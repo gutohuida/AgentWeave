@@ -7,23 +7,24 @@
   "parent_sha": "a40ac5b",
   "stop_at": "2026-08-15T14:00:00+01:00",
   "stop_at_note": "Operator may extend by messaging the live session. If extended, re-run install-driver.ps1 with the new time; the driver's StopAt is baked in at install.",
-  "last_heartbeat": "2026-08-15T11:52:00+01:00",
+  "last_heartbeat": "2026-08-15T11:57:12+01:00",
 
   "heartbeat_contract": "An interactive session AND the backup driver are both live. run-iteration.ps1 stands down when last_heartbeat is younger than 25 minutes. Whichever process is working MUST refresh last_heartbeat at every commit, or the other one will take over and both will write to this branch.",
 
-  "current": "q1-tool-list-close",
-  "next_action": "Close openspec/changes/2026-08-13-the-tool-list-matches-the-tools. Its tasks.md reads 6 done / 17 open but prep verified sections 2-4 are ALREADY IMPLEMENTED: hub/hub/api/v1/agents.py:844 defines UNDESCRIBED_TOOLS with a reason per entry (approve_tool_call, submit_checkpoint_notes); _tool_surface_lines() below it describes both submit_spec_document and recall; and hub/tests/test_tool_surface_matches_server.py passes 5/5. Tick 2.1-2.3, 3.1-3.4 and 4.1-4.4 citing that evidence in the task line itself. Then actually run and tick 4.5 (pytest hub/tests/ chunked in three, pytest tests/ separately), 4.6 (ruff check hub/ src/, black on files touched) and 4.7 (npx openspec validate --changes --strict and --specs --strict). Leave section 5 unticked - it is human-only and belongs to q3. Commit, refresh last_heartbeat, push.",
+  "current": "q2-spec-flow-live",
+  "next_action": "Start q2. Create a fresh project aw-loop10 at C:\\Users\\huida\\Documents\\aw-loop10 (outside this repo) against the Hub on :8010, seed agents, and drive the spec flow end to end as a real operator would - create a spec document from the composer, let the agent interview, confirm it calls submit_spec_document rather than summarising and stopping, read the rendered document, watch the rename, propose -> approve, derive tasks that declare their requirements, build, record_evidence, accept it as a can_accept_evidence agent, approve the task, and confirm the work is reachable from main. Record every friction and defect in .claude/autonomous/2026-08-15-spec-flow-findings.md with run id and exact message. Capture q3's judgement artefacts as you go. NOTE: q1 left task 4.5 open pending the full post-change suite, which was running at handover - check .claude/autonomous/2026-08-15-spec-flow-findings.md or re-run it before archiving that change.",
+  "previous_action_result": "q1 done except 4.5. The change was already built but never ticked, and checking the code rather than the boxes found the defect the change exists to prevent still live: submit_spec_document was described as (path, document), a signature it has never had, so an agent following its own tool list would have failed the call. 18 of 19 described tools were correct. Fixed the entry, added two tests comparing described arguments against the real schema, mutation-checked both. 22 done / 4 open, from 6 / 17.",
 
   "queue": [
     {
       "id": "q1-tool-list-close",
-      "state": "current",
+      "state": "done except task 4.5, which needs the full post-change suite",
       "title": "Close the-tool-list-matches-the-tools (already implemented, tasks.md is stale)",
       "detail": "See next_action. Small and first because it removes a false '17 open' from the board and the change it closes is the one that fixes why an agent never wrote a spec document."
     },
     {
       "id": "q2-spec-flow-live",
-      "state": "pending",
+      "state": "current",
       "title": "Drive the spec flow end to end in a fresh project, as a real operator",
       "detail": "Create aw-loop10 at C:\\Users\\huida\\Documents\\aw-loop10 (outside this repo) against the Hub on :8010. Seed agents. Then drive the whole loop without shortcuts: create a spec document from the composer, let the agent interview you, confirm it calls submit_spec_document rather than summarising and stopping, read the rendered document, watch the rename, take it propose -> approve, derive tasks that declare the requirements they serve, build, record_evidence, accept the evidence as a can_accept_evidence agent, approve the task, and confirm the work is actually reachable from main. Record every friction and defect in .claude/autonomous/2026-08-15-spec-flow-findings.md with real evidence - run id, exact message, screenshot where the finding is visual. Operator pre-authorised as many aw-loop* projects as needed.",
       "why_first_run_matters": "First-run friction can only be seen once. Do not reuse a project to save time."

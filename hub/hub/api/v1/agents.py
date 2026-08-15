@@ -875,7 +875,13 @@ def _tool_surface_lines() -> List[str]:
     session"*, and stopped without writing the document it had just spent three rounds designing.
     A silently incomplete inventory is worse than none, because the agent believes it.
     """
-    from ...mcp_server import JobSessionMode, MessageType, TaskPriority, TaskStatus
+    from ...mcp_server import (
+        JobSessionMode,
+        MessageType,
+        SpecKind,
+        TaskPriority,
+        TaskStatus,
+    )
 
     def values(alias: Any) -> str:
         return ", ".join(f"`{value}`" for value in get_args(alias))
@@ -913,12 +919,16 @@ def _tool_surface_lines() -> List[str]:
         "handle an answer that is none of yours.",
         "- `get_answer(question_id)` — only needed for a question you asked with "
         "`blocking=False`; a normal `ask_user` has already returned the answer.",
-        "- `submit_spec_document(path, document)` — write the specification document the operator "
-        "has open. `document` is the structured payload; the Hub validates it, mints requirement "
-        "identifiers and renders the file, so never write specification HTML yourself. Submitting "
-        "an incomplete document is expected while exploring: what is missing comes back to you as "
-        "`blocking`, and is a list of what to ask about next rather than an error. There is no "
-        "argument that sets a phase or approves — those are the operator's.",
+        f"- `submit_spec_document(path, title, kind, summary, problem, design, lifecycle, scope, "
+        f"requirements, acceptance_criteria, tasks, algorithms, evidence, open_questions)` — write "
+        f"the specification document the operator has open. `kind` is one of {values(SpecKind)}. "
+        "Only `path`, `title` and `kind` are required; the rest fill in as the document takes "
+        "shape. You pass the structure as these arguments — there is no single payload argument, "
+        "and no argument takes prerendered markup. The Hub validates what you send, mints "
+        "requirement identifiers and renders the file, so never write specification HTML "
+        "yourself. Submitting an incomplete document is expected while exploring: what is missing "
+        "comes back to you as `blocking`, and is a list of what to ask about next rather than an "
+        "error. There is no argument that sets a phase or approves — those are the operator's.",
         "- `rename_spec_document(path, subject)` — a document is created before anyone knows what "
         "it is about, so it starts with a meaningless placeholder name. `subject` is plain words "
         "describing what it turned out to cover; the Hub derives the path. Returns the new path, "

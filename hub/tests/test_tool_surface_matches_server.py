@@ -28,6 +28,19 @@ def _described() -> set:
     return set(re.findall(r"`(\w+)\(", text))
 
 
+def _described_signatures() -> dict:
+    """Each described tool mapped to the argument names the surface gives it."""
+    text = "\n".join(_tool_surface_lines())
+    return {
+        name: [arg.split("=")[0].strip() for arg in args.split(",") if arg.strip()]
+        for name, args in re.findall(r"`(\w+)\(([^)]*)\)`", text)
+    }
+
+
+def _schemas() -> dict:
+    return {tool.name: (tool.parameters or {}) for tool in asyncio.run(mcp.list_tools())}
+
+
 def test_every_served_tool_is_described_or_deliberately_excluded():
     missing = _served() - _described() - set(UNDESCRIBED_TOOLS)
     assert not missing, (
@@ -57,6 +70,44 @@ def test_an_excluded_tool_is_actually_served():
     the name is ever reused."""
     stale = set(UNDESCRIBED_TOOLS) - _served()
     assert not stale, f"excluded but not served: {sorted(stale)}"
+
+
+def test_no_described_argument_is_one_the_tool_does_not_take():
+    """Matching names is not enough: the arguments have to be the real ones.
+
+    `submit_spec_document` was described as taking `(path, document)` for two days after this
+    file was written to stop exactly this. The real tool takes `(path, title, kind, ...)` and has
+    no `document` parameter at all, so an agent following its own tool list would have been
+    rejected for an unexpected keyword argument on top of two missing required ones. The
+    name-only check above passed the whole time, because the name was never the part that drifted.
+    """
+    schemas = _schemas()
+    wrong = {}
+    for name, args in _described_signatures().items():
+        properties = schemas.get(name, {}).get("properties", {})
+        phantom = [arg for arg in args if arg not in properties]
+        if phantom:
+            wrong[name] = phantom
+    assert not wrong, (
+        f"described arguments that the tool does not accept: {wrong}. "
+        "Correct the entry in `_tool_surface_lines` to the real signature."
+    )
+
+
+def test_every_required_argument_is_described():
+    """An omitted optional argument costs an agent a capability it did not know it had. An omitted
+    *required* one costs it the call, which is what makes this the stricter half."""
+    schemas = _schemas()
+    missing = {}
+    for name, args in _described_signatures().items():
+        required = set(schemas.get(name, {}).get("required", []))
+        absent = sorted(required - set(args))
+        if absent:
+            missing[name] = absent
+    assert not missing, (
+        f"required arguments the surface never mentions: {missing}. "
+        "An agent cannot supply an argument it was not told about."
+    )
 
 
 def test_the_spec_tool_is_described():

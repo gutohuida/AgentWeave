@@ -2,6 +2,11 @@
 
 Two entries and a test. The test is the change; the entries are what it would have caught.
 
+**Reopened 2026-08-15.** Sections 2–4 were implemented but never ticked, so the board read
+6 done / 17 open against a change that was largely built. Checking the code rather than the boxes
+turned up the thing the change was written to prevent, still present: `submit_spec_document` was
+described with a signature it has never had. The name matched, so the test passed. See 2.1 and 3.5.
+
 ## 1. Establish the defect
 
 - [x] 1.1 Confirm the tool is served. Listing the canonical server's own registry: **16 tools,
@@ -23,34 +28,67 @@ Two entries and a test. The test is the change; the entries are what it would ha
 
 ## 2. Describe the missing tools
 
-- [ ] 2.1 Add `submit_spec_document` with its arguments, taking constrained values from the server's
+- [x] 2.1 Add `submit_spec_document` with its arguments, taking constrained values from the server's
       own `Literal` aliases as the neighbouring entries do, so it cannot drift from the schema.
-- [ ] 2.2 Add `recall`.
-- [ ] 2.3 Say what the tool is *for*, not only its signature. The section's value over a generated
-      schema is prose an agent can act on.
+      **This was half-done, and the missing half was the whole point.** The entry existed, but read
+      `submit_spec_document(path, document)` — a signature the tool has never had. The real one is
+      `(path, title, kind, summary, problem, design, lifecycle, scope, requirements,
+      acceptance_criteria, tasks, algorithms, evidence, open_questions)`, with no `document`
+      parameter at all, so an agent following its own tool list would have been rejected for an
+      unexpected keyword argument on top of two missing required ones — `title` and `kind`. It now
+      describes the real arguments, and `kind` takes its values from the `SpecKind` alias as this
+      task asked. Found by comparing every described signature against `mcp.list_tools()`:
+      **18 of 19 entries were correct and this was the only one that drifted** — the same tool,
+      again.
+- [x] 2.2 Add `recall`. `agents.py` — "`recall(observation_id)` — read back one observation by its
+      identifier."
+- [x] 2.3 Say what the tool is *for*, not only its signature. Every entry carries prose on what the
+      tool accomplishes and when to reach for it; `ask_user` and `record_evidence` are the longest
+      because their cost is the least obvious.
 
 ## 3. Make the agreement enforced (the actual change)
 
-- [ ] 3.1 A test that lists the served tools and the described ones and asserts every served tool is
-      described or explicitly excluded.
-- [ ] 3.2 The exclusion list carries a reason per entry, in the code, so an omission is a decision
-      someone recorded rather than a line nobody wrote.
-- [ ] 3.3 Fail on the reverse too — a described tool the server does not serve. An agent told it has
+- [x] 3.1 A test that lists the served tools and the described ones and asserts every served tool is
+      described or explicitly excluded. `test_every_served_tool_is_described_or_deliberately_excluded`.
+- [x] 3.2 The exclusion list carries a reason per entry, in the code, so an omission is a decision
+      someone recorded rather than a line nobody wrote. `UNDESCRIBED_TOOLS` at `agents.py:844`,
+      carrying `approve_tool_call` and `submit_checkpoint_notes` with a sentence each.
+- [x] 3.3 Fail on the reverse too — a described tool the server does not serve. An agent told it has
       a tool it does not have wastes a turn discovering that.
-- [ ] 3.4 Do not generate the descriptions from the schema. The test enforces coverage, not
-      authorship (proposal Non-Goals).
+      `test_no_tool_is_described_that_the_server_does_not_serve`.
+- [x] 3.4 Do not generate the descriptions from the schema. The test enforces coverage, not
+      authorship (proposal Non-Goals). Every entry is hand-written; nothing reads a schema to
+      produce prose. Only the constrained *values* come from the `Literal` aliases, which is the
+      part that must not drift.
+- [x] 3.5 **Check the arguments, not just the name.** Added after 2.1 found the surface naming the
+      right tool with the wrong signature. The name-only check passed for two days across a
+      description that would have failed every call, because the name was never the part that
+      drifted. Two tests now compare each described argument list against the tool's real schema.
 
 ## 4. Tests — agent-verifiable
 
-- [ ] 4.1 Served ⊆ described ∪ excluded (3.1).
-- [ ] 4.2 Described ⊆ served (3.3).
-- [ ] 4.3 Every exclusion carries a non-empty reason (3.2).
-- [ ] 4.4 `submit_spec_document` specifically appears in the rendered context of a spec turn,
+- [x] 4.1 Served ⊆ described ∪ excluded (3.1).
+- [x] 4.2 Described ⊆ served (3.3).
+- [x] 4.3 Every exclusion carries a non-empty reason (3.2). Also asserts the reason is at least
+      eight words, since a one-word reason silences the check without recording a decision.
+- [x] 4.4 `submit_spec_document` specifically appears in the rendered context of a spec turn,
       alongside the phase-block instruction that names it — the two must agree, which is the failure
-      that occurred.
-- [ ] 4.5 `pytest hub/tests/ -q` and `pytest tests/ -q` run separately.
-- [ ] 4.6 `ruff check hub/ src/`, `black` on every file touched.
-- [ ] 4.7 `npx openspec validate --changes --strict` and `--specs --strict`.
+      that occurred. `test_spec_procedure_precedence.py::test_the_instruction_and_the_tool_list_agree_in_one_rendered_context`
+      renders the real context and asserts both halves of it.
+- [ ] 4.5 `pytest hub/tests/ -q` and `pytest tests/ -q` run separately. Full baseline measured green
+      before the change (hub 631+686+712 passed / 11 skipped over three file chunks; CLI 360 passed,
+      3 skipped), and the 173 tests touching the tool surface or spec context pass after it. The
+      full run **after** the change is still outstanding — that is what this box is for.
+- [x] 4.6 `ruff check hub/ src/` — all checks passed. `black --check` on both files touched —
+      unchanged.
+- [x] 4.7 `npx openspec validate --changes --strict` — 14 passed. `--specs --strict` — 30 passed.
+- [x] 4.8 **No described argument is one the tool does not take** (3.5). Mutation-checked: restoring
+      `(path, document)` fails it with `described arguments that the tool does not accept:
+      {'submit_spec_document': ['document']}`, while **all five pre-existing tests still pass** —
+      which is the measurement of what the name-only check could not see.
+- [x] 4.9 **Every required argument is described** (3.5). Mutation-checked: the same restoration
+      fails it with `required arguments the surface never mentions: {'submit_spec_document':
+      ['kind', 'title']}`.
 
 ## 5. Verification — human-only
 
