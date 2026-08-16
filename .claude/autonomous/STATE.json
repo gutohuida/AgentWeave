@@ -96,7 +96,7 @@
   ],
 
   "current": "Q1-projects",
-  "next_action": "The tree is clean and this STATE.json is already committed on hub-native-experience at its tip — just cut the branch autonomous/2026-08-16-app-and-test-reform from there and start. Open the log at .claude/autonomous/2026-08-16-app-and-test-reform-log.md. Then do Q1-projects: using the Hub API on http://127.0.0.1:8010 (bootstrap key is AW_BOOTSTRAP_API_KEY in hub/.env), delete the ten projects listed in Q1's detail field, keeping only proj-ff695d96 (aw-loop10). Then confirm GET /api/v1/projects returns exactly one project and that aw-loop10's spec coverage endpoint still reports 9 requirements. Log what API you used to delete, or record that none exists.",
+  "next_action": "The branch is already cut and the log is already open at .claude/autonomous/2026-08-16-app-and-test-reform-log.md — read its Entry 0 first, it carries the limits and what prep already verified. Then do Q1-projects: using the Hub API on http://127.0.0.1:8010 (bootstrap key is AW_BOOTSTRAP_API_KEY in hub/.env), delete the ten projects listed in Q1's detail field, keeping only proj-ff695d96 (aw-loop10). Then confirm GET /api/v1/projects returns exactly one project and that aw-loop10's spec coverage endpoint still reports 9 requirements. Log what API you used to delete, or record that none exists.",
 
   "limits": [
     "Stay on the autonomous branch. No commits, merges or rebases onto hub-native-experience or master. Merging back is the operator's decision, made awake.",
