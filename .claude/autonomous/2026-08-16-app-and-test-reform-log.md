@@ -1550,3 +1550,107 @@ fixed-height ancestor). This phase touches `hub/ui` — same rebuild-then-verify
 entry.
 
 **Elapsed:** one iteration.
+
+## Entry 18 — 11:20 — Q4-spec-ux-fixes: IMPLEMENT phase 6 (F5 — task detail as a drawer), tasks.md 6.1-6.5
+
+**Starting state verified clean**: `git log` tip was `9b71366` matching STATE.json, working tree
+clean, `next_action` pointed at phase 6 with an accurate back-reference to Entry 17's commit
+(`9f24710`) — checked per the standing rule that a back-reference is a claim, not fact.
+
+**What this iteration built**, all five tasks.md items (6.1-6.5):
+
+- New `hub/ui/src/components/tasks/TaskDetailDrawer.tsx`: `role="dialog"`, `aria-modal`, focus trap
+  and Escape via the existing `useDialogFocus` hook (`DeleteProjectDialog.tsx`'s own dependency —
+  no new mechanism). Right-anchored, `top/right/bottom: 0`, `width: min(480px, 100vw)`. Click-outside
+  closes on the board itself, not a modal backdrop (`design.md` D8) — a `document`-level `mousedown`
+  listener checking `panelRef.current.contains(target)`, since there is no scrim element to attach a
+  handler to.
+- **Real bug found building 6.1, not anticipated by the design doc**: `RowMenu` (6.2's relocated
+  status-transition menu) is a Radix `DropdownMenu`, which portals its open content to a sibling of
+  `document.body` — outside `panelRef`'s subtree. The naive click-outside check read a click on
+  "Move to blocked" as a board click and closed the drawer mid-selection, so the status change never
+  landed. Confirmed the mechanism by reading `node_modules/@radix-ui/react-popper/dist/index.js`
+  (`data-radix-popper-content-wrapper`), not guessed. Fixed by also excluding clicks whose target is
+  inside `[data-radix-popper-content-wrapper]`. Mutation-checked in the new `taskDetailDrawer.test.tsx`:
+  temporarily disabled the exclusion, the regression test failed exactly as expected (`onClose` called
+  once), reapplied, 14/14 pass.
+- 6.2 — moved into the drawer: the status-transition `RowMenu` and its refusal message, the
+  blocking-reason input flow, description, "Serves" (see correction below), unresolved requirements,
+  requirements-as-written, acceptance criteria, deliverables, notes, the divergence-policy control.
+  **Judgement call, recorded rather than guessed silently**: the pre-F5 status-transition menu and
+  blocking-reason input were not actually gated behind `expanded` in the old code — they lived in the
+  card's always-visible header. `design.md` D8 names them as moving anyway and states the collapsed
+  card keeps only "title, status, assignee, and F4's chips" — narrower than the old header. Read
+  literally. The "Start work" `RowMenu` is named in neither list; kept on the card — starting a run is
+  the one action reached for while still scanning the board, not after opening one ticket, and moving
+  it was not asked for. Its own refusal (`task-status-refusal-{id}`, testid preserved) stayed with it;
+  the status-menu's refusal moved into the drawer. The "Waiting on you" banner, badges row,
+  `TaskIntegrationNote`, and timestamp predate the inline-expansion mechanism entirely and are
+  informational, not actionable — stayed on the card. Factored the chip-resolution logic (link lookup,
+  document-id-to-path, anchor-strip) shared between `TaskCard.tsx` and this drawer into a new
+  `hub/ui/src/hooks/useRequirementChips.ts`, since both now need it.
+- 6.3 — **initial pass was wrong, caught by a relocated test failing honestly rather than by
+  inspection**: reusing `useRequirementChips` (5.1's `requirement_ids`-scoped resolution) for the
+  drawer's "Serves" section broke `taskRequirementLinks.test.tsx`'s pre-existing "marks a link whose
+  requirement is no longer active" test. That fixture sets `requirement_links` without
+  `requirement_ids`; the pre-F5 "Serves" list has always shown every `requirement_links` entry
+  regardless of `requirement_ids`, and narrowing it would have been exactly the "changed behaviour"
+  6.2 forbids. Fixed: "Serves" still iterates `task.requirement_links` directly (unchanged — it
+  already showed full statement text, satisfying 6.3's "not just the identifier" trivially), with a
+  `Rejected: {reason}` line added per-link off `has_rejected_evidence`/`latest_rejection_reason`
+  directly, and each entry resolves its own document path independently (via `useSpecDocuments`) so
+  it navigates through `onOpenRequirement` the same way the card's F4 chips do.
+- 6.4 — relocated the existing tests rather than rewriting: `taskBlockedTreatment.test.tsx`'s
+  "parking a task by hand" block, `taskDivergenceControls.test.tsx`'s policy/escalation block,
+  `taskStatusControl.test.tsx`'s whole file, and `taskRequirementLinks.test.tsx`'s "a card shows what
+  it is checked against" block now open the drawer first (via a new shared
+  `hub/ui/src/__tests__/testUtils/TaskCardHost.tsx`, mirroring what `TasksBoard.tsx` now does) before
+  driving the same assertions against the same testids. `taskStatusControl.test.tsx`'s defensive
+  "renders no control when the map offers nothing" needed a real addition, not just relocation: as
+  written it rendered a bare `TaskCard` with no drawer, which would have passed for the wrong reason
+  once the menu moved regardless of the transitions map — now opens the drawer first. New
+  `taskDetailDrawer.test.tsx` (14 tests) covers what is specific to the drawer: open/close via close
+  button, Escape, and click-outside; the portaled-menu regression above; 6.3's full-statement-text and
+  rejection-reason rendering — both mutation-checked (reverting each condition made its test fail as
+  expected, reapplied).
+- 6.5 — jsdom performs no real layout, so `scrollHeight <= clientHeight` (design.md's literal wording)
+  would be 0/0 always and prove nothing; stated precisely in the test file rather than asserted
+  meaninglessly. What is actually checked: the body region (`task-drawer-body-{id}`) carries
+  `overflow-y: auto` and no inline `height`/`max-height`; the panel root carries no `overflow: hidden`
+  that would clip the scrolling body; and with a long description plus 3 requirement chips (the F6
+  ceiling) rendered at `window.innerWidth = 360`, every chip's full statement and the complete
+  description are present in the DOM, not truncated by the component. This proves "does not cut off
+  silently," not "never visibly overflows the viewport" — the latter needs real browser layout, which
+  is Q4a's own agent-verifiable/human-only boundary; recorded in `decisions_for_user`, not claimed
+  here.
+
+**Full verification:**
+1. `npx tsc --noEmit -p hub/ui` — clean.
+2. Targeted run (9 files touching this change): 112 passed.
+3. Full `hub/ui` suite (`npm test -- --run`), twice: first run 25 failed / 876 passed across 19 files
+   (mostly timeouts); second run 19 failed / 882 passed across 15 files — different failures each run,
+   13-of-19 in files this change never touched (`ActivityLog`, `agentHandoff`, `App-mount`,
+   `chartersUi`, `composerPermissionDefault`, `composerTriggerMenu`, `rowMenus`, `runnersUi`,
+   `specChatSurface`, `specNavigationUi`, `specPage`, `specPickerTree`), consistent with this repo's
+   documented full-suite resource contention (`STATE.json` `dead_ends`) rather than a regression. The
+   5 files this change did touch (`taskDetailDrawer`, `taskBlockedTreatment`, `taskDivergenceControls`,
+   `taskRequirementLinks`, `taskStatusControl`) were re-run together in isolation immediately after:
+   **55 passed, 0 failed**, confirming the full-suite failures were contention, not this diff.
+4. `npm run lint` — same 9 pre-existing warnings as `decisions_for_user` records, 0 errors, nothing new.
+5. `npm run build` + `python scripts/refresh_ui_bundle.py` — bundle rebuilt and stamp refreshed.
+6. Backend sanity check (no backend file touched this phase): `test_tasks.py`,
+   `test_task_rejected_evidence_signal.py`, `test_task_requirement_ids_readable.py`,
+   `test_spec_render.py` — 54 passed.
+7. `npx openspec validate 2026-08-16-spec-surface-legibility --strict` — valid, both before and after
+   updating `tasks.md`'s section 6 checkboxes with the implementation notes above.
+
+**Q4-spec-ux-fixes is now fully implemented.** All six phases (F1-F6) are built, tested and committed.
+What remains is entirely the approved tasks.md's own section 7 (5 human-only taste/feel checks) and
+section 8 (the user test guide, already written) — recorded in `decisions_for_user` rather than
+attempted here, consistent with the standing limit on visual judgement.
+
+**Next:** `Q5-test-audit` — write the deletion bar in the log before deleting anything (per the item's
+own detail), then survey `hub/tests/` (147 files) and `tests/` (20 files) against it. Full detail in
+`STATE.json`'s `next_action`.
+
+**Elapsed:** one iteration.

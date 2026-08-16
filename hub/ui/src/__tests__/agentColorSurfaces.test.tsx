@@ -17,7 +17,7 @@ describe('phase 5 agent identity colors across project surfaces', () => {
     // offer, so it now needs a query client. The colours this test is about are unaffected.
     render(
       <QueryClientProvider client={new QueryClient()}>
-        <TaskCard task={task} assigneeColorIndex={2} />
+        <TaskCard task={task} assigneeColorIndex={2} onOpen={() => {}} />
       </QueryClientProvider>,
     )
     expect(screen.getByText('@claude')).toBeInTheDocument()

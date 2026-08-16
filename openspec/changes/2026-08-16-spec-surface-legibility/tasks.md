@@ -287,30 +287,104 @@ independent backend-only work, F4 before F5 (the drawer reuses F4's chips).
 
 ## 6. F5 — task detail as a drawer
 
-- [ ] 6.1 New `hub/ui/src/components/tasks/TaskDetailDrawer.tsx`, following the dialog-pattern
+- [x] 6.1 New `hub/ui/src/components/tasks/TaskDetailDrawer.tsx`, following the dialog-pattern
       precedent (`AgentCreateDialog.tsx`, `DeleteProjectDialog.tsx`): `role="dialog"`, focus trap,
       Escape to close, click-outside (on the board, not a modal backdrop, per `design.md` D8) to
-      close. Right-anchored, full height.
-- [ ] 6.2 Move everything `TaskCard.tsx`'s current inline expansion renders into the drawer, unchanged
+      close. Right-anchored, full height. **Done:** `role="dialog"` + `aria-modal` + focus trap +
+      Escape via the existing `useDialogFocus` hook (`DeleteProjectDialog.tsx`'s own dependency, so
+      no new mechanism). Click-outside is a `mousedown` listener on `document` checking
+      `panelRef.current.contains(target)` — there is no full-screen scrim div, since D8 is explicit
+      that the board itself, not a backdrop standing in for it, is what a click dismisses. **One
+      wrinkle found building this, not anticipated in the design:** `RowMenu` (6.2's relocated
+      status-transition menu) is a Radix `DropdownMenu`, which portals its open content to a
+      sibling of `document.body` — outside `panelRef`'s subtree. The naive click-outside check read
+      a click on a menu item as a board click and closed the drawer out from under the menu it had
+      just opened, so the status change never landed. Fixed by also excluding any click whose
+      target is inside `[data-radix-popper-content-wrapper]` (the attribute Radix's own popper
+      wrapper carries — confirmed by reading
+      `node_modules/@radix-ui/react-popper/dist/index.js`, not guessed). Regression-tested and
+      mutation-checked in `taskDetailDrawer.test.tsx` (below) — reverting the exclusion made the
+      new test fail exactly as expected.
+- [x] 6.2 Move everything `TaskCard.tsx`'s current inline expansion renders into the drawer, unchanged
       in behaviour: description, acceptance criteria, deliverables, notes, the transition-move menu,
       the blocking-reason input, the divergence-policy control. `TaskCard.tsx`'s collapsed state keeps
       title, status, assignee, and 5.1's requirement chips; its own expansion state and toggle are
-      removed in favour of an explicit "open" action that opens the drawer.
-- [ ] 6.3 The drawer additionally renders 5.1/5.2's requirement chips with their full statement text
+      removed in favour of an explicit "open" action that opens the drawer. **Done, with one
+      judgement call recorded rather than guessed silently:** the status-transition menu and the
+      blocking-reason input it can open were not, in the pre-F5 code, actually gated behind
+      `expanded` — they lived in the card's always-visible header, alongside badges and the
+      timestamp. `design.md` D8 names them as moving anyway ("the status-transition menu ...
+      the blocking-reason input") and states the collapsed card keeps only "title, status,
+      assignee, and F4's new requirement chips" — a narrower list than everything the pre-F5 header
+      showed. Read literally: they move. The "Start work" `RowMenu` is not named in either list;
+      kept on the card, since — unlike a status change, which can now fail against a stale board
+      and wants the fuller drawer context to read the refusal in — starting a run is the one action
+      an operator reaches for while still scanning the board, not after opening one specific
+      ticket, and moving it was not asked for. Its own refusal message (`task-status-refusal-{id}`,
+      testid preserved) stayed on the card for the same reason; the status-transition menu's
+      refusal moved into the drawer with the menu. The "Waiting on you" banner, badges row,
+      `TaskIntegrationNote`, and timestamp all predate the inline-expansion mechanism entirely (they
+      were never behind `expanded`) and are informational rather than actionable, so they stayed on
+      the card. `TaskCard.tsx`'s and `TaskDetailDrawer.tsx`'s requirement-chip resolution logic
+      (looking up a link by identifier, resolving `document_id` to a path, stripping the anchor's
+      `#`) was factored into a new shared `hub/ui/src/hooks/useRequirementChips.ts` so the two
+      places do not carry two implementations of the same lookup.
+- [x] 6.3 The drawer additionally renders 5.1/5.2's requirement chips with their full statement text
       (not just the identifier, since there is now room) and, where `has_rejected_evidence` is true,
       the `latest_rejection_reason` already on `requirement_links` — never surfaced anywhere before
-      this change.
-- [ ] 6.4 Behaviour-parity tests: every control that worked inline (start a transition, set a blocking
+      this change. **Done, with a correction found via a relocated test failing honestly:** an
+      initial pass reused `useRequirementChips` (5.1's `requirement_ids`-scoped resolution) to
+      render this section, which broke `taskRequirementLinks.test.tsx`'s pre-existing "marks a link
+      whose requirement is no longer active" test — that fixture sets `requirement_links` without
+      `requirement_ids`, and the pre-F5 "Serves" list has always shown every `requirement_links`
+      entry regardless of whether `requirement_ids` names it. Reusing the `requirement_ids`-scoped
+      hook here would have silently narrowed what "Serves" shows, which is exactly the "unchanged
+      in behaviour" 6.2 asks for and 6.4's tests exist to catch. Fixed: the "Serves" list still
+      iterates `task.requirement_links` directly (unchanged from the pre-F5 code, which already
+      rendered full statement text — "not just the identifier" was already true there), with the
+      rejection-reason line added per-link off `has_rejected_evidence`/`latest_rejection_reason`
+      directly on the link, and each entry now resolves its own document path (via `useSpecDocuments`,
+      independent of `useRequirementChips`) so it is clickable through `onOpenRequirement` the same
+      way the card's chips are.
+- [x] 6.4 Behaviour-parity tests: every control that worked inline (start a transition, set a blocking
       reason, change divergence policy) still works from the drawer, same assertions as whatever
       existing `TaskCard.tsx` tests cover those paths today, relocated rather than rewritten from
-      scratch where the existing test already proves the right thing.
-- [ ] 6.5 Machine-checkable no-clipping check (`design.md` D8): with a task carrying a long
+      scratch where the existing test already proves the right thing. **Done:** relocated in place —
+      `taskBlockedTreatment.test.tsx`'s "parking a task by hand" block, `taskDivergenceControls.test.tsx`'s
+      policy/escalation block, `taskStatusControl.test.tsx`'s whole file, and
+      `taskRequirementLinks.test.tsx`'s "a card shows what it is checked against" block all now open
+      the drawer first (via a new shared `hub/ui/src/__tests__/testUtils/TaskCardHost.tsx` — pairs a
+      `TaskCard` with a `TaskDetailDrawer` the way `TasksBoard.tsx` now does — or, for
+      `taskStatusControl.test.tsx`, by clicking `task-open-{id}` before opening the menu), same
+      assertions, same testids, unchanged otherwise. `taskStatusControl.test.tsx`'s defensive "renders
+      no control when the map offers nothing" test needed one addition, not just a relocation: as
+      written it rendered a bare `TaskCard` with no drawer at all, so it would have passed for the
+      wrong reason once the menu moved (no drawer means no menu regardless of the transitions map) —
+      it now opens the drawer before asserting the menu's absence. New `taskDetailDrawer.test.tsx`
+      covers what is specific to the drawer itself, not a relocation of anything: open/close via the
+      close button, Escape, and click-outside; the portaled-menu click-outside regression above,
+      mutation-checked; 6.3's full-statement-text and rejection-reason rendering, also
+      mutation-checked (reverting the rejection-reason condition made the test fail as expected).
+- [x] 6.5 Machine-checkable no-clipping check (`design.md` D8): with a task carrying a long
       description and 3 requirement chips (the F6 ceiling, so this is a realistic worst case, not an
       arbitrary stress value), assert the drawer body's `scrollHeight <= clientHeight` is *not* the
       constraint that matters — the body should scroll, not clip — so the actual assertion is that no
       *fixed-height* ancestor clips it (`overflow: hidden` with a height less than content) — state
       precisely what is asserted, since "does not clip" is ambiguous between "never scrolls" and
-      "never cuts off silently"; this change wants the latter.
+      "never cuts off silently"; this change wants the latter. **Done, and stated precisely in the
+      test file itself, per the task's own instruction:** jsdom performs no real layout —
+      `scrollHeight`/`clientHeight` are always 0 — so `design.md`'s literal `scrollHeight <=
+      clientHeight` wording cannot be asserted meaningfully here; it would pass or fail for reasons
+      unconnected to the component. What `taskDetailDrawer.test.tsx`'s `no-clipping` block actually
+      checks: the body region (`task-drawer-body-{id}`) carries `overflow-y: auto` and no inline
+      `height`/`max-height` of its own; the panel root (`role="dialog"`) carries no `overflow:
+      hidden` that would clip the scrolling body beneath it; and, with a long description plus the
+      three-chip F6 ceiling rendered at a narrow (360px) `window.innerWidth`, every chip's full
+      statement text and the complete description are present in the DOM — not truncated or
+      dropped by the component itself. This proves "does not cut off silently" (the D8/6.5 reading
+      this task asks for) — it does not and cannot prove "never visibly scrolls past the viewport,"
+      which needs real browser layout and is exactly the human-only/agent-verifiable boundary Q4a's
+      own note already draws; recorded in `decisions_for_user` below rather than claimed here.
 
 ## 7. Human-only verification
 

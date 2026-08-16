@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { Task } from '@/api/tasks'
 import { TaskCard } from '@/components/tasks/TaskCard'
+import { TaskCardHost } from './testUtils/TaskCardHost'
 
 /**
  * The board showed the prose and hid the links.
@@ -70,14 +71,17 @@ function makeTask(overrides: Partial<Task> = {}): Task {
   }
 }
 
+// The "Serves" block moved into the drawer along with the rest of the inline expansion (F5,
+// `design.md` D8) — opened the same way the operator would, via the card's explicit "open"
+// affordance.
 async function renderExpanded(task: Task) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(
     <QueryClientProvider client={client}>
-      <TaskCard task={task} />
+      <TaskCardHost task={task} />
     </QueryClientProvider>,
   )
-  await userEvent.click(screen.getByText(task.title))
+  await userEvent.click(screen.getByTestId(`task-open-${task.id}`))
 }
 
 afterEach(cleanup)
@@ -154,7 +158,7 @@ describe('the requirement chip row (F4)', () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     return render(
       <QueryClientProvider client={client}>
-        <TaskCard task={task} onOpenRequirement={onOpenRequirement} />
+        <TaskCard task={task} onOpenRequirement={onOpenRequirement} onOpen={() => {}} />
       </QueryClientProvider>,
     )
   }

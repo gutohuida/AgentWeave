@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { Task } from '@/api/tasks'
 import { TaskCard } from '@/components/tasks/TaskCard'
+import { TaskCardHost } from './testUtils/TaskCardHost'
 
 /**
  * A task waiting on the operator, on a board that has no column for it.
@@ -62,9 +63,22 @@ function renderCard(task: Task) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(
     <QueryClientProvider client={client}>
-      <TaskCard task={task} />
+      <TaskCard task={task} onOpen={() => {}} />
     </QueryClientProvider>,
   )
+}
+
+// The status-transition menu and the blocking-reason input moved into the drawer (F5,
+// `design.md` D8) — this opens it the same way the operator would, via the card's explicit
+// "open" affordance, before driving either control.
+async function renderCardOpen(task: Task) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  render(
+    <QueryClientProvider client={client}>
+      <TaskCardHost task={task} />
+    </QueryClientProvider>,
+  )
+  await userEvent.click(screen.getByTestId(`task-open-${task.id}`))
 }
 
 beforeEach(() => {
@@ -115,7 +129,7 @@ describe('a waiting task says so on the card', () => {
 
 describe('parking a task by hand collects the reason first', () => {
   it('does not send the status straight from the menu', async () => {
-    renderCard(makeTask())
+    await renderCardOpen(makeTask())
 
     await userEvent.click(screen.getByTestId('task-status-menu-task-1'))
     await userEvent.click(screen.getByTestId('task-status-menu-task-1-blocked'))
@@ -126,7 +140,7 @@ describe('parking a task by hand collects the reason first', () => {
   })
 
   it('sends the status and the reason together once given one', async () => {
-    renderCard(makeTask())
+    await renderCardOpen(makeTask())
 
     await userEvent.click(screen.getByTestId('task-status-menu-task-1'))
     await userEvent.click(screen.getByTestId('task-status-menu-task-1-blocked'))
@@ -142,7 +156,7 @@ describe('parking a task by hand collects the reason first', () => {
   })
 
   it('will not send an empty reason', async () => {
-    renderCard(makeTask())
+    await renderCardOpen(makeTask())
 
     await userEvent.click(screen.getByTestId('task-status-menu-task-1'))
     await userEvent.click(screen.getByTestId('task-status-menu-task-1-blocked'))
@@ -153,7 +167,7 @@ describe('parking a task by hand collects the reason first', () => {
   })
 
   it('releases a waiting task without asking for anything', async () => {
-    renderCard(makeTask({ status: 'blocked', blocked_reason: 'Waiting on the key' }))
+    await renderCardOpen(makeTask({ status: 'blocked', blocked_reason: 'Waiting on the key' }))
 
     await userEvent.click(screen.getByTestId('task-status-menu-task-1'))
     await userEvent.click(screen.getByTestId('task-status-menu-task-1-in_progress'))

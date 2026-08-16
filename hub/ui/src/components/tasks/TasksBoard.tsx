@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useTasks } from '@/api/tasks'
 import { TaskCard } from './TaskCard'
+import { TaskDetailDrawer } from './TaskDetailDrawer'
 import { EmptyState } from '@/components/common/EmptyState'
 import { Icon } from '@/components/common/Icon'
 import { useAgents } from '@/api/agents'
@@ -39,6 +40,10 @@ export function TasksBoard({ onOpenRequirement }: TasksBoardProps = {}) {
   )
   const [activeFilter, setActiveFilter] = useState<string | null>(null)
   const [rejectedExpanded, setRejectedExpanded] = useState(false)
+  // One drawer for the whole board, not one per card (F5) — which task it shows is just an id, so
+  // it always reads the freshest copy of the task from `useTasks()` rather than a snapshot taken
+  // when it was opened.
+  const [openTaskId, setOpenTaskId] = useState<string | null>(null)
   const activeTaskIds = useTaskFilterStore((state) => state.activeTaskIds)
   const clearActiveTaskIds = useTaskFilterStore((state) => state.clearActiveTaskIds)
 
@@ -62,6 +67,7 @@ export function TasksBoard({ onOpenRequirement }: TasksBoardProps = {}) {
   }
 
   const rejectedTasks = tasks.filter((t) => t.status === 'rejected')
+  const openTask = tasks.find((t) => t.id === openTaskId) ?? null
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -181,6 +187,7 @@ export function TasksBoard({ onOpenRequirement }: TasksBoardProps = {}) {
                       task={task}
                       assigneeColorIndex={colorsByAgent.get(task.assignee ?? '')}
                       onOpenRequirement={onOpenRequirement}
+                      onOpen={() => setOpenTaskId(task.id)}
                     />
                   ))}
                 </div>
@@ -225,6 +232,7 @@ export function TasksBoard({ onOpenRequirement }: TasksBoardProps = {}) {
                       task={task}
                       assigneeColorIndex={colorsByAgent.get(task.assignee ?? '')}
                       onOpenRequirement={onOpenRequirement}
+                      onOpen={() => setOpenTaskId(task.id)}
                     />
                   ))}
               </div>
@@ -232,6 +240,12 @@ export function TasksBoard({ onOpenRequirement }: TasksBoardProps = {}) {
           </div>
         )}
       </div>
+
+      <TaskDetailDrawer
+        task={openTask}
+        onClose={() => setOpenTaskId(null)}
+        onOpenRequirement={onOpenRequirement}
+      />
     </div>
   )
 }

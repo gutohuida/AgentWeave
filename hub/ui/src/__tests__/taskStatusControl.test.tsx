@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ApiError } from '@/api/client'
 import type { Task } from '@/api/tasks'
-import { TaskCard } from '@/components/tasks/TaskCard'
+import { TaskCardHost } from './testUtils/TaskCardHost'
 
 /**
  * The operator's status control (B1 §7).
@@ -64,13 +64,17 @@ function renderCard(status: string) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
-      <TaskCard task={makeTask(status)} />
+      <TaskCardHost task={makeTask(status)} />
     </QueryClientProvider>,
   )
 }
 
+// The status-transition menu moved into the drawer (F5, `design.md` D8) — this opens it the same
+// way the operator would, via the card's explicit "open" affordance, before opening the menu
+// itself.
 async function openMenu(status: string) {
   const user = userEvent.setup()
+  await user.click(screen.getByTestId(`task-open-task-${status}`))
   await user.click(screen.getByTestId(`task-status-menu-task-${status}`))
   return user
 }
@@ -164,14 +168,16 @@ describe('the task status control', () => {
     expect(refusal.textContent).not.toContain('{')
   })
 
-  it('renders no control when the map offers nothing from this status', () => {
-    // Defensive: an agent-scoped map would report no exits from `approved`. The card must then
-    // show no menu at all rather than an empty one.
+  it('renders no control when the map offers nothing from this status', async () => {
+    // Defensive: an agent-scoped map would report no exits from `approved`. The drawer must then
+    // show no menu at all rather than an empty one. Opened first — asserting on a menu that was
+    // never given the chance to render (the drawer closed) would pass for the wrong reason.
     render(
       <QueryClientProvider client={new QueryClient()}>
-        <TaskCard task={{ ...makeTask('approved'), status: 'unknown_status' }} />
+        <TaskCardHost task={{ ...makeTask('approved'), status: 'unknown_status' }} />
       </QueryClientProvider>,
     )
+    await userEvent.click(screen.getByTestId('task-open-task-approved'))
     expect(screen.queryByTestId('task-status-menu-task-approved')).toBeNull()
   })
 })

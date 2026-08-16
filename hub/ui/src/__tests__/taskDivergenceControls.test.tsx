@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { Task } from '@/api/tasks'
 import { TaskCard } from '@/components/tasks/TaskCard'
+import { TaskCardHost } from './testUtils/TaskCardHost'
 
 /**
  * The operator's controls for a task nobody finished.
@@ -49,14 +50,16 @@ function makeTask(overrides: Partial<Task> = {}): Task {
   }
 }
 
+// The divergence-policy control moved into the drawer (F5, `design.md` D8) — opened the same way
+// the operator would, via the card's explicit "open" affordance.
 async function renderExpanded(task: Task) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(
     <QueryClientProvider client={client}>
-      <TaskCard task={task} />
+      <TaskCardHost task={task} />
     </QueryClientProvider>,
   )
-  await userEvent.click(screen.getByText(task.title))
+  await userEvent.click(screen.getByTestId(`task-open-${task.id}`))
 }
 
 beforeEach(() => {
@@ -135,7 +138,7 @@ describe('a stalled task says so', () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     render(
       <QueryClientProvider client={client}>
-        <TaskCard task={makeTask()} />
+        <TaskCard task={makeTask()} onOpen={() => {}} />
       </QueryClientProvider>,
     )
     expect(screen.queryByTestId('task-divergence-task-1')).not.toBeInTheDocument()
@@ -145,7 +148,7 @@ describe('a stalled task says so', () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     render(
       <QueryClientProvider client={client}>
-        <TaskCard task={makeTask({ has_open_divergence: true })} />
+        <TaskCard task={makeTask({ has_open_divergence: true })} onOpen={() => {}} />
       </QueryClientProvider>,
     )
     // "Dropped" was the first label. Shown it, the operator asked "what is a dropped task?" —
@@ -164,7 +167,7 @@ describe('starting work binds the run', () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     render(
       <QueryClientProvider client={client}>
-        <TaskCard task={makeTask()} />
+        <TaskCard task={makeTask()} onOpen={() => {}} />
       </QueryClientProvider>,
     )
 
