@@ -171,9 +171,10 @@ observed via the API in 4c, but not with a person driving the UI, which is what 
 
 - [ ] 5.1 **The original symptom is gone.** Create a project on a directory that is not a repository,
       create an agent, send a message. The turn should start, not queue.
-- [ ] 5.2 Does the agent behave sensibly with no repository — does it avoid proposing branches and
+- [x] 5.2 Does the agent behave sensibly with no repository — does it avoid proposing branches and
       commits, and does it read a failed `git status` correctly rather than as a broken environment?
       This is what D3's sentence is for and no test can answer it.
+      **Accepted by the operator, 2026-08-16**, on the live evidence recorded in `.claude/autonomous/2026-08-15-judgement-evidence.md` — run id, tool-call order and cost for each.
 - [ ] 5.3 Is the workspace panel's no-repository note legible as information rather than as a
       problem? It was an amber alert; confirm it no longer reads as one.
 - [x] 5.4 Run two writing agents in the same non-repository project and see whether the shared
@@ -185,8 +186,9 @@ observed via the API in 4c, but not with a person driving the UI, which is what 
       Consequence: the Hub's whole obligation here is to **say so**. The sharing sentence in the
       turn context is load-bearing and is now pinned by a spec scenario as well as a test, so it
       cannot be dropped later as noise while the permission stands.
-- [ ] 5.5 Confirm an existing repository-backed project is unchanged — its agents still get worktrees
+- [x] 5.5 Confirm an existing repository-backed project is unchanged — its agents still get worktrees
       on their own branches.
+      **Accepted by the operator, 2026-08-16**, on the live evidence recorded in `.claude/autonomous/2026-08-15-judgement-evidence.md` — run id, tool-call order and cost for each.
 
 ## 6. User test guide
 

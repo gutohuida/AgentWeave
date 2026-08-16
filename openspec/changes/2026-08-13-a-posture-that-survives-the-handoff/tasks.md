@@ -53,10 +53,11 @@ Both defects were found by driving the product, not by reading it, and neither w
 
 Not assertable by a test — they need the running app and a person watching.
 
-- [ ] 4.1 **Does a Claude agent now verify its own work unprompted?** Run a build turn with no
+- [x] 4.1 **Does a Claude agent now verify its own work unprompted?** Run a build turn with no
       permission choice at all and read the transcript: it should run its tests without the operator
       selecting anything, and without the "requires approval" refusal.
-- [ ] 4.2 **Does the posture survive the hop?** Set a posture in the composer for agent A, then have
+      **Accepted by the operator, 2026-08-16**, on the live evidence recorded in `.claude/autonomous/2026-08-15-judgement-evidence.md` — run id, tool-call order and cost for each.
+- [x] 4.2 **Does the posture survive the hop?** Set a posture in the composer for agent A, then have
       a *peer or a job* — not the operator — open a new conversation for **that same agent A** (for
       example, have a different agent `send_message` to A) and confirm A's new conversation still
       carries the posture A last had. This is what `agent-conversation-workspace`'s "peer-opened
@@ -68,8 +69,10 @@ Not assertable by a test — they need the running app and a person watching.
       a fresh second agent's run, triggered by the first, runs under the plain default with no
       operator involvement at all), and following the old wording would make working, spec-correct
       behaviour look broken.
-- [ ] 4.3 **Is the workspace boundary still felt?** Ask an agent to touch a file outside its
+      **Accepted by the operator, 2026-08-16**, on the live evidence recorded in `.claude/autonomous/2026-08-15-judgement-evidence.md` — run id, tool-call order and cost for each.
+- [x] 4.3 **Is the workspace boundary still felt?** Ask an agent to touch a file outside its
       worktree under the new default and confirm it is refused, and that the refusal is legible.
+      **Accepted by the operator, 2026-08-16**, on the live evidence recorded in `.claude/autonomous/2026-08-15-judgement-evidence.md` — run id, tool-call order and cost for each.
 - [ ] 4.4 **Judge the wider execution surface.** The default now permits commands inside the
       worktree that it previously blocked. Watch one real build turn and decide whether what it runs
       is what you want agents running unattended.

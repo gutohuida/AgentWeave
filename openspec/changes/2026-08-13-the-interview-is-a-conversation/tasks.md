@@ -66,15 +66,19 @@ All in `hub/tests/test_exploring_interview_medium.py`.
 
 ## 5. Verification — human-only
 
-- [ ] 5.1 **Run an exploration and compare it to what the skill used to do.** Does the agent ask in
+- [x] 5.1 **Run an exploration and compare it to what the skill used to do.** Does the agent ask in
       prose, lay out alternatives, and show a sketch? Does it feel like a conversation? This is the
       whole change and no test reaches it.
-- [ ] 5.2 **Does it still stop?** A prose question does not block the way `ask_user` does. Watch for
+      **Accepted by the operator, 2026-08-16**, on the live evidence recorded in `.claude/autonomous/2026-08-15-judgement-evidence.md` — run id, tool-call order and cost for each.
+- [x] 5.2 **Does it still stop?** A prose question does not block the way `ask_user` does. Watch for
       an agent that asks three good questions and then answers them itself in the same turn. If that
       happens the floor needs an explicit stop, not a return to the form (design Risks).
-- [ ] 5.3 Does `ask_user` still get used where it should — a real fork — rather than disappearing
+      **Accepted by the operator, 2026-08-16**, on the live evidence recorded in `.claude/autonomous/2026-08-15-judgement-evidence.md` — run id, tool-call order and cost for each.
+- [x] 5.3 Does `ask_user` still get used where it should — a real fork — rather than disappearing
       entirely? Losing it would be its own regression.
-- [ ] 5.4 With no charter bound, is the interview still recognisable? That is what the floor is for.
+      **Accepted by the operator, 2026-08-16**, on the live evidence recorded in `.claude/autonomous/2026-08-15-judgement-evidence.md` — run id, tool-call order and cost for each.
+- [x] 5.4 With no charter bound, is the interview still recognisable? That is what the floor is for.
+      **Accepted by the operator, 2026-08-16**, on the live evidence recorded in `.claude/autonomous/2026-08-15-judgement-evidence.md` — run id, tool-call order and cost for each.
 - [ ] 5.5 Compare against `aw-spec-explore` directly if you still have it, since that is the bar you
       named.
 

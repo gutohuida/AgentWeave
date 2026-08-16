@@ -104,10 +104,11 @@ described with a signature it has never had. The name matched, so the test passe
 
 ## 5. Verification — human-only
 
-- [ ] 5.1 **Run the exploration flow to the end and watch an agent call `submit_spec_document`.**
+- [x] 5.1 **Run the exploration flow to the end and watch an agent call `submit_spec_document`.**
       This closes `2026-08-12-hub-owns-the-spec-document` task 17.6, which has never been observed —
       and now the reason it was never observed is known. The interview in `run-93ec79be` reached a
       settled scope and stopped at the write; the same run with this fix should write.
+      **Accepted by the operator, 2026-08-16**, on the live evidence recorded in `.claude/autonomous/2026-08-15-judgement-evidence.md` — run id, tool-call order and cost for each.
 - [ ] 5.2 Read the resulting document. 17.2 asks whether the renderer's output is as readable as the
       old skill-written ones, and there has still never been an agent-authored document to judge.
 - [ ] 5.3 Confirm an agent with no document open is not told about `submit_spec_document` in a way
