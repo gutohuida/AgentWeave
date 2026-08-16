@@ -2987,3 +2987,79 @@ beside the label. Test per 2.2, including the fallback-when-no-payload and the m
 (remove one table entry, confirm its test falls back instead of matching, reapply). Section 3 (diff
 view) and section 4 (command palette) remain independent and can follow in either order. Time
 remaining to `stop_at` (18:00) is roughly 2h18m as of this entry.
+
+## Entry 37 — 2026-08-16T15:52+01:00 — Q7 IMPLEMENT tasks.md section 2 (D2 tool-call icon and label), iteration 38
+
+Verified branch/log/`STATE.json` against `git log` first — matched (`a01cff2` at HEAD, Entry 36's
+heartbeat back-date, as claimed; working tree clean).
+
+**2.1** — added `TOOL_ICON: Record<string, {icon: string; label: string}>` to `WorkRow`'s module in
+`AgentTimeline.tsx`, transcribed directly from `design.md` D2's table (`Read`→description/"Read",
+`Write`→file_plus/"Write", `Edit`/`MultiEdit`→edit/"Edit", `Bash`→terminal/"Bash",
+`Grep`→search/"Search", `Glob`→folder_search/"Find files", `WebFetch`→public/"Fetch",
+`WebSearch`→search/"Web search", `Task`/`Agent`→group/"Subagent", `TodoWrite`→task_alt/"Plan",
+`NotebookEdit`→edit_note/"Notebook"). `WorkRow` now reads `entry.payload?.tool`, looks it up, and
+renders the resolved `Icon` beside the label. Read `1.4`'s existing test fixtures first
+(`agentTimeline.test.tsx` already had `tool_use` entries with `payload: { call_id: 'c1' }` and no
+`tool` field) to confirm the unmapped/no-`tool` path had to keep those tests passing unchanged, which
+settled an ambiguity in the task wording: `TOOL_ICON`'s table supplies the *label* only for a mapped
+tool (test 2.2 says a mapped entry "renders that tool's icon and label"); an unmapped tool or a
+missing `payload.tool` falls back to the icon `Wrench` **and** the label `WorkRow` already computed
+before this change (`entry.content || 'Tool call'`/`'Tool result'`, or `"Thinking"`) — not a
+hardcoded "Tool call" string, so existing content-based labels (like the pre-existing `Read`/`Edit`
+fixtures) still render exactly as before, just now with a fallback icon alongside them.
+
+**Icon system** — `hub/ui/src/components/common/Icon.tsx` is the only lucide-react-backed icon
+system in the app (CLAUDE.md). Added 7 new lucide imports and `ICONS` entries the table needed
+(`FilePlus2`/`file_plus`, `Pencil`/`edit`, `FolderSearch`/`folder_search`, `Globe`/`public`,
+`Users`/`group`, `NotebookPen`/`edit_note`, `Wrench`/`build`) and reused 4 existing entries where a
+tool shares an icon with something already mapped (`description`→FileText for Read,
+`terminal`→Terminal for Bash, `search`→Search for Grep/WebSearch, `task_alt`→ListChecks for
+TodoWrite). No second icon system, no new dependency — `lucide-react` was already installed.
+
+**2.2** — three new tests in `agentTimeline.test.tsx`, under a new `describe` block. File-scoped
+`vi.mock('@/components/common/Icon', ...)` stub (same pattern as `SidebarItem.test.tsx`) renders
+`<span data-testid="icon" data-name={name} />` so the resolved icon name is assertable without
+depending on lucide's real SVG output; confirmed this doesn't break any of the file's other 15 tests
+(none of them assert on real `Icon` DOM output, only text/attributes). Because `WorkBlockDisclosure`'s
+own fold-toggle icon (`expand_more`) is also rendered once the block is opened, tests query
+`getAllByTestId('icon')` and assert the expected name is present among them, rather than assuming a
+single icon on screen.
+- A mapped tool (`Bash`, `content: 'Called Bash'`) renders the table label `"Bash"` (not the raw
+  `"Called Bash"` content) and an icon named `terminal`.
+- An unmapped tool name (`payload.tool: 'SomeFutureTool'`) renders the original generic label
+  (`"Called SomeFutureTool"`) and the `build` (`Wrench`) fallback icon.
+- An entry with no `payload` at all (a `thinking` entry) renders `"Thinking"` and the `build`
+  fallback icon, without throwing.
+
+**Mutation-checked**: commented out the `Bash` table entry, reran the mapped-tool test alone —
+failed exactly as expected (`getByText('Bash')` not found, since the entry fell back to
+`"Called Bash"` and the `Wrench` icon instead). Reinstated the entry and reran — 18/18 passing again.
+
+**Full verification (tasks.md section 5):**
+- 5.1 `npx tsc --noEmit` — clean.
+- 5.2 `npm run lint` — same 9 pre-existing warnings as Entry 36 (unrelated files), zero new.
+- 5.3 `npm test -- --run` — 908 tests total (Entry 36's 905 base plus this entry's 3 new). Full run:
+  906/908 passed inline, with `chartersUi.test.tsx` and `runnersUi.test.tsx` timing out under
+  full-suite resource contention — the exact pattern already named in `STATE.json`'s `dead_ends` (a
+  documented pre-existing flake, previously seen on `chartersUi.test.tsx`/`taskStatusControl.test.tsx`).
+  Reran both files alone: 4/4 passed cleanly, confirming this run's two failures were contention, not
+  a regression this change introduced — effectively 908/908.
+- 5.4 `npm run build && python scripts/refresh_ui_bundle.py` — built clean, bundle refreshed.
+- 5.5 `git status` before staging showed changes confined to `hub/ui/` and `hub/hub/static/ui/` — no
+  `hub/hub/` (backend) or `src/agentweave/` file touched.
+
+Staged explicitly (not `git add -A`): the three modified `hub/ui/src/` files and `hub/hub/static/ui/`
+in full, plus `tasks.md`'s two newly-checked boxes. Committed as `a01178a`.
+
+**Elapsed:** one iteration (table, icon-system extension, wire, test, mutation-check, verify,
+bundle).
+
+**Next:** `tasks.md` section 3 (D2 — diff view for edit-shaped tool calls): `npm install diff`
+(jsdiff), new `ToolEditDiff.tsx` per 3.2's exact parse/fallback rules (malformed JSON, `truncated`,
+missing either key → `null`, caller keeps today's raw-text rendering), wire into `WorkRow`'s expanded
+state per 3.3, tests per 3.4 including the real `MultiEdit`-shaped fixture that must fall through
+(per `design.md`'s documented, deliberate limitation) and the mutation check on the `truncated`
+guard. Section 4 (command palette, D3) remains independent and can follow instead if section 3 turns
+out to need more than one iteration. Time remaining to `stop_at` (18:00) is roughly 2h08m as of this
+entry.
