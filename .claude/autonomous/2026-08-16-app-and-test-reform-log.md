@@ -1654,3 +1654,101 @@ own detail), then survey `hub/tests/` (147 files) and `tests/` (20 files) agains
 `STATE.json`'s `next_action`.
 
 **Elapsed:** one iteration.
+
+## Entry 19 — 11:28 — Q5-test-audit: write the bar, run the first (automated) survey pass
+
+**Starting state verified clean**: `git log` tip `3e8ac13` matched `STATE.json`, working tree clean,
+branch correct. Q4-spec-ux-fixes confirmed fully closed (all 6 phases, Entries 12-18).
+
+**The bar, recorded before anything was touched** (verbatim from the queue item, restated here so
+this entry is self-contained): a test may be deleted only if it meets one of —
+(a) it asserts nothing the code can break (tautological, or asserts only on mocks it set up itself);
+(b) it duplicates another test's coverage exactly, and deleting it changes no mutation outcome;
+(c) it tests behaviour that no longer exists.
+A slow test alone is NOT grounds (that was Q2, already done and closed). Every deletion this queue
+item makes must log: the test name, which clause it met, and a mutation check proving the remaining
+suite still catches the defect the deleted test claimed to catch.
+
+**Survey pass 1 — mechanical/automated, across all 2258 test functions in `tests/` (21 files) and
+`hub/tests/` (150 files; `STATE.json`'s file counts of 147/20 were stale by a few files, recounted
+live with `find`):**
+
+1. **Clause (c) — references to deleted subsystems.** Grepped every test file for imports/usages of
+   the five modules `CLAUDE.md` names as "Deleted, and not to be recreated" (`watchdog.py`,
+   `messaging.py`, `runner.py`, `transport/local.py`, `transport/git.py`) and the deleted CLI role
+   subsystem (`cmd_role`, `role_file`, `RoleFile`, `VALID_ROLES`, `agentweave.roles`). **Zero matches
+   as imports/usages anywhere.** The only files matching a bare "watchdog" string search
+   (`test_agent_facing_text.py`, `test_launchability.py`, `test_operator_agent_creation.py`,
+   `test_agents.py`, `test_scheduler.py`, `test_runtime_diagnostics.py`, `tests/test_eventlog.py`)
+   turned out, on reading each, to be one of two things — neither a clause-(c) hit: regression tests
+   asserting the word "watchdog" no longer appears in operator-facing status text or the scheduler's
+   write path (guarding that a real deletion *stays* deleted — these test current, live behaviour),
+   or `tests/test_eventlog.py`'s `WATCHDOG_HEARTBEAT_FILE`, which is a live constant in
+   `src/agentweave/constants.py` still read by `eventlog.py` today — a naming leftover, not a dead
+   import. **Zero clause-(c) deletions found in this pass.**
+
+2. **Clause (a) — asserts nothing the code can break.** Wrote a small AST script
+   (`ast.walk` per `test_*` function, checking for an `assert` statement, a `unittest`
+   `self.assert*`/`assertRaises` call, `pytest.raises`/`warns` as a call or context manager, or a
+   mock `assert_called*`) across every test function in both directories. First pass (checking only
+   for the bare `assert` statement) flagged 133 false positives — entirely `unittest.TestCase`-style
+   tests using `self.assertEqual`/`self.assertFalse`, which my first regex for "assert_" (with an
+   underscore) missed. Corrected to `attr.startswith('assert')`, re-ran: 17 remained. Read every one
+   of the 17 by hand rather than trusting the script — all 17 were legitimate "must not raise" tests
+   (the assertion is "no uncaught exception propagates," which pytest itself enforces — e.g.
+   `test_broadcast_no_subscribers`, `test_already_dead_pid_does_not_raise`,
+   `test_init_db_skips_alembic_for_in_memory`) or delegate the actual assertion to a helper function
+   the per-function AST walk doesn't see inlined (e.g. `test_project_directory_binding_round_trips_and_is_unique`
+   calls `asyncio.run(_assert_duplicate_path_key_is_rejected())`, which itself raises
+   `AssertionError` on failure). **Zero clause-(a) deletions found in this pass** — every flagged
+   candidate was a tool false-positive, not a real gap, once read.
+
+3. **Clause (b) — exact duplicates.** Two checks. First, function-name collisions across the whole
+   scope (2258 names, 26 repeats) — but cross-checked against enclosing class, since a name repeated
+   in two different `class Test...:` bodies is two distinct pytest items, not a collision (e.g.
+   `test_fs_browse.py`'s `test_a_relative_path_is_refused` appears once in a plain function and once
+   in `TestFsListEndpoint` — different call, different assertion, not a dupe). Rewrote the scan to
+   qualify each name by `(file, class-path, function)`: **zero same-file-same-scope collisions** —
+   meaning no test function is silently shadowing another (which would have been a stronger finding
+   than "duplicate coverage": a shadowed name is dead code that pytest never even collects). Second,
+   normalized-AST body comparison (ignoring the function's own name/args, `len(body) >= 3` to skip
+   noise) across all functions: found exactly one duplicate family — 8 identically-bodied test pairs,
+   all between `tests/test_spec_manifest.py` and `hub/tests/test_spec_manifest.py`
+   (`test_valid_manifest_parses`, `test_malformed_json`, `test_too_large`, `test_too_many_documents`,
+   `test_duplicate_path`, `test_invalid_home`, `test_unknown_parent`, `test_parent_cycle`). Read both
+   files' module docstrings before concluding anything: `tests/test_spec_manifest.py` tests
+   `agentweave.spec_manifest` (CLI-side, `src/agentweave/spec_manifest.py`, includes filesystem
+   discovery); `hub/tests/test_spec_manifest.py` tests `hub.spec_manifest` (Hub-side,
+   `hub/hub/spec_manifest.py`, its own docstring states "No filesystem discovery here — the Hub only
+   ever sees uploaded content and manifest text"). Two separate source files, deliberately parallel
+   implementations, each needing its own coverage — deleting either test file changes the mutation
+   outcome for the module it targets, failing clause (b)'s own "changes no mutation outcome" test
+   explicitly. **Zero clause-(b) deletions found in this pass** — the one apparent duplicate family
+   is intentional parallel coverage of a genuine two-module duplication in the source tree (a
+   separate, unauthorised-to-fix-here DRY observation about `spec_manifest.py` existing twice, not a
+   test problem).
+
+**Conclusion of survey pass 1: zero tests met the deletion bar.** This is a real, checked result, not
+an early stop — all three clauses were run mechanically across the full 2258-function population, and
+every flagged candidate was individually read and ruled a tool false-positive rather than assumed.
+Worth recording plainly: this suite does not have an obvious layer of dead or tautological tests sitting
+on the surface. Whatever Q5 still finds will need a slower pass — reading test bodies against their
+current source module for *semantic* staleness (an assertion on a field/shape/state that changed
+without the test being updated, which no import-grep or AST-shape check catches), not another
+mechanical sweep. That is qualitatively harder to do safely and needs to be scoped file-by-file rather
+than attempted as one static pass.
+
+**Nothing was deleted this iteration** — correct per the bar: nothing met it.
+
+**Next:** Q5-test-audit, survey pass 2 — semantic review. Pick a bounded slice (suggest: the 20 files
+under `tests/` first, since it is the smaller of the two directories and finishing it gives a concrete
+done/not-done boundary before starting on `hub/tests/`'s 150) and read each test file against its
+target module's *current* behaviour, not just its imports — looking specifically for assertions on
+response shapes, field names, or state transitions that the source has since changed while the test
+kept passing against a stale expectation (which would be a real, non-tautological, still-passing test
+that nonetheless tests nothing true anymore — the dangerous version of clause (c), not caught by import
+greps). Record findings per-file in the log as they're found; do not attempt all 20 in one iteration if
+it does not fit — better to finish half the files properly, with mutation checks on anything deleted,
+than rush all 20 and miss something.
+
+**Elapsed:** one iteration.
