@@ -2629,3 +2629,87 @@ before it's proposed as a finding rather than a maybe. Standing directive still 
 splits agent-verifiable from human-only work and emits a user test guide — and per Q4/Q4b's precedent,
 anything visual (does a new icon/diff view actually look right) is human-only, not something this
 loop self-ticks. Time remaining to `stop_at` (18:00) is about 3h40m as of this entry.
+
+## Entry 32 — 14:37 — Q7-ui-gap-analysis: AUTHOR pass — proposal/design/tasks written, iteration 33
+
+Verified branch/log/`STATE.json` against `git log` first — matched cleanly (`c4d95a0` at HEAD, Entry
+31's heartbeat back-date, as claimed).
+
+**Read the survey cold** (`openspec/explorations/2026-08-16-ui-gap-analysis.md`, Entry 31) and, before
+writing anything, closed the two open uncertainties it named rather than carrying them forward as
+guesses:
+
+1. **Gap 7 (composer autonomy dial), flagged "needs a closer read... before this is a real finding".**
+   Read `ComposerModelControls.tsx` and `modelCatalog.ts` directly. Found `PERMISSION_MODE_CONTROL`
+   (`modelCatalog.ts:56`) already renders as a per-conversation `EnumControlPill` in the composer,
+   through the same generic control-pill mechanism every other per-turn control (model, effort) uses —
+   an in-composer autonomy dial already exists. **Conclusion: not a real gap.** Recorded in
+   `proposal.md`'s out-of-scope section with the evidence trail, not silently dropped and not proposed
+   as new work.
+2. **Gap 2b (diff view), flagged as depending on "what the edit tool's payload actually carries",
+   unconfirmed.** Read `stream_events.py`'s `tool_use_event`/`tool_result_event`
+   (`src/agentweave/stream_events.py:475-503`) directly: `payload.tool` is the literal tool name,
+   `payload.input` is `json.dumps(input_data, sort_keys=True)` — a real JSON string of the tool's
+   actual arguments — unless `payload.truncated` is `true`. This confirms a diff view is buildable
+   against real, parseable data, with truncation as the one documented failure mode to guard against
+   (not to guess about).
+
+**Wrote `openspec/changes/2026-08-16-conversation-formatting-and-quick-nav/`** — `proposal.md`,
+`design.md` (D1-D4), `tasks.md`, and two spec deltas:
+
+- **D1 — Markdown rendering** (`agent-conversation-workspace`, ADDED). `react-markdown` +
+  `remark-gfm` + `remark-breaks`, explicitly **no** `rehype-raw`/`dangerouslySetInnerHTML` — argued in
+  `design.md` as a real security boundary, not a style choice: conversation content includes agent
+  output and peer traffic, neither operator-authored, so treating it as HTML-safe would be a stored-XSS
+  path. Scoped to message-level entries only (`MessageEntry`), not tool-call rows (data, not prose).
+  `remark-breaks` specifically to avoid regressing today's single-newline-preserved behaviour, which a
+  bare Markdown renderer would collapse. Syntax-highlighted code blocks explicitly **deferred** — a
+  highlighter needs its own theme built from the Hub's CSS variables (same constraint
+  `2026-08-16-spec-surface-legibility` established for the spec document), named as real design work
+  rather than folded into this change's estimate.
+- **D2 — Tool-call icon/label + edit diff** (`agent-conversation-workspace`, ADDED). A fixed
+  `payload.tool` → `{icon, label}` table (11 named tools + a `Wrench`/"Tool call" fallback for anything
+  unmapped — future runner tool names degrade gracefully, don't break). Diff view keyed on the *shape*
+  of the parsed `payload.input` (`old_string`+`new_string` both present as strings) rather than a
+  tool-name allow-list, using `diff` (jsdiff) for `Diff.diffLines`. Explicit decline conditions, each
+  with its own task-level test: JSON parse failure, `payload.truncated === true` (never diff against a
+  string known to have been cut), or a parsed object missing either key — all fall through to the
+  existing raw-text rendering unchanged.
+- **D3 — Command palette** (`hub-workspace-shell`, ADDED). `cmdk`, `Cmd+K`/`Ctrl+K`, scoped to the
+  current project only (conversations, agents, spec documents, tasks — all already-loaded data, no new
+  fetch). Explicitly not in scope: cross-project switching, full-text search inside conversation
+  content — named as materially larger, separate features.
+
+**Deferred, with reasons stated in `proposal.md` rather than silently dropped:** gap 4 (in-chat
+plan/todo — architecturally the most expensive item on the survey's own list, deserves its own
+exploration and spec round), gap 5 (per-turn/conversation cost display — its cost estimate depends on
+what `accounting.py` actually scopes its numbers to, not re-checked this pass), gap 6 (cross-agent grid
+view — medium cost, additive, no evidence pass has scoped it, not coupled to what this change touches).
+
+`tasks.md` — sections 1-5 agent-verifiable (each of D1/D2/D3 plus a full-suite verification section:
+`tsc`, lint, `npm test`, bundle rebuild, confirm no backend file touched), section 6 human-only taste
+verification (5 items — does markdown actually read better, do the icons help scan, does the diff read
+cleanly against a real edit, does the palette feel fast, a regression check against pre-existing
+conversations), section 7 the user test guide (5 steps), per the standing directive. Every new
+assertion in the task list is written mutation-check-first, matching this run's established pattern.
+
+**Verification of the artifact itself:** `npx openspec validate 2026-08-16-conversation-formatting-and-
+quick-nav --strict` → valid. `npx openspec validate --all --strict` → 46/47 pass, the one failure being
+Q6's already-documented, already-investigated pre-existing validator false-positive (Entry 30) —
+nothing this change touched. **Nothing implemented yet** — no dependency installed, no component
+written — this iteration is the AUTHOR half of the spec-round protocol only, matching the shape of every
+other `spec_round: true` item this run (Q4, Q4b, Q6).
+
+**Elapsed:** one iteration.
+
+**Next:** a fresh, **cold** REVIEW round 1 of this artifact against Q7's own `review_criteria` in
+`STATE.json` — is the survey evidence-based rather than recollected (it is — cite the specific
+`Read`/`Grep` calls the reviewer should be able to find); is the gap list ranked by user value (the
+survey's own ranking, carried through to the proposal's scoping); does each proposed item say what it
+costs (D1-D3 each name a library choice and what was deliberately deferred); does anything conflict
+with the single-icon-system rule (D2's table is `lucide-react`-only, confirmed) or existing theming
+(D1's code-block styling and D2's diff colours both cite existing CSS tokens, no new palette). Follow
+the protocol exactly: do not look up who wrote it, critique on the merits, then either approve (set
+`next_action` to begin `tasks.md` section 1) or write concrete objections and set `next_action` to
+`REVISE round 2`. Max 3 rounds, same gate as Q6. Time remaining to `stop_at` (18:00) is about 3h20m as
+of this entry.
