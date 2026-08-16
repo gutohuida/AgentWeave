@@ -5,6 +5,12 @@ import type { AgentSummary } from '@/api/agents'
 import type { TimelineEntry } from '@/api/agentChat'
 import { AgentTimeline } from '@/components/agents/AgentTimeline'
 
+// Stub the Icon component so WorkRow's per-tool icon (Q7 D2) can be asserted by name
+// without depending on the real lucide-react SVG output — same pattern as SidebarItem.test.tsx.
+vi.mock('@/components/common/Icon', () => ({
+  Icon: ({ name }: { name: string }) => <span data-testid="icon" data-name={name} />,
+}))
+
 const agent: AgentSummary = {
   name: 'claude',
   status: 'running',
@@ -335,5 +341,83 @@ describe('AgentTimeline — execution-order work blocks (2026-08-04-hub-charcoal
     // proving the pairing lookup did not reach into the second block.
     fireEvent.click(screen.getAllByText('Work · 1 step')[0])
     expect(screen.getByText('awaiting result')).toBeInTheDocument()
+  })
+})
+
+describe('AgentTimeline — WorkRow tool icon and label (Q7 D2)', () => {
+  it('renders a mapped tool\'s icon and clean label, not the raw content text', () => {
+    render(
+      <AgentTimeline
+        agent={agent}
+        entries={[
+          entry({
+            id: 'tool_bash',
+            kind: 'agent_output',
+            output_kind: 'tool_use',
+            content: 'Called Bash',
+            payload: { call_id: 'c1', tool: 'Bash' },
+            run_id: 'run-bash',
+          }),
+        ]}
+        roster={[agent]}
+        timelineEvents={[]}
+        isRunning={false}
+      />,
+    )
+    fireEvent.click(screen.getByText('Work · 1 step'))
+    expect(screen.getByText('Bash')).toBeInTheDocument()
+    expect(screen.queryByText('Called Bash')).not.toBeInTheDocument()
+    const iconNames = screen.getAllByTestId('icon').map((el) => el.getAttribute('data-name'))
+    expect(iconNames).toContain('terminal')
+  })
+
+  it('falls back to the Wrench icon and the existing generic label for an unmapped tool name', () => {
+    render(
+      <AgentTimeline
+        agent={agent}
+        entries={[
+          entry({
+            id: 'tool_future',
+            kind: 'agent_output',
+            output_kind: 'tool_use',
+            content: 'Called SomeFutureTool',
+            payload: { call_id: 'c1', tool: 'SomeFutureTool' },
+            run_id: 'run-future',
+          }),
+        ]}
+        roster={[agent]}
+        timelineEvents={[]}
+        isRunning={false}
+      />,
+    )
+    fireEvent.click(screen.getByText('Work · 1 step'))
+    expect(screen.getByText('Called SomeFutureTool')).toBeInTheDocument()
+    const fallbackIconNames = screen.getAllByTestId('icon').map((el) => el.getAttribute('data-name'))
+    expect(fallbackIconNames).toContain('build')
+  })
+
+  it('falls back to the Wrench icon without throwing for an entry with no payload at all', () => {
+    render(
+      <AgentTimeline
+        agent={agent}
+        entries={[
+          entry({
+            id: 'thinking_no_payload',
+            kind: 'agent_output',
+            output_kind: 'thinking',
+            content: 'thinking',
+            payload: undefined,
+            run_id: 'run-think',
+          }),
+        ]}
+        roster={[agent]}
+        timelineEvents={[]}
+        isRunning={false}
+      />,
+    )
+    fireEvent.click(screen.getByText('Work · 1 step'))
+    expect(screen.getByText('Thinking')).toBeInTheDocument()
+    const fallbackIconNames = screen.getAllByTestId('icon').map((el) => el.getAttribute('data-name'))
+    expect(fallbackIconNames).toContain('build')
   })
 })

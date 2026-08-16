@@ -306,6 +306,25 @@ function WorkBlockDisclosure({ entries }: { entries: TimelineEntry[] }) {
   )
 }
 
+/** design.md D2 — a fixed lookup, not inferred, keyed on `payload.tool`. Unmapped tool
+ * names (a future runner's new tool) degrade to `TOOL_ICON_FALLBACK` rather than throwing. */
+const TOOL_ICON: Record<string, { icon: string; label: string }> = {
+  Read: { icon: 'description', label: 'Read' },
+  Write: { icon: 'file_plus', label: 'Write' },
+  Edit: { icon: 'edit', label: 'Edit' },
+  MultiEdit: { icon: 'edit', label: 'Edit' },
+  Bash: { icon: 'terminal', label: 'Bash' },
+  Grep: { icon: 'search', label: 'Search' },
+  Glob: { icon: 'folder_search', label: 'Find files' },
+  WebFetch: { icon: 'public', label: 'Fetch' },
+  WebSearch: { icon: 'search', label: 'Web search' },
+  Task: { icon: 'group', label: 'Subagent' },
+  Agent: { icon: 'group', label: 'Subagent' },
+  TodoWrite: { icon: 'task_alt', label: 'Plan' },
+  NotebookEdit: { icon: 'edit_note', label: 'Notebook' },
+}
+const TOOL_ICON_FALLBACK = { icon: 'build' }
+
 function WorkRow({ entry, paired }: { entry: TimelineEntry; paired?: TimelineEntry }) {
   const [expanded, setExpanded] = useState(false)
   const label =
@@ -314,6 +333,10 @@ function WorkRow({ entry, paired }: { entry: TimelineEntry; paired?: TimelineEnt
       : entry.output_kind === 'tool_use'
         ? entry.content || 'Tool call'
         : entry.content || 'Tool result'
+  const toolName = (entry.payload as Record<string, unknown> | null | undefined)?.tool
+  const mapped = typeof toolName === 'string' ? TOOL_ICON[toolName] : undefined
+  const iconName = mapped?.icon ?? TOOL_ICON_FALLBACK.icon
+  const displayLabel = mapped?.label ?? label
   const statusSuffix = paired
     ? (paired.payload as Record<string, unknown> | null | undefined)?.is_error === true
       ? ' · failed'
@@ -327,7 +350,8 @@ function WorkRow({ entry, paired }: { entry: TimelineEntry; paired?: TimelineEnt
       onClick={() => setExpanded((v) => !v)}
       className="flex gap-[.55rem] py-[2.5px] w-full text-left font-mono text-[12.5px]"
     >
-      <b style={{ color: 'var(--text)', fontWeight: 500, minWidth: 64 }}>{label}</b>
+      <Icon name={iconName} size={13} style={{ color: 'var(--text-2)', marginTop: 1, flexShrink: 0 }} />
+      <b style={{ color: 'var(--text)', fontWeight: 500, minWidth: 64 }}>{displayLabel}</b>
       <span style={{ color: 'var(--text-2)' }}>{statusSuffix.replace(' · ', '')}</span>
       {expanded && (
         <span className="block whitespace-pre-wrap mt-0.5" style={{ color: 'var(--text-3)' }}>

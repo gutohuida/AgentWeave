@@ -34,13 +34,13 @@ No database migration, no backend route change.
 
 ## 2. Tool-call icon and label (D2) — agent-verifiable
 
-- [ ] 2.1 `WorkRow` (`AgentTimeline.tsx`): add the `TOOL_ICON` lookup table from `design.md` D2,
+- [x] 2.1 `WorkRow` (`AgentTimeline.tsx`): add the `TOOL_ICON` lookup table from `design.md` D2,
       keyed on `entry.payload?.tool` (fall back to the existing generic label when `payload` is
       absent or `tool` is unmapped — do not assume every historical entry has a `payload.tool`, since
       this reads data recorded before this change too). Render the resolved `Icon` beside the
       existing label text, replacing the single shared fold icon that currently stands in for every
       tool type.
-- [ ] 2.2 Test: for each mapped tool name, `WorkRow` renders that tool's icon and label; for an
+- [x] 2.2 Test: for each mapped tool name, `WorkRow` renders that tool's icon and label; for an
       unmapped name (e.g. a fixture tool `"SomeFutureTool"`), it renders the `Wrench`/"Tool call"
       fallback; for an entry with no `payload` at all, it renders the same fallback without throwing.
       Mutation-check: remove one table entry, confirm its test fails (falls back instead of matching),
