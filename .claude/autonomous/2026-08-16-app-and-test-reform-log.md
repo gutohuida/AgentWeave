@@ -2163,3 +2163,82 @@ with evidence; per-OS global-state location with a migration path; what happens 
 `data/agentweave.db`; desktop-shell choice states rejected alternatives and why). Either approve and
 move `next_action` to the phase-1 implementation tasks, or write concrete objections and set
 `next_action` to `REVISE ... round 2`.
+
+## Entry 26 — 13:05 — Q6-desktop-and-global: REVIEW round 1 — REVISE, two blocking objections
+
+Read `openspec/changes/2026-08-16-one-hub-and-a-window-of-its-own/{proposal.md, design.md, tasks.md,
+specs/app-lifecycle/spec.md}` cold, per the spec-round protocol — did not look up who wrote them,
+critiqued against Q6's `review_criteria` in `STATE.json` by checking every factual claim against the
+actual code rather than trusting the artifact's own citations. D1/D2/D4/D5 check out completely —
+line numbers, `HUB_DIR` computation, `docker-compose.yml`'s missing `name:` key, and the
+`env_file=".env"` non-issue (native mode sets `DATABASE_URL`/`AW_BOOTSTRAP_API_KEY` in `os.environ`
+before `hub.main` import, which takes precedence over pydantic-settings' `.env` regardless of `cwd`)
+all verified directly against `hub/hub/config.py`, `hub/docker-compose.yml`, and `src/agentweave/cli.py`.
+The desktop-shell comparison (Electron/Tauri-PyTauri/pywebview) in the exploration is genuinely
+evidenced with sourced numbers, not asserted. But D3 and everything built on it has two blocking
+defects — **not approved**, round 2 required.
+
+**Objection 1 (blocking).** The entire artifact — `proposal.md`'s Impact section, `design.md` D3 in
+full, `tasks.md` sections 3, 4, 6, and 7 (the entire user test guide), and the ADDED requirement plus
+all four of its scenarios in `specs/app-lifecycle/spec.md` — is written around a command,
+`agentweave hub-start` / `agentweave hub-start --app`, that **does not exist** in this codebase and
+has not existed since the archived `2026-08-03-single-runtime` change (commit `ab53cf4`, the same
+commit this artifact correctly cites for the database-path fix). Verified directly against
+`src/agentweave/cli.py`'s `create_parser()`: the only subparsers are `doctor`/`status`/`stop`/`reset`
+— there is no `hub-start` subcommand — and there is no `--app` flag defined anywhere. `main()`
+unconditionally sets `parsed_args.app = True` for every bare invocation (`cli.py:1126`) before
+calling `cmd_hub_start`. `create_parser()`'s own docstring (`cli.py:1028-1029`) states this in exactly
+these words: *"Bare invocation is the primary entry point — equivalent to what used to be `hub start
+--app` — and is the only way to launch the app."* Past tense. This also directly contradicts the
+unmodified requirement scenario in the same capability this change extends: "No separate registration
+ceremony exists... there is no `init`, `activate`, `quick`, or `start` subcommand distinct from bare
+invocation" (`openspec/specs/app-lifecycle/spec.md`, left untouched by this delta).
+
+This is not a naming nit — it changes what D3 actually describes. Since `app=True` is already forced
+on the *one and only* way to start AgentWeave (bare invocation), the new pywebview-blocking behavior,
+once wired, becomes the **default experience of every normal launch**, not — as D3's "Scripted/
+--no-detach callers" paragraph frames it — an edge case affecting only callers who explicitly opt in
+with a flag that does not exist. `tasks.md`'s human-only section (6.2-6.4) and its entire user test
+guide (section 7, all three steps) instruct the operator to run commands argparse will reject outright.
+Traced this back to the exploration document itself (`openspec/explorations/2026-08-16-desktop-app-
+global-state.md` lines 25, 42, 74, 165, 192) — the wrong command form originates there, inherited
+uncritically into the AUTHOR pass rather than re-verified against `create_parser()`.
+
+**Objection 2 (blocking, compounds #1).** `tasks.md` 3.3 accounts for only 3 of the 5 real
+`_open_app_window` call sites: `_hub_native_start`'s two (`cli.py:692`, `:789`) and `_wait_and_open_app`
+(`cli.py:661`). It misses `cmd_hub_start`'s Docker branch entirely, which has two more
+(`cli.py:850` — the "already running" early return under `--docker`/`--local`, and `cli.py:942` —
+after `docker compose up` succeeds). Since Objection 1 established `app` is forced `True` for every
+bare invocation regardless of `--docker`/`--local`, a Docker-launched instance would silently keep
+opening the old chromeless-browser fallback even with `pywebview` installed — contradicting the ADDED
+requirement's own unqualified language ("The system SHALL open `--app` in a dedicated window... when
+a native webview backend is installed," with no native-only qualifier). Verified by reading
+`cmd_hub_start` in full (`cli.py:819-943`).
+
+**A third, non-blocking finding worth fixing in the same pass.** `tasks.md` section 4 repeatedly
+references extending `tests/test_cli.py` (4.1, 4.4: "Full existing `tests/test_cli.py` suite still
+passes unmodified"). No such file exists anywhere in this repo — confirmed by listing `tests/` and by
+grepping every file in it for `agentweave.cli`, `_open_app_window`, `_hub_native_start`, and
+`cmd_hub_start`: zero hits. The CLI currently has **no test coverage of any kind**. Task 4.4's claim
+is trivially true only because there is nothing to have asserted the old behavior — a materially
+different starting point (writing a new test file, including whatever import/fixture setup that
+needs) than "extend an existing suite," worth stating plainly rather than implying continuity with
+something that isn't there.
+
+**Verification this iteration:** no code changed. Every claim above was checked against the actual
+current source — `src/agentweave/cli.py` in full for the parser, both `_hub_native_start` and
+`cmd_hub_start`; `hub/hub/config.py`; `hub/docker-compose.yml`; `openspec/specs/app-lifecycle/spec.md`;
+a directory listing plus a grep of `tests/` — not recalled from the artifact's own citations. One
+`cd hub` from an earlier check leaked into a later `ls -la` and produced a confusing directory
+listing (the known trap already in `dead_ends`); caught it via `pwd` before drawing any conclusion
+from it, no wasted finding.
+
+**Elapsed:** one iteration.
+
+**Next:** a fresh iteration does `Q6 REVISE openspec/changes/2026-08-16-one-hub-and-a-window-of-its-own
+round 2` — fix both blocking objections (rewrite every command example from `agentweave hub-start
+--app` to the real bare-invocation form throughout `proposal.md`, `design.md` D3, `tasks.md`, and the
+spec delta's scenarios; add the two missing Docker-branch call sites to task 3.3/4.x or explicitly
+scope the ADDED requirement to native-only launches with a stated reason) and fix the third finding
+(task 4.1 states plainly that `tests/test_cli.py` does not exist yet and is being created, not
+extended). Then set `next_action` back to `REVIEW ... round 2` per the protocol — round 2 of max 3.
