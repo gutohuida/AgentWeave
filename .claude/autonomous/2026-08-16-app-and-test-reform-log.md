@@ -2713,3 +2713,95 @@ the protocol exactly: do not look up who wrote it, critique on the merits, then 
 `next_action` to begin `tasks.md` section 1) or write concrete objections and set `next_action` to
 `REVISE round 2`. Max 3 rounds, same gate as Q6. Time remaining to `stop_at` (18:00) is about 3h20m as
 of this entry.
+of that entry.
+
+---
+
+## Entry 33 — 2026-08-16T14:49+01:00 — Q7 REVIEW round 1 (iteration 34)
+
+**Cold review** of `openspec/changes/2026-08-16-conversation-formatting-and-quick-nav/` against Q7's
+`review_criteria`. Read `proposal.md`, `design.md`, `tasks.md`, both spec deltas, and the survey
+(`openspec/explorations/2026-08-16-ui-gap-analysis.md`) without looking at who wrote them or the
+previous entry's narrative, then independently re-verified the artifact's factual claims against the
+actual source rather than trusting the citations:
+
+- Confirmed no `react-markdown`/`remark`/`dangerouslySetInnerHTML` anywhere in `hub/ui` today (grep).
+- Confirmed `WorkRow`/`MessageEntry` exist exactly where and as described
+  (`AgentTimeline.tsx:308`/`385`), and that `SharedStreamRenderer.tsx` (also `whitespace-pre-wrap`,
+  not mentioned in the proposal) is dead code — exported and unit-tested but imported nowhere in the
+  live app — so its omission from scope is correct, not an oversight.
+- Confirmed `PERMISSION_MODE_CONTROL` (`modelCatalog.ts:56`) is real and wired into the composer via
+  `AgentOutputPanel.tsx`, supporting gap 7's "not a real gap" resolution.
+- Confirmed `stream_events.py:475-505`'s `tool_use_event` shape (`payload.tool`, `payload.input` via
+  `_stringify`, `payload.truncated`) matches D2's description.
+- Confirmed `--green`/`--red` tokens and the "hue is reserved for meaning" requirement
+  (`hub-workspace-shell` spec) are both real, pre-existing, cited correctly.
+- Confirmed `hub/ui/package.json`'s React 18.3.1 has no version conflict with `react-markdown`
+  v9/`cmdk`/`diff`.
+- Confirmed the survey's gap ranking is evidence-based (direct reads cited per gap, secondary-source
+  gaps flagged and down-weighted explicitly — gap 7), and the proposal's scoping follows that ranking
+  without silently dropping anything (gaps 4/5/6 deferred with reasons, gap 7 resolved with evidence).
+
+**One concrete objection, evidence-based, cheap to fix — REVISE round 2, not approved.**
+
+`design.md` D2 claims the diff view's structural check (parsed `payload.input` object carrying both
+`old_string` and `new_string` as top-level string properties) covers "`Edit`, `MultiEdit`'s per-edit
+entries." This is not true given the actual payload shape. Checked
+`hub/hub/runner_parsing.py:264-272` directly: for a Claude `tool_use` block, `input_data=block.get
+("input", {})` passes the tool's raw API input straight through unmodified. Claude's own `MultiEdit`
+tool input schema is `{file_path, edits: [{old_string, new_string, replace_all}, ...]}` — the two
+keys the structural check looks for live inside each element of a nested `edits` array, never at the
+top level of `payload.input` itself. A real `MultiEdit` call would therefore fail the structural
+check and fall through to the existing raw-text rendering, exactly like any other non-matching shape
+— which is *safe* (no crash, no wrong diff, the fallback path is exercised and tested for other
+cases) — but `design.md`'s own sentence asserts MultiEdit is one of the shapes this feature renders as
+a diff, and it is not. A reader of `design.md` alone would believe `MultiEdit` edits already get diff
+treatment; they do not, and no task or test in `tasks.md` covers a `MultiEdit`-shaped payload at all
+(3.4's fallback cases are: invalid JSON, `truncated: true`, and a payload with only `old_string` — not
+`MultiEdit`'s actual `edits`-array shape).
+
+A smaller, related inaccuracy in the same neighborhood: `tasks.md` 3.4 labels its third fallback
+fixture "a `Write`-shaped payload, no `new_string`" for a payload that has only `old_string`. Write's
+actual tool input shape (same `runner_parsing.py` code path, same Claude API tool schema) is
+`{file_path, content}` — it has neither `old_string` nor `new_string`. The fixture is a valid
+generic test of "parses but is missing one of the two required keys," and the fallback behavior it
+verifies is correct — but labelling it "Write-shaped" asserts a specific real-world case that was not
+actually checked, the same pattern as the MultiEdit claim: a plausible-sounding tool-shape claim that
+was not verified against `runner_parsing.py`, which was available and was correctly consulted for the
+generic `input`/`truncated` shape elsewhere in the same design section.
+
+**Why this earns a round instead of a note-and-ship:** both inaccuracies are about what specific,
+named tool payload shapes this feature does and does not cover — exactly the kind of claim
+`review_criteria` asks be evidence-based rather than assumed, and the fix is one paragraph of
+`design.md` wording plus one more fixture in 3.4, not new engineering. Cheap enough that spending a
+round on it is worth more than shipping a design doc that overclaims what round-1 implementation will
+actually do.
+
+**Requested for round 2 (AUTHOR):**
+1. Correct `design.md` D2: state plainly that the structural check matches `Edit`'s shape (and any
+   future tool whose `payload.input` happens to parse to an object with top-level `old_string`/
+   `new_string`), and that `MultiEdit`'s actual `{file_path, edits: [...]}` shape does **not** match
+   it — a `MultiEdit` call falls to the raw-text fallback like any other non-matching shape. Either
+   name this as a known, deliberately out-of-scope limitation (parallel to "no diff for tools other
+   than the edit family," already named as not-built), or, if per-edit `MultiEdit` diffing is wanted
+   in v1, design it properly (iterate the `edits` array, one diff per entry) — a real scope decision,
+   not a wording fix, so record which was chosen and why.
+2. Fix `tasks.md` 3.4's fixture label to not claim "Write-shaped" for a synthetic
+   only-`old_string` case; either rename it to describe what it actually is (a generic
+   missing-required-key case) or add a second, genuinely `Write`-shaped fixture
+   (`{"file_path":"x","content":"y"}`) alongside it so the fallback claim is verified against the
+   real tool shape it's named after.
+3. If choice 1 above adds a `MultiEdit`-shaped fallback (or diff) fixture to 3.4, note it there too.
+
+**Everything else in the artifact stands as reviewed** — no other objection. Gap ranking, cost
+statements, icon-system compliance, theming compliance, and the deferral reasoning for gaps 4/5/6/7
+all check out against direct re-verification, not just re-reading the prose.
+
+**Elapsed:** one iteration (review only, no code or artifact changes made — a REVIEW iteration
+critiques and gates, per the protocol, it does not edit).
+
+**Next:** REVISE round 2 — apply the three fixes above to `design.md` and `tasks.md` (no spec.md
+change needed; neither delta names `MultiEdit` specifically, so the requirement text itself does not
+overclaim). Small, targeted edit, not a rewrite. Then a fresh cold REVIEW round 2 the iteration after,
+same as this one. Round 3 is the last possible round per the gate. Time remaining to `stop_at`
+(18:00) is about 3h10m as of this entry.
