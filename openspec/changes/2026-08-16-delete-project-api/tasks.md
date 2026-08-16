@@ -156,24 +156,63 @@ No migration in this change (`design.md` D1) — every table already exists.
 
 ## 4. UI — delete control
 
-- [ ] 4.1 `useDeleteProject(projectId)` in `hub/ui/src/api/projects.ts`, mirroring
+- [x] 4.1 `useDeleteProject(projectId)` in `hub/ui/src/api/projects.ts`, mirroring
       `useRelocateProject`'s shape: `useMutation` calling `DELETE /api/v1/projects/{id}`, `onSuccess`
       removes the project from the `['projects']` query cache and, if it was the selected project,
       resolves the next selection the same way `configStore.bootstrap()` does
       (`design.md` D6) — reuse that resolution, do not reimplement it a second way.
-- [ ] 4.2 A `DeleteProjectSection` (or extend `ProjectSettingsPanel.tsx` directly) using
+      Added. The mutation bypasses `deleteJson` deliberately — the route returns `204` with an empty
+      body, and `deleteJson` always calls `res.json()`, which throws `SyntaxError` on an empty
+      response; used `fetchWithAuth` directly and discarded the response. `onSuccess` writes the
+      filtered array once via `queryClient.setQueryData`'s functional updater, captures that same
+      filtered array as `remaining`, and only then reads `useConfigStore.getState().selectedProjectId`
+      to decide whether to call `setSelectedProject(remaining[0]?.id ?? null)` — one source of truth
+      for "what's left" rather than a second cache read.
+- [x] 4.2 A `DeleteProjectSection` (or extend `ProjectSettingsPanel.tsx` directly) using
       `SettingsSection`/`SettingsRow`, in the `settings` environment section, below the existing
       relocate control. `Icon` component only (`name="trash"` or nearest lucide equivalent already
       used elsewhere in this codebase — check before introducing a new icon name).
-- [ ] 4.3 Confirmation dialog: names the project, requires typing its current name
+      Extended `ProjectSettingsPanel.tsx` with a `SettingsRow` below the Directory row, holding a
+      `destructive`-variant `Button` that opens the dialog. No new icon needed — the trigger is a
+      labelled button ("Delete project…"), matching the Directory row's own "Locate project" trigger,
+      which is also text-only.
+- [x] 4.3 Confirmation dialog: names the project, requires typing its current name
       (case-sensitive, trimmed) before the Delete button enables (`design.md` D7). Cancel leaves
       everything unchanged.
-- [ ] 4.4 On `409` (active run), the dialog surfaces that reason instead of a generic error — the
+      New `hub/ui/src/components/environment/DeleteProjectDialog.tsx`, following
+      `AgentCreateDialog.tsx`'s existing dialog pattern (`role="dialog"`, `aria-modal`,
+      `useDialogFocus` for focus trap + Escape). `canDelete` compares `typed.trim() === project.name`
+      — trimmed at the edges only, case-sensitive otherwise, per D7's literal wording. Cancel calls
+      `onClose` with no mutation invoked; the dialog's own `useEffect` resets `typed` and the mutation
+      state every time it reopens, so a cancelled attempt leaves no stale input behind.
+- [x] 4.4 On `409` (active run), the dialog surfaces that reason instead of a generic error — the
       operator should learn *why* deletion is refused, not just that it was.
-- [ ] 4.5 Confirm (by reading `App.tsx` and `Sidebar.tsx` as they exist after 4.1-4.4, not by
+      No new branching needed: `hub/hub/api/v1/projects.py`'s 409 already carries
+      `detail={"code": ..., "message": "project cannot be deleted while a run is active"}`, and
+      `readableApiError` (`hub/ui/src/api/client.ts`) already extracts `detail.message` from exactly
+      this shape (it was written for the checkpoint-threshold refusal, but the shape is generic). The
+      dialog calls `readableApiError(deleteProject.error, 'The project could not be deleted.')` —
+      verified by reading `readableApiError`'s object-detail branch against the route's actual
+      `detail` shape, not assumed.
+- [x] 4.5 Confirm (by reading `App.tsx` and `Sidebar.tsx` as they exist after 4.1-4.4, not by
       assumption) that a zero-project state renders the rail's existing "Add project" affordance
       with no crash and no stale project header. If it does not, fix it here — `design.md` D6 treats
       a broken last-delete as in-scope, not a follow-up.
+      Read both files. Already coherent, no fix needed — better than D6 assumed: `App.tsx` already
+      has a `WorkspaceDestination` of `{kind: 'zero'}` (`lib/navigation.ts`), and
+      `useWorkspaceNavigation`'s `resolveDestination` falls through to it whenever
+      `availableProjectIds` is a non-null empty array with no `lastOpenedProjectId` match
+      (`navigation.ts:383-386`). `App.tsx`'s `content` renders "Open or create a project to begin."
+      for every destination kind that isn't `conversation`/`agent-settings`/`project` (the final
+      `else` at `App.tsx:398`), `<ProjectHeader>` is already gated on `currentProject &&` so it
+      renders nothing rather than a stale header, and `Sidebar.tsx`'s rail always renders the
+      "Add project" button (`data-testid="create-new-project"`) unconditionally below
+      `projects.map(...)`, which is simply empty when `projects` is `[]` — no crash. This path was
+      reachable only by wiping the database before; `useDeleteProject`'s cache write to `['projects']`
+      is what makes `availableProjectIds` go to `[]` reactively inside a live session, and
+      `useWorkspaceNavigation` already recomputes `destination` on that array's content (compared by
+      `.join(',')`, not identity) via its `useEffect` dependency — confirmed by reading, not run
+      live yet (that's task 6.4, the taste judgement on top of this structural check).
 
 ## 5. UI tests — agent-verifiable
 

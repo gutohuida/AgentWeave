@@ -5,6 +5,7 @@ import { useConfigStore } from '@/store/configStore'
 
 const update = vi.fn()
 const relocate = vi.fn()
+const deleteProject = vi.fn()
 const project = {
   id: 'proj-a', name: 'Website', working_directory: null, path_display: 'C:/missing/site',
   directory_state: 'missing', last_opened_at: null, last_seen_at: null, hop_budget: 12,
@@ -40,6 +41,9 @@ vi.mock('@/api/projects', () => ({
   useMainBranchSuggestion: () => ({ data: suggestion }),
   useUpdateProjectSettings: () => ({ mutate: update, isPending: false, error: null }),
   useRelocateProject: () => ({ mutate: relocate, isPending: false, error: null }),
+  useDeleteProject: () => ({
+    mutate: deleteProject, isPending: false, error: null, isSuccess: false, reset: vi.fn(),
+  }),
 }))
 
 vi.mock('@/api/runners', () => ({

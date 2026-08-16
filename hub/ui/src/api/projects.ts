@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { getJson, postJson, putJson } from './client'
+import { fetchWithAuth, getJson, postJson, putJson } from './client'
 import { useConfigStore } from '@/store/configStore'
 
 export interface ProjectAgentSummary {
@@ -160,6 +160,33 @@ export function useRelocateProject(projectId: string) {
       queryClient.setQueryData<ProjectSummary[]>(['projects'], (current = []) =>
         current.map((project) => project.id === projectId ? updated : project),
       )
+    },
+  })
+}
+
+/**
+ * DELETE /api/v1/projects/{id} returns 204 with no body, so this bypasses `deleteJson` (which
+ * always calls `res.json()` and would throw a `SyntaxError` on an empty response) and drops the
+ * response entirely — the caller learns of success or failure only through the promise settling.
+ *
+ * `onSuccess` mirrors `useRelocateProject`'s direct-cache-write pattern, then resolves the next
+ * selection the same way `configStore.bootstrap()` does when a persisted selection stops existing
+ * (`design.md` D6) — reusing that fallback rather than a second one, so the two paths that can make
+ * the selected project disappear (deletion, and a stale selection at load) never disagree.
+ */
+export function useDeleteProject(projectId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => fetchWithAuth(`/api/v1/projects/${projectId}`, { method: 'DELETE' }).then(() => undefined),
+    onSuccess: () => {
+      let remaining: ProjectSummary[] = []
+      queryClient.setQueryData<ProjectSummary[]>(['projects'], (current = []) => {
+        remaining = current.filter((project) => project.id !== projectId)
+        return remaining
+      })
+      if (useConfigStore.getState().selectedProjectId === projectId) {
+        useConfigStore.getState().setSelectedProject(remaining[0]?.id ?? null)
+      }
     },
   })
 }

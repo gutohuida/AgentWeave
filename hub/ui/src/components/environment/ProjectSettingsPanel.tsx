@@ -11,6 +11,7 @@ import {
 import { useModelCatalog } from '@/api/modelCatalog'
 import { useRunners } from '@/api/runners'
 import { Button } from '@/components/ui/button'
+import { DeleteProjectDialog } from '@/components/environment/DeleteProjectDialog'
 import { SettingsRow, SettingsSection } from '@/components/environment/SettingsSection'
 import { useConfigStore } from '@/store/configStore'
 
@@ -80,6 +81,7 @@ export function ProjectSettingsPanel() {
   const [thresholdEntry, setThresholdEntry] = useState('')
   const [notesEntry, setNotesEntry] = useState('')
   const [newPath, setNewPath] = useState('')
+  const [deleteOpen, setDeleteOpen] = useState(false)
 
   useEffect(() => {
     if (!settings) return
@@ -296,10 +298,21 @@ export function ProjectSettingsPanel() {
           </div>
         )}
       </SettingsRow>
+      <SettingsRow label="Delete project" description="Removes this project from AgentWeave, permanently. The folder on disk is never touched.">
+        <Button type="button" variant="destructive" size="sm" onClick={() => setDeleteOpen(true)}>
+          Delete project…
+        </Button>
+      </SettingsRow>
+
       {update.isSuccess && <div role="status" className="py-3 text-xs" style={{ color: 'var(--green)' }}>Settings saved.</div>}
       {relocate.isSuccess && <div role="status" className="py-3 text-xs" style={{ color: 'var(--green)' }}>Project directory updated.</div>}
       {error && <div role="alert" className="py-3 text-xs" style={{ color: 'var(--red)' }}>{readableApiError(error, 'The update could not be saved.')}</div>}
       </form>
+      <DeleteProjectDialog
+        project={deleteOpen ? project : null}
+        onClose={() => setDeleteOpen(false)}
+        onDeleted={() => setDeleteOpen(false)}
+      />
     </SettingsSection>
   )
 }
