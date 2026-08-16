@@ -743,3 +743,86 @@ a keystone item and, per `spec_round_protocol`, gets its own three-round cap sta
 cold review, cold review/cap. `next_action` set to N3 round 1 (author proposal.md/design.md/tasks.md
 and a spec delta in `openspec/changes/`, scope-ceiling reminder: model + API + visibility ONLY, the
 Hub actually spawning/re-entering iterations is explicitly out of scope for tonight).
+
+## Entry 8 — N3 round 1 (AUTHOR): `openspec/changes/2026-08-16-many-named-loops`
+
+Wrote `proposal.md`, `design.md`, `tasks.md`, and two spec deltas (new capability `agent-loops`;
+`task-lifecycle-governance` modified) for the job-system keystone item. Spec only — no code this
+iteration, per the three-round protocol's own discipline (N2 and N2b both authored round 1 before
+touching code).
+
+**Grounded in the running code, not the abstract, before drafting.** Read `hub/hub/db/models.py`'s
+`AIJob`/`JobRun` (1123/1160) and `hub/hub/scheduler.py::_do_fire_job` end to end first. Two things
+that changed the shape of the proposal from what `queue[3].detail` assumed:
+
+1. **`AIJob` already spawns real work.** `queue[3].detail`'s framing — "everything that makes the
+   overnight loop actually work lives in `STATE.json` on disk, outside the product" — is true of the
+   *semantics* but not of execution: `_do_fire_job` already creates a `Conversation`, enqueues a real
+   `InboundQueueEntry`, and calls `schedule_agent` — no synthetic message, no watchdog, the direct
+   spawn path task 3.10 (an earlier change) already built. This mattered for the scope-ceiling
+   reading: "the Hub actually spawning or re-entering iterations is explicitly out of scope" cannot
+   mean "don't let jobs fire" (they already do, unconditionally); it has to mean "don't build the
+   thing that decides to fire when the existing cron/manual trigger would not have, and don't build
+   the thing that picks the next queue item for an agent." Design D4's stop-condition check is
+   written to hold exactly that line: it only ever *skips* a fire the scheduler was already about to
+   make, never causes one.
+2. **A real, present-tense traceability gap, not a hypothetical one.** `JobRun` records
+   `session_id`, but `scheduler.py:283` only sets it from `job.last_session_id` when resuming — a
+   fresh (`session_mode="new"`) firing's `JobRun.session_id` is `None` forever, even though the
+   function builds a `Conversation` object two lines later and never attaches its id to the row it
+   writes. Confirmed by reading the function, not assumed: nothing else in `hub/hub/*.py` writes
+   `JobRun.conversation_id` because the column does not exist yet. This became design D3 — the
+   proposal's own single highest-value line, a one-line fix, and the fact that makes every other
+   piece of visibility possible (open questions per loop, a firing's own output log) a join instead
+   of new storage.
+
+**Composition, checked against each of the operator's named primitives, not asserted:**
+- Iteration → `JobRun`, already exists, gains one column (`conversation_id`), not a new table.
+- Decisions for the operator → the existing `Question`/`ask_user` machinery, reached via
+  `conversation_id`, no new column on `Question` at all.
+- Queue item → `Task`, gains one column (`loop_id`), exactly mirroring `spec_document_id`'s own
+  established shape (nullable, indexed, deliberately no FK — the SQLite undroppable-CHECK-column trap
+  `Task.spec_document_id`'s own comment and `0074`'s comment both document).
+- Narrative log → `AgentOutput` + the activity timeline, already keyed on `conversation_id` — reached
+  the same way, not rebuilt.
+- A loop's operator → deliberately **not** touched. `AIJob.agent` already names who runs it; nothing
+  in this proposal adds a second notion of "whose loop is this."
+- The *task-list scoping mechanism itself* — `GET /tasks?loop_id=` is a third `elif` arm beside the
+  `spec_document_id`/`exclude_archived_completed` pair `2026-08-16-the-board-scoped-by-document`
+  shipped earlier tonight (N2b). Literally the second caller N2b's own design predicted having.
+
+**Pre-authorised default honoured explicitly**: new table (`loops`), not new columns on `AIJob`/
+`JobRun` beyond the one traceability column D3 adds — and D1 states in writing why `JobRun.
+conversation_id` and `Task.loop_id` are *not* overloading in the sense the default warns against
+(they are the join keys a table naturally needs to relate to another, not a redefinition of what
+`AIJob`/`JobRun`/`Task` already mean).
+
+**Rejected a `Loop.status` enum** (design D1) in favour of reading "is this loop firing" off the
+`AIJob.enabled` flag that already exists, with a new `stop_reason` (nullable) distinguishing a loop
+that stopped itself from one an operator merely paused with the existing, unchanged `toggle_job`
+path. One boolean field the Hub already had, plus one nullable reason field, instead of a second
+status vocabulary that could disagree with the first.
+
+**Rejected a `GET /loops` router** (design D5) in favour of embedding an optional `loop` object on
+the existing `JobResponse` — a loop has no field of its own the underlying job does not already
+carry (no independent cron, message, or agent), so a separate endpoint would only mean stitching two
+responses together for a relationship that is always 1:1. "Many named loops" is answered by the
+existing Jobs page listing many jobs, some of which now carry a loop block.
+
+**Explicit non-goal, stated in both proposal.md and design D7, because it is the item's own trickiest
+judgment call and the one round 2's cold review should press hardest on**: nothing here lets a loop
+choose its own next queue item, mark one done and start the next, or resume a conversation on the
+Hub's initiative. The stop-condition check (D4) is the only place this proposal's code runs on its
+own — and it can only ever *prevent* an already-scheduled fire, never cause one. Composing this into
+something that actually drives itself is named as future work, not folded in quietly.
+
+`npx openspec validate --changes --strict`: 20/20 (19 prior + this one). No code touched, so the
+green baseline from `20e963e` (`pytest hub/tests -n 8` 2093/11, `pytest tests/ -n 4` 362/3, `npm
+test` 943/943) is untouched and not re-run this iteration — nothing changed that those suites cover.
+
+`next_action` set to N3 round 2 (cold review — a fresh reading against the actual `AIJob`/`JobRun`/
+`Task`/scheduler code this iteration cited, checking in particular: does D4's skip-check really only
+ever prevent a fire and never cause one; does the `elif` ordering in D2 actually compose with the
+`spec_document_id`/`exclude_archived_completed` pair from N2b without a fourth interaction case
+nobody considered; is `list_jobs`' N+1 risk from task 4.4 real and, if so, is round 1 right to leave
+it as a task-level warning rather than a design decision).
