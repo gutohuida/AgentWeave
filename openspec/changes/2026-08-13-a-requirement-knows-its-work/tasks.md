@@ -162,8 +162,16 @@ Unblocked. **Both footprint paths ship together.**
       links found. A factual check, not a judgement call.
 - [ ] 8.4 **Choose the project's retention policy** and confirm the evidence tree is somewhere you
       would actually keep artifacts.
-- [ ] 8.5 **Decide which agent, if any, holds `can_accept_evidence`** — and confirm that working
+- [x] 8.5 **Decide which agent, if any, holds `can_accept_evidence`** — and confirm that working
       without one still feels workable rather than obstructive.
+      **Decided by the operator, 2026-08-16: nobody by default; the operator grants it.** This keeps
+      the standing rule — *"only test agents can accept the evidence… If no tester agent then all
+      defers to the operator"* — as the shipped default rather than as convention. Rejected
+      auto-granting to any agent bound to the `Verifier` charter: it would turn charter binding into
+      a permission grant, so rebinding a charter would silently change what an agent may do.
+      **Known consequence, deliberately accepted:** a fresh project cannot accept evidence until the
+      operator grants it, which is a first-run friction. `aw-loop10` needed an explicit
+      `PATCH /agents/verifier {"can_accept_evidence": true}` before the verify half worked at all.
 
 ## 9. User test guide
 

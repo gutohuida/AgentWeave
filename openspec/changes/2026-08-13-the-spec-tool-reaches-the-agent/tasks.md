@@ -98,6 +98,13 @@ grounded in the repository, and it stopped. No `ask_user`. No OpenSpec.
 - [ ] 6.4 **The ten-minute turn timeout.** An interview of several rounds plus operator thinking time
       exceeds it; one loop run died that way. Not touched by this change and worth its own look,
       because the exploration flow is the feature that produces long turns.
-- [ ] 6.5 Decide whether a turn triggered with no `conversation_id` should open a new conversation
+- [x] 6.5 Decide whether a turn triggered with no `conversation_id` should open a new conversation
       every time. The UI always sends one, so this is not reached from the app — but jobs and peer
       messages do not, and 1.10 shows how convincingly a cold start imitates continuity.
+      **Decided by the operator, 2026-08-16: yes, a new conversation each time — current behaviour
+      stands.** Predictable and stateless: a job or a peer message gets a clean thread rather than
+      landing in the middle of one the operator was having, with its context and its cost. Rejected
+      reusing the agent's most recent open conversation for exactly that reason. The known cost is
+      thread sprawl, and it is why runtime overrides need `inherit_runtime_overrides` to carry the
+      operator's chosen posture across the hop — that mechanism exists precisely because this
+      decision went this way.

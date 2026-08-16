@@ -91,10 +91,29 @@ judgement about how it feels rather than whether it fires.
       you what to do without reading the code. If it does not, the gate will end up switched off.
 - [ ] 5.2 **Is demotion the right escape hatch?** Use it to get past a gate under time pressure and
       judge whether it feels like a legitimate recorded decision or like defeat.
-- [ ] 5.3 **Is `contract` worth having?** It reports and blocks nothing. Decide whether that middle
+- [x] 5.3 **Is `contract` worth having?** It reports and blocks nothing. Decide whether that middle
       level earns its place or whether two levels would be clearer.
-- [ ] 5.4 **Does gating at `approved` match how you work?** If you rarely take tasks past
+      **Decided by the operator, 2026-08-16: keep it, but make it mean something.** `contract`
+      becomes the *"tell me but do not stop me"* posture — it reports unmet or rejected requirements
+      on approval without blocking the transition. Rejected dropping it: the middle level is worth
+      having, it just has to have a consequence. Rejected keeping it as a documentation-only marker:
+      a level users must choose with nothing attached is worse than not offering one.
+      **This is now implementation work, not a decision** — see 5.5 below.
+- [ ] 5.5 **Give `contract` its behaviour.** Report unmet and rejected requirements on approval,
+      without refusing the transition. Filed 2026-08-16 out of 5.3. This is the natural home for the
+      non-silent approval signal 5.4 asks for, so build the two together: `contract` reports, `gate`
+      refuses, `sketch` stays quiet apart from the rejected-evidence signal itself.
+- [x] 5.4 **Does gating at `approved` match how you work?** If you rarely take tasks past
       `completed`, the gate will rarely fire and that is worth knowing early.
+      **Answered by the operator, 2026-08-16: keep the default loose, but never silent.**
+      `sketch` and `contract` stay non-blocking, which was the deliberate choice; what must change
+      is that approving stops succeeding *quietly* when a linked requirement's evidence was
+      rejected. Rejected blocking approval regardless of rigor: it would remove the ability to push
+      past a gate under time pressure that 5.2 exists to preserve.
+      **Confirmed against a real cost, not a hypothetical:** in `aw-loop10`, `task-1f82d976` was
+      approved and merged while carrying `FR-9`, whose evidence the verifier had rejected. Commit
+      `60f0b3f` already names a rejected requirement on the task response; this decision confirms
+      that direction and 5.5 completes it.
 
 ## 6. User test guide
 
