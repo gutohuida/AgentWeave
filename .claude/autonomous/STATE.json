@@ -6,8 +6,8 @@
   "started_at": "2026-08-16T02:15:00+01:00",
   "stop_at": "2026-08-16T12:00:00+01:00",
   "stop_when_queue_empties": false,
-  "iteration": 1,
-  "last_heartbeat": "2026-08-16T01:42:53+01:00",
+  "iteration": 2,
+  "last_heartbeat": "2026-08-16T02:53:00+01:00",
   "spec_round_protocol": {
     "why": "Operator: 'one agent produces the spec, the next triggers the agents review until a agent thinks is good to implement. We need to have another gate so agent don't go on forever.' Implemented as successive driver iterations rather than subagents, at the operator's suggestion ('the trigger at 2AM generates the spec and the one at 2:15 reviews it'). A fresh process has no memory of writing the thing it reviews, so the independence is structural rather than merely prompted.",
     "max_rounds": 3,
@@ -32,7 +32,7 @@
     {
       "id": "Q2-test-speed",
       "title": "Measure where the 7 minutes goes, and try pytest-xdist",
-      "status": "open",
+      "status": "done",
       "why": "Operator: 'the testing is taking way too long'. Cutting tests is one fix; making the suite faster is the other, and it costs no coverage. Prep found pytest-xdist is NOT installed and 147 hub test files run on one core.",
       "detail": "Measure first, do not guess. Run with --durations=50 per chunk to find where time concentrates. Then pip install pytest-xdist into C:/Users/huida/AppData/Local/Programs/Python/Python311/python.exe and try -n auto. The fixtures look xdist-friendly — hub/tests/conftest.py:10 uses in-memory SQLite (per-process, so each worker is isolated) and _default_project_workspace gives each test its own tmp_path. Verify identical pass counts with and without -n before claiming it works; a parallel run that silently skips tests is worse than a slow one. Also check whether root pyproject.toml's addopts '-v --tb=short' costs measurable I/O on 360 tests.",
       "verify": "Same passed/failed/skipped counts serial vs parallel, with wall-clock for both, recorded in the log. If xdist breaks fixtures, say so and record why rather than forcing it.",
@@ -116,8 +116,8 @@
       "est_iterations": 8
     }
   ],
-  "current": "Q2-test-speed",
-  "next_action": "Read Entry 1 of the log first (Q1 is done — 10 projects deleted via raw SQL after confirming no delete API exists; Hub restarted and re-verified: 1 project, 9 requirements). Now do Q2-test-speed: run the hub test suite in chunks with --durations=50 to find where the 7 minutes concentrates (chunk it — the full run exceeds the 600s command cap; consider running a chunk in the background). Record top offenders in the log. Then pip install pytest-xdist into C:/Users/huida/AppData/Local/Programs/Python/Python311/python.exe and run the SAME chunk both serial and with -n auto, comparing pass/fail/skip counts exactly (not just wall-clock) before claiming xdist works. Also check whether root pyproject.toml's addopts '-v --tb=short' costs measurable I/O across ~360 tests. This item is sized at 2 iterations in the estimate — if the measurement phase alone fills this iteration, stop there, log the durations findings, and leave next_action pointing at the xdist comparison for the next firing rather than rushing both into one turn.",
+  "current": "Q3-conversation-sequence",
+  "next_action": "Read Entry 2 of the log first (Q2 is done — hub/tests (2057 tests) was the whole cost, not root tests/ (363 tests, 18s, untouched); root pyproject.toml's -v --tb=short addopts never applied to hub tests in the first place because hub/pyproject.toml is the configfile pytest picks for that path. pytest-xdist installed and verified: identical pass/skip counts serial vs -n auto vs -n 8 at both chunk and full-suite scale. Makefile's test-hub now runs `pytest hub/tests/ -n auto` (317.85s full suite, down from an extrapolated ~762s serial) and hub/pyproject.toml's dev extra now lists pytest-xdist>=3.6. -n 8 measured faster still (292.54s) but was NOT hardcoded — this machine is 12 physical/20 logical cores and -n auto already self-derives per-machine; recorded as a decision point in the log, not applied.) Now do Q3-conversation-sequence: hub/hub/conversations.py:72 orders by created_at.desc() alone, which ties when two conversations are created inside the same ~15.6ms Windows clock tick. DO NOT use the id.desc() fix from handoff 0050 — prep already verified Conversation.id is random ('conv-' + short_id()), so ordering by it is arbitrary, not deterministic. Instead add an autoincrement `sequence` integer primary key to Conversation, following the exact precedent already in the codebase for TaskTransition and InboundQueueEntry (read the reasoning at hub/hub/db/models.py:695-699 first). Order conversations.py:72 by sequence.desc(). Write a migration in hub/hub/migrations/versions/ guarding for a missing table like 0033/0034 do, and bump the head assertions in BOTH hub/tests/test_migrations.py and hub/tests/test_project_persistence.py (CLAUDE.md requires both). Add a regression test that creates two conversations with an identical created_at and asserts the later-created one wins; mutation-check it by reverting the ordering change and confirming that named test fails. Then run hub/tests/test_override_inheritance.py three times (loop three separate invocations, not a single one with repeat, so a real process restart happens each time) and confirm test_override_inheritance passes every time — that test currently fails ~50% of the time in a full chunked run. Use `pytest hub/tests -n auto` from the now-fixed Makefile target to re-verify the full suite stays green afterward, now that it runs in ~5 minutes instead of ~13.",
   "limits": [
     "Stay on the autonomous branch. No commits, merges or rebases onto hub-native-experience or master. Merging back is the operator's decision, made awake.",
     "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Pushing the autonomous branch itself is required, not optional.",

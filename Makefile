@@ -14,7 +14,7 @@ install-hub:
 	pip install -e "hub/[dev]"
 
 test-hub:
-	pytest hub/tests/ -v
+	pytest hub/tests/ -n auto
 
 # ── Both ─────────────────────────────────────────────────────────────────────
 

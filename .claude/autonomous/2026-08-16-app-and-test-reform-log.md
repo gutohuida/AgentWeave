@@ -227,3 +227,75 @@ session. Both edits are in the log and both used the heartbeat protocol, so no i
 but the estimates in `STATE.json` were written for a seven-item queue and it now has nine. It will
 almost certainly not finish by 12:00, and that is expected rather than a failure: the ordering is
 what matters, and the cheap compounding items are first.
+
+---
+
+## Entry 2 — 02:51 — Q2 done: measured, xdist verified, Makefile fixed
+
+**Where the time actually goes.** `pytest hub/tests --collect-only` from the repo root picks
+`hub/pyproject.toml` as its `configfile` (pytest walks up from the test path and finds the nearer
+ini file), so root `pyproject.toml`'s `addopts = "-v --tb=short"` **does not touch hub/tests at
+all** — that worry in the queue item was moot. It does apply to root `tests/` (the CLI suite), but
+that suite is 363 tests and ran in **18.08s**. It was never the problem; ruled out and not touched
+further.
+
+`hub/tests` is 149 files, 2057 collected tests. Ran a representative first chunk (38 files, 525
+tests, alphabetical `NR%4==1` split) with `--durations=50`: the 50 slowest entries top out at
+**1.27s** and the bulk of the list is `setup` phase entries clustered at **0.7–1.1s**, spread across
+hundreds of different tests. No pathological single test or file. This is per-test fixture overhead
+(in-memory SQLite creation + migration per test, per `hub/tests/conftest.py`), not a few slow
+offenders — which is exactly the shape of problem `pytest-xdist` fixes and duration-chasing does
+not.
+
+**Installed** `pytest-xdist` (3.8.0 + execnet 2.1.2) into the Python311 interpreter, then compared
+pass/fail/skip counts, not just wall-clock, at every step:
+
+| Run | Scope | Time | Result |
+|---|---|---|---|
+| serial | chunk1 (525 tests) | 194.53s | 522 passed, 3 skipped |
+| `-n auto` (20 workers) | chunk1 | 113.69s | 522 passed, 3 skipped |
+| `-n 8` | chunk1 | 82.08s | 522 passed, 3 skipped |
+| `-n 8` | chunks 2–4 (1532 tests) | 143.37+79.38+58.12s | 1524 passed, 8 skipped |
+| `-n 8` | **full suite, one process** | **292.54s (4m52s)** | **2046 passed, 11 skipped** |
+| `-n auto` | **full suite, one process** | **317.85s (5m17s)** | **2046 passed, 11 skipped** |
+
+Every row's pass+skip total agrees with the other rows and with the 2057 collected count. No test
+was silently dropped by parallelisation.
+
+**`-n auto` is not the fastest option on this machine, and that is itself informative, not just a
+footnote.** `Get-CimInstance Win32_Processor` reports **12 physical / 20 logical** cores. `-n auto`
+defaults to `os.cpu_count()` (20, logical), which oversubscribes past the physical core count and
+was measurably slower than `-n 8` at both chunk (113.69s vs 82.08s) and full-suite (317.85s vs
+292.54s) scale. `-n 8` is the locally-tuned optimum, but hardcoding it into a shared Makefile would
+be tuning to this monitor's hardware — the same mistake the run's constants-derivation rule warns
+against elsewhere. Shipped `-n auto` instead: it self-derives from whatever machine or CI runner
+executes it, and it is *still* a real win — 317.85s beats the operator's stated "seven minutes"
+(420s) by nearly two minutes, and beats the extrapolated serial full-suite time (525→2057 tests
+scaled from the 194.53s chunk1 serial baseline: ≈762s / 12.7min) by well over 2×. A developer on
+hardware like this one who wants the extra 25s can still run `pytest hub/tests -n 8` by hand; that
+choice is now recorded here rather than baked in silently.
+
+**Changes made:**
+- `hub/pyproject.toml`: added `pytest-xdist>=3.6` to the `dev` extra so `make install-hub` pulls it.
+- `Makefile`: `test-hub` now runs `pytest hub/tests/ -n auto` (was `pytest hub/tests/ -v`). Dropped
+  `-v`: under xdist, workers report asynchronously, so per-test verbose lines interleave out of
+  order and are markedly less readable than the dot progress this run's `-q` testing already
+  confirmed works cleanly. `-rA`/`--tb=short`-style detail on failure is unaffected — xdist still
+  prints full failure output at the end, it just does not narrate every pass.
+- `test-cli` and root `tests/` were left alone — confirmed not the bottleneck, no reason to touch.
+
+**Verification:** the exact Makefile command (`pytest hub/tests -n auto`, no `-v`, from the repo
+root) is the same invocation measured in the table above (317.85s, 2046 passed, 11 skipped) — not a
+close approximation, the literal command.
+
+**What a reviewer should distrust:** the `-n 8` vs `-n auto` comparison is single-machine, single-run
+evidence — no repeated trials to check run-to-run variance, and no CI-hardware data point at all.
+If `make test-hub` regresses on the actual CI runner (unknown core count, unknown whether SQLite
+in-memory contention behaves the same under a different OS), that would only be caught by watching
+an actual CI run, which this driver was told is out of scope to chase further ("just push the
+branch"). Treat the 317.85s figure as this-machine-today, not a permanent guarantee.
+
+**Elapsed:** roughly one full iteration (~1 hour of wall-clock spent mostly waiting on test runs,
+across ~10 pytest invocations). Estimated 2 iterations; used 1 — the measurement and the xdist
+comparison both fit because the chunk-first approach let correctness be established on a 26% sample
+before committing to the much longer full-suite runs.
