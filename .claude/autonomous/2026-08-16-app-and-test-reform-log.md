@@ -1068,3 +1068,88 @@ decisions_for_user, then move the queue on to Q4-spec-ux-fixes once phase 6 is e
 determined to need the operator's eyes.
 
 **Elapsed:** one iteration.
+
+## Entry 12 — 05:49 — Q4-spec-ux-fixes: AUTHOR round 1
+
+Verified branch/log/STATE.json agreed before starting (HEAD `314cc28`,
+`autonomous/2026-08-16-app-and-test-reform`, iteration 11, next_action pointing at Q4b phase 6
+exhausted → move to Q4-spec-ux-fixes AUTHOR round 1). Judged phase 6 exhausted per Entry 11's own
+framing (all four sub-tasks are explicitly human-only; nothing left this driver can tick) and moved
+straight to Q4, the operator's first-named agenda item, per `spec_round_protocol`.
+
+Read `.claude/autonomous/2026-08-16-operator-ux-findings.md` in full — the brief for all six
+findings. Then read the actual code behind each, rather than taking the findings document's
+descriptions at face value, since a spec round that restates a symptom without checking the cause
+produces a plan nobody can implement without redoing this reading:
+
+- **F2 (navy background)** — found the actual root cause, not previously stated anywhere: it's a
+  wiring bug, not a missing feature. `hub/ui/src/components/spec/SpecFrame.tsx`'s `themeOverride()`
+  injects CSS custom properties named `--bg`/`--surface`/`--surface-2`/`--border`/`--fg`/`--muted`
+  (the Hub's own dashboard token names, confirmed absent from any `--aw-*` prefix via
+  `grep -n "aw-bg\|aw-fg..." hub/ui/src/index.css` returning nothing). `hub/hub/spec_render.py`'s
+  stylesheet defines and reads a completely disjoint set — `--aw-bg`, `--aw-fg`, `--aw-muted`,
+  `--aw-rule`, `--aw-accent`, `--aw-chip-bg`, `--aw-code-bg`. None of the six override names appears
+  anywhere in the renderer's CSS, so the override has nothing to affect and the document always falls
+  through to its own dark default (`#0d1117`, the observed navy) via the `prefers-color-scheme`
+  media query or `[data-theme="dark"]` rule. `SpecFrame.tsx`'s own comment block confirms this was
+  written for the *older* skill-authored documents (which used `--bg`/`--surface` directly) and never
+  updated when `spec_render.py` was written under a new prefix for
+  `2026-08-12-hub-owns-the-spec-document`.
+- **F3 (misleading coverage labels)** — read `hub/hub/requirement_coverage.py`'s `_state()`: it
+  checks `accepted` and `awaiting` review states against the current digest, and falls through to
+  `in_progress`/`not_started`/`unserved` for anything else, including a requirement whose current
+  evidence is entirely `rejected`. Found a direct precedent for the fix already built elsewhere and
+  never reused: `hub/hub/api/v1/tasks.py`'s `_attach_requirements()` already computes
+  `has_rejected_evidence`/`rejected_evidence_count`/`latest_rejection_reason` per requirement, scoped
+  to the current digest, for the task board's own requirement-link payload — confirmed by
+  `grep -n "has_rejected_evidence" hub/ui/src -r` returning nothing, so this signal already exists
+  server-side and has never reached any screen.
+- **F4 (task board doesn't show requirement links)** — confirmed the data gap is real and one-sided:
+  `hub/hub/api/v1/tasks.py`'s `_attach_requirements()` populates `requirement_links`/`requirement_ids`
+  on every task response already, `hub/ui/src/api/tasks.ts`'s `Task` type already declares the field,
+  and `TaskCard.tsx` renders none of it.
+- **F6 (ticket granularity)** — confirmed `hub/hub/spec_tasks.py`'s `materialise()` mints exactly what
+  the document's `tasks[]` array declares, with no cap anywhere. Found the enforcement point:
+  `hub/hub/spec_completeness.py`'s `check()` already blocks `propose()` on structural findings
+  (`requirement_without_task`, `task_without_requirement`, etc.) — a new `task_too_coarse` finding is
+  the same mechanism, not a new one.
+
+Wrote `openspec/changes/2026-08-16-spec-surface-legibility/` — `proposal.md`, `design.md` (D1-D8,
+one per major decision: phase ordering, F2's variable-rename mapping table, F1's colour targets, F3's
+precedence placement and the `has_rejected_evidence` precedent, F3's breaking-change scope, F6's
+ceiling derived from the findings document's own table — 3, not 2 or a round number, chosen because
+the evidence contains no complaint about a 2-requirement ticket, so 3 is the smallest ceiling that
+does not retroactively flag the one ticket nobody named as a problem while still refusing the 4/5/6
+ones that were — F4's chip/navigation design including a new `anchor` field on the spec destination,
+F5's drawer-not-modal reasoning and its clipping-check precision), `tasks.md` (8 phases: F2, F1, F3,
+F6, F4, F5, human-only verification, user test guide — matching `design.md` D1's stated ordering),
+and spec deltas for `spec-document-authority` (4 new requirements: theme inheritance, modal visual
+distinction, rejected coverage state, task requirement ceiling) and `task-lifecycle-governance`
+(3 new requirements: requirement links visible on the board, full-detail view sized to hold content,
+navigating a requirement link reaches the requirement).
+
+Findings 1, 2 and 5 are explicitly marked taste in the proposal's Non-Goals and `tasks.md` section 7
+(human-only) — matching the standing limit on visual judgement. F2 is treated as *also* measurable
+(D2's pinning test plus an optional computed-style screenshot check), per Q4a's own note that
+background-token equality is provable even though "looks right" is not; both the measurable claim and
+the taste judgement are listed separately so neither is ticked on the other's evidence.
+
+`npx openspec validate 2026-08-16-spec-surface-legibility --strict` failed once on first pass — the
+validator reads only a requirement's first physical source line for the SHALL/MUST check, and one
+requirement's SHALL landed on line two of a wrapped sentence. Reworded so SHALL appears in the first
+line; revalidated clean. Then ran `npx openspec validate --changes --strict` for the full set: 15
+passed, 0 failed (this change included, alongside the pre-existing 14) — confirms this proposal did
+not disturb any other in-flight change.
+
+No code was touched this iteration — this is authoring only, per `spec_round_protocol`: the next
+iteration reviews this document *cold*, without the context of having written it, which is the whole
+point of the round-gating. Not reviewing in the same iteration that authored it.
+
+**Next:** `REVIEW openspec/changes/2026-08-16-spec-surface-legibility/ round 1` — read `proposal.md`,
+`design.md`, `tasks.md` and the spec deltas cold, against the six findings in
+`.claude/autonomous/2026-08-16-operator-ux-findings.md` and the `review_criteria` in `STATE.json`'s
+Q4 queue entry, without looking up who wrote it. Then either set `approved=true` in the log and move
+`next_action` to implementation phase 1 (F2), or write concrete objections and set `next_action` to
+`REVISE ... round 2`.
+
+**Elapsed:** one iteration.
