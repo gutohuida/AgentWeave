@@ -1153,3 +1153,104 @@ Q4 queue entry, without looking up who wrote it. Then either set `approved=true`
 `REVISE ... round 2`.
 
 **Elapsed:** one iteration.
+
+## Entry 13 — 05:57 — Q4-spec-ux-fixes: REVIEW round 1 — APPROVED
+
+Verified branch/log/STATE.json agreed before starting (HEAD `d534357`,
+`autonomous/2026-08-16-app-and-test-reform`, iteration 12, working tree clean, next_action pointing
+at this review). Read `proposal.md`, `design.md` (D1-D8), `tasks.md` (8 phases) and both spec deltas
+cold — no memory of authoring them, since this is a fresh process, but deliberately not re-reading
+Entry 12 as a substitute for reading the artifact itself.
+
+**Re-verified the two technical claims STATE.json's `next_action` flagged for independent re-checking,
+by reading the cited source files directly rather than trusting the proposal's restatement:**
+
+- **F2's root cause (SpecFrame.tsx vs spec_render.py variable names).** Confirmed exactly as claimed.
+  `hub/ui/src/components/spec/SpecFrame.tsx`'s `themeOverride()` (lines 62-75) injects exactly
+  `--bg`, `--surface`, `--surface-2`, `--border`, `--fg`, `--muted`. `hub/hub/spec_render.py`'s
+  `_STYLE` (lines 29-47) defines and reads a disjoint set — `--aw-bg`, `--aw-fg`, `--aw-muted`,
+  `--aw-rule`, `--aw-accent`, `--aw-chip-bg`, `--aw-code-bg` — confirmed by direct grep, zero overlap.
+  The dark palette's `--aw-bg: #0d1117` matches the operator's observed navy exactly. The override
+  genuinely has nothing to affect today; F2's fix is real, not a restatement of a symptom.
+- **F3's precedent (`_attach_requirements()`'s `has_rejected_evidence`).** Confirmed.
+  `hub/hub/api/v1/tasks.py:76-209` computes `rejected_by_requirement` scoped to each requirement's
+  *current* digest (lines 127-151) and attaches `has_rejected_evidence`/`rejected_evidence_count`/
+  `latest_rejection_reason` per requirement link (lines 184-186) — exactly the shape D4 says F3 should
+  reuse. Also read `requirement_coverage.py`'s actual `_state()` (lines 167-192) to check the proposed
+  insertion point is coherent: today it is
+  `drifting → stale → awaiting → accepted(VERIFIED) → not linked(UNSERVED) → not started → IN_PROGRESS`.
+  Task 3.2's placement ("after accepted/awaiting, before the linked checks") lands the new `rejected`
+  check between the existing `if accepted: return VERIFIED` and `if not linked: return UNSERVED`
+  lines — confirmed by reading the literal code, not just the docstring's precedence list — and D4's
+  claim that a later accepted submission against the same digest still short-circuits to VERIFIED
+  before the rejected check ever runs is correct by construction (accepted is checked first). `REJECTED
+  = "rejected"` is already a defined constant in `requirement_evidence.py:56`, so 3.1's import needs no
+  new constant.
+
+**One inaccuracy found and fixed in this iteration, not deferred to a REVISE round.** `design.md` D3
+claimed the rigor chip's values (`sketch`/`gate`/…) are "the values `RIGOR_META` already names" —
+false: `RIGOR_META` (`hub/hub/spec_rigor.py:47`) is the string `"aw-spec-rigor"`, the *name* of a meta
+tag, not an enumeration of rigor levels. The actual values are `SKETCH`/`CONTRACT`/`GATE`
+(`spec_rigor.py:39-41`) and `SPEC_RIGORS = ("sketch", "contract", "gate")`
+(`hub/hub/db/models.py:1519`). Judged this correctable-in-place rather than round-tripping the whole
+artifact: `tasks.md` 2.4 already hedges ("cite where those values are enumerated — `spec_payload.py`
+*or wherever rigor is validated*"), so the wrong citation in `design.md` would not have misdirected
+implementation, only wasted a lookup. Fixed the one paragraph to cite `SPEC_RIGORS` correctly and
+note what `RIGOR_META` actually is, so the next reader (implementation phase 2) does not repeat the
+same wrong grep. Re-ran `npx openspec validate 2026-08-16-spec-surface-legibility --strict` after the
+edit: valid.
+
+Checked one more thing the design doc asserts loosely: `PRECEDENCE`'s "ranking" language (D4 says
+`rejected` "ranks... above states that describe the absence of an attempt"). Read
+`requirement_coverage.py:120-130`: `PRECEDENCE` is used only to seed `CoverageReport.totals` with a
+zero count per state (`dict.fromkeys(PRECEDENCE, 0)`) — there is no "worst state wins" comparison
+anywhere that depends on tuple order. Harmless: task 3.1's instruction ("insert into PRECEDENCE
+between VERIFIED and IN_PROGRESS") is safe regardless, since the tuple's only real job is
+enumeration/display-consistency, not priority selection. Not worth a design.md edit — flagging here
+for the implementer's benefit, not as a defect.
+
+**Review criteria, checked against the artifact as read (not as summarized in Entry 12):**
+
+- *Addresses all six findings, or defers with a reason?* Yes — F1-F6 map 1:1 to findings 1-6.
+  Findings 1, 2 and 5 are explicitly marked taste in `proposal.md`'s Non-Goals and `tasks.md` section
+  7 (human-only), matching the findings document's own framing ("readable, but uglier... not ticked").
+  F2 is treated as partially measurable (the pinning test) and partially taste (does it *look* right)
+  — both listed separately, neither ticked on the other's evidence. This is the right call, not a
+  dodge: the operator's own verdict on 17.2/5.2/6.1 already drew this exact line.
+- *F2 respects the no-external-resource constraint?* Yes — inherited CSS custom properties and
+  `!important` overrides only, matching what `SpecFrame.tsx` already does today; no stylesheet link,
+  no fetch, confirmed by reading the actual mechanism, not assuming it.
+- *F3 introduces a genuinely new state, not a relabel?* Yes, and `design.md` D5 says so explicitly —
+  `PRECEDENCE`, `CoverageReport.totals` and every state-enumerating test change shape (seven becomes
+  eight). Task 3.4 requires grepping for hardcoded state lists rather than trusting only the one file
+  this task anticipated, which is the right discipline for a breaking change to a shared contract.
+- *F6 acts at the right layer?* Yes — `spec_completeness.check()`, the existing mechanism
+  `requirement_without_task`/`task_without_requirement` already use to block `propose()` (confirmed:
+  `hub/hub/spec_service.py:279` calls `spec_completeness.check()` inside `propose()` and refuses on
+  findings). Charter guidance (task 4.3) is additive, not a substitute for the refusal — matches the
+  findings document's own framing ("a prompt/charter problem as much as a code one").
+- *Ceiling of 3, derived not guessed?* D6's reasoning holds up against the findings table: approved
+  tickets carried 6/2/1 requirements, an earlier rejected batch carried 5/4; 3 is the smallest ceiling
+  that does not retroactively flag the uncomplained-about 2-requirement ticket while still refusing
+  4/5/6. Reasonable, not arbitrary.
+- *Anything proposed beyond what was asked (scope creep check)?* F4's cross-tab anchor navigation and
+  F5's drawer looked like candidates worth checking closely, since they are larger builds than a
+  literal reading of findings 4 and 5 might imply. Re-read the verbatim quotes: finding 4 is *"hard to
+  understand... **and the navigation between the two is hard**"* — cross-tab navigation is not an
+  add-on, it is half of what was reported. Finding 5 is *"maybe we should be able to open the task
+  like jira"* — Jira's ticket view is exactly a full-size, non-inline detail surface, so a drawer is a
+  literal reading, not an embellishment. Judged proportionate, not creep.
+
+**No objections that rise to blocking.** Set `approved=true`.
+
+**Files touched:** `openspec/changes/2026-08-16-spec-surface-legibility/design.md` (one paragraph,
+D3's rigor-values citation).
+
+**Next:** `IMPLEMENT phase 1 (F2) of openspec/changes/2026-08-16-spec-surface-legibility/tasks.md` —
+realign `hub/hub/spec_render.py`'s neutral CSS variable names with `SpecFrame.tsx`'s override names
+per `design.md` D2's table, add the pinning test (task 1.2), update existing render tests (1.3), and
+attempt the Q4a harness screenshot check (1.4) if `scripts/uishot.py` is available and the live Hub
+can be pointed at a rebuilt UI bundle — record plainly if the harness path is unavailable rather than
+skipping silently.
+
+**Elapsed:** one iteration.

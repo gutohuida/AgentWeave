@@ -61,9 +61,11 @@ with colour") and each already has a `class` to hang a rule on:
    word — this is the literal "popped with colour" behaviour the operator described from the older
    documents.
 3. **The phase/rigor chips in the document header**, currently both `--surface-2` background. `phase`
-   keeps neutral (it is a workflow state, not a judgement); `rigor` (`sketch`/`gate`/… — the values
-   `RIGOR_META` already names) takes a tone from a small fixed mapping the renderer already has the
-   value to key off (no new data needed).
+   keeps neutral (it is a workflow state, not a judgement); `rigor` (`sketch`/`contract`/`gate` — the
+   values `SPEC_RIGORS` in `hub/hub/db/models.py` enumerates, mirrored as `SKETCH`/`CONTRACT`/`GATE`
+   in `hub/hub/spec_rigor.py`; `RIGOR_META` is a different constant — the meta-tag *name* the rendered
+   document carries, not the value set) takes a tone from a small fixed mapping the renderer already
+   has the value to key off (no new data needed).
 
 **Deliberately not done:** colouring the acceptance table by requirement, or colouring based on live
 coverage state. The latter would require the renderer to know coverage at render time, which it does
