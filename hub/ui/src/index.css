@@ -581,6 +581,46 @@
     color: var(--text);
   }
 
+  /* react-markdown output. `:not(pre) > .md-code` targets INLINE code only — a fenced code
+     block's `code` element is always wrapped in `pre`, so this selector alone tells the two
+     apart without any ancestry lookup in JS. */
+  .markdown-message :not(pre) > .md-code {
+    background: var(--surface-2, var(--surface));
+    border-radius: var(--radius-sm);
+    padding: 0 4px;
+  }
+  .markdown-message .md-pre {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-content, 8px);
+    padding: 10px 12px;
+    margin: 4px 0;
+    overflow-x: auto;
+  }
+  .markdown-message .md-pre .md-code {
+    background: none;
+    padding: 0;
+  }
+  .markdown-message .md-link {
+    color: var(--blue);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  .markdown-message p,
+  .markdown-message ul,
+  .markdown-message ol {
+    margin: 0 0 6px;
+  }
+  .markdown-message p:last-child,
+  .markdown-message ul:last-child,
+  .markdown-message ol:last-child {
+    margin-bottom: 0;
+  }
+  .markdown-message ul,
+  .markdown-message ol {
+    padding-left: 1.3em;
+  }
+
   @media (max-width: 760px) {
     .workspace-shell { flex-direction: column; }
     .workspace-rail {

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { format } from 'date-fns'
 import { Icon } from '@/components/common/Icon'
+import { MarkdownMessage } from '@/components/agents/MarkdownMessage'
 import type { AgentSummary, AgentTimelineEvent } from '@/api/agents'
 import type { TimelineEntry } from '@/api/agentChat'
 import type { QueueStatus } from '@/api/queue'
@@ -434,12 +435,18 @@ function MessageEntry({
           {queuedTag}
           {withdraw}
         </div>
-        <div
-          className="text-sm leading-[1.6] whitespace-pre-wrap break-words"
-          style={{ color: isError ? 'var(--red)' : 'var(--text)' }}
-        >
-          {entry.content}
-        </div>
+        {isError ? (
+          <div
+            className="text-sm leading-[1.6] whitespace-pre-wrap break-words"
+            style={{ color: 'var(--red)' }}
+          >
+            {entry.content}
+          </div>
+        ) : (
+          <div className="text-sm leading-[1.6] break-words">
+            <MarkdownMessage content={entry.content} />
+          </div>
+        )}
       </div>
     )
   }
@@ -461,7 +468,7 @@ function MessageEntry({
           </span>
         </div>
         <div
-          className="max-w-[82%] px-[13px] py-[10px] text-sm leading-[1.6] whitespace-pre-wrap break-words"
+          className="max-w-[82%] px-[13px] py-[10px] text-sm leading-[1.6] break-words"
           style={{
             borderRadius: 'var(--radius-xl, 18px)',
             border: '1px solid var(--border)',
@@ -469,7 +476,7 @@ function MessageEntry({
             color: 'var(--text)',
           }}
         >
-          {entry.content}
+          <MarkdownMessage content={entry.content} />
         </div>
       </div>
     )
@@ -521,8 +528,8 @@ function MessageEntry({
         {queuedTag}
         {withdraw}
       </div>
-      <div className="whitespace-pre-wrap break-words" style={{ color: 'var(--text)' }}>
-        {entry.content}
+      <div className="break-words" style={{ color: 'var(--text)' }}>
+        <MarkdownMessage content={entry.content} />
       </div>
     </div>
   )

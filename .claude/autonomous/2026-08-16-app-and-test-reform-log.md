@@ -2915,3 +2915,75 @@ the tests in 1.4 including the mutation-checked XSS-safety assertion. Sections 2
 view, command palette) are independent and can follow in any order per `tasks.md`'s own note; section
 5 (full-suite verification, bundle rebuild) gates the commit. Time remaining to `stop_at` (18:00) is
 about 2h43m as of this entry.
+
+## Entry 36 — 2026-08-16T15:42+01:00 — Q7 IMPLEMENT tasks.md section 1 (D1 markdown rendering), iteration 37
+
+Verified branch/log/`STATE.json` against `git log` first — matched (`d063230` at HEAD, Entry 35's
+heartbeat back-date, as claimed). Approved artifact:
+`openspec/changes/2026-08-16-conversation-formatting-and-quick-nav/`.
+
+**1.1** — `cd hub/ui && npm install react-markdown remark-gfm remark-breaks`. Installed
+`react-markdown@10.1.0`. Confirmed its own `dependencies` in `node_modules/react-markdown/package.json`
+carry no `rehype-raw` and grepped its `lib/*.js` for `dangerouslySetInnerHTML`/`rehype-raw` — zero
+hits, so the security boundary D1 names (no raw-HTML parsing in the default pipeline) holds for the
+actual installed version, not just the package's reputation.
+
+**1.2** — new `hub/ui/src/components/agents/MarkdownMessage.tsx`: `ReactMarkdown` with
+`remarkPlugins={[remarkGfm, remarkBreaks]}`, no `rehypePlugins`. Component overrides for `a` (adds
+`target="_blank" rel="noreferrer"`), `pre`, and `code`, each just attaching a class name
+(`md-link`/`md-pre`/`md-code`) — the actual bounded-block/`--surface`/`--border` styling lives in
+`index.css` as plain CSS rather than inline styles, using `.markdown-message :not(pre) > .md-code`
+to distinguish inline code from a fenced block's `code` (whose parent is always `pre`) without any
+JS ancestry lookup, since `react-markdown` v10's `code` component gets no reliable parent reference.
+Links use `var(--blue)`, matching `hub/hub/spec_render.py`'s `a { color: var(--aw-accent); }`
+precedent for the equivalent rendered-document surface, and consistent with `hub-workspace-shell`'s
+"hue is reserved for meaning" (a link is exactly that).
+
+**1.3** — wired into `AgentTimeline.tsx`'s `MessageEntry` at its three prose call sites:
+`agent_output` (only when NOT `output_kind === 'error'` — errors keep the plain red
+`whitespace-pre-wrap` text, per tasks.md's explicit exclusion), `operator_input`, and the shared
+peer-bubble renderer (covers both `inbound_peer`/`outbound_peer`). Confirmed via
+`agentTimelineModel.ts`'s `entryCategory` that these are exactly the `kind`/`output_kind`
+combinations that ever reach `MessageEntry` through `TurnBody`'s per-block dispatch — `thinking`/
+`tool_use`/`tool_result` route to `WorkRow` (`'work'` category) and `status`/`diagnostic` route to
+`ResultCard` (`'result'` category), neither touched.
+
+**1.4** — new `hub/ui/src/__tests__/markdownMessage.test.tsx`, testing `MarkdownMessage` directly
+(more precise than driving it through the full `AgentTimeline` tree): bold/fenced-code/bulleted-list
+render as real `<strong>`/`<pre><code>`/`<ul><li>`, not literal syntax; a single `\n` between two
+lines renders a `<br>` (the `remark-breaks` regression this task exists to prevent); a
+`<script>`/`<img onerror=...>` string renders as inert visible text — no `<script>`/`<img>` element
+in the DOM, `window.__pwned`/`__pwned2` never set; plain text with no Markdown syntax renders
+unchanged. **Mutation-checked** the XSS test: temporarily installed `rehype-raw` (`--no-save`, so
+`package.json`/`package-lock.json` stayed untouched — verified with `git diff` after reverting) and
+added `rehypePlugins={[rehypeRaw]}`, reran — the XSS test failed exactly as expected (`<script>`
+element materialized in the DOM), confirming the test actually exercises the boundary it claims to.
+Reverted the plugin line and confirmed the suite passed clean again before proceeding.
+
+**Full verification (tasks.md section 5):**
+- 5.1 `npx tsc --noEmit` — clean.
+- 5.2 `npm run lint` — 9 warnings, all `react-refresh/only-export-components`/`react-hooks/
+  exhaustive-deps` in files this change never touches (`ChartersPage.tsx`, `Badge.tsx`,
+  `ProjectSettingsPanel.tsx`, `OverviewPage.tsx`, `SpecFrame.tsx`, `button.tsx`, `agentStatus.tsx`) —
+  the exact pre-existing backlog itemised in `STATE.json`'s `decisions_for_user`. Zero new warnings.
+- 5.3 `npm test -- --run` — full suite, one run, no chunking needed: **94 files, 905 tests, all
+  passed.** (The `Error: boom` lines in the output are `ErrorBoundary.test.tsx` deliberately throwing
+  to test the boundary — expected console noise, not a failure.) No flake this run, so the documented
+  `dead_ends` full-suite-timeout entry didn't need to be invoked.
+- 5.4 `npm run build && python scripts/refresh_ui_bundle.py` — built clean, bundle refreshed and
+  staged alongside `hub/ui/src`.
+- 5.5 `git status` before staging showed changes confined to `hub/ui/` and `hub/hub/static/ui/` — no
+  `hub/hub/` (backend) or `src/agentweave/` file touched.
+
+Staged explicitly (not `git add -A`): the six new/modified `hub/ui/src/` files, `package.json`/
+`package-lock.json`, and `hub/hub/static/ui/` in full.
+
+**Elapsed:** one iteration (install, build, wire, test, verify, bundle).
+
+**Next:** `tasks.md` section 2 (D2 — tool-call icon and label): add the `TOOL_ICON` lookup table to
+`WorkRow` in `AgentTimeline.tsx` per `design.md`'s table, keyed on `entry.payload?.tool` with a
+`Wrench`/"Tool call" fallback for unmapped names or a missing `payload`; render the resolved icon
+beside the label. Test per 2.2, including the fallback-when-no-payload and the mutation check
+(remove one table entry, confirm its test falls back instead of matching, reapply). Section 3 (diff
+view) and section 4 (command palette) remain independent and can follow in either order. Time
+remaining to `stop_at` (18:00) is roughly 2h18m as of this entry.
