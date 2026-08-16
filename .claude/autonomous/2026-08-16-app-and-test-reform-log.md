@@ -2308,3 +2308,85 @@ round 2` cold, per the spec-round protocol — do not look up who wrote it, re-v
 `cli.py` rather than trusting this entry, and check against Q6's `review_criteria` in `STATE.json`.
 Round 2 of max 3 — if this round objects again, round 3 is the last one before the artifact ships as-is
 with objections recorded in `decisions_for_user`.
+## Entry 28 — 13:33 — Q6-desktop-and-global: REVIEW round 2 — REVISE, one new blocking objection
+
+Read `proposal.md`, `design.md`, `tasks.md`, and `specs/app-lifecycle/spec.md` cold, per the
+spec-round protocol — did not look up who wrote Entry 27. Independently re-verified, directly
+against `src/agentweave/cli.py` (not against the artifact's own citations or Entry 27's claims),
+the two things `next_action` specifically asked to re-check:
+
+- **"All five call sites" claim:** confirmed exact — `_open_app_window` is called at `cli.py:692`,
+  `:789` (inside `_hub_native_start`), `:661` (inside `_wait_and_open_app`), and `:850`, `:942`
+  (inside `cmd_hub_start`'s Docker branch). Grepped for the call name across the whole file; no
+  sixth site exists.
+- **"App mode always forced on" claim:** confirmed exact — `create_parser()` (`cli.py:1025-1100`)
+  defines `--docker`/`--local` as top-level flags on the *bare* parser, not under a subcommand, so
+  `agentweave --docker` has `parsed_args.command` unset and takes the same `if not
+  parsed_args.command: parsed_args.app = True` branch (`cli.py:1124-1127`) as plain `agentweave`.
+  `cmd_hub_start` (`cli.py:825`) reads that same `app` value into both its native and Docker
+  branches. There is no CLI surface that produces `app=False`.
+
+Both round-1 objections' fixes hold up under independent re-verification. Round 1's `hub-start`/
+`--app` command-name error is gone from all four files (grepped `hub-start` and `--app`; only the
+two intentional non-AgentWeave references Entry 27 named remain). Round 1's missing Docker call
+sites are now named in `tasks.md` 3.3 and covered by a new spec scenario. `review_criteria`'s four
+questions (exploration compares alternatives with evidence, per-OS global-state location with a
+migration path, what happens to existing `data/agentweave.db`, desktop-shell rejected alternatives
+stated) all check out — verified in Entry 26 and unchanged since. **Not approved anyway — one new
+blocking defect, found by tracing the actual threading model behind call site `cli.py:661` rather
+than re-checking round 1's claims.**
+
+**Objection (blocking).** `_wait_and_open_app` (`cli.py:654-661`) exists specifically to run
+`_open_app_window` **off the main thread** — its own docstring says so ("Runs off the main thread so
+a foreground (`--no-detach`) start can block on uvicorn while still opening the browser") — and it is
+only ever invoked via `threading.Thread(target=_wait_and_open_app, ...).start()` at `cli.py:798`,
+inside `_hub_native_start`'s `--no-detach` foreground branch, where the *main* thread is occupied
+blocking in `uvicorn.run(...)` (`cli.py:802`) until Ctrl+C. `tasks.md` 3.3 wires this exact call site
+through `_open_app_window_native`/`webview.start()` as one of the "all five." But `pywebview` requires
+`webview.start()` to be called from the main thread — confirmed via web research (authorised by
+`spec_round_protocol`), not assumed: pywebview's own maintainers state "the main thread requirement is
+dictated by underlying GUI libraries pywebview is based on... Cocoa has a strict requirement regarding
+the main thread," and the documented pattern for exactly this shape of problem (a blocking backend
+task needs to run somewhere) is the *inverse* of what's wired here — pass the backend work as
+`webview.start(func, *args)` so pywebview's own thread management starts it, rather than starting
+pywebview from inside an already-spawned worker thread. (Sources: r0x0r/pywebview issue #1251 "Why
+must pywebview be run on a main thread?", and pywebview's own FAQ.) Calling `webview.start()` from
+`cli.py:661`'s worker thread will not reliably work — worst case (macOS/Cocoa) it raises or misbehaves
+outright; even where it happens not to crash, `design.md` D3's own contract for the ADDED requirement
+("The invoking process SHALL remain running for as long as the native desktop window is open, and
+SHALL exit once the operator closes it") cannot hold for this call site regardless, because the
+process's actual lifetime here is governed by `uvicorn.run()` on the main thread returning on
+Ctrl+C, not by the window closing — the window is on a thread `main()` never waits on. `design.md`
+D3 states a single behavior model (block in `webview.start()`, then exit 0) that was verified true
+for the other four call sites (they all run before any fork into a long-lived blocking call) but
+was never checked against this one, which is structurally different: it fires *inside* the Hub's own
+already-blocking foreground process. Neither round-1 objection touched this — round 1 was about the
+wrong command name and the missing Docker sites, not this thread model — so this is genuinely new,
+not a re-surfacing of something already raised and missed.
+
+**Two resolution shapes exist (for the REVISE pass to choose and justify, not decided here):**
+(a) scope task 3.3 / the ADDED requirement to exclude the `--no-detach` foreground path — state
+plainly that `--no-detach` keeps today's browser-only fallback always, since its process-exit
+contract (Ctrl+C, not window-close) already differs fundamentally from the other four call sites,
+so exempting it isn't a new inconsistency; or (b) invert the threading model for `--no-detach`
+specifically so `webview.start()` owns the main thread and `uvicorn.run()`'s foreground server moves
+to a worker thread instead (matching pywebview's own documented pattern) — a real architectural
+change belonging in `design.md` D3 as a named subsection, not just a `tasks.md` line edit, and one
+that then has to answer what "the invoking process exits when the window closes" means for a
+foreground Hub that has nowhere else to keep running once its window-owning process exits.
+
+**Verification this iteration:** no code changed — artifact-only review, same as rounds 1's and 2's
+predecessor. Every command-form and call-site claim re-derived from `cli.py` directly. The new
+objection's technical premise (pywebview's main-thread requirement) was checked via `WebSearch`
+against the library's own issue tracker and FAQ rather than asserted from training-data recall, per
+`spec_round_protocol`'s "web research is authorised and encouraged where it would change the
+answer" — it changed the answer here.
+
+**Elapsed:** one iteration.
+
+**Next:** a fresh iteration does `Q6 REVISE openspec/changes/2026-08-16-one-hub-and-a-window-of-its-own
+round 3` — the last round before the gate forces shipping as-is with objections recorded in
+`decisions_for_user`. Resolve the blocking objection above (pick (a) or (b), or a third option, and
+say why) in `design.md` D3, `tasks.md` section 3, and the spec delta's scenarios as needed. Then set
+`next_action` to `Q6 REVIEW ... round 3` — that review either approves or the gate ships it with the
+objection recorded; there is no round 4.
