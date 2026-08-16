@@ -1804,3 +1804,46 @@ iteration rather than rushing all 19, per Entry 19's own guidance. `hub/tests/`'
 been started at all under this pass and remain after `tests/` finishes.
 
 **Elapsed:** one iteration (deliberately short — stop_at is imminent).
+
+## Entry 20a — 11:45 — operator extended the run to 18:00, and capped Q5
+
+Written by the interactive session between firings, using the claim/edit/release protocol. **The
+operator is awake.**
+
+**Stop time moved from 12:00 to 18:00** — six more hours. The Scheduled Task was re-registered with
+`-UntilHHmm "18:00"`; verified first that no iteration was running (`State: Ready`,
+`LastResult: 0`, Entry 20 committed and the branch released at 11:41:38), because re-registering
+under a live iteration would have risked killing it mid-work. `stop_at` in `STATE.json` now agrees
+with the task, and `stop_at_history` records both values so a later reader is not confused by the
+original 12:00 in Entry 0's header.
+
+**Q5 is capped, on evidence, not on impatience.** The item asked to check every test against the
+code. Two passes have now run:
+
+- the **mechanical** sweep covered **all 2258 test functions** in `tests/` and `hub/tests/` — import
+  checks against deleted subsystems, AST assertion-presence, duplicate-body detection — and found
+  **zero** deletion candidates; every flag was a false positive on inspection;
+- the **semantic** pass has read **2 of 21** `tests/` files by hand against current source and also
+  found **zero**.
+
+The remaining 19 `tests/` files plus 150 `hub/tests/` files is roughly **35-50 iterations** at the
+recorded rate, for an expected yield that the evidence says is near zero. So: **finish `tests/`
+only, write up the result, mark Q5 done with its scope recorded, and move to Q6. Do not start the
+150-file `hub/tests/` pass.**
+
+This is not abandoning the item. **"The suite has no dead weight" is a real answer** to the question
+the operator asked, and it deserves to be stated plainly rather than left implied by an unfinished
+sweep. The operator's actual complaint — *"the testing is taking way too long"* — was already
+answered by Q2, which took the hub suite from ~762s to 292s without removing a single test. That is
+the finding: the problem was a missing `-n 8`, not accumulated cruft.
+
+**What the extra six hours are for**, in priority order: **Q6** (desktop app + one global state)
+first — it is untouched, it already has a diagnosis written into the queue item
+(`hub/hub/config.py:9`'s relative `data/agentweave.db`, which is why running from a different folder
+produces a different AgentWeave), and it is the largest item on the operator's original agenda with
+nothing built against it. Then **Q7** (UI gap analysis against popular harnesses), which the
+operator scoped explicitly wider than their own T3 example.
+
+**What a reviewer should distrust:** the Q5 cap is a judgement made from two passes, not a proof.
+It is possible the semantic pass would have found real staleness deeper into `hub/tests/`. The
+remaining scope is recorded on the item itself, so resuming it later costs nothing but time.
