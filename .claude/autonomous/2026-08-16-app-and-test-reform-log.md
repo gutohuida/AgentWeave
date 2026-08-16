@@ -2849,3 +2849,69 @@ under the 3-round gate. If it approves, `next_action` moves to `tasks.md` sectio
 If it finds a new objection, round 3 (REVISE) follows, and round 3's REVIEW is the last round
 regardless of outcome, same gate Q6 hit. Time remaining to `stop_at` (18:00) is about 2h59m as of
 this entry.
+
+---
+
+## Entry 35 — 2026-08-16T15:17+01:00 — Q7 REVIEW round 2 — APPROVED, iteration 36
+
+Verified branch/log/`STATE.json` against `git log` first — matched (`dad1afd` at HEAD, Entry 34's
+heartbeat back-date, as claimed).
+
+**Cold review round 2** of `openspec/changes/2026-08-16-conversation-formatting-and-quick-nav/`
+against Q7's `review_criteria`, reading `proposal.md`, `design.md`, `tasks.md`, and both spec deltas
+fresh — not trusting Entry 33/34's narrative, independently re-verifying the artifact's factual
+claims against source:
+
+- Confirmed round 1's objection is actually fixed, not just reworded: `design.md` D2 now states
+  the structural check is "at the top level," then a dedicated paragraph says plainly that `Edit`
+  matches and `MultiEdit` does not, citing `hub/hub/runner_parsing.py:264-272` — read that file
+  directly (lines 250-284) and confirmed `input_data=block.get("input", {})` passes a `tool_use`
+  block's raw API input straight through with no reshaping, so `MultiEdit`'s real
+  `{file_path, edits: [...]}` shape indeed never surfaces `old_string`/`new_string` at
+  `payload.input`'s top level — the citation is accurate, not just present. `tasks.md` 3.4 no longer
+  calls the only-`old_string` fixture "Write-shaped" and now carries a fourth, genuinely
+  `MultiEdit`-shaped fallback case. Both requested fixes present and correctly done.
+- Independently re-verified claims round 1 already checked, rather than assuming they still hold
+  after the edit: grepped `hub/ui/src` for `react-markdown|remark-gfm|remark-breaks|
+  dangerouslySetInnerHTML|rehype-raw` — zero hits, confirms D1's "no markdown rendering today" and
+  the security-boundary framing are both still true. Grepped `hub/ui/package.json` for
+  `cmdk|diff|react-markdown|remark` — zero hits, confirms all three are genuinely new dependencies,
+  no version already pinned to conflict with. Read `stream_events.py:475-505` directly again:
+  `tool_use_event`'s payload is `{version, call_id, tool, category, input, summary, truncated}` with
+  `input` built from `_stringify(_redact(input_data))` — confirms `payload.tool`/`payload.input`/
+  `payload.truncated` all exist exactly as D2 describes. (Noted, not raised as an objection: D1/D2's
+  prose says `payload.input` is `json.dumps(input_data, sort_keys=True)` and omits the `_redact` step
+  in between — checked `redact_secrets` in `diagnostics.py:122-137` and it redacts by key-name regex
+  or in-string secret patterns while preserving dict structure and key names, so it cannot turn
+  `old_string`/`new_string` into different keys or break the structural check the diff view relies
+  on. This is pre-existing behaviour on every payload today, not something this change touches or
+  changes, and doesn't affect any claim `review_criteria` asks to be evidence-based — not a defect,
+  not worth a round.)
+- Confirmed `--green`/`--red` CSS custom properties are real and widely used (46 files), and the
+  existing `hub-workspace-shell` spec's requirement `### Requirement: The chrome is neutral and hue
+  is reserved for meaning` (line 223) is real, not paraphrased — D2's diff-colour justification cites
+  a real constraint correctly.
+- Confirmed `hub/ui/src/hooks/useDialogFocus.ts` exists, supporting D3's claim that the command
+  palette can reuse this codebase's existing dialog-focus pattern rather than inventing a new one.
+- Re-read `tasks.md` sections 1-7 end to end: section 6 (5 items) is explicitly taste/human-only,
+  section 7 is the user test guide (5 steps + a "where it would go wrong" note) — both present per
+  the standing directive, matching the shape every other `spec_round: true` item this run has shipped
+  with (Q4, Q4b, Q6).
+- `npx openspec validate 2026-08-16-conversation-formatting-and-quick-nav --strict` → valid.
+
+**No new objection. APPROVED.** Round 1's single objection was the only substantive issue in this
+artifact across two review passes and one independent re-verification pass; it was fixed correctly
+and nothing new surfaced on a fresh cold read plus direct re-checking of both old and new claims
+against source. This closes the spec-round protocol for Q7 at round 2 (well inside the 3-round gate,
+unlike Q6 which needed all 3).
+
+**Elapsed:** one iteration (review only).
+
+**Next:** begin `tasks.md` section 1 (D1 — markdown rendering): `cd hub/ui && npm install
+react-markdown remark-gfm remark-breaks`, confirm the installed version's default render path has no
+`rehype-raw`/`dangerouslySetInnerHTML` (task 1.1's own instruction), then build
+`MarkdownMessage.tsx` and wire it into `AgentTimeline.tsx`'s `MessageEntry` per tasks 1.2-1.3, with
+the tests in 1.4 including the mutation-checked XSS-safety assertion. Sections 2-4 (icon/label, diff
+view, command palette) are independent and can follow in any order per `tasks.md`'s own note; section
+5 (full-suite verification, bundle rebuild) gates the commit. Time remaining to `stop_at` (18:00) is
+about 2h43m as of this entry.
