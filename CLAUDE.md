@@ -36,7 +36,39 @@ expect them to move.
 | Delegate this repo's work through AgentWeave messaging | Do the work directly, or use Claude Code subagents. Roster delegation is not part of this stage. |
 | Move `openspec/specs/` into `spec/` | See "Specifications" below — AgentWeave has nowhere to put a current-behaviour corpus yet. |
 
-The trial Hub's port and database path are fixed at setup time and recorded here once chosen.
+### The trial Hub — fixed 2026-08-16
+
+| | |
+|---|---|
+| **Port** | `8010` |
+| **Database** | `~/.agentweave/hub/profiles/beta/agentweave.db` |
+| **PID file** | `~/.agentweave/hub/hub-8010.pid` (per-port; the default instance keeps `hub.pid`) |
+| **This repo registered as** | `proj-5e960453`, working directory the repo root |
+
+Start it — **from `hub/`, not the repo root** (see the trap below):
+
+```bash
+cd hub
+DATABASE_URL="sqlite+aiosqlite:///$HOME/.agentweave/hub/profiles/beta/agentweave.db" agentweave --port 8010
+```
+
+Point the Vite dev server at it with `AW_DEV_HUB=http://127.0.0.1:8010 npm run dev`, and
+`scripts/uishot.py --url http://127.0.0.1:8010` for screenshots.
+
+**`agentweave` cannot be started from this repo's root.** `_hub_native_start` spawns
+`python -m uvicorn hub.main:app`, and `-m` puts the working directory on `sys.path[0]` — so this
+repo's own `hub/` directory shadows the installed `hub` package and the child dies with
+`ImportError: cannot import name '__version__' from 'hub' (unknown location)`. The parent process
+is unaffected (console scripts do not put the cwd on the path), so migrations run and only the
+spawned server fails, 60 seconds later, with its output already sent to `DEVNULL`. Starting from
+`hub/` avoids the shadowing but makes the CLI register `<repo>/hub` as a second project — delete
+that one if it appears. This only bites a repository that contains a top-level `hub/` directory,
+which is to say: this one, the one being dogfooded.
+
+An 11 MB database also sits at `hub/data/agentweave.db`, gitignored and untracked. It is the
+**pre-migration original**, left as a backup — a Hub started by bare `uvicorn` from `hub/` landed
+there via `config.py`'s relative default. Nothing runs against it now. Do not delete it without
+checking the beta profile copy is healthy first.
 
 ## Specifications — openspec owns the corpus, AgentWeave takes new work
 
