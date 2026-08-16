@@ -48,20 +48,20 @@ No database migration, no backend route change.
 
 ## 3. Diff view for edit-shaped tool calls (D2) — agent-verifiable
 
-- [ ] 3.1 `cd hub/ui && npm install diff` (jsdiff).
-- [ ] 3.2 New `hub/ui/src/components/agents/ToolEditDiff.tsx`: given `payload.input` (a string),
+- [x] 3.1 `cd hub/ui && npm install diff` (jsdiff).
+- [x] 3.2 New `hub/ui/src/components/agents/ToolEditDiff.tsx`: given `payload.input` (a string),
       attempt `JSON.parse`; if it throws, or `payload.truncated === true`, or the parsed value lacks
       both `old_string` and `new_string` as string properties, return `null` (caller falls back to the
       existing raw-text rendering — see 3.3). Otherwise render `Diff.diffLines(old_string, new_string)`
       as a sequence of added/removed/unchanged lines, added lines on `--green`, removed on `--red`,
       unchanged neutral — no syntax highlighting (out of scope, per D1's deferral, which applies
       equally here).
-- [ ] 3.3 `WorkRow`'s expanded state: when `entry.output_kind === 'tool_use'` and `ToolEditDiff`
+- [x] 3.3 `WorkRow`'s expanded state: when `entry.output_kind === 'tool_use'` and `ToolEditDiff`
       returns non-null content for `entry.payload`, render it instead of the current raw
       input/output text concatenation. Every other tool type, and every edit-shaped payload
       `ToolEditDiff` declines (malformed, truncated, non-edit-shaped), keeps today's raw-text
       rendering exactly as is.
-- [ ] 3.4 Tests: a `payload.input` of `'{"old_string":"foo","new_string":"bar"}'` (well-formed JSON,
+- [x] 3.4 Tests: a `payload.input` of `'{"old_string":"foo","new_string":"bar"}'` (well-formed JSON,
       the shape `tool_use_event` actually produces per D2) renders added/removed lines with the
       expected content and tone classes. A `payload.input` that is not valid JSON, one with
       `truncated: true`, one that parses but has only `old_string` and no `new_string` (a synthetic

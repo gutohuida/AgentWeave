@@ -421,3 +421,117 @@ describe('AgentTimeline — WorkRow tool icon and label (Q7 D2)', () => {
     expect(fallbackIconNames).toContain('build')
   })
 })
+
+describe('AgentTimeline — WorkRow edit diff view (Q7 D2 section 3)', () => {
+  function editEntry(overrides: Partial<TimelineEntry> & { payload: Record<string, unknown> }) {
+    return entry({
+      id: 'tool_edit',
+      kind: 'agent_output',
+      output_kind: 'tool_use',
+      content: 'Called Edit',
+      run_id: 'run-edit',
+      ...overrides,
+    })
+  }
+
+  function expandTheOnlyWorkRow() {
+    fireEvent.click(screen.getByText('Work · 1 step'))
+    fireEvent.click(screen.getByText('Edit'))
+  }
+
+  it('renders added/removed lines for a well-formed edit payload, not the raw text', () => {
+    const { container } = render(
+      <AgentTimeline
+        agent={agent}
+        entries={[
+          editEntry({
+            payload: { call_id: 'c1', tool: 'Edit', input: JSON.stringify({ old_string: 'foo', new_string: 'bar' }) },
+          }),
+        ]}
+        roster={[agent]}
+        timelineEvents={[]}
+        isRunning={false}
+      />,
+    )
+    expandTheOnlyWorkRow()
+    const removedLine = container.querySelector('[style*="var(--red)"]')
+    const addedLine = container.querySelector('[style*="var(--green)"]')
+    expect(removedLine?.textContent).toBe('- foo')
+    expect(addedLine?.textContent).toBe('+ bar')
+    expect(screen.queryByText('Called Edit')).not.toBeInTheDocument()
+  })
+
+  it('falls back to the raw text for input that is not valid JSON', () => {
+    render(
+      <AgentTimeline
+        agent={agent}
+        entries={[editEntry({ payload: { call_id: 'c1', tool: 'Edit', input: '{not valid json' } })]}
+        roster={[agent]}
+        timelineEvents={[]}
+        isRunning={false}
+      />,
+    )
+    expandTheOnlyWorkRow()
+    expect(screen.getByText('Called Edit')).toBeInTheDocument()
+  })
+
+  it('falls back to the raw text when payload.truncated is true, even with a well-formed pair', () => {
+    render(
+      <AgentTimeline
+        agent={agent}
+        entries={[
+          editEntry({
+            payload: {
+              call_id: 'c1',
+              tool: 'Edit',
+              input: JSON.stringify({ old_string: 'foo', new_string: 'bar' }),
+              truncated: true,
+            },
+          }),
+        ]}
+        roster={[agent]}
+        timelineEvents={[]}
+        isRunning={false}
+      />,
+    )
+    expandTheOnlyWorkRow()
+    expect(screen.getByText('Called Edit')).toBeInTheDocument()
+  })
+
+  it('falls back to the raw text when new_string is missing (a synthetic fixture, not a real tool shape)', () => {
+    render(
+      <AgentTimeline
+        agent={agent}
+        entries={[editEntry({ payload: { call_id: 'c1', tool: 'Edit', input: JSON.stringify({ old_string: 'foo' }) } })]}
+        roster={[agent]}
+        timelineEvents={[]}
+        isRunning={false}
+      />,
+    )
+    expandTheOnlyWorkRow()
+    expect(screen.getByText('Called Edit')).toBeInTheDocument()
+  })
+
+  it('falls back to the raw text for a real MultiEdit-shaped payload, since its pair lives inside edits[]', () => {
+    render(
+      <AgentTimeline
+        agent={agent}
+        entries={[
+          editEntry({
+            content: 'Called MultiEdit',
+            payload: {
+              call_id: 'c1',
+              tool: 'MultiEdit',
+              input: '{"file_path":"x","edits":[{"old_string":"foo","new_string":"bar"}]}',
+            },
+          }),
+        ]}
+        roster={[agent]}
+        timelineEvents={[]}
+        isRunning={false}
+      />,
+    )
+    expandTheOnlyWorkRow()
+    expect(screen.getByText('Called MultiEdit')).toBeInTheDocument()
+  })
+})

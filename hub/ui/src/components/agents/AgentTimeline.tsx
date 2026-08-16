@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { format } from 'date-fns'
 import { Icon } from '@/components/common/Icon'
 import { MarkdownMessage } from '@/components/agents/MarkdownMessage'
+import { ToolEditDiff } from '@/components/agents/ToolEditDiff'
 import type { AgentSummary, AgentTimelineEvent } from '@/api/agents'
 import type { TimelineEntry } from '@/api/agentChat'
 import type { QueueStatus } from '@/api/queue'
@@ -327,6 +328,9 @@ const TOOL_ICON_FALLBACK = { icon: 'build' }
 
 function WorkRow({ entry, paired }: { entry: TimelineEntry; paired?: TimelineEntry }) {
   const [expanded, setExpanded] = useState(false)
+  // design.md D2 — declines (returns null) for anything not shaped like a single-pair edit;
+  // WorkRow falls back to the raw text rendering it already had for every other tool.
+  const editDiff = entry.output_kind === 'tool_use' ? ToolEditDiff({ payload: entry.payload }) : null
   const label =
     entry.output_kind === 'thinking'
       ? 'Thinking'
@@ -353,12 +357,13 @@ function WorkRow({ entry, paired }: { entry: TimelineEntry; paired?: TimelineEnt
       <Icon name={iconName} size={13} style={{ color: 'var(--text-2)', marginTop: 1, flexShrink: 0 }} />
       <b style={{ color: 'var(--text)', fontWeight: 500, minWidth: 64 }}>{displayLabel}</b>
       <span style={{ color: 'var(--text-2)' }}>{statusSuffix.replace(' · ', '')}</span>
-      {expanded && (
-        <span className="block whitespace-pre-wrap mt-0.5" style={{ color: 'var(--text-3)' }}>
-          {entry.content}
-          {paired && paired.content !== entry.content ? `\n${paired.content}` : ''}
-        </span>
-      )}
+      {expanded &&
+        (editDiff ?? (
+          <span className="block whitespace-pre-wrap mt-0.5" style={{ color: 'var(--text-3)' }}>
+            {entry.content}
+            {paired && paired.content !== entry.content ? `\n${paired.content}` : ''}
+          </span>
+        ))}
     </button>
   )
 }
