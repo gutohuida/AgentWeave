@@ -3363,3 +3363,23 @@ steps from queue text.
 out — this is likely one of the last one or two firings before the window closes. last_heartbeat
 refreshed to now; branch released with a back-dated heartbeat immediately after this commit, per
 protocol, so a firing before stop_at (if any) does not idle a cycle against its own heartbeat.
+
+---
+
+## Entry 44 — standby confirmation, iteration 45
+
+**Time:** 2026-08-16T17:30+01:00. ~30 minutes remained to stop_at (18:00). Verified branch
+(`autonomous/2026-08-16-app-and-test-reform`) and `git log` match STATE.json (HEAD at e87e686,
+"Release the branch: back-date heartbeat after Entry 43"); working tree clean, nothing to
+reconcile.
+
+**Action taken:** none, per next_action. Reread the queue (Q1-Q7, all closed) and the full
+decisions_for_user list rather than trusting Entry 43's claim outright. Nothing new is authorised
+without a spec round, and none is due — no unresolved evidence-gathering step remains (gap 5 was
+the last one, closed at Entry 40). No new UI feature, no re-opening of Q1-Q7, no re-deriving next
+steps from queue text.
+
+**Queue status: still empty.** Standing by for the operator's review at stop_at (18:00), ~30
+minutes out — very likely the last firing before the window closes. last_heartbeat refreshed to
+now; branch released with a back-dated heartbeat immediately after this commit, per protocol, so a
+firing before stop_at (if any) does not idle a cycle against its own heartbeat.
