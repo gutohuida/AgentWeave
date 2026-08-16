@@ -156,3 +156,101 @@ the queue for the migration/lifecycle mechanics (0074, the SQLite CHECK-constrai
 enforcing archive-is-operator-only inside `spec_lifecycle.transition`). N2b remains pending,
 contingent on N1 as already stated — N1 did NOT conclude the board needs no scoping, so N2b is not
 skipped.
+
+---
+
+## Entry 2 — N2 spec-round 1: the archive transition and the capability kind (2026-08-16T22:14 +01:00)
+
+Verified before starting: branch `autonomous/2026-08-16-spec-corpus-and-jobs`, `git log` head
+`2f7f22c` matching STATE.json, working tree clean. `current` was already `N2-archive-and-capability`
+from entry 1's handoff. No reconciliation needed.
+
+Read N1's exploration in full before writing anything, as `next_action` required, plus the code it
+grounds itself in: `hub/hub/spec_lifecycle.py` (the whole file — `transition()`'s operator-only
+approval check is the shape everything else in this round copies), `spec_service.py` (`save_document`,
+`rename_document` — the ordering discipline "everything that can be refused is refused before anything
+moves" is reused rather than reinvented), `spec_payload.py` (`SpecPayload`, `KINDS`, `validate_payload`)
+and `spec_render.py`, `hub/hub/db/models.py` around `SpecDocument`/`SPEC_PHASES`, migrations `0058` and
+`0073` (the two prior CHECK-constraint-recreate migrations this round's `0074` follows), `0065` (the
+guarded plain-`create_table` idiom the new `spec_document_merges` table follows), and
+`hub/hub/api/v1/spec.py` and `agent_actions.py` end to end to see which routes are operator-credentialed
+versus agent-credentialed.
+
+**One correction to N1, found by reading code N1 had not read this closely.** N1's recommendation 1
+said a capability document needs a distinct payload schema (absolute requirements vs. a
+change-spec's ADDED/MODIFIED/REMOVED delta), reasoning from the *openspec file* convention. Reading
+`spec_payload.py` shows the Hub's `SpecPayload` has never modelled a delta at all — every document's
+`requirements` field is a flat, absolute list, `change-spec` included, because nothing in the Hub's own
+JSON payload has ever had ADDED/MODIFIED/REMOVED semantics; that convention exists only in the
+hand-authored `openspec/` markdown files N1 read. So a capability document needs **no schema change** —
+recorded as design D2's correction, with the reasoning, rather than silently doing something different
+from what N1 recommended.
+
+**One latent bug found while tracing the write path, fixed in the same change rather than filed
+separately.** `spec_service.save_document` → `spec_lifecycle.record_content` sets `document.kind =
+payload.kind` on **every** content submission, unconditionally — an agent's payload can silently
+reclassify a document's `kind` today, and nothing has ever needed a document's `kind` to be trustworthy
+enough to notice. Once `kind='capability'` starts governing which phase a document is allowed to
+occupy (this change's whole point), that same drift would let a submission defeat the coupling. Design
+D3 pins `kind` at creation and refuses a submission whose `kind` disagrees with the document's own —
+argued in the design doc as belonging in this change, not a follow-up, because shipping the coupling
+without it ships a coupling with a known hole.
+
+Wrote the full artifact set at
+`openspec/changes/2026-08-16-the-corpus-keeps-what-shipped/`:
+
+- **`proposal.md`** — the gap, what changes, capabilities touched (`spec-document-authority` only,
+  modified — this is additive machinery inside its existing domain, not a new capability area),
+  impact, and six explicit non-goals (no task-board scoping — that's N2b; no merge-before-archive
+  requirement; no general capability-document content editor beyond creation and merge; no unarchive
+  transition; no `openspec/` reorganisation; no import of openspec's existing 30+67 documents).
+- **`design.md`**, eight sections: D1 the two new phase values and the one new transition, enforced in
+  `transition()` exactly where approval already is; D2 capability documents (created directly at
+  `current`, written only by the operator, and the schema correction above); D3 the kind-pinning fix;
+  D4 the new `spec_document_merges` table — chosen over N1's left-open JSON-field alternative because
+  an unindexed JSON scan does not answer "what touched this capability" as a query, and given a
+  `CHECK actor_kind = 'operator'` stronger than every other actor-kind CHECK in the schema, because this
+  table exists specifically to make the operator's-authorship rule true; D5 the merge endpoint
+  (`POST /project/documents/{path}/merge`, operator-only, sources named by path, must be `approved` or
+  `archived`); D6 migration `0074` in two pieces (the `ck_spec_documents_phase` recreate plus two *new*
+  CHECKs — a `kind` vocabulary CHECK that has never existed before, and a cross-column
+  `(kind='capability') <=> (phase='current')` CHECK in the shape `0058` already established for
+  `origin_type`/`origin_agent` — and a guarded plain `create_table` for the merge table); D7 the three
+  UI changes (an Archive button, a latent "Reopen shows for every non-exploring phase" bug fix that
+  becomes load-bearing once `archived`/`current` exist, a muted chip treatment); D8 states explicitly
+  what this leaves untouched for N2b (no task is read or written by anything in this change).
+- **`tasks.md`** — 11 sections, unchecked: migration, model, lifecycle, service, API, the agent-route
+  refusal (which needs no code change if D2's refusal is placed correctly — task 6.1 says to confirm
+  this by reading and by test, not assume it), UI, agent-verifiable tests, driven-against-the-running-Hub
+  checks, human-only verification, and a user test guide. Task 8.5 deliberately leaves one edge case
+  undecided rather than silently picking an answer: can a capability document itself be cited as a merge
+  *source*? Design D5 doesn't rule it out and probably should — flagged for round 2 or for whoever
+  implements to resolve, not guessed at here.
+- **`specs/spec-document-authority/spec.md`** — three ADDED requirements (archiving, the capability
+  kind, the authored merge) and two MODIFIED (the phase-transition requirement gains `current`'s
+  no-transitions rule; the approval-is-the-operator's requirement gains archiving as its sibling, with
+  a scenario stating the refusal holds "regardless of caller" — the same wording this session's own
+  `spec_lifecycle.py` docstring uses for why the check lives in the function and not the route).
+
+**Validation friction worth recording**, since CLAUDE.md asks every friction with the spec flow itself
+to be recorded rather than worked around: `openspec validate --strict` refused the merge requirement
+with "must contain SHALL or MUST" even though the full paragraph plainly contains SHALL — the parser
+only reads the **first physical line** of the requirement's opening paragraph, not the full sentence
+after a hand-wrapped line break. Every existing requirement in the corpus that wraps its opening
+sentence happens to have its modal verb before the first line break by accident of phrasing; this one
+didn't. Rewrote the sentence so SHALL appears in line one. This is a real authoring trap for anyone
+writing openspec by hand — worth a line in a later pass over the `openspec-propose` skill's own
+guidance, not something to fix in this run.
+
+**Verification**: `npx openspec validate 2026-08-16-the-corpus-keeps-what-shipped --strict` → valid.
+`npx openspec validate --changes --strict` → **18 passed, 0 failed** (17 baseline + this one), matching
+the `verified_green_at_b2b0cd5` baseline plus one. No code was touched this iteration — round 1 is
+author-only per `spec_round_protocol` — so `pytest`/`npm test`/etc. are unchanged from baseline and were
+not re-run; nothing in this iteration could have moved them.
+
+`current` stays `N2-archive-and-capability`. Advanced `next_action` to round 2: a cold review against
+the four binding rulings and N2's own queue detail, with explicit call-outs to the judgment calls this
+round made on its own authority (the schema correction, the kind-pinning bundling, the table-over-JSON
+choice, the cross-column CHECK, path-based source naming) so round 2 does not have to rediscover them
+from scratch — and a reminder that `at_cap`/on-approval means proceed straight to implementation in the
+same run, tasks.md section by section, not stop at another artifact.

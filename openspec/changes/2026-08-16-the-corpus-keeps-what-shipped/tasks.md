@@ -1,0 +1,208 @@
+# Tasks — The corpus keeps what shipped
+
+## 1. Migration `0074`
+
+- [ ] 1.1 `hub/hub/migrations/versions/0074_archive_and_capability_phase.py`. Guard function mirrors
+      `0058`/`0073`: read `sa.inspect(conn).get_table_names()`, no-op if `spec_documents` or `projects`
+      is absent.
+- [ ] 1.2 `batch_alter_table("spec_documents", recreate="always")`: drop `ck_spec_documents_phase`,
+      recreate it with `("exploring", "proposed", "approved", "archived", "current")`; add
+      `ck_spec_documents_kind` (`kind IN (...)` over `spec_payload.KINDS + ("capability",)`); add
+      `ck_spec_documents_kind_phase` (the cross-column CHECK from design D6).
+- [ ] 1.3 Guarded `op.create_table("spec_document_merges", ...)` per design D4/D6, columns, the
+      `actor_kind = 'operator'` CHECK, and both indexes — same call shape as `0065`'s
+      `spec_document_events`.
+- [ ] 1.4 `downgrade()`: reassign `archived` rows to `approved` and `current` rows to `approved` before
+      dropping the two new CHECKs and restoring the three-value phase CHECK (design D6); drop
+      `spec_document_merges`'s indexes then the table.
+- [ ] 1.5 Bump the migration-head assertion in `hub/tests/test_migrations.py` **and**
+      `hub/tests/test_project_persistence.py` to `0074` (CLAUDE.md's standing instruction for this
+      exact step).
+- [ ] 1.6 `alembic upgrade head` against a copy of a pre-`0074` database; confirm no error and that
+      existing rows are unaffected (`kind='change-spec'`, `phase` one of the original three all satisfy
+      both new CHECKs trivially). `alembic downgrade -1` then `upgrade head` again, round-trips clean.
+
+## 2. Model
+
+- [ ] 2.1 `hub/hub/db/models.py`: `SPEC_PHASES` gains `"archived"`, `"current"`. Update the CHECK
+      definition on `SpecDocument.__table_args__` to match `ck_spec_documents_phase`'s new values, and
+      add `ck_spec_documents_kind` / `ck_spec_documents_kind_phase` as declared in the migration — the
+      model and the migration must describe the same schema, per this codebase's existing convention of
+      keeping `__table_args__` and its originating migration in agreement.
+- [ ] 2.2 New `SpecDocumentMerge` class, exactly as specified in design D4.
+- [ ] 2.3 `hub/hub/db/engine.py` or wherever `Base.metadata` is exercised for a fresh `create_all` —
+      confirm `SpecDocumentMerge` is picked up with no additional registration (it will be, by
+      inheriting `Base`, but verify the fresh-database test path exercises it).
+
+## 3. Lifecycle (`hub/hub/spec_lifecycle.py`)
+
+- [ ] 3.1 `ARCHIVED = "archived"`, `CURRENT = "current"` module constants, beside the existing three.
+- [ ] 3.2 `TRANSITIONS` gains `(APPROVED, ARCHIVED)`. Nothing added for `CURRENT` — design D1.
+- [ ] 3.3 `create_document`: initial `phase` is `CURRENT` when `kind == "capability"`, else `EXPLORING`
+      as today.
+- [ ] 3.4 `transition()`: the unknown-phase guard admits `ARCHIVED`, still refuses `CURRENT` as a
+      `to_phase` (design D1 — the only door into `current` is creation). The operator-only check for
+      `to_phase == APPROVED` gains a sibling for `to_phase == ARCHIVED`, same shape, same
+      `PhaseError` type, new `code="archive_is_the_operators"`.
+- [ ] 3.5 `record_content` drops its `kind` parameter (design D3) — the caller (`save_document`) has
+      already asserted `payload.kind == document.kind` before calling it, so there is nothing left for
+      this function to vary. Update its one call site.
+
+## 4. Service (`hub/hub/spec_service.py`)
+
+- [ ] 4.1 `save_document`: new refusal, before the existing `document.phase == APPROVED` check —
+      `payload.kind != document.kind` → `SaveRefusedError(code="kind_is_fixed")` (design D3).
+- [ ] 4.2 `save_document`: new refusal — `document.kind == "capability" and actor.kind != "operator"` →
+      `SaveRefusedError(code="capability_write_is_the_operators")` (design D2). Placed so it is checked
+      regardless of phase, since a capability document's phase is always `current` and phase-based
+      refusals don't otherwise touch it.
+- [ ] 4.3 New `merge_document(session, workspace, capability_document, source_documents, payload, *,
+      actor, note)` in `spec_service.py` implementing design D5 steps 5–7 (the write via
+      `save_document`, the `SpecDocumentMerge` rows, the `merged` event). Steps 1–4 (resolution and
+      refusals) live in the API handler, matching this file's existing split between "the API resolves
+      what a path names" and "the service acts once it has documents in hand."
+
+## 5. API (`hub/hub/api/v1/spec.py`)
+
+- [ ] 5.1 `MergeRequest` Pydantic model per design D5, `extra="forbid"`.
+- [ ] 5.2 `POST /project/documents/{path:path}/merge`: resolve the capability document
+      (`_require_document`), refuse `not_a_capability` if its `kind` is not `capability`, resolve every
+      `from_changes` path via `_require_document` (404 naming the missing one), refuse
+      `source_not_finished` for any source not in `(APPROVED, ARCHIVED)`, call
+      `spec_service.merge_document(...)`, commit, broadcast `spec_updated` for the capability document's
+      path, return `_document_view(document)` plus the created merge ids.
+- [ ] 5.3 `_document_view`: no change needed — `kind` and `phase` are already surfaced; confirm the
+      response for a capability document reads sensibly (`kind: "capability"`, `phase: "current"`,
+      `explore_closed: false` since `explore_closed_at` is never set for one — note this in the response
+      rather than treating it as a defect, since nothing reads `explore_closed` for a document that
+      never explores).
+- [ ] 5.4 `GET /project/documents` (`list_documents`) and any other route that lists documents by
+      `phase` or filters — audit for an implicit assumption that `phase` is one of the original three
+      (e.g., a hardcoded `IN` clause anywhere outside `spec_lifecycle.py`); fix any found, or state in
+      the log that none exist.
+
+## 6. Agent route refusal (`hub/hub/api/v1/agent_actions.py`)
+
+- [ ] 6.1 `submit_spec_document`: confirm — by reading, and by test 8.x below — that the new
+      `save_document` refusal (task 4.2) reaches this route with no code change here required (design
+      D2's point: the refusal lives one layer down). If the route currently catches `SaveRefusedError`
+      by a fixed set of `code` values and maps unrecognised ones to a generic 500, extend that mapping
+      to include `capability_write_is_the_operators` and `kind_is_fixed` so the agent gets a legible
+      refusal rather than an opaque failure.
+
+## 7. UI (`hub/ui/src`)
+
+- [ ] 7.1 `SpecPhaseBar.tsx`: narrow the "Reopen" condition to `phase === 'proposed' || phase ===
+      'approved'` (design D7 — fixes the latent bug for `archived`/`current` as a side effect of adding
+      them).
+- [ ] 7.2 `SpecPhaseBar.tsx`: new "Archive" button, `phase === 'approved'` only, calling
+      `useSetSpecPhase` with `to: 'archived'`. No new mutation hook.
+- [ ] 7.3 Phase chip: muted visual treatment for `archived` and `current` (CSS/token choice, not a new
+      component).
+- [ ] 7.4 `hub/ui/src/api/spec.ts` (or wherever `useSpecDocuments`'s response type lives): confirm the
+      TypeScript type for `phase` includes the two new literals so a UI branch on `document.phase`
+      type-checks against all five rather than silently widening to `string`.
+- [ ] 7.5 `cd hub/ui && npm run build && python ../../scripts/refresh_ui_bundle.py` after the above,
+      confirming `hub/hub/static/ui/ui-build-stamp.json` updates and `diff -rq` between `dist/` and the
+      committed bundle reports no difference (CLAUDE.md's standing rule for any `hub/ui/src` change).
+
+## 8. Tests — agent-verifiable
+
+Everything here is asserted by the suite; none of it requires a human.
+
+- [ ] 8.1 `hub/tests/test_migrations.py`: head is `0074`; `0074` upgrades cleanly from `0073` on a
+      populated database (existing rows satisfy both new CHECKs); downgrade round-trips (task 1.6,
+      turned into an assertion).
+- [ ] 8.2 `hub/tests/test_project_persistence.py`: head assertion updated to `0074`.
+- [ ] 8.3 New `hub/tests/test_spec_archive.py`: an approved document archives when the operator calls
+      `transition(to_phase=ARCHIVED)`; an agent actor calling the same is refused with
+      `archive_is_the_operators`; archiving a `proposed` or `exploring` document is refused as an
+      illegal transition (not in `TRANSITIONS`); archiving does not touch the document's requirements,
+      digests, or any `Task` row; an archived document has no legal outgoing transition (attempting
+      `to_phase="exploring"` from `archived` is refused).
+- [ ] 8.4 New `hub/tests/test_spec_capability_kind.py`: creating a document with `kind="capability"`
+      lands it at `phase="current"` with no `explore_closed_at`; `transition()` refuses any `to_phase`
+      against it, including `"current"` itself (unknown-phase-for-transition, per design D1); an
+      agent's `submit_spec_document` against a capability document is refused
+      `capability_write_is_the_operators`; the identical payload submitted by the operator succeeds; a
+      payload whose `kind` differs from the document's recorded `kind` is refused `kind_is_fixed`,
+      tested against a capability document and, separately, against an ordinary `change-spec` document
+      (design D3's fix is not capability-specific).
+- [ ] 8.5 New `hub/tests/test_spec_merge.py`: a merge from an approved change document into a capability
+      document writes the payload, creates one `SpecDocumentMerge` row per named source, and one
+      `"merged"` event on the capability document; a merge naming a source still `exploring` or
+      `proposed` is refused `source_not_finished`; a merge naming a source whose `kind` is `capability`
+      (a capability document cannot itself be a merge source) — decide and assert the intended
+      behaviour, since design D5 does not explicitly rule this out and it should (a source is what got
+      merged *from*, which only makes sense for a change document); a merge against a non-capability
+      target document is refused `not_a_capability`; two merges from different changes into the same
+      capability accumulate two rows, not one overwritten row; a merge's payload is still subject to
+      every existing `save_document` refusal (e.g. malformed payload → `payload_invalid`, unchanged
+      behaviour).
+- [ ] 8.6 `hub/tests/test_spec_documents_api.py` (existing file): add coverage for the new
+      `POST /project/documents/{path}/merge` route's request/response shape, and for
+      `POST /project/documents/phase?to=archived` going through the ordinary phase route with no new
+      endpoint needed.
+- [ ] 8.7 `hub/tests/test_spec_lifecycle.py` or equivalent existing coverage of `transition()`: extend
+      the existing table-driven tests (if any) to cover the two new phase values rather than duplicating
+      them in a new file, if an existing file already parametrises over `SPEC_PHASES`/`TRANSITIONS`.
+- [ ] 8.8 UI: `SpecPhaseBar.test.tsx` (existing or new) — "Reopen" absent for `archived` and `current`
+      fixtures; "Archive" present only for `approved`; phase chip renders the literal phase name for all
+      five values.
+- [ ] 8.9 `pytest hub/tests/ -n 8` and `pytest tests/ -n 4` — both green, counts recorded in the log
+      against the `verified_green_at_b2b0cd5` baseline in `STATE.json`.
+- [ ] 8.10 `cd hub/ui && npm test`, `npm run lint`, `npx tsc --noEmit` — all clean.
+- [ ] 8.11 `ruff check hub/ src/` and `black --check` on every file touched — clean.
+- [ ] 8.12 `npx openspec validate --changes --strict` (this change validates) and
+      `npx openspec validate --specs --strict` (the modified `spec-document-authority` delta merges
+      cleanly) — both clean.
+
+## 9. Driven against the running Hub
+
+Not a test — the real HTTP surface, the real database, real files. Restart the trial Hub
+(`environment.restart_command` in `STATE.json`) onto the implementing commit first; confirm `/health`
+reports `ok` before trusting any observation.
+
+- [ ] 9.1 Create a document with `kind="capability"` via the API; confirm it appears at `phase:
+      "current"` and that `POST /project/documents/phase?to=approved` against it is refused.
+- [ ] 9.2 Approve an ordinary change document (materialising its tasks, as today), then archive it;
+      confirm its tasks are unchanged (`GET` the tasks, compare `spec_document_id` and `status` before
+      and after).
+- [ ] 9.3 Merge that archived change into the capability document created in 9.1, citing it by path;
+      confirm the capability document's content updates and `GET
+      /project/documents` (or wherever merges surface, if anything does yet — this change ships no
+      dedicated merge-history UI) shows the row exists at the database level.
+- [ ] 9.4 Attempt the same merge again with a source still in `proposed`; confirm `source_not_finished`.
+- [ ] 9.5 Attempt to write capability-document content through the ordinary agent route
+      (`submit_spec_document`, using a live run's credential rather than the operator's project
+      credential); confirm the refusal.
+
+## 10. Human-only verification
+
+- [ ] 10.1 **Does "Archive" read as final?** Look at the button beside "Approve" — is it clear this is a
+      different kind of action from the reversible phase moves nearby?
+- [ ] 10.2 **Is a capability document's phase bar quiet enough?** With no controls rendering for
+      `current`, confirm the bar does not look broken or empty — it should read as "there is nothing to
+      decide here," not "something failed to load."
+
+## 11. User test guide
+
+**Setup.** Hub running on `:8010`. A project with at least one approved document.
+
+1. **Archive an approved document.** Open an approved document. Click "Archive."
+   - *Expect:* the phase chip changes to `archived`. No task on the board changes status.
+2. **Archiving is not available earlier.** Open a document still in `proposed` or `exploring`.
+   - *Expect:* no "Archive" control anywhere in the phase bar.
+3. **A capability document has no decisions to make.** Create a document with kind `capability` (via
+   whatever surface this change's own UI work exposes, or the API directly if none does yet).
+   - *Expect:* its phase reads `current`. No "Propose," "Approve," "Archive" or "Reopen" button appears
+     — only the phase chip and the enforcement (rigor) control.
+4. **A capability document rejects an ordinary agent edit.** Ask an agent, in conversation, to submit
+   content directly against the capability document's path.
+   - *Expect:* the agent's submission is refused; the operator sees the document unchanged.
+5. **A merge names its source.** Using the merge route, submit updated content for the capability
+   document, citing the archived change from step 1.
+   - *Expect:* the capability document's content updates to what was submitted.
+
+**Where it would go wrong:** if step 1 changes a task's status, task 8.3's isolation assertion is
+incomplete; if step 4 succeeds, task 4.2's refusal is not actually wired into the path the agent uses.
