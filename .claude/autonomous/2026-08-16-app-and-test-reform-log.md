@@ -500,3 +500,56 @@ per the item's own `note`.
 
 **Elapsed:** one iteration, well under the 2-iteration cap — nothing failed that needed a second
 attempt.
+
+---
+
+## Entry 5 — 04:00 — Q4b round 1 (AUTHOR): `openspec/changes/2026-08-16-delete-project-api/`
+
+Verified branch/log/`STATE.json` agreed before starting (HEAD `02d9cff`, `autonomous/2026-08-16-app-
+and-test-reform`, iteration 4, `current: Q4b-delete-project`). Refreshed `last_heartbeat` to now
+before beginning.
+
+**Derived the cascade from evidence, not guesswork, per the item's `detail`.** Read Q1's raw-SQL
+cleanup (`git show 8a12932`, Entry 1) and grepped every `project_id` column in
+`hub/hub/db/models.py`: 27 tables carry one, `Project` declares an ORM relationship for only 11 of
+them, none declares `cascade=`, `PRAGMA foreign_keys` is never turned on
+(`hub/hub/db/engine.py`), and only `job_runs` declares `ondelete="CASCADE"` at all — so neither the
+ORM nor SQLite would cascade a delete today. Decision: a generic sweep over
+`Base.metadata.tables` for every table with a `project_id` column, not hand-maintained relationships
+— the same principle Q1's one-shot script used, now productized. Read `_guard_relocation` in
+`hub/hub/project_lifecycle.py` and reused its exact `Run.status == "running"` check as the delete
+guard rather than inventing a second definition of "still doing something" — deliberately did **not**
+extend that guard to "has a conversation," since almost every real project has one and that would
+make delete unreachable for the case it's meant to serve.
+
+**Traced the actual UI surfaces rather than assuming them:** `ProjectSettingsPanel.tsx` (already
+hosts the relocate control, using `SettingsSection`/`SettingsRow`) is where the delete control
+belongs; `useRelocateProject` in `hub/ui/src/api/projects.ts` is the mutation-hook shape to mirror;
+`Sidebar.tsx`'s rail already renders an "Add project" button unconditionally, which is what an empty
+project collection falls back to today — except nothing in `App.tsx` currently special-cases "zero
+projects" as distinct from "not configured," which the design records as a real, currently-latent gap
+this change makes reachable (and therefore has to make not-broken) rather than one it introduces.
+
+**Wrote `proposal.md`, `design.md` (D1–D7, plus route/auth), `tasks.md` (7 phases, backend/UI split
+into agent-verifiable vs human-only per the standing directive, ending in a user test guide), and the
+`local-project-workspace` spec delta** (one `ADDED Requirement` with six scenarios covering the happy
+path, workspace survival, the active-run refusal, the non-blocking conversation, the last-project
+empty state, and the type-to-confirm gate). `npx openspec validate --changes --strict` — **14 passed,
+0 failed**, this change included.
+
+**What a reviewer should distrust:** D6 (the empty-project-collection UI state) is the least certain
+piece — it is reasoned from reading `App.tsx`/`configStore.ts`/`Sidebar.tsx` cold, not from running the
+app with zero projects, because doing that against the live Hub would have meant emptying
+`aw-loop10`, which is explicitly off-limits. Task 4.5 requires confirming this for real once the code
+exists. The `Icon` name for the delete control (task 4.2) is left as "check before introducing a new
+icon name" rather than picked, since the available lucide names weren't enumerated this round.
+`agent_job_deletions`' inclusion in the sweep (D2) is a judgement call — it is a "durable attribution
+tombstone" by its own docstring, and this design overrides that durability once the project itself is
+gone; a reviewer who reads "durable" more literally than "durable while the project exists" would
+object here, and task 3.8 exists so that objection has a concrete test to look at rather than only
+prose.
+
+**Set `next_action` to the review step, per the spec-round protocol** — round 2 will read this cold,
+without looking up who wrote it, against the item's `review_criteria`.
+
+**Elapsed:** one iteration.
