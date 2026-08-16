@@ -3323,3 +3323,23 @@ next steps from queue text.
 out. last_heartbeat refreshed to now; branch released with a back-dated heartbeat immediately after
 this commit, per protocol, so the next firing (if any, before stop_at) does not idle a cycle
 against its own heartbeat.
+
+---
+
+## Entry 42 — standby confirmation, iteration 43
+
+**Time:** 2026-08-16T17:00+01:00. ~1h remained to stop_at (18:00). Verified branch
+(`autonomous/2026-08-16-app-and-test-reform`) and `git log` match STATE.json (HEAD at 42b8a85,
+"Release the branch: back-date heartbeat after Entry 41"); working tree clean, nothing to
+reconcile.
+
+**Action taken:** none, per next_action. Reread the queue (Q1-Q7, all closed) and the full
+decisions_for_user list rather than trusting Entry 41's claim outright. Nothing new is authorised
+without a spec round, and none is due — no unresolved evidence-gathering step remains (gap 5 was
+the last one, closed at Entry 40). No new UI feature, no re-opening of Q1-Q7, no re-deriving next
+steps from queue text.
+
+**Queue status: still empty.** Standing by for the operator's review at stop_at (18:00), ~1h out.
+last_heartbeat refreshed to now; branch released with a back-dated heartbeat immediately after this
+commit, per protocol, so the next firing (if any, before stop_at) does not idle a cycle against its
+own heartbeat.
