@@ -1962,3 +1962,65 @@ decides where per-OS global state should live and what happens to an existing
 (or similar). Research desktop shell options with authorised web research, compare against the
 current architecture, and draft the exploration document per the item's `detail` and
 `review_criteria` fields in STATE.json.
+
+## Entry 23 — 12:19 — Q6-desktop-and-global: exploration written, with a re-diagnosis that narrows the actual bug
+
+Wrote `openspec/explorations/2026-08-16-desktop-app-global-state.md` per the queue item's own
+instruction to explore before proposing. Two pieces of work: research the desktop shell options, and
+re-check the "different folder, different AgentWeave" diagnosis against the actual call paths rather
+than just the `config.py` line it was first attributed to.
+
+**The re-diagnosis is the more important finding.** Reading `_hub_native_start`
+(`src/agentweave/cli.py:664`) shows that `agentweave hub-start` — the command a `pip install
+agentweave-ai` user actually runs — has **not** had the per-folder bug since commit `ab53cf4`
+(2026-08-03, "local multi-project workspace phase 2"): it computes an absolute db path from
+`HUB_DIR = Path.home() / ".agentweave" / "hub"` and sets `DATABASE_URL` in the environment *before*
+importing `hub.main`, so `hub/hub/config.py:9`'s relative default never fires on that path. The
+relative default only bites two callers: (1) anyone who runs `uvicorn hub.main:app` directly without
+going through the CLI — which is exactly this driver's own `restart_command` in this session's
+`STATE.json`, and exactly the pattern a Hub contributor uses while developing — and (2) Docker mode,
+where the *container's* relative path is fine (fixed by the Dockerfile's `WORKDIR`) but the named
+volume backing it is not: `hub/docker-compose.yml` declares `hub-data:` with no top-level `name:`
+key (confirmed by grep — none present), so Docker Compose's default project-naming (derived from the
+containing directory's basename) gives a different volume prefix depending on which directory
+`docker compose up` was run from. Confirmed live, not assumed.
+
+This changes the shape of the fix without changing that a fix is needed: pin `config.py`'s default
+to the same absolute path native mode already computes (defense-in-depth, and a real fix for direct
+uvicorn invocations), and give the compose file an explicit `name:`. Both are small, mechanical, and
+independent of the desktop-shell decision — recorded in the exploration as findings, not fixed here,
+since the queue item scopes this as research-first.
+
+**Desktop shell comparison**, web-researched (sources cited inline in the document): Electron
+(rejected — heaviest on every axis, and needs a second Node toolchain separate from `hub/ui`'s own
+build), Tauri/PyTauri (best-specced on every measured axis — 96% smaller and far less RAM than
+Electron per the sources found, and a Python binding now exists — but needs Rust, which this run's
+`limits` forbid installing; recorded as the strongest candidate if that constraint is ever lifted,
+not rejected on merit), and **pywebview** (recommended for this run: pure `pip install`, no new
+language toolchain, pairs with FastAPI+static-bundle in exactly AgentWeave's existing shape, working
+examples found in the wild with this same architecture). Also named a candidate the queue item's own
+`detail` field did not mention: `_open_app_window` (`cli.py:634`) already opens the Hub in a
+chromeless `chrome --app=<url>` window today, for zero new dependency — recorded as the floor a
+pywebview proposal needs to justify going past, not a replacement for it.
+
+**Global state and migration**: `Path.home() / ".agentweave" / "hub" / "data" / "agentweave.db"` is
+already the right per-OS path on Windows/macOS/Linux via `Path.home()`, once `config.py` is
+corrected to match what native mode already does — no new dependency (e.g. `platformdirs`) is needed
+to fix the reported bug, though one would place data more idiomatically per OS as a refinement.
+Two populations need distinct migration handling, named but not resolved: native-mode users already
+at the global path (nothing to do), and direct-uvicorn/Docker users whose data sits at a
+project-relative or directory-prefixed location today (detect-and-migrate vs. leave-orphaned is an
+open decision for the coming proposal).
+
+**Left open, by design** (Section 5 of the document): code signing and auto-update for any shell
+choice (unresearched this pass — distribution, not architecture); whether the no-Rust constraint
+should be lifted given PyTauri's numbers; pywebview's Linux GTK/Qt system-dependency story against
+the CLI's zero-runtime-dependency stance.
+
+**Elapsed:** one iteration (research + document; no code changed, so no test run was needed — the
+document's factual claims about `cli.py`/`config.py`/`docker-compose.yml` were checked by direct
+reading and grep, cited inline with line numbers).
+
+**Next:** an AUTHOR pass producing `openspec/changes/2026-08-16-<name>/` (proposal, design, tasks,
+spec deltas) per the spec-round protocol, working from this exploration's Section 6 recommendation.
+Then an independent cold REVIEW pass against the queue item's `review_criteria`.
