@@ -2024,3 +2024,74 @@ reading and grep, cited inline with line numbers).
 **Next:** an AUTHOR pass producing `openspec/changes/2026-08-16-<name>/` (proposal, design, tasks,
 spec deltas) per the spec-round protocol, working from this exploration's Section 6 recommendation.
 Then an independent cold REVIEW pass against the queue item's `review_criteria`.
+
+## Entry 24 — 12:33 — Q6-desktop-and-global: AUTHOR pass, part 1 — proposal.md and design.md
+
+Wrote `openspec/changes/2026-08-16-one-hub-and-a-window-of-its-own/{proposal.md,design.md}`,
+implementing the exploration's Section 6 recommendation. Sized as a checkpointable slice per this
+item's own `next_action` instruction — `tasks.md` and the `specs/app-lifecycle/spec.md` delta are
+the next iteration, not this one.
+
+**proposal.md** states the Why (both operator quotes, the re-diagnosis from Entry 23, the desktop-app
+comparison), What Changes (five bullets: `config.py` default, `docker-compose.yml` `name:`, a
+migration decision, `pywebview` as an optional extra, `--app` opening a real window with an
+unchanged fallback), Impact (behavior/dependencies/schema/process-model — the last one flagged as a
+genuine change, not hidden), and Non-Goals (Tauri/PyTauri explicitly deferred not rejected, code
+signing/auto-update, Linux packaging, per-folder project registration explicitly unchanged,
+`platformdirs`-style OS-idiomatic placement deferred as a refinement).
+
+**design.md** has five decisions (D1-D5), checked against the actual code before writing each one:
+
+- **D1** — `config.py`'s default is *independently computed*, not imported from `cli.py`'s `HUB_DIR`.
+  Checked both `pyproject.toml` files first: `agentweave-ai` has `dependencies = []`,
+  `agentweave-hub` depends on nothing from `agentweave-ai` either — there is no dependency edge
+  either package could add without turning an optional/lazy relationship into a hard one. Recorded
+  the small duplication cost explicitly and named the drift test `tasks.md` needs (assert both
+  computations agree). Also traced through what actually consumes `config.py`'s default under Docker
+  and confirmed it is Docker's `environment:` block that wins there, not the Python default — so D1
+  only ever fires for direct-`uvicorn` callers, correctly scoped to what Entry 23 diagnosed.
+- **D2** — pin `docker-compose.yml`'s project name via a top-level `name:` key, not
+  `COMPOSE_PROJECT_NAME` in `.env` (a `.env`-based fix only helps whoever's `.env` happens to set it;
+  the file-level fix is unconditional). Explicitly states it does not rename any volume that already
+  exists under a directory-prefixed name — that population is D4's problem, not duplicated here.
+- **D3** — the one decision that took the most reasoning: `webview.start()` is inherently blocking
+  (an OS event-loop property, not a library limitation), which conflicts with today's
+  spawn-detached-and-return `--app` behavior. Resolution: the Hub backend's start behavior
+  (detached/foreground) is completely unchanged; `--app`'s window becomes an *additional* blocking
+  phase after the Hub is confirmed healthy, so `hub-start --app` now waits for the window to close
+  before the CLI invocation exits — named as a real behavior change for scripted callers in both
+  `proposal.md`'s Impact section and here, not smoothed over. Fallback to today's exact
+  `_open_app_window` behavior when `pywebview` is not installed is stated as byte-identical, not
+  approximate.
+- **D4** — migration decision, resolved rather than left open as the exploration flagged it: native
+  users need nothing; direct-uvicorn/Docker-dev users' existing data is left in place, not
+  auto-migrated, reasoned from `CLAUDE.md`'s own caution against silent, hard-to-reverse actions on
+  a population that (by definition) is not the operator-facing case the bug report was about.
+- **D5** — `pywebview` platform dependencies (WebView2/WebKitGTK-or-Qt/Cocoa) are documented and
+  caught-and-fallback, not vendored or auto-installed; explicitly named as unsolved rather than
+  silently assumed away.
+
+Also stated which existing capability this change extends and why: `app-lifecycle`
+(`openspec/specs/app-lifecycle/spec.md`) — its purpose statement already covers "begin and manage a
+local AgentWeave instance," and its "Bare invocation is the only entry point" requirement already
+uses the phrase "the one local AgentWeave runtime" that this change makes literally true for the two
+launch paths that did not yet honor it. Read the full existing spec before deciding this, and also
+skimmed `hub-workspace-shell/spec.md` (visual-hierarchy scope, not instance-state — ruled out as a
+better home) and `local-project-workspace/spec.md`'s purpose (per-project, not per-instance — also
+ruled out) to make sure `app-lifecycle` was the right target and not just the first one checked.
+
+**Verification this iteration:** no code changed, so no test run. Every factual claim in `design.md`
+about current behavior was checked by reading the actual files, not recalled from Entry 23: re-read
+`hub/hub/config.py:1-30`, `src/agentweave/cli.py:190-230` and `:620-860` (both `_hub_native_start`
+and `_hub_native_scaffold`'s detach/foreground/app branches), `hub/docker-compose.yml` in full, and
+both `pyproject.toml` files' `dependencies`/`optional-dependencies` sections.
+
+**Elapsed:** one iteration.
+
+**Next:** part 2 of the AUTHOR pass — `tasks.md` (agent-verifiable vs. human-only split per the
+standing directive, including a task for D1's drift test, D2's compose-name check, D3's fallback
+behavior, and a user test guide for the window/process-model change D3 introduces) and
+`specs/app-lifecycle/spec.md`'s delta (new/modified requirements for global instance state and the
+desktop-window `--app` behavior, as `### Requirement:`/`#### Scenario:` blocks against the existing
+spec read this iteration). Then set `next_action` to `REVIEW
+openspec/changes/2026-08-16-one-hub-and-a-window-of-its-own round 1` per the spec-round protocol.
