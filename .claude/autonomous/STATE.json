@@ -6,8 +6,8 @@
   "started_at": "2026-08-16T02:15:00+01:00",
   "stop_at": "2026-08-16T12:00:00+01:00",
   "stop_when_queue_empties": false,
-  "iteration": 5,
-  "last_heartbeat": "2026-08-16T03:21:46+01:00",
+  "iteration": 6,
+  "last_heartbeat": "2026-08-16T04:10:39+01:00",
   "spec_round_protocol": {
     "why": "Operator: 'one agent produces the spec, the next triggers the agents review until a agent thinks is good to implement. We need to have another gate so agent don't go on forever.' Implemented as successive driver iterations rather than subagents, at the operator's suggestion ('the trigger at 2AM generates the spec and the one at 2:15 reviews it'). A fresh process has no memory of writing the thing it reviews, so the independence is structural rather than merely prompted.",
     "max_rounds": 3,
@@ -117,7 +117,7 @@
     }
   ],
   "current": "Q4b-delete-project",
-  "next_action": "REVIEW openspec/changes/2026-08-16-delete-project-api/ round 1. Read Entry 5 of the log first for what round 1 (AUTHOR) actually produced and what it flagged as uncertain (D6's empty-project-collection state was reasoned cold, not run live; the agent_job_deletions inclusion in D2's sweep is a judgement call; the Icon name for the delete control is deliberately left unpicked). Then, per spec_round_protocol.how: read proposal.md, design.md, tasks.md and the local-project-workspace spec delta COLD, without re-deriving from this summary, and critique against Q4b's review_criteria field in the queue array below (does delete touch ONLY database rows with a mutation-checked survival test; is the cascade derived from models+Q1 evidence rather than guessed, and is anything left orphaned; what happens on a RUNNING run vs an open conversation, and is that stated; what happens deleting the LAST project; is the confirmation proportionate; does it reuse Icon/rail patterns). If it holds up: set approved=true in the log entry, and set next_action to the implementation step (start at tasks.md phase 1 \u2014 ProjectLifecycleService.delete()). If not: write concrete objections in the log and set next_action to 'REVISE openspec/changes/2026-08-16-delete-project-api/ round 2'. This is round 1 of max 3 \u2014 record the round number in the log entry either way.",
+  "next_action": "Q4b round 1 was REVIEWED and APPROVED (see log Entry 6 \u2014 read it first for the two implementation-time watch items it flagged: verify every swept project_id column really means ownership before trusting D2's generic sweep in task 1.3, and make task 2.3's SSE broadcast fire after the delete transaction commits, not before). Begin implementation at openspec/changes/2026-08-16-delete-project-api/tasks.md phase 1: ProjectLifecycleService.delete() in hub/hub/project_lifecycle.py (tasks 1.1-1.5). Size this iteration to phase 1 plus its guard logic only \u2014 do not attempt the API route (phase 2), UI (phase 4) or tests (phase 3/5) in the same turn; check tasks.md boxes as they are actually done, not preemptively. Next iteration after this one continues at whichever phase is still unchecked.",
   "limits": [
     "Stay on the autonomous branch. No commits, merges or rebases onto hub-native-experience or master. Merging back is the operator's decision, made awake.",
     "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Pushing the autonomous branch itself is required, not optional.",

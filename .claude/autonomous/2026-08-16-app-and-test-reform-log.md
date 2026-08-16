@@ -553,3 +553,78 @@ prose.
 without looking up who wrote it, against the item's `review_criteria`.
 
 **Elapsed:** one iteration.
+
+---
+
+## Entry 6 — 04:10 — Q4b round 1 (REVIEW): APPROVED
+
+Verified branch/log/`STATE.json` agreed before starting (HEAD `e1f3d64`, iteration 5, `current:
+Q4b-delete-project`, `next_action` pointing at this review). Read `proposal.md`, `design.md`,
+`tasks.md`, and `specs/local-project-workspace/spec.md` cold — no `git log`/`git show` on the change
+itself, no re-reading Entry 5 beyond what the `next_action` field already summarized before reading
+the artifacts themselves.
+
+**Against each of Q4b's six `review_criteria`, in order:**
+
+1. *Does the delete touch ONLY database rows, with a test proving the workspace directory
+   survives?* Yes. D4 states it as a structural guarantee (no import of `project_workspace.py`, no
+   filesystem call), not a promise, and 3.5 is mutation-checked — add `shutil.rmtree`, watch the test
+   fail, revert. This is the right shape for a safety property: a test that can be shown to catch the
+   regression, not just one that currently passes.
+2. *Is the cascade derived from the models and iteration 1's evidence rather than guessed, and is
+   anything left orphaned?* Yes — D2's 27-table count (11 with a declared relationship, 16 without,
+   `agent_job_deletions` with a `project_id` column but no `ForeignKey`) reconciles exactly with Q1's
+   "26 tables + projects" from Entry 1. 3.2 asserts zero remaining rows across every `project_id`
+   table, not just the 3.1 sample — that is what makes "no orphans" a test rather than a claim.
+3. *What happens on a RUNNING run vs an open conversation, and is that stated?* Yes, both stated and
+   opposite: running run refuses (409, reusing `_guard_relocation`'s exact check, not a new
+   definition), open conversation does not block (D3's reasoning — a conversation is history, not an
+   in-progress operation, and treating it as a blocker would make delete unreachable for the normal
+   case). Both have dedicated tests (3.4, 3.6, 3.7).
+4. *What happens deleting the LAST project?* Addressed in D6, honestly flagged as the least certain
+   piece (reasoned from reading `App.tsx`/`Sidebar.tsx`/`configStore.ts` cold, not from running the
+   app at zero projects, since emptying `aw-loop10` to test it live is off-limits). Task 4.5 requires
+   confirming for real once the code exists, and commits to fixing rather than filing separately if
+   that check finds a crash. Deferring a genuinely-untestable-yet claim to an implementation-time
+   check, with the check written down as a task rather than left as a hope, is the right call here —
+   not a gap in the round.
+5. *Is the confirmation proportionate?* Type-to-confirm the project's exact name. Proportionate to an
+   irreversible, no-undo action (the Non-Goals section states explicitly that soft-delete/undo was not
+   requested and is out of scope) and consistent with Q4b's own `detail` field, which named this
+   pattern directly.
+6. *Does it reuse Icon/rail patterns rather than inventing new ones?* Yes for the mutation hook shape
+   (`useDeleteProject` mirrors `useRelocateProject`), the settings layout
+   (`SettingsSection`/`SettingsRow`), and the icon system (task 4.2 requires checking for an existing
+   lucide name before introducing one). One genuinely new pattern is introduced — type-to-confirm
+   itself, since nothing in this codebase does that yet — and D7 says explicitly why the lighter
+   existing pattern (`delete_runner`'s single-click confirm) is not reused: proportionality to what is
+   being destroyed, not habit.
+
+**Two things checked beyond the six criteria, because a cold read surfaces different questions than
+the one that wrote it:**
+
+- **D2's generic sweep assumes every table with a `project_id` column is *owned* by that project** —
+  i.e., that the column always means "scoped to," never "references," e.g. a cross-project pointer.
+  Not disprovable from the design doc alone, and not one of the stated criteria, so this is not an
+  objection — but it is exactly the kind of assumption 3.2's exhaustive no-orphan test does not catch
+  (an over-broad delete looks identical to a correct one from "no orphans remain"). Recorded here as
+  an implementation-time watch item, not a blocker: task 1.3's implementer should spot-check that
+  every swept table's `project_id` semantics really is ownership before trusting the sweep, using the
+  same per-table reasoning D2 already applied to `project_sessions`/`project_instructions`'s
+  primary-key case.
+- **Task 2.3's SSE broadcast phrasing ("before the row is gone") is ambiguous** between "capture the
+  project's name before the row disappears" (uncontroversial — you need the name for the payload) and
+  "emit the event before the transaction commits" (which would tell clients a delete happened before
+  it is durable, a real bug if the transaction then fails). Not written unambiguously enough to catch
+  a wrong implementation on its own. Not an objection to the design — 2.1/2.3 read together imply
+  success-then-broadcast — but worth flagging so whoever implements 2.3 reads it as "commit, then
+  broadcast," not literally.
+
+**Verdict: APPROVED, round 1.** No criterion fails; the two additional observations above are
+implementation-time watch items, not design defects, and do not warrant a revision round. Per the
+spec-round protocol, this ends the spec round at round 1 of the max 3 — the artifact ships to
+implementation as written, with the two watch items carried forward here rather than folded into a
+`design.md` edit that would only restate what this entry already says.
+
+**Elapsed:** part of one iteration — reading and reasoning against six stated criteria, no code run
+(nothing to run; this is a document review).
