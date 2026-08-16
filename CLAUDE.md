@@ -2,44 +2,75 @@
 
 This file provides guidance to Claude Code when working on the **AgentWeave Framework** codebase itself.
 
-## You develop AgentWeave here — you do not use it here
+## You develop AgentWeave here — and you are starting to use it here
 
-This repository is the framework's **source code**, not a project that runs the framework. The
-distinction governs almost every decision in this file, so read it before anything else.
+This repository is the framework's **source code** first. That is still the fact that governs most
+decisions in this file, so read this section before anything else.
 
-**This repo has no AgentWeave session, and must not acquire one.** There is no `agentweave.yml`, no
-`.agentweave/`, no `spec/`, and no generated `.claude/skills/aw-*`. They were removed on 2026-08-02
-because they were test output that read as project state. Do not recreate them at the repository
-root.
+**What changed on 2026-08-16.** The operator decided to migrate slowly to developing AgentWeave with
+AgentWeave. The blanket prohibition that used to open this file — *"this repo has no AgentWeave
+session, and must not acquire one"* — is **retired, deliberately.** It was written on 2026-08-02
+when the Hub-owned spec flow did not exist and the only artefacts at the root were leftover test
+output. Both facts have changed: the spec flow shipped (`spec-document-authority`,
+`spec-chat-session`, 2026-08-12/13) and has been driven end to end live, and the operator's original
+choice of openspec was chronology — AgentWeave had nothing to offer yet — not a verdict against it.
 
-| Don't | Do |
+This is a **staged migration, not a switch.** Read the two tables below as the current stage, and
+expect them to move.
+
+### Permitted now
+
+| Do | Notes |
 |---|---|
-| Launch the app or point a Hub at the repo root | Do it inside `testbed/` (see `testbed/README.md`) |
-| Invoke `aw-*` skills (`aw-spec-propose`, `aw-status`, `aw-delegate`, …) | Use the `openspec-*` skills — see "Specifications" below |
-| Delegate to agents via AgentWeave messaging | Do the work directly, or use Claude Code subagents |
-| Write to `spec/` | Write to `openspec/changes/<date>-<name>/` |
-| Treat `agentweave.yml` / `.agentweave/` as configuration to read | Treat them as *product surfaces you implement* |
+| Register this repo as a project in a **trial Hub** | Creates `.agentweave/project.json` at the root. Already gitignored at any depth — leave it that way; the marker binds a project ID to this machine's database and means nothing on another. |
+| Author specification documents under `spec/` | These are work product, not test output. Track and commit them. |
+| Use the Hub-owned spec flow — documents, requirements, tasks, evidence, coverage | Via the app and its MCP tools (`submit_spec_document`, `record_evidence`, …). |
+| Throwaway experiments in `testbed/` | Unchanged — see `testbed/README.md`. Use it for anything you would not want in this repo's history. |
 
-The `aw-*` skills and the aw-spec workflow are **features AgentWeave ships to its users**
-(`openspec/specs/aw-spec-workflow/spec.md`, `src/agentweave/spec_manifest.py`,
-`hub/hub/api/v1/spec.py`, `hub/ui/src/components/spec/`, `src/agentweave/templates/skills/`). Change
-that code when the feature needs changing; never run it against this repo.
+### Still prohibited
 
-## Specifications — this repo uses openspec
+| Don't | Why |
+|---|---|
+| Point the Hub **you are editing** at this repo | Every Hub code change restarts the process orchestrating the work and kills runs in flight. The trial Hub is a separate instance on its own port with its own database, never the development one. |
+| Invoke the legacy `aw-*` collab skills (`aw-delegate`, `aw-status`, `aw-relay`, `aw-setup-*`, …) | These are product source in `src/agentweave/templates/skills/`, predating the Hub-owned flow. They are a feature you implement, not a workflow you run. |
+| Delegate this repo's work through AgentWeave messaging | Do the work directly, or use Claude Code subagents. Roster delegation is not part of this stage. |
+| Move `openspec/specs/` into `spec/` | See "Specifications" below — AgentWeave has nowhere to put a current-behaviour corpus yet. |
 
-All planned work lives in `openspec/`:
+The trial Hub's port and database path are fixed at setup time and recorded here once chosen.
 
-- `openspec/specs/<capability>/spec.md` — current behaviour of shipped capabilities.
-- `openspec/changes/<date>-<name>/` — one in-flight change: `proposal.md`, `design.md`,
-  `tasks.md`, and `specs/<capability>/spec.md` deltas.
+## Specifications — openspec owns the corpus, AgentWeave takes new work
+
+Two systems run side by side during the migration. The split is not arbitrary: AgentWeave's
+lifecycle is `exploring → proposed → approved` (`hub/hub/spec_lifecycle.py`) with **no archive phase
+and no concept of a current-behaviour specification.** A document reaches `approved` and stops.
+Until that gap closes, the accumulated truth about shipped behaviour has no home in AgentWeave and
+must stay in openspec.
+
+**openspec keeps:**
+
+- `openspec/specs/<capability>/spec.md` — current behaviour of shipped capabilities (30 today).
+- `openspec/changes/<date>-<name>/` — in-flight changes: `proposal.md`, `design.md`, `tasks.md`,
+  and `specs/<capability>/spec.md` deltas.
 - `openspec/changes/archive/` — completed changes.
+- `openspec/explorations/` — thinking that precedes a change.
 
 Use the `openspec-propose`, `openspec-apply-change`, `openspec-sync-specs`, and
 `openspec-archive-change` skills. Requirements use `### Requirement:` with `#### Scenario:` blocks
 and MUST/SHALL language.
 
+**AgentWeave takes** new changes chosen for the trial, one at a time, authored in the app. Prefer a
+self-contained slice with no Hub-restart hazard. When a trial change completes, its outcome is
+reconciled back into `openspec/specs/` by hand until AgentWeave can hold a corpus itself.
+
+**Which one am I using?** If the change is already in `openspec/changes/`, finish it there. If it is
+new, ask the operator — do not silently pick. Never carry one change in both.
+
 **Never mark a task complete on the strength of a plan existing.** Only real, verified
 implementation closes a task.
+
+The Hub-owned spec flow is simultaneously the thing you are using and the thing you are building.
+When it frustrates you, that is a finding — record it rather than working around it. That is the
+entire point of the migration.
 
 ## Project Context
 
@@ -63,7 +94,8 @@ pip install -e ".[dev,mcp]"
 agentweave --help
 aw --help
 
-# Anything that touches project state belongs in the testbed, never the repo root
+# Throwaway runs against project state belong in the testbed, not the repo root — the root's
+# project state is the migration's, and `reset` or a stray `doctor --fix` would eat it
 cd testbed/scratch && agentweave doctor
 
 # Hub (Docker)
@@ -211,8 +243,9 @@ hub/
 
 ## Shipped features and their user-facing commands
 
-The commands below are the **product surface you implement and test**, not a workflow to run in this
-repo. When you need to exercise one, do it in `testbed/`. Read them as "this is what a user types."
+The commands below are the **product surface you implement and test**. Read them as "this is what a
+user types" — and, during the migration, increasingly what you type too. Exercise them against the
+trial Hub or in `testbed/`, never against the Hub instance whose code you are editing.
 
 ### Runner, Agent, and Charter Separation
 
@@ -309,7 +342,10 @@ pending → assigned → in_progress → completed → under_review → approved
 - ALL task modifications use `with lock("name"):`
 - Templates via `get_template("name")` — never hardcode in `cli.py`
 - `is_locked()` is read-only — never delete files
-- NEVER create `.agentweave/`, `agentweave.yml`, or `spec/` at the repository root — use `testbed/`
+- `.agentweave/` and `spec/` at the repository root are the migration's, not stray test output —
+  do not delete them as cleanup (see the opening section). `.agentweave/` stays gitignored; `spec/`
+  is tracked. An `agentweave.yml` at the root is still wrong — nothing in the current product writes
+  one, so treat it as a leftover and ask before keeping it.
 - NEVER commit `kimichanges.md`, `kimiwork.md`
 - Hub API key format: `aw_live_{random32}`; run credentials are minted per run (`agent_auth.py`) and
   identity is never accepted from a request body or header
@@ -367,15 +403,17 @@ pending → assigned → in_progress → completed → under_review → approved
 ## When Compacting
 
 Keep in context:
-- The openspec change being implemented, and which phase/task number
+- The change being implemented, **which system it lives in** (openspec or the trial Hub), and which
+  phase/task number
 - Which CLI command, API route, or UI component is being modified
 - Test status: what passed, what is failing, what has not been run
-- Any decision made this session that is not yet written into `openspec/`
+- Any decision made this session that is not yet written down
 - Uncommitted work in progress
+- Any friction the spec flow itself caused this session that is not yet recorded as a finding
 
-Do **not** carry AgentWeave session state (task IDs, session mode, principal agent, transport type,
-pending messages). This repo has no session — if that seems relevant, something was run at the repo
-root that should have run in `testbed/`.
+Do **not** carry the legacy CLI session vocabulary (session mode, principal agent, transport type,
+pending messages) — that subsystem was deleted and the Hub owns execution. Trial-Hub state (project
+ID, document path, task and requirement IDs) *is* worth carrying when a trial change is in flight.
 
 ## Resources
 
