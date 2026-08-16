@@ -131,8 +131,11 @@ HTTP surface, the real database, real files.
 
 These cannot be asserted by a test and need the operator in front of the running app.
 
-- [ ] 9.1 **Is the placeholder pleasant?** Create a document from the composer and look at what it is
+- [x] 9.1 **Is the placeholder pleasant?** Create a document from the composer and look at what it is
       called. `amber-griffin` is a judgement about tone, not a property.
+      **Answered by the operator, 2026-08-16: pleasant, keep it.** The document in `aw-loop10` was
+      minted `spec/changes/ivory-salamander/spec.html`, titled "Untitled exploration", and was
+      visible under that name for 71 seconds before the agent renamed it.
 - [ ] 9.2 **Does the rename feel timely?** Watch a real interview and judge whether the agent renames
       at the moment the subject becomes clear, too eagerly, or not at all.
 - [ ] 9.3 **Does the panel move cleanly?** Whether the open document following a rename reads as the
