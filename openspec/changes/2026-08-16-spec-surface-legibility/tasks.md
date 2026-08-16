@@ -41,24 +41,41 @@ independent backend-only work, F4 before F5 (the drawer reuses F4's chips).
 
 ## 2. F1 — colour that carries meaning
 
-- [ ] 2.1 Add `--aw-warn` (amber-family literal, in both `:root` light/dark blocks and both
-      `[data-theme]` rules) alongside the existing `--aw-accent`, per `design.md` D3.
-- [ ] 2.2 `.aw-modal` styled by value: `MUST` → `--aw-accent`, bold (already bold via existing
+- [x] 2.1 Add `--aw-warn` (amber-family literal, in both `:root` light/dark blocks and both
+      `[data-theme]` rules) alongside the existing `--aw-accent`, per `design.md` D3. **Done:**
+      `#9a6700` light / `#d29922` dark — GitHub Primer's `attention.fg` tokens, chosen for the same
+      "already tuned for text-on-background contrast in both modes" reason `--aw-accent`'s existing
+      values were.
+- [x] 2.2 `.aw-modal` styled by value: `MUST` → `--aw-accent`, bold (already bold via existing
       `.aw-modal { font-weight: 600 }` — add colour only); `SHOULD` → `--aw-warn`; `MAY` → unchanged
       (`--aw-fg`, normal weight). Implemented via a per-value CSS class the renderer emits
       (`_requirements()` in `spec_render.py` already has the modal string in hand) — e.g.
       `aw-modal-must`/`aw-modal-should`/`aw-modal-may` — not inline `style=`, so the mapping lives in
-      one place (`_STYLE`) rather than being repeated per requirement.
-- [ ] 2.3 `.aw-requirement`'s left border takes the same modal-derived colour as 2.2, via the same
+      one place (`_STYLE`) rather than being repeated per requirement. **Done:** `SHALL` (a fourth
+      value `spec_payload.py`'s `MODALS` allows, not named in `design.md` D3) is mapped to the same
+      "must" tone via `_MODAL_TONE`, since MUST/SHALL are equal obligation in RFC2119 language and an
+      unhandled fourth value would have rendered with no colour at all.
+- [x] 2.3 `.aw-requirement`'s left border takes the same modal-derived colour as 2.2, via the same
       per-value class on the containing `<div>`.
-- [ ] 2.4 The `rigor` chip in the document header takes a tone from a small fixed mapping already
+- [x] 2.4 The `rigor` chip in the document header takes a tone from a small fixed mapping already
       derivable from `RIGOR_META`'s values — state the mapping and cite where those values are
       enumerated (`spec_payload.py` or wherever `rigor` is validated) rather than inventing new ones.
-      `phase` chip stays neutral, per `design.md` D3.
-- [ ] 2.5 A test asserting each modal value's requirement renders with its distinct class/colour
+      `phase` chip stays neutral, per `design.md` D3. **Done:** mapping cites `SPEC_RIGORS` in
+      `hub/hub/db/models.py` (`"sketch"`, `"contract"`, `"gate"`), per Entry 13's correction that this
+      is the value enumeration, not `RIGOR_META` (a different constant — the meta-tag name). `sketch`
+      (default, blocks nothing) stays the plain neutral chip; `contract` takes `--aw-warn`, `gate`
+      takes `--aw-accent` — same accent-is-strongest ordering as 2.2, since `gate` is the rigor level
+      that can block a task's approval.
+- [x] 2.5 A test asserting each modal value's requirement renders with its distinct class/colour
       (three fixture requirements, one per modal value, assert three different class names present) —
       this is what "colour is applied" means as a machine check; it does not check the actual hex
-      values look good together, which is 6.4-equivalent taste, deferred to section 7.
+      values look good together, which is 6.4-equivalent taste, deferred to section 7. **Done:**
+      `test_each_modal_value_renders_with_its_own_distinct_class`,
+      `test_shall_takes_the_same_tone_as_must`, and
+      `test_the_rigor_chip_takes_a_tone_for_contract_and_gate_but_not_sketch` in
+      `hub/tests/test_spec_render.py`. Mutation-checked: reverted `SHOULD`'s tone to `"must"` in
+      `_MODAL_TONE`, confirmed `test_each_modal_value_renders_with_its_own_distinct_class` fails
+      (only two distinct classes present instead of three), reapplied.
 
 ## 3. F3 — a `rejected` coverage state
 

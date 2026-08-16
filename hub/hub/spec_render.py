@@ -35,21 +35,21 @@ from .spec_payload import SpecPayload, embed_payload
 _STYLE = """
 :root {
   --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
-  --aw-accent: #0969da; --surface-2: #eaeef2; --surface: #f6f8fa;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --surface-2: #eaeef2; --surface: #f6f8fa;
 }
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
-    --aw-accent: #4493f8; --surface-2: #21262d; --surface: #161b22;
+    --aw-accent: #4493f8; --aw-warn: #d29922; --surface-2: #21262d; --surface: #161b22;
   }
 }
 :root[data-theme="light"] {
   --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
-  --aw-accent: #0969da; --surface-2: #eaeef2; --surface: #f6f8fa;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --surface-2: #eaeef2; --surface: #f6f8fa;
 }
 :root[data-theme="dark"] {
   --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
-  --aw-accent: #4493f8; --surface-2: #21262d; --surface: #161b22;
+  --aw-accent: #4493f8; --aw-warn: #d29922; --surface-2: #21262d; --surface: #161b22;
 }
 * { box-sizing: border-box; }
 body {
@@ -69,9 +69,17 @@ a { color: var(--aw-accent); }
            background: var(--surface-2); font-size: .78rem; margin-right: .4rem; }
 .aw-requirement { border-left: 3px solid var(--border); padding: .1rem 0 .1rem .9rem;
                   margin: 1.1rem 0; }
+.aw-requirement-must { border-left-color: var(--aw-accent); }
+.aw-requirement-should { border-left-color: var(--aw-warn); }
+.aw-requirement-may { border-left-color: var(--border); }
 .aw-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8rem;
          color: var(--muted); }
 .aw-modal { font-weight: 600; }
+.aw-modal-must { color: var(--aw-accent); }
+.aw-modal-should { color: var(--aw-warn); }
+.aw-modal-may { color: var(--fg); font-weight: 400; }
+.aw-chip-rigor-gate { color: var(--aw-accent); border: 1px solid var(--aw-accent); }
+.aw-chip-rigor-contract { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
 .aw-rationale { color: var(--muted); font-size: .9rem; }
 .aw-refs { font-size: .82rem; color: var(--muted); }
 .aw-note { color: var(--muted); font-style: italic; }
@@ -105,12 +113,19 @@ def _list(items: List[str], empty: str = "") -> str:
     return "<ul>" + "".join(f"<li>{_e(item)}</li>" for item in items) + "</ul>"
 
 
+# MUST/SHALL carry equal weight in RFC2119 language, so both take the "must" tone. Unknown
+# values (should not occur — spec_payload.py's MODALS validates on the way in) fall back to
+# "may", the tone that adds no colour, rather than raising here.
+_MODAL_TONE = {"MUST": "must", "SHALL": "must", "SHOULD": "should", "MAY": "may"}
+
+
 def _requirements(payload: SpecPayload, identifiers: Dict[str, str]) -> str:
     if not payload.requirements:
         return '<p class="aw-empty">No requirements yet.</p>'
     parts: List[str] = []
     for requirement in payload.requirements:
         identifier = identifiers.get(requirement.key, "")
+        tone = _MODAL_TONE.get(requirement.modal, "may")
         party = f'<span class="aw-chip">{_e(requirement.party)}</span>' if requirement.party else ""
         rationale = (
             f'<p class="aw-rationale">{_e(requirement.rationale)}</p>'
@@ -118,9 +133,9 @@ def _requirements(payload: SpecPayload, identifiers: Dict[str, str]) -> str:
             else ""
         )
         parts.append(
-            f'<div class="aw-requirement" id="{_e(identifier)}">'
+            f'<div class="aw-requirement aw-requirement-{tone}" id="{_e(identifier)}">'
             f'<span class="aw-id">{_e(identifier)}</span> {party}'
-            f'<p><span class="aw-modal">{_e(requirement.modal)}</span> '
+            f'<p><span class="aw-modal aw-modal-{tone}">{_e(requirement.modal)}</span> '
             f"{_e(requirement.statement)}</p>{rationale}</div>"
         )
     return "".join(parts)
@@ -129,6 +144,14 @@ def _requirements(payload: SpecPayload, identifiers: Dict[str, str]) -> str:
 # The one spelling of the rigor metadata name. Stated once so the renderer and anything reading a
 # document back cannot drift apart on it.
 RIGOR_META = "aw-spec-rigor"
+
+# Values are SPEC_RIGORS in hub/hub/db/models.py ("sketch", "contract", "gate"). "sketch" is the
+# default and blocks nothing, so it stays the plain neutral chip — only the two rigor levels that
+# mean something (a stated intent, a refusal) get a tone, mirroring the modal treatment above:
+# `gate` is the strongest (it can block a task's approval) and takes the accent; `contract` takes
+# the warn tone. Any value not in this mapping (should not occur; spec_rigor.set_rigor validates
+# on the way in) renders as the plain neutral chip rather than raising here.
+_RIGOR_TONE = {"gate": "gate", "contract": "contract"}
 
 
 def requirement_anchor(identifier: str) -> str:
@@ -273,6 +296,9 @@ def render_document(
         ]
     )
 
+    rigor_tone = _RIGOR_TONE.get(rigor, "")
+    rigor_chip_class = f"aw-chip aw-chip-rigor-{rigor_tone}" if rigor_tone else "aw-chip"
+
     return (
         "<!DOCTYPE html>\n"
         '<html lang="en">\n<head>\n'
@@ -288,7 +314,7 @@ def render_document(
         f"<h1>{_e(payload.title)}</h1>\n"
         f'<p class="aw-meta"><span class="aw-chip">{_e(payload.kind)}</span>'
         f'<span class="aw-chip">{_e(phase)}</span>'
-        f'<span class="aw-chip">{_e(rigor)}</span></p>\n'
+        f'<span class="{rigor_chip_class}">{_e(rigor)}</span></p>\n'
         f"{sections}\n"
         f"{embed_payload(stored_payload)}\n"
         "</body>\n</html>\n"

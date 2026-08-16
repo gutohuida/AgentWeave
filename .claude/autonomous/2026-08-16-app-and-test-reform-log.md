@@ -1318,3 +1318,72 @@ This is server-render-only again (`spec_render.py`), same as phase 1 — no UI b
 unless a later phase touches `hub/ui`.
 
 **Elapsed:** one iteration.
+
+---
+
+## Entry 15 — 08:36 — Q4-spec-ux-fixes: IMPLEMENT phase 2 (F1 — colour that carries meaning), tasks.md 2.1-2.5
+
+**Starting state.** As with Entry 14, the working tree already carried a full, uncommitted
+implementation of the named `next_action` (phase 2, tasks.md 2.1-2.5) when this iteration began —
+`hub/hub/spec_render.py`, `hub/tests/test_spec_render.py`, and `tasks.md`'s checkmarks/notes were all
+present but never committed. Verified rather than trusted: read the actual diff against `design.md`
+D3 line by line before treating any of it as done.
+
+**What the diff does (all five tasks.md items marked `[x]`, verified below):**
+- 2.1: `--aw-warn` added to `_STYLE` in both `:root` blocks and both `[data-theme]` rules —
+  `#9a6700` light / `#d29922` dark (GitHub Primer `attention.fg`), alongside the untouched
+  `--aw-accent`.
+- 2.2/2.3: `.aw-modal-{must,should,may}` and `.aw-requirement-{must,should,may}` classes added to
+  `_STYLE`; `_requirements()` now computes `tone = _MODAL_TONE.get(requirement.modal, "may")` and
+  emits both classes from the one lookup. `_MODAL_TONE` maps `SHALL` to the same tone as `MUST` — a
+  real find, not scope creep: `spec_payload.py`'s `MODALS` allows a fourth value `design.md` D3 never
+  named, and leaving it unmapped would have silently rendered SHALL requirements with no colour at
+  all, defeating F1 for exactly the documents that use RFC2119's other mandatory keyword.
+- 2.4: rigor chip gets `_RIGOR_TONE = {"gate": "gate", "contract": "contract"}`, `sketch` (the
+  default, blocks nothing) deliberately left out so it stays the plain neutral chip. Cites
+  `SPEC_RIGORS` in `hub/hub/db/models.py`, matching Entry 13's design.md correction (not `RIGOR_META`,
+  which is the meta-tag name, not a value enumeration) — checked the citation is actually followed
+  through in code, not just claimed.
+- 2.5: three new tests — `test_each_modal_value_renders_with_its_own_distinct_class`,
+  `test_shall_takes_the_same_tone_as_must`, `test_the_rigor_chip_takes_a_tone_for_contract_and_gate_but_not_sketch`.
+
+**This iteration's own verification:**
+1. `pytest hub/tests/test_spec_render.py -q` — 31 passed (28 from phase 1 + 3 new).
+2. Independent mutation check (not just re-trusting tasks.md's own account of one): changed
+   `_MODAL_TONE["SHOULD"]` from `"should"` to `"must"` — collapsing SHOULD into the MUST tone, the
+   real failure mode the per-value class exists to prevent. `test_each_modal_value_renders_with_its_own_distinct_class`
+   failed exactly as expected (`AssertionError`, only two distinct classes present, `aw-modal-should`
+   missing from the actual set). Reapplied the correct mapping, reran the file: 31 passed again.
+3. Grepped `tasks.md` phase 2's checked items against the literal diff — no gap between what is
+   claimed done and what the code does.
+4. Full `hub/tests/` suite, backgrounded (exceeds the 600s foreground cap; ~15 minutes):
+   **2062 passed, 11 skipped, 72 warnings, 902.83s. No failures.** Up from Entry 14's 2059 passed by
+   exactly 3 — the three new phase-2 tests, nothing else moved. Same pre-existing warning set
+   (Alembic path-separator deprecation, the `conversations.sequence` primary-key SAWarning from Q3,
+   FastAPI's `HTTP_422_UNPROCESSABLE_ENTITY` rename deprecation) — none new, none touching
+   `spec_render` or the modal/rigor colour code.
+5. `npx openspec validate 2026-08-16-spec-surface-legibility --strict` — valid.
+
+No UI bundle rebuild needed — phase 2 is server-render-only (`spec_render.py`), same as phase 1.
+Did not attempt a fresh Q4a screenshot for this phase: 2.5's machine check (three distinct classes
+present) is exactly what a screenshot would confirm visually and cannot add beyond class-name
+presence without human judgement on whether the actual hex values "look right" — that is section 7's
+taste work, explicitly deferred there by the tasks.md itself, not something to smuggle in here as a
+self-tick.
+
+**Files touched (committed this entry):** `hub/hub/spec_render.py`, `hub/tests/test_spec_render.py`,
+`openspec/changes/2026-08-16-spec-surface-legibility/tasks.md`.
+
+**Next:** `IMPLEMENT phase 3 (F3 — a rejected coverage state) of tasks.md, 3.1-3.7`: add
+`REJECTED = "rejected"` to `requirement_coverage.py` between `VERIFIED` and `IN_PROGRESS` in
+`PRECEDENCE`; compute it in `_state()` after the accepted/awaiting checks and before the linked
+checks; two coverage tests (rejected-only, and rejected-then-later-accepted proving no shadowing);
+grep for any hardcoded "seven states" list needing to become eight; grep `IN_PROGRESS`/`"in_progress"`
+callers for a branch `rejected` should take instead; then the UI half —
+`hub/ui/src/components/spec/SpecCoverageBar.tsx` gets a `rejected` `STATES` entry with its own colour
+(check `TaskCard.tsx`'s `isBlocked`/`revision_needed` precedent) and a UI test. This phase DOES touch
+`hub/ui`, so unlike phases 1-2 it needs `cd hub/ui && npm run build` then
+`python scripts/refresh_ui_bundle.py` before any screenshot verification, and the UI test suite
+(`cd hub/ui && npm test` or wherever the UI tests run — locate it) alongside the backend suite.
+
+**Elapsed:** one iteration.

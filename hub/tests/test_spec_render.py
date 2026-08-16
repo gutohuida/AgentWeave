@@ -218,6 +218,66 @@ def test_the_neutral_variables_match_the_hub_shells_override_names():
         assert f"{name}:" in _STYLE, f"{name} is not defined in spec_render.py's _STYLE"
 
 
+def test_each_modal_value_renders_with_its_own_distinct_class():
+    """F1: colour carries meaning. MUST/SHOULD/MAY must be visually distinct without reading
+    the word — the machine-checkable half of that is three distinct classes, one per value,
+    on both the modal span and the requirement's left border."""
+    payload = _payload(
+        requirements=[
+            _requirement("alpha", modal="MUST"),
+            _requirement("beta", modal="SHOULD"),
+            _requirement("gamma", modal="MAY"),
+        ]
+    )
+    identifiers, _ = mint(["alpha", "beta", "gamma"])
+
+    html = _render(payload, identifiers)
+
+    modal_classes = set(re.findall(r'class="aw-modal (aw-modal-\w+)"', html))
+    requirement_classes = set(re.findall(r'class="aw-requirement (aw-requirement-\w+)"', html))
+    assert modal_classes == {"aw-modal-must", "aw-modal-should", "aw-modal-may"}
+    assert requirement_classes == {
+        "aw-requirement-must",
+        "aw-requirement-should",
+        "aw-requirement-may",
+    }
+
+
+def test_shall_takes_the_same_tone_as_must():
+    """MUST and SHALL are the same obligation in RFC2119 language; a document written with
+    SHALL should not silently lose the colour a MUST would have gotten."""
+    payload = _payload(requirements=[_requirement("alpha", modal="SHALL")])
+    html = _render(payload, {"alpha": "FR-1"})
+    assert 'class="aw-modal aw-modal-must"' in html
+
+
+def test_the_rigor_chip_takes_a_tone_for_contract_and_gate_but_not_sketch():
+    """sketch is the default and blocks nothing, so it stays the plain neutral chip; contract
+    and gate mean something happens, so each gets its own tone."""
+    for rigor, expected_class in (
+        ("contract", "aw-chip-rigor-contract"),
+        ("gate", "aw-chip-rigor-gate"),
+    ):
+        html = render_document(
+            _payload(),
+            {},
+            phase="exploring",
+            stored_payload=payload_to_dict(_payload()),
+            rigor=rigor,
+        )
+        assert f'class="aw-chip {expected_class}">{rigor}' in html
+
+    sketch_html = render_document(
+        _payload(),
+        {},
+        phase="exploring",
+        stored_payload=payload_to_dict(_payload()),
+        rigor="sketch",
+    )
+    assert 'class="aw-chip">sketch' in sketch_html
+    assert "aw-chip-rigor-sketch" not in sketch_html
+
+
 def test_the_document_carries_no_navigation_script_of_its_own():
     """The shell injects the bridge into the frame. A second copy here would
     diverge from the one that is actually used."""
