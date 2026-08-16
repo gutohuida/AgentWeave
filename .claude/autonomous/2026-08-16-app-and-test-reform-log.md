@@ -3063,3 +3063,83 @@ state per 3.3, tests per 3.4 including the real `MultiEdit`-shaped fixture that 
 guard. Section 4 (command palette, D3) remains independent and can follow instead if section 3 turns
 out to need more than one iteration. Time remaining to `stop_at` (18:00) is roughly 2h08m as of this
 entry.
+
+## Entry 38 — 2026-08-16T16:06+01:00 — Q7 IMPLEMENT tasks.md section 3 (D2 edit diff view), iteration 39
+
+Verified branch/log/`STATE.json` against `git log` first — matched (`72ee747` at HEAD, Entry 37's
+heartbeat back-date, as claimed; working tree clean).
+
+**3.1** — `cd hub/ui && npm install diff` (jsdiff `^9.0.0`). `package-lock.json` diff is 10 insertions,
+nothing else touched; the package ships its own types (`libcjs`/`libesm` `.d.ts`), no `@types/diff`
+needed.
+
+**3.2** — new `hub/ui/src/components/agents/ToolEditDiff.tsx`. `diffLinesForPayload(payload)` parses
+`payload.input`, returns `null` on parse failure, `payload.truncated === true`, or either
+`old_string`/`new_string` missing/non-string at the top level — matching `design.md`'s structural
+check exactly, and matching `MultiEdit`'s real shape (`hub/hub/runner_parsing.py:264-272`, the pair
+nested inside `edits[]`) falling through by design. On success, runs `Diff.diffLines(old_string,
+new_string)`, splits each change's `.value` into lines (dropping the trailing empty entry
+`diffLines` leaves from the final `\n`), and renders one div per line: `+ `/`--green` for added,
+`- `/`--red` for removed, `  `/`--text-3` for unchanged, backgrounds via the existing `tint()` helper
+(`src/lib/colorTint.ts`) rather than a hand-rolled `color-mix` literal.
+
+**3.3** — `WorkRow` now computes `const editDiff = entry.output_kind === 'tool_use' ? ToolEditDiff({
+payload: entry.payload }) : null` — calling the component as a plain function (it holds no hooks) so
+its return value (JSX or `null`) can be inspected before deciding what to render, exactly as the task
+wording ("`ToolEditDiff` returns non-null content") describes. The expanded-state block became
+`editDiff ?? (<span>...raw text...</span>)` — every non-diffable case (wrong tool, malformed JSON,
+truncated, `MultiEdit`) keeps the pre-existing raw-content rendering unchanged.
+
+**3.4** — 5 new tests in `agentTimeline.test.tsx`, a new describe block:
+- well-formed `{"old_string":"foo","new_string":"bar"}` renders a `- foo` line on `var(--red)` and a
+  `+ bar` line on `var(--green)`, and the raw fallback text (`Called Edit`) is absent. (Text-node
+  assertion note: `+ ` and the line text are separate JSX children of the same div, so
+  `screen.getByText('foo')` doesn't match — RTL's default matcher requires a node's own full text to
+  equal the target, and the div's is `- foo`. Switched to `container.querySelector('[style*="var(--
+  red)"]').textContent === '- foo'`, which is also a stronger assertion — it ties content to tone in
+  one check.)
+- invalid JSON (`'{not valid json'`) falls through to `Called Edit`.
+- `truncated: true` with an otherwise well-formed pair still falls through — the cut-string case D2
+  calls out specifically ("a cut string is not valid JSON and must not be diffed against a lie").
+- a synthetic fixture with only `old_string` (no `new_string`) falls through — the "missing key" case,
+  not any real tool's shape, as the task itself notes.
+- a real `MultiEdit`-shaped payload (`{"file_path":"x","edits":[{"old_string":"foo","new_string":"bar"}]}`)
+  falls through, confirming the structural check does not reach into `edits[]`.
+
+**Mutation-checked**: commented out the `payload?.truncated === true` disjunct in the guard, reran the
+truncated-fixture test alone — failed exactly as predicted (the fixture's well-formed inner pair got
+diffed instead of falling back, so `Called Edit` was absent). Reinstated the guard, reran — 23/23
+passing in the file again.
+
+**Full verification (tasks.md section 5):**
+- 5.1 `npx tsc --noEmit` — clean.
+- 5.2 `npm run lint` — same 9 pre-existing warnings as Entries 36-37 (unrelated files), zero new,
+  zero errors.
+- 5.3 `npm test -- --run` — 913 tests total (908 prior + 5 new). Full run: 912/913 passed inline,
+  `taskStatusControl.test.tsx` timed out on one `it.each` case under full-suite contention — the exact
+  named pattern in `STATE.json`'s `dead_ends` (that file is explicitly listed as a repeat offender
+  alongside `chartersUi.test.tsx`). Reran it alone: 13/13 passed cleanly — contention, not a
+  regression. Effectively 913/913.
+- 5.4 `npm run build && python scripts/refresh_ui_bundle.py` — built clean (one pre-existing >500kB
+  chunk-size warning, unrelated to this change), bundle refreshed and stamp recorded.
+- 5.5 `git status` before staging showed changes confined to `hub/ui/` and `hub/hub/static/ui/` — no
+  `hub/hub/` (backend) or `src/agentweave/` file touched. `package-lock.json`'s diff is exactly the
+  `diff` package's own entries (10 lines), nothing else churned despite npm's "removed 11 packages"
+  install-log line (a lockfile-prune side effect, not a scope leak — confirmed by the diff itself).
+
+Staged explicitly (not `git add -A`): the two modified `hub/ui/src/` files, the new
+`ToolEditDiff.tsx`, `package.json`/`package-lock.json`, `hub/hub/static/ui/` in full, and `tasks.md`'s
+three newly-checked boxes. Committed as `1ed9c9d`.
+
+**Elapsed:** one iteration (install, component, wire, 5 tests, mutation-check, verify, bundle).
+
+**Next:** `tasks.md` section 4 (D3 — command palette): `npm install cmdk`; new
+`hub/ui/src/components/palette/CommandPalette.tsx` using `Command.Dialog`, mounted once at
+`App.tsx`, global `Cmd+K`/`Ctrl+K` guarded against firing while a text input/textarea/composer holds
+focus (per 4.2's exact guard — respects the shortcut on a non-text-focused element); four action
+groups per 4.3 (conversation, agent, spec document, task), each reading data already loaded, no new
+fetch; tests per 4.4 (open/close, guarded-against-typing-k-in-a-text-field, each action kind selecting
+and calling the mocked navigation function — same pattern as `2026-08-16-spec-surface-legibility`'s
+F4 chip-click tests). This is the last content section before 5 (full-suite verification, already
+proven to work) — if section 4 finishes with runway left, Q7's `tasks.md` is fully implemented. Time
+remaining to `stop_at` (18:00) is roughly 1h54m as of this entry.
