@@ -74,8 +74,11 @@ table (`tasks`), so an `ADD COLUMN` migration is the only thing this proposal ev
 loop_id: Optional[str] = Query(None)
 ```
 
-applied as a fourth `elif` arm alongside `spec_document_id`'s exact-match filter and
-`exclude_archived_completed`'s exclusion (`2026-08-16-the-board-scoped-by-document`, design D1):
+applied as a third `elif` arm alongside `spec_document_id`'s exact-match filter and
+`exclude_archived_completed`'s exclusion (`2026-08-16-the-board-scoped-by-document`, design D1) —
+`list_tasks` today has exactly two branches (`if spec_document_id: ... elif exclude_archived_
+completed: ...`, confirmed by reading `hub/hub/api/v1/tasks.py:421-439` in this round's cold review),
+so this is the second `elif` added to that chain, making three branches total:
 
 ```python
 if spec_document_id:
@@ -272,7 +275,42 @@ empties` `false`, which is functionally "not stopping itself" without deleting t
 row entirely was considered and rejected: it would discard `purpose` and `stop_reason`'s history for
 no operational benefit, since an inert `Loop` row with no stop condition costs nothing to keep.
 
-## D7. What this leaves for a future change, named rather than assumed away
+## D7. `list_jobs` computes every job's `loop` block in four batch queries, never one query per job
+
+**Added in round 2's cold review**, elevated from tasks.md 4.4's task-level warning because a cold
+read of `hub/hub/api/v1/jobs.py:178-191` shows the starting point is worse than "watch the N+1
+shape" implies: today's `list_jobs` runs **exactly one query, full stop** — it does not even fetch
+history the way `get_job` does. Computing `queue`/`current_task`/`open_questions` per job the naive
+way — one query each, per job, inside a loop over the `list_jobs` result — would turn a single-query
+endpoint into `1 + 4×L` queries where `L` is the number of jobs that are loops, on the exact endpoint
+this whole change's operator motivation ("many named loops... at different cadences") expects to
+carry a growing `L`. That is precisely the "pile-up" shape this session has spent N1/N2b avoiding
+elsewhere on the task board; `list_jobs` should not reintroduce it on the jobs page.
+
+`list_jobs` (and `get_job`, which already does one extra query and gains three more per job's `loop`
+computation, so the same batching applies there too, just over a result set of size one) SHALL
+compute `loop` in a fixed number of queries independent of job count:
+
+1. One query: `SELECT * FROM loops WHERE job_id IN (:job_ids)` — builds `job_id -> Loop` for every
+   job in the page being returned.
+2. One query: `SELECT loop_id, status, COUNT(*) FROM tasks WHERE loop_id IN (:loop_ids) GROUP BY
+   loop_id, status` — builds `loop_id -> {status: count}` for every loop found in step 1.
+3. One query: `SELECT * FROM tasks WHERE loop_id IN (:loop_ids) AND status IN ('in_progress',
+   'blocked', 'pending') ORDER BY loop_id, (status != 'pending') DESC, updated_at DESC,
+   created_at ASC` — fetched once, then `current_task` is picked per loop in Python by taking the
+   first row for each `loop_id` (the ordering puts an in-progress/blocked row before any pending row
+   within the same `loop_id`, matching D5's derivation rule), rather than a second round trip per
+   loop.
+4. One query: the `open_questions` count from D5, but grouped —
+   `SELECT job_runs.job_id, COUNT(*) FROM questions JOIN job_runs ON job_runs.conversation_id =
+   questions.conversation_id WHERE job_runs.job_id IN (:job_ids) AND questions.answered = false AND
+   questions.declined = false GROUP BY job_runs.job_id`.
+
+Four queries total for a page of jobs, not four queries per loop-job. `get_job`'s existing single-job
+call reuses the same four functions with a one-element `job_ids`/`loop_ids` list — no special-cased
+single-job path to keep in sync with the batch one.
+
+## D8. What this leaves for a future change, named rather than assumed away
 
 No code anywhere lets an agent or the Hub choose a loop's next queue item, mark one done and start
 the next, or update `job.message` between firings — an operator or the running agent does all of

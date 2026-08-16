@@ -826,3 +826,71 @@ ever prevent a fire and never cause one; does the `elif` ordering in D2 actually
 `spec_document_id`/`exclude_archived_completed` pair from N2b without a fourth interaction case
 nobody considered; is `list_jobs`' N+1 risk from task 4.4 real and, if so, is round 1 right to leave
 it as a task-level warning rather than a design decision).
+
+## Entry 9 — N3 round 2 (REVIEWER): cold review against the real code, three findings fixed, approved early
+
+**2026-08-17T00:54:47+01:00.** Round 1 (Entry 8) authored `2026-08-16-many-named-loops`. This
+iteration is the cold review `spec_round_protocol` calls for: a fresh reading against the actual
+`AIJob`/`JobRun`/`Task`/`scheduler.py`/`tasks.py`/`jobs.py`/`models.py` code the proposal cites, not
+a re-read of round 1's own reasoning. Read every artifact top to bottom, then verified each concrete
+claim against the live source rather than trusting the prose:
+
+- **D3's traceability gap is real.** `scheduler.py:308-316` constructs `JobRun(...)` with no
+  `conversation_id` field, even though `conversation` is already a live local variable two blocks
+  above (`:292-298`). Confirmed, not re-derived from round 1's say-so.
+- **D4's "only ever prevents a fire, never causes one" claim holds.** Read `_do_fire_job` end to end:
+  `job.last_run`/`run_count`/`next_run` are updated unconditionally (`:271-281`) *before* the existing
+  `_job_agent_skip_reason` check (`:322`), and the queue entry that actually starts a conversation
+  (`:344` `new_entry(...)`) is created only *after* that check passes — the proposed
+  `_loop_stop_reason` check slots into the identical position, so it can only ever suppress the
+  `entry = new_entry(...)` call that follows it, never trigger one on its own. Also confirms task
+  3.4's question (does skip-path bookkeeping still run) is already answered by the code: yes, stats
+  update before any skip check, existing or proposed.
+- **The `elif` composition with N2b's `spec_document_id`/`exclude_archived_completed` pair is
+  genuinely safe** — `tasks.py:421-439` today is exactly `if spec_document_id: ... elif
+  exclude_archived_completed: ...`, two branches, mutually exclusive by construction. Adding `loop_id`
+  as a second `elif` makes three, still mutually exclusive, no fourth interaction case anyone missed.
+  Design.md's own prose called this a "fourth `elif` arm," which was simply a miscount (task-level
+  wording in tasks.md 4.5 already said "third" correctly) — fixed in place, cosmetic, not a design
+  problem.
+- **`hub/hub/api/v1/agent_actions.py`'s `list_shared_tasks`** (the direct-call site tasks.md 4.5
+  warns about) is confirmed real: it calls the tasks module with `spec_document_id=None,
+  exclude_archived_completed=False` hardcoded — exactly the D7-regression shape from
+  `-the-board-scoped-by-document` that already bit this session once tonight. Already correctly
+  flagged in tasks.md; nothing to add.
+- **`Question.conversation_id`/`declined` fields**, D5's `open_questions` query depends on both —
+  confirmed present (`models.py:875`, `:894`) and indexed.
+
+**Two findings elevated beyond cosmetic, both fixed in `design.md`/`tasks.md` this iteration rather
+than deferred to a round 3:**
+
+1. **`list_jobs`'s N+1 risk is worse than the task-level note implied.** `jobs.py:178-191` shows
+   `list_jobs` today runs **exactly one query, full stop** — it does not even fetch history the way
+   `get_job` does (`get_job` adds one). Naively computing `queue`/`current_task`/`open_questions` per
+   job inside a loop would turn a single-query endpoint into `1 + 4×L` queries where `L` grows with
+   exactly the thing this whole change exists to support ("many named loops"). Added **design D7**:
+   four fixed batch queries (`loops WHERE job_id IN (...)`, a grouped `tasks` count, a single ordered
+   `tasks` fetch for `current_task` picked in Python per loop, a grouped `questions JOIN job_runs`
+   count) computed once over the whole page, with `get_job` reusing the same batch functions on a
+   one-element id list rather than a separate single-job path. Renumbered the old D7 ("what this
+   leaves for a future change") to D8 to keep the sequence intact. `tasks.md` 4.4 now points at D7
+   instead of a loose "watch the shape" warning.
+2. **The `purpose is not None` opt-in boundary (D6) is unambiguous server-side but not
+   client-side.** A controlled React form whose textarea state starts at `''` and always serialises
+   `purpose: ""` in the request body — rather than omitting the field when the collapsed loop section
+   is untouched — would opt every job into being a loop regardless of operator intent, because the
+   server cannot distinguish "sent empty on purpose" from "sent empty because the form always sends
+   it." Added an explicit note to tasks.md 5.1 naming this as a real client-side requirement, not
+   merely a server-side rule to restate.
+
+**No fundamental architectural objection survived cold reading.** The composition claims (`Loop`↔
+`AIJob` FK, `Task.loop_id`/`JobRun.conversation_id` as join keys not new storage, no `Loop.status`
+enum, no `GET /loops` router) all check out against the real schema and call sites, not just round
+1's own prose. Per `spec_round_protocol`'s "or on earlier reviewer approval" clause: **this round
+approves early**, having fixed what it found rather than deferring to a round 3 that would find the
+same two things again. `npx openspec validate 2026-08-16-many-named-loops --strict`: valid, both
+before and after the amendments. No code touched; green baseline from `20e963e` untouched.
+
+`next_action` set to implementation, starting with tasks.md sections 1-3 (migration `0075`, models,
+scheduler) — the layers everything else depends on — leaving API/UI/tests for the iteration(s) after,
+the same incremental pacing N2/N2b used rather than attempting the whole tasks.md list in one turn.

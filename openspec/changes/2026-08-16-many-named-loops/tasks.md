@@ -71,12 +71,12 @@
       creation or afterward" from the spec delta's own first requirement); apply supplied fields to
       the existing or newly-created row.
 - [ ] 4.4 `LoopSummary` schema (design D5) and `JobResponse.loop: Optional[LoopSummary] = None`.
-      `list_jobs`/`get_job`: when a job has a `Loop` row, compute `queue` (group `Task` by `status`
-      where `loop_id` matches), `current_task` (design D5's derivation), `open_questions` (design
-      D3's join-via-`JobRun.conversation_id` query) and populate `LoopSummary`; leave `loop: None`
-      otherwise. Watch `list_jobs`' existing `N+1` shape — it is already one query per job for
-      history in `get_job` but not in `list_jobs`; do not silently turn `list_jobs` into one query
-      per job per loop-derived field without at least noting the cost in this task's own log entry.
+      `list_jobs`/`get_job`: implement per design D7 (added in round 2's cold review) — four batch
+      queries over the full job/loop page, never one query per job per loop-derived field. `get_job`
+      calls the same batch functions with a one-element id list rather than a separate single-job
+      code path. `list_jobs` today runs exactly one query (confirmed in round 2: it does not even
+      fetch history the way `get_job` does), so this is the floor to hold, not merely a shape to
+      "watch."
 - [ ] 4.5 `hub/hub/api/v1/tasks.py`: `list_tasks` gains `loop_id: Optional[str] = Query(None)`,
       applied as a third `elif` arm per design D2. Check `hub/hub/api/v1/agent_actions.py`'s
       `list_shared_tasks` — the D7 regression from `-the-board-scoped-by-document` was exactly a
@@ -87,7 +87,14 @@
 ## 5. UI (`hub/ui/src`)
 
 - [ ] 5.1 `hub/ui/src/api/jobs.ts`: extend the `Job` type with the optional `loop` field; extend
-      `JobCreate`/`JobUpdate` request shapes with the three/four loop fields.
+      `JobCreate`/`JobUpdate` request shapes with the three/four loop fields, all optional and
+      **omitted from the request body**, not sent as `""`/`false`, when the loop section (5.3) is
+      collapsed. Design D6's opt-in rule is `purpose is not None` server-side — a controlled form
+      that always serialises its (empty) textarea state as `purpose: ""` would opt every job into
+      being a loop the moment the request shape includes the field at all, regardless of whether the
+      operator ever touched the collapsed section. Confirmed in round 2's cold review: this is a real
+      client-side boundary, not merely a server-side one, since the server cannot distinguish "sent
+      empty on purpose" from "sent empty because the form always sends it."
 - [ ] 5.2 `hub/ui/src/api/tasks.ts`: `useTasks()` options gain `loopId?: string`, applied the same
       way `specDocumentId`/`excludeArchivedCompleted` already are; add `useLoopTasks(loopId)` mirroring
       `useDocumentTasks`, or confirm `useTasks({ loopId })` alone already covers `JobCard`'s need
