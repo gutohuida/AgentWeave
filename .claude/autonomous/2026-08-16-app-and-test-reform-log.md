@@ -3383,3 +3383,36 @@ steps from queue text.
 minutes out — very likely the last firing before the window closes. last_heartbeat refreshed to
 now; branch released with a back-dated heartbeat immediately after this commit, per protocol, so a
 firing before stop_at (if any) does not idle a cycle against its own heartbeat.
+
+---
+
+## Entry 45 — standby confirmation, iteration 46 — window closing
+
+**Time:** 2026-08-16T17:45+01:00. ~14 minutes remained to stop_at (18:00). Verified branch
+(`autonomous/2026-08-16-app-and-test-reform`) and `git log` match STATE.json (HEAD at 4283420,
+"Release the branch: back-date heartbeat after Entry 44"); working tree clean, nothing to
+reconcile.
+
+**Action taken:** none, per next_action. Reread the queue (Q1-Q7, all closed) and the full
+decisions_for_user list rather than trusting Entry 44's claim outright. Nothing new is authorised
+without a spec round, and none is due — no unresolved evidence-gathering step remains (gap 5 was
+the last one, closed at Entry 40). No new UI feature, no re-opening of Q1-Q7, no re-deriving next
+steps from queue text.
+
+**Queue status: still empty. This is the last iteration inside the stop_at window** — the next
+firing, if any, lands after 18:00, and stop_at exists precisely so the run ends here for the
+operator's review rather than continuing to idle. No further standby entries are needed; a firing
+past 18:00 should recognise stop_at has passed and stand down rather than write another
+confirmation. last_heartbeat refreshed to now; branch released with a back-dated heartbeat
+immediately after this commit, per protocol, in case a firing lands in the last few minutes before
+18:00.
+
+**Summary for the operator, awake now or soon:** all seven queue items (Q1-Q7) reached their stated
+finish line across this run's 46 iterations. Every remaining step is explicitly human-only (visual
+judgement, live UI driving, or a decision only the operator can make) and is listed in
+`decisions_for_user` in STATE.json — nothing was silently left undone. The two cheapest next actions
+if picking this back up: (1) Q4b's phase 6, driving delete-project live on a throwaway project and
+screenshotting with `scripts/uishot.py`; (2) running the user test guides already written at the
+bottom of the three shipped changes' `tasks.md` files
+(`2026-08-16-spec-surface-legibility`, `2026-08-16-one-hub-and-a-window-of-its-own`,
+`2026-08-16-conversation-formatting-and-quick-nav`).

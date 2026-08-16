@@ -6,8 +6,8 @@
   "started_at": "2026-08-16T02:15:00+01:00",
   "stop_at": "2026-08-16T18:00:00+01:00",
   "stop_when_queue_empties": false,
-  "iteration": 45,
-  "last_heartbeat": "2026-08-16T16:51:30+01:00",
+  "iteration": 46,
+  "last_heartbeat": "2026-08-16T17:46:20+01:00",
   "spec_round_protocol": {
     "why": "Operator: 'one agent produces the spec, the next triggers the agents review until a agent thinks is good to implement. We need to have another gate so agent don't go on forever.' Implemented as successive driver iterations rather than subagents, at the operator's suggestion ('the trigger at 2AM generates the spec and the one at 2:15 reviews it'). A fresh process has no memory of writing the thing it reviews, so the independence is structural rather than merely prompted.",
     "max_rounds": 3,
@@ -118,7 +118,7 @@
     }
   ],
   "current": "Q7-ui-gap-analysis",
-  "next_action": "QUEUE EMPTY, confirmed again at Entry 44, iteration 45. All seven items (Q1-Q7) reached their finish line by Entry 39; Entry 40 completed the one permitted follow-up (gap 5's accounting-scope check, see decisions_for_user); Entries 41-44 were standby confirmations with no action taken. ~30 minutes remained to stop_at (18:00) as of Entry 44 — very likely the last firing before the window closes. STAND BY: keep last_heartbeat current if woken again before stop_at, take no further action, and let stop_at end the run for the operator's review. Do NOT start a new UI feature (gap 4, gap 5's display, or gap 6) without a spec round — this run's spec_round_protocol and Q7's review_criteria apply to any new capability. Do NOT re-open Q1-Q7 or re-derive next steps from the queue text; the queue is exhausted.",
+  "next_action": "WINDOW CLOSED (or about to). Entry 45 (iteration 46) ran at 17:45, ~14 minutes before stop_at (18:00) — the last iteration inside the run window. QUEUE EMPTY: all seven items (Q1-Q7) reached their finish line by Entry 39; Entry 40 completed the one permitted follow-up (gap 5's accounting-scope check, see decisions_for_user); Entries 41-45 were standby confirmations with no action taken. If woken again and the current time is past stop_at (2026-08-16T18:00+01:00): DO NOT write another standby entry or take any action — the window is over, this run is done, the operator reviews from here. Just note in the log that a firing arrived past stop_at and was declined, refresh last_heartbeat, and stop. If somehow still before stop_at: keep standing by as before. Do NOT start a new UI feature (gap 4, gap 5's display, or gap 6) without a spec round. Do NOT re-open Q1-Q7 or re-derive next steps from the queue text; the queue is exhausted.",
   "limits": [
     "Stay on the autonomous branch. No commits, merges or rebases onto hub-native-experience or master. Merging back is the operator's decision, made awake.",
     "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Pushing the autonomous branch itself is required, not optional.",
