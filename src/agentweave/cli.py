@@ -148,14 +148,14 @@ def cmd_stop(args: argparse.Namespace) -> int:
             print_info(f"Stopping Hub (native, PID {pid})...")
             _hub_kill_pid(pid)
             with contextlib.suppress(OSError):
-                _hub_pid_file().unlink()
+                _hub_pid_file(port).unlink()
             print_success("Hub stopped")
             return 0
         # PID is alive but nothing is serving the Hub on the recorded port — most
         # likely a recycled PID owned by an unrelated process. Never kill it; just
         # discard the stale PID file and fall through to the Docker check.
         with contextlib.suppress(OSError):
-            _hub_pid_file().unlink()
+            _hub_pid_file(port).unlink()
 
     # --- Docker mode ---
     import urllib.request as _req
@@ -209,6 +209,9 @@ def cmd_stop(args: argparse.Namespace) -> int:
 
 
 HUB_DIR = Path.home() / ".agentweave" / "hub"
+# The port every command falls back to. Named here because the PID file's name depends on
+# whether a start is on this port or another one — see `_hub_pid_file`.
+DEFAULT_HUB_PORT = 8000
 HUB_COMPOSE_URL = (
     "https://raw.githubusercontent.com/gutohuida/AgentWeave/master/hub/docker-compose.yml"
 )
@@ -425,18 +428,30 @@ def _download_with_sha256(
     return True
 
 
-def _hub_pid_file() -> Path:
-    """Return the path to the native Hub PID file."""
-    return HUB_DIR / "hub.pid"
+def _hub_pid_file(port: Optional[int] = None) -> Path:
+    """Return the path to the native Hub PID file for `port`.
+
+    Per-port, because one machine can legitimately run more than one Hub: the instance you
+    work in, and a throwaway one on another port and another `DATABASE_URL` that you test
+    against. With a single shared `hub.pid` the second start overwrote the first's record,
+    which left `stop` and `status` blind to whichever instance started earlier — the process
+    kept running with nothing tracking it.
+
+    `DEFAULT_HUB_PORT` keeps the historic unsuffixed name, so a Hub already running from an
+    older build is still found, reported and stopped by this one.
+    """
+    if port is None or port == DEFAULT_HUB_PORT:
+        return HUB_DIR / "hub.pid"
+    return HUB_DIR / f"hub-{port}.pid"
 
 
 def _hub_pid_running(port: Optional[int] = None) -> Optional[int]:
-    """Return the PID from hub.pid if the process is alive (and port matches), else None.
+    """Return the PID from the port's PID file if the process is alive, else None.
 
     If port is given, only returns the PID if the native process was started on that port.
     Removes a stale PID file if the process is no longer running.
     """
-    pid_file = _hub_pid_file()
+    pid_file = _hub_pid_file(port)
     if not pid_file.exists():
         return None
     try:
@@ -703,10 +718,15 @@ def _hub_native_start(
     data_dir = HUB_DIR / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
     db_path = data_dir / "agentweave.db"
-    db_url = f"sqlite+aiosqlite:///{db_path.as_posix()}"
 
-    # Set DATABASE_URL so hub.config.settings gets the right value at import
+    # An explicit DATABASE_URL wins. This used to be overwritten unconditionally, which made
+    # `--port` a trap: a second start got its own process and its own port but the *same*
+    # database, so two SQLite writers shared one file and both instances showed one project
+    # list. Honouring the variable is what lets one machine run an instance you work in and a
+    # throwaway one you test against. Absent it, the path below is unchanged, so a plain
+    # `agentweave` start still lands exactly where every existing install already has its data.
     _old_db_url = os.environ.get("DATABASE_URL")
+    db_url = _old_db_url or f"sqlite+aiosqlite:///{db_path.as_posix()}"
     os.environ["DATABASE_URL"] = db_url
 
     try:
@@ -764,7 +784,7 @@ def _hub_native_start(
                     stderr=_sp.DEVNULL,
                 )
 
-            _hub_pid_file().write_text(f"{proc.pid}\n{port}", encoding="utf-8")
+            _hub_pid_file(port).write_text(f"{proc.pid}\n{port}", encoding="utf-8")
             print_info(f"Starting Hub (native, PID {proc.pid}) on port {port}...")
 
             if not _hub_health_check(port=port, timeout=60):
@@ -776,7 +796,7 @@ def _hub_native_start(
                 # bind the port with no PID file left to track it.
                 _hub_kill_pid(proc.pid)
                 with contextlib.suppress(OSError):
-                    _hub_pid_file().unlink()
+                    _hub_pid_file(port).unlink()
                 return 1
 
             print_success(f"Hub ready at {_hub_url(port)}")

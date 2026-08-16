@@ -71,6 +71,44 @@ class TestSubprocessRunHasTimeout:
         )
 
 
+class TestTwoInstancesDoNotCollide:
+    """One machine may run more than one Hub — the instance you work in, and a throwaway one
+    on another port and another database that you test against.
+
+    `--port` has existed all along, but two singletons made it a trap: a single shared
+    `hub.pid`, so the second start erased the first's record, and an unconditional overwrite
+    of `DATABASE_URL`, so both processes opened the same SQLite file. These guard both.
+    """
+
+    def test_pid_file_is_per_port_and_the_default_port_keeps_its_historic_name(self):
+        from agentweave.cli import DEFAULT_HUB_PORT, HUB_DIR, _hub_pid_file
+
+        # The default keeps the unsuffixed name, so a Hub started by an older build is still
+        # found, reported and stopped by this one.
+        assert _hub_pid_file() == HUB_DIR / "hub.pid"
+        assert _hub_pid_file(DEFAULT_HUB_PORT) == HUB_DIR / "hub.pid"
+
+        # Any other port gets its own file, so two instances never overwrite each other.
+        assert _hub_pid_file(8010) == HUB_DIR / "hub-8010.pid"
+        assert _hub_pid_file(8010) != _hub_pid_file(DEFAULT_HUB_PORT)
+
+    def test_native_start_prefers_an_explicit_database_url(self, monkeypatch):
+        """The source-level guard: `db_url` must fall back to the computed path rather than
+        replace an explicit one. Asserted against the source because reaching the assignment
+        for real requires an installed hub package, a migration run and a spawned uvicorn."""
+        import inspect
+
+        from agentweave import cli
+
+        src = inspect.getsource(cli._hub_native_start)
+        assert (
+            'db_url = _old_db_url or f"sqlite+aiosqlite:///{db_path.as_posix()}"' in src
+        ), "regression: _hub_native_start no longer honours a pre-set DATABASE_URL"
+        assert (
+            'os.environ["DATABASE_URL"] = db_url' in src
+        ), "DATABASE_URL must still be exported before hub.config.settings is imported"
+
+
 class TestDownloadWithSha256:
     """S9 — verify SHA256 of downloaded Hub docker-compose.yml and .env
     via a new _download_with_sha256 helper.
