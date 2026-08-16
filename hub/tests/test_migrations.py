@@ -144,7 +144,7 @@ def test_alembic_upgrade_head_fresh_file_db(tmp_path) -> None:
             return row[0]
 
     version = _run(_check_version())
-    assert version == "0073", f"expected alembic_version=0073, got {version}"
+    assert version == "0074", f"expected alembic_version=0074, got {version}"
 
     columns = {column["name"]: column for column in _inspect_columns(db_url, "agent_outputs")}
     assert {"kind", "payload", "run_id", "sequence"} <= columns.keys()
@@ -192,7 +192,7 @@ def test_migration_0025_drops_legacy_project_roles_config(tmp_path) -> None:
         }
         version = conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
     assert "project_roles_config" not in tables
-    assert version == "0073"
+    assert version == "0074"
 
 
 def test_migration_0027_adds_conversation_runtime_overrides(tmp_path) -> None:
@@ -295,7 +295,7 @@ def test_migration_0035_recreates_conversations_preserving_shape(tmp_path) -> No
 
     with sqlite3.connect(db_file) as conn:
         version = conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
-        assert version == "0073"
+        assert version == "0074"
 
         # The existing row survives, unnamed and attributed to the operator.
         row = conn.execute(
@@ -512,7 +512,7 @@ async def test_init_db_runs_alembic_for_file_db(tmp_path, monkeypatch) -> None:
             return row[0] if row else None
 
     version = await _check()
-    assert version == "0073", f"expected alembic_version=0073, got {version}"
+    assert version == "0074", f"expected alembic_version=0074, got {version}"
 
 
 @pytest.mark.asyncio
@@ -1234,7 +1234,7 @@ def test_migration_0052_is_guarded_when_tasks_does_not_exist(tmp_path) -> None:
 
     with sqlite3.connect(db_file) as conn:
         version = conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
-        assert version == "0073"
+        assert version == "0074"
         tables = {
             row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
@@ -1403,7 +1403,7 @@ def test_migration_0057_is_guarded_when_tasks_does_not_exist(tmp_path) -> None:
 
     with sqlite3.connect(db_file) as conn:
         version = conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
-        assert version == "0073"
+        assert version == "0074"
         tables = {
             row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
@@ -1468,7 +1468,7 @@ def test_migration_0059_is_guarded_when_the_tables_do_not_exist(tmp_path) -> Non
 
     with sqlite3.connect(db_file) as conn:
         version = conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
-        assert version == "0073"
+        assert version == "0074"
         tables = {
             row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
@@ -1526,7 +1526,7 @@ def test_migration_0060_is_guarded_when_conversations_does_not_exist(tmp_path) -
 
     with sqlite3.connect(db_file) as conn:
         version = conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
-        assert version == "0073"
+        assert version == "0074"
         tables = {
             row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
@@ -1588,7 +1588,7 @@ def test_migration_0061_is_guarded_when_questions_does_not_exist(tmp_path) -> No
 
     with sqlite3.connect(db_file) as conn:
         version = conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
-        assert version == "0073"
+        assert version == "0074"
         tables = {
             row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
@@ -1879,7 +1879,7 @@ def test_migration_0073_gives_conversations_a_sequence_primary_key(tmp_path) -> 
 
     with sqlite3.connect(db_file) as conn:
         version = conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
-        assert version == "0073"
+        assert version == "0074"
 
         rows = conn.execute("SELECT id, sequence FROM conversations ORDER BY sequence").fetchall()
         assert [row[0] for row in rows] == ["conv-existing", "conv-second"]
@@ -1942,7 +1942,7 @@ def test_migration_0073_is_guarded_when_conversations_does_not_exist(tmp_path) -
 
     with sqlite3.connect(db_file) as conn:
         version = conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
-        assert version == "0073"
+        assert version == "0074"
         tables = {
             row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
         }

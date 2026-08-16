@@ -44,6 +44,7 @@ from hub.db.models import (
     Runner,
     SpecDocument,
     SpecDocumentEvent,
+    SpecDocumentMerge,
     SpecRequirement,
     SpecRequirementRevision,
     SpecRigorEvent,
@@ -78,6 +79,7 @@ PROJECT_SCOPED_TABLE_NAMES = [
     "spec_rigor_events",
     "spec_requirements",
     "spec_document_events",
+    "spec_document_merges",
     "runs",
     "run_divergences",
     "messages",
@@ -274,6 +276,15 @@ async def _seed_full_project(session, project_id: str, tag: str) -> None:
             kind="created",
             actor_kind="operator",
             origin="control",
+        )
+    )
+    session.add(
+        SpecDocumentMerge(
+            id=f"specmerge-{tag}",
+            project_id=project_id,
+            capability_document_id=f"specdoc-{tag}",
+            change_document_id=f"specdoc-{tag}",
+            actor_kind="operator",
         )
     )
     session.add(

@@ -77,7 +77,15 @@ export function SpecPhaseBar({ path }: { path: string }) {
       <div className="flex items-center gap-2">
         <span
           className="rounded-full px-2 py-0.5"
-          style={{ background: 'var(--surface-2)', color: 'var(--text-2)' }}
+          style={{
+            background: 'var(--surface-2)',
+            // Muted for the two phases nobody is actively deciding about — `archived` and
+            // `current` — as opposed to `exploring`/`proposed`, where a decision is pending.
+            color:
+              document.phase === 'archived' || document.phase === 'current'
+                ? 'var(--text-3)'
+                : 'var(--text-2)',
+          }}
           data-testid="spec-phase"
         >
           {document.phase}
@@ -116,7 +124,18 @@ export function SpecPhaseBar({ path }: { path: string }) {
           </button>
         )}
 
-        {document.phase !== 'exploring' && (
+        {document.phase === 'approved' && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => setPhase.mutate({ path, to: 'archived' })}
+            className="rounded-[var(--radius-sm)] px-2 py-1 hover:bg-[var(--row-hover)]"
+          >
+            Archive
+          </button>
+        )}
+
+        {(document.phase === 'proposed' || document.phase === 'approved') && (
           <button
             type="button"
             disabled={busy}

@@ -189,7 +189,7 @@ export interface SpecDocumentRecord {
   kind: string
   /** The authority on where the document stands. The `aw-spec-status` metadata
    *  inside the file is a copy for whoever reads it, never the source. */
-  phase: 'exploring' | 'proposed' | 'approved'
+  phase: 'exploring' | 'proposed' | 'approved' | 'archived' | 'current'
   /** What happens to work that ignores this document. **Not phase.** Phase asks whether the
    *  operator agreed to it; rigor asks what the system does about work that does not satisfy it.
    *  A `gate` document can still be exploring, and an approved one can still be a sketch. */

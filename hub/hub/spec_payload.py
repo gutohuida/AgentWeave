@@ -40,7 +40,7 @@ SCHEMA_VERSION = 1
 
 KEY_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 MODALS = ("MUST", "SHOULD", "MAY", "SHALL")
-KINDS = ("baseline", "system-map", "roadmap", "change-spec")
+KINDS = ("baseline", "system-map", "roadmap", "change-spec", "capability")
 
 
 class PayloadError(ValueError):
@@ -148,7 +148,7 @@ class SpecPayload(_Part):
     schema_version: int = Field(
         description=f"The payload contract version. Currently {SCHEMA_VERSION}."
     )
-    kind: str = Field(description="One of: baseline, system-map, roadmap, change-spec.")
+    kind: str = Field(description="One of: baseline, system-map, roadmap, change-spec, capability.")
     title: str = Field(description="The document's title.")
     summary: str = Field(default="", description="One paragraph: what this changes and why.")
     problem: str = Field(default="", description="What hurts today, who it affects, and why now.")

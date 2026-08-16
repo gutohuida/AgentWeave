@@ -156,6 +156,20 @@ class PhaseRequest(BaseModel):
     model_config = {"extra": "forbid"}
 
 
+class MergeRequest(BaseModel):
+    """The operator folding a finished change's content into a capability document.
+
+    `from_changes` names sources by path, like every other document-scoped route in this file —
+    the operator, in the UI, is looking at paths, not database ids.
+    """
+
+    payload: dict = Field(description="Same shape submit_spec_document accepts.")
+    from_changes: list[str] = Field(min_length=1, max_length=16)
+    note: str = Field(default="", max_length=2000)
+
+    model_config = {"extra": "forbid"}
+
+
 def _document_view(document) -> dict:
     return {
         "id": document.id,
@@ -965,3 +979,69 @@ async def set_phase(
     if created:
         await sse_manager.broadcast(project_id, "task_updated", {"created": len(created)})
     return {**_document_view(document), "tasks_created": [task.id for task in created]}
+
+
+@router.post("/documents/{path:path}/merge")
+async def merge_document(
+    path: str,
+    body: MergeRequest,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """The corpus absorbs a finished change: fold its content into a capability document.
+
+    An explicit authored merge, not automatic requirement migration — the operator supplies the
+    payload the capability document ends up with, citing which finished changes it draws from. Every
+    refusal happens before anything is written, the same discipline `rename_document` already
+    follows.
+    """
+    project_id, _ = project
+    workspace = await _workspace(session, project_id)
+    document = await _require_document(session, project_id, path)
+
+    if document.kind != "capability":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "message": f"{path} is not a capability document",
+                "code": "not_a_capability",
+            },
+        )
+
+    sources = []
+    for source_path in body.from_changes:
+        try:
+            safe_source_path = validate_spec_path(source_path)
+        except SpecPathError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        source = await spec_lifecycle.get_document(session, project_id, safe_source_path)
+        if source is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"no specification document at {safe_source_path}",
+            )
+        if source.phase not in (spec_lifecycle.APPROVED, spec_lifecycle.ARCHIVED):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "message": f"{source_path} is {source.phase!r}; a merge names a finished change",
+                    "code": "source_not_finished",
+                },
+            )
+        sources.append(source)
+
+    try:
+        result = await spec_service.merge_document(
+            session, workspace, document, sources, body.payload, actor=_operator(), note=body.note
+        )
+    except spec_service.SaveRefusedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"message": str(exc), "code": exc.code, "field": exc.field_path},
+        ) from exc
+
+    await session.commit()
+    await sse_manager.broadcast(
+        project_id, "spec_updated", {"path": document.path, "phase": document.phase}
+    )
+    return {**_document_view(document), "blocking": result.blocking, "merged": len(sources)}

@@ -28,6 +28,10 @@ from .utils import short_id
 EXPLORING = "exploring"
 PROPOSED = "proposed"
 APPROVED = "approved"
+ARCHIVED = "archived"
+# A capability document's phase, and the only phase `transition()` never accepts as a `to_phase` —
+# the one door into `current` is document creation (`create_document`, below), not this function.
+CURRENT = "current"
 
 # Every legal move. A transition not in this table does not happen, including
 # any that would move a document backwards without an explicit decision.
@@ -39,6 +43,11 @@ TRANSITIONS = {
     # silent edit.
     (PROPOSED, EXPLORING),
     (APPROVED, EXPLORING),
+    # A finished, shipped change becomes history. Scoped to `approved` only — an abandoned
+    # exploration or proposal is a different situation, and the existing reopen transitions
+    # already give the operator a way to walk a document backwards without inventing a second
+    # kind of "done." There is no transition out of `archived`.
+    (APPROVED, ARCHIVED),
 }
 
 
@@ -118,11 +127,15 @@ async def create_document(
     title: str = "",
     kind: str = "change-spec",
 ) -> SpecDocument:
-    """A new document, always in `exploring`.
+    """A new document, in `exploring` — or in `current`, if it is a capability document.
 
     Explore is the one phase that would otherwise precede its own document,
     which is why the entry point creates the document rather than setting a mode
     on the conversation: without it, "propose" and "approve" have no subject.
+
+    A capability document has no exploration to close and nothing to propose — it describes
+    current, shipped behaviour and is written directly, through a merge (`spec_service.py`). It is
+    created at `current` and this is the only place a document's phase is ever set there.
     """
     existing = await get_document(session, project_id, path)
     if existing is not None:
@@ -134,7 +147,7 @@ async def create_document(
         path=path,
         title=title,
         kind=kind,
-        phase=EXPLORING,
+        phase=CURRENT if kind == "capability" else EXPLORING,
     )
     session.add(document)
     await session.flush()
@@ -150,7 +163,6 @@ async def record_content(
     content: str,
     digests: Dict[str, str],
     title: str,
-    kind: str,
 ) -> SpecDocumentEvent:
     """Note that the document's content was rewritten, and by whom.
 
@@ -158,9 +170,12 @@ async def record_content(
     requirement index stores, computed once by the caller. Recomputing them here
     from a different input is how the row and the index would come to disagree
     about whether a requirement changed.
+
+    Takes no `kind` — a document's kind is fixed at creation (`create_document`) and the caller
+    (`spec_service.save_document`) has already refused a payload whose `kind` disagrees with
+    `document.kind` before this function is ever reached, so there is nothing left for it to vary.
     """
     document.title = title
-    document.kind = kind
     document.content_digest = digest(content)
     document.requirement_digests = dict(digests)
     return await record_event(
@@ -186,8 +201,12 @@ async def transition(
     `to_phase="approved"` is refused here as well as at the API boundary,
     because a rule enforced in one place is a rule that survives exactly as long
     as nobody adds a second caller.
+
+    **So is archiving**, the same shape and the same reasoning. `current` is deliberately absent
+    from the phases this function accepts as a `to_phase` at all — a capability document is created
+    at `current` (`create_document`) and never moves there, or anywhere, through this function.
     """
-    if to_phase not in (EXPLORING, PROPOSED, APPROVED):
+    if to_phase not in (EXPLORING, PROPOSED, APPROVED, ARCHIVED):
         raise PhaseError(f"unknown phase {to_phase!r}", code="unknown_phase")
 
     if document.phase == to_phase:
@@ -203,6 +222,12 @@ async def transition(
         raise PhaseError(
             "only the operator can approve a document",
             code="approval_is_the_operators",
+        )
+
+    if to_phase == ARCHIVED and actor.kind != "operator":
+        raise PhaseError(
+            "only the operator can archive a document",
+            code="archive_is_the_operators",
         )
 
     if to_phase == PROPOSED and document.explore_closed_at is None:

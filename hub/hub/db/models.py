@@ -1504,7 +1504,14 @@ class WorkerInvocation(Base):
 # the document because the document is a file the operator can edit, and a gate whose value lives
 # where the gated party can write it is not a gate. `aw-spec-status` in the rendered markup is a
 # copy for a human reading the file, never the authority.
-SPEC_PHASES = ("exploring", "proposed", "approved")
+SPEC_PHASES = ("exploring", "proposed", "approved", "archived", "current")
+
+# Restated from `spec_payload.KINDS` (this module does not import that one, the same way it does
+# not import `spec_lifecycle`'s phase constants) so the CHECK below can state the vocabulary
+# without a cross-package import at the ORM layer. Migration `0074` restates the same list again,
+# standalone, for the reason every migration restates its own values: migrations run without the
+# rest of the package importable in the same way.
+SPEC_KINDS = ("baseline", "system-map", "roadmap", "change-spec", "capability")
 
 SPEC_EVENT_ACTORS = ("operator", "agent", "system")
 SPEC_EVENT_ORIGINS = ("control", "submission", "lifecycle")
@@ -1567,10 +1574,62 @@ class SpecDocument(Base):
             "phase IN ('" + "', '".join(SPEC_PHASES) + "')",
             name="ck_spec_documents_phase",
         ),
+        CheckConstraint(
+            "kind IN ('" + "', '".join(SPEC_KINDS) + "')",
+            name="ck_spec_documents_kind",
+        ),
+        # The strongest available statement that `current` is where capability documents live and
+        # nowhere else — enforced even against a row inserted some other way than
+        # `spec_lifecycle.create_document`. Same cross-column shape `0058` uses for
+        # `origin_type`/`origin_agent`.
+        CheckConstraint(
+            "(kind = 'capability' AND phase = 'current') OR "
+            "(kind != 'capability' AND phase != 'current')",
+            name="ck_spec_documents_kind_phase",
+        ),
         # No CHECK on `rigor`, deliberately, for the reason recorded on `TaskTransition.origin`: a
         # table-level CHECK naming a column makes that column undroppable in SQLite, which would
         # make 0069 irreversible. The values are declared once in `SPEC_RIGORS` and refused on the
         # way in by `spec_rigor.set_rigor`, which is the only writer.
+    )
+
+
+class SpecDocumentMerge(Base):
+    """One (capability document, change document) pair an operator has folded together.
+
+    The corpus absorbs a finished change by explicit authored merge, not automatic requirement
+    migration — this table is the record of that act, not the content itself (the content lands on
+    `SpecDocument.requirement_digests`/rendered file the same way any other write does, through
+    `save_document`). `actor_kind = 'operator'` is stronger than every other `actor_kind` CHECK in
+    this file: this table exists *because* the operator's authorship is the point, and the CHECK
+    makes that true even against a caller that reaches the table directly, not only against the one
+    route this change adds.
+    """
+
+    __tablename__ = "spec_document_merges"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
+    capability_document_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("spec_documents.id"), nullable=False
+    )
+    change_document_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("spec_documents.id"), nullable=False
+    )
+    actor_kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    actor: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    note: Mapped[str] = mapped_column(String(2000), nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, nullable=False
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "actor_kind = 'operator'", name="ck_spec_document_merges_actor_is_operator"
+        ),
+        Index("ix_spec_document_merges_capability", "capability_document_id", "created_at"),
+        Index("ix_spec_document_merges_change", "change_document_id", "created_at"),
     )
 
 

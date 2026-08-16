@@ -24,10 +24,11 @@ from . import (
     spec_lifecycle,
     spec_naming,
 )
-from .db.models import InboundQueueEntry, SpecDocument
+from .db.models import InboundQueueEntry, SpecDocument, SpecDocumentMerge
 from .project_workspace import ProjectWorkspace
 from .spec_payload import PayloadError, extract_payload, payload_to_dict, validate_payload
 from .spec_render import render_document
+from .utils import short_id
 
 
 @dataclass
@@ -68,17 +69,35 @@ async def save_document(
     incomplete by definition, and it is the transition to `proposed` that cares.
     What *is* refused is a submission against an approved document — silently
     rewriting what an operator approved would make the approval meaningless.
+
+    A capability document is written only by the operator, through a merge — never by an ordinary
+    submission, whoever the caller — and a document's `kind` is fixed at creation: nothing here may
+    reclassify what a document *is*. Both are checked before the approved-document refusal, the
+    same way that refusal is checked before anything else, because none of the three depend on the
+    document's phase to make sense.
     """
+    try:
+        payload = validate_payload(raw_payload)
+    except PayloadError as exc:
+        raise SaveRefusedError(str(exc), code="payload_invalid", field_path=exc.field) from exc
+
+    if payload.kind != document.kind:
+        raise SaveRefusedError(
+            f"this document is {document.kind!r}; a submission cannot change what a document is",
+            code="kind_is_fixed",
+        )
+
+    if document.kind == "capability" and actor.kind != "operator":
+        raise SaveRefusedError(
+            "capability documents are written by the operator, through a merge",
+            code="capability_write_is_the_operators",
+        )
+
     if document.phase == spec_lifecycle.APPROVED:
         raise SaveRefusedError(
             "this document is approved; reopen it before changing what was approved",
             code="document_approved",
         )
-
-    try:
-        payload = validate_payload(raw_payload)
-    except PayloadError as exc:
-        raise SaveRefusedError(str(exc), code="payload_invalid", field_path=exc.field) from exc
 
     # Identity carries forward from whatever is on disk, so a key that already
     # holds an identifier keeps it. A file that has been replaced by hand simply
@@ -128,7 +147,6 @@ async def save_document(
         content=content,
         digests=digests,
         title=payload.title,
-        kind=payload.kind,
     )
 
     # Reindexed in the same transaction that recorded the write. An index that
@@ -153,6 +171,58 @@ async def save_document(
         ],
         divergence=({"recorded": divergence[0], "found": divergence[1]} if divergence else None),
     )
+
+
+async def merge_document(
+    session: AsyncSession,
+    workspace: ProjectWorkspace,
+    capability_document: SpecDocument,
+    source_documents: List[SpecDocument],
+    raw_payload: Any,
+    *,
+    actor: spec_lifecycle.Actor,
+    note: str = "",
+) -> SaveResult:
+    """Fold a finished change's content into a capability document, by explicit authored merge.
+
+    Resolving the path arguments to documents and refusing an unfinished or mistargeted merge
+    (design D5 steps 1-4) is the API handler's job, matching this file's existing split between
+    "the API resolves what a path names" and "the service acts once it has documents in hand." This
+    function does the write: the content lands through `save_document`, the same function every
+    other content write uses, so every one of its refusals (malformed payload, kind mismatch) and
+    every one of its side effects (identity minting, rendering, reindexing) apply here exactly as
+    they would to any other caller — not a second, looser implementation of the same thing. One
+    `SpecDocumentMerge` row per named source records that this specific fold happened and who did
+    it; one `"merged"` event on the capability document is the single copy of that fact in the
+    per-document history a reader already knows to check (no matching event on the source's side —
+    `spec_document_merges` already answers "what did this change's merge do" by querying
+    `change_document_id`).
+
+    Committing and broadcasting `spec_updated` is the caller's job too, the same way it is for
+    every other route in `spec.py` — this function only prepares the session.
+    """
+    result = await save_document(session, workspace, capability_document, raw_payload, actor=actor)
+    for source in source_documents:
+        session.add(
+            SpecDocumentMerge(
+                id=f"spmrg-{short_id()}",
+                project_id=capability_document.project_id,
+                capability_document_id=capability_document.id,
+                change_document_id=source.id,
+                actor_kind=actor.kind,
+                actor=actor.name or "",
+                run_id=actor.run_id,
+                note=note,
+            )
+        )
+        await spec_lifecycle.record_event(
+            session,
+            capability_document,
+            kind="merged",
+            actor=actor,
+            detail={"change_document_id": source.id, "note": note},
+        )
+    return result
 
 
 async def rename_document(

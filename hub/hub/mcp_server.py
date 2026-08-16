@@ -784,7 +784,7 @@ def approve_tool_call(
 # Restated, not imported — see the note at the top of this file. `test_mcp_tool_schemas.py`
 # asserts these agree with `hub.spec_payload`, so drift fails in CI rather than at an agent's
 # first call.
-SpecKind = Literal["baseline", "system-map", "roadmap", "change-spec"]
+SpecKind = Literal["baseline", "system-map", "roadmap", "change-spec", "capability"]
 SPEC_SCHEMA_VERSION = 1
 
 # The one closed vocabulary in the evidence surface, restated for the same reason as the rest.

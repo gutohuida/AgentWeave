@@ -94,6 +94,16 @@ already calls `save_document` right after creating a document, of any kind, to w
 scaffold. Skipping this would mean creating a capability document — not merging into one, just
 creating it — fails immediately with `payload_invalid`. Added as task 4.4.
 
+**Round 3 finding, recorded per `spec_round_protocol.at_cap` before proceeding to implementation.**
+`hub/hub/mcp_server.py`'s restated `SpecKind` Literal (a standalone copy of `KINDS`, required because
+`mcp_server.py` may import only stdlib + fastmcp) was not in round 1/2's task list. Task 4.5 adds it.
+Confirmed harmless to skip functionally — `save_document`'s operator-only refusal (above) still
+catches any agent attempt regardless — but skipping it breaks
+`test_spec_kind_agrees_with_the_payload_validator` deterministically the moment `KINDS` changes, so
+it ships together with 4.4, not after. Also confirmed in the same pass: `spec_manifest.VALID_KINDS`
+and the UI's `SpecEntry.kind` TS union name the same four strings but are the unrelated on-disk
+manifest/index subsystem's vocabulary, not this one — no change needed there.
+
 ## D3. `kind` is pinned at creation
 
 Reading `record_content` (`spec_lifecycle.py:145`) and its one caller, `save_document`

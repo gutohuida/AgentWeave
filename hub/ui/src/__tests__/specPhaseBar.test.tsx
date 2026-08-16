@@ -144,4 +144,46 @@ describe('SpecPhaseBar', () => {
     renderBar()
     expect(screen.queryByText('Reopen')).not.toBeInTheDocument()
   })
+
+  it('offers archiving only on an approved document', () => {
+    documents = [doc({ phase: 'approved' })]
+    renderBar()
+    expect(screen.getByText('Archive')).toBeInTheDocument()
+  })
+
+  it('archives through the phase route', async () => {
+    documents = [doc({ phase: 'approved' })]
+    renderBar()
+
+    await userEvent.click(screen.getByText('Archive'))
+
+    expect(setPhase).toHaveBeenCalledWith({
+      path: 'spec/changes/demo/spec.html',
+      to: 'archived',
+    })
+  })
+
+  it.each(['exploring', 'proposed', 'archived', 'current'])(
+    'does not offer archiving a %s document',
+    (phase) => {
+      documents = [doc({ phase })]
+      renderBar()
+      expect(screen.queryByText('Archive')).not.toBeInTheDocument()
+    },
+  )
+
+  it.each(['archived', 'current'])('does not offer reopening a %s document', (phase) => {
+    documents = [doc({ phase })]
+    renderBar()
+    expect(screen.queryByText('Reopen')).not.toBeInTheDocument()
+  })
+
+  it.each(['exploring', 'proposed', 'approved', 'archived', 'current'])(
+    'renders the literal phase name for %s',
+    (phase) => {
+      documents = [doc({ phase })]
+      renderBar()
+      expect(screen.getByTestId('spec-phase')).toHaveTextContent(phase)
+    },
+  )
 })
