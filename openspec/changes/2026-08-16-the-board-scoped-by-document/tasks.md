@@ -2,9 +2,10 @@
 
 ## 1. API (`hub/hub/api/v1/tasks.py`)
 
-- [ ] 1.1 Import `spec_lifecycle` and `SpecDocument` (from `...db.models`) and
-      `TERMINAL_FOR_BINDING` (from `...run_task_binding`, already imported for
-      `release_conversations_bound_to`/`release_reason` — extend that import line).
+- [ ] 1.1 Import `spec_lifecycle` (module) and add `SpecDocument` to the existing
+      `from ...db.models import (...)` block. `TERMINAL_FOR_BINDING` needs no new import — it is
+      already imported at the top of this file (`from ...run_task_binding import (TERMINAL_FOR_BINDING,
+      release_conversations_bound_to, release_reason)`), verified this session.
 - [ ] 1.2 `list_tasks`: add `spec_document_id: Optional[str] = Query(None)` and
       `exclude_archived_completed: bool = Query(False)` parameters.
 - [ ] 1.3 Apply them per design D1's `elif` ordering — `spec_document_id` exact-match filter when
