@@ -1752,3 +1752,55 @@ it does not fit — better to finish half the files properly, with mutation chec
 than rush all 20 and miss something.
 
 **Elapsed:** one iteration.
+
+## Entry 20 — 11:40 — Q5-test-audit: survey pass 2 (semantic), first two files of `tests/`
+
+**Starting state verified clean**: `git log` tip `7b93390` matched `STATE.json`, working tree clean,
+branch correct.
+
+Time budget note: `stop_at` is 12:00 and this iteration started at 11:40, so this entry deliberately
+scopes to a small, honestly-finished slice rather than starting all 21 `tests/` files and leaving the
+scan half-done at the deadline. Two files read in full against their current source module, both by
+hand (not tooled):
+
+1. **`tests/test_constants.py` vs `src/agentweave/constants.py`** — every asserted value checked
+   against the live dict/list literals: `TestOpencodeConstants` (opencode's `RUNNER_TYPES` membership,
+   full `RUNNER_CONFIGS["opencode"]` shape — `cli`, `subcommand`, `session_flag`, `output_format`,
+   `context_flag`, `model_flag`, `mcp_add_cmd`, `AGENT_RUNNER_DEFAULTS`, `KNOWN_AGENTS` membership),
+   `TestKimiConstants` (`RUNNER_CONFIGS["kimi"]["model_flag"]`), `TestCodexMcpConstants`
+   (`codex_mcp`'s `RUNNER_TYPES` membership and full config shape). Every asserted field/value matches
+   `constants.py` exactly as it stands today (lines 119-223, 240-250, 71-87). **No staleness found —
+   file is clean.**
+2. **`tests/test_stream_events.py` vs `src/agentweave/stream_events.py`** — the larger of the two (35
+   tests across 8 classes: constructors, tool correlation, redaction/truncation, `ContextUsageSample`
+   validation, legacy normalization, cache-breakdown allowlisting, `ParsedRunnerLine`, transport-field
+   redaction). Checked each assertion against current behaviour rather than just current existence:
+   `STREAM_EVENT_KINDS` is exactly the asserted 7-tuple (source lines 32-40); `CONTEXT_BREAKDOWN_FIELDS`
+   is exactly the asserted allowlist plus the two fields the test explicitly expects dropped
+   (`raw_provider_object`, `prompt` — source lines 78-87 vs test lines 310-317); the
+   `percent`-requires-`provider_reported_ratio`-basis rule (source 215-221) matches the test's
+   both-directions coverage (accepts with the right basis, rejects without it); the legacy-normalizer's
+   contradiction handling — `tokens_used` taking precedence over an `input_tokens`/`output_tokens`
+   breakdown (source 323, test 245-254), a >1-point percent/ratio disagreement degrading to token-only
+   rather than trusting the reported percent (source 372-378, test 261-268) — both match current
+   behaviour exactly, not a stale expectation of an earlier contradiction-handling rule. **No staleness
+   found — file is clean.**
+
+Both were also cross-checked for clause (a)/(b) opportunistically while reading (not just clause-(c)
+staleness): no tautological assertions, no assertions against self-constructed mocks, and no coverage
+duplicated elsewhere in either file. Neither file produced a deletion candidate under any of the three
+clauses.
+
+**Nothing was deleted this iteration** — correct per the bar: nothing met it in either file.
+
+**Next:** Q5-test-audit, survey pass 2 continues. 19 of 21 `tests/` files remain unreviewed for
+semantic staleness: `test_cli.py`, `test_config.py`, `test_diagnostics.py`, `test_eventlog.py`,
+`test_handoff_resume_templates.py`, `test_http_transport.py`, `test_hub_commands.py`, `test_jobs.py`,
+`test_locking.py`, `test_logging_handlers.py`, `test_mcp_server.py`, `test_packaging.py`,
+`test_session.py`, `test_spec_manifest.py`, `test_task.py`, `test_transport_config.py`,
+`test_utils.py`, `test_validator.py` (`test___init__.py` has no tests). Suggest continuing
+alphabetically so "reviewed" stays an unambiguous prefix of the list; read a handful (3-5) per
+iteration rather than rushing all 19, per Entry 19's own guidance. `hub/tests/`'s 150 files have not
+been started at all under this pass and remain after `tests/` finishes.
+
+**Elapsed:** one iteration (deliberately short — stop_at is imminent).
