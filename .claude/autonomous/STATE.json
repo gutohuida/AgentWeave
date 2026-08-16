@@ -1,150 +1,155 @@
 {
-  "purpose": "Finish the spec integration and make AgentWeave's spec/dev flow strong and working: find the bugs, correct them, and find the frictions. Then QoL improvements, then an honest read on where AgentWeave fits in the market.",
-  "operator_intent_verbatim": "I want to finish the integration with the spec. I want the spec/dev flow in agentweave to be strong and working. Find all the bugs, correct them, find improvements, frictions and work on them.",
-  "branch": "autonomous/2026-08-15-spec-flow-hardening",
+  "purpose": "Operator's agenda of 2026-08-16: apply the spec/UX fixes from the last session, reform the test suite so it stops taking seven minutes, clean the test environments down to one, make AgentWeave a real desktop app with one global state instead of one instance per folder, and — only if time remains — close UI quality-of-life gaps against popular harnesses.",
+  "branch": "autonomous/2026-08-16-app-and-test-reform",
   "parent_branch": "hub-native-experience",
-  "parent_sha": "a40ac5b",
-  "stop_at": "2026-08-15T22:00:00+01:00",
-  "stop_at_note": "Operator left at ~13:05 and asked for the loop to run until 22:00. The session is NOT being kept open - the Scheduled Task driver is now the primary mechanism, not a backup. Driver reinstalled with StopAt 2026-08-15T22:00:00, firing every 15 minutes.",
-  "last_heartbeat": "2026-08-15T21:12:44+01:00",
-  "heartbeat_contract": "run-iteration.ps1 stands down when last_heartbeat is younger than 25 minutes. Protocol: refresh last_heartbeat to NOW at every commit while working, and as the FINAL action of a finished iteration set it ~40 minutes into the past so the next firing takes over immediately instead of standing down against your own heartbeat. Driver-vs-driver overlap is already prevented by the scheduler (MultipleInstances=IgnoreNew), so this guard exists only to keep a live interactive session and the driver off the same branch. Always stamp from PowerShell or Python, never Git Bash date.",
-  "current": "run-closed-handoff-0049-finalized",
-  "next_action": "The run is closed. q1-q8 are each 'done' or 'standing' with nothing queued; q9 is genuinely complete (handoff-0049 finalized). The 'Needs your decision' table in overnight-catchup.md was re-diffed against decisions_for_user (d1-d6) again at 21:51 and still matches exactly. stop_at is 2026-08-15T22:00:00+01:00 - the run window is essentially over. IF an iteration fires before stop_at: do NOT invent a tenth queue item - re-read this file, confirm nothing changed (no new operator message, no queue item un-done), and if genuinely still nothing to do, just refresh last_heartbeat forward, note a one-line 'still nothing to do' entry in overnight-catchup.md, and end the iteration - per the 19:57 standing rule, saying so honestly beats manufacturing work. IF an iteration fires after stop_at: do not start new work at all - confirm tree clean, leave heartbeat appropriately, stand down; the driver should stop scheduling past stop_at on its own. IF the operator has returned and left new instructions: those supersede everything above.",
-  "previous_action_result": "21:51 iteration: verified tree clean and branch/log matched STATE.json exactly (acc961a 'Release the branch to the driver' on top of 0c873d6, the prior iteration's own 'still nothing to do' entry). Re-checked every condition next_action asked for: no new operator message, no queue item un-done, q1-q9 all still done or standing, the 'Needs your decision' table in overnight-catchup.md still matches decisions_for_user (d1-d6) exactly. Only ~9 minutes of runway left before stop_at (22:00), and the next 15-minute driver firing lands after it - genuinely nothing to do and no time to start anything new. Logged a one-line honest entry rather than inventing a tenth queue item, per the 19:57 standing rule. This is very likely the last working iteration of the run; the driver should stand down against stop_at from here. No code or artefact changed beyond the log and this file.",
+  "parent_sha": "5acc8d8",
+  "started_at": "2026-08-16T02:15:00+01:00",
+  "stop_at": "2026-08-16T12:00:00+01:00",
+  "stop_when_queue_empties": false,
+  "iteration": 0,
+  "last_heartbeat": null,
+
+  "spec_round_protocol": {
+    "why": "Operator: 'one agent produces the spec, the next triggers the agents review until a agent thinks is good to implement. We need to have another gate so agent don't go on forever.' Implemented as successive driver iterations rather than subagents, at the operator's suggestion ('the trigger at 2AM generates the spec and the one at 2:15 reviews it'). A fresh process has no memory of writing the thing it reviews, so the independence is structural rather than merely prompted.",
+    "max_rounds": 3,
+    "gate": "At round 3 without approval, STOP iterating. Ship the artifact as-is, record every unresolved objection in decisions_for_user, and move to the next queue item. Never a fourth round.",
+    "how": [
+      "AUTHOR iteration: write or revise the artifact. Set next_action to 'REVIEW <path> round <K>'. Commit.",
+      "REVIEW iteration: read the artifact cold. Do NOT look up who wrote it. Critique against the item's stated review_criteria. Then either (a) set approved=true in the log and set next_action to the implementation step, or (b) write concrete objections and set next_action to 'REVISE <path> round <K+1>'. Commit.",
+      "Record the round number in the log entry every time, so the gate is auditable."
+    ],
+    "research": "Web research is authorised and encouraged where it would change the answer. Operator: 'Do any research on the internet that the agents deem necessary. Always think things out before implementing.'"
+  },
+
   "queue": [
     {
-      "id": "q1-tool-list-close",
-      "state": "done, fully - task 4.5's full post-change suite re-run 21:0x-21:11 clean (hub 2046 passed/11 skipped, CLI 360 passed/3 skipped, zero failures)",
-      "title": "Close the-tool-list-matches-the-tools (already implemented, tasks.md is stale)",
-      "detail": "See next_action. Small and first because it removes a false '17 open' from the board and the change it closes is the one that fixes why an agent never wrote a spec document."
+      "id": "Q1-projects",
+      "title": "Delete every Hub project except aw-loop10",
+      "status": "open",
+      "why": "Operator: 'Clean up the environment for testing. To many aw-loop environments' and 'you can keep only aw-loop10 and delete every other project.'",
+      "detail": "The live Hub on :8010 has 11 projects. Delete all but proj-ff695d96 (aw-loop10), which holds the proven spec flow — 9 requirements, 5 tasks, 9 evidence rows — and is what the operator will drive to answer the 29 parked judgement tasks. Delete: proj-9eb82406 aw-loop9, proj-94f3f169 aw-loop8, proj-e6c1de74 aw-loop7, proj-c28f08df aw-loop6, proj-30d900a7 aw-loop5, proj-471e281a aw-e2e, proj-477dab47 aw-loop-4, proj-319e7dfd test2, proj-e109fc87 newtest, proj-44e9adba aw-testbed. Also delete aw-loop6's hand-minted credential row (run-ev6 / aw_run_loop6_evidence). Prefer the Hub's own delete API over raw SQL — if no such API exists, that absence is itself a finding worth recording. Afterwards confirm aw-loop10 still resolves and its spec document still renders.",
+      "verify": "GET /api/v1/projects returns exactly 1 project; aw-loop10's coverage endpoint still returns 9 requirements.",
+      "est_iterations": 1
     },
     {
-      "id": "q2-spec-flow-live",
-      "state": "core loop proven end-to-end for all three tasks; friction well treated as dry. task-1f82d976: propose -> approve -> build -> record_evidence -> verifier accept/reject -> approve -> merge -> reachable-from-main, all real, 5/6 requirements merged. task-0d3c8cb5 (digest delivery, FR-5/FR-8) driven 2026-08-15 16:0x: build -> record_evidence -> verifier rejected both (real gap: implementation has no window-end trigger or delivery event) -> approved anyway (sketch rigor, by design) -> confirmed live that has_rejected_evidence and the skipped-merge reason both surface correctly on the task response. task-553c2c37 (no-notification-lost, FR-6 exactly-once) driven 2026-08-15 ~16:0x, read live 17:2x: verifier correctly rejected weak test evidence (dict-keyed outcome check hides duplicate delivery) - third independent confirmation the review gate works. No new bug or spec conflict surfaced by any of the three.",
-      "title": "Drive the spec flow end to end in a fresh project, as a real operator",
-      "detail": "Create aw-loop10 at C:\\Users\\huida\\Documents\\aw-loop10 (outside this repo) against the Hub on :8010. Seed agents. Then drive the whole loop without shortcuts: create a spec document from the composer, let the agent interview you, confirm it calls submit_spec_document rather than summarising and stopping, read the rendered document, watch the rename, take it propose -> approve, derive tasks that declare the requirements they serve, build, record_evidence, accept the evidence as a can_accept_evidence agent, approve the task, and confirm the work is actually reachable from main. Record every friction and defect in .claude/autonomous/2026-08-15-spec-flow-findings.md with real evidence - run id, exact message, screenshot where the finding is visual. Operator pre-authorised as many aw-loop* projects as needed.",
-      "why_first_run_matters": "First-run friction can only be seen once. Do not reuse a project to save time."
+      "id": "Q2-test-speed",
+      "title": "Measure where the 7 minutes goes, and try pytest-xdist",
+      "status": "open",
+      "why": "Operator: 'the testing is taking way too long'. Cutting tests is one fix; making the suite faster is the other, and it costs no coverage. Prep found pytest-xdist is NOT installed and 147 hub test files run on one core.",
+      "detail": "Measure first, do not guess. Run with --durations=50 per chunk to find where time concentrates. Then pip install pytest-xdist into C:/Users/huida/AppData/Local/Programs/Python/Python311/python.exe and try -n auto. The fixtures look xdist-friendly — hub/tests/conftest.py:10 uses in-memory SQLite (per-process, so each worker is isolated) and _default_project_workspace gives each test its own tmp_path. Verify identical pass counts with and without -n before claiming it works; a parallel run that silently skips tests is worse than a slow one. Also check whether root pyproject.toml's addopts '-v --tb=short' costs measurable I/O on 360 tests.",
+      "verify": "Same passed/failed/skipped counts serial vs parallel, with wall-clock for both, recorded in the log. If xdist breaks fixtures, say so and record why rather than forcing it.",
+      "note": "If this works it compounds — every later iteration's verification gets faster. That is why it is second, not later.",
+      "est_iterations": 2
     },
     {
-      "id": "q3-judgement-evidence",
-      "state": "SECOND gap-check pass (20:2x-20:4x) found 5 MORE items sourced but never written, on top of the whole missing change the first pass (20:1x) found - see previous_action_result for full detail. hub-owns-the-spec-document 17.8, a-document-earns-its-name 9.4, a-requirement-knows-its-work 8.2/8.3/8.4 all now written up; 8.3 was answerable outright (queried the live DB) and ticked [x] in its own tasks.md. This pass used a materially stronger method than either prior one: item-by-item diff of each change's own tasks.md human-only section against judgement-evidence.md, not just 'does a section exist'. Every other change checked the same way matched exactly - no further gaps found by this method. Genuinely open now, all operator-only: run-without-a-git-repository 5.3 (pure visual read), the-spec-tool-reaches-the-agent 6.1/6.4/6.5, a-document-earns-its-name 9.3/9.4 (both need a live UI look), a-requirement-knows-its-work 8.1 (needs the build half of the loop), 8.2/8.4 (wording/policy judgement, evidence supplied), hub-owns-the-spec-document 17.1-17.4/17.6/17.8 (evidence supplied). Full history: the-interview-is-a-conversation 5.1/5.2/5.5 written up from existing run data (17:54). run-without-a-git-repository 5.1/5.2/5.5 driven live and answered (18:13). a-posture-that-survives-the-handoff 4.1-4.4 driven live and answered (18:31) - 4.2 also surfaced and fixed a real documentation bug (see q4). a-gate-that-only-evidence-opens 5.1-5.4 driven live and answered (18:46). answers-arrive-together 5.1-5.5 driven live and answered (18:59). the-hubs-procedure-outranks-an-installed-one 5.3-5.5 driven live and answered (19:16). declining-a-question 6.8-6.9 driven live and answered (19:28). blocked-and-conversation-binding 8.10-8.13 driven live and answered (19:41). the-interview-is-a-conversation 5.3/5.4 driven live and answered (19:57). the-spec-tool-reaches-the-agent 6.1-6.5 written up and gap-fixed (20:1x). hub-owns-the-spec-document 17.8, a-document-earns-its-name 9.4, a-requirement-knows-its-work 8.2/8.3/8.4 gap-fixed (20:2x-20:4x, this iteration).",
-      "title": "Capture the artefact for each human-only judgement task",
-      "detail": "About 40 open tasks across the 14 in-flight changes are operator judgement calls ('Is the placeholder pleasant?', 'Does the rename feel timely?'). A loop cannot tick them, and they are why nothing can be archived. While driving q2, capture what the operator needs to answer each one into .claude/autonomous/2026-08-15-judgement-evidence.md: one section per task id, quoting the task verbatim, with the rendered document, screenshot or measured timing attached. Goal is the operator clearing 40 judgement calls in one sitting instead of re-driving the product 40 times.",
-      "sources": [
-        "run-without-a-git-repository 5.3 (pure visual read, stays open regardless - no code or process change can close it)",
-        "the-spec-tool-reaches-the-agent 6.1 (document readability, evidence supplied), 6.4 (ten-minute turn timeout, product decision), 6.5 (no-conversation_id default behaviour, product decision)",
-        "a-document-earns-its-name 9.3 (panel move on rename, pure visual read), 9.4 (reordered acceptance table, evidence supplied)",
-        "a-requirement-knows-its-work 8.1 (needs the build half of the loop, not yet reached), 8.2 (drift wording, evidence supplied), 8.4 (retention policy, evidence supplied)",
-        "hub-owns-the-spec-document 17.1-17.4/17.6 (authoring feel, readability, interview parity, refusal actionability, Codex parity - all evidence supplied), 17.8 (skill-disposition-table read, evidence supplied)"
-      ]
+      "id": "Q3-conversation-sequence",
+      "title": "Fix the conversation-inheritance tie properly, with a sequence column",
+      "status": "open",
+      "why": "hub/tests/test_override_inheritance.py::test_the_most_recent_overrides_win fails ~50% in a full chunked run. The test is CORRECT; the code is wrong. A trustworthy suite is a precondition for Q5's audit — a loop culling tests cannot tell a flake from a test it broke.",
+      "detail": "DO NOT apply the one-line fix proposed in handoff 0050 (adding Conversation.id.desc()). Prep checked it and it does not work: Conversation.id is 'conv-' + short_id(), i.e. random, so id.desc() picks the later-created row only about half the time. It would make the query deterministic-looking while staying arbitrary. The real bug: hub/hub/conversations.py:72 orders by created_at.desc() alone, and two conversations created inside the same clock tick tie — on Windows the default timer granularity is ~15.6ms, so this hits real users, not just tests. Follow the codebase's own precedent: add an autoincrement `sequence` integer primary key to Conversation, exactly as TaskTransition and InboundQueueEntry already do, and read the reasoning already written at hub/hub/db/models.py:695-699. Order by sequence.desc(). Needs a migration in hub/hub/migrations/versions/ that guards for a missing table (see 0033/0034), and CLAUDE.md requires bumping the head assertions in BOTH hub/tests/test_migrations.py and hub/tests/test_project_persistence.py.",
+      "verify": "Add a regression test that creates two conversations with an identical created_at and asserts the later one wins. Mutation-check it: revert the ordering change and watch that named test fail. Then run the full hub suite three times and confirm test_override_inheritance passes every time.",
+      "est_iterations": 2
     },
     {
-      "id": "q4-fix-found-bugs",
-      "state": "done - all 3 known code defects fixed with regression tests: (2) merge-outcome-silent (13:29), (1) rejected-evidence-silent (13:43), (3) propose-completeness-ignores-board-tasks/duplication (committed 14:4x, verified pre-fix-fails/post-fix-passes). Plus (4), 18:31: q3's live drive of a-posture-that-survives-the-handoff 4.2 found the *implementation* is correct (per spec and its own regression test) but that change's own tasks.md task 4.2 and user-test-guide steps 3-4 described testing it the wrong way (cross-agent propagation, which is deliberately not what the feature does) - fixed the wording in openspec/changes/2026-08-13-a-posture-that-survives-the-handoff/tasks.md so the guide tests the real, correct scenario instead of describing working code as broken. No code changed for (4) - it was a documentation defect, not a code one. No further known defects queued; new ones found in future q2/q3 driving should still be filed here.",
-      "title": "Fix every defect q2 finds, each with a regression test",
-      "detail": "Operator directive: 'Find all the bugs, correct them.' Each fix needs a test that fails before and passes after - state both observations. Interleave with q2 rather than batching at the end: a defect found and fixed while the flow is live is verified in the same breath."
+      "id": "Q4-spec-ux-fixes",
+      "title": "Apply the six operator UX findings on the spec surfaces",
+      "status": "open",
+      "why": "Operator's first-named item: 'apply the fixes to the spec discussed in the last session'. All six are in .claude/autonomous/2026-08-16-operator-ux-findings.md, with verbatim operator quotes, file paths, and two verified against live data.",
+      "detail": "Read the findings document first — it is the brief. The six: (1) rendered document is too 'texty', colour carries no meaning [hub/hub/spec_render.py]; (2) document background is navy and ignores the app theme — must be fixed with inherited CSS variables only, because 2026-08-12-hub-owns-the-spec-document 16.12 forbids any external resource reference in the rendered document; (3) coverage labels are misleading — a requirement whose evidence was REJECTED reads as 'in_progress' and 'not_applicable', indistinguishable from active work; this is the answer to a-requirement-knows-its-work 8.1, which is NO; (4) the task board shows nothing about which requirements a task serves, although GET /tasks/{id} already returns requirement_ids, requirement_links and spec_document_id and spec_requirements.anchor is already '#FR-n' — a UI gap, not a data gap; (5) task cards are unreadable expanded, operator wants 'open the task like jira'; (6) generated tickets are far too coarse — one ticket carried 6 of 9 requirements on 42 words, and it linked FR-9 whose evidence was rejected, yet was approved and merged. Generation is hub/hub/spec_tasks.py, which mints whatever the authoring agent decided, so the ceiling has to come from charter guidance, a validator warning, or a split at mint time.",
+      "spec_round": true,
+      "review_criteria": "Does the proposal address all six findings or explicitly defer some with a reason? Does it respect the no-external-resource constraint on the rendered document? Does finding 3 introduce a genuinely new coverage state rather than renaming a label? Does finding 6's fix act at the right layer, given the Hub only mints what the agent decided? Is anything proposed that the operator did not ask for?",
+      "artifact": "openspec/changes/2026-08-16-<name>/ with proposal.md, design.md, tasks.md and spec deltas. STANDING DIRECTIVE: tasks.md must split agent-verifiable from human-only and emit a user test guide.",
+      "note": "Findings 1, 2 and 5 are visual judgements the loop CANNOT self-assess. Build them, then record in decisions_for_user that they need the operator's eyes. Do not tick a task claiming a visual improvement.",
+      "est_iterations": 8
     },
     {
-      "id": "q5-triage-in-flight",
-      "state": "done - all 14 changes triaged into .claude/autonomous/2026-08-15-triage.md: 13 verdicted 'archive (pending d1)' (only judgement calls left open), 1 (hub-owns-the-spec-document) verdicted 'resume (small)' (12.3 needs a D9 decision first, 16.8 is a test-only gap), 1 (hub-native-experience) verdicted 'drop (as a single change)' with a concrete split proposal for d2. Follow-up (2026-08-15 later iteration): section 14's 19-item mapping to its 2026-08-13 successors is now also done (same file, 'Section 14 mapping' section) - 3 items (14.11, 14.12, 14.14) genuinely undelivered, 2 partial, rest delivered or bookkeeping-blocked. No archiving performed - gated on the operator's d1/d2 reads as instructed.",
-      "title": "Triage the 14 in-flight openspec changes",
-      "detail": "For each, decide archive / resume / drop with a one-line reason, into .claude/autonomous/2026-08-15-triage.md. q1 proves at least one tasks.md has fallen behind its implementation, so check the code before believing any count. Give 2026-07-30-hub-native-experience (119 done / 69 open) particular attention: its sections 13 and 14 describe the runner/charter separation and requirement identifiers, evidence and coverage - all of which later, smaller changes appear to have delivered. Archive only what is genuinely complete."
+      "id": "Q5-test-audit",
+      "title": "Audit every test against the code and cut what does not earn its place",
+      "status": "open",
+      "why": "Operator: 'Check every test against the code see if they earn their place or if they need to be removed.' Authority granted: delete, on a stated bar, mutation-checked.",
+      "detail": "Write the bar FIRST, in the log, before deleting anything. Proposed bar — a test may be deleted only if it meets one of: (a) it asserts nothing the code can break (tautological, or asserts only on mocks it set up itself); (b) it duplicates another test's coverage exactly, and deleting it changes no mutation outcome; (c) it tests behaviour that no longer exists. A slow test is NOT grounds for deletion on its own — that is Q2's problem. For every deletion, log the test name, which bar clause it met, and the mutation check that proves the remaining suite still catches the defect the deleted test claimed to catch. Beware the trap already recorded in the autonomous-session skill: a green suite after deleting tests proves nothing by itself.",
+      "verify": "Per-deletion mutation check. Net test-count and wall-clock before/after. Every deletion reviewable as a diff on the autonomous branch.",
+      "scope": "hub/tests (147 files) and tests (20 files).",
+      "est_iterations": 10
     },
     {
-      "id": "q6-qol",
-      "state": "3 fixes shipped this session: (1) duplicate context-usage rows (309fef4), (2) create's refusal message names the alternative (fcedde6), (3) evidence rows carry their own rejection/acceptance reason inline via latest_review (1b9233a). The task-553c2c37 fallback drive (17:2x) surfaced no fourth candidate - treated as reasonably dry for now, revisit only if q2/q3 driving surfaces something new later.",
-      "title": "QoL improvements to AgentWeave overall",
-      "detail": "Only once the spec work is done. Operator: 'No new features just QoL improvements.' Prefer frictions observed first-hand in q2 over invented ones."
+      "id": "Q6-desktop-and-global",
+      "title": "Explore, then spec: a real desktop app with one global state",
+      "status": "open",
+      "why": "Operator: 'I also want a full app experience with agentweave no more opening on the browser' and 'agentweave should be global... if I ran agentweave from different folders it creates a different agentweave which is weird. Now that I want it to be a full app opening always restore the same state.'",
+      "detail": "These are ONE change, not two — a desktop app that opens a different database per launch folder is incoherent, so they must be specified together. Prep already found the root cause of the second half: hub/hub/config.py:9 sets database_url to 'sqlite+aiosqlite:///data/agentweave.db', a RELATIVE path resolved against the Hub process's working directory. Launch from a different folder and you get a different database and therefore a different AgentWeave. Note the multi-project architecture is already correct — src/agentweave/cli.py:828 registers Path.cwd() as a project, which is right; it is the Hub's own state that is wrongly per-folder. Also check src/agentweave/cli.py:176 and :857, which build 'Path.cwd() / hub' and so assume the caller is standing in the AgentWeave repo. Start with an EXPLORATION (openspec/explorations/), not a proposal: the problem is felt but the shape is not settled. Research Tauri, Electron, pywebview, and anything else current, against the existing FastAPI-serving-a-static-bundle architecture; web research is authorised. Weigh: install size, whether it stays pip-installable, code signing, auto-update, OS webview differences, and what a second toolchain costs a zero-runtime-dependency CLI. Then decide where global state should live on each OS. Then a spec round.",
+      "spec_round": true,
+      "review_criteria": "Does the exploration actually compare alternatives with evidence rather than assert a winner? Is the global-state location specified per-OS, with a migration path for people who already have a per-folder database they care about? Does it say what happens to an existing data/agentweave.db? Does the desktop shell choice state its rejected alternatives and why?",
+      "constraint": "NO new language toolchain may be installed this run (no Rust, no Node-for-Electron). Research and specify only; a prototype is allowed only if it needs nothing beyond pip. This is a pre-authorised default, not the operator's stated wish — if the spec concludes a toolchain is required, record that in decisions_for_user rather than installing it.",
+      "est_iterations": 10
     },
     {
-      "id": "q7-market-research",
-      "state": "done - openspec/explorations/2026-08-15-where-agentweave-fits.md written 17:2x, 5 web searches, sources cited inline. Honest conclusion: AgentWeave's three claimed differentiators (multi-agent collaboration, spec-driven dev, governance) have each been absorbed or commoditised since 2026-08-02 (Claude Code itself now ships Agent Teams + Dynamic Workflows; OpenSpec - which this repo's own CLAUDE.md mandates using - has 52k stars; governance trend is enterprise-compliance-shaped). What survives is narrower: durable cross-session state, addressable bound agent identity, and an operator-facing UI, none of which ephemeral in-session subagent features provide. Does not recommend dropping AgentWeave, per the operator's stated intent - recommends narrowing future positioning.",
-      "title": "Deep search: where AgentWeave fits",
-      "detail": "How people are actually working with AI now, how the market is shifting, what new technologies are emerging, what the big players are doing, and honestly where AgentWeave sits in that. Write openspec/explorations/2026-08-15-where-agentweave-fits.md. Operator: 'Be honest about it. My intention is not to drop agentweave but we can always evolve it and pivot it like we did from previous versions to this one.' This is the one item for which the operator has explicitly authorised deep web research."
-    },
-    {
-      "id": "q8-final-catchup-file",
-      "state": "reviewed end-to-end twice now: 20:1x (found 1 stale claim + 1 whole missing change) and 20:2x-20:4x (found 5 more items missing across 2 changes, using a stronger item-by-item method - see q3's updated state). overnight-catchup.md updated with a full entry both times, newest-first order maintained. 'Needs your decision' table still consistent with decisions_for_user (d1-d6). Two passes in a row each found real gaps the previous one missed, which argues the file genuinely needed this; a THIRD pass with the same item-by-item method is unlikely to find more since it already checked every change exhaustively. Standing: keep updating overnight-catchup.md every iteration.",
-      "title": "The catch-up file the operator asked for",
-      "detail": "Operator: 'Don't forget handoffs and resumes and also the final file so I can catchup on everything that happened.' Maintain .claude/autonomous/2026-08-15-overnight-catchup.md as the single thing to read first: what was done per iteration, what was found, what was decided, what broke, what is left, and every entry in decisions_for_user. Update it EVERY iteration rather than writing it at the end - an iteration that dies on quota must still leave the file current. Newest first. This is the deliverable, not a nicety."
-    },
-    {
-      "id": "q9-handoff-discipline",
-      "state": "done for this run - handoff-0049 finalized 21:2x (renamed from draft, real closing facts filled in, LATEST.md repointed). Standing rule remains standing for any future run.",
-      "title": "Handoffs and resumes, as the operator asked",
-      "detail": "Write a /handoff into .claude/handoffs/ when an openspec change completes, and at the end of the run - and update LATEST.md. Chain it to handoff-0047. Standing rule from memory: handoff cadence is 'only when asked, or when an openspec change is done' - the operator has now asked, so the end-of-run handoff is required regardless. On starting an iteration, read STATE.json first; the handoff is for the human, STATE.json is for the loop."
+      "id": "Q7-ui-gap-analysis",
+      "title": "What do popular harnesses have on the UI that AgentWeave lacks",
+      "status": "open",
+      "why": "Operator: 'After all of that is done if there still time and the loop is not done I want you to work on UI quality of life things.' Explicitly last.",
+      "detail": "The operator's example: 'When the agent is executing something, file edit, bash, things like that it all show in a work box without much explanation. T3 for example show the details of the things being executed with a different font and a icon which is really nice and give more insight on what's actually happening.' But the scope is deliberately WIDER than that one example — operator: 'that t3 is nice but go beyond compare t3 and other tools. What is nice to have on the UI that we do not have. Is there any functionality in the most popular harnesses that we lack? Investigate everything before implementing.' So: survey real, current tools — read open source where it exists, use the web where it does not. Produce a gap list ranked by what it would give a user, not by how easy it is. Only then propose. Note AgentWeave's Icon component wraps lucide-react and is the ONLY icon system — CLAUDE.md forbids introducing a second one, so any icon work uses it.",
+      "spec_round": true,
+      "review_criteria": "Is the survey based on evidence — code read, product used, documentation cited — or on recollection? Is the gap list ranked by user value? Does each proposed item say what it costs to build? Does anything proposed conflict with the single-icon-system rule or the existing theming?",
+      "est_iterations": 8
     }
   ],
+
+  "current": "Q1-projects",
+  "next_action": "The tree is clean and this STATE.json is already committed on hub-native-experience at its tip — just cut the branch autonomous/2026-08-16-app-and-test-reform from there and start. Open the log at .claude/autonomous/2026-08-16-app-and-test-reform-log.md. Then do Q1-projects: using the Hub API on http://127.0.0.1:8010 (bootstrap key is AW_BOOTSTRAP_API_KEY in hub/.env), delete the ten projects listed in Q1's detail field, keeping only proj-ff695d96 (aw-loop10). Then confirm GET /api/v1/projects returns exactly one project and that aw-loop10's spec coverage endpoint still reports 9 requirements. Log what API you used to delete, or record that none exists.",
+
   "limits": [
-    "Standard limits only: work on this dated branch, never push to master.",
-    "Never create .agentweave/, agentweave.yml or spec/ at the repository root. Test projects live outside the repo.",
-    "Stage paths explicitly. Never suppress stderr on staging commands - a swallowed error is how 1f79918 shipped an empty commit under a message describing three fixes.",
-    "Never mark a task complete on the strength of a plan existing. Only real, verified implementation closes a task.",
-    "Every tasks.md splits agent-verifiable from human-only and emits a user test guide.",
-    "The ci.yml question is settled - 'just push the branch'. Do not raise it again.",
-    "The requeue rule is 'any failed run, capped at 3'. Do not re-propose the narrow variant.",
-    "G5, the interview backstop, is a non-goal.",
-    "Evidence can be anything the model thinks shows its work is good. Only test agents can accept evidence; with no tester agent it all defers to the operator.",
-    "Derive constants, do not tune them to one monitor.",
-    "Use openspec, never the aw-spec skills, and never run AgentWeave against this repo.",
-    "Do not call the Agent tool, and do not use workflows or deep research, unless the user requests it. The user HAS requested deep web research, for q7 only.",
-    "Refresh last_heartbeat at every commit - see heartbeat_contract."
+    "Stay on the autonomous branch. No commits, merges or rebases onto hub-native-experience or master. Merging back is the operator's decision, made awake.",
+    "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Pushing the autonomous branch itself is required, not optional.",
+    "Nothing destructive beyond what is explicitly authorised. The ONLY authorised deletions are: the ten Hub projects named in Q1, aw-loop6's minted credential row, and test files that meet Q5's written bar with a mutation check.",
+    "Never mark work complete on the strength of a plan existing.",
+    "Every claim is measured or labelled unverified. If something could not be run, the log says so.",
+    "pip install into C:/Users/huida/AppData/Local/Programs/Python/Python311 is allowed (pytest-xdist). Installing a new LANGUAGE toolchain (Rust, Node-for-Electron) is NOT — record it as a decision instead.",
+    "This repository must never acquire an AgentWeave session: no agentweave.yml, no .agentweave/, no spec/ at the repo root. Operator confirmed: 'Yes no agentweave'. Use openspec/, never the aw-* skills.",
+    "Test projects live outside the repository.",
+    "STANDING DIRECTIVE: every tasks.md splits agent-verifiable from human-only and emits a user test guide.",
+    "Do NOT answer or tick the 29 parked judgement tasks in .claude/autonomous/2026-08-16-operator-decisions.md. A loop may add evidence beneath them; it may not tick them. Same for 17.1 and 17.3 in the UX findings.",
+    "The ci.yml question is settled — 'just push the branch'. Do not raise it again.",
+    "G5 (the interview backstop) is a non-goal.",
+    "Requeue rule is 'any failed run, capped at 3'.",
+    "Derive constants; do not tune them to this monitor. Operator: 'by measuring pixels aren't you making things a little bit too catered to my monitor?'",
+    "Icon is the only icon system (lucide-react). approve_tool_call keeps NO return annotation. Migrations guard for a missing table and bump BOTH head assertions.",
+    "Stage paths explicitly; never git add -A outside a scratch directory."
   ],
+
   "decisions_for_user": [
-    {
-      "id": "d1",
-      "question": "The ~40 human-only judgement calls themselves. q3 exists to put the artefact in front of you so you can answer them in one sitting; they cannot be answered by the loop.",
-      "blocking": "Not blocking the loop, but blocking the archive of 13 of the 14 in-flight changes."
-    },
-    {
-      "id": "d2",
-      "question": "2026-07-30-hub-native-experience has 69 open tasks and looks partly superseded by the smaller changes that followed it. q5's concrete proposal (2026-08-15-triage.md, now including the section-14 mapping): don't resume the whole thing (sections 9-12 are dead weight, closed by 5 already-archived successors) and don't archive it either - 13.4, 13.9, 13.11, part of 13.3, all of section 15, and section 14's three genuinely undelivered items (14.11/14.12: an in-place proposal/authoring mechanic that no successor built; 14.14: scope-discipline enforcement that exists only as charter prose, never as a built control) plus two small partial remainders (14.5's 'mark editorial' affordance, 14.13's missing derive-from-implementation and start-from-template on-ramps) are real undelivered work. Split whatever remains live in 13/14/15 into one or two new dated changes, then archive the umbrella. The call is yours.",
-      "blocking": "No"
-    },
-    {
-      "id": "d3",
-      "question": "Carried unanswered from handoff 0047: does an abandoned queue entry read as 'the Hub gave up' clearly enough to act on, and do two exit codes on one event read as informative or as noise? Both concern surfaces built this week that nobody has used in anger.",
-      "blocking": "No"
-    },
-    {
-      "id": "d4",
-      "question": "Carried unanswered since handoff 0044: should .claude/handoffs/ stay tracked? It is now 133 files.",
-      "blocking": "No"
-    },
-    {
-      "id": "d5",
-      "question": "q2 found a real conflict between two MUST requirements in the notify-window spec document itself: FR-7 ('delivered immediately regardless of its deadline', outside quiet hours) and FR-9 ('dropped: not delivered ... and not included in the digest', unqualified) contradict each other for a stale notification arriving outside quiet hours. builder implemented FR-7 literally and verifier correctly rejected the FR-9 evidence on exactly this ground (2026-08-15-spec-flow-findings.md, 'verifier reviewing real evidence'). Does FR-9 mean 'during quiet hours' implicitly, or does FR-7 need a staleness exception? This is a wording call on a test project's throwaway spec, not production - but it is the first real defect the review step has ever caught, so it is worth deciding rather than discarding.",
-      "blocking": "No"
-    },
-    {
-      "id": "d6",
-      "question": "findings.md finding 4: the minted spec directory slug can run to 66+ characters (e.g. 'notify-window-graded-notification-urgency-beyond-quiet-hours-boolean'), eating a third of Windows MAX_PATH before the project directory itself is counted. hub/hub/spec_naming.py's MAX_SLUG_LENGTH (232) is derived from the 255-char storage contract (SPEC_PATH_MAX_LENGTH), not from any path-practicality bound - investigated a principled fix this iteration and am punting rather than shipping it: the one piece of information that WOULD make a bound principled - the real filesystem depth the slug lands at - is only knowable at mint time (api/v1/spec.py::_mint_document_path has `workspace: ProjectWorkspace`, whose `.root` is an absolute Path), but that path means different things in the two deployment modes CLAUDE.md documents: in native mode it is the real host path (Windows MAX_PATH genuinely applies), in Docker mode it is a container-visible path under AW_WORKSPACE_ROOT that has no fixed relationship to the host path length at all, and the Hub cannot always tell which mode produced the workspace it is holding. A bound derived from workspace.root would be correct sometimes and silently wrong (either too strict on Linux hosts, or not strict enough to save a Windows host) other times - exactly the per-machine tuning 'limits' forbids, just laundered through a variable instead of a literal. Two ways to actually close this, both are calls for you: (a) accept a conservative fixed cap (e.g. 60-80 chars) as a UX judgement independent of any platform's exact MAX_PATH, restoring something like the UI's old 64-char bound but now shared with the MCP path too, or (b) leave it be - the 255-char contract is real and enforced, this is a cosmetic long-path nuisance on Windows native installs only, not a correctness bug, and nothing has actually failed because of it yet.",
-      "blocking": "No"
-    }
+    "CARRIED, unanswered since handoff 0050 — 12.3 (hub-owns-the-spec-document) needs a ruling, not an implementation: the task argues D9 should be AMENDED, because auto-binding the spec charter would make 'no charter' unreachable and contradicts the operator's 'Not necessarily I want to use the charter for spec. Is good practice but I can skip it.' Amend D9, or implement as written? Deprioritised by the operator's 2026-08-16 agenda; not in this run's queue.",
+    "CARRIED — d5: the FR-7 vs FR-9 contradiction the verifier found in the notify-window document. The document is throwaway but the wording question is real.",
+    "CARRIED — d6: the minted spec directory slug can run to 66+ characters. spec_naming.py's MAX_SLUG_LENGTH (232) derives from the 255-char storage contract, not from path practicality. Pick a fixed UX cap, or leave it.",
+    "CARRIED — should a spec document be allowed to be renamed TWICE? The path kept the agent's first phrasing while the title was later refined, so they now disagree in quality.",
+    "PRE-AUTHORISED DEFAULT set during prep, not by the operator: spec rounds are capped at 3. At round 3 without approval the artifact ships with its objections recorded here. Cost if wrong: a spec lands with an unresolved disagreement in it rather than being iterated further.",
+    "PRE-AUTHORISED DEFAULT set during prep: no new language toolchain may be installed for Q6. Cost if wrong: the desktop-app spec may recommend Tauri or Electron and stop one step short of a working prototype."
   ],
+
   "environment": {
-    "hub": "http://localhost:8010 - restarted 2026-08-15T16:39+01:00 (PID 22360) onto working tree at commit 1b9233a, current at restart time. Previous restart (16:00, PID 20744) went stale before this one because 1b9233a's changes were made to a dirty tree it never saw - see dead_ends. /health returns {\"status\":\"ok\"}. Restart again before trusting any live check against code committed after 16:39.",
-    "hub_start_command": "Win32_Process.Create, CommandLine 'C:\\Users\\huida\\AppData\\Local\\Programs\\Python\\Python311\\python.exe -m uvicorn hub.main:app --host 127.0.0.1 --port 8010', CurrentDirectory C:\\Users\\huida\\Documents\\projects\\AgentWeave\\hub. Detached, so it outlives the session.",
-    "python": "C:\\Users\\huida\\AppData\\Local\\Programs\\Python\\Python311\\python.exe. Bare 'python' on PATH lacks pytest_asyncio and fails at conftest import - a wrong interpreter reads as a broken suite.",
-    "suite_baseline": "Measured at prep on a40ac5b: hub chunk 1 631 passed 1 skipped, chunk 2 686 passed 9 skipped, chunk 3 and the CLI suite recorded in the prep report. Anything red beyond this baseline is yours.",
-    "pytest_note": "pytest hub/tests/ is about 7 minutes and exceeds the 600s cap - run it in three file chunks. pytest hub/tests/ tests/ together fails collection.",
-    "existing_projects": "aw-testbed, newtest, test2, aw-loop-4, aw-e2e, aw-loop5, aw-loop6, aw-loop7, aw-loop8, aw-loop9, aw-loop10. Keep aw-loop6 through aw-loop10. aw-loop6 holds a hand-minted credential run-ev6 / aw_run_loop6_evidence - delete that row if ever shared. aw-loop10 (proj-ff695d96, C:\\Users\\huida\\Documents\\aw-loop10) now has main_branch='master' set and master carries a real merge commit (e1ac86c) from the notify-window spec-flow proof - do not reset that repo without checking findings.md first. Operator credential for scripting against it: aw_live_58ab7d84a1bf7b34eb2d1b424875bacd (read from operator_credentials table, no CLI/HTTP bootstrap exists - itself a filed minor finding)."
+    "hub": "http://127.0.0.1:8010 — RESTARTED during prep at 2026-08-16T02:12 on current code (it had been running since 2026-08-15T11:46 and was 7 hub/hub commits stale). Healthy in 1s, all 11 projects intact.",
+    "restart_command": "Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{CommandLine='cmd.exe /c \"cd /d C:\\Users\\huida\\Documents\\projects\\AgentWeave\\hub && C:\\Users\\huida\\AppData\\Local\\Programs\\Python\\Python311\\python.exe -m uvicorn hub.main:app --host 127.0.0.1 --port 8010 > %TEMP%\\agentweave-hub.log 2>&1\"'}",
+    "interpreter": "C:/Users/huida/AppData/Local/Programs/Python/Python311/python.exe",
+    "auth": "Bearer token = AW_BOOTSTRAP_API_KEY in hub/.env (40 chars). Read it with python, not grep -oP — grep -P is unavailable in this Git Bash.",
+    "test_chunking": "pytest hub/tests/ is ~7 minutes and exceeds the 600s command cap — run it in file chunks, or in the background. pytest hub/tests/ tests/ together fails collection. This may become unnecessary if Q2 lands."
   },
+
   "dead_ends": [
-    "Git Bash `date` on this machine prints UTC but labels it +0100, so it reads one hour EARLIER than real local time while claiming to be local. PowerShell Get-Date is correct. This matters more than it looks: a last_heartbeat stamped from Git Bash lands an hour in the FUTURE, the driver computes a negative age, concludes a live session holds the branch, and stands down until real time catches up. ALWAYS stamp last_heartbeat from PowerShell (Get-Date -Format 'yyyy-MM-ddTHH:mm:sszzz') or from Python's datetime.now().astimezone().",
-    "git add on a path that was deleted and already unstaged aborts the whole add and stages nothing.",
-    "npx openspec status --change rejects names starting with a digit; npx openspec archive accepts them. Do not conclude archiving is blocked.",
-    "openspec archive prefixes the archive date, producing 2026-08-15-2026-08-13-... in a repo that already dates change names. Rename after archiving.",
-    "Keep .ps1 files ASCII-only. PS 5.1 reads BOM-less UTF-8 as ANSI and an em dash inside a quoted string breaks parsing several tokens away. Syntax-check with Parser::ParseFile, from the repo root - from hub/ the relative paths resolve to nothing and it reports a spurious FAIL.",
-    "PowerShell 5.1 Add-Content -Encoding utf8 writes a BOM. Use UTF8Encoding($false).",
-    "Editing a file with Python newline='\\n' when git has it as CRLF shows as modified with an empty --numstat. git checkout -- it; it is whitespace-only.",
-    "Register-ScheduledTask reports LastTaskResult 267011 before a task has ever run - a stale slot, not an error. 267009 means currently running.",
-    "Event rows are in event_logs, payload column data.",
-    "hub/agentweave.db is a stray 0-byte file, untracked, named in the last seven handoffs. The live database is hub/data/agentweave.db.",
-    "Ending an autonomous-driver iteration with 'a background Monitor/Task will notify me when the builder/verifier run finishes' does not work: each Scheduled-Task firing is a brand-new process with no memory of anything a previous firing started, so the notification has nowhere to land and the whole turn is wasted. Three consecutive iterations (16:51, 17:06, 17:21 on 2026-08-15) each spawned a wait and ended immediately, while the run they were 'waiting' on had actually already finished at 16:09 - nobody checked the live Hub state instead of trusting the stale in-session assumption. If a run needs watching, poll synchronously within the same iteration (block on GET /tasks/{id} or /spec/evidence in a loop with sleeps, inside the one turn) until it completes or a firm timeout is hit, or better: before assuming a task is 'still pending', GET its current state from the Hub first - a prior iteration may have already finished the drive and just failed to log it.",
-    "The Hub is started as plain `uvicorn hub.main:app`, no `--reload`. It does NOT pick up code changes while running - a commit that changes hub/hub/ behaviour is invisible to the live server until it is killed and restarted (Win32_Process.Create, same command line, from hub/). Discovered 2026-08-15T16:00 after 6 commits' worth of hub/hub/ fixes (95f8fa4 through fcedde6) were verified only by pytest, not live, and the running Hub (up since 12:21) silently kept serving a40ac5b's pre-fix behaviour the whole time. Restart before any live-Hub verification of code changed since the last restart, every time - do not assume a Hub that answers /health is running current code."
+    "Handoff 0050's proposed one-line flake fix (Conversation.id.desc()) DOES NOT WORK — ids are random. Verified during prep. See Q3.",
+    "cd inside a Bash tool call persists across calls and breaks subsequent relative paths. Re-cd to the repo root or use absolute paths.",
+    "npx openspec archive prefixes the archive date, producing 2026-08-16-2026-08-13-… — rename after, with plain mv (git mv refuses a directory git does not track), then git add -A openspec/.",
+    "Bare `python` on PATH lacks pytest_asyncio — use the Python311 interpreter above.",
+    "Git Bash `date` prints UTC while labelling it +0100.",
+    "Reading a response field by the wrong name looks exactly like a broken feature. Four suspected defects in an earlier session were all this. Check the response schema before believing a surface is broken.",
+    "Keep .ps1 files ASCII-only — PowerShell 5.1 reads a BOM-less UTF-8 file as ANSI and an em dash inside a double-quoted string corrupts the quoting.",
+    "A loop's 'clean suite' claim is only as good as its chunk boundaries. Different groupings expose different flakes."
   ],
-  "operator_departure_note": "Operator message at ~13:05, verbatim: 'I'm going to leave. Run the loop until 10PM. Don't need to keep this session open if this is going to be a problem. Still follow what we defined. Don't forget handoffs and resumes and also the final file so I can catchup on everything that happened. With this intensive use you might run into quota limits. If this happens program a restart for the next window. Bye'",
-  "quota_policy": "If an iteration dies on a quota/rate limit: DO NOTHING SPECIAL. The Scheduled Task fires every 15 minutes and never unregisters on a failed iteration - it only unregisters past stop_at or with no STATE.json. So the retry loop IS the restart, and it self-heals when the window reopens. Record the quota failure in the work log with its timestamp so the gap is explicable in the morning, and do not burn the remaining budget re-trying inside one iteration.",
-  "handover_note": "Interactive session ended 2026-08-15T12:22:47+01:00. last_heartbeat is deliberately stale so the next firing takes over immediately instead of waiting out the 25-minute grace window."
+
+  "prep_notes": {
+    "prepared_at": "2026-08-16T02:15+01:00",
+    "prepared_by": "/autonomous-prep, operator awake and answering",
+    "created_this_session": "Nothing — the operator asked for spec rounds to be run BY the loop, so no artifact was pre-written. The runway was fixed instead: the stale Hub was restarted, and the handoff's proposed flake fix was checked and found wrong before the loop could spend an iteration on it.",
+    "reordering": "The operator granted reorder authority. Their stated order was: spec fixes, tests, environment, desktop app, global state, UI. Actual order hoists the two cheap compounding items first — Q1 environment cleanup (trivial, removes noise from every later live check) and Q2 test speed (if xdist works, every later iteration verifies faster) — then Q3 flake fix, because Q5's audit cannot distinguish a flake from a test it broke. Desktop and global were MERGED into Q6: a desktop app that opens a different database per launch folder is incoherent, so they must be specified together. UI stays last, as the operator specified.",
+    "still_unknown": "Whether xdist survives the fixtures (Q2 measures it rather than assuming). Whether finding 6's ticket-granularity fix belongs in the charter, a validator, or mint time (Q4's spec round decides). Which desktop shell wins (Q6's exploration decides)."
+  }
 }
