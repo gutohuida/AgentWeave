@@ -2553,3 +2553,79 @@ first — read AgentWeave's own UI code, then research current popular agent/cod
 by the operator as one example, explicitly not the only one) for functionality AgentWeave's UI lacks,
 evidence-based, ranked by user value, before proposing anything. `est_iterations: 8`, `spec_round:
 true`. Time remaining to `stop_at` (18:00) is comfortable — about four hours as of this entry.
+
+## Entry 31 — 14:18 — Q7-ui-gap-analysis: SURVEY complete, iteration 32
+
+Per the item's own `detail` ("Investigate everything before implementing"), did the survey pass
+only — no proposal/design/tasks this iteration.
+
+**Read directly, not inferred:** `AgentOutputPanel.tsx`, `AgentTimeline.tsx` (the turn-grouping,
+fold/unfold, and `WorkBlockDisclosure`/`WorkRow` tool-call rendering the operator's T3 comparison is
+actually about), `AgentActivityTab.tsx`, `ActivityLog.tsx`, `EventRow.tsx`, `AccountingPanel.tsx`,
+and grepped `hub/ui/src` and `hub/ui/package.json` for markdown-rendering deps, `dangerouslySetInnerHTML`,
+and command-palette/global-keydown patterns.
+
+**Two findings surfaced directly from the code, not from comparison:**
+1. **Zero markdown rendering anywhere in the live conversation surface.** `hub/ui/package.json` has
+   no `react-markdown`/`marked`/`remark`/syntax-highlighter dependency; grepped for
+   `dangerouslySetInnerHTML` across `hub/ui/src` — zero hits. Every message and every tool-call label
+   in `AgentTimeline.tsx` renders through `whitespace-pre-wrap` on raw `entry.content` — code blocks,
+   bold, lists, links all show literal markdown syntax. The Hub's own `spec_render.py` (built this run
+   under Q4) renders markdown server-side, but only for spec documents, not the conversation every
+   session actually touches.
+2. **The `WorkBlockDisclosure`/`WorkRow` tool-call rendering the operator's T3 comparison points at is
+   real and structurally sound (grouped, foldable, individually expandable — already close to what
+   Cline/Cursor do) but every tool type renders identically: one fold icon, monospace text label,
+   `entry.content || 'Tool call'`, no per-tool icon, and — compounding finding 1 — no diff view for
+   file edits, just concatenated raw text.
+
+**Web research (WebSearch, 2026-08-16), secondary sources, cited per-claim in the exploration doc:**
+Cursor (Composer diffs, Mission Control grid view for concurrent agents), Cline (syntax-highlighted
+diffs, per-tool-call checkpoints, spend-limit/autonomy dial in the composer), Windsurf/Cascade
+(automatic in-chat todo lists backed by a persistent `plan.md`, Wave 12), Claude Code CLI (TodoWrite,
+diff review, `/usage` per-category breakdown), T3 Chat (named markdown/code formatting and keyboard
+shortcuts as core features), OpenHands/Devin (multi-agent dashboard framing), and three third-party
+token-tracking tools (evidence that per-turn/per-session cost display is something people reach for an
+add-on for when a tool's own UI doesn't show it close to the work).
+
+**Wrote `openspec/explorations/2026-08-16-ui-gap-analysis.md`** (228 lines): a "what AgentWeave
+already does" baseline section (so the later spec round doesn't propose rebuilding what exists — color
+identity, structured turns, operator-in-the-loop banners, the accounting panel, the SSE activity feed,
+the Q4-built task drawer), then 7 gaps ranked by user value with evidence, comparison, a rough build
+cost, and an explicit icon-system note (`Icon`/lucide-react only, per CLAUDE.md) on each:
+1. No markdown rendering at all (highest value — evidenced directly, affects every message)
+2. Tool-call rendering is type-blind, no diff view (the operator's own named example, refined against
+   the actual code rather than taken at face value)
+3. No global command palette
+4. No persistent in-chat plan/todo list (flagged as the architecturally most expensive item, which is
+   why cost is discussed even in a value-ranked list)
+5. No per-conversation/per-turn cost display (Accounting panel is project-scoped only)
+6. No cross-agent "all runs at a glance" grid view
+7. Spend-limit/autonomy composer dial — flagged LOWER CONFIDENCE, secondary-source only, not checked
+   against AgentWeave's own `Composer.tsx`/`ComposerModelControls.tsx` this pass, may already be
+   partially covered by the existing `PERMISSION_MODE_CONTROL` pill
+
+Section 3 states explicitly what this pass does NOT do: no proposal/design/tasks, no cost estimate
+firmer than "rough" for items needing a closer read first (2b's diff view depends on what each
+runner's edit-tool payload actually carries; 5's per-turn grain depends on what the accounting API
+already returns — neither checked this pass), and Gap 7's lower-confidence flag is explicit rather
+than presented at the same weight as the others.
+
+**Verification:** every "read directly" claim above is grounded in files actually opened this
+iteration (`Read`/`Grep` tool calls, not recollection); the markdown-rendering and command-palette
+absences were confirmed by grep returning zero hits, not by not looking. Web claims are attributed to
+their source and flagged as secondary (comparison/guide sites, not first-party docs fetched directly)
+per the exploration's own confidence framing — consistent with `review_criteria`'s "based on evidence
+... or on recollection?" bar.
+
+**Elapsed:** one iteration.
+
+**Next:** Q7's AUTHOR pass — read `openspec/explorations/2026-08-16-ui-gap-analysis.md` (ideally cold,
+in a fresh iteration) and write `proposal.md`/`design.md`/`tasks.md` under
+`openspec/changes/2026-08-16-<name>/` per `spec_round: true`. Scope the proposal to what the
+exploration's evidence actually supports — gaps 1-3 are the best-evidenced and lowest-uncertainty;
+gap 4 needs its own design discussion per the exploration's own flag; gap 7 needs a closer code read
+before it's proposed as a finding rather than a maybe. Standing directive still applies: tasks.md
+splits agent-verifiable from human-only work and emits a user test guide — and per Q4/Q4b's precedent,
+anything visual (does a new icon/diff view actually look right) is human-only, not something this
+loop self-ticks. Time remaining to `stop_at` (18:00) is about 3h40m as of this entry.
