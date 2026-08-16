@@ -503,3 +503,59 @@ tonight (confirmed: N2's design D8 states explicitly no task is read or written 
 change). `next_action` set to N2b's own round 1: author `proposal.md`/`design.md`/`tasks.md`/spec
 delta in `openspec/changes/`, grounded in N1's two recommendations above rather than re-deriving them,
 then round-robin per `spec_round_protocol`.
+
+## Entry 5 — N2b round 1 (author)
+
+Authored `openspec/changes/2026-08-16-the-board-scoped-by-document/` — `proposal.md`, `design.md`,
+`tasks.md`, and a `task-lifecycle-governance` spec delta. Grounded directly in N1's sections 4-5 and
+N2's design D8 handoff, re-derived nothing.
+
+**Read before designing, not assumed:** `hub/hub/api/v1/tasks.py`'s `list_tasks` (only `agent`,
+`status`, `offset`, `limit` today); `hub/ui/src/api/tasks.ts`'s `useTasks()`, called with no
+arguments from three other places besides the board (`App.tsx`, `OverviewPage.tsx`,
+`QualityHealthPanel.tsx` — confirmed by grep, all three want the *full* task list, which is why the
+exclusion had to be opt-in rather than a new default); `TasksBoard.tsx`'s existing
+`activeTaskIds`/`taskFilterStore` mechanism (client-side membership filter over whatever `useTasks()`
+returned); `SpecCoverageBar.tsx`'s `onOpenTasks` wiring through `SpecDocumentPanel.tsx` to
+`App.tsx:352-355`; `run_task_binding.TERMINAL_FOR_BINDING = ("approved", "rejected")`, already
+imported in `tasks.py` — confirmed by reading the file's own import block, not assumed; `Task.
+spec_document_id` (indexed, nullable) and `SpecDocument.phase`/`spec_lifecycle.ARCHIVED` (from N2,
+already landed this session).
+
+**The one real design decision, not just plumbing:** whether the archived-and-terminal exclusion
+belongs at `GET /tasks`'s *default* (every caller gets it) or behind an opt-in parameter only the
+board's own fetch requests. Traced the alternative through before rejecting it: if the exclusion
+applied by default, the MCP `list_tasks` tool and the Overview/Quality pages would silently start
+losing rows with no code change on their part, and — the concrete bug, not a hypothetical one — the
+existing `SpecCoverageBar` task-count links (which pass specific task ids into `activeTaskIds` and
+expect `TasksBoard` to find them inside whatever `useTasks()` returned) would show "Showing N tasks"
+banners for documents that had since been archived while displaying zero of them, because the
+excluded rows would never have reached the client to be filtered by id in the first place. Design D1
+solves this with two independent, `elif`-ordered query parameters (`spec_document_id` always shows
+everything; `exclude_archived_completed` defaults `false` and is opt-in) rather than one default
+behaviour change — every existing caller of `GET /tasks`, agent-facing or UI, is unaffected unless it
+explicitly asks for the new behaviour.
+
+**New affordance kept separate from `SpecCoverageBar` rather than folded in**, because that
+component returns `null` when a document has no requirements and no diagnostics
+(`SpecCoverageBar.tsx:87`) — a condition unrelated to whether the document declared tasks. Folding
+the new "N tasks declared by this document" link inside that early return would hide it exactly when
+it is least discoverable any other way. A second, independent `SpecDocumentTasksLink.tsx` with its
+own null-guard avoids coupling two facts that are not actually related.
+
+**Corrected one filename assumption while writing `tasks.md`**: initially referenced
+`hub/tests/test_tasks_api.py` and a nested `hub/ui/src/components/.../__tests__/` layout by pattern-
+matching N2's tasks.md without checking. Listed the actual directories before finalizing: the backend
+file is `hub/tests/test_tasks.py` (confirmed present), and every UI test in this repo lives flat
+under `hub/ui/src/__tests__/` — including `tasksBoardFilter.test.tsx`, which already tests exactly
+the `activeTaskIds` mechanism this change extends, so task 3.5 targets it directly instead of
+inventing a new file. Fixed before this was committed, not left for round 2 to catch.
+
+**Not yet done — this is round 1 only.** `npx openspec validate --changes --strict` is clean (19/19,
+this change included). No code has been touched; `hub/hub/api/v1/tasks.py`,
+`hub/ui/src/api/tasks.ts`, `TasksBoard.tsx`, and the new `SpecDocumentTasksLink.tsx` all remain as
+they were at N2's implementation commit. Per `spec_round_protocol`, the next iteration reads this
+change **cold** — without re-deriving the reasoning above from memory, verify it independently
+against the actual files — and either approves (moving straight to implementation, since round 1 is
+below the 3-round cap) or raises objections for round 2. `current` stays `N2b-task-board-at-scale`;
+`next_action` set to N2b round 2 (cold review).
