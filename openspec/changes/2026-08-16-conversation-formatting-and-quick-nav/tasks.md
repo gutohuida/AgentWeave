@@ -64,11 +64,14 @@ No database migration, no backend route change.
 - [ ] 3.4 Tests: a `payload.input` of `'{"old_string":"foo","new_string":"bar"}'` (well-formed JSON,
       the shape `tool_use_event` actually produces per D2) renders added/removed lines with the
       expected content and tone classes. A `payload.input` that is not valid JSON, one with
-      `truncated: true`, and one that parses but has only `old_string` (a `Write`-shaped payload, no
-      `new_string`) all fall through to the unchanged raw-text rendering — three separate cases, not
-      one collapsed test, since each is a distinct reason to decline. Mutation-check: comment out the
-      `truncated` guard, confirm a truncated fixture wrongly attempts a diff on possibly-cut JSON
-      (test fails), reinstate.
+      `truncated: true`, one that parses but has only `old_string` and no `new_string` (a synthetic
+      fixture for the "missing key" case, not any real tool's actual shape), and a real
+      `MultiEdit`-shaped payload (`'{"file_path":"x","edits":[{"old_string":"foo","new_string":"bar"}]}'`
+      — `old_string`/`new_string` nested inside `edits`, absent at the top level, per
+      `hub/hub/runner_parsing.py:264-272` and design.md's documented limitation) all fall through to
+      the unchanged raw-text rendering — four separate cases, not one collapsed test, since each is a
+      distinct reason to decline. Mutation-check: comment out the `truncated` guard, confirm a
+      truncated fixture wrongly attempts a diff on possibly-cut JSON (test fails), reinstate.
 
 ## 4. Command palette (D3) — agent-verifiable
 

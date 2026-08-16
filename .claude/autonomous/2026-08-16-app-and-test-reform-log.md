@@ -2805,3 +2805,47 @@ change needed; neither delta names `MultiEdit` specifically, so the requirement 
 overclaim). Small, targeted edit, not a rewrite. Then a fresh cold REVIEW round 2 the iteration after,
 same as this one. Round 3 is the last possible round per the gate. Time remaining to `stop_at`
 (18:00) is about 3h10m as of this entry.
+
+---
+
+## Entry 34 — 2026-08-16T15:01+01:00 — Q7 REVISE round 2 (iteration 35)
+
+**AUTHOR pass**, applying the three fixes Entry 33's cold review requested to
+`openspec/changes/2026-08-16-conversation-formatting-and-quick-nav/`. Targeted edits, not a rewrite,
+per the review's own recommendation.
+
+1. **`design.md` D2, choice made explicitly:** picked "name it as a known, deliberately out-of-scope
+   limitation," not "design real per-edit `MultiEdit` handling" — the latter is genuine new scope
+   (iterate a nested array, decide how N diffs render in one work row) that the review flagged as a
+   real decision to record, not default into. The diff-view paragraph now says the structural check
+   matches keys "at the top level" (was ambiguous before) and a new paragraph states plainly, with
+   the `hub/hub/runner_parsing.py:264-272` citation, that `Edit` matches and `MultiEdit` does not —
+   `old_string`/`new_string` live inside `MultiEdit`'s `edits` array, never at `payload.input`'s top
+   level, so a real `MultiEdit` call safely falls through to the existing raw-text fallback. The
+   "Not built" list at the end of the D2 section now names per-edit `MultiEdit` diffing alongside the
+   two exclusions already there (full side-by-side diff, non-edit-family tools).
+2. **`tasks.md` 3.4's mislabelled fixture:** the payload with only `old_string` is no longer called
+   "a `Write`-shaped payload" (Write's real shape is `{file_path, content}`, matching neither key) —
+   relabelled as a synthetic fixture for the generic missing-required-key case, not a claim about any
+   real tool's shape.
+3. **Added a fourth 3.4 case per choice 1's extension:** a genuinely `MultiEdit`-shaped fixture
+   (`{"file_path":"x","edits":[{"old_string":"foo","new_string":"bar"}]}`) added to the fallback
+   test list, with a citation back to `runner_parsing.py:264-272` and the new design.md limitation
+   paragraph, so the "falls back safely" claim is actually exercised against `MultiEdit`'s real shape
+   rather than left unverified as it was in round 1.
+
+No `spec.md` delta touched — round 1's review already confirmed neither delta names `MultiEdit`
+specifically, so the requirement text itself never overclaimed; only `design.md`'s prose and
+`tasks.md`'s test-fixture description needed correcting.
+
+**Verified:** `npx openspec validate 2026-08-16-conversation-formatting-and-quick-nav --strict`
+passes clean after the edit. `git diff` reviewed in full — only the two intended files touched, no
+stray edits.
+
+**Elapsed:** one iteration.
+
+**Next:** a fresh iteration performs the cold REVIEW round 2 — the second-to-last possible round
+under the 3-round gate. If it approves, `next_action` moves to `tasks.md` section 1 implementation.
+If it finds a new objection, round 3 (REVISE) follows, and round 3's REVIEW is the last round
+regardless of outcome, same gate Q6 hit. Time remaining to `stop_at` (18:00) is about 2h59m as of
+this entry.

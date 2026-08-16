@@ -68,12 +68,21 @@ All from `lucide-react` — the existing `Icon` component's only backing set, pe
 icon dependency.
 
 **Diff view: only for tools whose `payload.input` parses to an object carrying both `old_string`
-and `new_string`** (`Edit`, `MultiEdit`'s per-edit entries) — this is a structural check on the
-parsed JSON, not a tool-name allow-list, so it degrades correctly if a future tool reuses the same
-shape or an existing one changes its schema. Parse `payload.input` with `JSON.parse` inside a
-`try`/`catch`; on parse failure, on `payload.truncated === true` (a cut string is not valid JSON and
-must not be diffed against a lie), or when the parsed object lacks both keys, render the existing
-raw-text fallback unchanged — the diff view is additive, never a required path.
+and `new_string` at the top level** — this is a structural check on the parsed JSON, not a
+tool-name allow-list, so it degrades correctly if a future tool reuses the same shape or an
+existing one changes its schema. Parse `payload.input` with `JSON.parse` inside a `try`/`catch`;
+on parse failure, on `payload.truncated === true` (a cut string is not valid JSON and must not be
+diffed against a lie), or when the parsed object lacks both keys, render the existing raw-text
+fallback unchanged — the diff view is additive, never a required path.
+
+**`Edit` matches this check; `MultiEdit` does not, by design of this change, not by oversight.**
+`MultiEdit`'s real payload (`hub/hub/runner_parsing.py:264-272`) is `{file_path, edits: [{old_string,
+new_string, replace_all}, ...]}` — `old_string`/`new_string` live one level down, inside each entry
+of the `edits` array, never at `payload.input`'s top level. The structural check as specified does
+not reach into that array, so a `MultiEdit` call always falls through to the raw-text fallback —
+safely (no crash, no wrong diff), just without a diff. Rendering N per-edit diffs for `MultiEdit` is
+real but separate scope, alongside the other exclusions in "Not built" below; only `Edit`'s single
+top-level pair is handled by this change.
 
 **Diff library: `diff` (jsdiff).** Chosen over hand-rolling a line/word diff because line-diff
 correctness (matching common prefixes/suffixes, not just a naive split) is exactly the kind of
@@ -83,9 +92,10 @@ removals with the existing `--green`/`--red` status-hue tokens already used for 
 (`hub-workspace-shell`'s "hue is reserved for meaning" requirement — a diff is a canonical case of
 meaningful hue, not decoration).
 
-**Not built:** a full editor-style side-by-side diff, or a diff for tools other than the edit
-family (e.g. structured `Bash` stdout/stderr formatting). Both are real but separate scope; only the
-one gap the survey evidenced (no diff view for a file edit, T3/Cline's named comparison) is built.
+**Not built:** a full editor-style side-by-side diff, a per-edit diff for `MultiEdit`'s `edits`
+array (see above), or a diff for tools other than the edit family (e.g. structured `Bash`
+stdout/stderr formatting). All are real but separate scope; only the one gap the survey evidenced
+(no diff view for a file edit, T3/Cline's named comparison) is built.
 
 ## D3. Command palette — scope and library
 
