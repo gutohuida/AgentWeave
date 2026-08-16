@@ -192,3 +192,38 @@ failure as a stale Hub, and it looks exactly like a fix that did not work.
 The claim that Playwright works headless in this environment is **untested** — it is the reason Q4a's
 verify step requires proving the harness is honest by capturing before and after a deliberate CSS
 change and confirming the two PNGs differ.
+
+## Entry 1b — 02:23 — delete-project filed; Q4a bounded; operator asleep
+
+Written by the interactive session between firings, using the driver's claim/edit/release protocol.
+**This is the operator's last input before sleeping.** Everything after this entry is unattended.
+
+**Q4b — delete a project through the product, not through SQL.** Filed at the operator's direct
+request, prompted by what Q1 found an hour earlier: no project-delete API exists anywhere in the
+Hub, so honouring "remove these ten test projects" meant stopping the Hub, backing up the database
+and sweeping 7,788 rows across 26 tables by hand. That is a gap the operator will hit again on their
+next test project. Placed after Q4a so its confirmation dialog and empty state are the screenshot
+harness's first real exercise — simple enough that a capture either obviously works or obviously
+does not, which is the right thing to prove a harness on before trusting it on Q4's taste questions.
+
+**The constraint that matters more than the feature**, restated here because a log entry is read and
+a JSON field is skimmed: **deleting a project must delete database rows only. It must never touch
+the workspace directory on disk.** An AgentWeave project points at a real working tree containing
+the operator's actual source code. A delete that removes a user's repository is the worst bug this
+product could ship. Q4b requires a test asserting the directory survives, and requires that test to
+be mutation-checked. Whether the `.agentweave/project.json` binding marker inside that directory
+should also be removed is a separate, smaller question, to be decided explicitly and written down.
+
+**Q4a is now bounded.** Operator: *"Playwright can be tested if it does not work no problem ill see
+it in the morning. But try and make it work."* So the harness gets a genuine attempt — headless
+flags, a different browser channel, `channel='chrome'` against an existing install — capped at **two
+iterations**. Past that: record the exact failure and error, mark Q4a blocked, and go build Q4b and
+Q4 blind. The work the harness was meant to verify matters more than the verification. A night spent
+on tooling that produced no product change would be the wrong outcome, and this line exists so no
+iteration talks itself into that.
+
+**What a reviewer should distrust:** the queue has now been edited twice mid-run by an interactive
+session. Both edits are in the log and both used the heartbeat protocol, so no iteration lost work —
+but the estimates in `STATE.json` were written for a seven-item queue and it now has nine. It will
+almost certainly not finish by 12:00, and that is expected rather than a failure: the ordering is
+what matters, and the cheap compounding items are first.
