@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -33,6 +33,26 @@ vi.mock('@/api/tasks', async (importOriginal) => {
 
 vi.mock('@/api/agents', () => ({
   useAgents: () => ({ data: [{ name: 'worker' }] }),
+}))
+
+vi.mock('@/api/spec', () => ({
+  useSpecDocuments: () => ({
+    data: {
+      documents: [
+        {
+          id: 'spdoc-1',
+          path: 'spec/example.html',
+          title: 'Example',
+          kind: 'baseline',
+          phase: 'approved',
+          rigor: 'sketch',
+          content_digest: null,
+          explore_closed: false,
+          updated_at: '2026-08-16T00:00:00Z',
+        },
+      ],
+    },
+  }),
 }))
 
 function makeTask(overrides: Partial<Task> = {}): Task {
@@ -81,7 +101,8 @@ describe('a card shows what it is checked against', () => {
     )
 
     expect(screen.getByTestId('task-serves-task-1')).toBeTruthy()
-    expect(screen.getByText('FR-1')).toBeTruthy()
+    // "FR-1" now also renders as a header chip (F4) — scope this assertion to the "Serves" block.
+    expect(within(screen.getByTestId('task-serves-task-1')).getByText('FR-1')).toBeTruthy()
     expect(screen.getByText(/It settles the account/)).toBeTruthy()
     // The prose survives, relabelled so the two are not confused for each other.
     expect(screen.getByText('Requirements (as written)')).toBeTruthy()
@@ -121,5 +142,135 @@ describe('a card shows what it is checked against', () => {
 
     expect(screen.queryByTestId('task-serves-task-1')).toBeNull()
     expect(screen.getByText('Requirements (as written)')).toBeTruthy()
+  })
+})
+
+/**
+ * F4's other half: which requirement(s) a task serves, visible on the collapsed card, and a way
+ * to land on the requirement in its document from there.
+ */
+describe('the requirement chip row (F4)', () => {
+  function renderCollapsed(task: Task, onOpenRequirement?: (path: string, anchor: string) => void) {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    return render(
+      <QueryClientProvider client={client}>
+        <TaskCard task={task} onOpenRequirement={onOpenRequirement} />
+      </QueryClientProvider>,
+    )
+  }
+
+  it('renders one chip per requirement_ids entry without expanding the card', () => {
+    renderCollapsed(
+      makeTask({
+        requirement_ids: ['FR-1', 'FR-2'],
+        requirement_links: [
+          {
+            identifier: 'FR-1',
+            requirement_id: 'spreq-a',
+            document_id: 'spdoc-1',
+            state: 'active',
+            statement: 'Settle to the cent',
+          },
+          {
+            identifier: 'FR-2',
+            requirement_id: 'spreq-b',
+            document_id: 'spdoc-1',
+            state: 'active',
+            statement: 'Round consistently',
+          },
+        ],
+      }),
+    )
+
+    expect(screen.getByTestId('task-requirement-chip-task-1-FR-1')).toBeTruthy()
+    expect(screen.getByTestId('task-requirement-chip-task-1-FR-2')).toBeTruthy()
+    // Not expanded — the "Serves" block, which lists the same links with their full statement,
+    // is not rendered until the card is opened.
+    expect(screen.queryByTestId('task-serves-task-1')).toBeNull()
+  })
+
+  it('renders nothing when requirement_ids is empty or absent', () => {
+    renderCollapsed(makeTask({ requirements: ['just prose'] }))
+
+    expect(screen.queryByTestId(/task-requirement-chip/)).toBeNull()
+  })
+
+  it('gives a chip whose requirement has rejected evidence the rejected tone', () => {
+    renderCollapsed(
+      makeTask({
+        requirement_ids: ['FR-1', 'FR-2'],
+        requirement_links: [
+          {
+            identifier: 'FR-1',
+            requirement_id: 'spreq-a',
+            document_id: 'spdoc-1',
+            state: 'active',
+            statement: 'Settle to the cent',
+            has_rejected_evidence: true,
+          },
+          {
+            identifier: 'FR-2',
+            requirement_id: 'spreq-b',
+            document_id: 'spdoc-1',
+            state: 'active',
+            statement: 'Round consistently',
+            has_rejected_evidence: false,
+          },
+        ],
+      }),
+    )
+
+    const rejectedChip = screen.getByTestId('task-requirement-chip-task-1-FR-1')
+    const okChip = screen.getByTestId('task-requirement-chip-task-1-FR-2')
+    expect(rejectedChip.style.color).toBe('var(--red)')
+    expect(okChip.style.color).not.toBe('var(--red)')
+  })
+
+  it('clicking a chip resolves the document from document_id and navigates with the anchor', async () => {
+    const onOpenRequirement = vi.fn()
+    renderCollapsed(
+      makeTask({
+        requirement_ids: ['FR-1'],
+        requirement_links: [
+          {
+            identifier: 'FR-1',
+            requirement_id: 'spreq-a',
+            document_id: 'spdoc-1',
+            state: 'active',
+            statement: 'Settle to the cent',
+            anchor: '#FR-1',
+          },
+        ],
+      }),
+      onOpenRequirement,
+    )
+
+    await userEvent.click(screen.getByTestId('task-requirement-chip-task-1-FR-1'))
+
+    expect(onOpenRequirement).toHaveBeenCalledWith('spec/example.html', 'FR-1')
+  })
+
+  it('is not clickable when the requirement resolves to no document', async () => {
+    const onOpenRequirement = vi.fn()
+    renderCollapsed(
+      makeTask({
+        requirement_ids: ['FR-9'],
+        requirement_links: [
+          {
+            identifier: 'FR-9',
+            requirement_id: 'spreq-z',
+            document_id: 'spdoc-missing',
+            state: 'active',
+            statement: null,
+          },
+        ],
+      }),
+      onOpenRequirement,
+    )
+
+    const chip = screen.getByTestId('task-requirement-chip-task-1-FR-9')
+    expect(chip).toBeDisabled()
+    await userEvent.click(chip)
+    expect(onOpenRequirement).not.toHaveBeenCalled()
   })
 })

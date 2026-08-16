@@ -89,7 +89,12 @@ export function parseSpecDocument(value: string | null | undefined): string | nu
 export type WorkspaceDestination =
   // `document` is carried on the Spec tab for the same reason the conversation carries one: which
   // document is open is part of where you are, so it survives a reload and can be linked to.
-  | { kind: 'project'; projectId: string; tab: ProjectTab; document?: string | null }
+  //
+  // `anchor` is the requirement fragment a cross-tab click (a task's requirement chip) arrived
+  // with — `design.md` D7. It only ever accompanies a `document`, but is not narrowed to the spec
+  // tab in the type for the same reason `document` is not: `projectDestination` is the one place
+  // that decides when either survives.
+  | { kind: 'project'; projectId: string; tab: ProjectTab; document?: string | null; anchor?: string | null }
   | { kind: 'project'; projectId: string; tab: 'environment'; environmentSection: EnvironmentSection }
   // `agent` is null only on the new-conversation surface reached from the recency view, where
   // no agent is implied by where the operator started — that surface asks for one.
@@ -122,12 +127,16 @@ export function projectDestination(
   projectId: string,
   tab: ProjectTab = DEFAULT_TAB,
   document: string | null = null,
+  anchor: string | null = null,
 ): Extract<WorkspaceDestination, { kind: 'project' }> {
   const parsed = parseSpecDocument(document)
   // Only the Spec tab has anywhere to put one; carrying it on Tasks would be a field nothing reads.
-  return parsed && tab === 'spec'
-    ? { kind: 'project', projectId, tab, document: parsed }
-    : { kind: 'project', projectId, tab }
+  if (!parsed || tab !== 'spec') return { kind: 'project', projectId, tab }
+  // An anchor with no document to scroll it in is not carried either — the same reasoning as
+  // `document` itself one line up.
+  return anchor
+    ? { kind: 'project', projectId, tab, document: parsed, anchor }
+    : { kind: 'project', projectId, tab, document: parsed }
 }
 
 export function environmentDestination(
@@ -254,7 +263,13 @@ export function isAgentSettingsDestination(
  *  this destination has no section. */
 export function isSpecDestination(
   destination: WorkspaceDestination,
-): destination is { kind: 'project'; projectId: string; tab: 'spec'; document?: string | null } {
+): destination is {
+  kind: 'project'
+  projectId: string
+  tab: 'spec'
+  document?: string | null
+  anchor?: string | null
+} {
   return destination.kind === 'project' && destination.tab === 'spec'
 }
 
@@ -293,6 +308,7 @@ export function serializeDestination(destination: WorkspaceDestination): string 
   }
   if (destination.tab === 'spec' && destination.document && isSpecDocumentPath(destination.document)) {
     params.set('document', destination.document)
+    if (destination.anchor) params.set('anchor', destination.anchor)
   }
   return `?${params.toString()}`
 }
@@ -351,7 +367,7 @@ export function parseDestination(search: string): WorkspaceDestination | null {
   const tab: ProjectTab = (PROJECT_TABS as readonly string[]).includes(rawTab ?? '')
     ? (rawTab as ProjectTab)
     : DEFAULT_TAB
-  return projectDestination(projectId, tab, parseSpecDocument(params.get('document')))
+  return projectDestination(projectId, tab, parseSpecDocument(params.get('document')), params.get('anchor'))
 }
 
 export interface ResolveDestinationOptions {

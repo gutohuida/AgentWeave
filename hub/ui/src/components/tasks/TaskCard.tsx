@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { formatDistanceToNow } from 'date-fns'
 import { Icon } from '@/components/common/Icon'
 import { readableApiError } from '@/api/client'
@@ -12,6 +12,7 @@ import {
   useUpdateTask,
 } from '@/api/tasks'
 import { useAgents } from '@/api/agents'
+import { useSpecDocuments } from '@/api/spec'
 import { StatusBadge } from '@/components/common/Badge'
 import { RowMenu } from '@/components/layout/RowMenu'
 import { TaskIntegrationNote } from '@/components/tasks/TaskIntegrationNote'
@@ -20,6 +21,9 @@ import { agentColorVars } from '@/lib/agentColors'
 interface TaskCardProps {
   task: Task
   assigneeColorIndex?: number | null
+  /** A requirement chip, clicked: which document it lives in (resolved from `document_id`) and
+   *  which fragment to scroll to. Omitted where there is nowhere to route to. */
+  onOpenRequirement?: (documentPath: string, anchor: string) => void
 }
 
 function statusLabel(status: string): string {
@@ -61,7 +65,7 @@ function agentStatusTitle(task: Task): string {
   return details.join(' · ')
 }
 
-export function TaskCard({ task, assigneeColorIndex }: TaskCardProps) {
+export function TaskCard({ task, assigneeColorIndex, onOpenRequirement }: TaskCardProps) {
   const [expanded, setExpanded] = useState(false)
   const [refusal, setRefusal] = useState<string | null>(null)
   // Open while the operator is saying what a hand-set block is waiting for. The Hub requires the
@@ -73,9 +77,23 @@ export function TaskCard({ task, assigneeColorIndex }: TaskCardProps) {
   const setHandling = useSetDivergenceHandling()
   const startWork = useStartWorkOnTask()
   const { data: agents } = useAgents()
+  const { data: specDocuments } = useSpecDocuments()
 
   const agentNames = (agents ?? []).map((a) => a.name)
   const policy = task.divergence_policy ?? 'surface'
+
+  // Which requirement this task serves, without expanding the card (F4). One chip per
+  // `requirement_ids` entry — looked up in `requirement_links` for the statement, the rejected
+  // tone, and where to navigate; a bare identifier with no matching link still renders, just
+  // without a title or a click target, rather than being silently dropped.
+  const linkByIdentifier = useMemo(
+    () => new Map((task.requirement_links ?? []).map((link) => [link.identifier, link])),
+    [task.requirement_links],
+  )
+  const documentPathById = useMemo(
+    () => new Map((specDocuments?.documents ?? []).map((doc) => [doc.id, doc.path])),
+    [specDocuments],
+  )
 
   // Only what the operator may do from *this* status, read from the Hub's own declaration. The
   // board can still be stale — a move legal when the card rendered may not be by the time it is
@@ -213,6 +231,51 @@ export function TaskCard({ task, assigneeColorIndex }: TaskCardProps) {
             </button>
           </div>
         </div>
+
+        {/* Which requirement(s) this task serves — visible without expanding, which is the whole
+            complaint F4 answers: the connection to the specification used to be invisible until
+            the card was opened. Empty when `requirement_ids` is empty or absent, no placeholder,
+            matching the card's existing pattern for other optional fields. */}
+        {(task.requirement_ids?.length ?? 0) > 0 && (
+          <div
+            className="flex flex-wrap items-center gap-1 mt-1.5"
+            data-testid={`task-requirement-chips-${task.id}`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {task.requirement_ids!.map((identifier) => {
+              const link = linkByIdentifier.get(identifier)
+              const rejected = link?.has_rejected_evidence === true
+              const documentPath = link ? documentPathById.get(link.document_id) : undefined
+              const anchor = link?.anchor ? link.anchor.replace(/^#/, '') : identifier
+              const clickable = Boolean(onOpenRequirement && documentPath)
+              return (
+                <button
+                  key={identifier}
+                  type="button"
+                  data-testid={`task-requirement-chip-${task.id}-${identifier}`}
+                  title={link?.statement ?? identifier}
+                  disabled={!clickable}
+                  onClick={() => {
+                    if (clickable) onOpenRequirement!(documentPath!, anchor)
+                  }}
+                  className="text-[10px] px-1.5 py-0.5 rounded-full font-medium"
+                  style={{
+                    background: rejected
+                      ? 'color-mix(in srgb, var(--red) 12%, transparent)'
+                      : 'var(--surface-3)',
+                    border: `1px solid ${
+                      rejected ? 'color-mix(in srgb, var(--red) 30%, transparent)' : 'var(--border)'
+                    }`,
+                    color: rejected ? 'var(--red)' : 'var(--text-2)',
+                    cursor: clickable ? 'pointer' : 'default',
+                  }}
+                >
+                  {identifier}
+                </button>
+              )
+            })}
+          </div>
+        )}
 
         {/* What this task is waiting for, and who it is waiting on. Said in words rather than left
             to a badge: "blocked" alone puts the operator back where they were when the card said in

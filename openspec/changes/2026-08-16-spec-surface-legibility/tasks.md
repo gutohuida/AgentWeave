@@ -201,32 +201,89 @@ independent backend-only work, F4 before F5 (the drawer reuses F4's chips).
 
 ## 5. F4 — requirement chips and cross-tab navigation
 
-- [ ] 5.1 `TaskCard.tsx`: a chip row in the card header (not gated behind `expanded`) rendering one
+- [x] 5.1 `TaskCard.tsx`: a chip row in the card header (not gated behind `expanded`) rendering one
       chip per `task.requirement_ids` entry — identifier text, `title` attribute carrying the
       statement from the matching `requirement_links` entry where present. Empty when
       `requirement_ids` is empty or absent — no placeholder, matching the card's existing pattern for
-      other optional fields.
-- [ ] 5.2 A chip whose linked requirement has `has_rejected_evidence: true` (already on
+      other optional fields. **Done:** iterates `task.requirement_ids` (not `requirement_links`
+      directly) so a bare identifier with no matching link still renders rather than being silently
+      dropped, per the task's own wording ("where present"); looks up the link by identifier for the
+      `title`, the resolved document, and the rejected tone.
+- [x] 5.2 A chip whose linked requirement has `has_rejected_evidence: true` (already on
       `requirement_links`, per the proposal's F4 note) gets the `rejected` tone from 3.6's colour
       choice — the one place this signal already existed server-side and never reached a screen.
-- [ ] 5.3 `hub/ui/src/lib/navigation.ts`: add `anchor?: string | null` to the `project`/`tab: 'spec'`
+      **Done, with one addition:** `hub/ui/src/api/tasks.ts`'s `RequirementLink` TypeScript interface
+      had no `has_rejected_evidence`/`rejected_evidence_count`/`latest_rejection_reason` fields at
+      all — the backend (`hub/hub/api/v1/tasks.py:184-189`) has sent them since 3.5, but nothing on
+      the frontend read them yet. Added the three fields to the interface as part of this task rather
+      than as a separate one, since F4 is the first consumer.
+- [x] 5.3 `hub/ui/src/lib/navigation.ts`: add `anchor?: string | null` to the `project`/`tab: 'spec'`
       destination variant (`design.md` D7). `projectDestination()` accepts an optional third-turned-
       fourth argument or an options object — check the existing call sites before choosing the
-      signature, since every one needs updating consistently.
-- [ ] 5.4 `SpecDocumentPanel.tsx`: accept an initial anchor (from the destination, on mount) the same
+      signature, since every one needs updating consistently. **Done:** a fourth positional parameter,
+      defaulted to `null` — every one of the 9 existing call sites (`App.tsx` ×7, `navigation.ts`
+      internal ×3, plus every test file constructing a destination) keeps working unchanged, and the
+      returned object omits the `anchor` key entirely when absent (mirroring how `document` is
+      already omitted) so no `toEqual` fixture anywhere needed touching. Also carried through
+      `serializeDestination`/`parseDestination` (an `anchor` query param, only ever alongside
+      `document`) and `isSpecDestination`'s type predicate, for the same reason `document` already
+      round-trips through the URL — an anchor is as much "where you are" as the document itself.
+- [x] 5.4 `SpecDocumentPanel.tsx`: accept an initial anchor (from the destination, on mount) the same
       way `pendingFragment` is already set from in-frame navigation, so a cross-tab click scrolls to
-      the requirement, not just opens the document.
-- [ ] 5.5 Clicking a chip resolves the requirement's `document_id` to a document path (via the
+      the requirement, not just opens the document. **Done, with a case the literal wording didn't
+      cover:** a chip click that names the document already open never fires a fresh `toc-ready`
+      message (nothing about the document changed), so seeding `pendingFragment` alone from
+      `initialAnchor` would never be consumed on that path. Added a second branch, keyed off a
+      `(path, anchor)` pair already applied: a *new* anchor for the *same* document scrolls directly
+      via the existing `frameRef.current?.scrollToSection()`; a new document keeps working the
+      original way, through `pendingFragment` and the `toc-ready` handshake `SpecFrame.tsx` already
+      has.
+- [x] 5.5 Clicking a chip resolves the requirement's `document_id` to a document path (via the
       existing document list the Spec tab already loads — no new endpoint, per `design.md` D7) and
-      navigates with that anchor.
-- [ ] 5.6 `SpecCoverageBar.tsx`: the existing `N task(s)` text becomes a link/button that switches to
+      navigates with that anchor. **Done:** `TaskCard.tsx` calls `useSpecDocuments()` directly (the
+      same hook `SpecPhaseBar.tsx` already uses to resolve a path to its record — confirmed by
+      reading that file rather than assuming the `design.md` reference to `SpecDocumentPicker.tsx`
+      was exact) and builds an `id → path` map. The anchor passed is the requirement's stored
+      `anchor` field with its leading `#` stripped (`spec_render.py`'s `requirement_anchor()` writes
+      `#FR-n`; every in-frame fragment — `pendingFragment`, `TocAnchor.id`, `resolveSpecLink`'s
+      output — is bare, without the `#`, so this is the format the rest of the fragment machinery
+      already expects), falling back to the bare identifier when a link carries no `anchor` at all.
+- [x] 5.6 `SpecCoverageBar.tsx`: the existing `N task(s)` text becomes a link/button that switches to
       the Tasks tab with `TasksBoard.tsx` filtered to `linked_task_ids` (new `activeTaskIds` state,
       alongside the existing `activeFilter`, per `design.md` D7 — not a new filtering mechanism).
-- [ ] 5.7 Tests: a task with requirement links renders the expected number of chips with the expected
+      **Done, with the state placed in a small Zustand store** (`hub/ui/src/store/taskFilterStore.ts`)
+      rather than literally local `useState` in `TasksBoard.tsx`: the click that sets it happens on
+      the Spec tab, before `TasksBoard` is even mounted, so nothing in the component tree can hold it
+      as local state at the moment it needs to be set. `SpecCoverageBar` takes an optional
+      `onOpenTasks` prop (renders the plain, unclickable text when absent, so every existing caller
+      and test is unaffected); `App.tsx` wires it to `setActiveTaskIds` + a tab-switch navigation.
+      `TasksBoard` shows a dismissible banner naming the count when the store's filter is active,
+      applies it in both the kanban columns and the rejected section, alongside — not instead of —
+      the existing `activeFilter`.
+- [x] 5.7 Tests: a task with requirement links renders the expected number of chips with the expected
       identifiers; clicking one calls the navigation function with the resolved path and anchor
       (mock the resolver, assert the call, matching this codebase's existing pattern of testing
       navigation intent rather than the full route change); a coverage row's task-count link, clicked,
-      sets the board filter to the expected task ids.
+      sets the board filter to the expected task ids. **Done:** `taskRequirementLinks.test.tsx` gained
+      a `the requirement chip row (F4)` describe block (chip count/identifiers, rejected tone, click
+      resolution via a mocked `useSpecDocuments`, and a disabled chip when resolution fails) and one
+      pre-existing test needed `within(...)` added since "FR-1" now also renders as a chip, matching
+      the "Serves" block's own text; `specCoverage.test.tsx` gained two tests (task-count is a button
+      that calls `onOpenTasks` with the linked ids; renders as plain text with no `onOpenTasks`);
+      `urlNavigation.test.ts` gained a describe block for the anchor's carry/drop/round-trip rules;
+      a new `tasksBoardFilter.test.tsx` covers the store→board wiring (unfiltered by default, filtered
+      with a banner when set, cleared restores everything). Every new assertion mutation-checked:
+      stripping the anchor's `#`, disabling the board filter, zeroing `onOpenTasks`'s argument, and
+      hard-coding the rejected tone to `false` were each reverted in turn and confirmed to fail the
+      test written against it, then reapplied. Full `hub/ui` suite (`npm test -- --run`): 887 passed
+      on a clean run — a first run showed 19 file-level timeouts, all resolved on rerun with no code
+      changed between the two, consistent with this repo's documented full-suite resource contention
+      (`STATE.json` `dead_ends`) rather than anything this phase broke; `npx tsc --noEmit` and
+      `npm run lint` both clean of anything new (lint's pre-existing 9 warnings, itemised in
+      `decisions_for_user`, are unchanged). Bundle rebuilt (`npm run build` +
+      `refresh_ui_bundle.py`). Backend sanity check (no backend file changed by this phase):
+      `test_tasks.py`, `test_task_rejected_evidence_signal.py`, `test_task_requirement_ids_readable.py`,
+      `test_spec_render.py` — 54 passed.
 
 ## 6. F5 — task detail as a drawer
 

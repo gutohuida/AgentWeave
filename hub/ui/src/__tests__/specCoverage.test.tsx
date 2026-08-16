@@ -37,7 +37,7 @@ function entry(overrides: Record<string, unknown> = {}) {
   }
 }
 
-function mount(payload: Record<string, unknown>) {
+function mount(payload: Record<string, unknown>, onOpenTasks?: (taskIds: string[]) => void) {
   vi.stubGlobal(
     'fetch',
     vi.fn(async () => ({
@@ -51,7 +51,7 @@ function mount(payload: Record<string, unknown>) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
-      <SpecCoverageBar path={PATH} />
+      <SpecCoverageBar path={PATH} onOpenTasks={onOpenTasks} />
     </QueryClientProvider>,
   )
 }
@@ -170,6 +170,46 @@ describe('coverage on the spec view', () => {
     const row = await screen.findByTestId('coverage-row-FR-1')
     expect(row).toHaveTextContent('Rejected')
     expect(row).not.toHaveTextContent('In progress')
+  })
+
+  it('turns the task-count into a link that hands back the linked task ids', async () => {
+    const onOpenTasks = vi.fn()
+    const { getByRole } = mount(
+      {
+        requirements: [entry({ linked_task_ids: ['task-1', 'task-2'] })],
+        diagnostics: [],
+        totals: { verified: 1 },
+        integration: { integrated: 1 },
+        unserved: [],
+      },
+      onOpenTasks,
+    )
+
+    await screen.findByTestId('coverage-count-verified')
+    getByRole('button').click()
+
+    const link = await screen.findByTestId('coverage-tasks-link-FR-1')
+    expect(link.tagName).toBe('BUTTON')
+    link.click()
+
+    expect(onOpenTasks).toHaveBeenCalledWith(['task-1', 'task-2'])
+  })
+
+  it('renders the count as plain text, not a link, when there is nowhere to route to', async () => {
+    mount({
+      requirements: [entry({ linked_task_ids: ['task-1'] })],
+      diagnostics: [],
+      totals: { verified: 1 },
+      integration: { integrated: 1 },
+      unserved: [],
+    })
+
+    await screen.findByTestId('coverage-count-verified')
+    screen.getByRole('button').click()
+
+    const row = await screen.findByTestId('coverage-row-FR-1')
+    expect(row).toHaveTextContent('1 task')
+    expect(screen.queryByTestId('coverage-tasks-link-FR-1')).toBeNull()
   })
 
   it('renders nothing at all for a document with no requirements', async () => {

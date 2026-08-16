@@ -9,7 +9,12 @@ interface SpecPageProps {
   /** The document open, from the destination — so this screen is linkable and survives a reload
    *  exactly as the conversation's document panel does. */
   document: string | null
+  /** The requirement fragment a cross-tab click (a task's requirement chip) arrived with, from the
+   *  destination. Read once by `SpecDocumentPanel`, the same as an in-frame `pendingFragment`. */
+  anchor?: string | null
   onOpenDocument: (path: string | null) => void
+  /** Switches to the Tasks tab, filtered to a coverage row's linked tasks. */
+  onOpenTasks?: (taskIds: string[]) => void
 }
 
 /**
@@ -26,7 +31,7 @@ interface SpecPageProps {
  * that needs navigation uses the rail rather than growing a second one beside it. So what is left
  * here is the document, which is the whole point of the screen.
  */
-export function SpecPage({ document: openDocument, onOpenDocument }: SpecPageProps) {
+export function SpecPage({ document: openDocument, anchor, onOpenDocument, onOpenTasks }: SpecPageProps) {
   const { data: specList, isLoading, refetch } = useSpecList()
   useSpecEvents()
   /* The agent renames the document it is exploring, so the open path can move under this screen. */
@@ -88,6 +93,8 @@ export function SpecPage({ document: openDocument, onOpenDocument }: SpecPagePro
             onRefresh={() => void refetch()}
             // No close control: there is nothing behind this panel to reveal. Closing a document
             // is what the conversation view offers, because there the conversation is underneath.
+            initialAnchor={anchor}
+            onOpenTasks={onOpenTasks}
           />
         ) : (
           <div className="p-6" style={{ color: 'var(--text-3)', fontSize: 14 }}>Loading…</div>

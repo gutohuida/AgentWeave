@@ -49,6 +49,7 @@ import {
 import { AgentSettingsPage } from '@/components/agents/AgentSettingsPage'
 import { useProjectConversations } from '@/api/agentChat'
 import { useConfigStore } from '@/store/configStore'
+import { useTaskFilterStore } from '@/store/taskFilterStore'
 
 const SIDEBAR_WIDTH_KEY = 'aw.sidebarWidth'
 const SIDEBAR_COLLAPSED_KEY = 'aw.sidebarCollapsed'
@@ -319,16 +320,32 @@ export default function App() {
         ? <QuestionsPanel />
         : <OverviewPage onNavigate={navigate} />
     } else if (destination.tab === 'tasks') {
-      projectContent = <TasksBoard />
+      projectContent = (
+        <TasksBoard
+          // A task's requirement chip, clicked: land on that requirement in its document,
+          // scrolled into view — the other direction of F4's cross-tab navigation.
+          onOpenRequirement={(documentPath, anchor) =>
+            navigateTo(projectDestination(destination.projectId, 'spec', documentPath, anchor))
+          }
+        />
+      )
     } else if (destination.tab === 'spec') {
       projectContent = (
         <SpecPage
           document={destination.document ?? null}
+          anchor={destination.anchor ?? null}
           // Replace: which document the Spec screen resolved to is not a place the operator
           // navigated to, and Back should leave the screen rather than walk its documents.
           onOpenDocument={(path) =>
             navigateTo(projectDestination(destination.projectId, 'spec', path), { replace: true })
           }
+          // A coverage row's task-count link, clicked: switch to the Tasks tab filtered to what
+          // it names. The filter is set on the global store because the board it applies to is
+          // not mounted yet — this navigation is what mounts it.
+          onOpenTasks={(taskIds) => {
+            useTaskFilterStore.getState().setActiveTaskIds(taskIds)
+            navigateTo(projectDestination(destination.projectId, 'tasks'))
+          }}
         />
       )
     } else if (destination.tab === 'jobs') {

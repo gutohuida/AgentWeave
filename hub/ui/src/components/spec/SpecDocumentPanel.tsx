@@ -32,6 +32,12 @@ interface SpecDocumentPanelProps {
    *  document is a conversation-view action, because there the conversation is underneath. */
   onClose?: () => void
   onRefresh: () => void
+  /** A fragment carried in from outside the frame — a task's requirement chip, not a link followed
+   *  inside the document. Applied once per distinct `(path, initialAnchor)` pair it is given,
+   *  the same way an in-frame `pendingFragment` is consumed once per navigation (`design.md` D7). */
+  initialAnchor?: string | null
+  /** Threaded down to `SpecCoverageBar` — switches to the Tasks tab, filtered. */
+  onOpenTasks?: (taskIds: string[]) => void
 }
 
 /**
@@ -54,6 +60,8 @@ export function SpecDocumentPanel({
   onOpenPicker,
   onClose,
   onRefresh,
+  initialAnchor,
+  onOpenTasks,
 }: SpecDocumentPanelProps) {
   const { mode } = useConfigStore()
   const { data: specDoc } = useSpec(path)
@@ -66,8 +74,14 @@ export function SpecDocumentPanel({
 
   const [outline, setOutline] = useState<TocAnchor[]>([])
   const [activeSection, setActiveSection] = useState<string | null>(null)
-  const [pendingFragment, setPendingFragment] = useState<string | null>(null)
+  const [pendingFragment, setPendingFragment] = useState<string | null>(initialAnchor ?? null)
   const [navStatus, setNavStatus] = useState<string | null>(null)
+  // The last `(path, anchor)` pair already applied, so a repeat render with the same
+  // `initialAnchor` (the prop does not clear itself) does not re-fire the scroll, while a fresh
+  // chip click — a new anchor, possibly on the document already open — does.
+  const appliedAnchorRef = useRef<{ path: string; anchor: string } | null>(
+    initialAnchor ? { path, anchor: initialAnchor } : null,
+  )
   /* Open by default, because the bridge does not ask before removing the alternative.
    *
    * `specBridge` hides the document's own `nav.toc` as soon as it has collected the anchors —
@@ -83,6 +97,21 @@ export function SpecDocumentPanel({
     setActiveSection(null)
     setNavStatus(null)
   }, [path])
+
+  // A cross-tab anchor for the document already open never triggers a fresh `toc-ready` message
+  // (nothing about the document changed), so `pendingFragment` alone would never be consumed —
+  // scroll directly in that case. A cross-tab anchor for a *different* document is handled the
+  // same way `pendingFragment` already is for in-frame navigation: set, and consumed once the new
+  // document's outline arrives.
+  useEffect(() => {
+    if (!initialAnchor) return
+    const already =
+      appliedAnchorRef.current?.path === path && appliedAnchorRef.current?.anchor === initialAnchor
+    if (already) return
+    appliedAnchorRef.current = { path, anchor: initialAnchor }
+    setPendingFragment(initialAnchor)
+    frameRef.current?.scrollToSection(initialAnchor)
+  }, [path, initialAnchor])
 
   const handleNavigate = useCallback(
     (nextPath: string, fragment: string | null) => {
@@ -206,7 +235,7 @@ export function SpecDocumentPanel({
       {/* Which requirements this document has work for, and which of that work is actually in the
           product. Under the phase bar because it is about what the document *says*, not about
           reading it. */}
-      <SpecCoverageBar path={path} />
+      <SpecCoverageBar path={path} onOpenTasks={onOpenTasks} />
 
       {/* Drift summary — only rendered when the Hub reports manifest drift. */}
       {driftCount > 0 && (

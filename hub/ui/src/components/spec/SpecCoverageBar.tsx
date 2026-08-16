@@ -72,7 +72,15 @@ const INTEGRATION_LABEL: Record<CoverageEntry['integration'], string> = {
  * in this product routinely sits on a branch nothing merges, so "verified" alone would be true of
  * the branch and false of the product.
  */
-export function SpecCoverageBar({ path }: { path: string }) {
+interface SpecCoverageBarProps {
+  path: string
+  /** Switches to the Tasks tab, filtered to the given task ids. Omitted where there is nowhere to
+   *  switch to (there is none today, but the prop stays optional rather than required so a future
+   *  caller with no board to route to is not forced to invent one). */
+  onOpenTasks?: (taskIds: string[]) => void
+}
+
+export function SpecCoverageBar({ path, onOpenTasks }: SpecCoverageBarProps) {
   const { data } = useSpecCoverage(path)
   const [open, setOpen] = useState(false)
 
@@ -150,11 +158,32 @@ export function SpecCoverageBar({ path }: { path: string }) {
                 </a>{' '}
                 — {state?.label ?? entry.state}
                 {integration ? ` · ${integration}` : ''}
-                {entry.linked_task_ids.length > 0
-                  ? ` · ${entry.linked_task_ids.length} task${
-                      entry.linked_task_ids.length === 1 ? '' : 's'
-                    }`
-                  : ''}
+                {entry.linked_task_ids.length > 0 && (
+                  <>
+                    {' · '}
+                    {onOpenTasks ? (
+                      <button
+                        type="button"
+                        data-testid={`coverage-tasks-link-${entry.identifier}`}
+                        onClick={() => onOpenTasks(entry.linked_task_ids)}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          padding: 0,
+                          color: 'var(--blue)',
+                          cursor: 'pointer',
+                          textDecoration: 'underline',
+                        }}
+                      >
+                        {entry.linked_task_ids.length} task{entry.linked_task_ids.length === 1 ? '' : 's'}
+                      </button>
+                    ) : (
+                      <span>
+                        {entry.linked_task_ids.length} task{entry.linked_task_ids.length === 1 ? '' : 's'}
+                      </span>
+                    )}
+                  </>
+                )}
                 {state ? <div style={{ paddingLeft: 12 }}>{state.why}</div> : null}
               </li>
             )

@@ -59,6 +59,12 @@ export interface RequirementLink {
   key?: string | null
   statement?: string | null
   modal?: string | null
+  /** True only for evidence rejected against the requirement's *current* digest. Kept independent
+   *  of coverage's `rejected` state: this stays true even after a later acceptance moves coverage
+   *  on to `verified` — see `hub/hub/api/v1/tasks.py`. */
+  has_rejected_evidence?: boolean
+  rejected_evidence_count?: number
+  latest_rejection_reason?: string | null
 }
 
 export type DivergencePolicy = 'surface' | 'retry' | 'escalate'

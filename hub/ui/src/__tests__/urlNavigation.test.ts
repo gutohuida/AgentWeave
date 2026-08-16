@@ -303,3 +303,46 @@ describe('the open document is part of the conversation destination', () => {
     })).toEqual(requested)
   })
 })
+
+/** F4 (`design.md` D7): a task's requirement chip lands on the Spec tab not just at the document,
+ *  but scrolled to the requirement — which needs the destination to carry a fragment. */
+describe('a cross-tab click can carry a requirement anchor onto the Spec tab', () => {
+  const DOC = 'spec/roadmaps/agentweave-reconstruction.html'
+
+  it('carries the anchor only alongside a document, on the Spec tab', () => {
+    const destination = projectDestination('proj-1', 'spec', DOC, 'FR-3')
+    expect(destination).toEqual({ kind: 'project', projectId: 'proj-1', tab: 'spec', document: DOC, anchor: 'FR-3' })
+  })
+
+  it('drops the anchor when there is no document to scroll it in', () => {
+    const destination = projectDestination('proj-1', 'spec', null, 'FR-3')
+    expect(destination).toEqual({ kind: 'project', projectId: 'proj-1', tab: 'spec' })
+  })
+
+  it('drops the anchor on a tab with nowhere to put it', () => {
+    const destination = projectDestination('proj-1', 'tasks', undefined, 'FR-3')
+    expect(destination).toEqual({ kind: 'project', projectId: 'proj-1', tab: 'tasks' })
+  })
+
+  it('every existing projectDestination call shape is unaffected — no anchor key present', () => {
+    expect(projectDestination('proj-1')).toEqual({ kind: 'project', projectId: 'proj-1', tab: 'overview' })
+    expect(projectDestination('proj-1', 'spec', DOC)).toEqual({
+      kind: 'project',
+      projectId: 'proj-1',
+      tab: 'spec',
+      document: DOC,
+    })
+  })
+
+  it('round-trips a document and its anchor through the URL', () => {
+    const destination = projectDestination('proj-1', 'spec', DOC, 'FR-3')
+    const search = serializeDestination(destination)
+    expect(search).toContain('anchor=FR-3')
+    expect(parseDestination(search)).toEqual(destination)
+  })
+
+  it('does not serialize an anchor with no document', () => {
+    const destination = projectDestination('proj-1', 'spec')
+    expect(serializeDestination(destination)).not.toContain('anchor')
+  })
+})

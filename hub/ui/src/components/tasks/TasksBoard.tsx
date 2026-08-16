@@ -5,6 +5,7 @@ import { EmptyState } from '@/components/common/EmptyState'
 import { Icon } from '@/components/common/Icon'
 import { useAgents } from '@/api/agents'
 import { agentColorVars } from '@/lib/agentColors'
+import { useTaskFilterStore } from '@/store/taskFilterStore'
 
 // `blocked` has no column of its own, deliberately. It is not a separate stage of work — it is
 // in-progress work that stopped — and giving it a ninth column both widens a board the operator has
@@ -23,7 +24,13 @@ const COLUMNS = [
   { key: 'revision_needed', label: 'Needs Revision', accentColor: 'var(--red)',          statuses: ['revision_needed'] },
 ]
 
-export function TasksBoard() {
+interface TasksBoardProps {
+  /** A task's requirement chip, clicked. Threaded to `TaskCard` — the other direction of F4's
+   *  cross-tab navigation, alongside `SpecCoverageBar`'s task-count link. */
+  onOpenRequirement?: (documentPath: string, anchor: string) => void
+}
+
+export function TasksBoard({ onOpenRequirement }: TasksBoardProps = {}) {
   const { data: tasks, isLoading } = useTasks()
   const { data: agents = [] } = useAgents()
   const colorsByAgent = useMemo(
@@ -32,6 +39,8 @@ export function TasksBoard() {
   )
   const [activeFilter, setActiveFilter] = useState<string | null>(null)
   const [rejectedExpanded, setRejectedExpanded] = useState(false)
+  const activeTaskIds = useTaskFilterStore((state) => state.activeTaskIds)
+  const clearActiveTaskIds = useTaskFilterStore((state) => state.clearActiveTaskIds)
 
   const assignees = useMemo(() => {
     if (!tasks) return []
@@ -56,6 +65,31 @@ export function TasksBoard() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
+      {/* Set from outside the board — a coverage row's task-count link. Shown above the assignee
+          filter chips because it is the reason the operator is looking at a narrowed board at
+          all, not one more filter among equals. */}
+      {activeTaskIds !== null && (
+        <div
+          data-testid="tasks-requirement-filter-banner"
+          className="shrink-0 flex items-center gap-2 px-4 py-2 text-xs"
+          style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-2)', background: 'var(--surface-2)' }}
+        >
+          <Icon name="filter_alt" size={14} />
+          <span>
+            Showing {activeTaskIds.length} task{activeTaskIds.length === 1 ? '' : 's'} linked from the
+            specification
+          </span>
+          <button
+            type="button"
+            data-testid="tasks-requirement-filter-clear"
+            onClick={clearActiveTaskIds}
+            style={{ background: 'none', border: 'none', color: 'var(--blue)', cursor: 'pointer' }}
+          >
+            Clear
+          </button>
+        </div>
+      )}
+
       {/* Filter chips */}
       {assignees.length > 0 && (
         <div className="shrink-0 flex items-center gap-2 px-4 py-2 flex-wrap" style={{ borderBottom: '1px solid var(--border)' }}>
@@ -96,6 +130,9 @@ export function TasksBoard() {
             let col = tasks.filter((t) => statuses.includes(t.status))
             if (activeFilter !== null) {
               col = col.filter((t) => t.assignee === activeFilter)
+            }
+            if (activeTaskIds !== null) {
+              col = col.filter((t) => activeTaskIds.includes(t.id))
             }
             // Waiting work first. It is the only kind in this column that needs the operator, and
             // burying it under running work is how a card that is asking for something goes unread.
@@ -139,7 +176,12 @@ export function TasksBoard() {
                     traps the wheel and gives `sticky` above the wrong container to stick to. */}
                 <div className="space-y-2">
                   {col.map((task) => (
-                    <TaskCard key={task.id} task={task} assigneeColorIndex={colorsByAgent.get(task.assignee ?? '')} />
+                    <TaskCard
+                      key={task.id}
+                      task={task}
+                      assigneeColorIndex={colorsByAgent.get(task.assignee ?? '')}
+                      onOpenRequirement={onOpenRequirement}
+                    />
                   ))}
                 </div>
               </div>
@@ -174,12 +216,17 @@ export function TasksBoard() {
                   gap: 8,
                 }}
               >
-                {(activeFilter !== null
-                  ? rejectedTasks.filter((t) => t.assignee === activeFilter)
-                  : rejectedTasks
-                ).map((task) => (
-                  <TaskCard key={task.id} task={task} assigneeColorIndex={colorsByAgent.get(task.assignee ?? '')} />
-                ))}
+                {rejectedTasks
+                  .filter((t) => activeFilter === null || t.assignee === activeFilter)
+                  .filter((t) => activeTaskIds === null || activeTaskIds.includes(t.id))
+                  .map((task) => (
+                    <TaskCard
+                      key={task.id}
+                      task={task}
+                      assigneeColorIndex={colorsByAgent.get(task.assignee ?? '')}
+                      onOpenRequirement={onOpenRequirement}
+                    />
+                  ))}
               </div>
             )}
           </div>
