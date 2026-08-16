@@ -5,25 +5,39 @@ independent backend-only work, F4 before F5 (the drawer reuses F4's chips).
 
 ## 1. F2 — realign the document's neutral CSS variables with the Hub's theme override
 
-- [ ] 1.1 In `hub/hub/spec_render.py`'s `_STYLE`, rename the six neutral custom properties per
+- [x] 1.1 In `hub/hub/spec_render.py`'s `_STYLE`, rename the six neutral custom properties per
       `design.md` D2's table (`--aw-bg`→`--bg`, `--aw-fg`→`--fg`, `--aw-muted`→`--muted`,
       `--aw-rule`→`--border`, `--aw-chip-bg`→`--surface-2`, `--aw-code-bg`→`--surface`) everywhere
       they are defined (`:root`, the `prefers-color-scheme` media query, both `[data-theme]` rules)
       and everywhere they are read (every `var(--aw-...)` reference in the same string). Leave
       `--aw-accent` untouched. Add a one-line note in the module docstring stating the mapping exists
       so the next reader does not have to diff against `SpecFrame.tsx` to discover it.
-- [ ] 1.2 Add the pinning test (`design.md` D2): every key in `SpecFrame.tsx`'s `HUB_NEUTRALS['light']`
+- [x] 1.2 Add the pinning test (`design.md` D2): every key in `SpecFrame.tsx`'s `HUB_NEUTRALS['light']`
       (equivalently `'dark'` — same key set) has a corresponding custom-property name present in
       `spec_render.py`'s `_STYLE`. Mutation-check: temporarily revert 1.1's rename on one property,
       confirm this test fails, then reapply.
-- [ ] 1.3 Existing `spec_render.py` tests (`hub/tests/test_spec_render.py` or wherever rendering is
+- [x] 1.3 Existing `spec_render.py` tests (`hub/tests/test_spec_render.py` or wherever rendering is
       tested today — locate it, do not assume the filename) still pass unmodified in substance; update
       only literal string assertions that named the old variable names.
-- [ ] 1.4 If `scripts/uishot.py` is available: capture the `aw-loop10` (or a throwaway document with
+- [x] 1.4 If `scripts/uishot.py` is available: capture the `aw-loop10` (or a throwaway document with
       requirements) spec document in both themes, `page.evaluate` the frame's computed
       `background-color`, and assert equality with `HUB_NEUTRALS[mode].bg`. If the harness is
       unavailable, record that plainly and rely on 1.2 alone — do not claim the pixel was checked when
-      it was not.
+      it was not. **Done, with a wrinkle:** `aw-loop10`'s one existing document was rendered and
+      stored *before* this change, so pointing the live Hub UI at it (via a scratch Playwright script,
+      not `uishot.py` directly, since checking computed style needs `page.evaluate` inside the iframe,
+      which `uishot.py`'s CLI does not expose) initially showed the OLD colours — not because the fix
+      is wrong, but because spec documents are rendered once at write time and stored
+      (`spec_service.py`'s `render_document()` calls), so editing `spec_render.py` does not retroactively
+      re-render what is already on disk. Confirmed by reading `spec_service.py`, not assumed. Rendered
+      a fresh throwaway payload with the current code instead (`SpecPayload(title="F2 verification
+      doc", ...)` through today's `render_document()`), applied the identical override `<style>`
+      `SpecFrame.tsx`'s `themeOverride()` emits, and opened it directly in Chromium: computed
+      `body` background is `rgb(250, 250, 250)` in light and `rgb(10, 10, 11)` in dark — exact matches
+      for `HUB_NEUTRALS.light.bg` (`#fafafa`) and `HUB_NEUTRALS.dark.bg` (`#0a0a0b`). Screenshots
+      confirm visually: no navy. `aw-loop10`'s own document was left untouched — re-rendering it would
+      mutate the only preserved project's data, out of scope for this task and not needed to prove the
+      renderer change works.
 
 ## 2. F1 — colour that carries meaning
 

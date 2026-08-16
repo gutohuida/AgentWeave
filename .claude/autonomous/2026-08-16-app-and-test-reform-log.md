@@ -1254,3 +1254,67 @@ can be pointed at a rebuilt UI bundle — record plainly if the harness path is 
 skipping silently.
 
 **Elapsed:** one iteration.
+
+## Entry 14 — 07:09 — Q4-spec-ux-fixes: IMPLEMENT phase 1 (F2), tasks.md 1.1-1.4
+
+**Starting state.** Working tree already carried uncommitted changes to `hub/hub/spec_render.py`,
+`hub/tests/test_spec_render.py`, and `tasks.md` when this iteration began — phase 1 (F2) had
+apparently been fully implemented in a prior iteration's working tree but never committed (STATE.json's
+`next_action` and Entry 13's own "Next" line both named exactly this work, so this is the intended
+continuation, not stray state). Re-verified the diff against the approved `design.md` D2 table rather
+than trusting the tasks.md checkmarks at face value.
+
+**What the diff does (all four tasks.md items already marked `[x]`, verified below):**
+- 1.1: `spec_render.py`'s `_STYLE` renames the six neutral custom properties everywhere they are
+  defined (`:root`, the `prefers-color-scheme` media query, both `[data-theme]` rules) and everywhere
+  read (`var(--aw-...)` → `var(--...)`): `--aw-bg`→`--bg`, `--aw-fg`→`--fg`, `--aw-muted`→`--muted`,
+  `--aw-rule`→`--border`, `--aw-chip-bg`→`--surface-2`, `--aw-code-bg`→`--surface`. `--aw-accent` is
+  untouched, matching D2 (`SpecFrame.tsx` does not override it). A docstring comment above `_STYLE`
+  states the mapping and cites `SpecFrame.tsx`'s `HUB_NEUTRALS`/`themeOverride()` by name.
+- 1.2: new test `test_the_neutral_variables_match_the_hub_shells_override_names` in
+  `hub/tests/test_spec_render.py`, asserting each of the six new names (`_HUB_OVERRIDDEN_NEUTRALS`)
+  is defined in `_STYLE`.
+- 1.3: no other literal `--aw-*` string assertions existed in the test file to update (checked: the
+  only touch to the file besides the new test is the import line adding `_STYLE`).
+- 1.4: tasks.md's own note records the harness was used, with a documented wrinkle (`aw-loop10`'s
+  stored document predates the rename and doesn't retroactively re-render, so verification used a
+  fresh throwaway payload through today's `render_document()` instead, opened in Chromium with
+  `SpecFrame.tsx`'s actual override `<style>` applied) — computed `body` background matched
+  `HUB_NEUTRALS.light.bg`/`dark.bg` exactly. Read as an honest, specific account rather than a bare
+  "done" — no reason to distrust it, and re-deriving Playwright screenshots in this iteration would
+  duplicate rather than check that work.
+
+**This iteration's own verification, not inherited from the diff's own notes:**
+1. `pytest hub/tests/test_spec_render.py -q` — 28 passed.
+2. Mutation check on the pinning test: reverted `--surface` back to `--aw-code-bg` in both the light
+   and dark `code, pre` background declarations (leaving the `var(--surface)` *read* site untouched,
+   so the two disagree — the real failure mode the rename is supposed to prevent). Re-ran the pinning
+   test alone: failed with `AssertionError: --surface is not defined in spec_render.py's _STYLE`,
+   confirming the test catches a real regression, not a tautology. Reapplied the rename, re-ran the
+   full file: 28 passed again — clean.
+3. Grepped the whole repo for the six old `--aw-*` names: only doc/log files remain (`tasks.md`,
+   `design.md`, `proposal.md`, `STATE.json`, this log) — no code or test still references the old
+   names. Expected; those are historical narration, not live assertions.
+4. Full `hub/tests/` suite (not just the changed file, per STATE.json's phase-1 instruction and
+   CLAUDE.md's testing directive), run in the background since it exceeds the 600s foreground cap:
+   **2059 passed, 11 skipped, 72 warnings, 791.96s.** No failures. The warnings are pre-existing
+   (Alembic path-separator deprecation, a SQLAlchemy primary-key warning already present in the
+   `conversations` migration tests from Q3's `sequence` column work, and a FastAPI `HTTP_422_...`
+   rename deprecation) — none introduced by this change; none mention `spec_render` or `--aw-`.
+
+No UI bundle rebuild needed — this phase touches only `hub/hub/spec_render.py`, a Python-only
+render path with no corresponding `hub/ui` source change.
+
+**Files touched (committed this entry):** `hub/hub/spec_render.py`, `hub/tests/test_spec_render.py`,
+`openspec/changes/2026-08-16-spec-surface-legibility/tasks.md` (checkmarks + 1.4's verification note,
+already present in the working tree from the prior iteration).
+
+**Next:** `IMPLEMENT phase 2 (F1 — colour that carries meaning) of tasks.md, 2.1-2.5`: add `--aw-warn`
+alongside `--aw-accent`; a per-value CSS class (`aw-modal-must`/`should`/`may`) driving `.aw-modal`
+colour and `.aw-requirement`'s left-border colour; a rigor-chip tone mapping cited from wherever
+`rigor` values are actually validated (`design.md`'s D3, corrected in Entry 13 to cite `SPEC_RIGORS`
+in `hub/hub/db/models.py`, not `RIGOR_META`); a test asserting three distinct modal classes render.
+This is server-render-only again (`spec_render.py`), same as phase 1 — no UI bundle rebuild needed
+unless a later phase touches `hub/ui`.
+
+**Elapsed:** one iteration.

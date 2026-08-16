@@ -26,54 +26,60 @@ from .spec_payload import SpecPayload, embed_payload
 # Three layers, in this order: variables, the system preference, and an explicit
 # override the shell can set. A document that honoured only the media query
 # would fight a shell whose theme was chosen rather than inherited.
+#
+# The six neutral custom properties (--bg/--fg/--muted/--border/--surface-2/--surface)
+# are named to match SpecFrame.tsx's theme override (HUB_NEUTRALS) so the shell's
+# inherited values actually land on something the document reads. --aw-accent is
+# deliberately unprefixed-but-unmatched: it stays the document's own literal, per
+# SpecFrame.tsx's own comment that accent/warn/done/danger are not the Hub's to recolour.
 _STYLE = """
 :root {
-  --aw-bg: #ffffff; --aw-fg: #1f2328; --aw-muted: #656d76; --aw-rule: #d8dee4;
-  --aw-accent: #0969da; --aw-chip-bg: #eaeef2; --aw-code-bg: #f6f8fa;
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --surface-2: #eaeef2; --surface: #f6f8fa;
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --aw-bg: #0d1117; --aw-fg: #e6edf3; --aw-muted: #9198a1; --aw-rule: #30363d;
-    --aw-accent: #4493f8; --aw-chip-bg: #21262d; --aw-code-bg: #161b22;
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --aw-accent: #4493f8; --surface-2: #21262d; --surface: #161b22;
   }
 }
 :root[data-theme="light"] {
-  --aw-bg: #ffffff; --aw-fg: #1f2328; --aw-muted: #656d76; --aw-rule: #d8dee4;
-  --aw-accent: #0969da; --aw-chip-bg: #eaeef2; --aw-code-bg: #f6f8fa;
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --surface-2: #eaeef2; --surface: #f6f8fa;
 }
 :root[data-theme="dark"] {
-  --aw-bg: #0d1117; --aw-fg: #e6edf3; --aw-muted: #9198a1; --aw-rule: #30363d;
-  --aw-accent: #4493f8; --aw-chip-bg: #21262d; --aw-code-bg: #161b22;
+  --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+  --aw-accent: #4493f8; --surface-2: #21262d; --surface: #161b22;
 }
 * { box-sizing: border-box; }
 body {
-  margin: 0; padding: 2rem 2.5rem 4rem; background: var(--aw-bg); color: var(--aw-fg);
+  margin: 0; padding: 2rem 2.5rem 4rem; background: var(--bg); color: var(--fg);
   font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
 }
 h1 { font-size: 1.75rem; margin: 0 0 .25rem; }
 h2 { font-size: 1.15rem; margin: 2.5rem 0 .75rem; padding-bottom: .3rem;
-     border-bottom: 1px solid var(--aw-rule); }
+     border-bottom: 1px solid var(--border); }
 h3 { font-size: 1rem; margin: 1.5rem 0 .4rem; }
 p { margin: .5rem 0; }
 ul, ol { margin: .5rem 0; padding-left: 1.4rem; }
 li { margin: .25rem 0; }
 a { color: var(--aw-accent); }
-.aw-meta { color: var(--aw-muted); font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-meta { color: var(--muted); font-size: .85rem; margin: 0 0 1.5rem; }
 .aw-chip { display: inline-block; padding: .1rem .5rem; border-radius: 999px;
-           background: var(--aw-chip-bg); font-size: .78rem; margin-right: .4rem; }
-.aw-requirement { border-left: 3px solid var(--aw-rule); padding: .1rem 0 .1rem .9rem;
+           background: var(--surface-2); font-size: .78rem; margin-right: .4rem; }
+.aw-requirement { border-left: 3px solid var(--border); padding: .1rem 0 .1rem .9rem;
                   margin: 1.1rem 0; }
 .aw-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8rem;
-         color: var(--aw-muted); }
+         color: var(--muted); }
 .aw-modal { font-weight: 600; }
-.aw-rationale { color: var(--aw-muted); font-size: .9rem; }
-.aw-refs { font-size: .82rem; color: var(--aw-muted); }
-.aw-note { color: var(--aw-muted); font-style: italic; }
-.aw-empty { color: var(--aw-muted); }
+.aw-rationale { color: var(--muted); font-size: .9rem; }
+.aw-refs { font-size: .82rem; color: var(--muted); }
+.aw-note { color: var(--muted); font-style: italic; }
+.aw-empty { color: var(--muted); }
 table { border-collapse: collapse; margin: .75rem 0; width: 100%; }
-th, td { border: 1px solid var(--aw-rule); padding: .4rem .6rem; text-align: left;
+th, td { border: 1px solid var(--border); padding: .4rem .6rem; text-align: left;
          vertical-align: top; font-size: .92rem; }
-code, pre { background: var(--aw-code-bg); border-radius: 4px; }
+code, pre { background: var(--surface); border-radius: 4px; }
 code { padding: .1rem .3rem; font-size: .88em; }
 """.strip()
 

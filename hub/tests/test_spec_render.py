@@ -17,7 +17,13 @@ from hub.spec_identity import (
     retained,
 )
 from hub.spec_payload import SCHEMA_VERSION, extract_payload, payload_to_dict, validate_payload
-from hub.spec_render import render_document
+from hub.spec_render import _STYLE, render_document
+
+# The neutral custom properties SpecFrame.tsx's HUB_NEUTRALS override sets on every
+# mode (`themeOverride()` in SpecFrame.tsx) — spec_render.py must define each one under
+# this exact name or the override has nothing to land on. --aw-accent is deliberately
+# excluded: SpecFrame.tsx does not override it, and spec_render.py is not meant to rename it.
+_HUB_OVERRIDDEN_NEUTRALS = ("--bg", "--surface", "--surface-2", "--border", "--fg", "--muted")
 
 
 def _payload(**overrides):
@@ -201,6 +207,15 @@ def test_the_three_theme_layers_are_present():
     assert ":root {" in html
     assert "@media (prefers-color-scheme: dark)" in html
     assert ':root[data-theme="dark"]' in html
+
+
+def test_the_neutral_variables_match_the_hub_shells_override_names():
+    """SpecFrame.tsx's themeOverride() sets --bg/--surface/--surface-2/--border/--fg/--muted
+    on the frame. If spec_render.py's _STYLE stops defining one of those names, the override
+    has nothing to affect and the document silently stops following the shell's theme — this
+    is what happened before the --aw-* names were renamed to match."""
+    for name in _HUB_OVERRIDDEN_NEUTRALS:
+        assert f"{name}:" in _STYLE, f"{name} is not defined in spec_render.py's _STYLE"
 
 
 def test_the_document_carries_no_navigation_script_of_its_own():
