@@ -148,3 +148,47 @@ gitignored (`.gitignore:88`), so none of this touched the working tree; `git sta
 **Elapsed:** well under the 15-minute firing interval. Estimated 1 iteration; used 1.
 
 ---
+
+## Entry 1a — 02:20 — the operator added visual verification, mid-run
+
+Written by the interactive session, not by a driver firing. It edited `STATE.json` between iterations
+using the driver's own protocol: claim `last_heartbeat`, edit, commit, push, back-date to release.
+
+**The operator asked:** can Claude screenshot the app and self-loop on that, and is there a tool for
+driving UI decisions and verifying them?
+
+**Answered by testing, not asserting.** The interactive session opened `localhost:8010` with the T3
+`preview_open` tool and took a `preview_snapshot`: it returned a real PNG of the AgentWeave
+dashboard, the visible text, the full accessibility tree, and every interactive element with
+coordinates. It also incidentally confirmed Q1 landed — only `aw-loop10` remains in the projects
+rail. `preview_set_appearance` can force light/dark, and `preview_resize` can set a viewport, which
+map directly onto findings 2 and 5.
+
+**But those tools are not available to this driver.** They come from the T3 Code environment, not
+from a configured MCP server: there is no `.mcp.json`, and `~/.claude.json` has `mcpServers` empty
+both globally and for this project. A headless `claude -p` firing gets none of them. Recorded here
+because it is exactly the kind of thing a later session would otherwise assume works.
+
+**So Q4a was added** — a Playwright harness writing PNGs that an iteration then `Read`s, which is
+headless-capable because it is just Bash plus a tool that renders images. It sits before Q4 so the
+UI work can use it. The operator authorised `playwright install chromium`, which the run's original
+limits forbade; the limit was amended narrowly rather than dropped.
+
+**What this does and does not buy**, stated plainly so no later iteration over-claims:
+
+- **Finding 2 becomes a measurement** — assert the rendered document's computed background equals
+  the app's theme token in each mode.
+- **Finding 5 becomes a measurement** — assert the task card does not clip its content at width W.
+- **Finding 1 stays taste.** A loop can verify colour is *applied*. It cannot verify colour *helps*.
+  Its PNG goes to `decisions_for_user`; it is not to be self-ticked. The same holds for `17.1`,
+  `17.3` and the 29 parked judgement tasks — unchanged by any of this.
+
+**One trap written into Q4a because it would otherwise be paid for twice:** `hub/hub/static/ui` is a
+committed build artefact, so a UI source change is invisible to a screenshot until
+`npm run build` + `python scripts/refresh_ui_bundle.py`. A screenshot of a stale bundle is the same
+failure as a stale Hub, and it looks exactly like a fix that did not work.
+
+**What a reviewer should distrust:** nothing here was built. Q4a is a queue item, not a harness.
+The claim that Playwright works headless in this environment is **untested** — it is the reason Q4a's
+verify step requires proving the harness is honest by capturing before and after a deliberate CSS
+change and confirming the two PNGs differ.

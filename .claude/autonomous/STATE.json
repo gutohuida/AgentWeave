@@ -7,8 +7,7 @@
   "stop_at": "2026-08-16T12:00:00+01:00",
   "stop_when_queue_empties": false,
   "iteration": 1,
-  "last_heartbeat": "2026-08-16T01:33:46+01:00",
-
+  "last_heartbeat": "2026-08-16T02:17:58+01:00",
   "spec_round_protocol": {
     "why": "Operator: 'one agent produces the spec, the next triggers the agents review until a agent thinks is good to implement. We need to have another gate so agent don't go on forever.' Implemented as successive driver iterations rather than subagents, at the operator's suggestion ('the trigger at 2AM generates the spec and the one at 2:15 reviews it'). A fresh process has no memory of writing the thing it reviews, so the independence is structural rather than merely prompted.",
     "max_rounds": 3,
@@ -20,7 +19,6 @@
     ],
     "research": "Web research is authorised and encouraged where it would change the answer. Operator: 'Do any research on the internet that the agents deem necessary. Always think things out before implementing.'"
   },
-
   "queue": [
     {
       "id": "Q1-projects",
@@ -48,6 +46,16 @@
       "why": "hub/tests/test_override_inheritance.py::test_the_most_recent_overrides_win fails ~50% in a full chunked run. The test is CORRECT; the code is wrong. A trustworthy suite is a precondition for Q5's audit — a loop culling tests cannot tell a flake from a test it broke.",
       "detail": "DO NOT apply the one-line fix proposed in handoff 0050 (adding Conversation.id.desc()). Prep checked it and it does not work: Conversation.id is 'conv-' + short_id(), i.e. random, so id.desc() picks the later-created row only about half the time. It would make the query deterministic-looking while staying arbitrary. The real bug: hub/hub/conversations.py:72 orders by created_at.desc() alone, and two conversations created inside the same clock tick tie — on Windows the default timer granularity is ~15.6ms, so this hits real users, not just tests. Follow the codebase's own precedent: add an autoincrement `sequence` integer primary key to Conversation, exactly as TaskTransition and InboundQueueEntry already do, and read the reasoning already written at hub/hub/db/models.py:695-699. Order by sequence.desc(). Needs a migration in hub/hub/migrations/versions/ that guards for a missing table (see 0033/0034), and CLAUDE.md requires bumping the head assertions in BOTH hub/tests/test_migrations.py and hub/tests/test_project_persistence.py.",
       "verify": "Add a regression test that creates two conversations with an identical created_at and asserts the later one wins. Mutation-check it: revert the ordering change and watch that named test fail. Then run the full hub suite three times and confirm test_override_inheritance passes every time.",
+      "est_iterations": 2
+    },
+    {
+      "id": "Q4a-visual-harness",
+      "title": "Build a headless screenshot harness so the loop can check its own UI work",
+      "status": "open",
+      "why": "The operator asked whether Claude can screenshot and self-loop on UI. Checked live during the run: the INTERACTIVE session can (the T3 preview tools drove localhost:8010 and returned a real PNG plus the a11y tree), but THIS DRIVER CANNOT — there is no .mcp.json and ~/.claude.json has empty mcpServers both globally and for this project, so a headless `claude -p` firing gets no preview tools at all. Playwright plus the Read tool is the headless-capable equivalent: Read renders PNGs visually. Operator authorised building it.",
+      "detail": "Install into the Python311 interpreter: `python -m pip install playwright` then `python -m playwright install chromium` (~150MB browser download — explicitly authorised by the operator, superseding the earlier no-new-toolchain default for THIS case only; it is a pip-managed browser binary, not a language toolchain). Write scripts/uishot.py taking --url, --theme (light|dark), --width, --out, using Playwright's sync API with browser.new_context(color_scheme=...) and a full-page screenshot. Then READ the PNG — the Read tool renders images, which is what closes the loop. CRITICAL: the Hub serves hub/hub/static/ui, a COMMITTED BUILD ARTEFACT, so a UI source change does not appear until `cd hub/ui && npm run build` then `python scripts/refresh_ui_bundle.py`. Either do that before each capture, or run the Vite dev server (npm run dev, :5173) and point the harness there for fast iteration — say in the log which you used, because a screenshot of a stale bundle is the same trap as a stale Hub.",
+      "verify": "Capture the aw-loop10 spec document and task board in BOTH themes at 1280 and at a narrow width, Read each PNG, and describe what is actually visible. Prove the harness is honest by capturing before AND after a deliberate one-line CSS change and confirming the two PNGs differ.",
+      "note": "This makes two of the three visual findings MEASURABLE rather than taste: finding 2 (navy background) becomes 'assert the rendered document's computed background equals the app's theme token in each mode' via page.evaluate + getComputedStyle; finding 5 (cards too narrow) becomes 'assert the card body does not clip — scrollHeight <= clientHeight at width W'. Finding 1 ('colour carries no meaning') stays TASTE: the loop may verify colour is applied, never that it helps. Capture its PNG, put it in decisions_for_user, and do NOT self-tick it.",
       "est_iterations": 2
     },
     {
@@ -94,17 +102,15 @@
       "est_iterations": 8
     }
   ],
-
   "current": "Q2-test-speed",
   "next_action": "Read Entry 1 of the log first (Q1 is done — 10 projects deleted via raw SQL after confirming no delete API exists; Hub restarted and re-verified: 1 project, 9 requirements). Now do Q2-test-speed: run the hub test suite in chunks with --durations=50 to find where the 7 minutes concentrates (chunk it — the full run exceeds the 600s command cap; consider running a chunk in the background). Record top offenders in the log. Then pip install pytest-xdist into C:/Users/huida/AppData/Local/Programs/Python/Python311/python.exe and run the SAME chunk both serial and with -n auto, comparing pass/fail/skip counts exactly (not just wall-clock) before claiming xdist works. Also check whether root pyproject.toml's addopts '-v --tb=short' costs measurable I/O across ~360 tests. This item is sized at 2 iterations in the estimate — if the measurement phase alone fills this iteration, stop there, log the durations findings, and leave next_action pointing at the xdist comparison for the next firing rather than rushing both into one turn.",
-
   "limits": [
     "Stay on the autonomous branch. No commits, merges or rebases onto hub-native-experience or master. Merging back is the operator's decision, made awake.",
     "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Pushing the autonomous branch itself is required, not optional.",
     "Nothing destructive beyond what is explicitly authorised. The ONLY authorised deletions are: the ten Hub projects named in Q1, aw-loop6's minted credential row, and test files that meet Q5's written bar with a mutation check.",
     "Never mark work complete on the strength of a plan existing.",
     "Every claim is measured or labelled unverified. If something could not be run, the log says so.",
-    "pip install into C:/Users/huida/AppData/Local/Programs/Python/Python311 is allowed (pytest-xdist). Installing a new LANGUAGE toolchain (Rust, Node-for-Electron) is NOT — record it as a decision instead.",
+    "pip install into C:/Users/huida/AppData/Local/Programs/Python/Python311 is allowed. The operator additionally authorised `playwright install chromium` (~150MB browser binary) for Q4a. Installing a new LANGUAGE toolchain (Rust, Node-for-Electron) is still NOT allowed — record it as a decision instead.",
     "This repository must never acquire an AgentWeave session: no agentweave.yml, no .agentweave/, no spec/ at the repo root. Operator confirmed: 'Yes no agentweave'. Use openspec/, never the aw-* skills.",
     "Test projects live outside the repository.",
     "STANDING DIRECTIVE: every tasks.md splits agent-verifiable from human-only and emits a user test guide.",
@@ -116,7 +122,6 @@
     "Icon is the only icon system (lucide-react). approve_tool_call keeps NO return annotation. Migrations guard for a missing table and bump BOTH head assertions.",
     "Stage paths explicitly; never git add -A outside a scratch directory."
   ],
-
   "decisions_for_user": [
     "NEW — Q1 found no project-delete API anywhere in the Hub (checked every @router.delete in hub/hub/api/v1/ and project_lifecycle.py: only runners, jobs, inbound-queue entries, a chat task-link, agent-actions jobs, and charters can be deleted through the API). The 10 stale projects were removed with a one-shot raw-SQL script instead (backed up first, Hub stopped during the write, restarted and re-verified after). Is an undeletable project the intended shape, or should DELETE /api/v1/projects/{id} exist? Not answered here.",
     "CARRIED, unanswered since handoff 0050 — 12.3 (hub-owns-the-spec-document) needs a ruling, not an implementation: the task argues D9 should be AMENDED, because auto-binding the spec charter would make 'no charter' unreachable and contradicts the operator's 'Not necessarily I want to use the charter for spec. Is good practice but I can skip it.' Amend D9, or implement as written? Deprioritised by the operator's 2026-08-16 agenda; not in this run's queue.",
@@ -124,9 +129,9 @@
     "CARRIED — d6: the minted spec directory slug can run to 66+ characters. spec_naming.py's MAX_SLUG_LENGTH (232) derives from the 255-char storage contract, not from path practicality. Pick a fixed UX cap, or leave it.",
     "CARRIED — should a spec document be allowed to be renamed TWICE? The path kept the agent's first phrasing while the title was later refined, so they now disagree in quality.",
     "PRE-AUTHORISED DEFAULT set during prep, not by the operator: spec rounds are capped at 3. At round 3 without approval the artifact ships with its objections recorded here. Cost if wrong: a spec lands with an unresolved disagreement in it rather than being iterated further.",
-    "PRE-AUTHORISED DEFAULT set during prep: no new language toolchain may be installed for Q6. Cost if wrong: the desktop-app spec may recommend Tauri or Electron and stop one step short of a working prototype."
+    "PRE-AUTHORISED DEFAULT set during prep: no new language toolchain may be installed for Q6. Cost if wrong: the desktop-app spec may recommend Tauri or Electron and stop one step short of a working prototype.",
+    "RESOLVED DURING THE RUN, by the operator while awake at 02:20: they asked whether Claude can screenshot and self-verify UI. Demonstrated live that the interactive session can, and that this headless driver cannot (no MCP servers are configured, so `claude -p` has no preview tools). They chose to add Q4a, a Playwright harness, and authorised the chromium download. The standing limit on visual judgement is UNCHANGED: findings 1, 17.1 and 17.3 and the 29 parked tasks remain the operator's to answer. A screenshot makes a background colour measurable; it does not make taste measurable."
   ],
-
   "environment": {
     "hub": "http://127.0.0.1:8010 — RESTARTED during prep at 2026-08-16T02:12 on current code (it had been running since 2026-08-15T11:46 and was 7 hub/hub commits stale). Healthy in 1s, all 11 projects intact.",
     "restart_command": "Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{CommandLine='cmd.exe /c \"cd /d C:\\Users\\huida\\Documents\\projects\\AgentWeave\\hub && C:\\Users\\huida\\AppData\\Local\\Programs\\Python\\Python311\\python.exe -m uvicorn hub.main:app --host 127.0.0.1 --port 8010 > %TEMP%\\agentweave-hub.log 2>&1\"'}",
@@ -134,7 +139,6 @@
     "auth": "Bearer token = AW_BOOTSTRAP_API_KEY in hub/.env (40 chars). Read it with python, not grep -oP — grep -P is unavailable in this Git Bash.",
     "test_chunking": "pytest hub/tests/ is ~7 minutes and exceeds the 600s command cap — run it in file chunks, or in the background. pytest hub/tests/ tests/ together fails collection. This may become unnecessary if Q2 lands."
   },
-
   "dead_ends": [
     "Handoff 0050's proposed one-line flake fix (Conversation.id.desc()) DOES NOT WORK — ids are random. Verified during prep. See Q3.",
     "cd inside a Bash tool call persists across calls and breaks subsequent relative paths. Re-cd to the repo root or use absolute paths.",
@@ -145,7 +149,6 @@
     "Keep .ps1 files ASCII-only — PowerShell 5.1 reads a BOM-less UTF-8 file as ANSI and an em dash inside a double-quoted string corrupts the quoting.",
     "A loop's 'clean suite' claim is only as good as its chunk boundaries. Different groupings expose different flakes."
   ],
-
   "prep_notes": {
     "prepared_at": "2026-08-16T02:15+01:00",
     "prepared_by": "/autonomous-prep, operator awake and answering",
