@@ -54,22 +54,33 @@ migration question, addressed there rather than duplicated here.
 
 ## D3 — The desktop window: pywebview owns the calling thread when installed, with an unchanged fallback
 
-**Decision:** when `pywebview` is importable, `--app` calls `webview.create_window(...)` then
+**Decision:** when `pywebview` is importable, app mode calls `webview.create_window(...)` then
 `webview.start()`, pointed at the same URL `_open_app_window` resolves today
 (`_hub_resolve_launch_url`). When `pywebview` is not installed, behavior is **byte-identical** to
 today — `_open_app_window`'s chromeless-browser-or-`webbrowser.open` path, unchanged. This keeps the
 CLI's zero-runtime-dependency stance genuinely optional rather than aspirational: nothing breaks, and
 nothing silently degrades in a way the operator can't see, if `pywebview` is absent.
 
+App mode is not a flag a caller opts into: `main()` forces `parsed_args.app = True` for bare
+invocation (`cli.py:1126`), which `create_parser()` states is "the only way to launch the app"
+(`cli.py:1028-1029`), and `cmd_hub_start` forwards that same `app=True` down its Docker branch
+(`--docker`/`--local`) exactly as it does down the native branch — there is no CLI surface today
+that starts the Hub with `app=False`. So the decision below applies to every bare `agentweave`
+invocation and every `agentweave --docker`/`agentweave --local` invocation, not to an opt-in flag.
+Historical note: earlier commits (before `ab53cf4`, `2026-08-03-single-runtime`) had a real `--app`
+flag on a `hub start` subcommand; this document keeps calling the concept "app mode" to avoid
+implying that flag still exists.
+
 **Why this is a real process-model change, not a drop-in:** `webview.start()` blocks the thread that
 calls it until the window closes — this is inherent to how OS webview event loops work, not a
 pywebview limitation to work around. Today's `detach` path spawns the Hub as a detached background
-process and then fires `_open_app_window` as a non-blocking `subprocess.Popen`, so `agentweave
-hub-start --app` returns immediately with the Hub still running. A pywebview window cannot be opened
-that way without pywebview managing its own subprocess and IPC — out of scope for this change.
+process and then fires `_open_app_window` as a non-blocking `subprocess.Popen`, so bare `agentweave`
+(app mode forced on, default detach) returns immediately with the Hub still running. A pywebview
+window cannot be opened that way without pywebview managing its own subprocess and IPC — out of scope
+for this change.
 
 **Resolution:** the Hub backend keeps starting exactly as it does today — detached (default) or
-foreground (`--no-detach`), unchanged by this proposal. `--app`'s window becomes a **separate,
+foreground (`--no-detach`), unchanged by this proposal. App mode's window becomes a **separate,
 additional blocking phase**: after the Hub is confirmed healthy (the same `_hub_health_check` call
 already used), the CLI process blocks in `webview.start()` until the operator closes the window, then
 exits 0. This mirrors what every real desktop app already does — the process the user thinks of as
@@ -78,12 +89,18 @@ exits 0. This mirrors what every real desktop app already does — the process t
 the window-owning CLI invocation exits, the detached uvicorn process backing it keeps running,
 exactly as closing a browser tab today does not stop the Hub).
 
-**Scripted/`--no-detach` callers:** a caller that both backgrounds the Hub (`--no-detach` *not* set,
-i.e. default detach) and passes `--app` now blocks until the window closes, where it previously
-returned in seconds. This is named in `proposal.md`'s Impact section as a real behavior change, not
-hidden; `tasks.md`'s human-only section asks the operator to confirm this is the experience wanted
-before it ships, since "the CLI command that starts your app now waits for you to close the window" is
-a genuine UX judgment, not something a test can validate as correct or wrong on its own.
+**Every default-detach launch, not just scripted or opt-in ones:** since app mode is forced on for
+bare invocation and for the Docker branch (there is no `app=False` CLI surface — see above), a caller
+that runs plain `agentweave` (or `agentweave --docker`) with default detach — which is every operator
+who has not passed `--no-detach` — now blocks until the window closes, where it previously returned
+in seconds. This is not a corner case for scripts that pass an extra flag; it is what happens by
+default the next time anyone runs the CLI's one entry point. This is named in `proposal.md`'s Impact
+section as a real behavior change, not hidden; `tasks.md`'s human-only section asks the operator to
+confirm this is the experience wanted before it ships, since "the CLI command that starts your app now
+waits for you to close the window" is a genuine UX judgment, not something a test can validate as
+correct or wrong on its own. A caller that genuinely needs the old non-blocking start-and-return
+behavior (e.g. this run's own driver, which starts the Hub via direct `uvicorn` rather than the CLI)
+is unaffected — it does not go through `cmd_hub_start` at all.
 
 **Window chrome:** a single window, no browser tabs/address bar/bookmarks (pywebview's default), title
 "AgentWeave", pointed at `_hub_resolve_launch_url(port, cwd)` — the same URL resolution already used
@@ -93,7 +110,7 @@ for the browser fallback, so which project opens is unaffected by this change.
 
 Two populations, named in the exploration and resolved here rather than left open:
 
-1. **Native-mode users** (`agentweave hub-start`, any flags, no direct `uvicorn`/Docker use). Already
+1. **Native-mode users** (bare `agentweave`, any flags, no direct `uvicorn`/Docker use). Already
    at `~/.agentweave/hub/data/agentweave.db`. **No migration — nothing changes for them.** D1/D2 do
    not touch this path.
 2. **Direct-`uvicorn`/Docker-dev users** whose data sits at a project-relative `hub/data/agentweave.db`
@@ -103,8 +120,9 @@ Two populations, named in the exploration and resolved here rather than left ope
 first-run migration that moves or copies a database file is exactly the kind of surprising, hard-to-
 reverse action `CLAUDE.md`'s executing-actions-with-care guidance warns against, and this population
 is by definition people running the Hub outside its one supported entry point (`app-lifecycle`'s
-"Bare invocation is the only entry point" requirement already declares `hub-start` the only supported
-way to begin) — most concretely, this run's own driver and any other Hub contributor mid-development,
+"Bare invocation is the only entry point" requirement already declares bare `agentweave` the only
+supported way to begin) — most concretely, this run's own driver and any other Hub contributor
+mid-development,
 not an end operator who would be surprised to lose data. `tasks.md`'s test only needs to prove D1/D2
 apply the corrected default going forward; it does not write a migration tool. Anyone in population 2
 who wants their existing data at the new global path can copy the file themselves — a one-line
@@ -118,11 +136,12 @@ would protect is not the operator-facing population this bug report was about.
 ["pywebview>=5.0"]`. Its platform requirements — WebView2 runtime on Windows (ships with current
 Windows 10/11 but is not guaranteed present on an unpatched install), WebKitGTK or Qt on Linux
 (pywebview does not vendor either; the operator's distribution must have one), Cocoa/WebKit on macOS
-(built in, no action) — are stated in the CLI's install documentation and in `--app`'s own failure
+(built in, no action) — are stated in the CLI's install documentation and in app mode's own failure
 path: if `pywebview.create_window` raises because no webview backend is available, the CLI catches it,
 prints what is missing, and falls back to `_open_app_window`'s existing browser behavior rather than
-crashing the whole `hub-start` invocation. This keeps `--app` best-effort rather than a hard
-requirement, consistent with D3's "nothing breaks if pywebview or its backend is unavailable."
+crashing the invocation (bare `agentweave` or `agentweave --docker`/`--local`). This keeps app mode
+best-effort rather than a hard requirement, consistent with D3's "nothing breaks if pywebview or its
+backend is unavailable."
 
 **Explicitly not solved here:** vendoring or auto-installing a Linux webview backend. Out of scope,
 named as an open cost in `proposal.md`'s Non-Goals, consistent with the exploration's Section 5.

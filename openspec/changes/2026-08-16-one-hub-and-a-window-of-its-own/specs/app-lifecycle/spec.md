@@ -9,9 +9,10 @@ open or register the invocation directory as a project through that runtime, and
 that project's overview. This SHALL be the only supported way to begin using AgentWeave.
 
 The one local AgentWeave runtime SHALL resolve to the same database and instance state regardless
-of which directory it was launched from, whether started through `agentweave hub-start`, a direct
-`uvicorn hub.main:app` invocation, or `docker compose up` against the Hub's compose file. Only the
-directory-scoped *project* registered against that runtime SHALL vary by launch directory.
+of which directory it was launched from, whether started through bare `agentweave` (with or without
+`--docker`/`--local`), a direct `uvicorn hub.main:app` invocation, or `docker compose up` against the
+Hub's compose file. Only the directory-scoped *project* registered against that runtime SHALL vary by
+launch directory.
 
 #### Scenario: First run
 
@@ -54,15 +55,21 @@ directory-scoped *project* registered against that runtime SHALL vary by launch 
 
 ## ADDED Requirements
 
-### Requirement: The app flag opens a dedicated desktop window when a native webview is available
+### Requirement: App mode opens a dedicated desktop window when a native webview is available
 
-The system SHALL open `--app` in a dedicated window with no browser chrome (no address bar, no
+App mode is not an opt-in flag — it is forced on for bare `agentweave` invocation, the CLI's only
+entry point, and for its `--docker`/`--local` branch equally. This requirement therefore governs the
+**default** behavior of every normal launch, not a feature an operator must ask for.
+
+The system SHALL open app mode in a dedicated window with no browser chrome (no address bar, no
 tabs) and its own OS taskbar/dock presence, rather than a browser tab or window, when a native
-webview backend (`pywebview`, an optional extra) is installed and can create a window.
+webview backend (`pywebview`, an optional extra) is installed and can create a window. This applies
+uniformly to every launch path that reaches app mode — native (`agentweave`) and Docker
+(`agentweave --docker`, `agentweave --local`) alike; neither is exempt.
 
 When no native webview backend is installed, or window creation fails for any reason (missing
 platform runtime, no display), the system SHALL fall back to the existing chromeless-browser-or-
-default-browser-tab behavior without error, and SHALL NOT crash the invoking `hub-start` command.
+default-browser-tab behavior without error, and SHALL NOT crash the invoking command.
 
 The invoking process SHALL remain running for as long as the native desktop window is open, and
 SHALL exit once the operator closes it. The detached Hub backend process itself SHALL be
@@ -70,13 +77,20 @@ unaffected by the window closing — closing the window MUST NOT stop the Hub.
 
 #### Scenario: A native window opens when the backend is available
 
-- **WHEN** `agentweave hub-start --app` is run with a working native webview backend installed
+- **WHEN** bare `agentweave` is run with a working native webview backend installed
 - **THEN** a single window opens with no browser chrome, titled for the app
 - **AND** the invoking command does not return until that window is closed
 
+#### Scenario: A native window opens for a Docker-launched instance too
+
+- **WHEN** `agentweave --docker` (or `agentweave --local`) is run with a working native webview
+  backend installed
+- **THEN** a single window opens with no browser chrome, exactly as it does for a native launch —
+  the Docker branch is not exempt from app mode
+
 #### Scenario: Falls back to a browser window when the backend is absent
 
-- **WHEN** `agentweave hub-start --app` is run with no native webview backend installed
+- **WHEN** bare `agentweave` is run with no native webview backend installed
 - **THEN** the system opens the Hub in a chromeless app-mode browser window or the default browser,
   exactly as it did before the native backend existed
 - **AND** the invoking command returns without waiting for that window to close
@@ -90,5 +104,5 @@ unaffected by the window closing — closing the window MUST NOT stop the Hub.
 
 #### Scenario: Closing the window does not stop the Hub
 
-- **WHEN** the operator closes a native app window opened by `--app`
+- **WHEN** the operator closes a native app window opened in app mode
 - **THEN** the detached Hub backend process remains running and reachable

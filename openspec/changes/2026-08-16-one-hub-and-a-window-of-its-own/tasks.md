@@ -51,39 +51,52 @@ name are both process/config-level, not schema.
       importable (caller falls back to `_open_app_window`). Any exception raised while creating or
       starting the window (e.g. no WebView2/WebKitGTK/Qt backend present) is caught, a message is
       printed naming what's missing, and the function returns `False` so the caller falls back —
-      per `design.md` D5, `--app` stays best-effort.
-- [ ] 3.3 Wire `_hub_native_start`'s two `if app: _open_app_window(url)` call sites
-      (`cli.py:692`, `:789`) and `_wait_and_open_app` (`cli.py:661`, used by the `--no-detach`
-      foreground path) through 3.2 first, falling back to `_open_app_window` only on `False`. Do not
-      change `_find_app_mode_browser`/`_open_app_window` themselves — they stay the exact fallback
-      path (`design.md` D3's "byte-identical when pywebview is absent").
+      per `design.md` D5, app mode stays best-effort.
+- [ ] 3.3 Wire **all five** real `_open_app_window` call sites through 3.2 first, falling back to
+      `_open_app_window` only on `False`. `_hub_native_start`'s two (`cli.py:692`, `:789`) and
+      `_wait_and_open_app` (`cli.py:661`, used by the `--no-detach` foreground path) cover the native
+      branch; `cmd_hub_start`'s Docker branch has two more that are just as reachable, since `main()`
+      forces `app=True` for bare invocation regardless of `--docker`/`--local` — `cli.py:850` (the
+      "already running" early return) and `cli.py:942` (after `docker compose up` succeeds). Missing
+      these two would leave a Docker-launched instance silently on the old browser fallback even with
+      `pywebview` installed, contradicting the ADDED requirement's unqualified "SHALL open... when a
+      native webview backend is installed" (round-1 review, Objection 2). Do not change
+      `_find_app_mode_browser`/`_open_app_window` themselves — they stay the exact fallback path
+      (`design.md` D3's "byte-identical when pywebview is absent").
 - [ ] 3.4 Confirm by reading (this is a process-model change, not something a unit test proves) that
       the detached-Hub-plus-blocking-window composition described in `design.md` D3 is what actually
-      happens: with `pywebview` installed and `--app` passed, the CLI invocation now blocks in
+      happens: with `pywebview` installed, running bare `agentweave` (app mode is always on) now blocks in
       `webview.start()` after the Hub is confirmed healthy, and only that invocation's exit is
       delayed — the detached uvicorn process is unaffected and keeps running after the window
       closes, exactly as today's browser-window close does not stop the Hub.
 
 ## 4. CLI tests — agent-verifiable
 
-- [ ] 4.1 A test that with `pywebview` NOT installed (or monkeypatched to raise `ImportError` on
-      `import webview`), `--app`'s behavior is byte-identical to today: same call into
-      `_open_app_window`, same arguments, no new branch taken. This is the test that makes D3's
-      "nothing silently degrades" claim checkable rather than asserted.
+**`tests/test_cli.py` does not exist yet.** Confirmed by listing `tests/` and grepping every file in
+it for `agentweave.cli`, `_open_app_window`, `_hub_native_start`, and `cmd_hub_start` — zero hits
+(round-1 review, non-blocking finding). The CLI has no test coverage of any kind today. Tasks 4.1-4.4
+create this file from scratch, including whatever fixtures/imports it needs — this is a new suite,
+not an extension of an existing one.
+
+- [ ] 4.1 In the new `tests/test_cli.py`: a test that with `pywebview` NOT installed (or
+      monkeypatched to raise `ImportError` on `import webview`), app mode's behavior is byte-identical
+      to today: same call into `_open_app_window`, same arguments, no new branch taken. This is the
+      test that makes D3's "nothing silently degrades" claim checkable rather than asserted.
 - [ ] 4.2 A test that with `webview` importable (mock the module — do not require a real
       `pywebview` install in the CLI test environment, which is a separate, zero-dependency
       distribution from the Hub's), `create_window` and `start` are called with the URL
       `_hub_resolve_launch_url` resolves, and `_open_app_window` (the fallback) is NOT called.
 - [ ] 4.3 A test that a `webview.start()` exception (simulated via the mock) is caught, and the
       function falls back to calling `_open_app_window` — proving 3.2's "best-effort" contract
-      rather than letting a missing backend crash `hub-start --app`.
-- [ ] 4.4 Full existing `tests/test_cli.py` suite still passes unmodified — no existing test asserted
-      the old always-browser `--app` behavior in a way this change should have broken; if one did,
-      record which and why updating it was correct, rather than silently editing an assertion.
+      rather than letting a missing backend crash the invocation.
+- [ ] 4.4 The new `tests/test_cli.py` suite passes. Since no prior suite existed, there is no old
+      assertion of the always-browser behavior to have broken — this task is "the new suite is green,"
+      not "nothing regressed in an existing one." Note this plainly in the PR/commit rather than
+      implying continuity with a suite that was never there (round-1 review, non-blocking finding).
 
 ## 5. Migration decision — no code, a documented non-action (D4)
 
-- [ ] 5.1 State in the CLI's install docs (wherever `hub-start`/`--docker`/`--local` are already
+- [ ] 5.1 State in the CLI's install docs (wherever bare `agentweave`/`--docker`/`--local` are already
       documented — `docs/` or `README.md`, whichever currently covers it) that anyone who has been
       running the Hub via direct `uvicorn hub.main:app` or `docker compose up` from varying
       directories may find their data at the pre-fix location after upgrading, and that copying the
@@ -93,19 +106,20 @@ name are both process/config-level, not schema.
 ## 6. Human-only verification
 
 - [ ] 6.1 **Confirm the same Hub/database is reached from two different launch directories**, for
-      each of the three launch paths in scope: `agentweave hub-start` (native — should already pass,
+      each of the three launch paths in scope: bare `agentweave` (native — should already pass,
       unchanged by this proposal; run as a control), direct `uvicorn hub.main:app` (should now match
       native, where it did not before), and `docker compose up` from two different directories
       (should now produce the same named volume). This is the actual bug report; task 2's tests
       prove the mechanism, this proves the outcome.
-- [ ] 6.2 **Try `agentweave hub-start --app` with `pywebview` installed** and judge whether a
-      CLI command that now blocks until the window closes, where it used to return in seconds, is
-      the experience wanted — `design.md` D3 names this a genuine UX judgment call, not something a
-      test can validate as correct.
-- [ ] 6.3 **Try `agentweave hub-start --app` with `pywebview` NOT installed** (a clean venv, or
-      uninstall it) and confirm the fallback browser window still opens and nothing looks broken or
-      half-migrated.
-- [ ] 6.4 **Try `--app` with no compatible webview backend present** (hardest to stage — e.g. a
+- [ ] 6.2 **Try bare `agentweave` with `pywebview` installed** and judge whether a CLI command that
+      now blocks until the window closes, where it used to return in seconds, is the experience
+      wanted — `design.md` D3 names this a genuine UX judgment call, not something a test can validate
+      as correct. Also try `agentweave --docker` (or `--local`) with `pywebview` installed, since
+      task 3.3 wires the Docker branch through the same native-window path — confirm it opens a
+      native window too, not the old browser fallback.
+- [ ] 6.3 **Try bare `agentweave` with `pywebview` NOT installed** (a clean venv, or uninstall it) and
+      confirm the fallback browser window still opens and nothing looks broken or half-migrated.
+- [ ] 6.4 **Try app mode with no compatible webview backend present** (hardest to stage — e.g. a
       Windows install with WebView2 genuinely absent, or Linux with neither WebKitGTK nor Qt) and
       confirm the fallback message is legible rather than a raw traceback.
 - [ ] 6.5 If Q4a's screenshot harness (`scripts/uishot.py`) is available, it screenshots a browser
@@ -118,17 +132,18 @@ name are both process/config-level, not schema.
 or `pip install agentweave-ai` (for the global-state steps, no extra needed).
 
 1. **Start the Hub from one directory, then a different one.**
-   Run `agentweave hub-start` from directory A, note the port and any projects listed by
-   `agentweave status`. Stop it (`agentweave stop`), then run `agentweave hub-start` again from an
+   Run bare `agentweave` from directory A, note the port and any projects listed by
+   `agentweave status`. Stop it (`agentweave stop`), then run bare `agentweave` again from an
    unrelated directory B.
    - *Expect:* the same Hub, the same projects (directory B is added as a new project, not a new
      Hub) — not a fresh, empty instance.
-2. **Open the app.** Run `agentweave hub-start --app` (having installed the `[app]` extra first if
-   you want the native window; otherwise this opens a browser window as before).
+2. **Open the app.** Run bare `agentweave` (having installed the `[app]` extra first if you want the
+   native window; otherwise this opens a browser window as before — app mode is always on, there is
+   no flag to pass).
    - *Expect, with `pywebview` installed:* a single window titled "AgentWeave," no browser
      chrome (no address bar, no tabs), with its own entry in your OS taskbar/dock — not a browser
      tab. The terminal command does not return until you close that window.
-   - *Expect, without it:* exactly what `--app` did before this change — a chromeless browser
+   - *Expect, without it:* exactly what app mode did before this change — a chromeless browser
      window or a new tab, and the command returns right away.
 3. **Close the window and check the Hub is still running.** After closing the app window from
    step 2, run `agentweave status`.

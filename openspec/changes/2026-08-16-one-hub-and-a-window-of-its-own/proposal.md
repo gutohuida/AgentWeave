@@ -11,9 +11,10 @@ different database depending on which folder it was launched from would be incoh
 and the instance-state fix are specified together.
 
 **The global-state bug is narrower than it first looked.** The exploration re-diagnosed it against
-the actual call paths rather than the single `hub/hub/config.py:9` line first blamed for it:
-`agentweave hub-start` (native mode, no flags — the command a `pip install agentweave-ai` user
-actually runs) has been global since commit `ab53cf4` (2026-08-03): `_hub_native_start`
+the actual call paths rather than the single `hub/hub/config.py:9` line first blamed for it: bare
+`agentweave` (native mode, no flags — the only entry point `create_parser()` exposes, and the
+command a `pip install agentweave-ai` user actually runs) has been global since commit `ab53cf4`
+(2026-08-03): `_hub_native_start`
 (`src/agentweave/cli.py:664`) computes an absolute `Path.home() / ".agentweave" / "hub" / "data" /
 "agentweave.db"` and sets `DATABASE_URL` in the environment *before* importing `hub.main`, so
 `config.py`'s relative default never fires on that path. The bug survives in exactly two other
@@ -26,7 +27,9 @@ basename, giving a different volume — a different database — per directory e
 itself resolves its relative path consistently.
 
 **The desktop app is the other half.** `_open_app_window` (`cli.py:634`) already opens the Hub in a
-chromeless `chrome --app=<url>` window today via the existing `--app` flag — a real, zero-dependency
+chromeless `chrome --app=<url>` window today whenever app mode is on — which, since `main()`
+unconditionally forces `parsed_args.app = True` for bare invocation (`cli.py:1126`), the only entry
+point this CLI has, means *every* normal launch, not an opt-in flag. That's a real, zero-dependency
 floor, but not a true desktop shell: the dock/taskbar icon and process are the browser's, not
 AgentWeave's, and there is no window if the operator has no Chrome/Edge installed. The exploration
 compared Electron, Tauri/PyTauri, and pywebview against this run's standing constraint (no new
@@ -38,7 +41,7 @@ pairs with a FastAPI-backend-plus-built-frontend in exactly AgentWeave's shape.
 - **`hub/hub/config.py`'s `database_url` default becomes the same absolute, home-relative path native
   mode already computes**, closing the two remaining holes (direct `uvicorn hub.main:app`, and
   belt-and-braces for any future caller that imports `hub.main` without going through the CLI). No
-  behavior change for anyone who has only ever used `agentweave hub-start`.
+  behavior change for anyone who has only ever used bare `agentweave` (native mode).
 - **`hub/docker-compose.yml` gets a top-level `name: agentweave`**, making Compose's project name —
   and therefore the `hub-data` volume it creates — independent of the directory `docker compose up`
   was run from.
@@ -47,10 +50,12 @@ pairs with a FastAPI-backend-plus-built-frontend in exactly AgentWeave's shape.
   this fix.
 - **`pywebview` as an optional extra** (`agentweave-ai[app]`), not a base dependency — the CLI's
   `dependencies = []` stance in `pyproject.toml` is preserved; installing it is the operator's choice.
-- **`--app` opens a real desktop window when pywebview is installed**, falling back to today's
+- **App mode opens a real desktop window when pywebview is installed**, falling back to today's
   chromeless-browser behavior when it is not (`design.md` D3 covers the threading/process model this
-  requires — pywebview's event loop must own the calling thread, which changes how `--app` composes
-  with `--no-detach`).
+  requires — pywebview's event loop must own the calling thread, which changes how app mode composes
+  with `--no-detach`). App mode is not an opt-in flag: it is forced on for bare invocation, the CLI's
+  only entry point, and for the Docker branch (`--docker`/`--local`) as well, so this is a change to
+  the default behavior of every normal launch, not a feature callers must ask for.
 - **Bare `agentweave` continues to register the invocation directory as a project** (per
   `app-lifecycle`'s existing "Bare invocation is the only entry point" requirement) — nothing about
   per-folder *project* registration changes; only the Hub's own single-instance state (database,
@@ -59,10 +64,11 @@ pairs with a FastAPI-backend-plus-built-frontend in exactly AgentWeave's shape.
 
 ## Impact
 
-**Behavior** — one AgentWeave Hub instance regardless of whether it is launched via `agentweave
-hub-start`, direct `uvicorn`, or Docker Compose, from any directory. `agentweave --app` (or
-`hub-start --app`) opens a dedicated window with its own OS taskbar/dock presence when `pywebview` is
-installed.
+**Behavior** — one AgentWeave Hub instance regardless of whether it is launched via bare
+`agentweave`, direct `uvicorn`, or Docker Compose, from any directory. Bare `agentweave` (and
+`agentweave --docker`/`agentweave --local`) opens a dedicated window with its own OS taskbar/dock
+presence when `pywebview` is installed — the default experience of the CLI's one entry point, not an
+opt-in.
 
 **Dependencies** — one new *optional* dependency (`pywebview`) on the CLI distribution only; the Hub
 distribution (`agentweave-hub`) is untouched. No change to either package's required dependencies.
@@ -70,10 +76,12 @@ distribution (`agentweave-hub`) is untouched. No change to either package's requ
 **Schema** — none. The database's location changes for two specific pre-existing populations
 (`design.md` D4); its schema does not.
 
-**Process model** — `--app` with `pywebview` installed changes from "spawn a detached window process
-and return" to "block the invoking process in the window's event loop" (`design.md` D3). This is a
-real behavior change for scripts that currently call `agentweave hub-start --app` and expect it to
-return promptly; recorded, not hidden.
+**Process model** — app mode with `pywebview` installed changes from "spawn a detached window process
+and return" to "block the invoking process in the window's event loop" (`design.md` D3). Because app
+mode is forced on for the CLI's one and only entry point (`cli.py:1126`) and for its Docker branch,
+this is a real behavior change to the **default** experience of every normal launch — not, as the
+`--app` framing might suggest, something only scripts that opt into a flag would notice. Recorded,
+not hidden.
 
 ## Non-Goals
 
@@ -87,7 +95,7 @@ return promptly; recorded, not hidden.
 - **Not changing per-folder project *registration*.** `app-lifecycle`'s "Invocation from another
   directory reuses the instance" scenario is precedent, not something this change touches — a second
   directory still becomes a second project in the same instance; it was never a second instance under
-  `hub-start`, and this change does not alter that.
+  bare `agentweave`, and this change does not alter that.
 - **Not relocating existing per-user data to a more OS-idiomatic path** (e.g. `platformdirs`'s
   `%LOCALAPPDATA%`/`~/Library/Application Support`/XDG placement). `Path.home() / ".agentweave"`
   already resolves correctly on every OS and needs no new dependency; a future proposal can weigh

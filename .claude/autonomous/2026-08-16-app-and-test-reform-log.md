@@ -2242,3 +2242,69 @@ spec delta's scenarios; add the two missing Docker-branch call sites to task 3.3
 scope the ADDED requirement to native-only launches with a stated reason) and fix the third finding
 (task 4.1 states plainly that `tests/test_cli.py` does not exist yet and is being created, not
 extended). Then set `next_action` back to `REVIEW ... round 2` per the protocol — round 2 of max 3.
+
+## Entry 27 — 13:20 — Q6-desktop-and-global: REVISE round 2 — both blocking objections fixed
+
+Reread `cli.py` in full around every line the round-1 review cited (`create_parser()` 1025-1101,
+`main()` 1103-1128, `_hub_native_start` 664-816, `cmd_hub_start` 819-943) to confirm the review's own
+claims before writing anything, per the standing rule that a prior iteration's finding is a claim, not
+fact, until re-checked. Confirmed independently: `create_parser()` has no `hub-start` subparser and no
+`--app` flag anywhere; `main()` unconditionally sets `parsed_args.app = True` for bare invocation
+(`cli.py:1126`) before calling `cmd_hub_start`; `cmd_hub_start` (`cli.py:825`) reads that same `app`
+value into its Docker branch exactly as into its native branch — so `app=True` really is forced for
+every real CLI entry point, native and Docker alike, with no way to construct `app=False` from the
+command line today.
+
+**Objection 1 fix.** Rewrote every `agentweave hub-start` / `agentweave hub-start --app` reference
+across `proposal.md`, `design.md`, `tasks.md`, and `specs/app-lifecycle/spec.md` to the real forms:
+bare `agentweave`, `agentweave --docker`, `agentweave --local`. Introduced "app mode" as the concept
+name (the internal `app` parameter, real in code) to stop implying a `--app` CLI flag exists — the two
+places that legitimately still say `--app` are `design.md` D3's explicit historical note (pre-`ab53cf4`
+commits genuinely had a `hub start --app` subcommand+flag) and `proposal.md`'s literal Chrome
+invocation `chrome --app=<url>` (a real browser flag, unrelated to AgentWeave's own parser). Reframed
+every place that had described the pywebview-blocking behavior as affecting only "scripts that pass
+`--app`" — `proposal.md`'s Impact/Process-model paragraphs, `design.md` D3's renamed
+"Every default-detach launch, not just scripted or opt-in ones" section, and the spec delta's ADDED
+requirement's opening two sentences — to state plainly that this is the **default** experience of
+every bare `agentweave` invocation, since app mode can't be turned off from the CLI today.
+
+**Objection 2 fix.** Chose "add the missing call sites" over "scope to native-only," since the ADDED
+requirement's own unqualified "SHALL open... when a native webview backend is installed" already
+implied Docker shouldn't be exempt, and the fix is mechanical (same `if app: _open_app_window(url)`
+pattern, two more instances). `tasks.md` 3.3 now says "wire **all five** real call sites" by name —
+`_hub_native_start`'s two (`cli.py:692`, `:789`), `_wait_and_open_app` (`cli.py:661`), and
+`cmd_hub_start`'s Docker branch's two (`cli.py:850`, `:942`) — and explains why missing the Docker pair
+would contradict the requirement. Added a new scenario to the spec delta ("A native window opens for a
+Docker-launched instance too") and a Docker check to `tasks.md` 6.2's human-only verification, so the
+requirement, the tasks, and the test guide agree Docker is in scope rather than only the code comment
+saying so.
+
+**Third finding fixed.** `tasks.md` section 4 now opens with an explicit note that `tests/test_cli.py`
+does not exist anywhere in this repo today (re-verified: `ls tests/` plus a grep of every file in it
+for `agentweave.cli`/`_open_app_window`/`_hub_native_start`/`cmd_hub_start`, zero hits, same result the
+round-1 review got), and 4.1/4.4 no longer say "existing suite" — 4.4 now reads "the new suite is
+green," not "nothing regressed in an existing one."
+
+**What was NOT touched, and why:** the round-1 review traced the wrong command form back to
+`openspec/explorations/2026-08-16-desktop-app-global-state.md` (lines 25, 42, 74, 165, 192), but did
+not include the exploration in objection 1's fix list or in `next_action`'s instructions — the gate's
+`review_criteria` and the artifact under review are the change's own four files (`proposal.md`,
+`design.md`, `tasks.md`, the spec delta), not the pre-existing exploration that fed it. Left the
+exploration as-is rather than expanding scope beyond what round 1 asked for; flagging here in case a
+future pass wants to correct it too, since it is genuinely the same error, just upstream and not gating
+this change.
+
+**Verification this iteration:** every command form in all four files checked against `create_parser()`
+and `main()`/`cmd_hub_start` directly (not against the artifact's own prior claims); grepped both
+`hub-start` and `--app` across the whole change directory afterward and confirmed only the two
+intentional non-AgentWeave references remain (the historical note, the literal `chrome --app=` flag).
+No code changed — this is an artifact-only revision, same as round 1's review.
+
+**Elapsed:** one iteration.
+
+**Next:** a fresh iteration does `Q6 REVIEW openspec/changes/2026-08-16-one-hub-and-a-window-of-its-own
+round 2` cold, per the spec-round protocol — do not look up who wrote it, re-verify every factual claim
+(especially the "all five call sites" and "app mode is always forced on" claims) against the actual
+`cli.py` rather than trusting this entry, and check against Q6's `review_criteria` in `STATE.json`.
+Round 2 of max 3 — if this round objects again, round 3 is the last one before the artifact ships as-is
+with objections recorded in `decisions_for_user`.
