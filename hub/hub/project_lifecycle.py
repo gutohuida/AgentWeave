@@ -6,14 +6,15 @@ import contextlib
 import json
 import logging
 import os
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
-from sqlalchemy import func, select
+from sqlalchemy import Table, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .db.models import RUNNER_CLIS, Charter, Project, Run, Runner
+from .db.models import RUNNER_CLIS, Base, Charter, Project, Run, Runner
 from .project_workspace import (
     PROJECT_MARKER_PATH,
     PROJECT_MARKER_VERSION,
@@ -28,6 +29,12 @@ from .repo_hygiene import seed_repo_excludes
 from .utils import short_id
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class DeletedProjectSummary:
+    id: str
+    name: str
 
 
 class ProjectLifecycleService:
@@ -146,6 +153,40 @@ class ProjectLifecycleService:
         await self.session.commit()
         return project
 
+    async def delete(self, project_id: str) -> DeletedProjectSummary:
+        """Remove a project and every row scoped to it. Never touches the filesystem.
+
+        Deletes by introspecting `Base.metadata` for every table carrying a `project_id`
+        column, rather than a hand-maintained list of ORM relationships — a fixed list
+        drifts silently as tables are added; the sweep is complete by construction. See
+        `openspec/changes/2026-08-16-delete-project-api/design.md` D2.
+
+        This function must never import from `project_workspace.py` or call a
+        filesystem API — `Project.working_directory` is read only to report what was
+        removed, never opened, listed, or deleted (design.md D4).
+        """
+        project = await self.session.get(Project, project_id)
+        if project is None:
+            raise ProjectPathError("unknown project", code="project_not_found")
+
+        active_runs = await self.session.scalar(
+            select(func.count())
+            .select_from(Run)
+            .where(Run.project_id == project_id, Run.status == "running")
+        )
+        if active_runs:
+            raise ProjectPathError(
+                "project cannot be deleted while a run is active",
+                code="project_has_active_run",
+            )
+
+        summary = DeletedProjectSummary(id=project.id, name=project.name)
+        for table in _project_scoped_tables():
+            await self.session.execute(table.delete().where(table.c.project_id == project_id))
+        await self.session.delete(project)
+        await self.session.commit()
+        return summary
+
     async def _guard_relocation(self, project: Project, destination: CanonicalProjectPath) -> None:
         if project.path_key == destination.path_key:
             return
@@ -236,6 +277,23 @@ class ProjectLifecycleService:
             await self.session.rollback()
             _restore_marker(marker_path, previous)
             raise
+
+
+def _project_scoped_tables() -> list[Table]:
+    """Every table other than `projects` that carries a `project_id` column.
+
+    `Base.metadata.sorted_tables` orders tables so a referenced table precedes what
+    references it (the order table *creation* needs); reversed, satellites that
+    reference another project-scoped table (e.g. `evidence_reviews` -> `requirement_evidence`)
+    are deleted before the table they reference. SQLite enforces no foreign key here
+    (`PRAGMA foreign_keys` is never turned on), so this order is not required for
+    correctness today, but keeps this code correct if that ever changes.
+    """
+    return [
+        table
+        for table in reversed(Base.metadata.sorted_tables)
+        if table.name != "projects" and "project_id" in table.c
+    ]
 
 
 def _observe(project: Project, canonical: CanonicalProjectPath) -> None:

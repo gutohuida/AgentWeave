@@ -4,23 +4,48 @@ No migration in this change (`design.md` D1) — every table already exists.
 
 ## 1. `ProjectLifecycleService.delete()`
 
-- [ ] 1.1 `delete(project_id: str) -> DeletedProjectSummary` (or similar) in
+- [x] 1.1 `delete(project_id: str) -> DeletedProjectSummary` (or similar) in
       `hub/hub/project_lifecycle.py`. 404s (raises the same not-found shape `_operator_project_row`
       uses) if the project does not exist.
-- [ ] 1.2 Guard: refuse with a distinct exception (`ProjectHasActiveRun` or reuse
+      Implemented as `ProjectLifecycleService.delete()`, raising `ProjectPathError(code=
+      "project_not_found")` — the same shape `relocate()` already raises for the identical case,
+      which the API layer already knows how to turn into a 404 (see `relocate_project`'s
+      `except ProjectPathError` branch). `DeletedProjectSummary` is a frozen dataclass (`id`, `name`)
+      captured before the row is deleted, for phase 2's SSE broadcast payload.
+- [x] 1.2 Guard: refuse with a distinct exception (`ProjectHasActiveRun` or reuse
       `ProjectPathError` with `code="project_has_active_run"`, matching the existing
       `code="project_relocation_active"` shape) if
       `SELECT COUNT(*) FROM runs WHERE project_id = :id AND status = 'running'` is non-zero
       (`design.md` D3).
-- [ ] 1.3 Enumerate `Base.metadata.tables`, collect every table other than `projects` with a
+      Reused `ProjectPathError` with `code="project_has_active_run"`. Verified live (throwaway
+      in-memory DB, not committed): creating a `Run(status="running")` then calling `delete()`
+      raises with that exact code, and the project row still exists afterward.
+- [x] 1.3 Enumerate `Base.metadata.tables`, collect every table other than `projects` with a
       `project_id` column (`design.md` D2). Delete from each, in the stable dependency-respecting
       order D2 specifies (satellites before what they reference), all inside one transaction. Delete
       the `projects` row last.
-- [ ] 1.4 Confirm by code inspection (not just by test — this is the property 3.5 mutation-checks)
+      `_project_scoped_tables()` sweeps `reversed(Base.metadata.sorted_tables)` filtered to tables
+      with a `project_id` column — 38 tables today (verified by direct introspection against the
+      live model registry: every table `grep`-confirmed to declare `project_id` in
+      `hub/hub/db/models.py` is included, `agent_job_deletions` among them despite its missing
+      `ForeignKey`, per D2). `sorted_tables` reversed puts referencing tables before what they
+      reference for the *whole* FK graph, not just `project_id` FKs, which is a superset of what D2
+      asked for and satisfies it. Reviewer's round-1 watch item ("does every swept `project_id`
+      column really mean ownership?") was checked against every table name in the sweep output — none
+      reads as a cross-project reference column (all are either the row's own FK to `projects.id` or,
+      for `project_sessions`/`project_instructions`, their primary key) — recorded here since the
+      watch item asked for this to be checked before trusting the sweep, not left implicit.
+- [x] 1.4 Confirm by code inspection (not just by test — this is the property 3.5 mutation-checks)
       that `delete()` never imports from `project_workspace.py` and calls no `os`/`pathlib`/`shutil`
       filesystem operation on `Project.working_directory`.
-- [ ] 1.5 Do not delete `.agentweave/project.json` in the working directory (`design.md` D5) — no
+      Confirmed: `delete()`'s only imports are already-present SQLAlchemy/`Project`/`Run` names; it
+      reads `project.working_directory` for nothing (not even the summary, since 2.3's SSE payload
+      only needs `id`/`name` per the route's existing broadcast shape) and calls no filesystem API.
+      The actual mutation check (temporarily adding `shutil.rmtree`, confirming a test fails, then
+      reverting) is task 3.5's job, once the test exists — not done in this phase-1-only iteration.
+- [x] 1.5 Do not delete `.agentweave/project.json` in the working directory (`design.md` D5) — no
       code path attempts to.
+      True by inspection — `delete()` never opens that path or any path.
 
 ## 2. API route
 

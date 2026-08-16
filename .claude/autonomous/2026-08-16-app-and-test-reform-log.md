@@ -628,3 +628,81 @@ implementation as written, with the two watch items carried forward here rather 
 
 **Elapsed:** part of one iteration — reading and reasoning against six stated criteria, no code run
 (nothing to run; this is a document review).
+
+---
+
+## Entry 7 — 04:28 — Q4b phase 1: `ProjectLifecycleService.delete()`
+
+Verified branch/log/`STATE.json` agreed before starting (HEAD `bd84cda`,
+`autonomous/2026-08-16-app-and-test-reform`, iteration 6, `current: Q4b-delete-project`,
+`next_action` pointing at `tasks.md` phase 1, tasks 1.1-1.5, with the two round-1 review watch items
+carried in). Refreshed `last_heartbeat` to now before beginning. Sized this iteration to phase 1
+only, per the `next_action`'s explicit instruction — no API route, no UI, no formal pytest file yet.
+
+**Implemented in `hub/hub/project_lifecycle.py`:**
+
+- `DeletedProjectSummary` — a frozen dataclass (`id`, `name`), captured before the row disappears,
+  for phase 2's SSE payload.
+- `ProjectLifecycleService.delete(project_id)` — 404-shaped `ProjectPathError(code=
+  "project_not_found")` for an unknown project (the same shape `relocate()` already raises for the
+  identical case, which the API layer already knows how to turn into a 404); `ProjectPathError(code=
+  "project_has_active_run")` if `SELECT COUNT(*) FROM runs WHERE project_id = :id AND status =
+  'running'` is non-zero (`_guard_relocation`'s exact check, reused rather than reinvented, per D3);
+  otherwise sweeps every project-scoped table and deletes the `projects` row last, all inside one
+  transaction (the existing `AsyncSession`, one `commit()`).
+- `_project_scoped_tables()` — `reversed(Base.metadata.sorted_tables)` filtered to tables with a
+  `project_id` column, excluding `projects` itself. Chose `sorted_tables` over hand-listing D2's
+  table names from the design doc's prose, because that prose enumeration turned out to be wrong
+  when checked against the live model registry (its "16" count doesn't match the actual list length,
+  and it omits `run_divergences` and `task_integrations` entirely) — trusting code over prose here is
+  exactly what D2 argues for. `Base.metadata.sorted_tables`, reversed, orders every table that
+  references another before what it references, for the whole FK graph, which is a superset of "just
+  `project_id`-linked satellites before what they reference" and satisfies it. Directly introspected:
+  38 tables carry a `project_id` column today (not 27 — the design doc's count was off; recorded here
+  as a correction, not silently reconciled).
+
+**Checked the round-1 review's watch item before trusting the sweep, as it asked:** read the name of
+every one of the 38 swept tables against D2's per-table reasoning for the two known special cases
+(`project_sessions`/`project_instructions`, where `project_id` is the primary key, not a secondary
+column) and found none that reads as a cross-project reference rather than ownership — every column
+is either a straight `ForeignKey("projects.id")` or one of those two primary keys. Not exhaustively
+provable from names alone, but the specific failure mode the watch item raised (a column that means
+"points at" rather than "belongs to") was not found.
+
+**Verified against a real (if throwaway, in-memory, not committed) SQLite session** — the standing
+instruction that a passing suite is not proof of behaviour applies doubly to a change with no test
+file yet:
+
+- Happy path: two projects, rows in `agents`/`runners`/`charters` for one of them; delete it; every
+  row for that project gone across all 38 swept tables (checked exhaustively, not sampled); the other
+  project's rows untouched.
+- Active-run guard: a `Run(status="running")` blocks delete with exactly `code=
+  "project_has_active_run"`; the project row survives the attempt.
+- 404 shape: deleting an unknown id raises `code="project_not_found"`.
+
+All four checks passed. This is not task 3.1-3.9's formal pytest coverage (deliberately deferred —
+next iteration's phase per the queue's own sizing) but it is real execution against a real database,
+not a read-only code review.
+
+**Ran the existing suite most likely to catch a regression from this change** —
+`test_project_lifecycle.py`, `test_project_persistence.py`, `test_migrations.py` — 64 passed, 1
+pre-existing skip, no failures. Confirms 1.1's claim (`test_migrations.py`/
+`test_project_persistence.py` need no head bump, since D1 states no migration) without waiting for
+task 3.9 to assert it formally.
+
+`npx openspec validate --changes --strict`: 14 passed, 0 failed, this change included — ticking
+`tasks.md` boxes did not break the artifact's own validity.
+
+**Ticked 1.1-1.5** in `tasks.md`, each with a note on what was actually done (not a bare checkmark —
+several record a decision or a correction to the design doc's prose, per the standing rule that a
+task is only complete on real, verified implementation). Left 1.4's actual mutation-check (add
+`shutil.rmtree`, watch a test fail, revert) unticked-in-spirit-but-noted: that check needs the test
+from 3.5 to exist first, so it is 3.5's job, not this phase's — recorded rather than faked here.
+
+**Next:** phase 2 (the API route, `DELETE /api/v1/projects/{project_id}`) is the natural next unit —
+`delete()` now exists for it to call. Phase 3 (the formal pytest file covering 3.1-3.9, including the
+mutation check 1.4 deferred) could come before or after phase 2; phase 2 first because the two watch
+items from round 1's review (D2 sweep semantics, SSE broadcast ordering) both land in phase 2's code,
+not phase 3's, and are fresher to apply now than after a context gap.
+
+**Elapsed:** one iteration.

@@ -6,8 +6,8 @@
   "started_at": "2026-08-16T02:15:00+01:00",
   "stop_at": "2026-08-16T12:00:00+01:00",
   "stop_when_queue_empties": false,
-  "iteration": 6,
-  "last_heartbeat": "2026-08-16T03:31:35+01:00",
+  "iteration": 7,
+  "last_heartbeat": "2026-08-16T04:28:22+01:00",
   "spec_round_protocol": {
     "why": "Operator: 'one agent produces the spec, the next triggers the agents review until a agent thinks is good to implement. We need to have another gate so agent don't go on forever.' Implemented as successive driver iterations rather than subagents, at the operator's suggestion ('the trigger at 2AM generates the spec and the one at 2:15 reviews it'). A fresh process has no memory of writing the thing it reviews, so the independence is structural rather than merely prompted.",
     "max_rounds": 3,
@@ -117,7 +117,7 @@
     }
   ],
   "current": "Q4b-delete-project",
-  "next_action": "Q4b round 1 was REVIEWED and APPROVED (see log Entry 6 \u2014 read it first for the two implementation-time watch items it flagged: verify every swept project_id column really means ownership before trusting D2's generic sweep in task 1.3, and make task 2.3's SSE broadcast fire after the delete transaction commits, not before). Begin implementation at openspec/changes/2026-08-16-delete-project-api/tasks.md phase 1: ProjectLifecycleService.delete() in hub/hub/project_lifecycle.py (tasks 1.1-1.5). Size this iteration to phase 1 plus its guard logic only \u2014 do not attempt the API route (phase 2), UI (phase 4) or tests (phase 3/5) in the same turn; check tasks.md boxes as they are actually done, not preemptively. Next iteration after this one continues at whichever phase is still unchecked.",
+  "next_action": "Q4b phase 1 is DONE (see log Entry 7): ProjectLifecycleService.delete() and DeletedProjectSummary exist in hub/hub/project_lifecycle.py, tasks 1.1-1.5 ticked with notes, verified against a real (throwaway, in-memory) SQLite session \u2014 happy path with exhaustive no-orphan check across all 38 swept tables, active-run refusal, 404 shape \u2014 plus the existing test_project_lifecycle.py/test_project_persistence.py/test_migrations.py suite (64 passed, 1 pre-existing skip) and `openspec validate --changes --strict` (14 passed). Continue at tasks.md phase 2: DELETE /api/v1/projects/{project_id} in hub/hub/api/v1/projects.py (tasks 2.1-2.3), Depends(get_operator) not get_project, 204 on success, 404/409 mapped from delete()'s ProjectPathError codes exactly the way relocate_project already maps 'project_not_found'/'project_relocation_active'. For 2.3's SSE broadcast, apply round 1 review's watch item directly: broadcast project_deleted AFTER session.commit() succeeds, not before \u2014 capture DeletedProjectSummary's id/name ahead of the delete since the row is gone once delete() returns. Size this iteration to phase 2 only \u2014 do not attempt UI (phase 4) or the formal pytest file (phase 3/5) in the same turn. Phase 3 (tasks 3.1-3.9, including 1.4's deferred mutation check) is next after phase 2; check tasks.md boxes as they are actually done.",
   "limits": [
     "Stay on the autonomous branch. No commits, merges or rebases onto hub-native-experience or master. Merging back is the operator's decision, made awake.",
     "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Pushing the autonomous branch itself is required, not optional.",
