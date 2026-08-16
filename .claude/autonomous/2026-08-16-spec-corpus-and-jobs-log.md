@@ -94,3 +94,65 @@ answer, or records why not.
   collection outright with exit 4.
 
 Next: install the driver and release the branch to it. First work item is `N1-corpus-at-scale`.
+
+---
+
+## Entry 1 — N1: the corpus-at-scale exploration (2026-08-16T21:50 +01:00)
+
+First iteration to actually run under the driver. Verified before starting: branch is
+`autonomous/2026-08-16-spec-corpus-and-jobs`, `git log` head is `46e2a74` matching STATE.json's
+implicit position (iteration 0, no heartbeat yet — this is genuinely the first firing), working
+tree clean. No reconciliation needed.
+
+Did the reading N1's `next_action` specified, in order: `openspec/specs/` (30 capability
+directories, confirmed) and read `spec-document-authority/spec.md` in full (573 lines) as the
+"what does a current-behaviour document read like" sample; `openspec/changes/` (17 unarchived, 67
+archived, confirmed) and read one archived change's `specs/` delta
+(`2026-08-14-what-the-product-actually-built/specs/task-lifecycle-governance/spec.md`) to see the
+ADDED-Requirements delta convention concretely; `hub/hub/db/models.py` around `Task` (595-660) and
+`SpecDocument`/`SPEC_PHASES` (1500-1580); `taskFilterStore.ts`, `App.tsx:330-358`, and
+`SpecCoverageBar.tsx` to trace the existing outside-the-board filter mechanism end to end
+(`onOpenTasks` → `setActiveTaskIds` → navigate → `TasksBoard` reads `activeTaskIds` and filters
+every column, with a "Showing N tasks linked from…" banner). Also spot-checked
+`hub/hub/api/v1/tasks.py` for an existing `spec_document_id` query filter — there isn't one yet
+(the field is used to *populate* task responses, not to filter the list), which the document
+states honestly as unverified/out-of-scope rather than assuming.
+
+Wrote `openspec/explorations/2026-08-16-a-corpus-at-scale.md`, answering N1's five questions:
+
+1. **Capability vs. change document** — the distinction already lives in file layout and prose
+   (absolute requirements vs. ADDED/MODIFIED/REMOVED deltas); the Hub-side gap is only that
+   `SpecDocument.kind` has never taken a second value. Recommends the capability/change split be a
+   rendering-schema concern, not a new phase.
+2. **The folder tree at scale** — `openspec/specs/` stays flat and fine at 30; the real scale risk
+   is `openspec/changes/archive/` at 67, which is unindexed by capability. Recommends a
+   capability-linkage index (Hub-side query, not a folder reorganization) over moving 67
+   directories around, and separately flags that a *capability document's own length* (863 lines
+   for `task-lifecycle-governance` today) is the sharper long-run risk than folder layout.
+3. **What a finished delta does to the corpus** — ports the already-proven openspec convention
+   (delta reviewed and hand-merged into the capability doc) into the Hub's data model, and
+   separates "merge the delta" from "archive the change document" as two acts, not one, so evidence
+   can keep accumulating on an already-merged change without forcing a premature archive.
+4. **The task board at scale** — traces the existing `taskFilterStore`/`SpecCoverageBar` mechanism
+   as proof a document-scoped filter is a second caller of code that already works, not new
+   machinery: one new query plus one UI affordance, no schema change.
+5. **What archiving does to a change's tasks** — recommends a *view-level* default-filter exclusion
+   (archived document's tasks hidden from the unscoped board only if the task itself is also
+   terminal; open tasks from archived documents stay visible), explicitly not a task mutation, and
+   notes it composes with N2 (same query surface) without being decided by N1 which of N2/N2b
+   implements it — restated from N2b's own brief rather than re-litigated.
+
+Six numbered recommendations close the document, addressed to N2 and N2b by name, concrete enough
+to spec from per N1's `output` requirement. No code changed; this item is spec-only by design.
+
+**Verification**: read-only exploration work: no test suite applies. Confirmed the document exists
+and reads coherently top to bottom after writing it (no separate "run tests" step for this item —
+the deliverable is the document itself, and N1's `output` field asks only for a document, not
+running code).
+
+Advanced `current` to `N2-archive-and-capability` and wrote its `next_action`: round 1 (author) of
+the change's spec artifacts, informed by N1's recommendations above, following N2's own `detail` in
+the queue for the migration/lifecycle mechanics (0074, the SQLite CHECK-constraint recreate trap,
+enforcing archive-is-operator-only inside `spec_lifecycle.transition`). N2b remains pending,
+contingent on N1 as already stated — N1 did NOT conclude the board needs no scoping, so N2b is not
+skipped.
