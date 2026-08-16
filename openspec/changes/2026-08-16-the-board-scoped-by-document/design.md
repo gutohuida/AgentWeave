@@ -38,10 +38,8 @@ already runs three more queries after the initial `select(Task)` — heartbeats,
 integrations, all keyed off the tasks already fetched (`hub/hub/api/v1/tasks.py:421-429`). Adding a
 `JOIN spec_documents` to the primary query would require `Task.spec_document_id` to be non-null for
 the row to survive an inner join, silently dropping every task with no document at all (`nullable
-=True`, the common case per N1 §4 — "most tasks today are unlinked"). An `IN` subquery has no such
-hazard: a task with a null `spec_document_id` simply never matches `.in_(archived_ids)`, so the
-`~(...)` leaves it in the result, which is the correct outcome (an unlinked task has no declaring
-document to be excluded on behalf of).
+=True`, the common case per N1 §4 — "most tasks today are unlinked"). An `IN` subquery avoids the
+join's hazard, but introduces a different one — see D6.
 
 **Why `TERMINAL_FOR_BINDING` and not a new list.** `hub/hub/run_task_binding.py:272` already names
 exactly `("approved", "rejected")` as the pair a run's binding to a task considers finished, for the
@@ -215,3 +213,55 @@ default view" half of 3.5 exercise real logic (the mock's own filtering, standin
 layer this proposal moves the exclusion into) while the "present once `activeTaskIds` includes it
 explicitly" half continues to exercise `TasksBoard.tsx`'s real, unchanged client-side filter. Task
 3.5 is revised accordingly.
+
+## D6. Implementation correction — `.in_()` on a NULL column is NULL, not false
+
+D1's original reasoning — "a task with a null `spec_document_id` simply never matches
+`.in_(archived_ids)`, so the `~(...)` leaves it in the result" — is wrong about SQL, and none of the
+three spec rounds caught it because none executed the query against a real row. Standard SQL's `IN`
+evaluates to NULL (not `false`) when the left operand is NULL, and `NULL & anything-true` is NULL,
+and `~NULL` is NULL — so `Task.spec_document_id.in_(archived_ids) & Task.status.in_(TERMINAL_FOR_
+BINDING)` evaluates to NULL, not `false`, for an unlinked task with a terminal status, and `WHERE`
+drops a row whose condition evaluates to NULL exactly as it drops one that evaluates to `false`.
+The result was the opposite of D1's stated guarantee: `test_exclude_archived_completed_hides_only_
+terminal_tasks_from_archived_documents` (task 3.1) failed with a task that has **no** declaring
+document missing from the result, caught only once task 3.1 was written and actually run against
+SQLite.
+
+Fixed by making the NULL case a real boolean before it reaches `&`: `Task.spec_document_id.isnot
+(None)` always evaluates to `true` or `false`, never NULL, so `false & anything` correctly
+short-circuits to `false` (SQL's three-valued `AND` treats a known-`false` operand as decisive
+regardless of the other operand's NULL-ness) — and `~false` is `true`, keeping the row. The
+production query in `hub/hub/api/v1/tasks.py` now reads:
+
+```python
+q = q.where(
+    ~(
+        Task.spec_document_id.isnot(None)
+        & Task.spec_document_id.in_(archived_ids)
+        & Task.status.in_(TERMINAL_FOR_BINDING)
+    )
+)
+```
+
+No other part of D1 changes — `elif`-ordering, the choice of a subquery over a join, and
+`TERMINAL_FOR_BINDING` reuse all hold as reasoned.
+
+## D7. Implementation correction — `list_shared_tasks` calls `list_tasks` as a plain function, not through FastAPI
+
+`hub/hub/api/v1/agent_actions.py`'s `list_shared_tasks` (the route behind the MCP `list_tasks` tool
+and the `/api/v1/agent-actions/tasks` surface) calls `tasks.list_tasks(...)` directly as a Python
+function rather than through a second HTTP round-trip, forwarding only the parameters it already
+knew about (`agent`, `task_status`, `offset`, `limit`). FastAPI's `Query(...)` sentinel objects are
+substituted for real values only when a route is dispatched through the framework's own request
+handling — a direct Python call leaves any parameter this call site does not name bound to its raw
+declared default, which for `spec_document_id`/`exclude_archived_completed` is a `fastapi.Query`
+object, not `None`/`False`. `test_agent_task_crud_retains_create_and_latest_update_runs`
+(pre-existing, `hub/tests/test_agent_actions_coordination.py`) caught it immediately:
+`sqlalchemy.exc.ProgrammingError: Error binding parameter 2: type 'Query' is not supported` the
+moment that test's `GET /api/v1/agent-actions/tasks` call reached the new `elif` branch.
+
+Fixed by having `list_shared_tasks` forward the two new parameters explicitly as `spec_document_id
+=None, exclude_archived_completed=False` — which is also the *correct* value for this route, not
+merely the one that unbreaks it: proposal.md's own non-goals already state the MCP `list_tasks` tool
+must keep seeing every task exactly as before, and this route is that tool's implementation.

@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ... import project_workspace, spec_reading
+from ... import project_workspace, spec_lifecycle, spec_reading
 from ...agent_status import effective_heartbeat_status
 from ...auth import get_project
 from ...db.engine import get_session
@@ -18,6 +18,7 @@ from ...db.models import (
     EvidenceReview,
     RequirementEvidence,
     RunDivergence,
+    SpecDocument,
     SpecRequirement,
     Task,
     TaskIntegration,
@@ -404,6 +405,8 @@ async def create_task(
 async def list_tasks(
     agent: Optional[str] = Query(None),
     task_status: Optional[str] = Query(None, alias="status"),
+    spec_document_id: Optional[str] = Query(None),
+    exclude_archived_completed: bool = Query(False),
     offset: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     project: Tuple[str, str] = Depends(get_project),
@@ -415,6 +418,25 @@ async def list_tasks(
         q = q.where(Task.assignee == agent)
     if task_status:
         q = q.where(Task.status == task_status)
+    if spec_document_id:
+        q = q.where(Task.spec_document_id == spec_document_id)
+    elif exclude_archived_completed:
+        archived_ids = select(SpecDocument.id).where(
+            SpecDocument.project_id == project_id,
+            SpecDocument.phase == spec_lifecycle.ARCHIVED,
+        )
+        # `Task.spec_document_id.in_(archived_ids)` alone evaluates to SQL NULL, not false, for a
+        # row whose `spec_document_id` is NULL — and `~(NULL & ...)` is NULL too, which a WHERE
+        # clause treats as "drop the row," excluding exactly the unlinked tasks this route must
+        # never exclude. `.isnot(None)` is a real boolean (never NULL), so it short-circuits the
+        # `&` to a real `False` for those rows before `in_()` is ever evaluated on them.
+        q = q.where(
+            ~(
+                Task.spec_document_id.isnot(None)
+                & Task.spec_document_id.in_(archived_ids)
+                & Task.status.in_(TERMINAL_FOR_BINDING)
+            )
+        )
     q = q.order_by(Task.created_at).offset(offset).limit(limit)
     result = await session.execute(q)
     tasks = result.scalars().all()

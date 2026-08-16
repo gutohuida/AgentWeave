@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from '@/components/common/Icon'
 import { SpecPhaseBar } from './SpecPhaseBar'
 import { SpecCoverageBar } from './SpecCoverageBar'
+import { SpecDocumentTasksLink } from './SpecDocumentTasksLink'
 import { Button } from '@/components/ui/button'
 import { useSpec, type SpecDiagnostic, type SpecListResponse } from '@/api/spec'
 import { useConfigStore } from '@/store/configStore'
@@ -236,6 +237,7 @@ export function SpecDocumentPanel({
           product. Under the phase bar because it is about what the document *says*, not about
           reading it. */}
       <SpecCoverageBar path={path} onOpenTasks={onOpenTasks} />
+      <SpecDocumentTasksLink path={path} onOpenTasks={onOpenTasks} />
 
       {/* Drift summary — only rendered when the Hub reports manifest drift. */}
       {driftCount > 0 && (

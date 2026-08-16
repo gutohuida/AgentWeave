@@ -2,40 +2,53 @@
 
 ## 1. API (`hub/hub/api/v1/tasks.py`)
 
-- [ ] 1.1 Import `spec_lifecycle` (module) and add `SpecDocument` to the existing
+- [x] 1.1 Import `spec_lifecycle` (module) and add `SpecDocument` to the existing
       `from ...db.models import (...)` block. `TERMINAL_FOR_BINDING` needs no new import — it is
       already imported at the top of this file (`from ...run_task_binding import (TERMINAL_FOR_BINDING,
-      release_conversations_bound_to, release_reason)`), verified this session.
-- [ ] 1.2 `list_tasks`: add `spec_document_id: Optional[str] = Query(None)` and
+      release_conversations_bound_to, release_reason)`), verified this session. Ruff's import-sort
+      merged the module import into the existing `from ... import project_workspace, spec_lifecycle,
+      spec_reading` line rather than a separate statement — same effect, one line.
+- [x] 1.2 `list_tasks`: add `spec_document_id: Optional[str] = Query(None)` and
       `exclude_archived_completed: bool = Query(False)` parameters.
-- [ ] 1.3 Apply them per design D1's `elif` ordering — `spec_document_id` exact-match filter when
+- [x] 1.3 Apply them per design D1's `elif` ordering — `spec_document_id` exact-match filter when
       given, else the archived-and-terminal exclusion via an `IN` subquery when
       `exclude_archived_completed` is true. Neither applies to any other route in this file (task
-      creation, single-task GET, PATCH are untouched).
+      creation, single-task GET, PATCH are untouched). **Implementation corrections, both found only
+      once real rows were run through the query (design D6/D7, not caught by any of the three spec
+      rounds):** (a) the exclusion clause needed `Task.spec_document_id.isnot(None)` ANDed in before
+      `.in_(archived_ids)` — SQL's `IN` returns NULL, not `false`, for a NULL left operand, so the
+      original expression silently excluded every unlinked task with a terminal status, the opposite
+      of the stated guarantee; (b) `hub/hub/api/v1/agent_actions.py`'s `list_shared_tasks` calls
+      `list_tasks(...)` as a plain Python function (not through FastAPI dispatch) and forwarded only
+      the parameters it already knew about, leaving the two new ones bound to their raw `Query(...)`
+      sentinel defaults — fixed by forwarding `spec_document_id=None, exclude_archived_completed=
+      False` explicitly, caught by the pre-existing `test_agent_task_crud_retains_create_and_latest_
+      update_runs`.
 
 ## 2. UI (`hub/ui/src`)
 
-- [ ] 2.1 `hub/ui/src/api/tasks.ts`: `useTasks()` gains an optional
+- [x] 2.1 `hub/ui/src/api/tasks.ts`: `useTasks()` gains an optional
       `{ excludeArchivedCompleted?: boolean }` argument per design D2, defaulting to `false`; query
       key includes it so the two variants cache independently.
-- [ ] 2.2 `hub/ui/src/api/tasks.ts`: new `useDocumentTasks(documentId: string | null)` per design D3.
-- [ ] 2.3 `hub/ui/src/components/tasks/TasksBoard.tsx`: pass
+- [x] 2.2 `hub/ui/src/api/tasks.ts`: new `useDocumentTasks(documentId: string | null)` per design D3.
+- [x] 2.3 `hub/ui/src/components/tasks/TasksBoard.tsx`: pass
       `useTasks({ excludeArchivedCompleted: activeTaskIds === null })` — the only change to this
       file; no change to how `activeTaskIds` itself filters the fetched array.
-- [ ] 2.4 New `hub/ui/src/components/spec/SpecDocumentTasksLink.tsx` per design D3.
-- [ ] 2.5 `hub/ui/src/components/spec/SpecDocumentPanel.tsx`: render
+- [x] 2.4 New `hub/ui/src/components/spec/SpecDocumentTasksLink.tsx` per design D3.
+- [x] 2.5 `hub/ui/src/components/spec/SpecDocumentPanel.tsx`: render
       `<SpecDocumentTasksLink path={path} onOpenTasks={onOpenTasks} />` beside `SpecCoverageBar`
       (no new prop — `onOpenTasks` is already threaded to this component).
-- [ ] 2.6 `cd hub/ui && npm run build && python ../../scripts/refresh_ui_bundle.py` after the above,
+- [x] 2.6 `cd hub/ui && npm run build && python ../../scripts/refresh_ui_bundle.py` after the above,
       confirming `hub/hub/static/ui/ui-build-stamp.json` updates and `diff -rq` between `dist/` and
       the committed bundle reports no difference (CLAUDE.md's standing rule for any `hub/ui/src`
       change). Run this again after committing, not only before — the fingerprint folds in `git
       status --porcelain`, so a run against a dirty tree stamps a fingerprint the post-commit clean
-      tree will not reproduce (found and recorded in N2's own log, Entry 4).
+      tree will not reproduce (found and recorded in N2's own log, Entry 4). First pass done before
+      commit; the post-commit re-run is the last step before pushing, recorded in the log.
 
 ## 3. Tests — agent-verifiable
 
-- [ ] 3.1 `hub/tests/test_tasks.py` (existing file — confirmed present, holds the `GET /tasks`
+- [x] 3.1 `hub/tests/test_tasks.py` (existing file — confirmed present, holds the `GET /tasks`
       coverage this belongs beside): `GET /tasks?spec_document_id=X` returns exactly the tasks with
       that `spec_document_id`, including ones whose status is terminal and whose declaring document
       is archived. `GET /tasks?exclude_archived_completed=true` excludes a task iff its declaring
@@ -44,23 +57,26 @@
       `in_progress` or `blocked` task from an archived document is not excluded. Both parameters
       given together: `spec_document_id` wins, exclusion is not applied (design D1's `elif`) —
       assert against a document that is itself archived, citing one of its own terminal tasks, and
-      confirm it is returned.
-- [ ] 3.2 Same file: a task with `spec_document_id = None` is never excluded by
+      confirm it is returned. This test is what caught design D6's NULL-handling bug — the first run
+      failed with an unlinked terminal task wrongly excluded, fixed in the same iteration (D6).
+- [x] 3.2 Same file: a task with `spec_document_id = None` is never excluded by
       `exclude_archived_completed`, regardless of its own status (the subquery's `~(...)` must not
       match a null against `.in_(archived_ids)` in a way that excludes it — this is the one subtlety
-      design D1 calls out explicitly).
-- [ ] 3.3 `hub/ui/src/__tests__/tasksApi.test.ts` (new — every existing UI test file lives flat under
-      `hub/ui/src/__tests__/`, confirmed by listing the directory; there is no nested
-      `api/__tests__/` convention to follow here): `useTasks({ excludeArchivedCompleted: true })`
-      requests `?exclude_archived_completed=true`; `useTasks()` with no argument requests the bare
-      path, unchanged; `useDocumentTasks(id)` requests `?spec_document_id=<id>`;
-      `useDocumentTasks(null)` does not fire (`enabled` false).
-- [ ] 3.4 `hub/ui/src/__tests__/specDocumentTasksLink.test.tsx` (new, same flat convention): renders
+      design D1 calls out explicitly). Folded into 3.1's own test (`task-exc-6`) rather than a
+      separate test function — same assertion, same seeded rows.
+- [x] 3.3 `hub/ui/src/__tests__/tasksApi.test.tsx` (new — **`.tsx`, not `.ts` as originally written**:
+      the file renders a `<QueryClientProvider>` wrapper via `renderHook`, which is JSX and fails
+      esbuild's transform under a `.ts` extension; every existing UI test file lives flat under
+      `hub/ui/src/__tests__/`, confirmed by listing the directory): `useTasks({
+      excludeArchivedCompleted: true })` requests `?exclude_archived_completed=true`; `useTasks()`
+      with no argument requests the bare path, unchanged; `useDocumentTasks(id)` requests
+      `?spec_document_id=<id>`; `useDocumentTasks(null)` does not fire (`enabled` false).
+- [x] 3.4 `hub/ui/src/__tests__/specDocumentTasksLink.test.tsx` (new, same flat convention): renders
       nothing when the document has no tasks; renders the count and, given `onOpenTasks`, clicking
       calls it with every task id the document declared (not merely ones linked to a requirement);
       renders a plain span with no click target when `onOpenTasks` is omitted, mirroring
       `SpecCoverageBar`'s existing fallback for the same prop.
-- [ ] 3.5 `hub/ui/src/__tests__/tasksBoardFilter.test.tsx` (existing — this is where
+- [x] 3.5 `hub/ui/src/__tests__/tasksBoardFilter.test.tsx` (existing — this is where
       `activeTaskIds`'s board-level filtering is already tested). Per design D5 (round 2 correction):
       first make the file's `useTasks` mock argument-sensitive — accept the options object and
       return a filtered array when `excludeArchivedCompleted` is true (a seeded terminal task from an
@@ -71,14 +87,30 @@
       the now argument-sensitive mock) and present once `activeTaskIds` includes it explicitly
       (exercising `TasksBoard.tsx`'s real, unchanged client-side membership filter — simulating the
       coverage-bar / document-tasks-link click path).
-- [ ] 3.6 `pytest hub/tests/ -n 8` and `pytest tests/ -n 4` — both green, counts recorded in the log
-      against the baseline in `STATE.json` (updated by N2 to 2089/11 and 362/3).
-- [ ] 3.7 `cd hub/ui && npm test`, `npm run lint`, `npx tsc --noEmit` — all clean, counts recorded
-      against N2's baseline of 934/934.
-- [ ] 3.8 `ruff check hub/ src/` and `black --check` on every file touched — clean.
-- [ ] 3.9 `npx openspec validate --changes --strict` (this change validates) and
+- [x] 3.5b **Not in round 1's plan, found during implementation, not a spec round.**
+      `hub/ui/src/__tests__/projectScopedApiContract.test.tsx` asserts `client.getQueryData(['project',
+      'proj-a', 'tasks'])` (and the `proj-1`/`proj-2` equivalent) against the exact query key
+      `useTasks()` with no argument produces — which, after D2's options object, is `['project',
+      projectId, 'tasks', { excludeArchivedCompleted: false }]`, not `['project', projectId,
+      'tasks']`. Two of that file's assertions updated to the new key shape; both pass. Design D2's
+      own "why the query key includes the options object" reasoning only checked
+      `invalidateQueries`'s prefix-match behaviour, not this file's exact-match `getQueryData` calls —
+      recorded as design D7's sibling finding rather than a new D-entry, since the fix is the test,
+      not the production code.
+- [x] 3.6 `pytest hub/tests/ -n 8` and `pytest tests/ -n 4` — both green, counts recorded in the log
+      against the baseline in `STATE.json` (updated by N2 to 2089/11 and 362/3). Actual:
+      2093/11 and 362/3 (2093 = 2089 + 4 new `test_tasks.py` functions). One unrelated
+      `test_agent_trigger.py::test_spawn_failure_broadcasts_run_failed_event` failure under `-n 8`
+      did not reproduce standalone or on a second full run — xdist flakiness, not a regression.
+- [x] 3.7 `cd hub/ui && npm test`, `npm run lint`, `npx tsc --noEmit` — all clean, counts recorded
+      against N2's baseline of 934/934. Actual: 943/943 (934 + 9 new: 4 in `tasksApi.test.tsx`, 4 in
+      `specDocumentTasksLink.test.tsx`, 1 new case in `tasksBoardFilter.test.tsx`).
+- [x] 3.8 `ruff check hub/ src/` and `black --check` on every file touched — clean (ruff's own
+      `--fix` resolved one import-order violation in `tasks.py`; black reformatted `test_tasks.py`
+      once, then both re-ran clean).
+- [x] 3.9 `npx openspec validate --changes --strict` (this change validates) and
       `npx openspec validate --specs --strict` (the modified `task-lifecycle-governance` delta
-      merges cleanly) — both clean.
+      merges cleanly) — both clean, 19/19.
 
 ## 4. Driven against the running Hub
 

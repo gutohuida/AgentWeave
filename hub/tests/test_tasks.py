@@ -2,6 +2,9 @@
 
 import pytest
 
+from hub.db.engine import async_session_factory
+from hub.db.models import SpecDocument, Task
+
 
 @pytest.mark.asyncio
 async def test_create_and_list_task(app, auth_headers):
@@ -205,3 +208,94 @@ async def test_create_task_rejects_overlong_description(app, auth_headers):
         headers=auth_headers,
     )
     assert resp.status_code == 422
+
+
+async def _make_document(doc_id: str, phase: str) -> None:
+    async with async_session_factory() as session:
+        session.add(
+            SpecDocument(id=doc_id, project_id="proj-test", path=f"spec/{doc_id}.md", phase=phase)
+        )
+        await session.commit()
+
+
+async def _make_task(task_id: str, status: str, spec_document_id: str | None) -> None:
+    async with async_session_factory() as session:
+        session.add(
+            Task(
+                id=task_id,
+                project_id="proj-test",
+                title=task_id,
+                status=status,
+                spec_document_id=spec_document_id,
+            )
+        )
+        await session.commit()
+
+
+@pytest.mark.asyncio
+async def test_spec_document_id_scopes_to_exactly_that_document_hiding_nothing(app, auth_headers):
+    await _make_document("spdoc-scale-a", "archived")
+    await _make_document("spdoc-scale-b", "approved")
+    await _make_task("task-scale-1", "approved", "spdoc-scale-a")
+    await _make_task("task-scale-2", "in_progress", "spdoc-scale-a")
+    await _make_task("task-scale-3", "pending", "spdoc-scale-b")
+
+    resp = await app.get(
+        "/api/v1/projects/proj-test/tasks?spec_document_id=spdoc-scale-a", headers=auth_headers
+    )
+    assert resp.status_code == 200
+    ids = {t["id"] for t in resp.json()}
+    assert ids == {"task-scale-1", "task-scale-2"}
+
+
+@pytest.mark.asyncio
+async def test_exclude_archived_completed_hides_only_terminal_tasks_from_archived_documents(
+    app, auth_headers
+):
+    await _make_document("spdoc-exc-archived", "archived")
+    await _make_document("spdoc-exc-live", "approved")
+    # Terminal + archived: excluded.
+    await _make_task("task-exc-1", "approved", "spdoc-exc-archived")
+    await _make_task("task-exc-2", "rejected", "spdoc-exc-archived")
+    # Open work from an archived document: never excluded.
+    await _make_task("task-exc-3", "in_progress", "spdoc-exc-archived")
+    await _make_task("task-exc-4", "blocked", "spdoc-exc-archived")
+    # Terminal, but the declaring document is not archived: not excluded.
+    await _make_task("task-exc-5", "approved", "spdoc-exc-live")
+    # No declaring document at all: never excluded, regardless of status.
+    await _make_task("task-exc-6", "approved", None)
+
+    resp = await app.get(
+        "/api/v1/projects/proj-test/tasks?exclude_archived_completed=true", headers=auth_headers
+    )
+    assert resp.status_code == 200
+    ids = {t["id"] for t in resp.json()}
+    assert "task-exc-1" not in ids
+    assert "task-exc-2" not in ids
+    assert {"task-exc-3", "task-exc-4", "task-exc-5", "task-exc-6"} <= ids
+
+
+@pytest.mark.asyncio
+async def test_scoping_wins_over_the_exclusion_when_both_are_given(app, auth_headers):
+    await _make_document("spdoc-both", "archived")
+    await _make_task("task-both-1", "approved", "spdoc-both")
+
+    resp = await app.get(
+        "/api/v1/projects/proj-test/tasks"
+        "?spec_document_id=spdoc-both&exclude_archived_completed=true",
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    ids = {t["id"] for t in resp.json()}
+    assert "task-both-1" in ids
+
+
+@pytest.mark.asyncio
+async def test_neither_parameter_returns_the_unfiltered_default(app, auth_headers):
+    await _make_document("spdoc-default", "archived")
+    await _make_task("task-default-1", "approved", "spdoc-default")
+
+    resp = await app.get("/api/v1/projects/proj-test/tasks", headers=auth_headers)
+    assert resp.status_code == 200
+    ids = {t["id"] for t in resp.json()}
+    assert "task-default-1" in ids

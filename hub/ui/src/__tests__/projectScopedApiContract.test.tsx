@@ -154,9 +154,12 @@ describe('a delayed response crossing a project switch stays in its own project 
     await new Promise((r) => setTimeout(r, 0))
 
     // Project A's cache slot holds A's data; project B's view is unaffected.
-    expect(client.getQueryData(['project', 'proj-a', 'tasks'])).toEqual([
-      { id: 'task-a', title: 'from A' },
-    ])
+    // `useTasks()` with no argument still defaults `excludeArchivedCompleted` to `false`, which
+    // is part of the query key (`2026-08-16-the-board-scoped-by-document` D2) — so the cache slot
+    // this asserts against carries that trailing options object too.
+    expect(
+      client.getQueryData(['project', 'proj-a', 'tasks', { excludeArchivedCompleted: false }]),
+    ).toEqual([{ id: 'task-a', title: 'from A' }])
     expect(bHook.result.current.data).toEqual([{ id: 'task-b', title: 'from B' }])
 
     void fetchMock
@@ -203,8 +206,13 @@ describe('rapid project switching never blends two projects into one rendered vi
 
     // Both project's slots are independently cached — switching back to
     // proj-1 would not need to refetch to get correct (if stale) data.
-    expect(client.getQueryData(['project', 'proj-1', 'tasks'])).toEqual([{ id: 'task-proj-1' }])
-    expect(client.getQueryData(['project', 'proj-2', 'tasks'])).toEqual([{ id: 'task-proj-2' }])
+    // See the same D2 note above: the key carries `useTasks()`'s default options object too.
+    expect(
+      client.getQueryData(['project', 'proj-1', 'tasks', { excludeArchivedCompleted: false }]),
+    ).toEqual([{ id: 'task-proj-1' }])
+    expect(
+      client.getQueryData(['project', 'proj-2', 'tasks', { excludeArchivedCompleted: false }]),
+    ).toEqual([{ id: 'task-proj-2' }])
     expect(seen.some((u) => u.includes('/projects/proj-1/tasks'))).toBe(true)
     expect(seen.some((u) => u.includes('/projects/proj-2/tasks'))).toBe(true)
   })

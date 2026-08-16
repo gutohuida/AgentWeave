@@ -32,7 +32,11 @@ interface TasksBoardProps {
 }
 
 export function TasksBoard({ onOpenRequirement }: TasksBoardProps = {}) {
-  const { data: tasks, isLoading } = useTasks()
+  const activeTaskIds = useTaskFilterStore((state) => state.activeTaskIds)
+  // Only the board's own default (unscoped) view retires an archived document's completed work —
+  // an explicit scope (a coverage-bar or document-tasks-link click) must never hide anything it
+  // named, so the exclusion switches off the instant a filter is active.
+  const { data: tasks, isLoading } = useTasks({ excludeArchivedCompleted: activeTaskIds === null })
   const { data: agents = [] } = useAgents()
   const colorsByAgent = useMemo(
     () => new Map(agents.map((agent) => [agent.name, agent.color_index])),
@@ -44,7 +48,6 @@ export function TasksBoard({ onOpenRequirement }: TasksBoardProps = {}) {
   // it always reads the freshest copy of the task from `useTasks()` rather than a snapshot taken
   // when it was opened.
   const [openTaskId, setOpenTaskId] = useState<string | null>(null)
-  const activeTaskIds = useTaskFilterStore((state) => state.activeTaskIds)
   const clearActiveTaskIds = useTaskFilterStore((state) => state.clearActiveTaskIds)
   const pendingOpenTaskId = useTaskFilterStore((state) => state.pendingOpenTaskId)
   const clearPendingOpenTaskId = useTaskFilterStore((state) => state.clearPendingOpenTaskId)

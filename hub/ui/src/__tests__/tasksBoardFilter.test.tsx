@@ -24,7 +24,16 @@ vi.mock('@/api/tasks', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/tasks')>()
   return {
     ...actual,
-    useTasks: () => ({ data: TASKS, isLoading: false }),
+    // Argument-sensitive, standing in for the server-side exclusion this hook's real `queryFn`
+    // applies (`design.md` D5) — `TasksBoard.tsx` itself has no client-side filter for it, so a
+    // mock that always returns the same array could not exercise the "excluded by default, visible
+    // once scoped" behaviour this file's own archived-document case needs.
+    useTasks: (options?: { excludeArchivedCompleted?: boolean }) => ({
+      data: options?.excludeArchivedCompleted
+        ? TASKS.filter((t) => !(t.id === ARCHIVED_TERMINAL_TASK_ID))
+        : TASKS,
+      isLoading: false,
+    }),
     useAllowedTransitions: () => ({ data: { actor_kind: 'operator', transitions: {} } }),
     useUpdateTask: () => ({ mutate: vi.fn() }),
     useSetDivergenceHandling: () => ({ mutate: vi.fn() }),
@@ -47,10 +56,17 @@ function makeTask(overrides: Partial<Task> = {}): Task {
   }
 }
 
+const ARCHIVED_TERMINAL_TASK_ID = 'task-4'
+
 const TASKS: Task[] = [
   makeTask({ id: 'task-1', title: 'Settle the account', status: 'in_progress' }),
   makeTask({ id: 'task-2', title: 'Round consistently', status: 'assigned' }),
   makeTask({ id: 'task-3', title: 'Unrelated work', status: 'pending' }),
+  makeTask({
+    id: ARCHIVED_TERMINAL_TASK_ID,
+    title: 'Retired from an archived document',
+    status: 'approved',
+  }),
 ]
 
 function renderBoard() {
@@ -96,5 +112,15 @@ describe('the board can be filtered from outside itself', () => {
 
     expect(screen.getByText('Unrelated work')).toBeInTheDocument()
     expect(screen.queryByTestId('tasks-requirement-filter-banner')).not.toBeInTheDocument()
+  })
+
+  it('retires a completed task from an archived document from the default view, but not from an explicit scope', () => {
+    renderBoard()
+    expect(screen.queryByText('Retired from an archived document')).not.toBeInTheDocument()
+
+    cleanup()
+    useTaskFilterStore.getState().setActiveTaskIds([ARCHIVED_TERMINAL_TASK_ID])
+    renderBoard()
+    expect(screen.getByText('Retired from an archived document')).toBeInTheDocument()
   })
 })

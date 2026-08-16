@@ -226,6 +226,8 @@ async def list_shared_tasks(
     return await list_tasks(
         agent=agent,
         task_status=task_status,
+        spec_document_id=None,
+        exclude_archived_completed=False,
         offset=offset,
         limit=limit,
         project=(actor.project_id, actor.project_id),

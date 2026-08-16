@@ -128,12 +128,34 @@ export function useRetryTaskIntegration(taskId: string) {
   })
 }
 
-export function useTasks() {
+export function useTasks(options?: { excludeArchivedCompleted?: boolean }) {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  const excludeArchivedCompleted = options?.excludeArchivedCompleted ?? false
+  return useQuery<Task[]>({
+    queryKey: ['project', projectId, 'tasks', { excludeArchivedCompleted }],
+    queryFn: () =>
+      getJson<Task[]>(
+        `/api/v1/projects/${projectId}/tasks${
+          excludeArchivedCompleted ? '?exclude_archived_completed=true' : ''
+        }`,
+      ),
+    enabled: isConfigured && !!projectId,
+  })
+}
+
+/** Every task one specification document declared, regardless of status or the document's own
+ *  phase — an explicit scope never hides anything. Its own hook rather than `useTasks({
+ *  specDocumentId })`: the two exist for different callers (one small link fetching one document's
+ *  tasks; the whole board fetching everything it will render). */
+export function useDocumentTasks(documentId: string | null) {
   const { isConfigured, selectedProjectId: projectId } = useConfigStore()
   return useQuery<Task[]>({
-    queryKey: ['project', projectId, 'tasks'],
-    queryFn: () => getJson<Task[]>(`/api/v1/projects/${projectId}/tasks`),
-    enabled: isConfigured && !!projectId,
+    queryKey: ['project', projectId, 'tasks', { spec_document_id: documentId }],
+    queryFn: () =>
+      getJson<Task[]>(
+        `/api/v1/projects/${projectId}/tasks?spec_document_id=${encodeURIComponent(documentId ?? '')}`,
+      ),
+    enabled: isConfigured && !!projectId && !!documentId,
   })
 }
 
