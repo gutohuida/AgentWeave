@@ -84,8 +84,15 @@ ever been submitted through the Hub, `change-spec` included. There is nothing to
 capability document's payload is the exact shape a change document's already is. **No schema change is
 needed for D2 to work.** What actually distinguishes the two is everything else in this design —
 phase, write authority, and the merge record — not the payload's shape. `KINDS` in `spec_payload.py`
-gains `"capability"` as a valid value (§ D5) so a submission can name it; nothing about `SpecPayload`
-itself changes.
+gains `"capability"` as a valid value (task 4.4) so a submission can name it; nothing about
+`SpecPayload` itself changes.
+
+**Round 2 correction.** Round 1's `tasks.md` stated this in prose here but never turned it into a
+checklist item — a real gap, not a stylistic one: `validate_payload` refuses any `kind` outside
+`KINDS` before either D2's or D3's refusal ever runs, and the *unchanged* `create_document` route
+already calls `save_document` right after creating a document, of any kind, to write its initial
+scaffold. Skipping this would mean creating a capability document — not merging into one, just
+creating it — fails immediately with `payload_invalid`. Added as task 4.4.
 
 ## D3. `kind` is pinned at creation
 

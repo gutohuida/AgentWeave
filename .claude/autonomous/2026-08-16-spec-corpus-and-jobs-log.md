@@ -254,3 +254,84 @@ round made on its own authority (the schema correction, the kind-pinning bundlin
 choice, the cross-column CHECK, path-based source naming) so round 2 does not have to rediscover them
 from scratch — and a reminder that `at_cap`/on-approval means proceed straight to implementation in the
 same run, tasks.md section by section, not stop at another artifact.
+
+---
+
+## Entry 3 — N2 spec-round 2: cold review, one load-bearing gap found and fixed (2026-08-16T22:23 +01:00)
+
+Verified before starting: branch `autonomous/2026-08-16-spec-corpus-and-jobs`, `git log` head
+`b07b1f6` matching STATE.json, working tree clean. `current` already `N2-archive-and-capability`,
+`next_action` already round 2. No reconciliation needed.
+
+Read `next_action`'s checklist in full and read code cold rather than trusting round 1's own
+account of it: `hub/hub/spec_lifecycle.py` end to end (`transition()`, `create_document`,
+`record_content`), `hub/hub/spec_service.py` (`save_document`, `rename_document`, `propose`),
+`hub/hub/spec_payload.py` (`KINDS`, `validate_payload`, `SpecPayload`), `hub/hub/db/models.py`
+around `SpecDocument`/`SPEC_PHASES` and every `actor_kind` CHECK in the file, migrations `0058`
+(the cross-column CHECK precedent) and `0073` (the batch-recreate precedent), and
+`hub/hub/api/v1/spec.py` (`_operator`, `_require_document`, `create_document`, `set_phase`,
+`agent_actions.py`'s `submit_spec_document`) to see the actual write paths rather than take
+`design.md`'s account of them.
+
+**Confirmed accurate, no action needed:** D2's correction of N1 (verified directly in
+`spec_payload.py` — `SpecPayload.requirements` really is one flat shape for every `kind`, no delta
+schema anywhere); D4's actor_kind CHECK claim (every existing `actor_kind` CHECK in `models.py` is a
+plain `IN ('operator', 'agent', 'system')` — six of them, grep'd — so the new table's
+`CHECK actor_kind = 'operator'` really is stronger than the rest, not a stray tightening); D6's
+cross-column CHECK precedent (`0058`'s `origin_type`/`origin_agent` pair is exactly that shape);
+`0073`'s batch-recreate-with-guard idiom matches what D6 claims for `0074`; `agent_actions.py`'s
+`submit_spec_document` really does catch `SaveRefusedError` generically (`code=exc.code`, no fixed
+mapping) — task 6.1's conditional ("if the route maps a fixed set of codes, extend it") correctly
+hedges on a premise that turns out false, not a bug.
+
+**One load-bearing gap, found by tracing the write path rather than trusting the design doc's
+account of it.** `spec_payload.KINDS` is `("baseline", "system-map", "roadmap", "change-spec")`
+today, and `validate_payload` refuses any `payload.kind` outside it — unconditionally, before
+either of D2's or D3's new refusals ever run. Design D2 states in prose that `KINDS` "gains
+`capability` as a valid value," but round 1's `tasks.md` never turned that into a checklist item —
+no task anywhere touches `spec_payload.py`. Traced the consequence concretely: the *existing,
+unchanged* `create_document` API route (`hub/hub/api/v1/spec.py:810`) already calls
+`spec_service.save_document` immediately after creating any document, of any kind, to write its
+initial scaffold (`payload = {"kind": document.kind, "title": ..., ...}`). So creating a capability
+document at all — not merging into one, just creating the empty scaffold task 8.4 tests — would hit
+`validate_payload`, find `kind="capability"` outside `KINDS`, and refuse `payload_invalid` before
+D2's phase or D3's kind-pinning logic ever run. The entire mechanism this change exists to build
+would be unreachable from its own first step.
+
+**Fixed in place, not just flagged.** Added task 4.4 to `tasks.md` (`spec_payload.py`: `KINDS`
+gains `"capability"`), marked load-bearing with the reasoning above so whoever implements does not
+skip it as a nice-to-have. Fixed task 1.2's wording, which had computed the migration's
+`ck_spec_documents_kind` CHECK as `spec_payload.KINDS + ("capability",)` — now that 4.4 makes
+`KINDS` include it directly, that concatenation would just duplicate the value in the SQL `IN`
+list; reworded to reference `spec_payload.KINDS` directly once both tasks are done, so there is one
+source of the vocabulary, not two that happen to agree today. Fixed a dangling cross-reference in
+`design.md` D2 (`"(§ D5)"` — D5 never mentions `KINDS` at all) and added a short "Round 2
+correction" paragraph there stating the gap and the fix, so a reader of `design.md` alone sees why
+task 4.4 exists without having to find this log entry.
+
+**One clarification, not a gap.** Task 8.5 flagged "can a capability document itself be a merge
+source?" as an edge case design D5 doesn't rule out and should. Reading D5 step 4 again: it already
+refuses any source document whose `phase` is not `(APPROVED, ARCHIVED)`, and a capability document's
+phase is always `current` — so citing one as a source is *already* refused today, by the same
+`source_not_finished` code, as a pure side effect of the phase gate, no extra code required. Not
+actually undecided; reworded task 8.5 to say so and to note the only real open question is whether
+`source_not_finished` is the right *message* for a document that was never a change (nice-to-have,
+not a blocker) — so the test still needs writing, but the implementer isn't asked to invent
+behaviour that already falls out of D5.
+
+**Verification**: `npx openspec validate 2026-08-16-the-corpus-keeps-what-shipped --strict` →
+valid. `npx openspec validate --changes --strict` → **18 passed, 0 failed**, unchanged from round
+1's count (a revision, not a new change). No code touched this iteration — round 2 revising an
+artifact is still artifact-only work — so `pytest`/`npm test` are unchanged from baseline and were
+not re-run.
+
+`current` stays `N2-archive-and-capability`. Advanced `next_action` to round 3: a fresh cold check
+specifically of whether task 4.4's fix is complete and correctly placed (does anything else assume
+`KINDS` is the original four-tuple? — `ck_spec_documents_kind`'s literal SQL list in the migration
+file needs to be written from the *post-4.4* `KINDS`, not copy-pasted from this round's now-stale
+description of it), plus a final pass over anything this round didn't have time to re-derive from
+scratch (the UI section, the human-only verification list, the user test guide) — and then, per
+`spec_round_protocol.at_cap` (round 3 is the cap), record any remaining objections in `design.md`
+and proceed straight to implementation in the same run, `tasks.md` section by section: migration
+0074 first (task 4.4 done first within that pass, since 1.2 now depends on it being decided), then
+model, lifecycle, service, API, agent-route refusal, UI, then the test sections.

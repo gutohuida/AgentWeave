@@ -7,8 +7,10 @@
       is absent.
 - [ ] 1.2 `batch_alter_table("spec_documents", recreate="always")`: drop `ck_spec_documents_phase`,
       recreate it with `("exploring", "proposed", "approved", "archived", "current")`; add
-      `ck_spec_documents_kind` (`kind IN (...)` over `spec_payload.KINDS + ("capability",)`); add
-      `ck_spec_documents_kind_phase` (the cross-column CHECK from design D6).
+      `ck_spec_documents_kind` (`kind IN (...)` over `spec_payload.KINDS`, which task 4.4 below has
+      already grown to include `"capability"` — write the literal SQL list once both are decided, not
+      as a separately-maintained copy); add `ck_spec_documents_kind_phase` (the cross-column CHECK from
+      design D6).
 - [ ] 1.3 Guarded `op.create_table("spec_document_merges", ...)` per design D4/D6, columns, the
       `actor_kind = 'operator'` CHECK, and both indexes — same call shape as `0065`'s
       `spec_document_events`.
@@ -61,6 +63,17 @@
       `save_document`, the `SpecDocumentMerge` rows, the `merged` event). Steps 1–4 (resolution and
       refusals) live in the API handler, matching this file's existing split between "the API resolves
       what a path names" and "the service acts once it has documents in hand."
+- [ ] 4.4 **Load-bearing, found in round 2 review — without this, nothing else in this change works.**
+      `hub/hub/spec_payload.py`: `KINDS` gains `"capability"`. `validate_payload` checks
+      `payload.kind not in KINDS` (line 216) unconditionally, before either of 4.1/4.2's refusals ever
+      run — and the *existing, unchanged* `create_document` API route already calls `save_document`
+      immediately after creating any document (`hub/hub/api/v1/spec.py`'s `create_document`, payload
+      `{"kind": document.kind, ...}`). So creating a capability document at all — not merging into one,
+      just creating the empty scaffold — would call `validate_payload` with `kind="capability"` and be
+      refused `payload_invalid` ("kind must be one of baseline, system-map, roadmap, change-spec") if
+      this task is skipped. Design D2 states the `KINDS` change in prose but round 1's `tasks.md` never
+      turned it into a checklist item; this task closes that gap. No other code change needed at the
+      Pydantic layer — `SpecPayload.kind` is already a bare `str`, not a Python enum.
 
 ## 5. API (`hub/hub/api/v1/spec.py`)
 
@@ -132,9 +145,14 @@ Everything here is asserted by the suite; none of it requires a human.
       document writes the payload, creates one `SpecDocumentMerge` row per named source, and one
       `"merged"` event on the capability document; a merge naming a source still `exploring` or
       `proposed` is refused `source_not_finished`; a merge naming a source whose `kind` is `capability`
-      (a capability document cannot itself be a merge source) — decide and assert the intended
-      behaviour, since design D5 does not explicitly rule this out and it should (a source is what got
-      merged *from*, which only makes sense for a change document); a merge against a non-capability
+      (a capability document cannot itself be a merge source) — **round 2 note: this is not actually
+      undecided.** D5 step 4 already refuses any source whose `phase` is not `(APPROVED, ARCHIVED)`,
+      and a capability document's phase is always `current` (D1) — so citing one as a source is already
+      refused today, by the same `source_not_finished` code, as a side effect of the phase gate, with no
+      extra code needed. The only real decision left is whether `source_not_finished` is the right
+      *message* for a document that was never a change to begin with — worth a distinct error string in
+      the same refusal branch if it is easy, not worth a new refusal path if it is not. Assert the
+      refusal happens; treat the message wording as a nice-to-have, not a blocker. A merge against a non-capability
       target document is refused `not_a_capability`; two merges from different changes into the same
       capability accumulate two rows, not one overwritten row; a merge's payload is still subject to
       every existing `save_document` refusal (e.g. malformed payload → `payload_invalid`, unchanged
