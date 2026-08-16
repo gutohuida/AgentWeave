@@ -202,19 +202,31 @@ Not a test — the real HTTP surface, the real database, real files. Restart the
 (`environment.restart_command` in `STATE.json`) onto the implementing commit first; confirm `/health`
 reports `ok` before trusting any observation.
 
-- [ ] 9.1 Create a document with `kind="capability"` via the API; confirm it appears at `phase:
+- [x] 9.1 Create a document with `kind="capability"` via the API; confirm it appears at `phase:
       "current"` and that `POST /project/documents/phase?to=approved` against it is refused.
-- [ ] 9.2 Approve an ordinary change document (materialising its tasks, as today), then archive it;
+      Driven against the restarted trial Hub (commit 55af280): created `spdoc-6b4fb89d` at
+      `spec/capabilities/n2-drive-test/spec.html`, landed at `phase: "current"`; the approve attempt
+      returned 409 `illegal_transition`.
+- [x] 9.2 Approve an ordinary change document (materialising its tasks, as today), then archive it;
       confirm its tasks are unchanged (`GET` the tasks, compare `spec_document_id` and `status` before
-      and after).
-- [ ] 9.3 Merge that archived change into the capability document created in 9.1, citing it by path;
+      and after). Created `spdoc-c30f9725`, submitted content via a directly-minted run credential
+      (mirroring the test suite's technique — no live agent process needed), closed exploration,
+      proposed, approved (materialised `task-b3fd0764`), then archived. `GET` on the task before and
+      after archiving returned byte-identical `status`, `updated`, and `spec_document_id`.
+- [x] 9.3 Merge that archived change into the capability document created in 9.1, citing it by path;
       confirm the capability document's content updates and `GET
       /project/documents` (or wherever merges surface, if anything does yet — this change ships no
       dedicated merge-history UI) shows the row exists at the database level.
-- [ ] 9.4 Attempt the same merge again with a source still in `proposed`; confirm `source_not_finished`.
-- [ ] 9.5 Attempt to write capability-document content through the ordinary agent route
+      `POST .../merge` returned 200 with `merged: 1`; queried `spec_document_merges` directly —
+      `spmrg-ef98fcdc` (capability_document_id=spdoc-6b4fb89d, change_document_id=spdoc-c30f9725,
+      actor_kind=operator); `GET /project/spec` on the capability path shows the rendered HTML with
+      `aw-spec-kind: capability`, `aw-spec-status: current`, and the merged content.
+- [x] 9.4 Attempt the same merge again with a source still in `proposed`; confirm `source_not_finished`.
+      A second change document (`spdoc-...`, proposed but not approved) named as `from_changes`
+      returned 409 `source_not_finished`, message naming the path and its actual phase.
+- [x] 9.5 Attempt to write capability-document content through the ordinary agent route
       (`submit_spec_document`, using a live run's credential rather than the operator's project
-      credential); confirm the refusal.
+      credential); confirm the refusal. Returned 422 `capability_write_is_the_operators`.
 
 ## 10. Human-only verification
 

@@ -335,3 +335,171 @@ scratch (the UI section, the human-only verification list, the user test guide) 
 and proceed straight to implementation in the same run, `tasks.md` section by section: migration
 0074 first (task 4.4 done first within that pass, since 1.2 now depends on it being decided), then
 model, lifecycle, service, API, agent-route refusal, UI, then the test sections.
+
+---
+
+## Entry 4 — N2 round 3: one more gap found, then implemented and shipped end to end (2026-08-16T23:12 +01:00)
+
+Verified before starting: branch `autonomous/2026-08-16-spec-corpus-and-jobs`, `git log` head
+`594fe57` matching STATE.json, working tree clean. `current` already `N2-archive-and-capability`,
+`next_action` already round 3 (the cap). No reconciliation needed.
+
+**Round 3 review**, reading code cold rather than trusting rounds 1-2's account of it. Re-derived
+task 4.4 directly from `spec_payload.py` — confirmed `KINDS` was still the original four-tuple and
+the fix is exactly as load-bearing as round 2 said. Then, per round 3's specific brief (does
+anything else assume `KINDS` is the original four-tuple), grepped every occurrence of the four kind
+strings across `hub/hub` rather than trusting the design doc's account of where they live. Found a
+second gap task 4.4 alone did not close: `hub/hub/mcp_server.py`'s `SpecKind` Literal is a *restated*
+copy of `spec_payload.KINDS` (CLAUDE.md: `mcp_server.py` may import only stdlib + fastmcp, so
+anything it needs from the Hub is restated there) — and
+`test_mcp_tool_schemas.py::test_spec_kind_agrees_with_the_payload_validator` asserts the two sets are
+equal. The moment `KINDS` gained `capability`, that existing test would fail deterministically. Traced
+the consequence to confirm it was a test-honesty issue and not a security hole: `submit_spec_document`
+(the tool using `SpecKind`) only writes to a document that already exists, and document creation is
+reached only through the operator's own project credential with a hardcoded operator actor — no
+agent-reachable route creates a document of any kind, capability included. So the fix (task 4.5, added
+to `tasks.md`) keeps the restated type honest; it does not open or close a door. Also checked and
+ruled out two false positives from the same grep: `spec_manifest.VALID_KINDS` and the UI's
+`SpecEntry.kind` TS union both name the same four strings but belong to the unrelated on-disk
+manifest/index subsystem (`spec/index.json`), never read or written by anything this change touches —
+recorded in `tasks.md` as confirmed-out-of-scope rather than silently ignored. Re-read the UI plan (D7)
+against the real `SpecPhaseBar.tsx` and confirmed the Reopen-narrowing bug and the insertion points
+were both exactly as designed. `npx openspec validate 2026-08-16-the-corpus-keeps-what-shipped
+--strict` -> valid after recording the finding in both `design.md` and `tasks.md`.
+
+**Implementation, `tasks.md` section by section, per `spec_round_protocol.at_cap`:**
+
+- **Migration 0074** — `batch_alter_table` recreating `ck_spec_documents_phase` (five values), adding
+  `ck_spec_documents_kind` (first-ever CHECK on that column) and the cross-column
+  `ck_spec_documents_kind_phase`; a guarded `create_table` for `spec_document_merges` following
+  `0065`'s shape. Verification caught a real harness bug before it became a shipped-migration bug: a
+  first hand-rolled upgrade/downgrade/upgrade round-trip script showed the post-round-trip schema
+  reverting to the pre-migration three-value CHECK with `alembic_version` still reading `0074` —
+  looked exactly like a broken migration. Traced it to the test harness, not the migration: the script
+  called `Base.metadata.create_all` through `hub.db.engine`'s module-level `engine` singleton, which is
+  constructed from `settings.database_url` at import time — before the script's patch of that setting
+  ever took effect — so `create_all` silently ran against the real default database
+  (`hub/data/agentweave.db`, the preserved pre-migration backup CLAUDE.md explicitly warns not to
+  touch) while alembic's own upgrade correctly targeted the tmp file. This did write one new, empty
+  `spec_document_merges` table into `hub/data/agentweave.db` — `create_all` is additive-only (creates
+  missing tables, never alters or drops existing ones), so no existing row in any of that file's 42
+  other tables was touched; confirmed by reading its table list and row counts before moving on.
+  Re-ran the round-trip with an explicitly-constructed async engine bound to the tmp path instead of
+  the module singleton — clean: `create_all` + `alembic upgrade head` (mirroring the real `init_db()`
+  sequence) produces every new constraint, and `downgrade -1` + `upgrade head` round-trips back to the
+  identical shape. Bumped all 12 head assertions (`test_migrations.py` x11 including the two inside
+  `test_migration_0073_*` functions that upgrade to head and were previously asserting the old head,
+  `test_project_persistence.py` x1) — script-driven since they are mechanically identical lines,
+  verified the exact line set first.
+- **Model** — `SPEC_PHASES` gains `archived`/`current`; new `SPEC_KINDS` local constant (restated,
+  same non-cross-import convention `SPEC_PHASES` already follows) backing the two new CHECKs on
+  `SpecDocument.__table_args__`; new `SpecDocumentMerge` class exactly per design D4.
+- **Lifecycle** (`spec_lifecycle.py`) — `ARCHIVED`/`CURRENT` constants; `TRANSITIONS` gains
+  `(APPROVED, ARCHIVED)` only; `create_document` picks `CURRENT` for `kind == "capability"`;
+  `transition()`'s unknown-phase guard admits `ARCHIVED`, still refuses `CURRENT` as a `to_phase` (the
+  only door into `current` is creation); a new operator-only check for `to_phase == ARCHIVED`, same
+  shape as the existing approval check, `code="archive_is_the_operators"`; `record_content` drops its
+  now-redundant `kind` parameter, one call site updated.
+- **Service** (`spec_service.py`) — `save_document` reordered so `validate_payload` runs first, then
+  two new refusals before the existing `document.phase == APPROVED` check (both design D2 and D3 ask
+  for this ordering): `kind_is_fixed` (`payload.kind != document.kind`) and
+  `capability_write_is_the_operators` (`document.kind == "capability" and actor.kind != "operator"`).
+  New `merge_document()` — steps 5-6 of design D5 (write via `save_document`, one `SpecDocumentMerge`
+  row plus one `merged` event per source); commit/broadcast stay the route's job, matching every other
+  function in this file.
+- **`spec_payload.py`** — `KINDS` gains `capability` (task 4.4); the `kind` field's docstring updated
+  to match, since it is agent-facing.
+- **`mcp_server.py`** — `SpecKind` gains `capability` (task 4.5).
+- **API** (`spec.py`) — `MergeRequest` model; `POST /project/documents/{path}/merge` following design
+  D5's refusal order. One deviation from the letter of task 5.2, recorded because it changes tested
+  behaviour: `_require_document`'s generic 404 (document not found) does not name the path, but design
+  D5 step 3 explicitly wants the missing source named — wrote the source-resolution loop inline
+  instead of reusing `_require_document` so the 404 detail states the actual missing path; verified by
+  a dedicated test. Audited every other route in the file plus `agents.py`'s `SPEC_PHASE_DUTIES` dict
+  and `launchability.py`'s exploring/else branch for a closed-set phase assumption (task 5.4) — both
+  degrade gracefully for the two new phases, no fix needed, recorded rather than silently assumed
+  clean.
+- **UI** — `SpecPhaseBar.tsx`: Reopen narrowed to `proposed`/`approved`; new Archive button (`approved`
+  only, existing `useSetSpecPhase` mutation, no new hook); muted chip color for `archived`/`current`.
+  `spec.ts`: `SpecDocumentRecord.phase` union gains the two literals. 13 new cases added to the
+  existing `specPhaseBar.test.tsx` rather than a new file. `npm run build` + `refresh_ui_bundle.py`.
+
+**A second harness-adjacent finding, caught by `/health` after restarting the trial Hub rather than by
+any test**: `refresh_ui_bundle.py`'s fingerprint folds in `git status --porcelain` (so an uncommitted
+edit still moves the fingerprint) — running it before committing `hub/ui/src` stamps a fingerprint
+that includes a dirty suffix the post-commit clean tree no longer reproduces, so `/health` reported
+`ui_stale` even though the bundle was byte-identical to what was committed. Re-running the script
+against the clean, committed tree produced a matching fingerprint; only `ui-build-stamp.json` changed
+(confirmed via `git status` — no asset content differed), committed separately. Worth a line in a
+later pass over that script or its own instructions: build-then-commit is the wrong order for this
+fingerprint design; commit-then-build (or refresh again post-commit) is what actually produces an
+accurate stamp.
+
+**A third real gap, caught only by running the full suite, not by anything in `tasks.md`**:
+`test_project_delete_api.py` maintains a hand-written `PROJECT_SCOPED_TABLE_NAMES` list and a
+`_seed_full_project` helper, checked against the live model registry by a dedicated sweep-coverage
+test. `spec_document_merges` carries a `project_id` column, so it is automatically part of the live
+delete sweep (`project_lifecycle.py`'s `_project_scoped_tables()` introspects `Base.metadata`
+directly — no code change was needed there, cascade-delete already covers the new table correctly) —
+but the test's hand-written list didn't know about it, failing the sweep-coverage test and, downstream,
+the two orphan-check tests whose seed helper left the new table at zero rows. Fixed by adding the table
+name to the list and one seed row (capability/change ids both point at the same seeded document row —
+no CHECK forbids that, and nothing about an orphan check cares which document either FK names).
+
+**Verification, all green:**
+- `pytest hub/tests/ -n 8`: 2089 passed, 11 skipped (baseline 2068/11 — +21 new: 7
+  `test_spec_archive.py`, 6 `test_spec_capability_kind.py`, 8 `test_spec_merge.py`).
+- `pytest tests/ -n 4`: 362 passed, 3 skipped — unchanged from baseline.
+- `npm test`: 934/934 (baseline 921 — +13 in `specPhaseBar.test.tsx`).
+- `npm run lint`, `npx tsc --noEmit`: clean.
+- `ruff check hub/ src/`: clean. `black --check`: clean after auto-formatting 5 files (line-wrapping
+  only, re-tested after).
+- `npx openspec validate --changes --strict`: 18/18. `--specs --strict`: 30/30.
+- Driven against the running Hub (restarted twice — once onto the implementing commit, once more
+  after the bundle-stamp fix — `/health` returned status ok, no `ui_stale`, before trusting any
+  observation): all five of section 9's checks, live, against `proj-5e960453` (this repo's own trial
+  project) with a directly-minted run credential standing in for a live agent process (same technique
+  the Python test suite uses — no Claude/Codex process needed to exercise the HTTP surface). 9.1
+  created a capability document, confirmed phase current and a refused approve attempt (409
+  illegal_transition). 9.2 approved an ordinary change (materialising one task), archived it, and
+  confirmed the task's status/updated/spec_document_id were byte-identical before and after via two
+  GETs. 9.3 merged the archived change into the capability document, confirmed one merge recorded, a
+  `spec_document_merges` row queried directly from the trial database, and the rendered HTML on disk
+  showing the merged content with the capability kind/status metadata. 9.4 named a still-proposed
+  source and got 409 source_not_finished naming the actual path and phase. 9.5 used the run credential
+  against the agent route targeting the capability document and got 422
+  capability_write_is_the_operators.
+
+**Teardown, not left in place.** This repo is itself the trial project's registered working
+directory, so the verification writes above landed as real files under `spec/` in this checkout, not
+in some other project's sandbox — `git status` surfaced an untracked `spec/capabilities/n2-drive-test/`
+and two `spec/changes/n2-drive-test*/` trees. Rather than commit synthetic test debris into the
+tracked `spec/` corpus or leave the trial database inconsistent with the filesystem, deleted both
+sides: every dependent row (`spec_requirements`, `spec_requirement_revisions`,
+`task_requirement_links`, `requirement_evidence`, `spec_document_events`, `spec_document_merges`,
+`task_requirement_references`, `task_transitions`, the one materialised `Task`, the three
+`SpecDocument` rows, the synthetic `Run`) via direct SQLite deletes against the trial database, then
+`rm -rf` the three directories. Verified zero rows and zero files remain named `n2-drive-test`
+afterward. The Hub itself is untouched — this was cleanup of my own verification data, not of
+anything else in either project.
+
+**Not done, deliberately** — section 10 (human-only: does Archive read as final, is a capability
+document's phase bar quiet without looking broken) genuinely needs a person looking at the UI; left
+unchecked in `tasks.md` for the operator rather than guessed at from a screenshot.
+
+Committed as `5e36209` (the implementation) and `55af280` (the bundle-stamp correction), both on this
+branch.
+
+`current` advances to `N2b-task-board-at-scale`. Read N1's exploration section 4-5 before setting
+`next_action`: N1 does not recommend skipping N2b — it recommends two concrete pieces: (1) a "show
+this document's tasks on the board" affordance, generalizing the exact mechanism
+`SpecCoverageBar`/`taskFilterStore.activeTaskIds` already proves live (a new `taskIds` source, not new
+UI machinery) — verified in this session that `TasksBoard.tsx` really does filter by `activeTaskIds`
+membership; (2) archiving retiring a document's completed tasks from the board's default (unscoped)
+view only — a task's status/assignee/every other field is untouched, this is a view-level query
+filter, and N1's own coordination note says explicitly this exclusion belongs to whichever of N2/N2b
+lands second — since N2 just landed, that is N2b's job, not a duplicate of anything N2 shipped
+tonight (confirmed: N2's design D8 states explicitly no task is read or written by anything in that
+change). `next_action` set to N2b's own round 1: author `proposal.md`/`design.md`/`tasks.md`/spec
+delta in `openspec/changes/`, grounded in N1's two recommendations above rather than re-deriving them,
+then round-robin per `spec_round_protocol`.
