@@ -870,3 +870,100 @@ are settled from phase 2, so this is buildable without further backend changes. 
 and phase 6 (human-only) follow after.
 
 **Elapsed:** one iteration.
+
+## Entry 10 — 05:16 — Q4b phase 4: the UI delete control, `tasks.md` 4.1-4.5
+
+Verified branch/log/`STATE.json` agreed before starting (HEAD `3c362f2`,
+`autonomous/2026-08-16-app-and-test-reform`, iteration 9, `next_action` pointing at phase 4 only —
+4.1 through 4.5, phase 5/6 explicitly out of scope this iteration). Refreshed `last_heartbeat`
+before beginning.
+
+**4.1** — `useDeleteProject(projectId)` in `hub/ui/src/api/projects.ts`. Deliberately does **not**
+call the existing `deleteJson<T>` helper: that helper always calls `res.json()`, and the route
+(`hub/hub/api/v1/projects.py:542`) returns `204 No Content` with an empty body, which throws a
+`SyntaxError` on `.json()`. Used `fetchWithAuth` directly and discarded the response. `onSuccess`
+writes the filtered `['projects']` cache once via `setQueryData`'s functional updater, captures that
+same filtered array, and only then checks `useConfigStore.getState().selectedProjectId` to decide
+whether to resolve the next selection — one read of "what's left" rather than a second cache lookup,
+reusing `configStore`'s own fallback (`design.md` D6) rather than a second implementation of it.
+
+**4.2/4.3** — new `hub/ui/src/components/environment/DeleteProjectDialog.tsx`, modelled directly on
+`AgentCreateDialog.tsx`'s existing dialog shape (`role="dialog"`, `aria-modal`, `useDialogFocus` for
+the Escape/focus-trap behaviour, `lifted-surface` panel) rather than inventing a new dialog pattern.
+`canDelete` requires `typed.trim() === project.name` — edge-trimmed only, case-sensitive otherwise,
+per D7's literal wording. `ProjectSettingsPanel.tsx` gained one `SettingsRow` below the existing
+Directory row, holding a `destructive`-variant `Button` that opens the dialog — no new icon needed,
+since the trigger is a labelled button matching the Directory row's own "Locate project" pattern
+(text, not an icon glyph), so the `Icon`-component-only rule was never in tension with this task.
+
+**4.4** — checked whether any new client-side branching was actually needed before writing any:
+`hub/hub/api/v1/projects.py`'s 409 already carries `detail={"code": "project_has_active_run",
+"message": "project cannot be deleted while a run is active"}` (phase 2), and
+`readableApiError` (`hub/ui/src/api/client.ts:74`) already has a branch that extracts
+`detail.message` from exactly an object-shaped detail — written earlier for the checkpoint-threshold
+refusal, but the shape is generic, not endpoint-specific. Confirmed by reading both sides against
+each other rather than assuming; the dialog calls `readableApiError(deleteProject.error, '...')` and
+needed no new parsing.
+
+**4.5** — read `App.tsx` and `Sidebar.tsx` as they exist now, not by assumption, per the task's own
+instruction. Found the zero-project state **already correct**, better than `design.md` D6 expected:
+`lib/navigation.ts` already declares a `{kind: 'zero'}` `WorkspaceDestination`, and
+`resolveDestination` (`navigation.ts:383-386`) already falls through to it when
+`availableProjectIds` is a non-null empty array with no `lastOpenedProjectId` match.
+`App.tsx`'s `content` renders "Open or create a project to begin." for every destination kind other
+than `conversation`/`agent-settings`/`project` (the final `else`, `App.tsx:398`); `<ProjectHeader>`
+is already gated on `currentProject &&` so an absent project renders nothing rather than a stale
+header; `Sidebar.tsx`'s "Add project" button is unconditional below `projects.map(...)`, which is
+simply empty when the array is `[]`. This path used to be reachable only by wiping the database —
+what's new is that `useDeleteProject`'s cache write makes `availableProjectIds` go to `[]` *inside a
+live session*, and `useWorkspaceNavigation`'s `useEffect` already recomputes `destination` off that
+array's content (compared by `.join(',')`, not identity), so this reactively resolves without any
+code change. Recorded as confirmed-by-inspection; the live drive (task 6.4) is still what turns this
+from "reads correct" into "observed correct," and stays a human-only task.
+
+**Verification.** `npx tsc --noEmit` (hub/ui) — clean. `npm run lint` — **could not run**: this
+machine's globally-resolved `eslint` is v9.39.4, which requires `eslint.config.js`; the repo has
+neither that file nor a `.eslintrc.*` anywhere (`find` from the repo root, excluding
+`node_modules`, returned nothing) despite `package.json`'s `lint` script assuming the old
+`.eslintrc` flag-based invocation and `eslint@^9.17.0` declared as a devDependency. This is **not
+introduced by this change** — confirmed by running `npm run lint` against the pre-4.1 tree (`git
+stash`) and getting the identical "couldn't find eslint.config" failure. Recorded here rather than
+silently worked around, since Q4b's phase 5 task 5.3 explicitly asks for "`npm run lint` clean" and
+that bar cannot currently be met by any change in this repo, not just this one — flagged for
+`decisions_for_user` below rather than fixed inline, since authoring a working `eslint.config.js` is
+a repo-wide config decision outside this queue item's scope.
+
+Ran the full UI suite (`npx vitest run`) after adding `useDeleteProject`'s stub to
+`projectSettingsPanel.test.tsx`'s existing `vi.mock('@/api/projects', ...)` — without it, all 10
+tests in that file failed on mount with "No `useDeleteProject` export is defined on the ... mock,"
+since `ProjectSettingsPanel` now renders `<DeleteProjectDialog>` unconditionally, which calls the
+hook even while closed. Also observed one unrelated flake on the first full-suite run —
+`chartersUi.test.tsx`'s single test timed out at 5000ms — and checked it before dismissing it:
+reran `chartersUi.test.tsx` alone and paired with `projectSettingsPanel.test.tsx` on the *pre-4.1*
+tree (`git stash`) and it passed there too, then reran both together on the current tree and they
+passed; a second full-suite run afterward was clean. Consistent with the load-dependent timeout
+already named in this run's `dead_ends` ("different chunk groupings expose different flakes"), not
+a regression from this iteration's changes — recorded as observed, not asserted away. **Final: 90
+test files / 864 tests passing**, two full runs. `npx openspec validate --changes --strict` — 14
+passed, this change included, after the `tasks.md` edit.
+
+**Ticked 4.1-4.5**, each with what was actually built/found, including 4.5's "no fix needed, here is
+why" and 4.4's "no new code needed, here is why" — neither is a checkbox ticked on the strength of
+the task's own wording being satisfied by default.
+
+**Files touched, confirmed via `git status --short`:** `hub/ui/src/api/projects.ts`,
+`hub/ui/src/components/environment/ProjectSettingsPanel.tsx` (both modified),
+`hub/ui/src/components/environment/DeleteProjectDialog.tsx` (new),
+`hub/ui/src/__tests__/projectSettingsPanel.test.tsx` (modified — mock addition only),
+`openspec/changes/2026-08-16-delete-project-api/tasks.md` (modified). Committed as `472b91e`.
+
+**Next:** phase 5 — UI tests (`tasks.md` 5.1-5.3): a component test that the Delete button stays
+disabled until the typed name matches exactly and calls the mutation only once enabled (5.1), a test
+that a `409` renders the active-run reason rather than a generic failure (5.2), and 5.3's lint/openspec
+gate — which, per this entry's finding, needs `npm run lint`'s prerequisite (`eslint.config.js`)
+addressed first or explicitly deferred with a reason, since the bar as written is currently
+unmeetable by any change in this repo. Then phase 6, human-only: drive it live against a throwaway
+project (never `aw-loop10`), screenshot with `scripts/uishot.py` if Q4a's harness works, and the two
+taste judgements (6.3 confirmation proportionality, 6.4 empty-state).
+
+**Elapsed:** one iteration.
