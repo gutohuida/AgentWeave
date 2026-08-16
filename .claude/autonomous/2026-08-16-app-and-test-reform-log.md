@@ -706,3 +706,75 @@ items from round 1's review (D2 sweep semantics, SSE broadcast ordering) both la
 not phase 3's, and are fresher to apply now than after a context gap.
 
 **Elapsed:** one iteration.
+
+---
+
+## Entry 8 — 04:43 — Q4b phase 2: `DELETE /api/v1/projects/{project_id}`
+
+Verified branch/log/`STATE.json` agreed before starting (HEAD `20c0cbe`,
+`autonomous/2026-08-16-app-and-test-reform`, iteration 7, `current: Q4b-delete-project`,
+`next_action` pointing at `tasks.md` phase 2 only). Refreshed `last_heartbeat` to now before
+beginning. Sized this iteration to phase 2 only, per the `next_action`'s explicit instruction — no
+formal pytest file (phase 3), no UI (phase 4).
+
+**Added to `hub/hub/api/v1/projects.py`**, after `relocate_project`: `DELETE
+/api/v1/projects/{project_id}`, `Depends(get_operator)` (plain — not `get_operator_project`, which
+would 404 an unknown id before `delete()`'s own typed error gets a chance, and not `get_project`,
+per `design.md`'s route-shape section). Calls `ProjectLifecycleService(session).delete(project_id)`
+and maps its two `ProjectPathError` codes explicitly: `project_not_found` → 404 (same shape
+`relocate_project` already uses), `project_has_active_run` → 409 with `detail={"code", "message"}`.
+
+**One deliberate deviation from `raise_workspace_http_error`, recorded rather than silently
+matched to `relocate_project`'s pattern:** that helper maps a bare `ProjectPathError` to 422,
+reserving 409 for `ProjectIdentityConflict`/`ProjectWorkspaceUnavailable` — so calling it here for
+`project_has_active_run` would produce a 422, contradicting `design.md`'s explicit "409 with a
+machine-readable code" for this route (and `tasks.md` 2.2's literal "409"). Raised the
+`HTTPException` directly instead. Worth flagging because `relocate_project`'s own
+`project_relocation_active` case goes through `raise_workspace_http_error` and therefore likely
+also returns 422 today despite its design doc calling it 409 — not this change's bug to fix, but a
+pre-existing inconsistency worth a `decisions_for_user` line rather than silently propagating it
+into new code.
+
+**SSE broadcast ordering — applied round 1 review's watch item, which superseded task 2.3's own
+literal wording:** `2.3` as written says broadcast "before the row is gone"; `STATE.json`'s
+`next_action` (set at Entry 6, after the round-1 review) directed broadcasting *after*
+`delete()`'s commit instead. Since `delete()` already commits inside its own transaction (phase 1),
+the row is unavoidably gone by the time the route regains control either way — the real choice was
+just "broadcast before or after we know the commit succeeded," and after is correct: broadcasting
+first and then having the commit fail would tell clients something happened that didn't. Used
+`summary.id`/`summary.name` (captured by `delete()` ahead of its sweep, exactly for this) since
+`project.name` isn't readable off a deleted ORM instance. Recorded the deviation from the literal
+task text directly in `tasks.md`, not just in this log.
+
+**Verified against the real route over real HTTP**, not just by reading the code: wrote a throwaway
+test file (`hub/tests/test_scratch_delete_project_phase2.py`, run then deleted — not part of the
+diff, per the standing "phase 3 is deliberately deferred" note) using the project's own `app`/
+`auth_headers` fixtures (a real FastAPI app behind `httpx.AsyncClient`, real in-memory SQLite, not
+mocked). Four cases, all passed:
+
+- Happy path: project + an agent row, `DELETE` → `204`, empty body, gone from a subsequent
+  `GET /api/v1/projects`.
+- Unknown id → `404`.
+- A project with a `Run(status="running")` → `409`, `detail["code"] == "project_has_active_run"`,
+  project still present in the listing afterward.
+- No `Authorization` header → `401` (confirms auth runs ahead of both the not-found and
+  active-run checks, not skippable).
+
+**Ran the existing regression set most likely to catch a break:**
+`test_operator_projects_api.py`, `test_project_lifecycle.py`, `test_project_persistence.py`,
+`test_migrations.py` (plus the throwaway file while it still existed) — 99 passed, 1 pre-existing
+skip, 63s. `ruff check hub/hub/api/v1/projects.py` clean. `npx openspec validate --changes --strict`
+— 14 passed, this change included, both before and after the `tasks.md` edit.
+
+**Ticked 2.1-2.3**, each with what was actually decided, including the two deviations from literal
+task wording and why. `git status`/`git diff --stat` after removing the scratch test file: exactly
+`hub/hub/api/v1/projects.py` (+37) and `tasks.md` (+30/-3) changed — nothing else touched.
+
+**Next:** phase 3, the formal pytest file (`tasks.md` 3.1-3.9) — the throwaway HTTP checks above
+cover the same shapes 3.1/3.4 will assert formally, but not yet as committed, reviewable coverage,
+and not yet the exhaustive no-orphan sweep (3.2), the second-project isolation proof (3.3), the
+mutation-checked workspace-survival test (3.5, deferred from 1.4), the terminal-run/open-conversation
+non-blocking cases (3.6/3.7), or the `agent_job_deletions` no-FK case (3.8). Phase 4 (UI) still
+depends on phase 2's response shapes, which are now settled and stable to build against.
+
+**Elapsed:** one iteration.

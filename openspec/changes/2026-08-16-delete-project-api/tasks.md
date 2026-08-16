@@ -49,14 +49,38 @@ No migration in this change (`design.md` D1) — every table already exists.
 
 ## 2. API route
 
-- [ ] 2.1 `DELETE /api/v1/projects/{project_id}` in `hub/hub/api/v1/projects.py`,
+- [x] 2.1 `DELETE /api/v1/projects/{project_id}` in `hub/hub/api/v1/projects.py`,
       `Depends(get_operator)` (not `get_project` — this is an instance-level operation, per
       `design.md`'s "Authentication and route shape"). `204 No Content` on success.
-- [ ] 2.2 `404` if the project does not exist. `409` with `code="project_has_active_run"` if 1.2's
+      Added after `relocate_project`. `project_id` is a plain path parameter (not resolved
+      through `get_operator_project`, which would 404 on an unknown id itself before
+      `delete()` gets a chance to raise its own typed error) — `Depends(get_operator)` only,
+      matching the task's literal wording. Verified live over real HTTP (throwaway test file,
+      run then deleted, not committed): a successful delete returns 204 with an empty body,
+      and the project is absent from a subsequent `GET /api/v1/projects`.
+- [x] 2.2 `404` if the project does not exist. `409` with `code="project_has_active_run"` if 1.2's
       guard fires.
-- [ ] 2.3 Broadcast an SSE event (`project_deleted`, matching the `project_opened`/`project_created`
+      Handled by catching `ProjectPathError` and branching on `.code`, the same shape
+      `relocate_project` uses for `project_not_found` — but for `project_has_active_run` this
+      route raises `HTTPException(409, detail={"code": ..., "message": ...})` directly rather
+      than calling `raise_workspace_http_error`, because that helper maps a bare
+      `ProjectPathError` to 422 (it reserves 409 for `ProjectIdentityConflict`/
+      `ProjectWorkspaceUnavailable`), which would contradict `design.md`'s explicit "409 with a
+      machine-readable code" for this route. Verified live: unknown id → 404; a project with a
+      `status="running"` run → 409 with `detail["code"] == "project_has_active_run"` and the
+      project row still present afterward; no `Authorization` header → 401 (auth runs before
+      either check).
+- [x] 2.3 Broadcast an SSE event (`project_deleted`, matching the `project_opened`/`project_created`
       pattern already in this file) with the id and name, before the row is gone, so a connected
       client's own project list updates without a poll.
+      Broadcasts **after** `ProjectLifecycleService.delete()` returns, not before — this
+      supersedes this task's literal "before the row is gone" wording per round 1 review's watch
+      item (recorded in `STATE.json`'s `next_action` after Entry 6): `delete()` already commits
+      inside its own transaction (phase 1, D2), so by the time the route regains control the row
+      is unavoidably already gone; broadcasting first would not change that, and broadcasting
+      after is what "confirm the commit happened before telling clients it happened" actually
+      requires. `summary.id`/`summary.name` (captured by `delete()` before the sweep, per 1.1)
+      supply the payload since `project.name` is no longer readable off a deleted ORM instance.
 
 ## 3. Backend tests — agent-verifiable
 

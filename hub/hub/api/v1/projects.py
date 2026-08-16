@@ -537,3 +537,40 @@ async def relocate_project(
         {"id": project.id, "name": project.name, "directory_state": project.directory_state},
     )
     return await _project_summary(session, project)
+
+
+@router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_project(
+    project_id: str,
+    operator: OperatorCredential = Depends(get_operator),
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    """Remove a project and every row scoped to it. Never touches the filesystem.
+
+    Instance-level operation (`Depends(get_operator)`, not `get_project`) — deleting a
+    project is a decision about the Hub's collection, not something a credential scoped
+    to operate inside one project has standing to do (design.md "Authentication and
+    route shape").
+    """
+    del operator
+    try:
+        summary = await ProjectLifecycleService(session).delete(project_id)
+    except ProjectPathError as exc:
+        if exc.code == "project_not_found":
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
+            ) from exc
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
+
+    # Broadcast after delete()'s own commit has succeeded, not before — round 1 review's
+    # watch item. The row is already gone by the time we get here; `summary` was captured
+    # by delete() ahead of the sweep for exactly this purpose.
+    await sse_manager.broadcast(
+        summary.id,
+        "project_deleted",
+        {"id": summary.id, "name": summary.name},
+    )
+    return None
