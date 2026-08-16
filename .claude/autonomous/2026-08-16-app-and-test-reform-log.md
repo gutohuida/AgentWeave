@@ -2456,3 +2456,100 @@ other stale "all five"/unqualified-exemption language survives elsewhere in the 
 grepped clean this iteration, worth re-checking cold). Either approve, or — since there is no round 4 —
 ship as-is with the objection recorded in `decisions_for_user` and move to the next queue item
 (Q7-ui-gap-analysis; Q5 is already closed with scope recorded).
+
+## Entry 30 — 14:03 — Q6-desktop-and-global: REVIEW round 3 (final) — SHIP AS-IS, one new non-blocking objection, gate closes Q6, iteration 31
+
+Read `proposal.md`, `design.md`, `tasks.md`, and `specs/app-lifecycle/spec.md` cold, per the
+spec-round protocol — did not look up who wrote Entry 29. Independently re-derived every claim
+`next_action` named, directly against `src/agentweave/cli.py`, not against the artifact's own
+citations:
+
+- **"Four of five" wiring:** confirmed exact. `_open_app_window` call sites: `cli.py:692` and `:789`
+  (both inside `_hub_native_start`, native branch), `:850` and `:942` (both inside `cmd_hub_start`'s
+  Docker branch — `:850` the "already running" early return, `:942` after `docker compose up`
+  succeeds). All four are synchronous, main-thread call sites (no `docker compose up` path spawns a
+  thread), so wiring them through `webview.start()` on the main thread is safe. The fifth,
+  `_wait_and_open_app` (`cli.py:654-661`), is called only via `threading.Thread(...).start()` at
+  `cli.py:798`, itself only reached inside `_hub_native_start`'s `else` branch (`detach=False`, i.e.
+  `--no-detach`) — confirmed by reading the branch directly: line 790 `else:` (foreground mode),
+  798 spawns the thread, 802 `uvicorn.run(...)` blocks the main thread until Ctrl+C. Matches Entry
+  28/29's description exactly, including the docstring quote at `cli.py:657-658`.
+- **Named exception's mechanism:** `_wait_and_open_app`'s own docstring ("Runs off the main thread so
+  a foreground (--no-detach) start can block on uvicorn while still opening the browser once the Hub
+  answers healthy") matches design.md's citation verbatim. pywebview's main-thread requirement was not
+  re-searched this round (Entry 28 already sourced it live against r0x0r/pywebview #1251 and the
+  project's own FAQ; re-verifying a citation that hasn't changed doesn't need a second web call) but
+  the reasoning built on top of it — that inverting the thread model is a real architectural change
+  being deliberately declined, not an oversight — holds up against the code: `--no-detach`'s only
+  purpose in `_hub_native_start` is attaching uvicorn's own log output to the terminal with Ctrl+C as
+  the stop signal (confirmed at `cli.py:794`, `:799-802`), which is a materially different contract
+  from the other four sites' "process exits when its window closes."
+- **New scenario's wording:** `specs/app-lifecycle/spec.md`'s "A foreground (`--no-detach`) start
+  keeps the browser fallback" scenario (lines 121-127) states both halves correctly — app mode still
+  falls back to the browser, and the foreground uvicorn server is unaffected, stopped only by Ctrl+C.
+  Matches the code.
+- **No stale "all five"/unqualified-exemption language:** grepped "all five", "five real", "five call
+  sites", and "neither is exempt" across all four files. Only two hits, both intentional and properly
+  scoped: `design.md:139` and `spec.md:68`, and `spec.md`'s "neither is exempt" sentence is
+  immediately followed by "This uniformity is about the native-vs-Docker launch path specifically, not
+  about detached vs. foreground process mode" — the scoping Entry 29 added is present and reads
+  correctly cold, without needing Entry 29's own explanation alongside it.
+
+All four of `next_action`'s specifically-named claims hold. **The core objection chain across rounds
+1-3 is resolved and verified independently three times now (Entry 26 found it, Entry 27 fixed it,
+this entry re-confirms it against the code rather than the artifact's prose).**
+
+**One new objection, found by reading `tasks.md` section 4 cold rather than re-tracing rounds 1-2's
+already-settled ground — non-blocking, but real and worth recording precisely.** Task 4's preamble
+states, in bold: **"`tests/test_cli.py` does not exist yet,"** citing a round-1 review grep for
+`agentweave.cli`, `_open_app_window`, `_hub_native_start`, and `cmd_hub_start` returning "zero hits,"
+and tasks 4.1-4.4 are written as "create this file from scratch." This is false. `tests/test_cli.py`
+exists today — 159 lines, three test classes (`TestTransportJsonAtomicWrite`,
+`TestSubprocessRunHasTimeout`, and a third), regression guards for unrelated fixes tagged `S8` and
+`M12`. `git log --diff-filter=A -- tests/test_cli.py` shows it was added in `b3f4b11` ("Add OpenCode
+agent support"), and its most recent touch before this run is `db01f40` ("black 26 over the tree"),
+dated 2026-08-10 — five days before this run's `started_at` of 2026-08-16T02:15. It does not merely
+predate this *change* (Q6) — it predates this entire autonomous run. Re-ran the grep tasks.md cites
+as its evidence: `agentweave.cli` (the literal dotted pattern) matches three times in the file, at
+lines 89, 115, 140 — `from agentweave.cli import _download_with_sha256` — so even the specific search
+tasks.md describes as returning "zero hits" does not, in fact, return zero hits against the file that
+exists today. Whether round 1's actual search used a narrower pattern that legitimately missed this,
+or the "zero hits" claim was simply wrong from the start, isn't resolvable from here — what is
+resolvable is that the artifact's premise, checked against the filesystem right now, is false.
+
+**Why non-blocking rather than blocking:** it does not touch D3's threading model, the subject of all
+three review rounds, which is sound and independently re-confirmed above. It is a task-instruction
+accuracy problem, not a design defect — but it is exactly the kind of error that causes real damage
+if followed literally: an implementer told to "create this file from scratch" containing tasks
+4.1-4.4 could easily overwrite `tests/test_cli.py`'s existing 159 lines (`TestTransportJsonAtomicWrite`
+and `TestSubprocessRunHasTimeout`, unrelated regression guards for prior fixes S8/M12) instead of
+appending to them, silently deleting live test coverage that has nothing to do with this change.
+
+**Per the spec-round protocol's round-3 gate: this is the last round regardless of outcome — "Never a
+fourth round."** Not approved (the tasks.md defect is real, even if non-blocking to the design), but
+per the gate the artifact ships as-is rather than triggering a round 4. Recording the objection in
+`decisions_for_user` with the precise, actionable fix (extend the existing file, do not recreate it;
+verify what the round-1 grep actually searched for before trusting a "zero hits" claim elsewhere in
+the artifact) rather than revising it myself — a REVIEW iteration's role under this protocol is to
+critique and gate, not edit, and the gate's own resolution for an unresolved-at-round-3 issue is
+exactly this: record it, ship, move on.
+
+**Verification this iteration:** every claim re-derived from `src/agentweave/cli.py` and the actual
+`tests/` directory directly (`ls`, `git log`, `grep -n`), not from the artifact's own citations or
+prior entries' line numbers taken on faith. No code changed — artifact-only review, consistent with
+rounds 1-2.
+
+**Elapsed:** one iteration.
+
+**Q6-desktop-and-global is now closed** — three spec rounds run to the gate, exploration and full
+spec artifact in place at `openspec/changes/2026-08-16-one-hub-and-a-window-of-its-own/`, one
+recorded non-blocking objection for whoever implements it. Not yet implemented — this run's Q6 scope
+was research-then-spec, matching `est_iterations: 10` against a queue item whose own detail said
+"Start with an EXPLORATION... Then a spec round," not "build it." Implementation is future work,
+tracked by the artifact's own `tasks.md`.
+
+**Next:** `Q7-ui-gap-analysis` (Q5 already closed with scope recorded). Per its own `detail`, survey
+first — read AgentWeave's own UI code, then research current popular agent/coding harnesses (T3 named
+by the operator as one example, explicitly not the only one) for functionality AgentWeave's UI lacks,
+evidence-based, ranked by user value, before proposing anything. `est_iterations: 8`, `spec_round:
+true`. Time remaining to `stop_at` (18:00) is comfortable — about four hours as of this entry.
