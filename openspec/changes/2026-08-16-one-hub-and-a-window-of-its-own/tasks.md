@@ -52,23 +52,33 @@ name are both process/config-level, not schema.
       starting the window (e.g. no WebView2/WebKitGTK/Qt backend present) is caught, a message is
       printed naming what's missing, and the function returns `False` so the caller falls back —
       per `design.md` D5, app mode stays best-effort.
-- [ ] 3.3 Wire **all five** real `_open_app_window` call sites through 3.2 first, falling back to
-      `_open_app_window` only on `False`. `_hub_native_start`'s two (`cli.py:692`, `:789`) and
-      `_wait_and_open_app` (`cli.py:661`, used by the `--no-detach` foreground path) cover the native
-      branch; `cmd_hub_start`'s Docker branch has two more that are just as reachable, since `main()`
-      forces `app=True` for bare invocation regardless of `--docker`/`--local` — `cli.py:850` (the
-      "already running" early return) and `cli.py:942` (after `docker compose up` succeeds). Missing
-      these two would leave a Docker-launched instance silently on the old browser fallback even with
-      `pywebview` installed, contradicting the ADDED requirement's unqualified "SHALL open... when a
-      native webview backend is installed" (round-1 review, Objection 2). Do not change
+- [ ] 3.3 Wire **four of the five** real `_open_app_window` call sites through 3.2 first, falling back
+      to `_open_app_window` only on `False`: `_hub_native_start`'s two (`cli.py:692`, `:789`), and
+      `cmd_hub_start`'s Docker branch's two — `cli.py:850` (the "already running" early return) and
+      `cli.py:942` (after `docker compose up` succeeds), reachable because `main()` forces `app=True`
+      for bare invocation regardless of `--docker`/`--local`. Missing these two would leave a
+      Docker-launched instance silently on the old browser fallback even with `pywebview` installed,
+      contradicting the ADDED requirement's "SHALL open... when a native webview backend is installed"
+      (round-1 review, Objection 2). **The fifth call site, `_wait_and_open_app` (`cli.py:661`, used
+      only by the `--no-detach` foreground path), is explicitly excluded from this wiring — it keeps
+      calling `_open_app_window` unconditionally, whether or not `pywebview` is installed.**
+      `pywebview` requires `webview.start()` to run on the main thread, and `--no-detach`'s main thread
+      is already committed to blocking in `uvicorn.run()` until Ctrl+C; `design.md` D3's named
+      exception explains why this is a deliberate scope boundary, not an oversight, and why inverting
+      the thread model to accommodate it was rejected. Do not change
       `_find_app_mode_browser`/`_open_app_window` themselves — they stay the exact fallback path
-      (`design.md` D3's "byte-identical when pywebview is absent").
+      (`design.md` D3's "byte-identical when pywebview is absent"), which is also what `--no-detach`
+      keeps using permanently now.
 - [ ] 3.4 Confirm by reading (this is a process-model change, not something a unit test proves) that
       the detached-Hub-plus-blocking-window composition described in `design.md` D3 is what actually
-      happens: with `pywebview` installed, running bare `agentweave` (app mode is always on) now blocks in
-      `webview.start()` after the Hub is confirmed healthy, and only that invocation's exit is
-      delayed — the detached uvicorn process is unaffected and keeps running after the window
-      closes, exactly as today's browser-window close does not stop the Hub.
+      happens: with `pywebview` installed, running bare `agentweave` (default detach; app mode is
+      always on) now blocks in `webview.start()` after the Hub is confirmed healthy, and only that
+      invocation's exit is delayed — the detached uvicorn process is unaffected and keeps running
+      after the window closes, exactly as today's browser-window close does not stop the Hub. Also
+      confirm `agentweave --no-detach` (with or without `pywebview` installed) is **unchanged** by this
+      task — it still calls `_wait_and_open_app` on a worker thread, still opens the existing
+      non-blocking browser fallback, and Ctrl+C on the foreground `uvicorn.run()` remains the only stop
+      mechanism, exactly as today.
 
 ## 4. CLI tests — agent-verifiable
 

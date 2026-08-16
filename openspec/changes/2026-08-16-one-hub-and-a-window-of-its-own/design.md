@@ -80,14 +80,17 @@ window cannot be opened that way without pywebview managing its own subprocess a
 for this change.
 
 **Resolution:** the Hub backend keeps starting exactly as it does today — detached (default) or
-foreground (`--no-detach`), unchanged by this proposal. App mode's window becomes a **separate,
-additional blocking phase**: after the Hub is confirmed healthy (the same `_hub_health_check` call
-already used), the CLI process blocks in `webview.start()` until the operator closes the window, then
-exits 0. This mirrors what every real desktop app already does — the process the user thinks of as
-"the app" is the one that exists for as long as its window is open — and it composes cleanly with
-`detach`'s existing meaning ("the *Hub process* survives the window closing," which stays true: only
-the window-owning CLI invocation exits, the detached uvicorn process backing it keeps running,
-exactly as closing a browser tab today does not stop the Hub).
+foreground (`--no-detach`), unchanged by this proposal. For the **detached** (default) path, app
+mode's window becomes a **separate, additional blocking phase**: after the Hub is confirmed healthy
+(the same `_hub_health_check` call already used), the CLI process blocks in `webview.start()` until
+the operator closes the window, then exits 0. This mirrors what every real desktop app already does —
+the process the user thinks of as "the app" is the one that exists for as long as its window is
+open — and it composes cleanly with `detach`'s existing meaning ("the *Hub process* survives the
+window closing," which stays true: only the window-owning CLI invocation exits, the detached uvicorn
+process backing it keeps running, exactly as closing a browser tab today does not stop the Hub). The
+**foreground** (`--no-detach`) path does not get this blocking phase at all — see the named exception
+below, which explains why pywebview's own main-thread requirement rules it out for that path
+specifically.
 
 **Every default-detach launch, not just scripted or opt-in ones:** since app mode is forced on for
 bare invocation and for the Docker branch (there is no `app=False` CLI surface — see above), a caller
@@ -105,6 +108,37 @@ is unaffected — it does not go through `cmd_hub_start` at all.
 **Window chrome:** a single window, no browser tabs/address bar/bookmarks (pywebview's default), title
 "AgentWeave", pointed at `_hub_resolve_launch_url(port, cwd)` — the same URL resolution already used
 for the browser fallback, so which project opens is unaffected by this change.
+
+**Named exception: the `--no-detach` foreground path keeps the browser fallback unconditionally, and
+is not wired through the native-window path at all.** `_wait_and_open_app` (`cli.py:654-661`) exists
+specifically to run `_open_app_window` off the main thread — its own docstring says so ("Runs off the
+main thread so a foreground (`--no-detach`) start can block on uvicorn while still opening the
+browser") — because `--no-detach`'s main thread is already committed to blocking in `uvicorn.run()`
+until Ctrl+C (`cli.py:798-802`). `pywebview` requires `webview.start()` to be called from the main
+thread — confirmed via web research against pywebview's own issue tracker and FAQ (r0x0r/pywebview
+issue #1251, "Why must pywebview be run on a main thread?"; pywebview's own FAQ), not assumed: Cocoa
+enforces this strictly, and the library's documented pattern for a blocking backend task is the
+*inverse* of a worker-thread call — hand the backend work to `webview.start(func, *args)` so
+pywebview's own thread management starts it, rather than starting pywebview from inside an
+already-spawned worker thread. Calling `webview.start()` from `_wait_and_open_app`'s worker thread
+would not reliably work regardless of that thread question, because this call site's actual process
+lifetime is governed by `uvicorn.run()` on the main thread returning on Ctrl+C — not by the window
+closing, which is what this requirement's exit contract (above) describes for the other four sites.
+
+Inverting the threading model instead — giving `webview.start()` the main thread and moving
+`uvicorn.run()`'s foreground server to a worker thread, matching pywebview's documented pattern — was
+considered and rejected here. `--no-detach` exists so a developer (or this run's own driver, which
+starts the Hub this exact way) gets uvicorn's log output attached to the invoking terminal and Ctrl+C
+as the stop mechanism; that is already a different exit contract from the other four call sites
+("closes when its window closes" vs. "stops when its terminal is interrupted"), and manufacturing a
+second, window-driven exit contract for the same invocation would make `--no-detach` behave
+inconsistently with itself depending on whether `pywebview` happens to be installed, which is a worse
+outcome than one call site staying on the existing fallback. So: `_wait_and_open_app` keeps calling
+`_open_app_window` (today's non-blocking browser-window-or-tab behavior) exactly as it does now,
+**regardless of whether `pywebview` is installed.** This is a real, narrow exception to "applies
+uniformly to every launch path... neither is exempt" above — that sentence was about the native/Docker
+split (both reach app mode through a path whose exit contract is "closes when the window closes"), not
+about detached vs. foreground process mode, and is clarified in the spec delta to say so explicitly.
 
 ## D4 — Migration for existing data
 

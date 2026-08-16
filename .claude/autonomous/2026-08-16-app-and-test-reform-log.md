@@ -2390,3 +2390,69 @@ round 3` — the last round before the gate forces shipping as-is with objection
 say why) in `design.md` D3, `tasks.md` section 3, and the spec delta's scenarios as needed. Then set
 `next_action` to `Q6 REVIEW ... round 3` — that review either approves or the gate ships it with the
 objection recorded; there is no round 4.
+
+## Entry 29 — 13:48 — Q6-desktop-and-global: REVISE round 3 (final) — chose resolution (a), scoped
+
+Read Entry 28's objection and its two named resolution shapes cold, then re-derived the relevant
+`cli.py` shapes directly (`_wait_and_open_app` at `cli.py:654-661`, its only call site at `cli.py:798`
+inside `_hub_native_start`'s `--no-detach` branch, and `uvicorn.run()` blocking the main thread at
+`cli.py:802`) rather than trusting the prior entry's line numbers unchecked — all matched.
+
+**Chose resolution (a): scope task 3.3 / the ADDED requirement to exclude the `--no-detach` foreground
+path, rather than (b) inverting the threading model.** Reasoning, recorded in `design.md` D3's new
+"Named exception" subsection rather than just here: `--no-detach` exists so a developer (this run's
+own driver included — its `restart_command` in this STATE.json starts the Hub via direct `uvicorn`,
+the most extreme case of "not going through the CLI at all") gets uvicorn's log output attached to the
+terminal and Ctrl+C as the stop mechanism. That is already a *different exit contract* from the other
+four `_open_app_window` call sites (Entry 28 established this: "stops when its terminal is
+interrupted" vs. "closes when its window closes"), so exempting it is not introducing a new
+inconsistency — it is declining to manufacture a *second* exit contract for the same invocation
+depending on whether `pywebview` happens to be installed, which would be worse. Resolution (b) was
+real and pywebview's own documented pattern would support it (`webview.start(func, *args)` letting
+pywebview manage the backend thread) — but it is a genuine architectural change to what `--no-detach`
+means, for a call site whose current non-blocking browser fallback already works correctly and loses
+nothing by staying as-is. Lower risk, smaller diff, and consistent with `design.md` D5's existing
+"best-effort, not a hard requirement" posture for app mode generally.
+
+**What changed, four files:**
+- `design.md` D3 — added two new blocks: a forward-pointer in the existing "Resolution" paragraph
+  ("the foreground path does not get this blocking phase at all — see the named exception below"),
+  and a full "Named exception" subsection (design.md:109-138) stating the mechanism (pywebview's
+  main-thread requirement, sourced the same way Entry 28 sourced it — r0x0r/pywebview #1251 and the
+  project's own FAQ, re-cited rather than re-searched since Entry 28 already verified it live this
+  same spec round), why resolution (b) was considered and rejected, and an explicit note that "applies
+  uniformly... neither is exempt" (the requirement text quoted in Entry 28's objection) was about the
+  native/Docker split, not detached/foreground.
+- `tasks.md` 3.3 — retitled from "all five" to "four of five," named the excluded call site
+  (`cli.py:661`) and why, and pointed at `design.md` D3 for the full reasoning instead of duplicating
+  it. 3.4 gained an explicit "also confirm `--no-detach` is unchanged" clause so the read-verification
+  task actually checks the exemption, not just the four wired sites.
+- `specs/app-lifecycle/spec.md` — the ADDED requirement gained one clarifying sentence on what
+  "neither is exempt" scopes to, plus a new paragraph stating the `--no-detach` exemption as a SHALL,
+  and a new scenario ("A foreground (`--no-detach`) start keeps the browser fallback") so the
+  exemption is a checkable scenario, not just prose in the requirement body.
+- `proposal.md` — the "What Changes" bullet describing app-mode windowing gained "**One named
+  exception:** the foreground (`--no-detach`) start path keeps today's browser fallback
+  unconditionally... see `design.md` D3," replacing a vaguer earlier phrase ("changes how app mode
+  composes with `--no-detach`") that gestured at the problem Entry 28 later found but didn't resolve
+  it.
+
+**Verification this iteration:** `npx openspec validate 2026-08-16-one-hub-and-a-window-of-its-own
+--strict` — fails on a validator quirk ("ADDED ... must contain SHALL or MUST" against a requirement
+whose body plainly contains multiple SHALLs). Checked whether this iteration's edits caused it: `git
+stash` reproduced the identical failure against the pre-Entry-29 tree, so it predates this change
+entirely and is not a regression introduced here — not fixed, since fixing an unrelated pre-existing
+validator false-positive is out of scope for a REVISE pass whose job is resolving Entry 28's named
+objection. No code changed (this remains a spec artifact, same as rounds 1 and 2) — no test suite to
+run.
+
+**Elapsed:** one iteration.
+
+**Next:** `Q6 REVIEW openspec/changes/2026-08-16-one-hub-and-a-window-of-its-own round 3` — the last
+round. Read `proposal.md`, `design.md`, `tasks.md`, and the spec delta cold, per the protocol. Confirm
+this entry's four claims independently against the files (the "four of five" wiring, the named
+exception's mechanism against `cli.py:654-661`/`:798`/`:802`, the new scenario's wording, and that no
+other stale "all five"/unqualified-exemption language survives elsewhere in the four files — already
+grepped clean this iteration, worth re-checking cold). Either approve, or — since there is no round 4 —
+ship as-is with the objection recorded in `decisions_for_user` and move to the next queue item
+(Q7-ui-gap-analysis; Q5 is already closed with scope recorded).

@@ -52,10 +52,12 @@ pairs with a FastAPI-backend-plus-built-frontend in exactly AgentWeave's shape.
   `dependencies = []` stance in `pyproject.toml` is preserved; installing it is the operator's choice.
 - **App mode opens a real desktop window when pywebview is installed**, falling back to today's
   chromeless-browser behavior when it is not (`design.md` D3 covers the threading/process model this
-  requires — pywebview's event loop must own the calling thread, which changes how app mode composes
-  with `--no-detach`). App mode is not an opt-in flag: it is forced on for bare invocation, the CLI's
-  only entry point, and for the Docker branch (`--docker`/`--local`) as well, so this is a change to
-  the default behavior of every normal launch, not a feature callers must ask for.
+  requires — pywebview's event loop must own the calling thread). App mode is not an opt-in flag: it
+  is forced on for bare invocation, the CLI's only entry point, and for the Docker branch
+  (`--docker`/`--local`) as well, so this is a change to the default behavior of every normal launch,
+  not a feature callers must ask for. **One named exception:** the foreground (`--no-detach`) start
+  path keeps today's browser fallback unconditionally, because its main thread is already committed
+  to running the backend server in the foreground — see `design.md` D3.
 - **Bare `agentweave` continues to register the invocation directory as a project** (per
   `app-lifecycle`'s existing "Bare invocation is the only entry point" requirement) — nothing about
   per-folder *project* registration changes; only the Hub's own single-instance state (database,

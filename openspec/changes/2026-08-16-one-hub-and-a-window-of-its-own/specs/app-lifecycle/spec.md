@@ -65,7 +65,11 @@ The system SHALL open app mode in a dedicated window with no browser chrome (no 
 tabs) and its own OS taskbar/dock presence, rather than a browser tab or window, when a native
 webview backend (`pywebview`, an optional extra) is installed and can create a window. This applies
 uniformly to every launch path that reaches app mode — native (`agentweave`) and Docker
-(`agentweave --docker`, `agentweave --local`) alike; neither is exempt.
+(`agentweave --docker`, `agentweave --local`) alike; neither is exempt. This uniformity is about the
+native-vs-Docker launch path specifically, not about detached vs. foreground process mode: the
+foreground (`--no-detach`) start path is a separate, narrower exception, stated below, because a
+native webview's event loop must run on the process's main thread, and `--no-detach` already commits
+that thread to blocking in the backend server until the operator interrupts it.
 
 When no native webview backend is installed, or window creation fails for any reason (missing
 platform runtime, no display), the system SHALL fall back to the existing chromeless-browser-or-
@@ -74,6 +78,13 @@ default-browser-tab behavior without error, and SHALL NOT crash the invoking com
 The invoking process SHALL remain running for as long as the native desktop window is open, and
 SHALL exit once the operator closes it. The detached Hub backend process itself SHALL be
 unaffected by the window closing — closing the window MUST NOT stop the Hub.
+
+A foreground (`--no-detach`) start SHALL be exempt from opening a native desktop window, regardless
+of whether a native webview backend is installed — it SHALL continue to use the existing
+chromeless-browser-or-default-browser-tab behavior for app mode, unchanged by this requirement. This
+exemption exists because `--no-detach` keeps the backend server itself in the foreground, occupying
+the one thread a native webview's event loop would need; Ctrl+C on that foreground server remains the
+only stop mechanism for a `--no-detach` start, exactly as before this change.
 
 #### Scenario: A native window opens when the backend is available
 
@@ -106,3 +117,11 @@ unaffected by the window closing — closing the window MUST NOT stop the Hub.
 
 - **WHEN** the operator closes a native app window opened in app mode
 - **THEN** the detached Hub backend process remains running and reachable
+
+#### Scenario: A foreground (`--no-detach`) start keeps the browser fallback
+
+- **WHEN** `agentweave --no-detach` is run with a working native webview backend installed
+- **THEN** the system still opens the existing chromeless-browser-or-default-browser-tab behavior for
+  app mode, not a native window
+- **AND** the foreground `uvicorn` server keeps running attached to the invoking terminal, stopped
+  only by Ctrl+C, exactly as it did before this change
