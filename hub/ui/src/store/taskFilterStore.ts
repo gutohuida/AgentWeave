@@ -11,10 +11,20 @@ interface TaskFilterState {
   activeTaskIds: string[] | null
   setActiveTaskIds: (ids: string[]) => void
   clearActiveTaskIds: () => void
+  /** The one task a screen outside the board wants opened — the command palette's "open task"
+   *  action (D3), which switches to the Tasks tab and needs the drawer open once it mounts, same
+   *  shape as `activeTaskIds` above. The board consumes and clears it on mount/update rather than
+   *  leaving it set, so navigating away and back to Tasks does not reopen a stale drawer. */
+  pendingOpenTaskId: string | null
+  setPendingOpenTaskId: (id: string) => void
+  clearPendingOpenTaskId: () => void
 }
 
 export const useTaskFilterStore = create<TaskFilterState>((set) => ({
   activeTaskIds: null,
   setActiveTaskIds: (ids) => set({ activeTaskIds: ids }),
   clearActiveTaskIds: () => set({ activeTaskIds: null }),
+  pendingOpenTaskId: null,
+  setPendingOpenTaskId: (id) => set({ pendingOpenTaskId: id }),
+  clearPendingOpenTaskId: () => set({ pendingOpenTaskId: null }),
 }))

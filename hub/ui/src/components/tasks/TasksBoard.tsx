@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useTasks } from '@/api/tasks'
 import { TaskCard } from './TaskCard'
 import { TaskDetailDrawer } from './TaskDetailDrawer'
@@ -46,6 +46,16 @@ export function TasksBoard({ onOpenRequirement }: TasksBoardProps = {}) {
   const [openTaskId, setOpenTaskId] = useState<string | null>(null)
   const activeTaskIds = useTaskFilterStore((state) => state.activeTaskIds)
   const clearActiveTaskIds = useTaskFilterStore((state) => state.clearActiveTaskIds)
+  const pendingOpenTaskId = useTaskFilterStore((state) => state.pendingOpenTaskId)
+  const clearPendingOpenTaskId = useTaskFilterStore((state) => state.clearPendingOpenTaskId)
+
+  // The command palette's "open task" action (D3): it can only set intent, since the drawer is
+  // this board's own state and the board may not be mounted yet when the selection happens.
+  useEffect(() => {
+    if (!pendingOpenTaskId) return
+    setOpenTaskId(pendingOpenTaskId)
+    clearPendingOpenTaskId()
+  }, [pendingOpenTaskId, clearPendingOpenTaskId])
 
   const assignees = useMemo(() => {
     if (!tasks) return []

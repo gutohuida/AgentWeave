@@ -25,11 +25,14 @@ import {
   type SidebarPage,
 } from '@/components/layout/Sidebar'
 import { OverviewPage } from '@/components/overview/OverviewPage'
+import { CommandPalette } from '@/components/palette/CommandPalette'
 import { ProjectManagerModal, type ProjectManagerMode } from '@/components/projects/ProjectManagerModal'
 import { QualityHealthPanel } from '@/components/quality/QualityHealthPanel'
 import { QuestionsPanel } from '@/components/questions/QuestionsPanel'
 import { RunnersPage } from '@/components/runners/RunnersPage'
+import { useSpecDocuments } from '@/api/spec'
 import { SpecPage } from '@/components/spec/SpecPage'
+import { useTasks } from '@/api/tasks'
 import { TasksBoard } from '@/components/tasks/TasksBoard'
 import { Button } from '@/components/ui/button'
 import { useSSE } from '@/hooks/useSSE'
@@ -122,6 +125,10 @@ export default function App() {
   // The same query the rail draws from, so resolving a destination costs no extra request.
   const currentProjectId = destination.kind === 'zero' ? projectId || '' : destination.projectId
   const { data: projectConversations } = useProjectConversations(currentProjectId || null)
+  // Read by the command palette (D3) — the same queries `SpecPage`/`TasksBoard` already use, not
+  // a fetch the palette introduces of its own.
+  const { data: specDocuments } = useSpecDocuments()
+  const { data: allTasks } = useTasks()
   const resolvedConversationId = resolveConversationSelection(
     destination,
     projectConversations?.conversations ?? [],
@@ -505,6 +512,25 @@ export default function App() {
           }}
         />
       )}
+      <CommandPalette
+        agents={agents}
+        conversations={projectConversations?.conversations ?? []}
+        documents={specDocuments?.documents ?? []}
+        tasks={allTasks ?? []}
+        onOpenConversation={(agent, conversationId) =>
+          navigateTo(agentDestination(currentProjectId, agent, conversationId, openDocument))
+        }
+        onOpenAgent={(agent) =>
+          navigateTo(agentDestination(currentProjectId, agent, null, openDocument))
+        }
+        onOpenDocument={(path) =>
+          navigateTo(projectDestination(currentProjectId, 'spec', path), { replace: true })
+        }
+        onOpenTask={(taskId) => {
+          useTaskFilterStore.getState().setPendingOpenTaskId(taskId)
+          navigateTo(projectDestination(currentProjectId, 'tasks'))
+        }}
+      />
     </div>
   )
 }

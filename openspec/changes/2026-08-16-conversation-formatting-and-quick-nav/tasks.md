@@ -6,22 +6,22 @@ No database migration, no backend route change.
 
 ## 1. Markdown rendering (D1) — agent-verifiable
 
-- [ ] 1.1 `cd hub/ui && npm install react-markdown remark-gfm remark-breaks` (three packages, no
+- [x] 1.1 `cd hub/ui && npm install react-markdown remark-gfm remark-breaks` (three packages, no
       transitive-dependency surprises expected from `react-markdown` v9's own peer set — confirm the
       installed version has no `rehype-raw`/`dangerouslySetInnerHTML` in its own default render path
       before relying on that as the security boundary D1 names).
-- [ ] 1.2 New `hub/ui/src/components/agents/MarkdownMessage.tsx`: wraps `ReactMarkdown` with
+- [x] 1.2 New `hub/ui/src/components/agents/MarkdownMessage.tsx`: wraps `ReactMarkdown` with
       `remarkPlugins={[remarkGfm, remarkBreaks]}`, no `rehypePlugins`. Custom component overrides for
       `code`/`pre` (bounded block, `--font-mono`, `--surface`/`--border` — no per-token colour, per D1)
       and `a` (existing link styling, `target="_blank" rel="noreferrer"` since a link can originate
       from agent or peer content, not just the operator).
-- [ ] 1.3 `AgentTimeline.tsx`'s `MessageEntry` renders `entry.content` through `MarkdownMessage`
+- [x] 1.3 `AgentTimeline.tsx`'s `MessageEntry` renders `entry.content` through `MarkdownMessage`
       instead of the current `whitespace-pre-wrap` span, for `operator_input`, `agent_output` where
       `output_kind` is `'text'` or absent, `inbound_peer`, and `outbound_peer`. Leave `WorkRow`
       (tool_use/tool_result rendering, handled in section 2) and non-text `agent_output` kinds
       (`thinking`, `status`, `diagnostic`, `error`) untouched — D1 scopes this to message-level prose
       only.
-- [ ] 1.4 Tests (`hub/ui/src/__tests__/` or co-located, matching this component's existing test
+- [x] 1.4 Tests (`hub/ui/src/__tests__/` or co-located, matching this component's existing test
       location): a message containing `**bold**`, a fenced code block, and a bulleted list renders a
       real `<strong>`, a real `<code>`/`<pre>`, and a real `<ul>`/`<li>` — not the literal
       `**`/backtick/`-` characters. A message with two lines separated by a single `\n` (no blank line
@@ -31,6 +31,15 @@ No database migration, no backend route change.
       element — the security property D1 is built around, asserted directly rather than trusted by
       inspection. Mutation-check the last one: temporarily add `rehypeRaw` to the plugin list, confirm
       the test fails, then remove it.
+
+      **Bookkeeping note (this entry):** all four boxes above were actually implemented and verified
+      in Entry 36 (commit `11dcfbf`, iteration 37) — that entry's own log describes 905 passing tests
+      including the mutation-checked XSS assertion — but the commit never updated this file, so the
+      boxes were left unchecked through Entries 37 and 38. Checked now on re-verification: read
+      `MarkdownMessage.tsx` and `markdownMessage.test.tsx` directly against 1.1-1.4's wording,
+      confirmed each claim (no `rehypePlugins`, the `a`/`pre`/`code` overrides, the three `AgentTimeline`
+      call sites, and all four described test cases, including the literal `<script>`/`onerror` case)
+      rather than trusting the log.
 
 ## 2. Tool-call icon and label (D2) — agent-verifiable
 
@@ -75,19 +84,19 @@ No database migration, no backend route change.
 
 ## 4. Command palette (D3) — agent-verifiable
 
-- [ ] 4.1 `cd hub/ui && npm install cmdk`.
-- [ ] 4.2 New `hub/ui/src/components/palette/CommandPalette.tsx` using `Command.Dialog`. Mounted once
+- [x] 4.1 `cd hub/ui && npm install cmdk`.
+- [x] 4.2 New `hub/ui/src/components/palette/CommandPalette.tsx` using `Command.Dialog`. Mounted once
       at the app-shell level (`App.tsx`), global `Cmd+K`/`Ctrl+K` listener guarded against firing
       while a text input, textarea, or the composer holds focus and the key event has no
       modifier-only intent (i.e. still respects the shortcut when a *non-text* element has focus, per
       D3).
-- [ ] 4.3 Four action groups, each reading data the app already has loaded (no new fetch): open
+- [x] 4.3 Four action groups, each reading data the app already has loaded (no new fetch): open
       conversation (agent + conversation pairs from navigation's existing adapter), open agent (jumps
       to that agent's most recent conversation, matching the existing rail-name behaviour), open spec
       document (the project's already-loaded document list), open task (the project's already-loaded
       task list). Each selection calls the existing navigation function for that destination and
       closes the palette.
-- [ ] 4.4 Tests: the palette opens on `Cmd+K`/`Ctrl+K` and closes on Escape; it does not open when a
+- [x] 4.4 Tests: the palette opens on `Cmd+K`/`Ctrl+K` and closes on Escape; it does not open when a
       text input has focus and a literal "k" is typed without the modifier; each of the four action
       kinds is listed with fixture data and, on selection, calls the mocked navigation function with
       the expected destination (same testing pattern as `2026-08-16-spec-surface-legibility`'s F4
@@ -95,17 +104,17 @@ No database migration, no backend route change.
 
 ## 5. Full-suite verification — agent-verifiable
 
-- [ ] 5.1 `npx tsc --noEmit` clean.
-- [ ] 5.2 `npm run lint` — no new warnings or errors beyond the 9 pre-existing `react-refresh/only-
+- [x] 5.1 `npx tsc --noEmit` clean.
+- [x] 5.2 `npm run lint` — no new warnings or errors beyond the 9 pre-existing `react-refresh/only-
       export-components` warnings already itemised in `STATE.json`'s `decisions_for_user` (unrelated
       files; do not fix them here, out of this change's scope).
-- [ ] 5.3 `npm test -- --run` — full suite passes. If any file times out under full-suite resource
+- [x] 5.3 `npm test -- --run` — full suite passes. If any file times out under full-suite resource
       contention (a documented, pre-existing flake in this repo's test environment — see `STATE.json`
       `dead_ends`), rerun that file alone before treating it as a regression.
-- [ ] 5.4 `npm run build && python ../../scripts/refresh_ui_bundle.py` — bundle rebuilt and committed
+- [x] 5.4 `npm run build && python ../../scripts/refresh_ui_bundle.py` — bundle rebuilt and committed
       alongside the source, per CLAUDE.md's "commit `hub/ui/src` and `hub/hub/static/ui` together"
       rule.
-- [ ] 5.5 No backend file changes in this change (D1–D3 are `hub/ui`-only); confirm with `git status`
+- [x] 5.5 No backend file changes in this change (D1–D3 are `hub/ui`-only); confirm with `git status`
       before committing that nothing under `hub/hub/` or `src/agentweave/` was touched.
 
 ## 6. Human-only verification
