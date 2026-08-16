@@ -1,9 +1,14 @@
 ---
-name: loop-prep
-description: Prepare for an unattended loop before starting it. Reads the recent handoffs, the openspec state and the working tree to work out where the project actually is, interviews the operator about intent, then finds the things that would stall the loop — unmade decisions, missing specs or explorations, an unready environment, a queue too vague to execute — and produces them up front. Ends by seeding STATE.json so the loop can start. Use when the user says "prepare for a loop", "get ready to run overnight", "loop prep", "what do we need before we start", or before invoking /autonomous-session on anything substantial.
+name: autonomous-prep
+description: The first half of an unattended run — prepare it before /autonomous-session starts it. Reads the recent handoffs, the openspec state and the working tree to work out where the project actually is, interviews the operator about intent, then finds the things that would stall the run — unmade decisions, missing specs or explorations, an unready environment, a queue too vague to execute — and produces them up front. Ends by seeding STATE.json, which /autonomous-session reads instead of asking again. Use when the user says "prepare for a loop", "get ready to run overnight", "loop prep", "prep the autonomous session", "what do we need before we start", or before invoking /autonomous-session on anything substantial. Unrelated to /e2e-loop, which drives the product's own loop by hand.
 ---
 
-Work out what would stall the loop, and remove it before the loop starts.
+Work out what would stall the unattended run, and remove it before the run starts.
+
+This is one half of a pair. `/autonomous-prep` runs while the operator is awake and can answer
+questions; `/autonomous-session` runs unattended, possibly from a fresh headless process hours
+later, and reads the `STATE.json` this skill writes. They are separate skills because they run at
+separate times — not because they are separate concerns.
 
 ## Why this exists
 

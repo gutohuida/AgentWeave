@@ -1,6 +1,6 @@
 ---
 name: autonomous-session
-description: Run a long unattended work session on an isolated branch, surviving the session deaths that kill naive loops. Asks what to work on up front (including "you choose"), commits and pushes every iteration, and keeps durable state on disk so any later session resumes exactly where the last one stopped. Use when the user says "work on this overnight", "keep working while I'm away", "work autonomously", "run until 10am", "do something crazy while I sleep", or asks to set up a recurring self-directed work loop. Pairs with /handoff, /resume and /e2e-loop.
+description: Run a long unattended work session on an isolated branch, surviving the session deaths that kill naive loops. Asks what to work on up front (including "you choose"), commits and pushes every iteration, and keeps durable state on disk so any later session resumes exactly where the last one stopped. Use when the user says "work on this overnight", "keep working while I'm away", "work autonomously", "run until 10am", "do something crazy while I sleep", or asks to set up a recurring self-directed work loop. Reads the STATE.json that /autonomous-prep writes — run that first when the operator is still awake. Also pairs with /handoff and /resume.
 ---
 
 Work unattended for a long stretch, on a branch nobody else is standing on, in a way that survives
@@ -47,10 +47,19 @@ do not let them find out in the morning.
 
 ## Step 1 — Ask what to work on
 
-**If `.claude/autonomous/STATE.json` already exists and is current, skip this step.** `/loop-prep`
-writes one: an ordered queue, an executable `next_action`, quoted limits, and the decisions it could
-not settle. Re-asking would discard work already done with the operator awake. Read it, confirm the
-queue still matches what they want in one line, and go to Step 3.
+This step is the second half of a pair. `/autonomous-prep` is the first half, and it does this job
+properly — with the operator awake.
+
+**If `.claude/autonomous/STATE.json` already exists and is current, skip this step.**
+`/autonomous-prep` writes one: an ordered queue, an executable `next_action`, quoted limits, and the
+decisions it could not settle. Re-asking would discard work already done with the operator awake.
+Read it, confirm the queue still matches what they want in one line, and go to Step 3.
+
+**If there is no `STATE.json` and the operator is present, run `/autonomous-prep` first** and come
+back. It hunts the stalls this step cannot: unmade decisions, a missing spec the run would write
+badly and then implement, a stale Hub, a queue too vague for a stranger to execute. Every one of
+those has cost a real iteration here. The fallback below exists for the case where prep is not an
+option — a headless start, or an operator already gone — not as an equal alternative.
 
 Otherwise, **ask before proposing.** Use `AskUserQuestion` with the work options *and* an explicit
 "you choose" option, because the user may genuinely not want to decide — but that has to be their
@@ -60,6 +69,8 @@ Offer, in a single multi-select where it fits:
 
 1. **A specific queue** they name — open findings, a change in flight, a failing suite.
 2. **Verification** — drive what was recently built and prove it works, rather than building more.
+   `/e2e-loop` is the method for this; it is a different skill with a different job, and the "loop"
+   in its name means the *product's* spec → task → run → review loop, not this one.
 3. **You choose** — you pick from the repository's own record: unarchived openspec changes, open
    findings in `openspec/explorations/`, unchecked human-only tasks, the last handoff's next steps.
 4. **Exploration** — write up a known gap properly rather than fixing anything.
