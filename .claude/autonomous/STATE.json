@@ -6,8 +6,8 @@
   "started_at": "2026-08-16T02:15:00+01:00",
   "stop_at": "2026-08-16T12:00:00+01:00",
   "stop_when_queue_empties": false,
-  "iteration": 0,
-  "last_heartbeat": null,
+  "iteration": 1,
+  "last_heartbeat": "2026-08-16T02:12:50+01:00",
 
   "spec_round_protocol": {
     "why": "Operator: 'one agent produces the spec, the next triggers the agents review until a agent thinks is good to implement. We need to have another gate so agent don't go on forever.' Implemented as successive driver iterations rather than subagents, at the operator's suggestion ('the trigger at 2AM generates the spec and the one at 2:15 reviews it'). A fresh process has no memory of writing the thing it reviews, so the independence is structural rather than merely prompted.",
@@ -25,7 +25,7 @@
     {
       "id": "Q1-projects",
       "title": "Delete every Hub project except aw-loop10",
-      "status": "open",
+      "status": "done",
       "why": "Operator: 'Clean up the environment for testing. To many aw-loop environments' and 'you can keep only aw-loop10 and delete every other project.'",
       "detail": "The live Hub on :8010 has 11 projects. Delete all but proj-ff695d96 (aw-loop10), which holds the proven spec flow — 9 requirements, 5 tasks, 9 evidence rows — and is what the operator will drive to answer the 29 parked judgement tasks. Delete: proj-9eb82406 aw-loop9, proj-94f3f169 aw-loop8, proj-e6c1de74 aw-loop7, proj-c28f08df aw-loop6, proj-30d900a7 aw-loop5, proj-471e281a aw-e2e, proj-477dab47 aw-loop-4, proj-319e7dfd test2, proj-e109fc87 newtest, proj-44e9adba aw-testbed. Also delete aw-loop6's hand-minted credential row (run-ev6 / aw_run_loop6_evidence). Prefer the Hub's own delete API over raw SQL — if no such API exists, that absence is itself a finding worth recording. Afterwards confirm aw-loop10 still resolves and its spec document still renders.",
       "verify": "GET /api/v1/projects returns exactly 1 project; aw-loop10's coverage endpoint still returns 9 requirements.",
@@ -95,8 +95,8 @@
     }
   ],
 
-  "current": "Q1-projects",
-  "next_action": "The branch is already cut and the log is already open at .claude/autonomous/2026-08-16-app-and-test-reform-log.md — read its Entry 0 first, it carries the limits and what prep already verified. Then do Q1-projects: using the Hub API on http://127.0.0.1:8010 (bootstrap key is AW_BOOTSTRAP_API_KEY in hub/.env), delete the ten projects listed in Q1's detail field, keeping only proj-ff695d96 (aw-loop10). Then confirm GET /api/v1/projects returns exactly one project and that aw-loop10's spec coverage endpoint still reports 9 requirements. Log what API you used to delete, or record that none exists.",
+  "current": "Q2-test-speed",
+  "next_action": "Read Entry 1 of the log first (Q1 is done — 10 projects deleted via raw SQL after confirming no delete API exists; Hub restarted and re-verified: 1 project, 9 requirements). Now do Q2-test-speed: run the hub test suite in chunks with --durations=50 to find where the 7 minutes concentrates (chunk it — the full run exceeds the 600s command cap; consider running a chunk in the background). Record top offenders in the log. Then pip install pytest-xdist into C:/Users/huida/AppData/Local/Programs/Python/Python311/python.exe and run the SAME chunk both serial and with -n auto, comparing pass/fail/skip counts exactly (not just wall-clock) before claiming xdist works. Also check whether root pyproject.toml's addopts '-v --tb=short' costs measurable I/O across ~360 tests. This item is sized at 2 iterations in the estimate — if the measurement phase alone fills this iteration, stop there, log the durations findings, and leave next_action pointing at the xdist comparison for the next firing rather than rushing both into one turn.",
 
   "limits": [
     "Stay on the autonomous branch. No commits, merges or rebases onto hub-native-experience or master. Merging back is the operator's decision, made awake.",
@@ -118,6 +118,7 @@
   ],
 
   "decisions_for_user": [
+    "NEW — Q1 found no project-delete API anywhere in the Hub (checked every @router.delete in hub/hub/api/v1/ and project_lifecycle.py: only runners, jobs, inbound-queue entries, a chat task-link, agent-actions jobs, and charters can be deleted through the API). The 10 stale projects were removed with a one-shot raw-SQL script instead (backed up first, Hub stopped during the write, restarted and re-verified after). Is an undeletable project the intended shape, or should DELETE /api/v1/projects/{id} exist? Not answered here.",
     "CARRIED, unanswered since handoff 0050 — 12.3 (hub-owns-the-spec-document) needs a ruling, not an implementation: the task argues D9 should be AMENDED, because auto-binding the spec charter would make 'no charter' unreachable and contradicts the operator's 'Not necessarily I want to use the charter for spec. Is good practice but I can skip it.' Amend D9, or implement as written? Deprioritised by the operator's 2026-08-16 agenda; not in this run's queue.",
     "CARRIED — d5: the FR-7 vs FR-9 contradiction the verifier found in the notify-window document. The document is throwaway but the wording question is real.",
     "CARRIED — d6: the minted spec directory slug can run to 66+ characters. spec_naming.py's MAX_SLUG_LENGTH (232) derives from the 255-char storage contract, not from path practicality. Pick a fixed UX cap, or leave it.",

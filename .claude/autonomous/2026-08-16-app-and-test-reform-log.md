@@ -101,3 +101,50 @@ xdist-friendly (`hub/tests/conftest.py:10` uses in-memory SQLite, which is per-p
 has been run to prove it, which is exactly why Q2 is written as *measure*, not *install*.
 
 ---
+
+## Entry 1 — 02:13 — Q1 done: 10 projects deleted, no delete API exists
+
+Verified branch/log/`STATE.json` all agree before starting (HEAD `6319880`, iteration 0, current
+`Q1-projects`). Hub was up and healthy on `:8010`.
+
+**No project-delete API exists.** Read `hub/hub/api/v1/projects.py` in full (get/open/create/
+settings/relocate only) and `hub/hub/project_lifecycle.py` (no delete/archive method), then grepped
+every `@router.delete` in `hub/hub/api/v1/` — six exist, for runners, jobs, inbound-queue entries,
+a chat task link, agent-actions jobs, and charters. None for projects. This is the finding Q1
+anticipated ("if no such API exists, that absence is itself a finding worth recording") — recorded
+here and worth a `decisions_for_user` entry: does the Hub *want* projects to be undeletable through
+the API, or was this simply never built? Not answered here; it's the operator's call.
+
+**Fallback: raw SQL, generic and verified.** `hub/hub/db/engine.py` never issues
+`PRAGMA foreign_keys = ON`, and only one model (`job_runs`) declares `ondelete="CASCADE"` — so
+SQLite enforces no referential integrity here and a delete confined to the `projects` table would
+have left ~7,700 orphaned rows across 27 other tables. Instead: stopped the Hub process (PID 2696,
+confirmed via `Get-NetTCPConnection -LocalPort 8010` → `Get-Process`) to avoid a concurrent-write
+race with the live app, took a file-copy backup of `agentweave.db`, then ran a one-shot script that
+introspects every table via `PRAGMA table_info` and deletes rows matching the 10 target project ids
+wherever a `project_id` column exists, before deleting the 10 `projects` rows themselves. This also
+answers the credential sub-task: `run-ev6` / `aw_run_loop6_evidence` turned out to live as a `runs`
+row (`id='run-ev6', project_id='proj-c28f08df'`, storing only `capability_token_hash`, not the raw
+token) rather than in `api_keys` or `operator_credentials` as the queue item guessed — deleted for
+free by the generic per-project sweep, no special-casing needed. Deleted 7,788 rows total across 26
+tables (`runners` 23, `charters` 90, `conversations` 71, `tasks` 28, `questions` 59, `event_logs`
+3162, `agents` 28, `messages` 45, `task_transitions` 136, `run_divergences` 22, `runs` 126,
+`agent_outputs` 3125, `turn_usage` 121, `inbound_queue_entries` 123, `spec_documents` 18 and 6 more
+spec/task-link tables, plus `projects` 10). The script asserted post-delete that the only remaining
+project was `proj-ff695d96` before exiting; it did. Restarted the Hub with the documented command,
+healthy in <2s. Deleted the one-shot script and the backup file afterward — `hub/data/` is
+gitignored (`.gitignore:88`), so none of this touched the working tree; `git status` is clean.
+
+**Verified, not assumed:**
+- `GET /api/v1/projects` before the delete: 11 projects, ids and names matching `STATE.json`'s list
+  exactly.
+- `GET /api/v1/projects/proj-ff695d96/project/spec/coverage` before the delete: 9 requirements
+  (path resolved by reading the router prefixes — `spec.py`'s `/project` mounted under
+  `api/v1/__init__.py`'s `/projects/{project_id}`, since `/api/v1/projects/{id}/spec/coverage`
+  404s).
+- Same two checks after the restart: `GET /api/v1/projects` → exactly 1 project
+  (`proj-ff695d96 aw-loop10`); coverage endpoint → 9 requirements, unchanged.
+
+**Elapsed:** well under the 15-minute firing interval. Estimated 1 iteration; used 1.
+
+---
