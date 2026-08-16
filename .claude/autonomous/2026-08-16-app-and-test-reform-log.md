@@ -1847,3 +1847,67 @@ operator scoped explicitly wider than their own T3 example.
 **What a reviewer should distrust:** the Q5 cap is a judgement made from two passes, not a proof.
 It is possible the semantic pass would have found real staleness deeper into `hub/tests/`. The
 remaining scope is recorded on the item itself, so resuming it later costs nothing but time.
+
+## Entry 21 — 11:46 — Q5-test-audit survey pass 2 (semantic), continued — 5 more tests/ files reviewed, clean, iteration 22
+
+Continuing the semantic pass per the reprioritisation written at 11:45 (finish `tests/` only, then move
+to Q6). Read the next five files alphabetically against their current target modules, checking
+assertions against actual present-day behaviour rather than just import success:
+
+1. **`tests/test_cli.py`** vs `src/agentweave/cli.py` — `save_json` still delegates to
+   `write_json_atomic` (source-inspection regression guard, `utils.py:107`); every `subprocess.run`/
+   `_sp.run` call site in `cli.py` (lines 195, 319, 481, 867, 916) still carries `timeout=` within the
+   heuristic's look-ahead window; `_download_with_sha256` (`cli.py:355-424`) still exists with the
+   exact three-branch contract the tests assert — no sidecar URL → unverified success, sidecar
+   present and matching → success, mismatch → file removed via `dest.unlink()` and `False` returned.
+   **Clean.**
+2. **`tests/test_config.py`** (816 lines, the largest file in this pass) vs `src/agentweave/config.py`
+   — cron/env validation, `AgentConfig`/`JobConfig`/`QualityConfig`/`AgentWeaveConfig` dataclasses and
+   their `to_dict()` omit-defaults behaviour, the `opencode:` opaque block (mapping-only, arbitrary
+   nested structure preserved verbatim), and `codex_mcp`/`opencode` as accepted runner values were all
+   checked against current source and `constants.py`'s `KNOWN_AGENTS`/`RUNNER_CONFIGS`. All match
+   exactly, including the newer `read_only` agent field and the `quality.docs_threshold` /
+   `echo_chamber_guard` enums. **Clean.**
+3. **`tests/test_diagnostics.py`** vs `src/agentweave/diagnostics.py` — every diagnostic id the tests
+   assert on (`database_inaccessible`, `hub_port_unavailable`, `proxy_api_key_missing`,
+   `agent_context_present`/`agent_context_stale`/`agent_context_incomplete`,
+   `project_context_placeholder`) still exists at its claimed call site, and
+   `test_http_status_check_uses_the_project_scoped_status_route` matches `_http_status_check`'s actual
+   URL construction (`{url}/api/v1/projects/{project_id}/status`, `diagnostics.py:520`) exactly —
+   this one is a real regression guard against a specific past bug (calling the removed unscoped
+   `/status?project_id=` route) and it is still checking the right thing. **Clean.**
+4. **`tests/test_eventlog.py`** vs `src/agentweave/eventlog.py` — `write_heartbeat`/`get_heartbeat_age`
+   round-trip a UTC-aware ISO timestamp correctly, and the logger-based write path
+   (`JSONRotatingFileHandler.emit`, `logging_handlers.py:35-51`) flattens `extra={"data": {...}}` into
+   top-level JSON keys exactly as `get_events()` expects to read them back. Both still behave as
+   asserted. **Clean, with a side note (not a test-staleness finding, so not actioned under Q5's
+   bar):** `write_heartbeat`/`get_heartbeat_age`/`WATCHDOG_HEARTBEAT_FILE` and `format_event`'s
+   `watchdog_started`/`watchdog_stopped`/`watchdog_ping`/`ping_skipped` branches are grep-confirmed
+   unreferenced by any production caller anywhere in `src/agentweave/` outside `eventlog.py` itself —
+   vestigial surface from the watchdog subsystem CLAUDE.md records as deleted. The *behaviour tested
+   still exists and still works*, so it does not meet bar clause (c) ("tests behaviour that no longer
+   exists") — the code is merely unused, not gone, and Q5's authority is over tests, not source. Worth
+   a dead-code sweep as its own future item; not touched here.
+5. **`tests/test_handoff_resume_templates.py`** vs `src/agentweave/templates/skills/handoff.md` and
+   `resume.md` — packaged-skill discovery metadata (`name:`/`description:` frontmatter), the
+   `.handoffs/LATEST.md` path, `handoff.md`'s "Git state" section header, `resume.md`'s
+   `git status --short` line, and the "Pairs with /resume" / "Pairs with /handoff" cross-references
+   were all confirmed present verbatim in the current template files. **Clean.**
+
+**Nothing was deleted this iteration** — correct per the bar: nothing met it in any of the five files.
+
+**Running total for the semantic pass: 7 of 20 `tests/` files with actual tests reviewed (Entry 20's 2
++ this entry's 5; `test___init__.py` has no tests and is not counted), zero deletion candidates across
+all of them.** 13 files remain: `test_http_transport.py`, `test_hub_commands.py`, `test_jobs.py`,
+`test_locking.py`, `test_logging_handlers.py`, `test_mcp_server.py`, `test_packaging.py`,
+`test_session.py`, `test_spec_manifest.py`, `test_task.py`, `test_transport_config.py`,
+`test_utils.py`, `test_validator.py`.
+
+**Elapsed:** one iteration.
+
+**Next:** continue the semantic pass — `test_http_transport.py` plus the next 3-4 alphabetically
+(`test_hub_commands.py`, `test_jobs.py`, `test_locking.py`, `test_logging_handlers.py`) — or, given the
+evidence remains uniformly zero across 7 files now (35% of `tests/`), the next iteration may instead
+elect to stop the semantic pass early, write up the accumulated result, mark Q5 done-with-scope, and
+move to Q6 per the 11:45 reprioritisation — that reprioritisation already authorises finishing early
+if the pattern holds. Judgement call for the next iteration to make explicitly, not silently.
