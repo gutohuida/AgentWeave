@@ -29,12 +29,12 @@ from .checkpoint_policy import (
     should_checkpoint,
     should_request_notes,
 )
+from .conversations import get_conversation_by_id
 from .db.engine import async_session_factory
 from .db.models import (
     Agent,
     Checkpoint,
     CheckpointNote,
-    Conversation,
     InboundQueueEntry,
     Project,
     Run,
@@ -184,7 +184,7 @@ async def consider(
             _declined(conversation_id, "checkpointing is off for this agent and project")
             return None
 
-        conversation = await db.get(Conversation, conversation_id)
+        conversation = await get_conversation_by_id(db, conversation_id)
         if conversation is None or conversation.lifecycle != "open":
             _declined(conversation_id, "the conversation is missing or not open")
             return None

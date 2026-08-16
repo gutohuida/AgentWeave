@@ -8,8 +8,9 @@ from typing import Dict, Optional, Tuple
 
 from sqlalchemy import select
 
+from .conversations import get_conversation_by_id
 from .db.engine import async_session_factory
-from .db.models import Conversation, InboundQueueEntry, Run
+from .db.models import InboundQueueEntry, Run
 from .inbound_queue import can_start, format_turn_prompt, project_limits, queued_entries
 from .sse import sse_manager
 from .usage_accounting import project_budget_state
@@ -51,7 +52,7 @@ async def schedule_agent(project_id: str, agent: str) -> ScheduleResult:
         controlling = next((entry for entry in entries if entry.hop_depth <= hop_budget), None)
         if controlling is None or controlling.conversation_id is None:
             return ScheduleResult(waiting_reason="queued entry has no conversation")
-        conversation = await db.get(Conversation, controlling.conversation_id)
+        conversation = await get_conversation_by_id(db, controlling.conversation_id)
         if (
             conversation is None
             or conversation.project_id != project_id

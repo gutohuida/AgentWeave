@@ -9,8 +9,9 @@ import pytest
 
 import hub.conversation_titles as conversation_titles
 from hub.conversation_titles import build_title_command, title_from_output
+from hub.conversations import get_conversation_by_id
 from hub.db.engine import async_session_factory
-from hub.db.models import Conversation, Project
+from hub.db.models import Project
 
 # ---------------------------------------------------------------------------
 # The pure pieces
@@ -104,7 +105,7 @@ async def _set_mode(mode: str, runner_id=None) -> None:
 
 async def _title(conversation_id: str):
     async with async_session_factory() as session:
-        conversation = await session.get(Conversation, conversation_id)
+        conversation = await get_conversation_by_id(session, conversation_id)
         return conversation.title, conversation.title_set_by_operator
 
 
@@ -240,7 +241,7 @@ async def test_a_rename_during_generation_wins(app, auth_headers, bind_runner, m
 
         async def _rename():
             async with async_session_factory() as session:
-                conversation = await session.get(Conversation, conversation_id)
+                conversation = await get_conversation_by_id(session, conversation_id)
                 conversation.title = "Mine"
                 conversation.title_set_by_operator = True
                 await session.commit()

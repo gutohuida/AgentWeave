@@ -15,6 +15,7 @@ inference about what the thread seems to be about (design D6, D7).
 import pytest
 from sqlalchemy import select
 
+from hub.conversations import get_conversation_by_id
 from hub.db.engine import async_session_factory
 from hub.db.models import Conversation, Run, Task
 from hub.run_task_binding import (
@@ -189,7 +190,7 @@ async def test_approving_a_task_releases_the_thread_through_the_route(app, auth_
     assert response.status_code == 200, response.text
 
     async with async_session_factory() as session:
-        conversation = await session.get(Conversation, "conv-8")
+        conversation = await get_conversation_by_id(session, "conv-8")
         assert conversation.task_id is None
 
 
@@ -208,7 +209,7 @@ async def test_the_operator_can_release_a_binding_explicitly(app, auth_headers):
     assert response.json()["task_id"] is None
 
     async with async_session_factory() as session:
-        assert (await session.get(Conversation, "conv-9")).task_id is None
+        assert (await get_conversation_by_id(session, "conv-9")).task_id is None
 
 
 @pytest.mark.asyncio

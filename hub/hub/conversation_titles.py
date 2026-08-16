@@ -22,7 +22,7 @@ from typing import List, Optional
 
 from sqlalchemy import select
 
-from .conversations import title_from_message
+from .conversations import get_conversation_by_id, title_from_message
 from .db.engine import async_session_factory
 from .db.models import Agent, AgentOutput, Conversation, InboundQueueEntry, Project, Runner
 from .pty_runner import resolve_executable
@@ -173,7 +173,7 @@ async def generate_conversation_title(
     Returns the stored title, or None when nothing was written.
     """
     async with async_session_factory() as db:
-        conversation = await db.get(Conversation, conversation_id)
+        conversation = await get_conversation_by_id(db, conversation_id)
         if conversation is None or conversation.project_id != project_id:
             return None
         if conversation.title_set_by_operator:
@@ -206,7 +206,7 @@ async def generate_conversation_title(
         return None
 
     async with async_session_factory() as db:
-        conversation = await db.get(Conversation, conversation_id)
+        conversation = await get_conversation_by_id(db, conversation_id)
         # Re-read rather than reuse: the operator may have renamed it while the model thought.
         if conversation is None or conversation.title_set_by_operator:
             return None

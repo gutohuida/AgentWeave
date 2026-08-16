@@ -53,6 +53,7 @@ from ...conversation_titles import maybe_generate_title
 from ...conversations import (
     conversation_for_provider_session,
     conversation_id_for_run,
+    get_conversation_by_id,
     get_open_conversation,
     name_conversation,
     new_conversation,
@@ -1339,7 +1340,7 @@ async def _execute_run(
             if parsed.session_id:
                 async with async_session_factory() as db:
                     run = await db.get(Run, run_id)
-                    conversation = await db.get(Conversation, conversation_id)
+                    conversation = await get_conversation_by_id(db, conversation_id)
                     if conversation is None:
                         binding_conflict = "Conversation disappeared during provider binding"
                     elif conversation.provider_session_id is None:
@@ -1743,7 +1744,7 @@ async def _execute_codex_appserver_run(
             nonlocal binding_conflict, session_id
             async with async_session_factory() as db:
                 run = await db.get(Run, run_id)
-                conversation = await db.get(Conversation, conversation_id)
+                conversation = await get_conversation_by_id(db, conversation_id)
                 if conversation is None:
                     binding_conflict = "Conversation disappeared during provider binding"
                 elif conversation.provider_session_id is None:

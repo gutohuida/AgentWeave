@@ -23,6 +23,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from hub.conversations import get_conversation_by_id
 from hub.db.engine import async_session_factory
 from hub.db.models import AgentOutput, Conversation, InboundQueueEntry, Message, Project
 
@@ -86,7 +87,7 @@ async def _add_queue_entry(
             conversation_id = run.conversation_id
         elif conversation_id is None:
             conversation_id = f"conv-{agent}"
-        if await session.get(Conversation, conversation_id) is None:
+        if await get_conversation_by_id(session, conversation_id) is None:
             session.add(
                 Conversation(
                     id=conversation_id,
@@ -124,7 +125,7 @@ async def _add_output(
     timestamp: datetime | None = None,
 ) -> None:
     async with async_session_factory() as session:
-        if await session.get(Conversation, session_id) is None:
+        if await get_conversation_by_id(session, session_id) is None:
             session.add(
                 Conversation(
                     id=session_id,
@@ -159,7 +160,7 @@ async def _add_outbound_message(
     timestamp: datetime | None = None,
 ) -> None:
     async with async_session_factory() as session:
-        if session_id and await session.get(Conversation, session_id) is None:
+        if session_id and await get_conversation_by_id(session, session_id) is None:
             session.add(
                 Conversation(
                     id=session_id,

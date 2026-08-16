@@ -22,6 +22,7 @@ from hub.checkpoint_generation import (
     generate_checkpoint,
     pending_notes,
 )
+from hub.conversations import get_conversation_by_id
 from hub.db.engine import async_session_factory
 from hub.db.models import CheckpointNote, Conversation, Run
 
@@ -213,7 +214,7 @@ async def test_notes_reach_the_generator_and_are_marked_as_one_input(app, monkey
     async with async_session_factory() as db:
         await _conversation_with_run(db)
         await _note(db)
-        conversation = await db.get(Conversation, "conv-1")
+        conversation = await get_conversation_by_id(db, "conv-1")
 
         monkeypatch.setattr("hub.worker.resolve_executable", lambda cmd: cmd)
         monkeypatch.setattr(subprocess, "run", fake_run)
@@ -242,7 +243,7 @@ async def test_notes_are_consumed_once_and_not_reused_by_a_later_checkpoint(app,
     async with async_session_factory() as db:
         await _conversation_with_run(db)
         await _note(db)
-        conversation = await db.get(Conversation, "conv-1")
+        conversation = await get_conversation_by_id(db, "conv-1")
 
         monkeypatch.setattr("hub.worker.resolve_executable", lambda cmd: cmd)
         monkeypatch.setattr(subprocess, "run", fake_run)
@@ -273,7 +274,7 @@ async def test_notes_are_consumed_even_when_generation_produced_nothing(app, mon
     async with async_session_factory() as db:
         await _conversation_with_run(db)
         await _note(db)
-        conversation = await db.get(Conversation, "conv-1")
+        conversation = await get_conversation_by_id(db, "conv-1")
 
         monkeypatch.setattr("hub.worker.resolve_executable", lambda cmd: cmd)
         monkeypatch.setattr(subprocess, "run", fake_run)
@@ -295,7 +296,7 @@ async def test_a_checkpoint_is_produced_when_the_agent_never_answered(app, monke
 
     async with async_session_factory() as db:
         await _conversation_with_run(db)
-        conversation = await db.get(Conversation, "conv-1")
+        conversation = await get_conversation_by_id(db, "conv-1")
 
         monkeypatch.setattr("hub.worker.resolve_executable", lambda cmd: cmd)
         monkeypatch.setattr(subprocess, "run", fake_run)

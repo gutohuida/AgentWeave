@@ -16,8 +16,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...auth import get_project
 from ...checkpoint_cutover import CutoverRefusedError, cut_over
 from ...checkpoint_generation import generate_checkpoint, render_checkpoint
+from ...conversations import get_conversation_by_id
 from ...db.engine import get_session
-from ...db.models import Checkpoint, Conversation, Project, Runner
+from ...db.models import Checkpoint, Project, Runner
 from ...sse import sse_manager
 
 router = APIRouter(tags=["checkpoints"])
@@ -64,7 +65,7 @@ class CheckpointSummary(BaseModel):
 
 
 async def _conversation_or_404(session: AsyncSession, project_id: str, conversation_id: str):
-    conversation = await session.get(Conversation, conversation_id)
+    conversation = await get_conversation_by_id(session, conversation_id)
     if conversation is None or conversation.project_id != project_id:
         raise HTTPException(status_code=404, detail=f"Conversation '{conversation_id}' not found")
     return conversation

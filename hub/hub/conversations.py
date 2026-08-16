@@ -69,7 +69,12 @@ async def inherit_runtime_overrides(session: AsyncSession, conversation: Convers
             Conversation.id != conversation.id,
             Conversation.runtime_overrides.is_not(None),
         )
-        .order_by(Conversation.created_at.desc())
+        # `sequence`, not `created_at`: two conversations created inside the same clock tick
+        # (Windows' default timer granularity is ~15.6ms) tie on `created_at`, and the tie is
+        # broken arbitrarily by whatever order SQLite happens to return matching rows in — not by
+        # which one is actually more recent. `sequence` is monotonic and gapless-enough to answer
+        # "most recent" correctly even inside one tick.
+        .order_by(Conversation.sequence.desc())
         .limit(1)
     )
     previous = result.scalars().first()
@@ -117,10 +122,26 @@ def name_conversation(conversation: Conversation, text: str) -> None:
         conversation.title = title
 
 
+async def get_conversation_by_id(
+    db: AsyncSession, conversation_id: Optional[str]
+) -> Optional[Conversation]:
+    """Look a conversation up by its stable `conv-` id.
+
+    Not `session.get(Conversation, conversation_id)`: the primary key is `sequence`, an
+    autoincrement integer, not `id` — `session.get()` looks up by primary key, so it would compare
+    a `conv-…` string against an integer column and never match. Every call site that used to read
+    `db.get(Conversation, ...)` reads this instead.
+    """
+    if conversation_id is None:
+        return None
+    result = await db.execute(select(Conversation).where(Conversation.id == conversation_id))
+    return result.scalar_one_or_none()
+
+
 async def get_open_conversation(
     db: AsyncSession, *, project_id: str, agent: str, conversation_id: str
 ) -> Optional[Conversation]:
-    conversation = await db.get(Conversation, conversation_id)
+    conversation = await get_conversation_by_id(db, conversation_id)
     if (
         conversation is None
         or conversation.project_id != project_id
@@ -141,7 +162,9 @@ async def latest_open_conversation(
             Conversation.agent == agent,
             Conversation.lifecycle == "open",
         )
-        .order_by(Conversation.updated_at.desc(), Conversation.created_at.desc())
+        # `sequence`, not `created_at`, breaks an `updated_at` tie: see the reasoning on the
+        # `.order_by(Conversation.sequence.desc())` call above, in `inherit_runtime_overrides`.
+        .order_by(Conversation.updated_at.desc(), Conversation.sequence.desc())
         .limit(1)
     )
     return result.scalar_one_or_none()
@@ -178,7 +201,7 @@ async def peer_bound_conversation(
         conditions.append(Conversation.bound_sender_agent == sender)
         conditions.append(Conversation.bound_sender_conversation_id.is_(None))
     result = await db.execute(
-        select(Conversation).where(*conditions).order_by(Conversation.created_at.desc()).limit(1)
+        select(Conversation).where(*conditions).order_by(Conversation.sequence.desc()).limit(1)
     )
     return result.scalar_one_or_none()
 

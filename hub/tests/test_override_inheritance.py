@@ -7,15 +7,17 @@ the reviewer replied — and the run that followed had `overrides=None` and coul
 anything, silently, in the middle of work the operator had configured.
 """
 
+from datetime import datetime, timezone
+
 import pytest
 
 from hub.conversations import (
     UNINHERITED_PERMISSION_MODE,
+    get_conversation_by_id,
     inherit_runtime_overrides,
     new_conversation,
 )
 from hub.db.engine import async_session_factory
-from hub.db.models import Conversation
 
 PROJECT = "proj-test"
 
@@ -23,6 +25,20 @@ PROJECT = "proj-test"
 async def _conversation(agent, overrides=None, origin="operator"):
     async with async_session_factory() as session:
         row = new_conversation(project_id=PROJECT, agent=agent, origin=origin)
+        row.runtime_overrides = overrides
+        session.add(row)
+        await session.commit()
+        return row.id
+
+
+async def _conversation_at(agent, overrides, created_at):
+    """Like `_conversation`, but with an explicit `created_at` — so two rows can share a
+    timestamp to the microsecond, the way two real conversations do inside one Windows clock
+    tick (~15.6ms), without depending on real wall-clock timing to reproduce it."""
+    async with async_session_factory() as session:
+        row = new_conversation(project_id=PROJECT, agent=agent, origin="operator")
+        row.created_at = created_at
+        row.updated_at = created_at
         row.runtime_overrides = overrides
         session.add(row)
         await session.commit()
@@ -55,6 +71,18 @@ async def test_the_most_recent_overrides_win(app):
     await _conversation("recent", {"permission_mode": "acceptEdits"})
     await _conversation("recent", {"permission_mode": "workspace"})
     assert await _inherit("recent") == {"permission_mode": "workspace"}
+
+
+@pytest.mark.asyncio
+async def test_the_most_recent_overrides_win_even_with_an_identical_created_at(app):
+    """The direct regression test for the tie: two conversations sharing one `created_at` to the
+    microsecond — as two real conversations can inside a single ~15.6ms Windows clock tick — must
+    still resolve to whichever was actually committed second, not to whichever `created_at` ties
+    happen to sort first. `sequence`, not `created_at`, is what makes this answerable at all."""
+    tie = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    await _conversation_at("simultaneous", {"permission_mode": "acceptEdits"}, tie)
+    await _conversation_at("simultaneous", {"permission_mode": "workspace"}, tie)
+    assert await _inherit("simultaneous") == {"permission_mode": "workspace"}
 
 
 @pytest.mark.asyncio
@@ -92,7 +120,7 @@ async def test_inheriting_does_not_couple_the_two_conversations(app):
     inherited = await _inherit("decoupled")
 
     async with async_session_factory() as session:
-        source = await session.get(Conversation, source_id)
+        source = await get_conversation_by_id(session, source_id)
         source.runtime_overrides = {"permission_mode": "acceptEdits"}
         await session.commit()
 

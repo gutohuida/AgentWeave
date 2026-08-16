@@ -11,6 +11,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    PrimaryKeyConstraint,
     String,
     Text,
     UniqueConstraint,
@@ -370,7 +371,21 @@ class Conversation(Base):
 
     __tablename__ = "conversations"
 
-    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    # Ordered by an autoincrement key, not by `created_at`, and not by the string `id` (random,
+    # `conv-` + short_id() — no ordering signal at all). Two conversations can be created inside
+    # the same clock tick — Windows' default timer granularity is ~15.6ms, so this is not a
+    # theoretical race — and "most recent" reads (`inherit_runtime_overrides`, the override-
+    # inheritance query in `conversations.py`) need a real answer, not a tied one. Same shape as
+    # `TaskTransition` and `InboundQueueEntry`, which order for the identical reason.
+    #
+    # `primary_key=True` is deliberately not set on the column — the primary key is declared in
+    # `__table_args__` instead, with an explicit name. An unnamed constraint gets whatever name
+    # SQLAlchemy or SQLite happens to assign, and the migration that moved the primary key onto
+    # this column (0073) has to `drop_constraint` it by name on downgrade; a database built by
+    # `create_all` from this model must produce the identical name, or the downgrade cannot find
+    # what to drop. Same reasoning for `id`'s unique constraint.
+    sequence: Mapped[int] = mapped_column(Integer, autoincrement=True)
+    id: Mapped[str] = mapped_column(String(64), nullable=False)
     project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
     agent: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     provider_session_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
@@ -441,6 +456,8 @@ class Conversation(Base):
     project: Mapped["Project"] = relationship(back_populates="conversations")
 
     __table_args__ = (
+        PrimaryKeyConstraint("sequence", name="pk_conversations"),
+        UniqueConstraint("id", name="uq_conversations_id"),
         CheckConstraint("lifecycle IN ('open', 'archived')", name="ck_conversations_lifecycle"),
         CheckConstraint(
             "origin IN ('operator', 'peer', 'handoff', 'spec', 'job')",

@@ -8,7 +8,8 @@ from typing import Iterable, List, Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .db.models import Conversation, InboundQueueEntry, Project, Run
+from .conversations import get_conversation_by_id
+from .db.models import InboundQueueEntry, Project, Run
 from .utils import short_id
 
 DEFAULT_HOP_BUDGET = 6
@@ -207,7 +208,7 @@ async def return_run_entries(db: AsyncSession, run_id: str) -> List[str]:
             # The one change that breaks the loop. Cleared rather than flagged, because
             # `session_mode` is derived from whether this is set — so clearing it makes the next
             # delivery a fresh start, and the turn after that re-binds whatever session it gets.
-            conversation = await db.get(Conversation, entry.conversation_id)
+            conversation = await get_conversation_by_id(db, entry.conversation_id)
             if conversation is not None and conversation.provider_session_id is not None:
                 conversation.provider_session_id = None
 

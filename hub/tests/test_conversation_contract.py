@@ -25,7 +25,7 @@ import sqlalchemy as sa
 from sqlalchemy import select
 
 import hub.api.v1.agent_trigger as agent_trigger
-from hub.conversations import new_conversation
+from hub.conversations import get_conversation_by_id, new_conversation
 from hub.db.engine import async_session_factory
 from hub.db.models import Conversation, EventLog, Run
 
@@ -98,6 +98,7 @@ def test_conversation_model_declares_full_contract_shape() -> None:
     surface downstream as a confusing 409 or a broken migration."""
     columns = Conversation.__table__.columns
     assert set(columns.keys()) >= {
+        "sequence",
         "id",
         "project_id",
         "agent",
@@ -107,7 +108,16 @@ def test_conversation_model_declares_full_contract_shape() -> None:
         "updated_at",
         "archived_at",
     }
-    assert columns["id"].primary_key
+    # `sequence`, not `id`, is the primary key — see the reasoning on
+    # `Conversation.sequence` in `hub/hub/db/models.py`. `id` keeps a `NOT NULL UNIQUE`
+    # constraint instead, which is what every foreign key elsewhere still resolves by value.
+    assert columns["sequence"].primary_key
+    assert not columns["id"].primary_key
+    assert not columns["id"].nullable
+    unique_constraints = {
+        c.name for c in Conversation.__table__.constraints if isinstance(c, sa.UniqueConstraint)
+    }
+    assert "uq_conversations_id" in unique_constraints
     assert not columns["project_id"].nullable
     assert not columns["agent"].nullable
     assert columns["provider_session_id"].nullable
@@ -184,7 +194,7 @@ async def test_trigger_allocates_conversation_synchronously_before_provider_outp
                 conversation_id = response.json()["conversation_id"]
 
                 async with async_session_factory() as db:
-                    conversation = await db.get(Conversation, conversation_id)
+                    conversation = await get_conversation_by_id(db, conversation_id)
                 assert conversation is not None
                 assert conversation.lifecycle == "open"
                 assert conversation.provider_session_id is None
@@ -222,7 +232,7 @@ async def test_conversation_scope_is_immutable_across_binding_and_followups(app,
             await _await_background_runs()
 
     async with async_session_factory() as db:
-        original = await db.get(Conversation, conversation_id)
+        original = await get_conversation_by_id(db, conversation_id)
         original_project_id = original.project_id
         original_agent = original.agent
         original_created_at = original.created_at
@@ -244,7 +254,7 @@ async def test_conversation_scope_is_immutable_across_binding_and_followups(app,
             await _await_background_runs()
 
     async with async_session_factory() as db:
-        after = await db.get(Conversation, conversation_id)
+        after = await get_conversation_by_id(db, conversation_id)
         assert after.project_id == original_project_id
         assert after.agent == original_agent
         assert after.created_at == original_created_at
@@ -306,7 +316,7 @@ async def test_provider_binding_is_idempotent_for_repeated_session_id(
         assert run.status == "completed"
         assert run.error is None
 
-        conversation = await db.get(Conversation, conversation_id)
+        conversation = await get_conversation_by_id(db, conversation_id)
         assert conversation.provider_session_id == "provider-1"
 
         conflicts = (
@@ -371,7 +381,7 @@ async def test_provider_binding_conflict_leaves_conversation_untouched_and_fails
         assert run.status == "failed"
         assert "binding conflict" in run.error.lower()
 
-        conversation = await db.get(Conversation, conversation_id)
+        conversation = await get_conversation_by_id(db, conversation_id)
         assert conversation.provider_session_id == "provider-1"
         assert conversation.lifecycle == "open"
 
@@ -449,7 +459,7 @@ async def test_stop_and_retry_retain_conversation_and_resume_bound_session(
         second_run = await db.get(Run, second_run_id)
         assert second_run.status == "stopped"
 
-        conversation = await db.get(Conversation, conversation_id)
+        conversation = await get_conversation_by_id(db, conversation_id)
         assert conversation is not None, "stop must not delete the conversation row"
         assert conversation.lifecycle == "open"
         assert conversation.provider_session_id == "provider-1"
@@ -480,7 +490,7 @@ async def test_stop_and_retry_retain_conversation_and_resume_bound_session(
         retry_run = await db.get(Run, retry_run_id)
         assert retry_run.session_id == "provider-1"
 
-        conversation = await db.get(Conversation, conversation_id)
+        conversation = await get_conversation_by_id(db, conversation_id)
         assert conversation.provider_session_id == "provider-1"
         assert conversation.lifecycle == "open"
 

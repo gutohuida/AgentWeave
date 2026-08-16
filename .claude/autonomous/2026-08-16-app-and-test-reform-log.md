@@ -299,3 +299,118 @@ branch"). Treat the 317.85s figure as this-machine-today, not a permanent guaran
 across ~10 pytest invocations). Estimated 2 iterations; used 1 — the measurement and the xdist
 comparison both fit because the chunk-first approach let correctness be established on a 26% sample
 before committing to the much longer full-suite runs.
+
+---
+
+## Entry 3 — 03:26 — Q3 done: `Conversation.sequence`, and a much bigger diff than the queue item estimated
+
+**The fix itself is exactly as specified.** `hub/hub/conversations.py` answered "which conversation
+is most recent" in three places by ordering on `created_at` alone, which ties when two conversations
+are created inside the same clock tick (~15.6ms on Windows — confirmed as the cause of
+`test_override_inheritance.py::test_the_most_recent_overrides_win`'s ~50% failure rate in a chunked
+run). Added `Conversation.sequence` — an autoincrement integer, same shape as `TaskTransition` and
+`InboundQueueEntry` — and ordered by it instead. Beyond the one call site the item named
+(`inherit_runtime_overrides`, conversations.py:72), `latest_open_conversation` and
+`peer_bound_conversation` had the identical hazard on the identical column, so both were fixed too
+(the first keeps `updated_at` as its primary sort — that is a real "most recently active" semantic,
+not the bug — and gets `sequence` only as its tiebreaker; the second's whole sort became `sequence`).
+Recorded here because the item named only line 72 and this went further; the extension is the same
+bug at the same mechanism, not new scope.
+
+**What the item did not anticipate, and why the diff is 21 files instead of 2.** Making `sequence`
+the primary key — which is what "exactly as `TaskTransition` and `InboundQueueEntry` already do"
+means, and is also the only way SQLite hands out real autoincrement, since only a table's sole
+`INTEGER PRIMARY KEY` column gets rowid-aliasing — silently breaks every `session.get(Conversation,
+conversation_id)` call in the codebase. `session.get()` resolves by primary key; after this change
+that is `sequence`, an int, so a lookup passing a `conv-…` string would compare it against an
+integer column and simply never match. `TaskTransition` and `InboundQueueEntry` never hit this
+because nothing in the codebase looks either of them up that way — both are always queried through
+an explicit `select(...).where(.id == ...)`. `Conversation` is different: it is looked up by its
+`conv-…` id in 11 production call sites (`checkpoint_trigger.py`, `inbound_queue.py`,
+`turn_scheduler.py`, `conversation_titles.py` ×2, `api/v1/agent_trigger.py` ×2, `api/v1/messages.py`,
+`api/v1/agent_chat.py` ×2, `api/v1/checkpoints.py`) and 41 more across 10 test files. Silently
+leaving those as `session.get()` would not have failed loudly — every one would have started
+returning `None` for a real id, and the closest visible symptom would have been agents losing their
+runtime overrides or checkpoints failing to resolve their conversation, which is a strictly worse
+bug than the flake being fixed. Added `get_conversation_by_id(db, conversation_id)` to
+`conversations.py` — `select(Conversation).where(Conversation.id == conversation_id)` — and replaced
+every one of those 52 call sites with it. Confirmed complete by grep (`\.get\(Conversation,` matches
+nothing outside a docstring) and by the full suite passing.
+
+**The migration (`0073_add_conversation_sequence.py`) recreates the table**, because SQLite cannot
+change which column is the primary key in place — same reasoning `0035` and `0058` already use to
+recreate `conversations` and `inbound_queue_entries` for their own constraint changes, and the same
+`batch_alter_table(..., recreate="always")` mechanism. Existing rows get `sequence` values in
+whatever order SQLite's `INSERT INTO … SELECT` visits them during the copy, which for a table whose
+PK was never `INTEGER` (nothing has ever reordered its physical storage) is real insertion order —
+verified in `test_migration_0073_gives_conversations_a_sequence_primary_key`, which seeds two rows
+through the real 0034→head chain and asserts they come out in creation order, that the FK-by-value
+row in `runs` still resolves, that every index and both CHECK constraints (`ck_conversations_lifecycle`,
+`ck_conversations_origin`) survive the recreate, and that a fresh INSERT after the migration gets a
+real larger `sequence` from the database itself, not from the test.
+
+**One bug caught only by testing the downgrade, which the queue item's verify step did not ask for
+but the existing test suite (`test_migration_0052_downgrade_drops_the_history`) exercises anyway.**
+The model originally left `sequence`'s primary key and `id`'s unique constraint unnamed
+(`primary_key=True` / `unique=True` on the column). That works when the *migration* builds the
+table, because the migration names them explicitly (`create_primary_key("pk_conversations", ...)`).
+It silently fails when `create_all` builds the table fresh from the *model* instead (the real path
+`init_db` takes on a brand-new database) — SQLAlchemy gives the constraint whatever name it likes,
+and the migration's downgrade, which drops `"pk_conversations"` by that exact name, then raises
+`ValueError: No such constraint: 'pk_conversations'`. Fixed by naming both constraints explicitly in
+`__table_args__` (`PrimaryKeyConstraint("sequence", name="pk_conversations")`,
+`UniqueConstraint("id", name="uq_conversations_id")`) so a `create_all`-built table and a
+migration-upgraded table are byte-identical in shape. Caught by running the full `test_migrations.py`
+module, not by anything the item asked to run — worth noting because Q5's coming test audit should
+not read `test_migration_0052_downgrade_drops_the_history` as unrelated-noise-worth-cutting; it is
+exactly the kind of test that catches a defect a change to a completely different table's migration
+introduced.
+
+**The regression test the item asked for, mutation-checked.**
+`test_the_most_recent_overrides_win_even_with_an_identical_created_at` constructs two conversations
+with the identical `created_at` (bypassing wall-clock timing entirely, unlike the pre-existing
+`test_the_most_recent_overrides_win`, which depends on real elapsed time and is what flaked) and
+asserts the second-committed one wins. Mutation-checked by hand: reverted just the one `order_by`
+line in `inherit_runtime_overrides` back to `created_at.desc()`, watched the new test fail with
+`{'permission_mode': 'acceptEdits'} != {'permission_mode': 'workspace'}`, restored the fix, watched
+it pass again. `test_the_most_recent_overrides_win` itself was left alone rather than deleted — it
+now passes reliably too, but it is real coverage of the same behaviour under real timing, which the
+identical-`created_at` test does not exercise.
+
+**Bumped both head assertions CLAUDE.md requires** — nine `assert version == "0072"` sites in
+`hub/tests/test_migrations.py` and one in `hub/tests/test_project_persistence.py`, all now `"0073"`.
+Also fixed one pre-existing test that the primary-key move broke on contact:
+`test_conversation_model_declares_full_contract_shape` in `test_conversation_contract.py` asserted
+`columns["id"].primary_key` directly; rewritten to assert `sequence` is the primary key, `id` is not,
+and `id` still carries `uq_conversations_id`.
+
+**Verification, run for real rather than assumed:**
+- `pytest hub/tests/test_migrations.py -k 0073` — 2 passed (the new migration tests).
+- `pytest hub/tests/test_migrations.py hub/tests/test_project_persistence.py` — 54 passed, 1 skipped.
+- `pytest hub/tests/test_override_inheritance.py` — 9 passed, run **three separate times** (fresh
+  process each time, per the item's verify step) — 9/9 every run, where the pre-fix baseline was
+  ~50% failure on the one flaky test.
+- The 10 test files whose `session.get` call sites were rewritten, run together — 141 passed.
+- Full suite, `pytest hub/tests -n auto` (the now-parallel Q2 command) — **2049 passed, 11 skipped**,
+  zero failures. (2046 baseline from Entry 2, +3 for the two new migration tests and the one new
+  override-inheritance regression test.)
+- Root CLI suite, `pytest tests/` — 360 passed, 3 skipped, unaffected as expected (no hub import).
+- `ruff check` and `ruff format --diff` clean on every file this touched (two lines in
+  `test_migrations.py` needed hand-formatting to match `ruff format`'s wrapping; left the rest of
+  that file's pre-existing formatter-version drift untouched rather than reformatting code this
+  change did not otherwise touch).
+
+**What a reviewer should distrust:** the existing-row sequence-ordering claim ("insertion order")
+rests on SQLite's actual `INSERT INTO … SELECT` behavior for a table whose PK was never `INTEGER`,
+observed empirically (in the migration test) rather than guaranteed by any SQLite specification —
+correct for every version tested here, but not a documented contract. The 52-call-site rewrite was
+done by a scripted regex pass plus manual verification (compile-check every file, grep for zero
+remaining `.get(Conversation,` sites, run the full suite) rather than reviewed line-by-line by a
+second pass; the full green suite is the actual evidence it is complete, not the process that
+produced it. `PermissionRequest`, `Question`, and `UnaskedQuestion` are imported in
+`conversations.py` but were not audited for the same `session.get(Model, id)` hazard — out of scope
+for Q3, but worth a note if their own primary keys ever move.
+
+**Elapsed:** roughly one full iteration. Estimated 2 iterations for Q3; this used what was budgeted,
+but for a materially larger reason than estimated (the `session.get` blast radius), not because the
+core fix was slow.

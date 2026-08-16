@@ -21,6 +21,7 @@ from hub.checkpoint_cutover import (
 from hub.checkpoint_generation import CheckpointBody, render_body
 from hub.checkpoint_trigger import consider
 from hub.checkpoints import compute_envelope, create_checkpoint
+from hub.conversations import get_conversation_by_id
 from hub.db.engine import async_session_factory
 from hub.db.models import (
     Agent,
@@ -114,7 +115,7 @@ async def test_cutover_creates_a_successor_delivers_and_archives(app):
             .scalars()
             .one()
         )
-        predecessor = await db.get(Conversation, "conv-1")
+        predecessor = await get_conversation_by_id(db, "conv-1")
 
     assert successor.origin == "handoff"
     assert successor.title == "Continued: Wire up the worker"
@@ -171,7 +172,7 @@ async def test_a_running_conversation_is_not_cut_over(app):
         with pytest.raises(CutoverRefusedError, match="run in progress"):
             await cut_over(db, conversation, checkpoint)
 
-        predecessor = await db.get(Conversation, "conv-1")
+        predecessor = await get_conversation_by_id(db, "conv-1")
 
     # Refused means untouched, not half-done.
     assert predecessor.lifecycle == "open"
@@ -217,7 +218,7 @@ async def test_an_unwritten_checkpoint_cannot_be_cut_over_to(app):
         with pytest.raises(CutoverRefusedError, match="unwritten"):
             await cut_over(db, conversation, checkpoint)
 
-        predecessor = await db.get(Conversation, "conv-1")
+        predecessor = await get_conversation_by_id(db, "conv-1")
 
     assert predecessor.lifecycle == "open"
 
@@ -314,7 +315,7 @@ async def test_crossing_the_threshold_under_automatic_generates_and_cuts_over(ap
     checkpoint_id = await consider(PROJECT, AGENT, "conv-1", context_tokens=None, percent=85.0)
 
     async with async_session_factory() as db:
-        predecessor = await db.get(Conversation, "conv-1")
+        predecessor = await get_conversation_by_id(db, "conv-1")
         successors = (
             (await db.execute(select(Conversation).where(Conversation.origin == "handoff")))
             .scalars()
@@ -359,7 +360,7 @@ async def test_under_offered_nothing_is_made_and_nothing_is_cut_over(app, monkey
     checkpoint_id = await consider(PROJECT, AGENT, "conv-1", context_tokens=None, percent=85.0)
 
     async with async_session_factory() as db:
-        predecessor = await db.get(Conversation, "conv-1")
+        predecessor = await get_conversation_by_id(db, "conv-1")
         successors = (
             (await db.execute(select(Conversation).where(Conversation.origin == "handoff")))
             .scalars()
@@ -560,7 +561,7 @@ async def test_offered_warns_at_the_threshold_and_spends_nothing(app, monkeypatc
     result = await consider(PROJECT, AGENT, "conv-1", context_tokens=None, percent=85.0)
 
     async with async_session_factory() as db:
-        conversation = await db.get(Conversation, "conv-1")
+        conversation = await get_conversation_by_id(db, "conv-1")
         checkpoints = (await db.execute(select(Checkpoint))).scalars().all()
 
     assert result is None
@@ -591,7 +592,7 @@ async def test_a_dismissed_warning_does_not_return_while_there_is_room(app, monk
     assert await consider(PROJECT, AGENT, "conv-1", context_tokens=None, percent=85.0) is None
 
     async with async_session_factory() as db:
-        conversation = await db.get(Conversation, "conv-1")
+        conversation = await get_conversation_by_id(db, "conv-1")
 
     # Still dismissed, not re-marked due.
     assert conversation.checkpoint_warning == "dismissed"
@@ -619,7 +620,7 @@ async def test_a_dismissal_runs_out_of_room_near_the_window(app, monkeypatch):
     assert await consider(PROJECT, AGENT, "conv-1", context_tokens=None, percent=99.0) is None
 
     async with async_session_factory() as db:
-        conversation = await db.get(Conversation, "conv-1")
+        conversation = await get_conversation_by_id(db, "conv-1")
         checkpoints = (await db.execute(select(Checkpoint))).scalars().all()
 
     assert conversation.checkpoint_warning == "final"
@@ -655,7 +656,7 @@ async def test_the_final_warning_needs_a_percentage_not_a_token_count(app, monke
     assert await consider(PROJECT, AGENT, "conv-1", context_tokens=999_999, percent=None) is None
 
     async with async_session_factory() as db:
-        conversation = await db.get(Conversation, "conv-1")
+        conversation = await get_conversation_by_id(db, "conv-1")
 
     assert conversation.checkpoint_warning == "dismissed"
 
@@ -677,7 +678,7 @@ async def test_the_final_warning_is_raised_once_not_on_every_reading(app, monkey
     assert await consider(PROJECT, AGENT, "conv-1", context_tokens=None, percent=99.0) is None
 
     async with async_session_factory() as db:
-        conversation = await db.get(Conversation, "conv-1")
+        conversation = await get_conversation_by_id(db, "conv-1")
 
     assert conversation.checkpoint_warning == "final"
 
@@ -699,7 +700,7 @@ async def test_automatic_still_acts_without_warning_first(app, monkeypatch):
     checkpoint_id = await consider(PROJECT, AGENT, "conv-1", context_tokens=None, percent=85.0)
 
     async with async_session_factory() as db:
-        conversation = await db.get(Conversation, "conv-1")
+        conversation = await get_conversation_by_id(db, "conv-1")
 
     assert checkpoint_id is not None
     assert conversation.lifecycle == "archived"
@@ -741,7 +742,7 @@ async def test_the_final_warning_refuses_to_be_dismissed(app, auth_headers):
     assert "compact" in response.json()["detail"]
 
     async with async_session_factory() as db:
-        conversation = await db.get(Conversation, "conv-1")
+        conversation = await get_conversation_by_id(db, "conv-1")
     assert conversation.checkpoint_warning == "final"
 
 
@@ -760,7 +761,7 @@ async def test_an_ordinary_warning_still_dismisses(app, auth_headers):
 
     assert response.status_code == 200
     async with async_session_factory() as db:
-        conversation = await db.get(Conversation, "conv-1")
+        conversation = await get_conversation_by_id(db, "conv-1")
     assert conversation.checkpoint_warning == "dismissed"
 
 
@@ -797,7 +798,7 @@ async def test_the_backstop_does_not_depend_on_the_configured_threshold(app, mon
     assert await consider(PROJECT, AGENT, "conv-1", context_tokens=None, percent=96.0) is None
 
     async with async_session_factory() as db:
-        conversation = await db.get(Conversation, "conv-1")
+        conversation = await get_conversation_by_id(db, "conv-1")
         checkpoints = (await db.execute(select(Checkpoint))).scalars().all()
 
     assert conversation.checkpoint_warning == "final"
@@ -824,7 +825,7 @@ async def test_a_dismissed_conversation_is_not_asked_for_notes(app, monkeypatch)
 
     async with async_session_factory() as db:
         entries = (await db.execute(select(InboundQueueEntry))).scalars().all()
-        conversation = await db.get(Conversation, "conv-1")
+        conversation = await get_conversation_by_id(db, "conv-1")
 
     assert entries == []
     assert conversation.checkpoint_warning == "dismissed"

@@ -14,6 +14,7 @@ import pytest
 from sqlalchemy import select
 
 from hub.agent_auth import hash_run_token
+from hub.conversations import get_conversation_by_id
 from hub.db.engine import async_session_factory
 from hub.db.models import Conversation, InboundQueueEntry, Message, Run
 
@@ -132,7 +133,7 @@ async def test_no_conversation_id_does_not_land_on_whatever_was_touched_last(
     landed = await _conversation_of(response.json()["id"])
     assert landed not in {"conv-older", "conv-newest"}
     async with async_session_factory() as session:
-        conversation = await session.get(Conversation, landed)
+        conversation = await get_conversation_by_id(session, landed)
         assert conversation.bound_sender_conversation_id == "conv-sender-a"
         assert conversation.origin == "peer"
 
@@ -207,7 +208,7 @@ async def test_senderless_traffic_gets_one_stable_thread_per_sender(app, auth_he
     assert landed == await _conversation_of(b.json()["id"])
     assert landed != "conv-touched-since"
     async with async_session_factory() as session:
-        conversation = await session.get(Conversation, landed)
+        conversation = await get_conversation_by_id(session, landed)
         assert conversation.bound_sender_agent == "codex-1"
         assert conversation.bound_sender_conversation_id is None
 
@@ -230,7 +231,7 @@ async def test_a_binding_the_operator_archived_gets_a_successor_not_a_refusal(
     original = await _conversation_of(first.json()["id"])
 
     async with async_session_factory() as session:
-        conversation = await session.get(Conversation, original)
+        conversation = await get_conversation_by_id(session, original)
         conversation.lifecycle = "archived"
         await session.commit()
 
@@ -244,7 +245,7 @@ async def test_a_binding_the_operator_archived_gets_a_successor_not_a_refusal(
     successor = await _conversation_of(second.json()["id"])
     assert successor != original
     async with async_session_factory() as session:
-        conversation = await session.get(Conversation, successor)
+        conversation = await get_conversation_by_id(session, successor)
         assert conversation.bound_sender_conversation_id == "conv-bound"
         assert conversation.origin == "peer"
         assert conversation.lifecycle == "open"
@@ -282,7 +283,7 @@ async def test_no_conversation_id_opens_one_when_the_recipient_has_none(app, aut
     landed = await _conversation_of(response.json()["id"])
     assert landed is not None
     async with async_session_factory() as session:
-        conversation = await session.get(Conversation, landed)
+        conversation = await get_conversation_by_id(session, landed)
         assert conversation.agent == "codex-2"
         assert conversation.lifecycle == "open"
         assert conversation.origin == "peer"
@@ -325,7 +326,7 @@ async def test_an_archived_conversation_is_refused_with_all_three_parts(app, aut
     await _sync_agents(app, auth_headers, "codex-2")
     await _open_conversation("codex-2", "conv-archived")
     async with async_session_factory() as session:
-        conversation = await session.get(Conversation, "conv-archived")
+        conversation = await get_conversation_by_id(session, "conv-archived")
         conversation.lifecycle = "archived"
         await session.commit()
     headers = await _active_run("run-route-6", "codex-1")

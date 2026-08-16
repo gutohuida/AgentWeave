@@ -28,6 +28,7 @@ from ...conversations import (
     archive,
     backfill_titles,
     conversation_attention,
+    get_conversation_by_id,
     unarchive,
 )
 from ...db.engine import get_session
@@ -227,7 +228,7 @@ async def _owned_conversation(
     404 rather than 403 for a conversation belonging to another project: whether an id exists
     elsewhere is not this caller's to learn.
     """
-    conversation = await session.get(Conversation, conversation_id)
+    conversation = await get_conversation_by_id(session, conversation_id)
     if conversation is None or conversation.project_id != project_id or conversation.agent != agent:
         raise HTTPException(status_code=404, detail="Conversation not found")
     return conversation
@@ -417,7 +418,7 @@ async def get_chat_history(
     """Full merged timeline for one durable conversation."""
     project_id, _ = project
 
-    conversation = await session.get(Conversation, conversation_id)
+    conversation = await get_conversation_by_id(session, conversation_id)
     if conversation is None or conversation.project_id != project_id or conversation.agent != agent:
         from fastapi import HTTPException
 

@@ -10,13 +10,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ... import project_workspace
 from ...auth import get_project
 from ...conversations import (
+    get_conversation_by_id,
     inherit_runtime_overrides,
     name_conversation,
     new_conversation,
     peer_bound_conversation,
 )
 from ...db.engine import get_session
-from ...db.models import Agent, Conversation, Message, Run
+from ...db.models import Agent, Message, Run
 from ...inbound_queue import new_entry, project_limits
 from ...run_task_binding import resolve_task_for_project
 from ...schemas.common import SuccessResponse
@@ -136,7 +137,7 @@ async def create_message_for_actor(
         )
 
     if body.conversation_id:
-        recipient_conversation = await session.get(Conversation, body.conversation_id)
+        recipient_conversation = await get_conversation_by_id(session, body.conversation_id)
         if (
             recipient_conversation is None
             or recipient_conversation.project_id != project_id

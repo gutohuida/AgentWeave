@@ -6,7 +6,7 @@ operator surface ever has to fall back to showing `conv-a3f81b2c` as a label.
 
 import pytest
 
-from hub.conversations import title_from_message
+from hub.conversations import get_conversation_by_id, title_from_message
 from hub.db.models import CONVERSATION_TITLE_MAX_LENGTH
 
 # ---------------------------------------------------------------------------
@@ -214,7 +214,7 @@ async def test_a_conversation_predating_titles_is_named_on_first_read(app, auth_
 
     # Persisted, not computed per request.
     async with async_session_factory() as session:
-        stored = await session.get(Conversation, conversation_id)
+        stored = await get_conversation_by_id(session, conversation_id)
         assert stored.title == "Investigate the flaky checkout test"
         assert stored.title_set_by_operator is False
 

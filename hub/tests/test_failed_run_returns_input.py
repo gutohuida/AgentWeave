@@ -26,6 +26,7 @@ import pytest
 from sqlalchemy import select
 
 import hub.api.v1.agent_trigger as agent_trigger
+from hub.conversations import get_conversation_by_id
 from hub.db.engine import async_session_factory
 from hub.db.models import Conversation, InboundQueueEntry, Run
 from hub.inbound_queue import DELIVERY_ATTEMPT_LIMIT
@@ -328,7 +329,7 @@ async def test_a_binding_conflict_does_not_return_its_input(app, auth_headers, b
         assert "provider" in (run.error or "")
         # The binding the check exists to protect is untouched, and stays untouched — which it
         # would not be if the entry had been handed back and retried past `RESUME_RETRY_LIMIT`.
-        conversation = await db.get(Conversation, conversation_id)
+        conversation = await get_conversation_by_id(db, conversation_id)
         assert conversation.provider_session_id == "provider-1"
 
     entries = await _entries_for("conflicted")
