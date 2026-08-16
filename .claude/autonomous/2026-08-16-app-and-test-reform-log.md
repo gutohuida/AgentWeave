@@ -1387,3 +1387,67 @@ callers for a branch `rejected` should take instead; then the UI half —
 (`cd hub/ui && npm test` or wherever the UI tests run — locate it) alongside the backend suite.
 
 **Elapsed:** one iteration.
+
+---
+
+## Entry 16 — 10:12 — Q4-spec-ux-fixes: reconcile and commit phases 3+4 (F3, F6), then continue
+
+**Starting state was inconsistent and needed reconciliation before any new work.** STATE.json
+claimed iteration 16, with next_action pointing at phase 4 and asserting "Phase 3 (F3) is done and
+committed (Entry 16)". Neither was true: the log's last entry was Entry 15 (phase 2), and `git log`
+showed no commit past Entry 14/15's phase-2 commit — the branch tip was `6f9f5d9`, "back-date
+heartbeat after Q4 phase 2". What actually existed was an uncommitted, unlogged working tree
+carrying a **complete implementation of both phase 3 (F3 — rejected coverage state) and phase 4
+(F6 — the 3-requirement-per-task ceiling)**, with `tasks.md` fully checked off and annotated for
+3.1-3.7 and 4.1-4.4, including mutation-check narratives. A prior iteration did the work, wrote the
+narrative, and then died (context exhaustion or a process kill) before the commit/log/heartbeat
+steps that would have made it real. This is exactly the failure mode `feedback_verify_on_resume`
+exists for: a claim of "done and committed" is not evidence, only the working tree and the tests are.
+
+**Verification performed before trusting any of it:**
+1. `git diff --stat` against HEAD — 18 files, matching the phase 3 + phase 4 scope described in
+   tasks.md's own annotations (plus the UI bundle, rebuilt).
+2. `python scripts/refresh_ui_bundle.py --check` — passed: "The committed bundle asserts it was
+   built from the current source." So although uncommitted, the UI bundle rebuild step (`npm run
+   build` + `refresh_ui_bundle.py`) had genuinely been run against the phase-3 UI source
+   (`SpecCoverageBar.tsx`, `spec.ts`) before the process died — not a stale bundle standing next to
+   fresh source.
+3. `pytest hub/tests/test_requirement_coverage.py hub/tests/test_requirement_gate.py
+   hub/tests/test_spec_completeness.py hub/tests/test_task_rejected_evidence_signal.py -q` —
+   **61 passed.**
+4. `cd hub/ui && npm test -- --run` (full suite) — **869 passed, 2 failed**
+   (`chartersUi.test.tsx`, `taskStatusControl.test.tsx`), neither file touched by this diff. Ran
+   those two files alone: **15 passed, 0 failed** — confirms the two failures are pre-existing
+   flakes under full-suite resource contention, not something phase 3/4 broke. `specCoverage.test.tsx`
+   alone (the file this diff actually changed): **7 passed**.
+5. Spot-checked one of the diff's own mutation-check claims independently rather than only trusting
+   the tasks.md narrative: grepped `REJECTED` through `requirement_coverage.py` — the import, the
+   `PRECEDENCE` insertion, and the `_state()` branch are all present exactly as 3.1/3.2 describe.
+6. `npx openspec validate 2026-08-16-spec-surface-legibility --strict` — valid.
+
+**Committed as `4269036`**, phases 3+4 together (they arrived together in the recovered tree; no
+value in an artificial split). Full detail of what phase 3 and phase 4 actually do is in the
+`tasks.md` diff itself (3.1-3.7, 4.1-4.4), carried over from whatever iteration wrote it — this
+entry's job was verifying it was true, not re-deriving it.
+
+**One correction to the record:** STATE.json's iteration counter and next_action referenced a
+non-existent "Entry 16" as though it had already been written. That entry never existed; this one
+is the real Entry 16. Future resumes should treat a next_action's back-reference to a log entry as
+a claim to verify (does the entry exist? does the log's last entry number match?), not as fact —
+the same standing rule as any other "done" claim.
+
+**Next:** `IMPLEMENT phase 5 (F4 — requirement chips and cross-tab navigation) of tasks.md,
+5.1-5.7`: `TaskCard.tsx` gets a chip row (one per `task.requirement_ids`, title = the linked
+requirement's statement, rejected tone per 3.6 where `has_rejected_evidence`); `navigation.ts` gets
+an optional `anchor` on the spec-tab destination; `SpecDocumentPanel.tsx` accepts an initial anchor
+on mount (parallel to the existing `pendingFragment` in-frame mechanism); a chip click resolves the
+requirement's `document_id` to a path via the already-loaded document list (no new endpoint, per
+design.md D7) and navigates with the anchor; `SpecCoverageBar.tsx`'s `N task(s)` text becomes a
+click target that switches to the Tasks tab filtered to `linked_task_ids` (new `activeTaskIds`
+state alongside the existing `activeFilter`). This phase touches `hub/ui` — rebuild
+(`npm run build` + `python scripts/refresh_ui_bundle.py`) and run both the UI test suite and a
+relevant backend chunk if `TaskCard`'s data contract changed. Check existing call sites of
+`projectDestination()` before changing its signature (5.3 flags this explicitly — every call site
+needs updating consistently, not just the new one).
+
+**Elapsed:** one iteration.
