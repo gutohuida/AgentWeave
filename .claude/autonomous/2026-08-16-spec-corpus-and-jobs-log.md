@@ -559,3 +559,74 @@ change **cold** — without re-deriving the reasoning above from memory, verify 
 against the actual files — and either approves (moving straight to implementation, since round 1 is
 below the 3-round cap) or raises objections for round 2. `current` stays `N2b-task-board-at-scale`;
 `next_action` set to N2b round 2 (cold review).
+
+## Entry 6 — N2b round 2 (cold review, one real gap found and fixed) (2026-08-16T23:37 +01:00)
+
+Read `proposal.md`, `design.md`, `tasks.md`, and the spec delta cold — none of Entry 5's reasoning
+taken on trust — and independently re-verified the four things `next_action` named:
+
+1. **`hub/hub/api/v1/tasks.py` imports.** Read the file's own import block (lines 1-40).
+   `TERMINAL_FOR_BINDING` is already imported (`from ...run_task_binding import (TERMINAL_FOR_BINDING,
+   ...)`, line 29). Neither the `spec_lifecycle` module nor `SpecDocument` is imported today — only
+   `from ...spec_lifecycle import Actor as SpecActor` (line 35), which does not give access to
+   `spec_lifecycle.ARCHIVED`. Task 1.1's claim holds exactly as stated.
+2. **`useTasks()` call sites.** Grepped `hub/ui/src` directly: `App.tsx:131`,
+   `QualityHealthPanel.tsx:25`, `OverviewPage.tsx:75`, plus `TasksBoard.tsx:35` — exactly the three
+   named besides the board. (`projectScopedApiContract.test.tsx` also calls it with no arguments in
+   four places, but as a test file consuming the same default-`false` optional argument, it needs no
+   change and design D2 doesn't claim otherwise.)
+3. **Test file identities.** `hub/tests/test_tasks.py` exists;
+   `hub/ui/src/__tests__/tasksBoardFilter.test.tsx` exists and is exactly where `activeTaskIds`'s
+   board-level filtering is already tested (read it in full — see finding below).
+4. **The `elif`-ordering / entry-point argument.** Traced `App.tsx:352-355`'s `onOpenTasks` handler
+   (`setActiveTaskIds` then navigate) and confirmed both `SpecCoverageBar.tsx:238`'s existing wiring
+   and design D3's new `SpecDocumentTasksLink` receive the *same* `onOpenTasks` prop threaded through
+   `SpecDocumentPanel.tsx:64/238` — they are literally the same callback, not two paths that could
+   drift apart. `TasksBoard.tsx:47` reads `activeTaskIds` from the same store `setActiveTaskIds`
+   writes to, and `useTasks({ excludeArchivedCompleted: activeTaskIds === null })` (task 2.3) flips to
+   `false` the instant either link is clicked. Holds for both entry points because they share one
+   underlying mechanism.
+
+Also independently checked facts design.md cites without a specific line reference, rather than take
+them as given: `TERMINAL_FOR_BINDING: Tuple[str, ...] = ("approved", "rejected")` at
+`run_task_binding.py:272`; `ARCHIVED = "archived"` at `spec_lifecycle.py:31`; `Task.spec_document_id`
+is `Mapped[Optional[str]]`, `String(64)`, `nullable=True`, `index=True` at `models.py:641`. All match
+the design's claims exactly. Checked the codebase's existing style for `.in_(select(...))` without
+`.scalar_subquery()` (`scheduler.py:218` does the same thing) — D1's subquery snippet is consistent
+with how this codebase already writes this, not a novel pattern that might not actually execute.
+
+**The gap.** Read `tasksBoardFilter.test.tsx` in full rather than skimming for the filename match
+task 3.5 needed. Its `vi.mock('@/api/tasks', ...)` stubs `useTasks: () => ({ data: TASKS, isLoading:
+false })` — a zero-argument function that ignores whatever options `TasksBoard.tsx` passes it and
+always returns the same static array. Per design D2, `TasksBoard.tsx` itself carries no code that
+excludes an archived-and-terminal task — that exclusion is entirely server-side, expressed only in
+which argument `useTasks()` receives. Traced `TasksBoard.tsx` end to end to confirm: `activeTaskIds`
+(lines 150-151, 238) is the *only* filter the component applies to the array it already has, and it's
+a client-side membership check unrelated to document phase or task status. So task 3.5 as round 1
+wrote it — "add a case... confirm it is absent from the default board render" — names an assertion
+this test file's own mock cannot produce: the mock discards the argument that would need to carry the
+exclusion, so every seeded task would render regardless of what `TasksBoard.tsx` passed. This is the
+same class of gap N2's own round 2 found (Entry 3): a task naming a behaviour the scaffolding named
+around it cannot exercise, caught by reading the file rather than trusting the filename match.
+
+**Fixed, not deferred.** Recorded as design D5 ("Round 2 correction," following N2's own convention)
+and revised tasks.md's 3.5 directly: make the existing mock argument-sensitive (return a filtered
+array when `excludeArchivedCompleted` is true, standing in for the server-side exclusion this
+proposal actually builds), so the "absent from the default view" half of the test exercises real
+logic and the "present once `activeTaskIds` includes it explicitly" half continues to exercise
+`TasksBoard.tsx`'s real, unchanged client-side filter. Confirmed no existing call site in this
+codebase already asserts on a mocked hook's arguments (grepped; none do), so this is the minimal fix
+rather than a new pattern invented from nothing.
+
+**No other objections.** Everything else in round 1's design and tasks — the `elif` ordering, the
+`IN`-subquery-over-join choice, the separate `SpecDocumentTasksLink` component instead of folding
+into `SpecCoverageBar`, the query-key-includes-options React Query rationale, the non-goals — checks
+out against the actual files with no further gap found.
+
+`npx openspec validate --changes --strict` clean, 19/19, this change included, after the tasks.md
+edit. Per `spec_round_protocol`, round 2 found and fixed a real gap, which does not by itself approve
+the change — the cap is 3 and this is round 2, so the next iteration reads the corrected artifact
+**cold** for round 3, the same discipline this entry applied to round 1's work. If round 3 finds
+nothing further, it proceeds straight to `approve-and-execute` (cap reached, `at_cap` binding for
+tonight). `current` stays `N2b-task-board-at-scale`; `next_action` set to N2b round 3 (cold review of
+the corrected artifact, specifically D5 and the revised task 3.5, then implementation if clean).

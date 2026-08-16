@@ -189,3 +189,29 @@ change special-cases away. If a future change lets a capability document declare
 satisfy, so its tasks (were any to exist) would never be excluded from the default view either. That
 is arguably wrong-shaped for a capability document specifically, but there is no live case to get
 wrong yet, so this proposal does not speculate about one.
+
+## D5. Round 2 correction — task 3.5 as written cannot exercise the exclusion it names
+
+Round 1's task 3.5 asked `tasksBoardFilter.test.tsx` to "confirm it is absent from the default
+board render" for a seeded task from an archived document at terminal status. Read the file rather
+than assumed: it mocks `useTasks` as `useTasks: () => ({ data: TASKS, isLoading: false })` — a
+zero-argument stub that returns the same static array regardless of what `TasksBoard.tsx` passes it
+(`hub/ui/src/__tests__/tasksBoardFilter.test.tsx:23-33`). By design D2, `TasksBoard.tsx` itself
+contains no code that excludes an archived-and-terminal task from what it renders — that exclusion
+is entirely server-side, expressed only as which argument `useTasks()` is called with (confirmed by
+reading `TasksBoard.tsx` end to end: `activeTaskIds` only ever drives a client-side membership
+filter over whatever array it already received, lines 150-151/238; there is no second filter for
+document phase or task status anywhere in the component). A test built on this mock would render
+every seeded task regardless of the option `TasksBoard.tsx` passed, because the mock discards its
+argument — the assertion "absent from the default board render" would fail not because the real
+exclusion is broken, but because nothing in the test simulates it. This is a real gap, the same kind
+N2's own round 2 found: a task that names a behaviour the test as scaffolded cannot produce.
+
+The fix is not a new testing pattern — no call site in this codebase already asserts on a mocked
+hook's arguments (checked; none do), so the natural minimal fix is to make the existing mock
+argument-sensitive, the same way a real `queryFn` would be: return a filtered array when
+`excludeArchivedCompleted` is true, the full array otherwise. That lets the "excluded from the
+default view" half of 3.5 exercise real logic (the mock's own filtering, standing in for the query
+layer this proposal moves the exclusion into) while the "present once `activeTaskIds` includes it
+explicitly" half continues to exercise `TasksBoard.tsx`'s real, unchanged client-side filter. Task
+3.5 is revised accordingly.

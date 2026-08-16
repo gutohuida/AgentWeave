@@ -61,10 +61,16 @@
       renders a plain span with no click target when `onOpenTasks` is omitted, mirroring
       `SpecCoverageBar`'s existing fallback for the same prop.
 - [ ] 3.5 `hub/ui/src/__tests__/tasksBoardFilter.test.tsx` (existing — this is where
-      `activeTaskIds`'s board-level filtering is already tested): add a case where a seeded task's
-      declaring document is archived and the task's own status is terminal — confirm it is absent
-      from the default board render and present once `activeTaskIds` includes it explicitly
-      (simulating the coverage-bar / document-tasks-link click path).
+      `activeTaskIds`'s board-level filtering is already tested). Per design D5 (round 2 correction):
+      first make the file's `useTasks` mock argument-sensitive — accept the options object and
+      return a filtered array when `excludeArchivedCompleted` is true (a seeded terminal task from an
+      archived document removed), the full `TASKS` array otherwise — standing in for the server-side
+      exclusion this proposal actually implements, since `TasksBoard.tsx` itself has no client-side
+      filter for it. Then add a case where a seeded task's declaring document is archived and the
+      task's own status is terminal: confirm it is absent from the default board render (exercising
+      the now argument-sensitive mock) and present once `activeTaskIds` includes it explicitly
+      (exercising `TasksBoard.tsx`'s real, unchanged client-side membership filter — simulating the
+      coverage-bar / document-tasks-link click path).
 - [ ] 3.6 `pytest hub/tests/ -n 8` and `pytest tests/ -n 4` — both green, counts recorded in the log
       against the baseline in `STATE.json` (updated by N2 to 2089/11 and 362/3).
 - [ ] 3.7 `cd hub/ui && npm test`, `npm run lint`, `npx tsc --noEmit` — all clean, counts recorded
