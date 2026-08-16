@@ -82,13 +82,20 @@ name are both process/config-level, not schema.
 
 ## 4. CLI tests — agent-verifiable
 
-**`tests/test_cli.py` does not exist yet.** Confirmed by listing `tests/` and grepping every file in
-it for `agentweave.cli`, `_open_app_window`, `_hub_native_start`, and `cmd_hub_start` — zero hits
-(round-1 review, non-blocking finding). The CLI has no test coverage of any kind today. Tasks 4.1-4.4
-create this file from scratch, including whatever fixtures/imports it needs — this is a new suite,
-not an extension of an existing one.
+**Corrected 2026-08-16 (amendment A1 in `design.md`) — read this before touching section 4.**
 
-- [ ] 4.1 In the new `tests/test_cli.py`: a test that with `pywebview` NOT installed (or
+This section previously asserted in bold that `tests/test_cli.py` **does not exist** and instructed
+creating it "from scratch." That is **false**, and acting on it destroys existing coverage. The file
+was added in `b3f4b11`, last touched in `db01f40` (2026-08-10), and has since been extended again
+with `TestTwoInstancesDoNotCollide`. It currently holds four test classes.
+
+The round-1 finding it came from was narrower and remains true: no test in that file covers
+`_open_app_window`, `_hub_native_start` or app mode. So the gap is real; the conclusion drawn from
+it was not. **Tasks 4.1-4.4 extend the existing file.** They add a class alongside the others,
+following its established shape, and 4.4 means "the whole suite is still green," not "a new suite
+is green."
+
+- [ ] 4.1 In `tests/test_cli.py`: a test that with `pywebview` NOT installed (or
       monkeypatched to raise `ImportError` on `import webview`), app mode's behavior is byte-identical
       to today: same call into `_open_app_window`, same arguments, no new branch taken. This is the
       test that makes D3's "nothing silently degrades" claim checkable rather than asserted.
@@ -99,10 +106,9 @@ not an extension of an existing one.
 - [ ] 4.3 A test that a `webview.start()` exception (simulated via the mock) is caught, and the
       function falls back to calling `_open_app_window` — proving 3.2's "best-effort" contract
       rather than letting a missing backend crash the invocation.
-- [ ] 4.4 The new `tests/test_cli.py` suite passes. Since no prior suite existed, there is no old
-      assertion of the always-browser behavior to have broken — this task is "the new suite is green,"
-      not "nothing regressed in an existing one." Note this plainly in the PR/commit rather than
-      implying continuity with a suite that was never there (round-1 review, non-blocking finding).
+- [ ] 4.4 The whole `tests/test_cli.py` suite passes, the pre-existing classes included. No prior
+      test asserted the always-browser behavior, so nothing there should need changing — if one does,
+      that is a finding to record, not a test to quietly rewrite.
 
 ## 5. Migration decision — no code, a documented non-action (D4)
 

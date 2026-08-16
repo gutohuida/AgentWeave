@@ -57,13 +57,15 @@ launch directory.
 
 ### Requirement: App mode opens a dedicated desktop window when a native webview is available
 
+The system SHALL open app mode in a dedicated window with no browser chrome (no address bar, no
+tabs) and its own OS taskbar/dock presence, rather than a browser tab or window, when a native
+webview backend (`pywebview`, an optional extra) is installed and can create a window.
+
 App mode is not an opt-in flag — it is forced on for bare `agentweave` invocation, the CLI's only
 entry point, and for its `--docker`/`--local` branch equally. This requirement therefore governs the
 **default** behavior of every normal launch, not a feature an operator must ask for.
 
-The system SHALL open app mode in a dedicated window with no browser chrome (no address bar, no
-tabs) and its own OS taskbar/dock presence, rather than a browser tab or window, when a native
-webview backend (`pywebview`, an optional extra) is installed and can create a window. This applies
+This applies
 uniformly to every launch path that reaches app mode — native (`agentweave`) and Docker
 (`agentweave --docker`, `agentweave --local`) alike; neither is exempt. This uniformity is about the
 native-vs-Docker launch path specifically, not about detached vs. foreground process mode: the

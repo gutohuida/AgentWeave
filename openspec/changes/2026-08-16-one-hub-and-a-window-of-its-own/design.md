@@ -189,3 +189,85 @@ instance." The existing "Bare invocation is the only entry point" requirement al
 launch paths that did not yet honor it, and adds the desktop-window behavior as a new requirement
 under the same capability rather than inventing a second one — starting the app and how its window
 presents are two facets of the same "begin and manage a local instance" purpose.
+
+---
+
+# Amendments — 2026-08-16, before implementation
+
+Three objections were raised against this change *after* it shipped at the round-3 gate and
+*before* any of its 21 tasks were started. They are recorded here rather than in a new change
+because all three concern the instance model this document already owns. A further review round
+should resolve them before implementation begins.
+
+## A1 — `tasks.md` section 4 is factually wrong about `tests/test_cli.py`
+
+Section 4 states **in bold** that `tests/test_cli.py` does not exist and instructs creating it
+"from scratch." **It does exist** — added in `b3f4b11`, last touched in `db01f40` (2026-08-10),
+and since extended again. A literal reading of that instruction destroys existing coverage.
+
+This was already recorded as the round-3 gate's non-blocking objection; it is repeated here
+because it is the one amendment that causes data loss if implemented as written. Section 4 must
+be reworded to *extend* that file.
+
+## A2 — pywebview forfeits the app window's testability, and nothing weighed that
+
+D3 chooses pywebview, which on Windows renders in WebView2. **Playwright cannot drive it.** There
+is no Playwright backend for WebView2; the only route would be starting it with
+`--remote-debugging-port` and attaching over CDP, which pywebview does not expose and does not
+support.
+
+What the change gives up is not hypothetical. Today's `_open_app_window` (`cli.py:634`) launches
+Chrome or Edge with `--app=<url>` — a chromeless window that **is** Chromium, and which Playwright
+drives for free. `scripts/uishot.py` already exists to do exactly that. So the app window is
+automatable today and would stop being automatable after D3.
+
+This is not necessarily a reason to reject pywebview. The mitigating fact is that app and web are
+not two builds: one FastAPI process serves one bundle, and the window is a window onto the same
+`http://127.0.0.1:PORT`. Anything Playwright asserts through a browser holds for the app window
+too. But that argument only works if the *shell* stays thin — window lifecycle, the main-thread
+rule, and the absent-backend fallback are then the only untested surface, and D3 must say so and
+keep them minimal. The three review rounds never made this trade explicitly.
+
+## A3 — the instance model needs a named profile, not just a moved default
+
+This change's thesis is that a database derived from the launch directory is wrong. That is right,
+but the fix as written leaves the opposite problem: **exactly one instance is reachable**, and
+`--port` is a trap that looks like it produces a second one.
+
+Three singletons made it so, all in `cli.py`:
+
+| Singleton | Consequence |
+|---|---|
+| `_hub_native_start` overwrote `DATABASE_URL` unconditionally | a second start opened the *same* SQLite file — two writers, one project list |
+| `_hub_pid_file()` returned one `hub.pid`, not per-port | the second start erased the first's record; `stop` and `status` went blind to it |
+| `cmd_reset` deletes `HUB_DIR/data` wholesale | with any additional instance, reset's blast radius is ambiguous |
+
+A fourth sat in the UI: `hub/ui/vite.config.ts` pinned its dev proxy to `http://localhost:8000`,
+so `npm run dev` could only ever reach the default instance.
+
+The first two and the fourth are **already fixed** as a minimal unblocking change, ahead of this
+one: `DATABASE_URL` is now honoured when set, `_hub_pid_file(port)` is per-port with
+`DEFAULT_HUB_PORT` keeping the historic unsuffixed name, and the dev proxy reads `AW_DEV_HUB`.
+Guarded by `TestTwoInstancesDoNotCollide` in `tests/test_cli.py`. That is deliberately the smallest
+change that removes the trap; it does **not** introduce a profile concept, and `cmd_reset` is
+untouched.
+
+**What this change should then own** is the named concept those fixes leave implicit:
+
+```
+agentweave                              # default profile, app window
+agentweave --profile dev --port 8010    # its own database, its own PID file, browser
+```
+
+A profile carries the database, the PID file and the default port together. The default profile
+keeps today's exact path, so no existing install migrates. Profiles live *beside* `data/`, not
+inside it, so `reset` cannot sweep them all, and `reset --profile <name>` targets one.
+
+**Why this belongs here and not in a separate change:** profiles do not contradict D1, they
+complete it. D1's enemy is the *accidental* database, derived from wherever you happened to
+launch. A profile is a *named, deliberate* one. Two changes both editing the instance model would
+have to agree about which owns `DATABASE_URL`, the PID file and `reset`; one change does not.
+
+**Cost if this is deferred instead:** the minimal fix above already makes two instances work via
+`DATABASE_URL` and `--port`, so nothing is blocked — but the operator carries the paths by hand,
+and `reset`'s blast radius stays ambiguous with a second instance present.
