@@ -1,12 +1,13 @@
-"""Rejected evidence at a requirement's current digest reads identically to "never attempted".
+"""A task-level signal for rejected evidence, independent of coverage's own `rejected` state.
 
-`requirement_coverage._state` has no precedence level for "tried and rejected" — evidence that
-exists, is current, and was rejected falls through every check to `in_progress`, the same state as
-a requirement with a task and no evidence at all. Approving the task that serves it ("approving is
-what merges it") gave no warning that the evidence backing it had actually been turned down. This
-covers the signal `TaskResponse.requirement_links[]` adds to close that gap: `has_rejected_evidence`,
-`rejected_evidence_count`, `latest_rejection_reason`. `requirement_gate.py`'s blocking behaviour is
-untouched — this is visibility only.
+`requirement_coverage._state` has a `rejected` precedence level, but it only holds while *every*
+current-digest evidence row is rejected — the moment a later attempt is accepted, coverage moves on
+to `verified` and the rejection stops being visible there. Approving the task that serves it
+("approving is what merges it") would then give no warning that an earlier attempt had actually
+been turned down. This covers the signal `TaskResponse.requirement_links[]` adds to close that gap:
+`has_rejected_evidence`, `rejected_evidence_count`, `latest_rejection_reason`, which name the
+rejection regardless of what coverage state the requirement has since moved to.
+`requirement_gate.py`'s blocking behaviour is untouched — this is visibility only.
 """
 
 import pytest

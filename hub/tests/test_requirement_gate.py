@@ -242,6 +242,38 @@ async def test_the_refusal_names_every_blocking_requirement_and_its_reason(
 
 
 @pytest.mark.asyncio
+async def test_rejected_evidence_blocks_with_its_own_remedy(app, auth_headers, builder, tmp_path):
+    """A rejected requirement is not `in_progress` to the gate either — it gets `REJECTED`'s more
+    specific remedy, naming that evidence was judged and turned down, not the generic "no evidence
+    yet" text `in_progress` carries."""
+    await _document(app, auth_headers, builder)
+    await _set_rigor(app, auth_headers, "gate")
+    task_id = await _linked_task(app, auth_headers)
+    recorded = await app.post(AGENT_EVIDENCE, json={"identifier": "FR-1"}, headers=builder)
+    await app.post(
+        f"{BASE}/spec/evidence/{recorded.json()['id']}/decision",
+        json={"decision": "rejected", "reason": "does not demonstrate it"},
+        headers=auth_headers,
+    )
+
+    response = await _task_to(
+        app,
+        auth_headers,
+        task_id,
+        "assigned",
+        "in_progress",
+        "completed",
+        "under_review",
+        "approved",
+    )
+
+    assert response.status_code == 409
+    blocking = response.json()["detail"]["blocking"][0]
+    assert blocking["state"] == "rejected"
+    assert "rejected" in blocking["remedy"]
+
+
+@pytest.mark.asyncio
 async def test_stale_evidence_does_not_open_the_gate(app, auth_headers, builder, tmp_path):
     await _document(app, auth_headers, builder)
     recorded = await app.post(AGENT_EVIDENCE, json={"identifier": "FR-1"}, headers=builder)

@@ -79,55 +79,125 @@ independent backend-only work, F4 before F5 (the drawer reuses F4's chips).
 
 ## 3. F3 — a `rejected` coverage state
 
-- [ ] 3.1 In `hub/hub/requirement_coverage.py`: add `REJECTED = "rejected"` alongside the existing
+- [x] 3.1 In `hub/hub/requirement_coverage.py`: add `REJECTED = "rejected"` alongside the existing
       state constants; insert it into `PRECEDENCE` between `VERIFIED` and `IN_PROGRESS`
       (`design.md` D4). Import `REJECTED` from `requirement_evidence` (already imported: `ACCEPTED`,
-      `AWAITING`).
-- [ ] 3.2 In `_state()`: after the existing `accepted`/`awaiting` checks and before the `linked`
+      `AWAITING`). **Done:** imported directly (no local `REJECTED = "rejected"` restatement — the
+      import binds the name into this module's namespace, which is what the "exactly one
+      implementation" test walks via `vars(requirement_coverage)`).
+- [x] 3.2 In `_state()`: after the existing `accepted`/`awaiting` checks and before the `linked`
       checks, compute `rejected = [item for item in current if item.review_state == REJECTED]` and
       return `REJECTED` if `rejected` is non-empty (accepted/awaiting already returned above this
-      point, so this only fires when every current-digest row is rejected).
-- [ ] 3.3 Test: a requirement whose only current-digest evidence is rejected reports `state ==
+      point, so this only fires when every current-digest row is rejected). **Done**, exactly as
+      specified.
+- [x] 3.3 Test: a requirement whose only current-digest evidence is rejected reports `state ==
       "rejected"`, `integration == "not_applicable"` (unchanged, per D4). A second test: the same
       requirement, then a later *accepted* current-digest submission, reports `state == "verified"`
       — proving the earlier rejection does not shadow a subsequent success. Mutation-check: revert
       3.2, confirm the first test fails (falls back to whatever `in_progress`/`not_started`/`unserved`
-      the fixture's task linkage produces), then reapply.
-- [ ] 3.4 `CoverageReport.totals` and any test enumerating "the seven states" by name updates to eight.
+      the fixture's task linkage produces), then reapply. **Done:**
+      `test_rejected_evidence_alone_reports_the_rejected_state` and
+      `test_a_later_acceptance_moves_past_an_earlier_rejection` in `hub/tests/test_requirement_coverage.py`.
+      Mutation check: reverted 3.2's `if rejected: return REJECTED` branch, the first test failed with
+      `AssertionError: assert 'unserved' == 'rejected'` (fell through to `unserved`, since this
+      fixture links no task) rather than a pass; reapplied, both tests pass again.
+- [x] 3.4 `CoverageReport.totals` and any test enumerating "the seven states" by name updates to eight.
       Grep `hub/tests/` and `hub/hub/` for a hardcoded list of coverage states (e.g. a tuple literal
       matching `PRECEDENCE`) and update every one found — do not rely on finding only the ones this
-      task anticipated.
-- [ ] 3.5 Check every caller `requirement_coverage.py`'s docstring names (the document badge, the
+      task anticipated. **Done:** the only hardcoded enumeration found was
+      `test_the_precedence_is_the_one_the_specification_states`'s tuple literal in
+      `hub/tests/test_requirement_coverage.py`, updated to eight with `"rejected"` between
+      `"verified"` and `"in_progress"`. `CoverageReport.totals` needed no change — it already builds
+      its dict from `PRECEDENCE` itself (`dict.fromkeys(PRECEDENCE, 0)`), so it picked up the eighth
+      state automatically. The `"unserved"` hit in `hub/hub/api/v1/spec.py` is a different, unrelated
+      list (`requirement_links.unserved()`, the identifiers of requirements with no linked task at
+      all) — checked, not a coverage-state enumeration, left alone.
+- [x] 3.5 Check every caller `requirement_coverage.py`'s docstring names (the document badge, the
       project total, "B4's gate") for a branch keyed on `state == "in_progress"` (or equivalent) that
       the new `rejected` state should now take instead — grep for `IN_PROGRESS` and `"in_progress"`
       across `hub/hub/`. If a gate treats `in_progress` as "not yet ready" in a way `rejected` should
-      inherit unchanged, say so explicitly; if it needs its own branch, add one.
-- [ ] 3.6 `hub/ui/src/components/spec/SpecCoverageBar.tsx`: add a `rejected` entry to `STATES`
+      inherit unchanged, say so explicitly; if it needs its own branch, add one. **Done:** only one
+      real caller keys off coverage's `IN_PROGRESS` — `requirement_gate.py`'s `REMEDY` dict. Gave
+      `REJECTED` its own branch (`"the evidence recorded for it was reviewed and rejected — record
+      evidence that satisfies the current wording"`) rather than falling back to `REMEDY.get(state,
+      "it is not verified")`'s generic text, since a rejected requirement has a more specific and more
+      actionable remedy than "not verified" — the evidence exists, it was judged, and the judgement is
+      why the gate is refusing. Every other `in_progress`/`IN_PROGRESS` hit in `hub/hub/` (grepped
+      across the whole tree) is `Task.status`, a same-named but unrelated enum on a different object —
+      confirmed by reading each site, not assumed from the string match. Also corrected two comments
+      that had gone stale the moment 3.2 landed: `hub/hub/api/v1/tasks.py`'s
+      `has_rejected_evidence`/`rejected_evidence_count` block claimed coverage "has no precedence
+      level for tried and rejected" and "falls through... to `in_progress` either way" — no longer
+      true, so reworded to explain why that per-task signal still earns its place *alongside* the new
+      coverage state (it survives a later acceptance that moves coverage on to `verified`; coverage's
+      `rejected` does not). Same correction to `test_task_rejected_evidence_signal.py`'s module
+      docstring. **Also added this iteration:** the `REMEDY` branch itself had no test exercising it
+      end to end through the gate (only `requirement_coverage`'s own unit tests covered `_state()`
+      returning `rejected`) — added `test_rejected_evidence_blocks_with_its_own_remedy` to
+      `hub/tests/test_requirement_gate.py`, following `test_the_refusal_names_every_blocking_requirement_and_its_reason`'s
+      pattern of asserting on the structured `blocking` payload. Mutation-checked: removed the
+      `REJECTED` entry from `REMEDY`, the test failed (`assert 'rejected' in 'it is not verified'`),
+      reapplied, 26/26 pass in the file.
+- [x] 3.6 `hub/ui/src/components/spec/SpecCoverageBar.tsx`: add a `rejected` entry to `STATES`
       (`design.md` D4's tone — a distinct colour from `in_progress`'s neutral grey; `--red` or
       `--amber`, matching the codebase's existing severity vocabulary — check `TaskCard.tsx`'s
       `isBlocked`/`revision_needed` colour choices for precedent rather than picking a new one), with
       a `why` string naming what happened ("Evidence was submitted for the current wording and
-      rejected. Nothing currently satisfies this requirement.").
-- [ ] 3.7 UI test: a coverage entry with `state: 'rejected'` renders the new label and colour, not the
-      `in_progress` one, in both the summary bar and the expanded row.
+      rejected. Nothing currently satisfies this requirement."). **Done:** `--red`, matching
+      `OverviewPage.tsx`'s and `TasksBoard.tsx`'s existing precedent that `revision_needed` *and*
+      Task's own `rejected` status both already read as `var(--red)` — the closer precedent than
+      `TaskCard.tsx`'s `isBlocked`, which is amber for a different meaning (blocked, not rejected).
+      Positioned between `verified` and `in_progress` in the `STATES` array, matching `PRECEDENCE`'s
+      order. Also added the new type member to `hub/ui/src/api/spec.ts`'s `CoverageEntry['state']`
+      union and updated the module comment's stale "seven distinct states" to "eight".
+- [x] 3.7 UI test: a coverage entry with `state: 'rejected'` renders the new label and colour, not the
+      `in_progress` one, in both the summary bar and the expanded row. **Done:** two tests added to
+      `hub/ui/src/__tests__/specCoverage.test.tsx`. Mutation check: removed the `rejected` `STATES`
+      entry, both new tests failed (`findByTestId('coverage-count-rejected')` timed out; the expanded
+      row rendered the lowercase raw `entry.state` fallback `— rejected` instead of the labelled
+      `— Rejected`, so `toHaveTextContent('Rejected')` failed) — reapplied, both pass.
 
 ## 4. F6 — a ceiling on requirements per declared task
 
-- [ ] 4.1 `hub/hub/spec_completeness.py`: `MAX_REQUIREMENTS_PER_TASK = 3` (module-level constant,
+- [x] 4.1 `hub/hub/spec_completeness.py`: `MAX_REQUIREMENTS_PER_TASK = 3` (module-level constant,
       `design.md` D6), a new finding code `task_too_coarse` appended in the existing per-task loop
       (alongside `task_without_requirement`) when `len(task.requirements) > MAX_REQUIREMENTS_PER_TASK`,
-      naming the task key, the count, and the ceiling in the message.
-- [ ] 4.2 Test: a document with one task naming 4 requirements is refused at `propose()` with
+      naming the task key, the count, and the ceiling in the message. **Done**, exactly as specified —
+      the branch is `elif`, mutually exclusive with `task_without_requirement` (a task with zero
+      requirements cannot also be "too coarse").
+- [x] 4.2 Test: a document with one task naming 4 requirements is refused at `propose()` with
       `task_too_coarse`; the same document with that task split into two (2 and 2) proposes cleanly.
       A document with a task naming exactly 3 is not refused (proving the ceiling is inclusive, not
-      exclusive, per D6's "at most 3" wording).
-- [ ] 4.3 `hub/hub/data/charters/spec.md`'s "How to slice the work" section gets a new bullet stating
+      exclusive, per D6's "at most 3" wording). **Done:**
+      `test_a_task_naming_four_requirements_is_too_coarse`,
+      `test_a_task_naming_exactly_three_requirements_is_not_refused`,
+      `test_the_same_document_split_into_two_and_two_proposes_cleanly` in
+      `hub/tests/test_spec_completeness.py`, following the file's own established pattern of testing
+      `spec_completeness.check()` directly rather than the full `propose()` API round trip —
+      `spec_service.propose()` calls `check()` verbatim with no additional logic between the two, and
+      every other finding code in this file (`task_without_requirement`, `non_goals_empty`, etc.) is
+      tested the same way, not through the API. Mutation check: disabled the new branch
+      (`elif False and len(...)`), reran — the 4-requirement test failed with `StopIteration` (no
+      `task_too_coarse` finding produced), the other two still passed as expected since they assert
+      absence; reapplied, all 16 tests in the file pass.
+- [x] 4.3 `hub/hub/data/charters/spec.md`'s "How to slice the work" section gets a new bullet stating
       the ceiling and why (points at the operator's own finding: one ticket carrying two-thirds of a
       specification on 42 words hid a rejected requirement inside an approved one). No code enforces
       charter text; this is guidance so the `propose()` refusal in 4.1 is the exception, not routine.
-- [ ] 4.4 Add the new finding code to whatever surfaces `spec_completeness` findings to an operator or
+      **Done:** new bullet added after the existing "task count is not scope" bullet, naming the
+      ceiling, citing the 6-of-9-on-42-words finding, and stating the consequence ("if a task would
+      need more than 3, it is several tasks"). No manifest checksum or charter-content test exists to
+      update — checked `charters.json` for a hash field, found none.
+- [x] 4.4 Add the new finding code to whatever surfaces `spec_completeness` findings to an operator or
       agent (check `hub/hub/api/v1/spec.py`'s propose endpoint and any UI that lists findings) — a
-      finding a caller cannot see is a silent refusal.
+      finding a caller cannot see is a silent refusal. **Checked, nothing to add:** `propose_document`
+      (`hub/hub/api/v1/spec.py:890-919`) returns `blocking` as a plain list of `finding.to_dict()`
+      dicts with no per-code filtering or allow-list — every code `check()` produces already reaches
+      the caller, `task_too_coarse` included. `SpecPhaseBar.tsx` (the only UI consumer of `blocking`,
+      confirmed by grep across `hub/ui/src`) renders `finding.code`/`where`/`message` generically in a
+      loop with no per-code switch, and `SpecBlockingFinding.code` in `hub/ui/src/api/spec.ts` is typed
+      as a bare `string`, not a closed union — no UI code or type needed a change. Confirmed this is
+      backend-only, per the phase's own note.
 
 ## 5. F4 — requirement chips and cross-tab navigation
 

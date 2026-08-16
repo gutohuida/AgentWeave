@@ -118,12 +118,15 @@ async def _attach_requirements(
     except Exception:
         wording = {}
 
-    # A requirement whose only evidence was rejected reads identically to one nobody has ever
-    # attempted — `requirement_coverage._state` falls through to `in_progress` either way, because
-    # coverage's precedence has no state for "tried and rejected". Approving the task above it would
-    # be silent about that. Scoped to the current digest, the same way coverage itself is: a
-    # rejection against a since-reworded requirement said nothing about what the requirement now
-    # asks for the day it was rejected, so it should not read as a live warning here either.
+    # `requirement_coverage._state` now has a `rejected` state for a requirement whose only
+    # current-digest evidence was turned down, but that state only holds while every row is
+    # rejected — the moment a task acquires *any* other evidence (awaiting, accepted), coverage
+    # moves on and the rejection stops being visible there. This signal is independent of coverage
+    # state for that reason: it names the rejection even after a later acceptance moves coverage to
+    # `verified`, so approving the task above it is never silent about an earlier turned-down
+    # attempt. Scoped to the current digest, the same way coverage itself is: a rejection against a
+    # since-reworded requirement said nothing about what the requirement now asks for the day it was
+    # rejected, so it should not read as a live warning here either.
     rejected_by_requirement: dict[str, dict] = {}
     requirement_ids = {requirement.id for _, requirement in rows}
     if requirement_ids:
@@ -179,8 +182,8 @@ async def _attach_requirements(
                 "statement": stated.get("statement"),
                 "modal": stated.get("modal"),
                 # True only for evidence rejected against the requirement's *current* digest — see
-                # the query above. `state` alone cannot say this: it is coverage's `in_progress`
-                # either way.
+                # the query above. Kept independent of coverage's `rejected` state: this stays true
+                # even after a later acceptance moves `state` on to `verified`.
                 "has_rejected_evidence": rejection is not None,
                 "rejected_evidence_count": rejection["count"] if rejection else 0,
                 "latest_rejection_reason": rejection["reason"] if rejection else None,

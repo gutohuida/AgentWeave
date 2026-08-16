@@ -11,9 +11,10 @@ The precedence, highest first:
 2. `stale` — evidence exists, none of it applies to the current digest
 3. `evidence_awaiting_review` — current-digest evidence, review pending
 4. `verified` — accepted current-digest evidence
-5. `in_progress` — linked work active, or completed without evidence
-6. `not_started` — linked work exists, not started
-7. `unserved` — no work linked at all
+5. `rejected` — current-digest evidence exists and every row of it was rejected
+6. `in_progress` — linked work active, or completed without evidence
+7. `not_started` — linked work exists, not started
+8. `unserved` — no work linked at all
 
 **Coverage is a state *and* an integration answer, and no surface may show one
 without the other.** Approved work in this product routinely sits on a per-agent
@@ -43,7 +44,7 @@ from .db.models import (
     Task,
     TaskRequirementLink,
 )
-from .requirement_evidence import ACCEPTED, AWAITING, open_drift_for
+from .requirement_evidence import ACCEPTED, AWAITING, REJECTED, open_drift_for
 
 DRIFTING = "drifting"
 STALE = "stale"
@@ -55,7 +56,16 @@ UNSERVED = "unserved"
 
 # Highest first. The order is the specification; the function below reads it rather than restating
 # it as a chain of conditionals whose order could drift from this list.
-PRECEDENCE = (DRIFTING, STALE, AWAITING_REVIEW, VERIFIED, IN_PROGRESS, NOT_STARTED, UNSERVED)
+PRECEDENCE = (
+    DRIFTING,
+    STALE,
+    AWAITING_REVIEW,
+    VERIFIED,
+    REJECTED,
+    IN_PROGRESS,
+    NOT_STARTED,
+    UNSERVED,
+)
 
 # A task at one of these has not started. Anything else linked to a requirement counts as work under
 # way, including terminal statuses — a completed task with no evidence is `in_progress` for the
@@ -174,6 +184,7 @@ def _state(
     current = [item for item in evidence if item.digest == digest]
     accepted = [item for item in current if item.review_state == ACCEPTED]
     awaiting = [item for item in current if item.review_state == AWAITING]
+    rejected = [item for item in current if item.review_state == REJECTED]
 
     if drifting:
         return DRIFTING
@@ -185,6 +196,11 @@ def _state(
         return AWAITING_REVIEW
     if accepted:
         return VERIFIED
+    if rejected:
+        # Reached only when every current-digest row is rejected: `accepted`/`awaiting` above already
+        # returned for any row in either of those states, so a rejection here is never shadowing a
+        # live attempt — it is the whole current story.
+        return REJECTED
     if not linked:
         return UNSERVED
     if all(task.status in NOT_STARTED_STATUSES for task in linked):

@@ -116,3 +116,50 @@ def test_a_finding_says_where_to_look():
     finding = next(f for f in check(payload) if f.code == "requirement_without_criterion")
     assert finding.where == "requirements[0]"
     assert "alpha" in finding.message
+
+
+def _requirements(*keys):
+    return [{"key": key, "statement": f"Requirement {key}", "modal": "MUST"} for key in keys]
+
+
+def _criteria(*keys):
+    return [
+        {"key": f"c-{key}", "requirement": key, "given": "g", "when": "w", "then": "t"}
+        for key in keys
+    ]
+
+
+def test_a_task_naming_four_requirements_is_too_coarse():
+    keys = ["a", "b", "c", "d"]
+    payload = _complete(
+        requirements=_requirements(*keys),
+        acceptance_criteria=_criteria(*keys),
+        tasks=[{"key": "t1", "description": "Build it", "requirements": keys}],
+    )
+    finding = next(f for f in check(payload) if f.code == "task_too_coarse")
+    assert "t1" in finding.message
+    assert "4" in finding.message
+    assert "3" in finding.message
+
+
+def test_a_task_naming_exactly_three_requirements_is_not_refused():
+    keys = ["a", "b", "c"]
+    payload = _complete(
+        requirements=_requirements(*keys),
+        acceptance_criteria=_criteria(*keys),
+        tasks=[{"key": "t1", "description": "Build it", "requirements": keys}],
+    )
+    assert "task_too_coarse" not in _codes(payload)
+
+
+def test_the_same_document_split_into_two_and_two_proposes_cleanly():
+    keys = ["a", "b", "c", "d"]
+    payload = _complete(
+        requirements=_requirements(*keys),
+        acceptance_criteria=_criteria(*keys),
+        tasks=[
+            {"key": "t1", "description": "Build the first half", "requirements": ["a", "b"]},
+            {"key": "t2", "description": "Build the second half", "requirements": ["c", "d"]},
+        ],
+    )
+    assert check(payload) == []

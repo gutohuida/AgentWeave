@@ -46,6 +46,10 @@ REMEDY = {
     requirement_coverage.IN_PROGRESS: (
         "its linked work has produced no evidence — record what demonstrates it"
     ),
+    requirement_coverage.REJECTED: (
+        "the evidence recorded for it was reviewed and rejected — record evidence that satisfies "
+        "the current wording"
+    ),
     requirement_coverage.AWAITING_REVIEW: (
         "its evidence is waiting for someone to accept it — accept or reject it"
     ),

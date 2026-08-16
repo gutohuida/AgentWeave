@@ -128,6 +128,50 @@ describe('coverage on the spec view', () => {
     expect(screen.queryByTestId('coverage-count-unserved')).toBeNull()
   })
 
+  it('shows a rejected requirement as rejected, not in_progress, in the summary bar', async () => {
+    mount({
+      requirements: [
+        entry({
+          state: 'rejected',
+          integration: 'not_applicable',
+          accepted_count: 0,
+          linked_task_ids: [],
+        }),
+      ],
+      diagnostics: [],
+      totals: { rejected: 1 },
+      integration: { not_applicable: 1 },
+      unserved: [],
+    })
+
+    expect(await screen.findByTestId('coverage-count-rejected')).toHaveTextContent('1 rejected')
+    expect(screen.queryByTestId('coverage-count-in_progress')).toBeNull()
+  })
+
+  it('shows a rejected requirement as rejected, not in_progress, in the expanded row', async () => {
+    const { getByRole } = mount({
+      requirements: [
+        entry({
+          state: 'rejected',
+          integration: 'not_applicable',
+          accepted_count: 0,
+          linked_task_ids: [],
+        }),
+      ],
+      diagnostics: [],
+      totals: { rejected: 1 },
+      integration: { not_applicable: 1 },
+      unserved: [],
+    })
+
+    await screen.findByTestId('coverage-count-rejected')
+    getByRole('button').click()
+
+    const row = await screen.findByTestId('coverage-row-FR-1')
+    expect(row).toHaveTextContent('Rejected')
+    expect(row).not.toHaveTextContent('In progress')
+  })
+
   it('renders nothing at all for a document with no requirements', async () => {
     const { container } = mount({
       requirements: [],

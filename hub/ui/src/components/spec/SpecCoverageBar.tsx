@@ -31,6 +31,12 @@ const STATES: Array<{ key: CoverageEntry['state']; label: string; tone: string; 
     why: 'Accepted evidence for the current wording.',
   },
   {
+    key: 'rejected',
+    label: 'Rejected',
+    tone: 'var(--red)',
+    why: 'Evidence was submitted for the current wording and rejected. Nothing currently satisfies this requirement.',
+  },
+  {
     key: 'in_progress',
     label: 'In progress',
     tone: 'var(--text-2)',
@@ -61,7 +67,7 @@ const INTEGRATION_LABEL: Record<CoverageEntry['integration'], string> = {
  * Coverage for the open document.
  *
  * Two things this deliberately does not do. It does not show a percentage — a single number makes
- * seven distinct states look like one axis, and the interesting question is almost always *which*
+ * eight distinct states look like one axis, and the interesting question is almost always *which*
  * requirements are where. And it never shows a state without its integration answer: approved work
  * in this product routinely sits on a branch nothing merges, so "verified" alone would be true of
  * the branch and false of the product.

@@ -91,6 +91,7 @@ export interface CoverageEntry {
     | 'stale'
     | 'evidence_awaiting_review'
     | 'verified'
+    | 'rejected'
     | 'in_progress'
     | 'not_started'
     | 'unserved'

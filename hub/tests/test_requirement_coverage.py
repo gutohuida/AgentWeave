@@ -209,6 +209,52 @@ async def test_drifting_outranks_verified(app, auth_headers, builder, tmp_path):
     del requirement_evidence, Actor
 
 
+@pytest.mark.asyncio
+async def test_rejected_evidence_alone_reports_the_rejected_state(
+    app, auth_headers, builder, tmp_path
+):
+    """A rejected attempt is not silence. Before this state existed it fell through every check
+    to `in_progress` — the same reading as a requirement nobody has ever tried."""
+    await _document(app, auth_headers, builder)
+    recorded = await app.post(AGENT_EVIDENCE, json={"identifier": "FR-1"}, headers=builder)
+    await app.post(
+        f"{BASE}/spec/evidence/{recorded.json()['id']}/decision",
+        json={"decision": "rejected", "reason": "does not demonstrate it"},
+        headers=auth_headers,
+    )
+
+    entry = _entry(await _coverage(app, auth_headers), "FR-1")
+    assert entry["state"] == "rejected"
+    # No accepted evidence to check reachability for — the same reason `unserved` is
+    # `not_applicable` rather than `unknown`.
+    assert entry["integration"] == "not_applicable"
+
+
+@pytest.mark.asyncio
+async def test_a_later_acceptance_moves_past_an_earlier_rejection(
+    app, auth_headers, builder, tmp_path
+):
+    """`rejected` holds only while every current-digest row is rejected. It must not shadow a
+    subsequent accepted attempt at the same wording."""
+    await _document(app, auth_headers, builder)
+    first = await app.post(AGENT_EVIDENCE, json={"identifier": "FR-1"}, headers=builder)
+    await app.post(
+        f"{BASE}/spec/evidence/{first.json()['id']}/decision",
+        json={"decision": "rejected", "reason": "not enough"},
+        headers=auth_headers,
+    )
+    assert _entry(await _coverage(app, auth_headers), "FR-1")["state"] == "rejected"
+
+    second = await app.post(AGENT_EVIDENCE, json={"identifier": "FR-1"}, headers=builder)
+    await app.post(
+        f"{BASE}/spec/evidence/{second.json()['id']}/decision",
+        json={"decision": "accepted"},
+        headers=auth_headers,
+    )
+
+    assert _entry(await _coverage(app, auth_headers), "FR-1")["state"] == "verified"
+
+
 # ---------------------------------------------------------------------------
 # Integration, which no surface may omit
 # ---------------------------------------------------------------------------
@@ -336,6 +382,7 @@ def test_the_precedence_is_the_one_the_specification_states():
         "stale",
         "evidence_awaiting_review",
         "verified",
+        "rejected",
         "in_progress",
         "not_started",
         "unserved",

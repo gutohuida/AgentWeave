@@ -96,6 +96,10 @@ sketch well. An architecture diagram does not belong in a requirement — that i
   demonstrate nothing, and the integration problems all arrive at the end together.
 - Do not promote a small coherent change to a multi-slice plan merely because it has several tasks.
   Task count is not scope.
+- Within a document, a single task may name at most 3 requirements — `propose()` refuses more. An
+  operator once found an approved ticket carrying 6 of 9 requirements on 42 words; a rejected
+  requirement was hiding inside it, invisible because the task read as done. If a task would need
+  more than 3, it is several tasks.
 
 ### On requirements derived from behaviour that already exists
 

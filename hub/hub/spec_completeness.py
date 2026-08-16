@@ -31,6 +31,13 @@ from .spec_payload import SpecPayload
 # and habits already use it. Matched case-insensitively and tolerant of spacing.
 CLARIFICATION_RE = re.compile(r"\[\s*needs[ _-]?clarification", re.IGNORECASE)
 
+# A task naming more requirements than this is a decomposition failure, not a big task: the operator
+# found one approved ticket carrying 6 of 9 requirements on 42 words, which hid a rejected requirement
+# (FR-9) inside a task that read as done. `design.md` D6 derives 3 from the evidence — see there for
+# why 3 and not 2 or 4. A module constant, not a magic number in the check, so a future ruling changes
+# it in one place.
+MAX_REQUIREMENTS_PER_TASK = 3
+
 
 @dataclass(frozen=True)
 class Finding:
@@ -127,6 +134,16 @@ def check(
                     "task_without_requirement",
                     f"tasks[{index}]",
                     f"{task.key!r} traces to no requirement, so it is work nobody asked for",
+                )
+            )
+        elif len(task.requirements) > MAX_REQUIREMENTS_PER_TASK:
+            findings.append(
+                Finding(
+                    "task_too_coarse",
+                    f"tasks[{index}]",
+                    f"{task.key!r} names {len(task.requirements)} requirements, over the ceiling of "
+                    f"{MAX_REQUIREMENTS_PER_TASK} — split it so each piece of work is demonstrable on "
+                    "its own",
                 )
             )
 
