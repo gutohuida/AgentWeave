@@ -216,11 +216,76 @@ No migration in this change (`design.md` D1) — every table already exists.
 
 ## 5. UI tests — agent-verifiable
 
-- [ ] 5.1 A component/integration test (matching the existing pattern in
+- [x] 5.1 A component/integration test (matching the existing pattern in
       `hub/ui/src/__tests__/projectRail.test.tsx` or a new file) that the Delete button stays
       disabled until the typed name matches exactly, and calls the mutation only once enabled.
-- [ ] 5.2 A test that a `409` response renders the active-run reason, not a generic failure message.
-- [ ] 5.3 `npm run lint` clean; `npx openspec validate --changes --strict` clean.
+      New `hub/ui/src/__tests__/deleteProjectDialog.test.tsx`, rendering `DeleteProjectDialog`
+      directly with a mocked `useDeleteProject` (matching `next_action`'s suggested approach) rather
+      than through `ProjectSettingsPanel`, since the dialog's own gating logic is what this asserts.
+      Three cases: disabled until an exact match, then calls the mutation exactly once with
+      `(undefined, { onSuccess: onDeleted })`; stays disabled on a case mismatch (`website`) or a
+      partial match (`Web`) and never calls the mutation; accepts only edge-trimmed whitespace
+      around an otherwise-exact match, per D7's literal wording (checked directly, not inferred from
+      5.1's happy path).
+- [x] 5.2 A test that a `409` response renders the active-run reason, not a generic failure message.
+      Same file — constructs a real `ApiError(409, JSON.stringify({detail: {code:
+      "project_has_active_run", message: "project cannot be deleted while a run is active"}}))`,
+      matching phase 2's actual route payload exactly rather than a stand-in shape, and asserts the
+      dialog's `role="alert"` renders that sentence, not the `readableApiError` fallback string. A
+      second case pins the fallback still fires for an unstructured (non-JSON) error, so the first
+      assertion is shown to depend on the structured shape rather than always passing regardless.
+      `npx vitest run src/__tests__/deleteProjectDialog.test.tsx` — 5 passed.
+- [~] 5.3 `npm run lint` clean; `npx openspec validate --changes --strict` clean.
+      **openspec half: clean.** 14 passed, this change included.
+      **lint half: partially met, and the remainder is out of this change's scope — recorded here
+      rather than silently deferred.** `npm run lint` could not run at all before this task (Entry
+      10's finding: no `eslint.config.js` anywhere in the repo, despite `eslint@9` requiring flat
+      config). Fixed by adding `hub/ui/eslint.config.js` — `@eslint/js` recommended +
+      `@typescript-eslint/eslint-plugin`'s `flat/recommended` (used directly; the combined
+      `typescript-eslint` meta-package the standard Vite template imports is not installed, and
+      installing it was avoidable) + `eslint-plugin-react-hooks`/`eslint-plugin-react-refresh`
+      recommended rules. `@eslint/js` and `globals` resolve today only as transitive dependencies
+      (pulled in by `eslint` itself and by other devDependencies) — present in `package-lock.json`
+      already, so importing them needed no network fetch, but they were undeclared in `package.json`
+      despite the config now importing both directly; added both as explicit devDependencies at
+      their already-resolved versions (`@eslint/js` `^9.17.0`, `globals` `^14.0.0`) and ran `npm
+      install --package-lock-only` to confirm the lockfile needed no other change — this is a
+      correctness fix (declaring what is actually imported), not a new install.
+
+      Running lint for the first time surfaced **16 pre-existing problems (7 errors, 9 warnings)**
+      across the repo, none in files this change added. Fixed all 7 errors, each a mechanical,
+      zero-behavior-change edit verified by rerunning the affected test/suite:
+      - `projectSettingsPanel.test.tsx:15` — `let settings` → `const settings` (never reassigned;
+        confirmed by grep before changing).
+      - `urlNavigation.test.ts:268` — `'spec\windows\spec.html'` had unescaped backslashes, so the
+        string literal actually evaluated to `"specwindowsspec.html"` (verified with `node -e`) —
+        the test silently never exercised `isSpecDocumentPath`'s `value.includes('\\')` rejection at
+        all. Fixed to `'spec\\windows\\spec.html'`, restoring the coverage the test always claimed
+        to have. A real bug, not a style nit — found only because lint could finally run.
+      - `AgentOutputPanel.tsx:210,302` and `ErrorBoundary.tsx:28` — three
+        `eslint-disable-next-line` directives now unused under this config (`react-hooks/
+        exhaustive-deps` no longer fires on either effect under the current plugin version;
+        `no-console` was never part of any rule set this config enables). Removed; reran the full
+        suite after to confirm no new failures.
+
+      The remaining **9 warnings are a pre-existing backlog in files this change never touches**
+      (`ChartersPage.tsx`, `Badge.tsx` ×2, `ProjectSettingsPanel.tsx` — the pre-existing top of the
+      file, not anything 4.2 added, `SpecFrame.tsx`, `button.tsx`, `agentStatus.tsx` ×2 — all
+      `react-refresh/only-export-components`, needing a file split to separate a component export
+      from a constant/helper export — and one `OverviewPage.tsx` `react-hooks/exhaustive-deps` on a
+      `useMemo` that needs an actual dependency-correctness review, not a mechanical fix). Fixing
+      these means editing six files with no relationship to project deletion, which is scope creep
+      beyond what a delete-project UI-tests task should carry, and the `useMemo` one specifically
+      needs judgement about intended behavior, not a safe mechanical edit. Left for a dedicated
+      follow-up; recorded in `decisions_for_user`. Net result: `npm run lint` runs (previously
+      impossible), reports **0 errors**, and fails only on `--max-warnings 0` against a documented,
+      unrelated 9-item backlog — a materially different, and now measurable, state from "cannot run
+      at all."
+
+      Full regression after all of phase 5's edits: `npx tsc --noEmit` clean; `npx vitest run` —
+      **91 files / 869 tests passing** (one `runnersUi.test.tsx` timeout on first run, reran alone
+      and passed in 3s, consistent with the load-dependent flake class this run's log already
+      documents for `chartersUi.test.tsx` — not a regression, not touched by this task's edits).
 
 ## 6. Human-only verification
 

@@ -207,7 +207,6 @@ export function AgentOutputPanel({
     )
     // conversations.length (not the array itself) re-seeds once the list first arrives,
     // without depending on an identity that changes more often than its content does.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agent.name, conversationId, conversations.length])
 
   useEffect(() => {
@@ -299,7 +298,6 @@ export function AgentOutputPanel({
   useLayoutEffect(() => {
     scrollToNewest()
     setAutoscroll(true)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agent.name, currentConversationId])
 
   const [foldAllSignal, setFoldAllSignal] = useState(0)

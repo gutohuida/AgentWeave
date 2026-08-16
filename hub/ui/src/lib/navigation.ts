@@ -62,6 +62,7 @@ const DEFAULT_AGENT_SETTINGS_SECTION: AgentSettingsSection = AGENT_SETTINGS_SECT
  *  It belongs here because the document arrives as an opaque URL parameter: a destination is the
  *  first thing to see it and the last thing that can refuse it before it becomes a fetch. */
 const SPEC_PATH_MAX_LENGTH = 255
+// eslint-disable-next-line no-control-regex -- deliberately matches control characters, mirroring validate_spec_path server-side
 const SPEC_PATH_CONTROL_CHARS = /[\x00-\x1f\x7f]/
 
 export function isSpecDocumentPath(value: string): boolean {

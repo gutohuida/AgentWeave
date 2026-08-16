@@ -265,7 +265,7 @@ describe('the open document is part of the conversation destination', () => {
       'spec//spec.html',
       'spec/.hidden/spec.html',
       'spec/%2e%2e/spec.html',
-      'spec\windows\spec.html',
+      'spec\\windows\\spec.html',
       '',
     ]
     for (const value of illegal) {

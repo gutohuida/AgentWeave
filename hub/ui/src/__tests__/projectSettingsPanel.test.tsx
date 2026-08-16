@@ -12,7 +12,7 @@ const project = {
   turn_delivery_cap: 8, agent_budget: 4, token_budget: 10000, allow_agent_jobs: false, agents: [],
 }
 
-let settings = {
+const settings = {
   name: 'Website',
   hop_budget: 12,
   turn_delivery_cap: 8,

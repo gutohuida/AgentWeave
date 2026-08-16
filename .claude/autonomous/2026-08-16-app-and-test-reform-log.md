@@ -967,3 +967,104 @@ project (never `aw-loop10`), screenshot with `scripts/uishot.py` if Q4a's harnes
 taste judgements (6.3 confirmation proportionality, 6.4 empty-state).
 
 **Elapsed:** one iteration.
+
+## Entry 11 — 05:31 — Q4b phase 5: UI tests, tasks.md 5.1-5.3, and making `npm run lint` runnable
+
+Verified branch/log/STATE.json agreed before starting (HEAD `fe3170c`,
+`autonomous/2026-08-16-app-and-test-reform`, iteration 10, next_action pointing at phase 5 only).
+Refreshed last_heartbeat before beginning.
+
+**5.1/5.2** — new `hub/ui/src/__tests__/deleteProjectDialog.test.tsx`, rendering
+`DeleteProjectDialog` directly with a mocked `useDeleteProject` rather than through
+`ProjectSettingsPanel` (matching the approach next_action suggested), since the dialog owns the
+gating logic under test. Five tests: disabled until an exact match then calls the mutation exactly
+once with `(undefined, {onSuccess: onDeleted})`; stays disabled on a case mismatch and a partial
+match, never calling the mutation; accepts edge-trimmed whitespace around an otherwise-exact match
+(D7's literal wording, checked directly); a 409 with the real route payload shape
+(code: project_has_active_run, message: "...") renders that sentence via role="alert", not
+readableApiError's fallback; an unstructured error still renders the fallback, pinning that the
+409 case's pass depends on the structured shape rather than always succeeding regardless. All 5
+passed first run.
+
+**5.3, the harder half.** `npx openspec validate --changes --strict` was already clean (14 passed)
+and stayed clean. `npm run lint`: Entry 10 had found this could not run at all — eslint@9 requires
+flat config (eslint.config.js), and neither that file nor any .eslintrc.* exists anywhere in the
+repo, confirmed again as never having existed (`git log --all --oneline -- '*.eslintrc*'
+'eslint.config*'` returns nothing). next_action said to attempt the fix since the needed packages
+were "already devDependencies," and to defer only if it turned out to need more than a config file
+— it did, in a way next_action didn't fully anticipate, so both halves happened.
+
+Wrote `hub/ui/eslint.config.js`: @eslint/js recommended + @typescript-eslint/eslint-plugin's own
+flat/recommended array (used directly rather than installing the typescript-eslint combined
+meta-package the standard Vite template imports, since it is not installed and the plugin's own flat
+config already includes a working parser) + eslint-plugin-react-hooks/eslint-plugin-react-refresh
+recommended rules — the same shape the Vite React+TS template ships, adapted to what's actually
+installed. Checking what that config imports found two more gaps: @eslint/js and globals resolve
+today only as transitive dependencies (of eslint itself and other devDependencies) — present in
+package-lock.json already, confirmed via `node -e "require(...)"` and a package-lock.json grep, so
+importing them needed no network fetch — but neither was a declared devDependency, despite the new
+config importing both directly. Added both explicitly at their already-resolved versions (@eslint/js
+^9.17.0, globals ^14.0.0) and ran `npm install --package-lock-only`, which touched only those two
+lines (git diff --stat) — a correctness fix (declaring what's actually imported), not a new install.
+
+Running lint for the first time ever surfaced 16 pre-existing problems (7 errors, 9 warnings), none
+in files this change added. Treated the two classes differently:
+
+- **7 errors — fixed, all mechanical and verified.** `let settings` -> `const` in
+  projectSettingsPanel.test.tsx (never reassigned, checked by grep first). AgentOutputPanel.tsx:210,302
+  and ErrorBoundary.tsx:28 had eslint-disable-next-line comments now flagged as unused under this
+  config (react-hooks/exhaustive-deps no longer fires on either effect under the installed plugin
+  version; no-console was never in any rule set this config enables) — removed, reran the full suite
+  after. navigation.ts:65's SPEC_PATH_CONTROL_CHARS regex intentionally matches control characters
+  (mirrors validate_spec_path server-side) — kept the regex, added a scoped
+  eslint-disable-next-line no-control-regex with the reason inline, rather than weakening the check
+  to satisfy the linter. **The one real find**: urlNavigation.test.ts:268's
+  'spec\windows\spec.html' had unescaped backslashes — in a plain JS string (not a regex) \w and \s
+  are not the escape sequences they look like, so the literal actually evaluated to
+  "specwindowsspec.html" (confirmed with node -e), meaning this test never once exercised
+  isSpecDocumentPath's value.includes('\\') rejection despite claiming to. Fixed to
+  'spec\\windows\\spec.html', restoring real coverage — a genuine bug lint surfaced, not a style
+  nit, and it would not have been found without this task.
+- **9 warnings — left as a recorded backlog, not fixed.** All in files this change never touches:
+  react-refresh/only-export-components x8 across ChartersPage.tsx, Badge.tsx,
+  ProjectSettingsPanel.tsx (its pre-existing top, not anything phase 4 added), SpecFrame.tsx,
+  button.tsx, agentStatus.tsx — each needs a file split to separate a component export from a
+  constant/helper export, a real but unrelated refactor. Plus one OverviewPage.tsx
+  react-hooks/exhaustive-deps on a useMemo that needs a judgement call about intended dependency
+  behavior, not a mechanical fix. Editing six files unrelated to project deletion is scope creep
+  beyond a delete-project UI-tests task; left for a dedicated follow-up and recorded in
+  decisions_for_user below.
+
+Net: `npm run lint` now runs (previously impossible on this repo), reports 0 errors, and fails only
+on --max-warnings 0 against the documented 9-item backlog above — measurably different from, and
+strictly better than, "cannot run at all."
+
+**Full regression after all of phase 5's edits:** `npx tsc --noEmit` (hub/ui) clean. `npx vitest run`
+— 91 test files / 869 tests passing. One runnersUi.test.tsx timeout on the first full-suite run;
+reran it alone and it passed in 3s — consistent with the load-dependent flake class this run's own
+log already documents for chartersUi.test.tsx, not a regression, and not a file this task's edits
+touch. A second full-suite run afterward was clean (91/91, 869/869).
+`npx openspec validate --changes --strict` — 14 passed, this change included.
+
+**Ticked 5.1 and 5.2. 5.3 marked `[~]`** (partial, not `[x]`) in tasks.md, with the openspec half
+stated as fully clean and the lint half stated precisely: 0 errors, 9 pre-existing warnings deferred
+with a named reason — matching the "record concretely, don't silently work around or falsely tick"
+pattern this run has used throughout.
+
+**Files touched, confirmed via `git status --short`:** hub/ui/eslint.config.js (new),
+hub/ui/src/__tests__/deleteProjectDialog.test.tsx (new), hub/ui/package.json and
+hub/ui/package-lock.json (both modified, two lines), hub/ui/src/__tests__/projectSettingsPanel.test.tsx,
+hub/ui/src/__tests__/urlNavigation.test.ts, hub/ui/src/components/agents/AgentOutputPanel.tsx,
+hub/ui/src/components/common/ErrorBoundary.tsx, hub/ui/src/lib/navigation.ts (all modified),
+openspec/changes/2026-08-16-delete-project-api/tasks.md (modified).
+
+**Next:** phase 6, human-only (tasks.md 6.1-6.4) — drive it live against a throwaway project
+(never aw-loop10), screenshot with scripts/uishot.py if Q4a's harness works (check Q4a's status
+in STATE.json first — it was capped at 2 iterations and may have ended blocked), and the two taste
+judgements (6.3 confirmation proportionality, 6.4 empty-state). All of phase 6 is human-only per
+tasks.md's own split — this driver cannot tick it; the honest move is to attempt what's
+machine-checkable within it (e.g. capturing screenshots if the harness works) and record the rest as
+decisions_for_user, then move the queue on to Q4-spec-ux-fixes once phase 6 is exhausted or
+determined to need the operator's eyes.
+
+**Elapsed:** one iteration.
