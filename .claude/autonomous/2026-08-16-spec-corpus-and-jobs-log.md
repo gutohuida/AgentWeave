@@ -630,3 +630,116 @@ the change — the cap is 3 and this is round 2, so the next iteration reads the
 nothing further, it proceeds straight to `approve-and-execute` (cap reached, `at_cap` binding for
 tonight). `current` stays `N2b-task-board-at-scale`; `next_action` set to N2b round 3 (cold review of
 the corrected artifact, specifically D5 and the revised task 3.5, then implementation if clean).
+
+## Entry 7 — N2b round 3 (cap, cold review — clean) → approve-and-execute (2026-08-17T00:23 +01:00)
+
+Read `proposal.md`, `design.md`, `tasks.md`, and the spec delta cold, independently re-verifying
+every line-numbered claim against the actual files rather than trusting rounds 1/2's own re-checks:
+`tasks.py`'s import block (`TERMINAL_FOR_BINDING` already imported, `SpecDocument`/`spec_lifecycle`
+not), `tasks.ts`'s `useTasks()` (still zero-arg) and its three invalidation call sites at the exact
+claimed line numbers, `TasksBoard.tsx`'s `activeTaskIds` filter at lines 150-151/238,
+`SpecCoverageBar.tsx`'s early return at line 87, `SpecPhaseBar.tsx`'s document lookup at line 30
+(byte-for-byte the pattern D3's new component copies), `run_task_binding.py:272`'s
+`TERMINAL_FOR_BINDING` tuple, `spec_lifecycle.py:31`'s `ARCHIVED`, `Task.spec_document_id`'s exact
+column definition, the flat `__tests__/` convention, and `tasksBoardFilter.test.tsx`'s mock in full
+(confirmed D5's fix target — the zero-argument stub — was real, not a round 2 misreading). Everything
+held. No further gap found in the artifact itself. Per `spec_round_protocol.at_cap` (binding for
+tonight): round 3 is the cap, so this proceeds straight to implementation in the same iteration
+regardless.
+
+**Implemented tasks.md sections 1-4.** Backend: `list_tasks` gains `spec_document_id` and
+`exclude_archived_completed`, applied per design D1's `elif` ordering. UI: `useTasks()` gains the
+options argument, new `useDocumentTasks()`, `TasksBoard.tsx` opts in on its default view, new
+`SpecDocumentTasksLink.tsx` rendered beside `SpecCoverageBar`. All exactly as designed — **but two
+real defects surfaced only once the code actually ran, past all three rounds of reading it**, plus a
+third-party test file that needed updating and a live-environment hygiene issue. Recorded as design
+D6/D7 rather than silently fixed, per this change's own convention (D5 already set the precedent):
+
+1. **D6 — the NULL-handling bug.** D1's own stated guarantee ("a task with a null
+   `spec_document_id` simply never matches `.in_(archived_ids)`, so the `~(...)` leaves it in the
+   result") is wrong about SQL. `IN` on a NULL left operand evaluates to NULL, not `false`; `NULL &
+   true` is NULL; `~NULL` is NULL; and `WHERE` drops a NULL-evaluating row exactly like a `false`
+   one. The result was the *opposite* of the design's own guarantee — every unlinked task with a
+   terminal status would have been silently excluded from the default board, the one class of task
+   the whole feature exists to never touch. Caught immediately by task 3.1's own test
+   (`test_exclude_archived_completed_hides_only_terminal_tasks_from_archived_documents`, seeded with
+   exactly that case) failing on the first run, not by inspection. Fixed with an explicit
+   `Task.spec_document_id.isnot(None)` AND'd in before `.in_()` — a real boolean, so it
+   short-circuits the whole expression to `false` (not NULL) for an unlinked row.
+2. **D7 — `list_shared_tasks` calls `list_tasks` as a plain function.** `agent_actions.py`'s
+   `list_shared_tasks` (the route behind the MCP `list_tasks` tool) calls `tasks.list_tasks(...)`
+   directly as Python, forwarding only the parameters it already knew about. FastAPI only substitutes
+   real values for `Query(...)` defaults when a route is dispatched through the framework itself — a
+   direct call left the two new parameters bound to raw `fastapi.Query` sentinel objects, and the
+   pre-existing `test_agent_task_crud_retains_create_and_latest_update_runs` caught it immediately:
+   `sqlalchemy.exc.ProgrammingError: Error binding parameter 2: type 'Query' is not supported`. Fixed
+   by forwarding `spec_document_id=None, exclude_archived_completed=False` explicitly — also the
+   *correct* value for this route on its own merits, since proposal.md's non-goals already commit to
+   this tool seeing every task unchanged.
+3. **`projectScopedApiContract.test.tsx`, not caught by any round.** Two of its behavioral tests
+   assert `client.getQueryData(['project', 'proj-a', 'tasks'])` — the exact pre-D2 query key. Once
+   `useTasks()`'s key gained the trailing `{ excludeArchivedCompleted }` object, that exact-match
+   `getQueryData` call returned `undefined` (`invalidateQueries`'s prefix match, which D2's own
+   reasoning checked, is not the same operation). Fixed by updating both assertions to the new key
+   shape; ran the file in isolation before and after to confirm.
+4. **Live-verification hit a stale trial Hub process, not a code defect.** The first live-verification
+   pass restarted the trial Hub, got `/health: ok`, and still found `task-a` present in the
+   `exclude_archived_completed=true` result — looked like a fourth real bug until `Get-NetTCPConnection`
+   showed the process actually bound to `:8010` had a `CreationDate` of 23:08 that night, before this
+   iteration's commits: a leftover Hub process from N2's own session, still alive, still answering
+   `/health` correctly. The new `uvicorn` invocation had silently failed to bind the already-taken
+   port and exited — `/health` was answering from **old code** the whole time. Killed the stale
+   process (confirmed the port free via `Get-NetTCPConnection` before restarting, not assumed), started
+   clean, re-ran: 19/19 checks passed. Recorded in tasks.md 4.1 so the next person restarting this Hub
+   checks the owning process's actual start time against `/health` succeeding, not just the response
+   itself — a 200 from `/health` proves *a* Hub is up, not *which* commit it is running.
+
+**Verification, all green, both before and after the D6 fix (the first backend run was red, exactly
+once, on the bug D6 records):**
+- `pytest hub/tests/ -n 8`: 2093 passed, 11 skipped (baseline 2089/11 — +4 new `test_tasks.py`
+  functions). One `test_agent_trigger.py::test_spawn_failure_broadcasts_run_failed_event` failure
+  under `-n 8` did not reproduce standalone or on a clean second full run — xdist flakiness, not
+  caused by this change.
+- `pytest tests/ -n 4`: 362 passed, 3 skipped — unchanged.
+- `npm test`: 943/943 (baseline 934 — +9: 4 in new `tasksApi.test.tsx`, 4 in new
+  `specDocumentTasksLink.test.tsx`, 1 new case in `tasksBoardFilter.test.tsx`).
+- `npm run lint`, `npx tsc --noEmit`: clean.
+- `ruff check hub/ src/`: clean after `--fix` resolved one import-order violation `tasks.py`'s new
+  `spec_lifecycle` import introduced. `black --check`: clean after reformatting `test_tasks.py` once.
+- `npx openspec validate --changes --strict`: 19/19. `--specs --strict`: 30/30.
+- **Driven against the running Hub** (restarted, discovered stale per finding 4 above, killed,
+  restarted clean, confirmed `/health: ok` with no `ui_stale` against the genuinely new process):
+  all of section 4's checks, live, against `proj-5e960453` (this repo's own trial project) with a
+  directly-minted run credential (same technique N2 used) — created a document declaring two tasks,
+  approved it (materialising both), moved one to `rejected` and the other to `in_progress`, archived
+  the document, confirmed `exclude_archived_completed=true` hides exactly the rejected one,
+  `spec_document_id=<doc>` still shows both, the unfiltered default still shows both, and — the D7
+  regression's actual live surface — `GET /api/v1/agent-actions/tasks` returns 200 rather than 500.
+  19/19 checks in the verification script itself.
+- **UI bundle**: built and stamped before commit, committed, then re-stamped and committed again
+  (N2's own Entry 4 finding — the fingerprint folds in `git status --porcelain`, so a pre-commit stamp
+  never matches the post-commit clean tree).
+
+**Teardown, not left in place.** The live verification's own script has one wrong column name on its
+first teardown attempt (`task_requirement_references` is keyed by `task_id`, not the guessed
+`requirement_key`) — caught by the raised `OperationalError`, and since it errored before `commit()`
+nothing had actually been deleted, so nothing was lost. Fixed and re-run cleanly. The on-disk
+`spec/n2b-live-verify/spec.html` the verification wrote (this repo is the trial project's own working
+directory) is not something the DB-only teardown touches — removed by hand; `git status` confirmed
+clean afterward. The verification script itself, `testbed/scratch/n2b_live_verify.py`, is gitignored
+by `testbed/.gitignore` and left in place rather than deleted — reusable for the next person who
+needs to drive this same document/task flow live.
+
+Committed as `b4b31d7` (implementation) and `20e963e` (post-commit bundle re-stamp), both on this
+branch.
+
+`current` advances to `N3-job-system`. Per `STATE.json`'s queue, N3 is the keystone remaining item:
+many named loops as a first-class Hub concept, composing with existing primitives (questions, runs,
+tasks, agents/runners/charters) rather than reinventing them, modelled on `STATE.json`'s own proven
+shape but explicitly NOT a port of it. Two operator notes bind its shape (composition over
+reinvention; many named loops at different cadences, never a singleton) — both already recorded in
+`decisions_for_user` and `queue[3].detail`; read them before drafting rather than re-deriving. This is
+a keystone item and, per `spec_round_protocol`, gets its own three-round cap starting fresh: author,
+cold review, cold review/cap. `next_action` set to N3 round 1 (author proposal.md/design.md/tasks.md
+and a spec delta in `openspec/changes/`, scope-ceiling reminder: model + API + visibility ONLY, the
+Hub actually spawning/re-entering iterations is explicitly out of scope for tonight).

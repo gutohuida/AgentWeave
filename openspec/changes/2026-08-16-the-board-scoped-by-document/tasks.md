@@ -117,18 +117,39 @@
 Not a test — the real HTTP surface, the real database. Restart the trial Hub onto the implementing
 commit first; confirm `/health` reports `ok` before trusting any observation.
 
-- [ ] 4.1 Using this session's own N2 verification technique (a directly-minted run credential
+- [x] 4.1 Using this session's own N2 verification technique (a directly-minted run credential
       standing in for a live agent process — no Claude/Codex process needed), approve a document
       that declares at least two tasks, archive it, approve one of the two resulting tasks (moving it
       to a terminal status), leave the other at `in_progress`. Confirm `GET /tasks?
       exclude_archived_completed=true` returns the `in_progress` task and omits the approved one;
-      confirm `GET /tasks?spec_document_id=<that document>` returns both.
-- [ ] 4.2 Confirm `GET /tasks` with neither parameter (the MCP `list_tasks` tool's own call shape)
-      still returns both tasks — the default is unchanged.
-- [ ] 4.3 Teardown per N2's own convention: delete every row and file this verification created
+      confirm `GET /tasks?spec_document_id=<that document>` returns both. Used `rejected` rather than
+      `approved` for the terminal task — a single operator-only hop from `pending`
+      (`TERMINAL_FOR_BINDING` covers both, and `task_transitions.py`'s own map makes `pending ->
+      approved` a multi-hop path not worth the extra round trips for this check). **Caught a real
+      restart-hygiene gap the first pass, not a code defect**: the "restart" landed on a stale Hub
+      process left running from N2's own session (PID bound to :8010 since 23:08, before tonight's
+      commits) — the new `uvicorn` invocation silently failed to bind the already-taken port and
+      exited, so the first verification pass exercised **old** code and (correctly, given the old
+      code) found `task-a` still present in the excluded set. Diagnosed via `Get-NetTCPConnection`
+      (owning PID's `CreationDate` predated this iteration's commits) rather than assumed from the
+      failure; killed the stale process, confirmed the port free, started clean, re-ran — 19/19
+      checks passed, including both halves of this task.
+- [x] 4.2 Confirm `GET /tasks` with neither parameter (the MCP `list_tasks` tool's own call shape)
+      still returns both tasks — the default is unchanged. Also checked the actual agent-facing route
+      behind that MCP tool, `GET /api/v1/agent-actions/tasks` (`list_shared_tasks`) — this is the D7
+      regression's real surface, and a 500 there would have meant the fix didn't hold live, not just
+      in the unit test.
+- [x] 4.3 Teardown per N2's own convention: delete every row and file this verification created
       (this repo is the trial project's own working directory, so verification writes land as real
       files under `spec/` here — do not commit synthetic test debris), confirm `git status` clean
-      afterward.
+      afterward. The script's own DB teardown had one wrong column name
+      (`task_requirement_references` is keyed by `task_id`, not `requirement_key`) on its first
+      attempt, caught immediately by the raised `OperationalError`; since it errored before
+      `commit()`, nothing had actually been deleted, so no data was lost — fixed and re-run cleanly.
+      The one thing the DB teardown never touches, the on-disk `spec/n2b-live-verify/spec.html` file,
+      was removed by hand; `git status` clean afterward. Verification script itself lives in
+      `testbed/scratch/` (gitignored by `testbed/.gitignore`), left there rather than deleted —
+      it is exactly what that directory is for.
 
 ## 5. Human-only verification
 
