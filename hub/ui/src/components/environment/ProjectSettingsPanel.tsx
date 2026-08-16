@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button'
 import { DeleteProjectDialog } from '@/components/environment/DeleteProjectDialog'
 import { SettingsRow, SettingsSection } from '@/components/environment/SettingsSection'
 import { useConfigStore } from '@/store/configStore'
+import { describeThreshold } from '@/components/environment/describeThreshold'
 
 const inputClass = 'block w-48 rounded px-2 py-1.5 text-xs'
 
@@ -32,28 +33,6 @@ function toCanonical(mode: string, entered: string): number | null {
   const parsed = Number(entered)
   if (!Number.isFinite(parsed) || parsed <= 0) return null
   return mode === 'tokens' ? Math.round(parsed * TOKENS_PER_UNIT) : Math.round(parsed)
-}
-
-/**
- * The threshold in both readings, where both are knowable.
- *
- * An operator setting one unit is reasoning about the other; making them work it out is how a
- * threshold ends up somewhere it will never fire. Mirrors `checkpoint_policy.describe_threshold`;
- * a test pins the two against the same examples.
- */
-export function describeThreshold(
-  mode: string | null,
-  value: number | null,
-  contextWindow: number | null,
-): string {
-  if (!mode || value === null) return ''
-  if (mode === 'percent') {
-    if (!contextWindow) return `${value}%`
-    return `${value}% — ${Math.round((contextWindow * value) / 100 / 1000)}k of ${Math.round(contextWindow / 1000)}k`
-  }
-  const thousands = `${Math.round(value / 1000)}k`
-  if (!contextWindow) return thousands
-  return `${thousands} — ${Math.round((value / contextWindow) * 100)}% of ${Math.round(contextWindow / 1000)}k`
 }
 
 const MODE_DESCRIPTION: Record<string, string> = {

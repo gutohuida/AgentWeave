@@ -1,6 +1,7 @@
 import { formatDistanceToNow } from 'date-fns'
 import { AgentLaunchability, AgentSummary } from '@/api/agents'
-import { getStatusConfig, StatusDot } from '@/lib/agentStatus'
+import { StatusDot } from '@/lib/agentStatus'
+import { getStatusConfig } from '@/lib/agentStatusConfig'
 import { ContextUsageIndicator } from '@/components/context/ContextUsageIndicator'
 
 interface AgentCardProps {

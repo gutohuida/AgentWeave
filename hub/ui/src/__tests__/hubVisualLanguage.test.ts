@@ -13,7 +13,7 @@ import projectTabsSource from '@/components/layout/ProjectTabs.tsx?raw'
 import conversationControlsSource from '@/components/agents/ConversationControls.tsx?raw'
 import composerSource from '@/components/agents/Composer.tsx?raw'
 import agentTimelineSource from '@/components/agents/AgentTimeline.tsx?raw'
-import { HUB_NEUTRALS, withHubTheme } from '@/components/spec/SpecFrame'
+import { HUB_NEUTRALS, withHubTheme } from '@/components/spec/hubTheme'
 
 const cssSource = readFileSync('src/index.css', 'utf8')
 

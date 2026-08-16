@@ -1,10 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { render } from '@testing-library/react'
-import {
-  STATUS_CONFIG,
-  getStatusConfig,
-  StatusDot,
-} from '@/lib/agentStatus'
+import { STATUS_CONFIG, getStatusConfig } from '@/lib/agentStatusConfig'
+import { StatusDot } from '@/lib/agentStatus'
 describe('Q6 / Q13 — lib/agentStatus: deduplicated helpers and components', () => {
   describe('STATUS_CONFIG and getStatusConfig', () => {
     it('covers the known statuses with consistent shape', () => {

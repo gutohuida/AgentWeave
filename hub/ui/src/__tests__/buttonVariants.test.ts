@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buttonVariants } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/buttonVariants'
 
 describe('Button — ghost variant draws no border in any state (composer/chrome refinement §1)', () => {
   it('ghost declares no hover or active border utility', () => {

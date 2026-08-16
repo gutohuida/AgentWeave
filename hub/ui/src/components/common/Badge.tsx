@@ -1,8 +1,9 @@
 import { tint } from '@/lib/colorTint'
+import type { BadgeVariant } from './badgeVariants'
 
 interface BadgeProps {
   children: React.ReactNode
-  variant?: 'default' | 'success' | 'warning' | 'danger' | 'info' | 'secondary'
+  variant?: BadgeVariant
   className?: string
   pill?: boolean
 }
@@ -89,29 +90,4 @@ export function StatusBadge({ status, pill }: { status: string; pill?: boolean }
       {status.replace(/_/g, ' ')}
     </span>
   )
-}
-
-export function statusVariant(status: string): BadgeProps['variant'] {
-  const map: Record<string, BadgeProps['variant']> = {
-    pending:         'default',
-    assigned:        'default',
-    in_progress:     'info',
-    completed:       'default',
-    under_review:    'warning',
-    approved:        'success',
-    rejected:        'danger',
-    revision_needed: 'danger',
-  }
-  return map[status] ?? 'default'
-}
-
-export function priorityVariant(priority: string): BadgeProps['variant'] {
-  const map: Record<string, BadgeProps['variant']> = {
-    low:      'default',
-    normal:   'default',
-    medium:   'warning',
-    high:     'danger',
-    critical: 'danger',
-  }
-  return map[priority] ?? 'default'
 }

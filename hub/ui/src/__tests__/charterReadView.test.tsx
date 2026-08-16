@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { ChartersPage, charterSummary } from '@/components/charters/ChartersPage'
+import { ChartersPage } from '@/components/charters/ChartersPage'
+import { charterSummary } from '@/components/charters/charterSummary'
 
 const updateMutate = vi.fn()
 const deleteMutate = vi.fn()

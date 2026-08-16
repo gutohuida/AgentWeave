@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { ProjectSettingsPanel, describeThreshold } from '@/components/environment/ProjectSettingsPanel'
+import { ProjectSettingsPanel } from '@/components/environment/ProjectSettingsPanel'
+import { describeThreshold } from '@/components/environment/describeThreshold'
 import { useConfigStore } from '@/store/configStore'
 
 const update = vi.fn()

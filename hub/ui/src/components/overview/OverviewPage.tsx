@@ -88,10 +88,15 @@ export function OverviewPage({ onNavigate }: OverviewPageProps) {
     return counts
   }, [tasks])
 
-  // Recent SSE events
-  const recentEvents = useMemo(() => {
-    return getBufferedEvents().slice(-10).reverse()
-  }, [agents, tasks, questions])
+  // Recent SSE events. `getBufferedEvents()` reads a module-level buffer the SSE hook mutates,
+  // so there is nothing in the callback for React to depend on. The three query results are the
+  // deps on purpose: they are what the same SSE events invalidate, so they are the only signal
+  // available here that the buffer has moved. Dropping them — which is what the exhaustive-deps
+  // rule asks for, since the body references none of them — would freeze this list at its first
+  // render. Replacing the buffer with a real subscription is the actual fix; until then this is
+  // deliberate.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const recentEvents = useMemo(() => getBufferedEvents().slice(-10).reverse(), [agents, tasks, questions])
 
   if (agentsLoading) {
     return (
