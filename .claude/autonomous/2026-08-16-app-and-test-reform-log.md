@@ -778,3 +778,95 @@ non-blocking cases (3.6/3.7), or the `agent_job_deletions` no-FK case (3.8). Pha
 depends on phase 2's response shapes, which are now settled and stable to build against.
 
 **Elapsed:** one iteration.
+
+---
+
+## Entry 9 — 05:02 — Q4b phase 3: the formal pytest file, `tasks.md` 3.1-3.9
+
+Verified branch/log/`STATE.json` agreed before starting (HEAD `878c6b7`,
+`autonomous/2026-08-16-app-and-test-reform`, iteration 8, `current: Q4b-delete-project`,
+`next_action` pointing at phase 3 only — 3.1 through 3.9, phases 4/5 explicitly out of scope for
+this iteration). Refreshed `last_heartbeat` to now before beginning.
+
+**First established what "27 project-scoped tables" in the task text actually means today**, since
+Entry 6 already found the design doc's count wrong once (16 vs. 38): directly introspected
+`Base.metadata.sorted_tables` again and got the same **38** phase 1 found, confirming it, not
+re-discovering a different number. Wrote `PROJECT_SCOPED_TABLE_NAMES` as an explicit, readable list
+in the new test file rather than leaving the sweep implicit, and added
+`test_sweep_covers_every_project_scoped_table_in_the_model_registry` — it introspects the live
+model registry the same way `_project_scoped_tables()` does and fails the moment the two disagree,
+so this list cannot go stale silently the way the design doc's own count already had.
+
+**Wrote `hub/tests/test_project_delete_api.py`** (new, committed file) with a shared
+`_seed_full_project(session, project_id, tag)` helper that adds one row to **every one of the 38**
+project-scoped tables (not a representative sample) — figured out every table's actually-required
+columns (non-nullable, no Python-side default, no `server_default`) by introspecting
+`Column.nullable`/`.default`/`.server_default` directly rather than reading each of ~35 model
+classes by eye, then cross-checked every `CheckConstraint` in `hub/hub/db/models.py` (enum-shaped
+columns like `evidence_reviews.decision`, `spec_document_events.origin`,
+`worker_invocations.outcome`, `task_transitions.actor_kind`, …) against the constant tuples they
+reference (`EVIDENCE_DECISIONS`, `SPEC_EVENT_ORIGINS`, `WORKER_OUTCOMES`, `SPEC_EVENT_ACTORS`, …) so
+the seed picks a value that is actually legal rather than guessing and hoping SQLite's disabled FK
+enforcement also meant disabled CHECK enforcement (it does not — CHECKs are still live). The seed
+built and ran clean on the first attempt against the real in-memory test database, no trial-and-error
+needed once the constraint audit was done up front.
+
+**3.1** (representative sample) and **3.2** (exhaustive, all 38 tables, not just 3.1's sample) both
+use the same seed helper — 3.2 additionally asserts every table is actually populated *before*
+delete, so a table sitting at 0 both before and after cannot pass for the wrong reason. **3.3**
+seeds two full projects and diffs exact per-table counts for the untouched one, proving
+`WHERE project_id = :id` scoping rather than a global truncate. **3.4** seeds a project with a
+second, *running* run alongside the terminal one the helper always adds (proving the guard fires
+without requiring every run on the project to be running), asserts the service-layer
+`ProjectPathError.code`, and diffs full per-table counts before/after the refused attempt — not just
+that the project row survived. **3.6**/**3.7** are the two non-blocking cases stated directly.
+**3.8** targets `agent_job_deletions` by itself, the one table `design.md` D2 names as having no
+declared `ForeignKey`, to prove the generic column-name sweep does not depend on a relationship
+existing.
+
+**3.5, the mutation-checked workspace-survival test — the one task 1.4 explicitly deferred to this
+phase.** Wrote `test_workspace_directory_survives_deletion` using the `bind_project_workspace`
+fixture (registers a *real* directory through `ProjectLifecycleService.open_existing`, and restores
+the suite's real `resolve_project_workspace` for the test, undoing `_default_project_workspace`'s
+autouse fake). First draft baked a "mutation check" into the committed test itself — a monkeypatched
+wrapper that called the real `delete()` then bolted its own `shutil.rmtree` onto a second directory
+afterward. Caught before committing that this proves nothing about the assertion's sensitivity: it
+only proves `shutil.rmtree` deletes a directory, which was never in question. Replaced it with the
+actual mutation check the task asks for, done by hand against the real function: temporarily added
+`shutil.rmtree(project.working_directory, ignore_errors=True)` directly inside
+`ProjectLifecycleService.delete()` (`hub/hub/project_lifecycle.py`), ran
+`test_workspace_directory_survives_deletion` alone, watched it fail —
+`AssertionError: assert False` on `directory.is_dir()`, directory actually gone from disk — then
+reverted the edit and confirmed `git status --short hub/hub/project_lifecycle.py` prints nothing.
+The committed test carries only the real assertions; the mutation check is recorded here, as the
+task's own wording asks ("record the mutation check in the PR/commit, not just claim it happened").
+
+**3.9**: rather than write a test that merely `importlib.import_module`s the two other test files
+(which proves nothing about pass/fail — collection succeeding is not the same as passing), ran them
+directly as part of this iteration's regression pass and recorded the result in `tasks.md` instead.
+`test_migrations.py`'s own hardcoded head assertion already reads `"0073"` — Q3's
+conversation-sequence migration, unrelated to this change — not `"0058"` as one nearby docstring
+comment still (incorrectly) says; it passed unmodified, which is what "no head bump needed" actually
+means here.
+
+**Full regression run:** `pytest hub/tests/test_project_delete_api.py
+hub/tests/test_operator_projects_api.py hub/tests/test_project_lifecycle.py
+hub/tests/test_project_persistence.py hub/tests/test_migrations.py` — **104 passed, 1 pre-existing
+skip, 0 failed, 65.5s**. `ruff check hub/tests/test_project_delete_api.py` clean. `npx openspec
+validate --changes --strict` — 14 passed, this change included, after the `tasks.md` edit.
+
+**Ticked 3.1-3.9**, each with what was actually built/checked and, for 3.5, the full mutation-check
+narrative (not just a checkmark).
+
+**Files touched, confirmed via `git status --short`:** `hub/tests/test_project_delete_api.py` (new)
+and `openspec/changes/2026-08-16-delete-project-api/tasks.md`. `hub/hub/project_lifecycle.py` has no
+diff — the mutation-check edit there was fully reverted, not left in.
+
+**Next:** phase 4, the UI delete control (`tasks.md` 4.1-4.5) — `useDeleteProject` in
+`hub/ui/src/api/projects.ts` mirroring `useRelocateProject`'s shape, a `DeleteProjectSection` in
+`ProjectSettingsPanel.tsx` below the existing relocate control, a type-the-name confirmation dialog,
+a `409`-surfaces-the-reason case, and the zero-project empty-state check (4.5) — all response shapes
+are settled from phase 2, so this is buildable without further backend changes. Phase 5 (UI tests)
+and phase 6 (human-only) follow after.
+
+**Elapsed:** one iteration.

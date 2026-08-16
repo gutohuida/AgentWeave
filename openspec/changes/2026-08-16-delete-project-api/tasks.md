@@ -84,35 +84,75 @@ No migration in this change (`design.md` D1) — every table already exists.
 
 ## 3. Backend tests — agent-verifiable
 
-- [ ] 3.1 Happy path: create a project, add at least one row in a representative sample of the
+- [x] 3.1 Happy path: create a project, add at least one row in a representative sample of the
       27 project-scoped tables (an agent, a runner, a charter, a task, a conversation with a
       message, a run in a terminal state, an event log row), delete it, assert every one of those
       rows is gone and the `projects` row is gone.
-- [ ] 3.2 No orphans, exhaustively: after 3.1's delete, iterate every table in `Base.metadata.tables`
+      `hub/tests/test_project_delete_api.py::test_delete_removes_a_representative_sample_of_project_scoped_rows`.
+      The table count is actually 38, not 27 — see 1.3's note and the new
+      `test_sweep_covers_every_project_scoped_table_in_the_model_registry`, which introspects
+      `Base.metadata` directly and fails if the live model registry ever disagrees with this
+      file's hand-kept `PROJECT_SCOPED_TABLE_NAMES` list, rather than letting that list silently
+      go stale the way the design doc's "27"/"16" counts already had.
+- [x] 3.2 No orphans, exhaustively: after 3.1's delete, iterate every table in `Base.metadata.tables`
       with a `project_id` column and assert zero rows remain matching that project id — not just the
       sample from 3.1. This is what makes the "no table left behind" claim a test rather than a
       review note.
-- [ ] 3.3 A second, untouched project's rows of every kind survive the first project's deletion
+      `test_delete_leaves_no_orphans_in_any_project_scoped_table` — a shared `_seed_full_project`
+      helper adds one row to **every** one of the 38 tables (not a sample), asserts every one is
+      populated before delete (so a table left at 0 both before and after cannot pass for the
+      wrong reason), deletes, then asserts every one is 0 after.
+- [x] 3.3 A second, untouched project's rows of every kind survive the first project's deletion
       unchanged (proves the `WHERE project_id = :id` scoping, not a global truncate).
-- [ ] 3.4 A running run refuses deletion: create a project, a `Run` row with `status="running"`,
+      `test_a_second_untouched_project_survives_the_first_projects_deletion` — both projects fully
+      seeded via the same helper; exact per-table counts for the survivor compared before/after.
+- [x] 3.4 A running run refuses deletion: create a project, a `Run` row with `status="running"`,
       attempt delete, assert `409` and that every row for the project (including the run) still
       exists.
-- [ ] 3.5 **The workspace-directory-survives test, mutation-checked** (`design.md` D4): create a real
+      `test_a_running_run_refuses_deletion_and_nothing_is_removed` — asserts at the service layer
+      (`ProjectPathError.code == "project_has_active_run"`; the route's `409` mapping is already
+      covered by phase 2's HTTP-level checks) and that per-table row counts are byte-identical
+      before and after the refused attempt, on a fully-seeded project with a second, running run
+      alongside the completed one `_seed_full_project` always adds — proving the guard does not
+      require every run on the project to be running.
+- [x] 3.5 **The workspace-directory-survives test, mutation-checked** (`design.md` D4): create a real
       temp directory with a marker file and a source file inside it, register it as a project,
       delete the project, assert the directory and both files still exist with unchanged content.
       Then mutation-check: temporarily add a `shutil.rmtree` (or equivalent) call to `delete()`,
       re-run this test, confirm it fails, then revert. Record the mutation check in the PR/commit,
       not just claim it happened.
-- [ ] 3.6 A terminal (non-running) run does not block deletion — a project whose only run is
+      `test_workspace_directory_survives_deletion`, using the `bind_project_workspace` fixture
+      (real directory, real `ProjectLifecycleService.open_existing`, not the suite's default fake
+      resolver). Mutation check done by hand against the real function, not baked into the test as
+      a self-injected wrapper (a wrapper that calls the real `delete()` then bolts on its own
+      `shutil.rmtree` only proves `shutil.rmtree` deletes directories, not that this assertion
+      would catch a real regression) — temporarily added
+      `shutil.rmtree(project.working_directory, ignore_errors=True)` directly inside
+      `ProjectLifecycleService.delete()`, ran this one test, watched it fail on
+      `assert directory.is_dir()` with the directory actually gone, then reverted with `git diff
+      --stat hub/hub/project_lifecycle.py` showing empty. Confirms 1.4's mutation check, deferred
+      from phase 1, is now done.
+- [x] 3.6 A terminal (non-running) run does not block deletion — a project whose only run is
       `completed`/`failed`/`diverged` deletes normally.
-- [ ] 3.7 A project with conversations and messages, no active run, deletes normally (the "open
+      `test_a_terminal_run_does_not_block_deletion`.
+- [x] 3.7 A project with conversations and messages, no active run, deletes normally (the "open
       conversation does not block" scenario).
-- [ ] 3.8 `agent_job_deletions` rows (no `ForeignKey`, per `design.md`'s D2 note) are removed by the
+      `test_a_project_with_conversations_and_messages_deletes_normally`.
+- [x] 3.8 `agent_job_deletions` rows (no `ForeignKey`, per `design.md`'s D2 note) are removed by the
       sweep despite having no declared relationship — a test that specifically targets this table,
       since it is the one the generic-sweep approach exists to catch without special-casing.
-- [ ] 3.9 `hub/tests/test_migrations.py` and `hub/tests/test_project_persistence.py` need **no** head
+      `test_agent_job_deletions_removed_despite_no_declared_foreign_key`.
+- [x] 3.9 `hub/tests/test_migrations.py` and `hub/tests/test_project_persistence.py` need **no** head
       bump (no migration in this change) — confirm both still pass unmodified as a sanity check that
       this claim is true, not assumed.
+      Ran both directly rather than adding a redundant test that merely imports them (importing
+      proves nothing about pass/fail): `pytest hub/tests/test_project_delete_api.py
+      hub/tests/test_operator_projects_api.py hub/tests/test_project_lifecycle.py
+      hub/tests/test_project_persistence.py hub/tests/test_migrations.py` — 104 passed, 1
+      pre-existing skip, 0 failed, 65.5s. `test_migrations.py`'s own hardcoded head assertion
+      already reads `"0073"` (Q3's conversation-sequence migration, unrelated to this change, not
+      `"0058"` as one stale docstring nearby still says) and passed unmodified, confirming no bump
+      was needed here.
 
 ## 4. UI — delete control
 
