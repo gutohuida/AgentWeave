@@ -165,6 +165,24 @@ per-turn or per-conversation figures (unconfirmed — would need checking `hub/h
 what `useAccounting`'s backing route actually scopes its numbers to before estimating further).
 If the data already exists at finer grain than the UI surfaces, this is a pure display change.
 
+**Addendum, 2026-08-16 ~16:35, checked directly (a read, not a build):** confirmed against
+`hub/hub/api/v1/accounting.py` and `hub/hub/usage_accounting.py`. `GET /accounting` returns
+`project` and `agents` (both aggregated with `GROUP BY`, project- and agent-scoped only) plus
+`recent_turns` — a flat list of the most recent `TurnUsage` rows (`recent_limit`, default 50),
+each one **already per-turn**: one row per `run_id`, with its own `input_tokens`/`output_tokens`/
+`total_tokens`/`model`/`observed_at`. So per-turn figures are not just present at finer grain than
+the UI shows — they are already shaped exactly as a "this turn used 40K tokens" display would need,
+with zero backend change. Per-conversation is a different story: `TurnUsage`
+(`hub/hub/db/models.py:1043`) carries no `conversation_id` — only `run_id`, `project_id`, `agent`.
+`Run` does have a nullable `conversation_id` (`hub/hub/db/models.py:983`), so a per-conversation
+rollup is reachable by joining `TurnUsage.run_id == Run.id` and grouping on `Run.conversation_id`,
+but nothing in the codebase does that join today; it would be new aggregation code, not a display
+change. Revised cost split: a **per-turn** cost/token display (surfacing `recent_turns` rows next
+to the turn they belong to in `AgentTimeline.tsx`/`AgentOutputPanel.tsx`) is purely a UI read of
+data that already exists in the right shape — the cheapest possible version of this gap. A
+**per-conversation** rollup needs the join above added to `usage_accounting.py` first — small, but
+a real backend change, not free.
+
 **Icon-system note.** N/A — text/number display.
 
 ### Gap 6 — No cross-agent "all runs at a glance" view

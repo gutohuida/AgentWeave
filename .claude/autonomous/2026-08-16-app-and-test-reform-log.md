@@ -3260,3 +3260,45 @@ next step is the small evidence-gathering check the survey flagged for gap 5 (wh
 hub/hub/api/v1/accounting.py scopes its numbers per-turn/per-conversation, which the survey did not
 confirm) — a check, not an implementation, and not a new UI feature built without a spec round.
 Otherwise, stand by for the operator's review at stop_at.
+
+---
+
+## Entry 40 — gap 5 evidence check (accounting scope), iteration 41
+
+**Time:** 2026-08-16T16:31+01:00. ~1h30m remained to stop_at (18:00). Queue (Q1-Q7) is empty per
+Entry 39; next_action named exactly one permitted next step — the evidence-gathering check
+`openspec/explorations/2026-08-16-ui-gap-analysis.md`'s gap 5 flagged but did not do: whether
+`hub/hub/api/v1/accounting.py` already scopes cost/token numbers per-conversation or per-turn. A
+check, explicitly not an implementation — no spec round applies, nothing shipped.
+
+**What I read:** `hub/hub/api/v1/accounting.py` (both routes) and `hub/hub/usage_accounting.py`
+(`accounting_snapshot`, `_aggregate_columns`, `TurnUsage` model at `hub/hub/db/models.py:1043`,
+`Run.conversation_id` at `hub/hub/db/models.py:983`).
+
+**Finding:** `GET /accounting` returns `project`- and `agent`-scoped aggregates (`GROUP BY`), plus
+`recent_turns` — a flat list of the most recent `TurnUsage` rows (default limit 50). Each
+`recent_turns` row is already **per-turn**: one row per `run_id`, carrying its own
+`input_tokens`/`output_tokens`/`total_tokens`/`model`/`observed_at`. So a per-turn cost display
+("this turn used 40K tokens") needs zero backend change — the data is already shaped exactly right,
+just not surfaced next to the turn in `AgentTimeline.tsx`/`AgentOutputPanel.tsx`. Per-conversation
+is different: `TurnUsage` has no `conversation_id` column, only `run_id`/`project_id`/`agent`.
+`Run.conversation_id` exists (nullable) and would let a per-conversation rollup be built by joining
+`TurnUsage.run_id == Run.id` and grouping on `Run.conversation_id` — but nothing does that join
+today, so a conversation-level number would be new aggregation code, not a display change.
+
+**Recorded:** an addendum to gap 5 in the exploration document itself (dated, marked as a
+2026-08-16 check against the named files), splitting the revised cost estimate: per-turn display is
+the cheapest possible version of this gap (pure UI, data already in the right shape); per-conversation
+needs the join added to `usage_accounting.py` first. Left the already-shipped
+`2026-08-16-conversation-formatting-and-quick-nav/proposal.md` untouched — it is an approved,
+closed artifact; the answer belongs in the exploration and in `decisions_for_user`, not a retroactive
+edit to a shipped spec.
+
+**Not done, deliberately:** no UI or backend change. Building the per-turn display (even though it
+is now known to be cheap) is a new capability and would need its own spec round per this run's
+`spec_round_protocol` and Q7's `review_criteria` — same rule as every other queue item this run,
+not waived because the answer turned out favourable.
+
+**Queue status: still empty.** No further permitted next step is named. ~55 minutes remain to
+stop_at (18:00). Standing by for the operator's review; last_heartbeat will be kept current until
+the branch is released at the end of this entry.
