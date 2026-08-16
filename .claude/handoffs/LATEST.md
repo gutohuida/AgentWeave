@@ -1,1 +1,1 @@
-handoff-0049-2026-08-15-2121-spec-flow-hardening-complete.md
+handoff-0050-2026-08-16-0122-operator-review-merged-and-archived.md
