@@ -3143,3 +3143,120 @@ and calling the mocked navigation function — same pattern as `2026-08-16-spec-
 F4 chip-click tests). This is the last content section before 5 (full-suite verification, already
 proven to work) — if section 4 finishes with runway left, Q7's `tasks.md` is fully implemented. Time
 remaining to `stop_at` (18:00) is roughly 1h54m as of this entry.
+
+## Entry 39 — 2026-08-16T16:25+01:00 — Q7 IMPLEMENT tasks.md section 4 (D3 command palette) + bookkeeping fix, iteration 40
+
+Verified branch/log/STATE.json against `git log` first — matched (`539426b` at HEAD, Entry 38's
+heartbeat back-date, as claimed; working tree clean).
+
+**4.1** — `cd hub/ui && npm install cmdk`. package.json/package-lock.json diff is 18 lines
+(1 dependency line + lockfile entries), nothing else touched.
+
+**4.2** — new `hub/ui/src/components/palette/CommandPalette.tsx` using `Command.Dialog` from `cmdk`,
+mounted once in `App.tsx` alongside the other floating dialogs (`SetupModal`, `ProjectManagerModal`,
+`AgentCreateDialog`). The global `keydown` listener requires `(event.metaKey || event.ctrlKey) &&
+event.key.toLowerCase() === 'k'` before opening — which makes a separate focus-based guard
+unnecessary rather than an omission: a bare "k" keystroke never satisfies that check regardless of
+where focus is, so 4.4's "does not open on a bare k in a text field" requirement holds automatically,
+and the shortcut still fires while the composer's textarea (or any other text field) has focus,
+matching D3's "still respects the shortcut when a non-text element has focus" and going one step
+further (composer included) since nothing in the codebase already claims Cmd+K/Ctrl+K for anything
+else (grep-checked Composer.tsx for metaKey/ctrlKey/`key ===` — no hits).
+
+cmdk ships no styles of its own, only cmdk-* data-attribute hooks (confirmed by reading its
+dist/index.mjs before writing any CSS) — added `.command-palette-*` rules to index.css (a
+`@layer base` block, next to `.lifted-surface`) targeting [cmdk-input]/[cmdk-list]/
+[cmdk-group-heading]/[cmdk-item]/[cmdk-empty], all drawing from existing tokens (--scrim,
+--surface, --surface-2, --border, --text, --text-3, --radius-md) — no new colour, no
+competing visual language, per D3.
+
+**4.3** — four Command.Groups, each reading data via props rather than fetching: agents,
+conversations (from useProjectConversations, already the same query the rail draws from),
+documents (useSpecDocuments), tasks (useTasks) — all four hooks already existed and are
+lifted into App.tsx alongside the ones already called there, not new endpoints. Each selection
+calls the same navigation functions the sidebar already uses:
+- **conversation** to agentDestination(currentProjectId, agent, conversationId, openDocument),
+  identical to the sidebar's onOpenConversation.
+- **agent** to agentDestination(currentProjectId, agent, null, openDocument) — the existing
+  App.tsx effect that resolves a null conversation to the agent's most recent one (added for the
+  rail) fires the same way here, so "jump to an agent's most recent conversation" needed no new code,
+  only the same destination the rail already produces.
+- **spec document** to projectDestination(currentProjectId, 'spec', path) with replace: true,
+  identical to the sidebar's onOpenSpecDocument.
+- **task** — TaskDetailDrawer's open state is local to TasksBoard, unreachable from App.tsx
+  directly, unlike the other three. Added pendingOpenTaskId/setPendingOpenTaskId/
+  clearPendingOpenTaskId to the existing taskFilterStore (same store SpecCoverageBar's
+  task-count link already uses for activeTaskIds, same shape: global state a screen outside the
+  board sets, the board consumes on mount/update and clears). The palette's task action sets it and
+  navigates to the Tasks tab; TasksBoard gained one useEffect that opens the drawer for a pending
+  id and clears it, so navigating away and back does not reopen a stale drawer.
+
+**4.4** — new hub/ui/src/__tests__/commandPalette.test.tsx, 7 tests. CommandPalette takes its
+four lists as props, so these render it directly with fixtures and mock only the four navigation
+callbacks (vi.fn()) — no QueryClientProvider, no API mocking needed, same pattern as
+taskRequirementLinks.test.tsx's "mock the resolver, assert the call":
+- closed until Ctrl+K, opens, closes on Escape (Radix's own Dialog.Content handles Escape —
+  confirmed working without any extra code).
+- also opens on Cmd+K (metaKey).
+- a plain input rendered alongside the palette, focused and sent a bare "k" via userEvent.type —
+  palette stays closed, confirming the modifier-only guard.
+- one test per action kind (conversation, agent, spec document, task): open the palette, click the
+  fixture's row, assert the matching onOpen* callback was called with the expected arguments
+  (onOpenConversation with ('claude', 'conv-old'), etc.). The conversation-selection test also
+  confirms the palette closes afterward.
+
+One implementation snag worth recording: my first draft of the test file named a local
+SpecDocumentRecord fixture `document`, shadowing the global DOM `document` that fireEvent.keyDown
+and the component's own document.addEventListener both need — every fireEvent.keyDown(document, ...)
+call would have dispatched onto the fixture object instead of the real document, silently matching
+nothing. Caught before running the suite by rereading the file, not by a failure; renamed to
+documentFixture (and conversationFixture/taskFixture for consistency) before first run.
+
+**Full verification (tasks.md section 5):**
+- 5.1 `npx tsc --noEmit` — clean.
+- 5.2 `npm run lint` — same 9 pre-existing warnings as Entries 36-38 (unrelated files), zero new,
+  zero errors.
+- 5.3 `npm test -- --run` — 920/920 passed (913 prior + 7 new), no full-suite contention timeout this
+  run (unlike Entry 38's taskStatusControl.test.tsx flake — that dead end is about contention under
+  load, not a per-run guarantee of failure).
+- 5.4 `npm run build && python scripts/refresh_ui_bundle.py` — built clean (same pre-existing
+  >500kB chunk-size warning), bundle refreshed and stamp recorded.
+- 5.5 `git status` before staging showed changes confined to hub/ui/ and hub/hub/static/ui/ —
+  confirmed with an explicit grep for hub/hub/ (excluding static/ui) and src/agentweave/ paths in
+  the status output, zero hits.
+
+**Bookkeeping fix, unplanned:** while checking section 4/5's boxes I found section 1 (D1 — markdown
+rendering) was still entirely unchecked, even though Entry 36 (commit 11dcfbf, iteration 37)
+implemented and verified it — that entry's own log text describes 905 passing tests including a
+mutation-checked XSS assertion. `git show 11dcfbf -- tasks.md` confirms that commit touched every
+file except tasks.md. Rather than trust the log's claim, reread MarkdownMessage.tsx and
+markdownMessage.test.tsx directly against 1.1-1.4's exact wording (no rehypePlugins; the
+a/pre/code component overrides; the three AgentTimeline call sites for operator_input/text
+agent_output/inbound_peer/outbound_peer; all four described test cases including the literal
+script/onerror inertness check) before checking those boxes too. Recorded the gap and what was
+checked inline in tasks.md itself rather than only here, so a future reader of that file sees why
+boxes checked in this commit reference work from three commits earlier.
+
+Staged explicitly (not git add -A): hub/ui/package.json/package-lock.json, the four modified/new
+hub/ui/src/ files, hub/hub/static/ui/ in full, and tasks.md. Committed as 4768c28.
+
+**Result: tasks.md sections 1-5 (everything agent-verifiable across D1/D2/D3) are now complete.**
+Only section 6 (5 human-only taste items — does Markdown read better, do the icons help scan, does
+the diff read cleanly, does the palette feel fast, does nothing old read worse now) and section 7
+(the user test guide, already written) remain, both explicitly the operator's per this file's own
+round-1 review split.
+
+**Queue status:** all seven queue items (Q1-Q7) have now reached their defined finish line — Q1-Q3
+mechanically verified complete, Q4a/Q4b/Q4/Q5/Q6 closed with recorded scope in earlier entries, and
+Q7's approved spec artifact is now fully implemented. decisions_for_user gets one new entry listing
+what remains human-only across the whole run, and a second listing the survey's deferred gaps (4-6:
+in-chat plan/todo list, per-turn cost display, cross-agent runs-at-a-glance grid) as candidates if the
+operator wants further UI work — each already has a stated reason for being out of this change's
+scope in proposal.md, not a gap in this run's coverage.
+
+**Time remaining to stop_at (18:00) is roughly 1h30m as of this entry.** next_action reflects
+that the named queue is empty: if a future iteration has runway before stop_at, the lowest-risk
+next step is the small evidence-gathering check the survey flagged for gap 5 (whether
+hub/hub/api/v1/accounting.py scopes its numbers per-turn/per-conversation, which the survey did not
+confirm) — a check, not an implementation, and not a new UI feature built without a spec round.
+Otherwise, stand by for the operator's review at stop_at.
