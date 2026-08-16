@@ -2095,3 +2095,71 @@ behavior, and a user test guide for the window/process-model change D3 introduce
 desktop-window `--app` behavior, as `### Requirement:`/`#### Scenario:` blocks against the existing
 spec read this iteration). Then set `next_action` to `REVIEW
 openspec/changes/2026-08-16-one-hub-and-a-window-of-its-own round 1` per the spec-round protocol.
+
+## Entry 25 — 12:54 — Q6-desktop-and-global: AUTHOR pass, part 2 — tasks.md and the spec delta
+
+Wrote `openspec/changes/2026-08-16-one-hub-and-a-window-of-its-own/{tasks.md,
+specs/app-lifecycle/spec.md}`, completing the AUTHOR pass Entry 24 started. This closes the
+artifact; round 1 review is the next iteration's job, done cold per the spec-round protocol.
+
+**`tasks.md`** has seven sections, each traced to a specific `design.md` decision rather than
+invented fresh: (1) global instance state — the `config.py` default fix and the compose `name:` key
+(D1, D2), explicitly noting task 1.3 is "confirm `_hub_native_start` needs no change" rather than a
+change itself, since it already computes the right path independently; (2) backend tests —
+agent-verifiable, including the D1 drift test (with an explicit fallback plan if the CLI and Hub
+distributions turn out not to be cross-importable in the test environment — flagged as something to
+check rather than assumed either way) and a mutation-checked regression test for the relative-default
+bug itself; (3) the desktop window — `pywebview` as an optional extra, a new
+`_open_app_window_native` helper wired into the three existing `--app` call sites without touching
+`_open_app_window`/`_find_app_mode_browser` themselves, keeping D3's "byte-identical when absent"
+claim literal rather than approximate; (4) CLI tests — agent-verifiable, all using a mocked `webview`
+module rather than requiring a real pywebview install in the CLI's own zero-dependency test
+environment; (5) D4's migration decision as a *documentation* task, not a code task, since design.md
+already decided against writing a migration tool — recorded here so the decision doesn't silently
+disappear between design and implementation; (6) human-only verification, split from the
+agent-verifiable tasks per the standing directive, covering the actual cross-directory-same-database
+outcome (task 2's tests prove the mechanism; 6.1 proves the outcome), the blocking-window UX judgment
+D3 named as ungradeable, and the three-way branch (installed-and-works /
+not-installed-falls-back / installed-but-fails-falls-back); (7) a user test guide, three numbered
+steps with explicit expected outcomes and a named failure mode.
+
+**`specs/app-lifecycle/spec.md`** has one MODIFIED requirement ("Bare invocation is the only entry
+point") and one ADDED requirement. The MODIFIED requirement keeps all four of its existing scenarios
+unchanged and adds a new paragraph plus two new scenarios (`uvicorn` direct-invocation
+launch-directory-independence; Compose launch-directory-independence) — chosen over writing a
+wholly separate requirement because the existing requirement already asserts what "the one local
+AgentWeave runtime" means, and this change is that assertion becoming true for the two paths that
+didn't honor it yet, not a new concept. The ADDED requirement ("The app flag opens a dedicated
+desktop window when a native webview is available") has four scenarios covering the
+installed-and-works, absent-falls-back, installed-but-fails-falls-back, and
+closing-the-window-doesn't-stop-the-Hub cases — the last one specifically because D3's design doc
+called it out as the thing that must stay true for `detach`'s existing meaning to still hold.
+
+**A real validator finding, not a style nit.** `npx openspec validate --changes --strict` first
+failed with `ADDED "..." must contain SHALL or MUST` even though the requirement's body plainly
+contained `SHALL` three times. Traced it to the actual validator source
+(`~/AppData/Roaming/npm/node_modules/@fission-ai/openspec/dist/core/validation/validator.js:378-400`,
+`extractRequirementText`): it reads only the *first physical source line* after the `###
+Requirement:` header (splitting on `\n`, not reflowing the paragraph), so a requirement whose
+opening sentence happens to wrap the SHALL/MUST keyword onto line 2 of its own paragraph reads to
+the validator as keyword-free. Every requirement elsewhere in this repo's `openspec/` that passes
+happens to put SHALL/MUST within the *first line*, not merely the first paragraph — not documented
+anywhere as a rule, just satisfied by convention. Fixed by rewriting the new requirement's opening
+sentence so `SHALL` appears on the physical first line. Worth remembering for every future
+`### Requirement:` block this run (and future runs) write: the keyword must be on the line
+immediately after the header, not just somewhere in the opening paragraph.
+
+**Verification this iteration:** `npx openspec validate --changes --strict` — 16/16 changes pass,
+this one included (was 15/16 before the fix, confirmed the specific failure before fixing it rather
+than assuming the cause). No code changed, so no test suite run.
+
+**Elapsed:** one iteration.
+
+**Next:** a fresh iteration must do `REVIEW
+openspec/changes/2026-08-16-one-hub-and-a-window-of-its-own round 1` per the spec-round protocol —
+read `proposal.md`, `design.md`, `tasks.md`, and the spec delta cold, without looking up who wrote
+them, and critique against Q6's `review_criteria` in `STATE.json` (alternatives actually compared
+with evidence; per-OS global-state location with a migration path; what happens to an existing
+`data/agentweave.db`; desktop-shell choice states rejected alternatives and why). Either approve and
+move `next_action` to the phase-1 implementation tasks, or write concrete objections and set
+`next_action` to `REVISE ... round 2`.
