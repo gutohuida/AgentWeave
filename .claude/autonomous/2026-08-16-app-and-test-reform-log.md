@@ -414,3 +414,89 @@ for Q3, but worth a note if their own primary keys ever move.
 **Elapsed:** roughly one full iteration. Estimated 2 iterations for Q3; this used what was budgeted,
 but for a materially larger reason than estimated (the `session.get` blast radius), not because the
 core fix was slow.
+
+---
+
+## Entry 4 — 03:47 — Q4a done in one iteration: `scripts/uishot.py`, and it already caught a real bug
+
+**The Hub was stale before anything else could be trusted.** Its process had started at 02:12:25,
+before Q3's 03:28:26 commit, so it was serving pre-`Conversation.sequence` code. Killed both stray
+python processes and restarted it with the documented command; `/health` reported `ok` in under 4s
+and `GET /api/v1/projects` still returned exactly `aw-loop10` (Q1 holding).
+
+**Install, as authorised.** `pip install playwright` into the Python311 interpreter, then
+`playwright install chromium` — 191.8 MiB Chrome for Testing + 114.5 MiB headless shell, both
+downloaded clean on the first try. No `channel=chrome` fallback or headless-flag fighting was
+needed; vanilla `chromium.launch()` worked immediately. The 2-iteration cap the operator set for
+"if it does not work" did not get exercised — it worked on the first attempt.
+
+**`scripts/uishot.py`**: `--url`, `--theme` (`light`/`dark`), `--width`, `--height`, `--out`,
+`--wait-selector`. Two things had to be discovered empirically, not assumed from the plan:
+
+1. `page.goto(url, wait_until="networkidle")` **times out on every real page**, always, because the
+   app holds an SSE connection open for live updates (`useSSE`) — the network is by design never
+   idle. Switched to `wait_until="load"` plus a fixed settle delay.
+2. Playwright's `new_context(color_scheme=...)` **does nothing to this app's theme.** It only
+   flips the `prefers-color-scheme` CSS media query; AgentWeave's light/dark mode is application
+   state (`configStore.mode`, persisted to `localStorage`, applied via
+   `document.documentElement.dataset.mode`), not an OS preference the app reads. The first `--theme
+   dark` capture came back pixel-identical to light — caught by actually reading the PNG, not by
+   the script exiting 0. Fixed by driving the real control: after load, if `--theme dark`, click the
+   button at `aria-label="Switch to dark mode"` (`ProjectHeader.tsx:71`) and re-settle. This is
+   itself evidence for why Q4a matters — a harness that trusted Playwright's `color_scheme` option
+   at face value would have shipped two identical screenshots as "light" and "dark" and called the
+   surface verified.
+
+**Captured aw-loop10's spec document and task board, both themes, two widths (1280 / 400px), 7
+PNGs total, and read every one:**
+- `spec-light-1280.png`, `spec-dark-1280.png`: chrome (rail, header, tab bar) themes correctly in
+  both. **The rendered document body does not** — it stays white-background-black-text in dark
+  mode while everything around it goes dark. This is finding 2 from
+  `2026-08-16-operator-ux-findings.md`, now measured rather than described from memory: not "navy"
+  as the operator's note said (that phrasing may have been from a different surface or an earlier
+  build), but a real, confirmed light/dark inconsistency in the one place — the document pane —
+  that CLAUDE.md's no-external-CSS constraint makes hardest to fix generically. Recorded for Q4's
+  spec round to pick up as verified fact, not restate as an open question.
+- `tasks-light-1280.png`, `tasks-dark-1280.png`: task board columns theme correctly in both modes.
+  Card titles wrap character-by-character in a narrow fixed-width column ("Verify / no /
+  notification / is / ever / silently / lost", one or two words per line) — visible, measurable
+  confirmation of finding 5 ("task cards are unreadable expanded... open the task like jira").
+- `spec-light-narrow.png` (400px): the document reflows cleanly, no clipping, no horizontal
+  scrollbar. Not a problem at this width.
+- `tasks-light-narrow.png` / `tasks-dark-narrow.png` (400px): the kanban columns run wider than the
+  viewport and get cut off ("IN..." mid-word) with no visible scroll affordance in the capture.
+  Recorded as a data point, not filed as a finding — a horizontally-scrolling kanban board at 400px
+  is normal for the pattern and this alone doesn't establish it is bad; left for whoever picks up
+  Q7's gap analysis to judge against what other tools do at that width.
+
+**Proved the harness is honest**, per the item's verify step: changed `hub/ui/src/index.css`'s
+light-mode `--bg` from `#fafafa` to `#ff00aa` (one line), `npm run build` (32.8s cold, 4.0s warm),
+`python scripts/refresh_ui_bundle.py`, re-captured the same tasks-board URL —
+`proof-after.png` is unmistakably magenta end to end. Reverted the CSS line, rebuilt again,
+recaptured — `proof-reverted.png` is pixel-identical to the original `tasks-light-1280.png`, and
+`refresh_ui_bundle.py`'s own `src_fingerprint` came back byte-identical to before the detour,
+confirming the revert left no residue. `git checkout` on the resulting `ui-build-stamp.json` (only
+its `built_at`/`src_commit` had changed, nothing else) restored a clean tree — `hub/ui/src` never
+showed a diff at any point, since the two builds bracketing the CSS edit were identical source.
+
+**Committed**: `scripts/uishot.py` only. All PNGs live under `.claude/autonomous/scratch/uishots/`,
+which `.gitignore:150` already excludes — verified with `git check-ignore -v` before assuming it,
+not asserted from memory of the rule.
+
+**What a reviewer should distrust:** the dark-mode document-pane finding rests on `aw-loop10`'s one
+seeded spec document (`notify-window-graded-...`) — not confirmed across every document template or
+every enforcement state. The narrow-kanban observation is explicitly *not* a finding, just a
+recorded data point, and treating it as one would overstate what one capture shows. The
+`aria-label="Switch to dark mode"` selector is coupled to `ProjectHeader.tsx:71`'s exact string — if
+that copy changes, `--theme dark` silently stops toggling and starts silently capturing light-mode
+pages again labelled dark, the same failure mode the `color_scheme` option had. Worth a code comment
+pointing back here if that file changes.
+
+**Not done, and deliberately out of scope for Q4a**: no assertion-based checks (`page.evaluate` +
+`getComputedStyle` for the background-token comparison the queue item's `note` field describes) were
+written — Q4a's job was building the capture-and-read tool and proving it works, not yet turning
+findings 2 and 5 into automated assertions. That belongs to whichever of Q4/Q4b actually fixes them,
+per the item's own `note`.
+
+**Elapsed:** one iteration, well under the 2-iteration cap — nothing failed that needed a second
+attempt.
