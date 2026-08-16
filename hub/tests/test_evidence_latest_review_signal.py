@@ -44,7 +44,9 @@ async def builder():
 
 async def _document(app, auth_headers, run_headers):
     created = await app.post(
-        f"{BASE}/documents", json={"path": PATH, "title": "Latest review demo"}, headers=auth_headers
+        f"{BASE}/documents",
+        json={"path": PATH, "title": "Latest review demo"},
+        headers=auth_headers,
     )
     assert created.status_code == 201, created.text
     saved = await app.post(

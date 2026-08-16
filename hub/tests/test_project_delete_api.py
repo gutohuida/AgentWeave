@@ -300,7 +300,10 @@ async def _seed_full_project(session, project_id: str, tag: str) -> None:
     )
     session.add(
         TaskRequirementLink(
-            id=f"tasklink-{tag}", project_id=project_id, task_id=f"task-{tag}", requirement_id=f"req-{tag}"
+            id=f"tasklink-{tag}",
+            project_id=project_id,
+            task_id=f"task-{tag}",
+            requirement_id=f"req-{tag}",
         )
     )
     session.add(
@@ -329,12 +332,18 @@ async def _seed_full_project(session, project_id: str, tag: str) -> None:
     )
     session.add(
         EvidenceFootprint(
-            id=f"evfootprint-{tag}", project_id=project_id, evidence_id=f"evidence-{tag}", kind="paths"
+            id=f"evfootprint-{tag}",
+            project_id=project_id,
+            evidence_id=f"evidence-{tag}",
+            kind="paths",
         )
     )
     session.add(
         RequirementDrift(
-            id=f"drift-{tag}", project_id=project_id, requirement_id=f"req-{tag}", evidence_id=f"evidence-{tag}"
+            id=f"drift-{tag}",
+            project_id=project_id,
+            requirement_id=f"req-{tag}",
+            evidence_id=f"evidence-{tag}",
         )
     )
     session.add(
@@ -397,9 +406,7 @@ async def test_delete_removes_a_representative_sample_of_project_scoped_rows(app
             ("event_logs", EventLog),
         ):
             count = await session.scalar(
-                select(func.count())
-                .select_from(model)
-                .where(model.project_id == "proj-victim")
+                select(func.count()).select_from(model).where(model.project_id == "proj-victim")
             )
             assert count == 0, f"{table_name} still has rows for the deleted project"
 
@@ -459,7 +466,9 @@ async def test_a_running_run_refuses_deletion_and_nothing_is_removed(app) -> Non
         # `_seed_full_project` already added a "completed" run; add a second, running one —
         # the guard only needs one active run to fire, and this proves it does not require
         # every run to be running.
-        session.add(Run(id="run-active", project_id="proj-victim", agent="agent-running", status="running"))
+        session.add(
+            Run(id="run-active", project_id="proj-victim", agent="agent-running", status="running")
+        )
         await session.commit()
 
     async with async_session_factory() as session:

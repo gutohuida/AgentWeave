@@ -521,9 +521,7 @@ async def list_evidence(
     prints = await _footprints_for(session, [row.id for row in rows])
     reviews = await _latest_reviews_for(session, [row.id for row in rows])
     return {
-        "evidence": [
-            _evidence_view(row, prints.get(row.id), reviews.get(row.id)) for row in rows
-        ]
+        "evidence": [_evidence_view(row, prints.get(row.id), reviews.get(row.id)) for row in rows]
     }
 
 

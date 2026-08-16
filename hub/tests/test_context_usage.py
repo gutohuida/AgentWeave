@@ -188,9 +188,7 @@ async def test_repeated_unchanged_reading_does_not_duplicate_the_activity_log(ap
     assert response.json()["status"] == "ok"
 
     history = (
-        await app.get(
-            "/api/v1/projects/proj-test/events/history", headers=auth_headers
-        )
+        await app.get("/api/v1/projects/proj-test/events/history", headers=auth_headers)
     ).json()
     context_rows = [
         row for row in history if row["type"] == "context_warning" and row["agent"] == agent

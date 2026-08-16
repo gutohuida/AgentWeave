@@ -46,7 +46,9 @@ async def builder():
 
 async def _document(app, auth_headers, run_headers):
     created = await app.post(
-        f"{BASE}/documents", json={"path": PATH, "title": "Rejected evidence demo"}, headers=auth_headers
+        f"{BASE}/documents",
+        json={"path": PATH, "title": "Rejected evidence demo"},
+        headers=auth_headers,
     )
     assert created.status_code == 201, created.text
     saved = await app.post(
@@ -72,9 +74,7 @@ def _link(task_json):
 
 
 @pytest.mark.asyncio
-async def test_a_rejected_current_digest_evidence_is_named_on_the_task(
-    app, auth_headers, builder
-):
+async def test_a_rejected_current_digest_evidence_is_named_on_the_task(app, auth_headers, builder):
     await _document(app, auth_headers, builder)
     created = await app.post(
         TASKS, json={"title": "Build it", "requirement_ids": ["FR-1"]}, headers=auth_headers

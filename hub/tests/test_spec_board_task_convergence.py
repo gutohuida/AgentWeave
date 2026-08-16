@@ -67,7 +67,9 @@ async def submit(app, run_headers, *, tasks=None):
 
 async def make_document(app, auth_headers, run_headers, *, tasks=None):
     created = await app.post(
-        f"{BASE}/documents", json={"path": PATH, "title": "Board convergence demo"}, headers=auth_headers
+        f"{BASE}/documents",
+        json={"path": PATH, "title": "Board convergence demo"},
+        headers=auth_headers,
     )
     assert created.status_code == 201, created.text
     await submit(app, run_headers, tasks=tasks)
@@ -107,9 +109,7 @@ async def test_a_hand_made_task_satisfies_propose_without_a_declared_task(
 
 
 @pytest.mark.asyncio
-async def test_propose_still_refuses_when_nothing_covers_the_requirement(
-    app, auth_headers, author
-):
+async def test_propose_still_refuses_when_nothing_covers_the_requirement(app, auth_headers, author):
     """Same document, no hand-made task and no declared task: the gate still works."""
     await make_document(app, auth_headers, author, tasks=None)
 
@@ -126,7 +126,11 @@ async def test_approving_does_not_duplicate_a_requirement_a_hand_made_task_alrea
     """The exact `aw-loop10` reproduction: a hand-made task exists first, the document also declares
     its own task for the same requirement, and approval must not mint a second one."""
     declared = [
-        {"key": "build-it", "description": "Build it, declared in the document.", "requirements": ["alpha"]}
+        {
+            "key": "build-it",
+            "description": "Build it, declared in the document.",
+            "requirements": ["alpha"],
+        }
     ]
     await make_document(app, auth_headers, author, tasks=declared)
 

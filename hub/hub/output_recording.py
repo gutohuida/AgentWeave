@@ -212,7 +212,9 @@ async def record_context_usage(
         current_signal = {k: v for k, v in payload.items() if k != "observed_at"}
         unchanged = latest_signal == current_signal
     if not unchanged:
-        await persist_event(db, project_id, "context_warning", payload, agent=agent, severity="info")
+        await persist_event(
+            db, project_id, "context_warning", payload, agent=agent, severity="info"
+        )
         await sse_manager.broadcast(project_id, "context_warning", payload)
 
     # A reading is the moment context pressure first becomes knowable, so it is where the

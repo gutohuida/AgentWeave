@@ -163,7 +163,11 @@ async def materialise(
             else:
                 unresolved.append(named)
 
-        if requirements and not unresolved and all(row.id in already_served for row in requirements):
+        if (
+            requirements
+            and not unresolved
+            and all(row.id in already_served for row in requirements)
+        ):
             existing_keys.add(key)
             continue
 
