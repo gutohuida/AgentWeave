@@ -54,6 +54,21 @@ describe('MarkdownMessage', () => {
     expect(container.textContent).toContain('img')
   })
 
+  it('neutralises a javascript: or data: link target while leaving an ordinary URL intact', () => {
+    // The second security boundary, and the one the component's own comment does not name:
+    // raw HTML is refused by the absence of rehype-raw, but a Markdown *link* needs no HTML at
+    // all — `[x](javascript:…)` is ordinary Markdown. react-markdown's default `urlTransform`
+    // is what blanks it. Passing a custom `urlTransform` (say, to allow `file://` links into a
+    // workspace) would replace that default and silently reopen this, so it is pinned here.
+    const { container } = render(
+      <MarkdownMessage
+        content={'[a](javascript:alert(1)) [b](data:text/html,<script>x</script>) [c](https://ok.example)'}
+      />,
+    )
+    const hrefs = Array.from(container.querySelectorAll('a')).map((a) => a.getAttribute('href'))
+    expect(hrefs).toEqual(['', '', 'https://ok.example'])
+  })
+
   it('renders plain text with no Markdown syntax exactly as before — no regression for ordinary messages', () => {
     render(<MarkdownMessage content="just a normal sentence" />)
     expect(screen.getByText('just a normal sentence')).toBeInTheDocument()
