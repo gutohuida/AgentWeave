@@ -7,7 +7,7 @@
   "stop_at": "2026-08-16T18:00:00+01:00",
   "stop_when_queue_empties": false,
   "iteration": 33,
-  "last_heartbeat": "2026-08-16T14:37:09+01:00",
+  "last_heartbeat": "2026-08-16T13:58:42+01:00",
   "spec_round_protocol": {
     "why": "Operator: 'one agent produces the spec, the next triggers the agents review until a agent thinks is good to implement. We need to have another gate so agent don't go on forever.' Implemented as successive driver iterations rather than subagents, at the operator's suggestion ('the trigger at 2AM generates the spec and the one at 2:15 reviews it'). A fresh process has no memory of writing the thing it reviews, so the independence is structural rather than merely prompted.",
     "max_rounds": 3,
