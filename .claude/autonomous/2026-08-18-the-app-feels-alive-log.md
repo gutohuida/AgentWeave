@@ -134,3 +134,57 @@ change documents — was sitting in `<repo>/hub/data/agentweave.db`, served by n
   0054 says it is untracked scratch that must not be committed. Both cannot be true. Folded into N3.
 
 **Next:** Q1b — the CLI suite hangs forever on a real pywebview window. Fix before touching CLI code.
+
+---
+
+## Entry 2 — 2026-08-17T23:33+01:00 · Q1b done: the CLI suite terminates again
+
+**Attempted:** make `py -3.11 -m pytest tests/` finish. It had stopped terminating entirely, which
+blocked this loop from validating any CLI change — including Q7, which edits the very function at
+fault.
+
+**The defect, and what it was not.** `agentweave.cli._open_app_window_native` (cli.py:740-757) does
+`import webview` inside the function body and then calls `webview.start()`, which blocks until a
+human closes the window. Two call sites reach it: `cmd_hub_start`'s already-running branch
+(cli.py:977) and `_hub_native_start`.
+
+None of that is a product bug — the blocking is deliberate, and `test_cli.py:400-422` records
+*why* (`pywebview requires the main thread`). The bug was that **the suite's behaviour depended on
+whether an optional package happened to be installed on the developer's machine.** While pywebview
+was absent, the ImportError guard returned `False` and every caller fell through to
+`_open_app_window`; tests that patched only that fallback passed. Handoff 0054 records
+`pip install pywebview` being run on 2026-08-17, and from that moment those same tests opened a real
+window and never returned.
+
+**Fixed** with a new `tests/conftest.py`: one autouse fixture setting `sys.modules["webview"] = None`
+for every test in the directory, which is the documented way to force `import webview` to raise
+regardless of what is installed. That pins the suite to the state it was written against and CI
+runs in. Tests that need the *installed* path still get it — `TestAppModeNativeWindow` injects its
+own fake over the top, and `monkeypatch.setitem` in a test body runs after the fixture and undoes in
+reverse, so an explicit fake always wins.
+
+Chosen over patching the two named tests individually: that fixes today's two and leaves the trap
+armed for the next test that touches app mode. Chosen over changing the product: the blocking
+behaviour is correct.
+
+**Verified — this is a real before/after, not a passing suite asserted over nothing:**
+
+- The two tests that hung forever, run alone: **2 passed in 0.05s**. Before the fix, both were
+  bisected to an infinite hang with unbuffered `-v` output, twice, and had to be killed.
+- Full CLI suite: **381 passed, 3 skipped in 11.77s.** That number now matches handoff 0054's
+  claim exactly — so the handoff was right, and it simply could not be reproduced while pywebview
+  was installed. **This is the first verified green CLI baseline of the run.**
+- `TestAppModeNativeWindow` — the 6 tests that exercise both the installed and not-installed
+  paths — still pass, so the fixture has not masked the path it neutralises.
+- `ruff check` clean; `black --check` reports the file unchanged.
+- No stray pytest processes left behind.
+
+**What a reviewer should distrust:**
+
+- The fixture is directory-scoped to `tests/`. `hub/tests/` was not touched and was not checked for
+  the same hazard; if anything there reaches a windowing call it will still hang. Not investigated.
+- Nothing here proves the *desktop app* works — only that the suite no longer waits on one. The
+  window itself remains unverified, as it was in handoff 0054.
+
+**Next:** Q2 — remove the end-of-conversation message, keeping the events that Handoff detection
+scans for.
