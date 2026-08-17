@@ -3,13 +3,12 @@
   "branch": "autonomous/2026-08-17-archive-and-hub-app",
   "parent_branch": "master",
   "parent_sha": "5e63004",
-  "started_at": "2026-08-17T19:35:00+01:00",
+  "started_at": "2026-08-17T19:17:24+01:00",
   "stop_at": "2026-08-17T22:00:00+01:00",
   "stop_when_queue_empties": false,
   "iteration": 0,
-  "last_heartbeat": "2026-08-17T19:35:00+01:00",
+  "last_heartbeat": "2026-08-17T18:00:00+01:00",
   "session_stopped": false,
-
   "queue": [
     {
       "id": "A1-archive-confirmation",
@@ -45,10 +44,8 @@
       "done_when": "One exploration file, ranked, each item with a reason and a rough size. It is a proposal for the operator, not a decision."
     }
   ],
-
   "current": "A1-archive-confirmation",
   "next_action": "Read openspec/changes/2026-08-16-the-corpus-keeps-what-shipped/{design,tasks}.md for the Archive control's existing design intent, then find the phase bar component under hub/ui/src/components/spec/ that renders Approve/Archive/Reopen. Add a confirmation dialog for Archive only, reusing the project-delete confirm pattern already in this codebase, stating that archiving cannot be undone. Cancelling must leave the phase untouched. Add UI tests for confirm and cancel. Then run, in CI's own order: `cd hub/ui && npm run lint && npx tsc --noEmit && npm test`. Commit, push, rewrite this file, append to the log.",
-
   "limits": [
     "Stay on this branch. No commits, merges or rebases onto master. Merging is the operator's decision, made awake.",
     "Nothing outward-facing: no publish, no release, no tag, no PR, no force-push, no history rewriting. Pushing THIS branch every iteration is required.",
@@ -58,7 +55,6 @@
     "CLAUDE.md applies in full. In particular: never create .agentweave/, agentweave.yml or spec/ at the repository root. Note spec/changes/quiet-hours-.../spec.html already exists there as untracked taste-pass scratch -- leave it, never commit it.",
     "ALWAYS run `npm run lint` before pushing UI work. CI runs it at --max-warnings 0 and it is not covered by `npm test` -- this exact gap turned the 1.0.1 release red once already today."
   ],
-
   "environment": {
     "python": "C:/Users/huida/AppData/Local/Programs/Python/Python311/python.exe",
     "hub_url": "http://127.0.0.1:8010",
@@ -68,7 +64,6 @@
     "hub_tests": "pytest hub/tests takes ~8 minutes and exceeds the 600s command cap -- run in file chunks or in the background",
     "ui_bundle": "after changing hub/ui/src, run `npm run build` then `python scripts/refresh_ui_bundle.py`, and commit hub/ui/src and hub/hub/static/ui together"
   },
-
   "decisions_for_user": [
     {
       "id": "D1-merge-this-branch",
@@ -89,15 +84,14 @@
       "default": "Shipped as 1.0.1 regardless -- it is real, tested and released. Worth retro-covering with one change so the specs match the code; a good candidate for A4's roadmap rather than something to do silently."
     }
   ],
-
   "known_debts": [
     "The test fixture's StaticPool shares ONE sqlite connection across every session in the process, so any concurrent session can roll back another's pending write. Proven: 105/200 commits lost with a concurrent poller vs 0/200 without. test_a_conversation_whose_model_changed_attributes_usage_per_turn is xfailed because of it. A file-backed DATABASE_URL is NOT a drop-in fix -- it HUNG the suite when tried; it needs WAL plus a busy timeout.",
     "The hub suite is ~100% fixture overhead: create_app() 121ms + drop_all/create_all across 43 tables 88ms = ~240ms per test x 2130 = ~510s against 477s observed. Session-scoping the app and schema would take it from 8 minutes to about 1."
   ],
-
   "driver": {
     "kind": "Windows Scheduled Task running headless `claude -p`",
     "why": "ScheduleWakeup and CronCreate both die with the interactive session -- measured 2026-08-15, nine hours asked for and forty minutes delivered. The operator is out; only an OS task survives.",
     "stands_down_if": "STATE.json's last_heartbeat is fresher than the grace window, meaning a live session holds the branch"
-  }
+  },
+  "handover_note": "The interactive session stopped at 2026-08-17T19:17:24+01:00. last_heartbeat is deliberately stale so the first firing takes over immediately. Stamp times from PowerShell, never by estimating."
 }
