@@ -445,3 +445,29 @@ subcommands and flags exactly. Verified rather than rewritten.
 **Verified:** `mkdocs build --strict` clean; both automated cross-checks pass; no live doc contains
 watchdog / role / transport / `agentweave.yml` references (the one remaining `agentweave.yml` hit is
 the README telling contributors not to create one).
+
+---
+
+## Iteration 9 — 12:05 — R10: every local gate green
+
+| Gate | Result | vs baseline |
+|---|---|---|
+| `pytest hub/tests/ -n 8` | **2130 passed**, 11 skipped | +2 (R6's tests) |
+| `pytest tests/ -n 4` | **362 passed**, 3 skipped | unchanged |
+| `npm test` | **957 passed**, 99 files | unchanged |
+| `npm run lint` | clean | unchanged |
+| `ruff check src/ hub/ tests/` | clean | unchanged (CI scope, wider than `src/ hub/hub/`) |
+| `black --check` | clean, 391 files | unchanged |
+| `mypy src/` | clean, 22 files | unchanged |
+| `mkdocs build --strict` | clean | **was failing since 2026-07-29** |
+| `openspec validate --changes --strict` | 8/8 | unchanged |
+
+**No UI bundle rebuild needed, and that was checked rather than assumed:**
+`git diff --name-only e45b014..HEAD -- hub/ui/src` is empty, so the committed bundle in
+`hub/hub/static/ui` cannot have drifted this run.
+
+**The cwd trap bit again, and this time it produced a false pass.** `npx openspec validate` ran
+straight after the UI tests, so it inherited `hub/ui` as its working directory and reported *"No
+items found to validate"* — which scrolls past looking like success. Re-run from an absolute path it
+reports 8/8. Second occurrence today; the tell is a result that is suspiciously empty rather than
+suspiciously wrong.

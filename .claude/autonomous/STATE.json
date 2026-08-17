@@ -6,8 +6,8 @@
   "started_at": "2026-08-17T10:14:49+01:00",
   "stop_at": "2026-08-17T15:00:00+01:00",
   "stop_when_queue_empties": true,
-  "iteration": 9,
-  "last_heartbeat": "2026-08-17T10:46:17+01:00",
+  "iteration": 10,
+  "last_heartbeat": "2026-08-17T10:49:59+01:00",
   "session_stopped": null,
   "release_shape": {
     "version": "1.0.0",
@@ -93,9 +93,10 @@
     {
       "id": "R10-full-local-gates",
       "title": "Run every gate locally and get them green",
-      "status": "pending",
+      "status": "done",
       "why": "The PR run in R11 costs minutes per cycle. Everything checkable locally should be green before it starts.",
-      "detail": "With `PY=\"C:/Users/huida/AppData/Local/Programs/Python/Python311/python.exe\"`: `$PY -m pytest hub/tests/ -n 8 -q`; `$PY -m pytest tests/ -n 4 -q`; `cd hub/ui && npm test` and `npm run lint`; `$PY -m ruff check src/ hub/ tests/` and `$PY -m black --check src/ hub/hub/ hub/tests/ tests/` — NOTE both at CI's exact scope, which is wider than `src/ hub/hub/` and caught a real error during prep; `$PY -m mypy src/`; `$PY -m mkdocs build --strict`; `npx openspec validate --changes --strict`. If `hub/ui/src` changed at all, `cd hub/ui && npm run build` then `$PY scripts/refresh_ui_bundle.py` and commit `hub/ui/src` and `hub/hub/static/ui` TOGETHER. Baseline to beat, measured this morning at c6aec88: hub 2128 passed/11 skipped, CLI 362/3 skipped, UI 957, lint clean, ruff clean, black clean, mypy clean, openspec 8/8."
+      "detail": "With `PY=\"C:/Users/huida/AppData/Local/Programs/Python/Python311/python.exe\"`: `$PY -m pytest hub/tests/ -n 8 -q`; `$PY -m pytest tests/ -n 4 -q`; `cd hub/ui && npm test` and `npm run lint`; `$PY -m ruff check src/ hub/ tests/` and `$PY -m black --check src/ hub/hub/ hub/tests/ tests/` — NOTE both at CI's exact scope, which is wider than `src/ hub/hub/` and caught a real error during prep; `$PY -m mypy src/`; `$PY -m mkdocs build --strict`; `npx openspec validate --changes --strict`. If `hub/ui/src` changed at all, `cd hub/ui && npm run build` then `$PY scripts/refresh_ui_bundle.py` and commit `hub/ui/src` and `hub/hub/static/ui` TOGETHER. Baseline to beat, measured this morning at c6aec88: hub 2128 passed/11 skipped, CLI 362/3 skipped, UI 957, lint clean, ruff clean, black clean, mypy clean, openspec 8/8.",
+      "outcome": "All 9 green: hub 2130/11, CLI 362/3, UI 957, UI lint, ruff, black, mypy, mkdocs --strict (previously failing), openspec 8/8. No UI bundle rebuild needed - hub/ui/src unchanged this run, verified by git diff."
     },
     {
       "id": "R11-merge-and-drive-ci",
@@ -112,8 +113,8 @@
       "detail": "PRECONDITION, CHECK IT EXPLICITLY: every CI job on the PR is green and finished. Then merge the PR to master. `hub-image.yml` fires on any master push touching `hub/` and will build the Docker image. Then tag `v1.0.0` and `gh release create v1.0.0` with notes drawn from R8's CHANGELOG. Watch `publish.yml` to completion — after R7 it must publish BOTH `agentweave-ai` and `agentweave-hub` from that one tag; if only one job fires, the R7 re-gating is wrong and that is the highest-priority fix. VERIFY, do not assume: `pip download agentweave-ai==1.0.0` into a temp dir, or `pip install` into a throwaway venv, and confirm `agentweave --version` reports 1.0.0 and that it pulled `agentweave-hub` with it (R4's whole point). Confirm the GHCR image published and the Pages docs site rebuilt. Do NOT create a `hub-v1.0.0` tag."
     }
   ],
-  "current": "R10-full-local-gates",
-  "next_action": "R10: run every gate locally and get them green before the PR. With PY=C:/Users/huida/AppData/Local/Programs/Python/Python311/python.exe from the repo root: pytest hub/tests/ -n 8 -q; pytest tests/ -n 4 -q; cd hub/ui && npm test and npm run lint; ruff check src/ hub/ tests/; black --check src/ hub/hub/ hub/tests/ tests/; mypy src/; mkdocs build --strict; npx openspec validate --changes --strict. hub/ui/src has NOT changed this run, so no bundle rebuild should be needed - confirm with git diff --name-only against the branch point before skipping it. Baseline to beat: hub 2130/11, CLI 362/3, UI 957, openspec 8/8.",
+  "current": "R11-merge-and-drive-ci",
+  "next_action": "R11: fast-forward hub-native-experience from this branch, push it, then `gh pr create --base master --head hub-native-experience`. That is the ONLY way CI has ever run against these 776 commits - ci.yml triggers on pushes to master and PRs targeting it, nothing else. Watch with `gh pr checks`. Expect R1's fix to be confirmed or refuted here; it is the one change that cannot be verified locally. DO NOT MERGE on red or still-running CI. If CI reveals a genuine PRODUCT bug rather than infrastructure, fix it only if small and understood; otherwise STOP, leave the PR open, write it up.",
   "limits": [
     "OUTWARD-FACING ACTIONS ARE AUTHORISED THIS RUN — this INVERTS the previous run's standing rule, deliberately. Pushing, opening a PR, merging to master, tagging, and creating a GitHub release are all in scope, in R11/R12 order. Everything else outward-facing is not: no force-push, no history rewriting on any shared branch, no deleting or moving existing tags or releases, no touching the four releases already published.",
     "NEVER release on a red or still-running CI. `gh pr checks` must show every job green and FINISHED before the PR merges, and the merge must be green before the tag exists. The operator chose 'Full auto, but only on green CI' with that as the hard rule.",
