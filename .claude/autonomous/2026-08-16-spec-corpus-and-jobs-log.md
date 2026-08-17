@@ -1814,3 +1814,88 @@ of 188 tasks open, no `judgement-evidence.md` coverage at all, no judgement roun
 unlike every other change in this batch) is explicitly too large for one iteration per iteration
 19's own assessment when it first surveyed the remaining two. `next_action` carries that forward
 unchanged: triage first, don't start ticking or waiving blind, expect 2+ iterations.
+
+---
+
+## Iteration 21 — 2026-08-17T04:52:33+01:00
+
+**N6, continuing the triage of `2026-07-30-hub-native-experience` per iteration 20's own
+instruction: triage first, don't attempt blind.** Read the whole 1664-line `tasks.md`. Sections 1-8
+are fully checked; the 69 open items sit in sections 9-16. Sections 9-12 (accounting, multi-project,
+composer first cut, composer controls — 27 items) each already carry an explicit "closed by real
+successor implementation" note citing archived changes and tests, and each note ends with "the
+checkboxes below remain unchanged under the reconciliation rule" — this file's own established
+convention that closure lives in the dated note, not the checkbox, so those 27 stay untouched by
+design, not by neglect. Left them alone.
+
+**Section 13 (agent identity, charters, skills — 15 items) got a real re-verification pass, not a
+re-read of the 2026-08-12 note.** Six items the note already called "verified shipped" were checked
+again against today's tree rather than trusted from six days ago: 13.1 (`Runner` class,
+`models.py:269`), 13.2 (`ix_agents_project_name` unique index, `models.py:261`), 13.8 (`### Team`
+block, `agents.py:1228`), 13.10 (`request_agent`, `mcp_server.py:491`, `Project.agent_budget`),
+13.12 (`src/agentweave/roles.py` and `templates/roles/` both confirmed absent), 13.13 (`cli.py` has
+exactly five `cmd_*` functions, no `init`). All six still hold; ticked them with the citations
+recorded in the file itself. The 2026-08-12 note's "not assessed" bucket (13.5, 13.6, 13.7, 13.14)
+was actually investigated this time instead of carried forward as unknown: 13.5 (skill invocation)
+is open — no runtime skill-invocation surface exists in the Hub API, only unrelated "skill" hits in
+`launchability.py`/`spec_lifecycle.py` and the packaged `aw-*` templates CLAUDE.md says are product
+source. 13.6 is partial, newly discovered rather than assumed — `AgentCreateDialog.tsx` does choose
+a runner via `useProviderLaunchability` and name the agent with no persona step (real, shipped), but
+"optionally start from a template" is not there. 13.7 (agent templates) is open, confirming 13.6's
+gap. 13.14 cannot verify because `agent-identity-and-skills` was never created as a capability spec
+— `openspec/specs/` has no `identity`, `skill`, or `template` named spec — the same "known-unbuilt,
+not renamed" pattern section 16 already documented for `spec-authoring`/`spec-traceability`, and it
+would not pass today regardless given the real gaps below. 13.3's remainder (charter scope/default
+skills) and 13.4 (scope enforcement) re-confirmed still open: `Charter` (`models.py:302-321`) is
+still exactly `id`/`project_id`/`name`/`content`, no scope field. 13.9 (single-agent Team omission)
+re-confirmed still open: `agents.py:1227-1244` still emits `### Team` unconditionally. 13.11
+(inspectable behaviour composition) re-confirmed still open: no composition endpoint exists.
+Recorded all of this as a dated note in the file with the reasoning that phase 13 is not one
+judgement call to waive — each open item is a concrete, falsifiable "this does not exist" check —
+and it is real, unbuilt product work (charter scope + enforcement + skill invocation, agent
+templates, single-agent roster omission, inspectable composition) for whoever specs and builds it
+next, not something this triage pass should build blind at 05:00.
+
+**Section 14 (specification traceability and authoring, 19 items, phase never built as of the
+2026-08-12 note) got a hypothesis, explicitly labelled as one, not a verification.** The 2026-08-12
+note for section 13 already showed the pattern — checking Section 16's "absence by name is not
+evidence of being unsynced" warning applies with much more force here, because the ENTIRE trial-Hub
+spec flow (`requirement-traceability`, `spec-document-authority`, `spec-chat-session`,
+`task-lifecycle-governance` — none of which existed on 2026-08-12) shipped in the six days since that
+note, largely across this very session (N2 tonight, plus 2026-08-12 through 2026-08-16 work).
+`grep '^### Requirement' openspec/specs/{requirement-traceability,spec-document-authority,spec-chat-session,task-lifecycle-governance}/spec.md`
+turned up requirement headings that map by name to most of 14.1-14.10, 14.16, and 14.17 — stable
+identifiers, task-requirement links, evidence records, coverage/verification state, drift-as-
+candidate, bidirectional navigation, rigor declaration and its operator-only promotion, gate
+enforcement (iteration 19 of this very run built the gate's approval-time report), and the
+workspace-legibility/plain-portable-with-divergence-reported requirements. Recorded the specific
+requirement-heading pairing for each in the file. Explicitly did NOT tick any of these — a heading
+match is not a scenario-level verification, and CLAUDE.md's "never mark complete on the strength of
+a plan existing" cuts just as hard against marking complete on the strength of a *name* matching.
+14.11-14.15 were flagged as genuinely uncertain rather than mapped: rigor-gated editing modes,
+in-position individually-acceptable proposals, the three authoring on-ramps, and — plausibly a
+rejected design rather than a gap — 14.15's `aw-spec-*` skills, since `submit_spec_document` and
+its siblings are MCP tools today, not skills, and CLAUDE.md lists invoking the `aw-*` skills as
+still prohibited. Recommended next step written into the file: a dedicated iteration (or its own
+change) reads all four successor specs in full against 14.1-14.17's exact wording, ticks what
+scenarios genuinely cover, and opens a fresh change for whatever from 14.11-14.15 turns out to
+still be missing — sized comparably to N2 tonight, not something to rush.
+
+**Left sections 15 and 16 untouched** — both are explicitly downstream of 14's resolution (15.2 half-
+blocked on it, 16's own note already names 14 as the concrete blocker to archiving the umbrella) and
+re-reading them before 14 is settled would have been re-deriving the same conclusion the file already
+states.
+
+**Verified the edit didn't break anything:** `openspec validate --changes --strict` → 8/8, unchanged
+(this pass only edited prose and checkboxes inside an existing change's tasks.md, no proposal/design/
+spec-delta touched). Did not run the Hub or CLI test suites — no source file changed this iteration,
+only `openspec/changes/2026-07-30-hub-native-experience/tasks.md`.
+
+**Net for N6:** phase 13 went from 11 open / 4 unknown to 6 done / 7 confirmed-open, a real (small)
+reduction with citations, not a relabelling. Phase 14 is still 0 done but now carries a concrete,
+falsifiable hypothesis instead of an inherited "never built" assumption six days stale. The umbrella
+is not archivable yet — 13's confirmed-open items and 14's unmapped-and-uncertain items (14.11-14.15)
+are real product gaps, not paperwork, and per iteration 20's framing this was always expected to
+span more than one iteration. `next_action` below hands off the concrete next step: the 14.1-14.17
+scenario-level mapping pass, since that is the single item most likely to move phase 14 from "mostly
+unknown" to "mostly closed by successor, small real remainder" the way phases 9-12 already are.

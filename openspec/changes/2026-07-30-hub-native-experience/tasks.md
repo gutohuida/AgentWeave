@@ -1490,9 +1490,55 @@ projects API and no UI. `hub-visual-language` depends on this.*
 > and instantiation), 13.14 (verify against `agent-identity-and-skills`). Recorded as unknown rather
 > than assumed either way.
 
-- [ ] 13.1 Introduce the runner record — CLI, model, environment — reusable across projects and
+> **Update (2026-08-17) — N6 triage pass, re-verified the 2026-08-12 note and closed the four
+> "not assessed" items. Six items ticked below on re-confirmed code citations (real implementation,
+> not a plan): 13.1 (`Runner` class, `models.py:269`), 13.2 (`ix_agents_project_name` unique index,
+> `models.py:261`), 13.8 (`### Team` block, `agents.py:1228`), 13.10 (`request_agent`,
+> `mcp_server.py:491`, `Project.agent_budget`), 13.12 (`src/agentweave/roles.py` and
+> `templates/roles/` both confirmed absent), 13.13 (`cli.py` now has exactly `cmd_status`,
+> `cmd_doctor`, `cmd_stop`, `cmd_hub_start`, `cmd_reset` — no `init`, no ceremony).
+>
+> **13.3's remainder and 13.4 re-confirmed still open**, no new evidence against the 2026-08-12
+> finding: `Charter` (`models.py:302-321`) is still exactly `id`/`project_id`/`name`/`content` — no
+> scope field, no default-skills field. Nothing greps for a scope-enforcement check outside the
+> unrelated "project-scoped" phrasing.
+>
+> **13.9 re-confirmed still open**: `agents.py:1227-1244` still appends `### Team` unconditionally,
+> falling back to "No other agents are registered in this project yet." rather than omitting the
+> section for single-agent projects.
+>
+> **The four "not assessed" items, now assessed:**
+> - **13.5 — open.** No skill-invocation mechanism exists in the Hub API; every "skill" hit in
+>   `hub/hub/*.py` is either `launchability.py`'s or `spec_lifecycle.py`'s unrelated usage, or the
+>   packaged `aw-*` skill *templates* CLAUDE.md says are product source, not a runtime invocation
+>   surface an agent calls.
+> - **13.6 — partial, was previously unassessed.** `AgentCreateDialog.tsx` does choose a runner via
+>   `useProviderLaunchability` and name the agent with no persona step — real, shipped. "Optionally
+>   start from a template" is not there; no `template` reference anywhere in that file.
+> - **13.7 — open.** No agent-template concept exists anywhere in the UI or API; confirms 13.6's gap
+>   rather than adding new information.
+> - **13.14 — cannot verify against `agent-identity-and-skills` because that capability spec was
+>   never created** (`openspec/specs/` has no `identity`, `skill`, or `template` named spec at all —
+>   same "known-unbuilt, not renamed" pattern section 16 already documented for `spec-authoring` and
+>   `spec-traceability`). Given 13.4, 13.5, 13.7, part of 13.3, and 13.11 are all still genuinely
+>   open, it would not pass today regardless.
+>
+> **13.11 re-confirmed still open**, consistent with 2026-08-12: no composition-inspection endpoint
+> exists; `effective_*` symbols in `agents.py` remain heartbeat status, unrelated to behaviour
+> resolution.
+>
+> **Net: phase 13 is not closeable yet.** Six of fifteen items are done (ticked below); 13.3
+> (remainder), 13.4, 13.5, 13.6 (remainder), 13.7, 13.9, 13.11 are real, unbuilt product work — a
+> charter scope model, enforcement, a skill-invocation surface, agent templates, single-agent roster
+> omission, and an inspectable behaviour-composition view. This is not a judgement call to waive;
+> each has a concrete, falsifiable "this file/endpoint does not exist" check behind it. Sizing it as
+> one change is plausible (charter scope + enforcement + skill invocation are one coherent slice;
+> templates and single-agent omission are each small and separable; 13.11 is its own slice) but that
+> is a decision for whoever picks this up with budget to spec and build it, not for this triage pass.
+
+- [x] 13.1 Introduce the runner record — CLI, model, environment — reusable across projects and
       independent of agent identity.
-- [ ] 13.2 Reduce the agent record to identity: name, runner reference, working directory, colour,
+- [x] 13.2 Reduce the agent record to identity: name, runner reference, working directory, colour,
       queue, session. Make `ix_agents_project_name` unique.
 - [ ] 13.3 Add the charter — purpose, scope, default skills — with an empty charter meaning full
       project scope. **Design it as a portable artifact from the start** (see
@@ -1503,17 +1549,17 @@ projects API and no UI. `hub-visual-language` depends on this.*
       start from a template. **No persona step.**
 - [ ] 13.7 Add agent templates and instantiation, with name-conflict resolution and no retroactive
       rewriting of existing agents.
-- [ ] 13.8 Inject the live roster at turn start for projects with more than one agent.
+- [x] 13.8 Inject the live roster at turn start for projects with more than one agent.
 - [ ] 13.9 Omit roster and all collaboration instruction entirely in single-agent projects; enable
       both on the addition of a second agent with no reconfiguration of the first.
-- [ ] 13.10 Implement agent-requested agent creation with a per-project budget, automatic
+- [x] 13.10 Implement agent-requested agent creation with a per-project budget, automatic
       instantiation only from approved templates, operator decisions otherwise, attribution of every
       created agent to its request.
 - [ ] 13.11 Implement behaviour resolution — project instructions → charter → skills → acceptance
       criteria — and make the effective composition for a turn inspectable.
-- [ ] 13.12 Remove `roles.py`, `roles.json`, `VALID_ROLE_IDS`, and the 21 guides in
+- [x] 13.12 Remove `roles.py`, `roles.json`, `VALID_ROLE_IDS`, and the 21 guides in
       `templates/roles/`; migrate anything worth keeping into `templates/skills/`.
-- [ ] 13.13 Fix `cli.py:268` — `init` creates a single agent with no mode or role ceremony.
+- [x] 13.13 Fix `cli.py:268` — `init` creates a single agent with no mode or role ceremony.
 - [ ] 13.14 Verify against `agent-identity-and-skills`.
 - [ ] 13.15 **`/handoff`**
 
@@ -1526,6 +1572,51 @@ projects API and no UI. `hub-visual-language` depends on this.*
 > and the `aw-spec-workflow` capability it provides to user projects. Local-only removes
 > cross-machine reconciliation from the problem, but file authority, stable identifiers, database
 > indexing, and external-editor changes still need a decision. Do not implement from this list.
+
+> **Update (2026-08-17) — N6 triage pass, NOT a verification pass. This phase looks unbuilt in the
+> 2026-08-12 note above because that note predates the entire trial-Hub-owned spec flow, which
+> shipped 2026-08-12 through tonight (2026-08-16/17) under different capability names:
+> `requirement-traceability`, `spec-document-authority`, `spec-chat-session`, and
+> `task-lifecycle-governance`, none of which existed when this phase was last touched. This is the
+> exact "absence by name is not evidence of being unsynced" trap section 16.2's note already names
+> for phases 9-12 — it plausibly applies here too, at greater scale, and nobody has done the mapping.
+>
+> A first read of those four specs' requirement headings suggests real coverage for most of this
+> phase: 14.1 (stable identifiers) ~ `requirement-traceability`'s "A requirement is addressable
+> outside its document" and spec-document-authority's "The Hub mints requirement identifiers and
+> they are stable"; 14.2 (task links requirements) ~ "Work is linked to the requirements it serves";
+> 14.3 (evidence records) ~ "Evidence names what produced it and what it was produced against";
+> 14.4/14.8 (verification state, coverage) ~ "Coverage is one computation with one precedence"; 14.5/
+> 14.6 (stale evidence, drift) ~ "A changed implementation raises a candidate, never an edit"; 14.7
+> (bidirectional navigation) ~ "navigable in both directions"; 14.9 (rigor declaration) ~
+> spec-document-authority's "A document declares how strictly it is enforced" / "Only the operator
+> changes rigor" / "Rigor is only raised on a document that can be enforced"; 14.10 (gate
+> enforcement) ~ task-lifecycle-governance's "Approval is refused while a gated requirement is
+> unverified" — and iteration 19 of tonight's own N6 fallback work built exactly this gate's
+> approval-time report. 14.16/14.17 (workspace standard, plain/portable with divergence reported) ~
+> spec-chat-session's width/legibility requirements and spec-document-authority's digest/divergence
+> requirement.
+>
+> **Genuinely uncertain, not just unmapped:** 14.11 (agent edits direct on sketches, proposals on
+> contracts/gates — a *rigor-gated editing mode*, not just a rigor *label*), 14.12 (in-position,
+> individually-acceptable proposals with no residue on rejection), 14.13 (the three on-ramps: derive
+> from implementation, grow from conversation, start from a template), 14.14 (scope authoring
+> assistance to specs only; discovered implementation work is proposed, not performed), and 14.15
+> (aw-spec-* skills reachable from the workspace — plausibly a rejected design now that
+> `submit_spec_document` and friends are MCP tools rather than skills, per CLAUDE.md's "still
+> prohibited" list; if so this item needs re-wording, not building).
+>
+> **This is a name-mapping hypothesis, not a verified closure — do not tick any 14.x box on the
+> strength of this note.** Closing this phase needs the same per-requirement, per-scenario check
+> 16.2 already prescribes for phases 9-12, done fresh against the current 30 specs rather than
+> assumed from headings. That is real, substantial work — comparable in size to N2 tonight — and
+> belongs to a dedicated iteration (or its own openspec change, since some of 14.11-14.15 may turn
+> out to be real product gaps worth speccing rather than paperwork). Recommended next step for
+> whoever picks this up: read `requirement-traceability`, `spec-document-authority`,
+> `spec-chat-session`, and `task-lifecycle-governance` in full against each of 14.1-14.17's exact
+> wording, tick what a scenario genuinely covers, and open a fresh change for whatever from
+> 14.11-14.15 turns out to still be missing rather than trying to shoehorn it into this 2026-07-30
+> umbrella.
 
 - [ ] 14.1 Add stable, visible requirement identifiers; report unidentified requirements; never
       reissue a retired identifier; keep identifiers stable across rewording, reordering, relocation.
