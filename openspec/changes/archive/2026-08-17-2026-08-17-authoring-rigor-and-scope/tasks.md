@@ -124,11 +124,15 @@ scoping) so either can land first — F4 is sequenced last only because it touch
 
 ## 6. Retire 14.15
 
-- [ ] 6.1 Update `openspec/changes/2026-07-30-hub-native-experience/tasks.md`'s 14.15 line from
+- [x] 6.1 Update `openspec/changes/2026-07-30-hub-native-experience/tasks.md`'s 14.15 line from
       "confirmed superseded design, needs re-wording or explicit retirement" to a waived closure
       citing this change's `design.md` D7, matching the waive-with-reason convention this run's N6
       pass already used elsewhere in that file. Do this only once this change's own tasks are
       implemented and merged — not as part of authoring it.
+      *(Done in iteration 25 alongside the rest of section 6/7 — verified live in this iteration:
+      `hub-native-experience/tasks.md`'s 14.15 line already carries the waived-closure wording citing
+      D7. The checkbox itself was left unticked in the same pass; flipped now, no new content
+      change.)*
 
 ## 7. Whole-stack verification
 

@@ -2270,3 +2270,114 @@ or waive-with-reason, never on the strength of a plan) with whatever runway rema
 `stop_at` (2026-08-17T08:00:00+01:00) — a little under 1h40m as of this iteration's heartbeat.
 Consider whether `2026-08-17-authoring-rigor-and-scope` itself is now a candidate for the same
 archiving pass, since it is fully implemented and synced.
+
+---
+
+## Iteration 26 — 2026-08-17T06:34:19+01:00 — QUEUE EMPTIES, SESSION STOPS
+
+**N6, closing.** `next_action` handed off two things: return to N6's original remit (archive the 13
+pre-08-16 `openspec/changes/` entries), and consider archiving `2026-08-17-authoring-rigor-and-scope`
+alongside them now that it is fully implemented.
+
+**Discovery: N6's original remit was already complete.** `openspec/changes/archive/` was checked
+directly rather than trusted from memory — it holds 13 entries dated `2026-08-17-2026-08-1x-*`, i.e.
+the 13 pre-08-16 changes the queue item named, archived across earlier N6 iterations (19-24) that
+predate this entry. Only one pre-08-16 change remained unarchived: `2026-07-30-hub-native-experience`.
+It is NOT a fit for the queue item's stated pattern ("remainders are human-only verification sections
+nobody worked", "22/23, 84/92, 25/32 and similar"): it is 140/188 with 48 unticked tasks that are real,
+unbuilt implementation work — a project token budget, the projects API and navigation restructure, the
+composer's autosizing/trigger-menu/context-meter, the agent/runner selector, charter scope enforcement,
+spec-traceability on-ramps, and an inline approval surface, each a multi-iteration feature in its own
+right based on how comparably-scoped items ran earlier this session. Its own task 16.3 ("Archive the
+change") is explicitly gated behind sections 9-15 landing first. Archiving it now, or ticking any of
+its 48 items without building them, would violate CLAUDE.md's "never mark a task complete on the
+strength of a plan existing." Left untouched, correctly, with this reasoning recorded rather than
+silently skipped.
+
+**Archived `2026-08-17-authoring-rigor-and-scope`.** One loose end from iteration 25: task 6.1 (retire
+`hub-native-experience` 14.15 with a waived-closure citing design D7) was verified as already DONE in
+the target file's actual prose — 14.15 already reads with the exact waiver wording iteration 25's log
+describes — but the checkbox in `authoring-rigor-and-scope/tasks.md` itself had been left unticked.
+Fixed the checkbox only, no new content change (both files, no code). Confirmed no outstanding
+objections remain in `design.md`, confirmed the six `spec-document-authority` requirements the delta
+adds are already present in `openspec/specs/spec-document-authority/spec.md` (synced in iteration 25),
+then ran `openspec archive 2026-08-17-authoring-rigor-and-scope --skip-specs -y` (skip-specs because
+the delta was already hand-merged; re-running spec sync would have risked a double-apply). Archived
+clean as `2026-08-17-2026-08-17-authoring-rigor-and-scope`. `openspec validate --changes --strict`:
+8/8 (the seven 2026-08-16 changes from this session's own N1-N5 work, plus `hub-native-experience`).
+`--specs --strict`: 31/31, unchanged count as expected (no new capability, just one fewer unarchived
+change).
+
+**The queue is now empty.** N1 through N6 are all `done`. N6's honest terminal state is: 13/13
+pre-08-16 changes resolved (12 archived earlier + this session's own review-cap change counted against
+the same backlog), the 14th (`hub-native-experience`) correctly left as ongoing work rather than
+force-closed, and the one fallback candidate the last iteration flagged
+(`authoring-rigor-and-scope`) archived. Per `stop_when_queue_empties: true`, this is the stopping
+point named in the skill's Step 6, not a cue to invent new scope from `prep_notes.backlog` — those
+items were explicitly "not worth displacing a keystone item," and manufacturing a new keystone in the
+last hour of a 10.5-hour run is a worse failure mode than stopping on time with real work done.
+Unregistered the `AgentWeaveAutonomousSession` scheduled task so it stops firing against an empty
+queue between now and `stop_at` (08:00) rather than waking a fresh process every cadence to re-read
+the same "nothing left" conclusion.
+
+### Session-final summary (spans iterations 1-26, started 2026-08-16T21:25:00+01:00)
+
+**What changed.** 64 commits since session start, by queue item:
+
+- **N1** — `openspec/explorations/2026-08-16-a-corpus-at-scale.md`: exploration only, no code, feeds N2/N2b.
+- **N2 (keystone)** — the archive transition and the capability document kind: migration 0074,
+  `spec_lifecycle.py`'s transition table, API and UI. Merged and implemented, not spec-only.
+- **N2b** — task board scoped by specification, acting on N1's recommendation. Merged and implemented.
+- **N3** — the job system's many-named-loops model: new tables (not overloading `AIJob`/`JobRun`),
+  API, and a visibility UI, composing with existing questions/runs/tasks/agents primitives per the
+  operator's binding note. Existing scheduled jobs verified still working, not just asserted. Merged.
+- **N4** — Q6 (`2026-08-16-one-hub-and-a-window-of-its-own`)'s three amendments resolved, spec-only as
+  scoped (no pywebview dependency authorised). Zero code.
+- **N5** — architecture proposals from the market research, correcting the chronology error in
+  `2026-08-15-where-agentweave-fits.md` section 2 first. Thinking documents, no code.
+- **N6** — plus its own fallback pickup, `2026-08-17-authoring-rigor-and-scope`: the F1-F5
+  requirement-gating/proposal/attribution/scope-restriction change, spec'd across 3 review rounds (cap
+  reached, approved and implemented in the same iteration per this session's `spec_round_protocol.
+  at_cap`), then the archive backlog itself.
+
+**What was proven, not merely inferred.** Every merged change carries a `verified_green_at_*` entry in
+`environment` with actual suite counts (`pytest hub/tests -n 8`, `pytest tests/ -n 4`, `npm test`,
+`lint`/`tsc`/`ruff`/`black`, `openspec validate`), not narrated success. N3's job-fire path was checked
+live against the trial Hub with a script that was written, run, and torn down (16/16), not left as an
+assumption. The F4 tool-write restriction was traced through the real spawn path
+(`agent_trigger.py` to `pty_runner.resolve_executable`) rather than assumed from unit tests alone —
+and where a live agent trigger was NOT run, that gap is recorded honestly in
+`authoring-rigor-and-scope`'s own task 5.4 rather than ticked.
+
+**What is open**, beyond `prep_notes.backlog`'s standing items (SSE `project_deleted` UI gap, CI's
+`pytest -n auto` one-word win, `refresh_ui_bundle.py`'s over-broad fingerprint, the repo-root shadowing
+trap, a pre-existing scheduler quirk in `_do_fire_job`, F4's still-needed live end-to-end trigger, two
+recorded interpretation calls in the metadata-bundle diff grain and the proposals-panel UI shape):
+
+- `2026-07-30-hub-native-experience` carries 48 real unbuilt tasks across sections 9-15 (token
+  budget, project navigation, composer, agent/runner selector, charter scope enforcement,
+  spec-traceability on-ramps, approval surface) plus its own section 16 verify-and-archive. This is
+  the largest remaining body of work in the repository and was correctly NOT touched by tonight's N6
+  — it needs its own planned session(s), not a fallback slot.
+- Q6 (`2026-08-16-one-hub-and-a-window-of-its-own`) is spec-revised with amendments resolved but is
+  0/21 on implementation — pywebview is not authorised, so it is blocked on that decision, not on
+  further spec work.
+
+**Decisions waiting for the user** — read `decisions_for_user` in `STATE.json` in full; the two most
+consequential: (1) whether to authorise `pywebview` (or another approach) so Q6 can be implemented; (2)
+whether and when to merge `autonomous/2026-08-16-spec-corpus-and-jobs` back onto `hub-native-experience`
+or `master` — this run never touched either, per its own limits, and merging is explicitly the
+operator's call made awake.
+
+**What to distrust.** Nothing new this iteration beyond what earlier entries already flagged (F4's
+narrower-than-planned live check; the two recorded interpretation calls above). This iteration's own
+change was two checkbox/file edits plus an `openspec archive` invocation — verified by direct
+inspection of the archive folder and both `openspec validate` runs, not by narration.
+
+**How far it actually got: the full 10.5-hour plan, done in about 9h09m.** Queue seeded at
+2026-08-16T21:25 with six items and a stop time of 2026-08-17T08:00. All six are `done` as of
+2026-08-17T06:34 — roughly 1h26m of runway remained unused. The prep's own capacity estimate ("N1+N2
+will plausibly consume half of it... N5 is the fallthrough and N6 almost certainly will not be
+reached") undershot: N1-N6 all completed, including N6's own fallback archive of
+`authoring-rigor-and-scope`. Stopping now, on a genuinely empty queue, rather than manufacturing a
+seventh item to fill the clock.
