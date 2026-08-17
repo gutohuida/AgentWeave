@@ -2178,7 +2178,9 @@ def test_migrations_0074_to_0076_roll_all_the_way_back_and_forward(tmp_path) -> 
         command.upgrade(cfg, "head")
 
     with sqlite3.connect(db_file) as conn:
-        assert conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == HEAD_REVISION
+        assert (
+            conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == HEAD_REVISION
+        )
         tables = {
             row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
