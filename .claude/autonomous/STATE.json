@@ -6,8 +6,8 @@
   "started_at": "2026-08-17T10:14:49+01:00",
   "stop_at": "2026-08-17T15:00:00+01:00",
   "stop_when_queue_empties": true,
-  "iteration": 11,
-  "last_heartbeat": "2026-08-17T10:55:07+01:00",
+  "iteration": 12,
+  "last_heartbeat": "2026-08-17T11:00:12+01:00",
   "session_stopped": null,
   "release_shape": {
     "version": "1.0.0",
@@ -114,7 +114,7 @@
     }
   ],
   "current": "R11-merge-and-drive-ci",
-  "next_action": "R11 continued: PR #1 is open into master. Round 1 gave 6/6 test matrix legs, ui-test and CI build GREEN; Docs/build FAILED on the agentweave-hub>=1.0.0 resolution (the R4 chicken-and-egg, fixed in ci.yml but missed in docs.yml). docs.yml now installs ./hub first, and publish.yml's `publish` job now `needs: publish-hub` so the dependency reaches PyPI before the dependent. Push and wait for round 2. DO NOT MERGE until every check is green AND finished.",
+  "next_action": "Waiting on PR #1 round 3 (commit cebb542). Round 2 had everything green except hub-test, still running. When all checks finish green, follow `release_runbook` in this file, step by step, without skipping step 3's wait.",
   "limits": [
     "OUTWARD-FACING ACTIONS ARE AUTHORISED THIS RUN — this INVERTS the previous run's standing rule, deliberately. Pushing, opening a PR, merging to master, tagging, and creating a GitHub release are all in scope, in R11/R12 order. Everything else outward-facing is not: no force-push, no history rewriting on any shared branch, no deleting or moving existing tags or releases, no touching the four releases already published.",
     "NEVER release on a red or still-running CI. `gh pr checks` must show every job green and FINISHED before the PR merges, and the merge must be green before the tag exists. The operator chose 'Full auto, but only on green CI' with that as the hard rule.",
@@ -206,5 +206,14 @@
       "what": "310 ruff pyupgrade modernisations (UP035/UP017/UP041/UP042) deferred in 1.0.0 via [tool.ruff.lint] ignore. Correct, mechanical, 204 not auto-fixable. Delete the ignore entries one at a time in a dedicated change.",
       "raised": "2026-08-17 iteration 4 (R5)"
     }
+  ],
+  "release_runbook": [
+    "1. WAIT for every check on PR #1 to be SUCCESS/SKIPPED and FINISHED. The commit under test must be the one being merged (currently cebb542). `hub-test` is the long pole: CI runs 2130 tests serially, ~15-25 min.",
+    "2. MERGE by fast-forward push, not a merge commit: `git push origin hub-native-experience:master`. There is no trustworthy local `master` (refs/heads/master is stale at eedbe46; the real base is origin/master f6663a9, and HEAD is 794 ahead / 0 behind). GitHub auto-closes PR #1 when the commits land.",
+    "3. The master push fires ci.yml again, docs.yml (which DEPLOYS to Pages this time - `deploy` is push-only), and hub-image.yml (paths hub/** matches; 634 files under hub/ changed). WAIT for ci.yml on master to be green - limit 2 says the merge must be green before the tag exists.",
+    "4. TAG AND RELEASE. Read both pyproject.toml version lines aloud against 1.0.0 first. `git tag v1.0.0 && git push origin v1.0.0`, then `gh release create v1.0.0 --title 'AgentWeave v1.0.0' --notes-file .release-notes-1.0.0.md`. Do NOT create hub-v1.0.0.",
+    "5. Creating the release fires publish.yml. `publish-hub` runs FIRST (publish now `needs: publish-hub`), so agentweave-hub reaches PyPI before agentweave-ai, which depends on it. Both jobs are gated on refs/tags/v - if only one fires, the re-gating is wrong and is the top priority to fix.",
+    "6. VERIFY THE ARTEFACT, not the workflow: fresh venv, `pip install agentweave-ai==1.0.0` from real PyPI, confirm `agentweave --version` is 1.0.0 AND that agentweave-hub 1.0.0 came with it. Then confirm the GHCR image published and the Pages site rebuilt.",
+    "7. Delete the untracked .release-notes-1.0.0.md afterwards; it is scratch, never committed."
   ]
 }
