@@ -35,21 +35,25 @@ from .spec_payload import SpecPayload, embed_payload
 _STYLE = """
 :root {
   --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
-  --aw-accent: #0969da; --aw-warn: #9a6700; --surface-2: #eaeef2; --surface: #f6f8fa;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
 }
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
-    --aw-accent: #4493f8; --aw-warn: #d29922; --surface-2: #21262d; --surface: #161b22;
+    --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+    --surface-2: #21262d; --surface: #161b22;
   }
 }
 :root[data-theme="light"] {
   --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
-  --aw-accent: #0969da; --aw-warn: #9a6700; --surface-2: #eaeef2; --surface: #f6f8fa;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
 }
 :root[data-theme="dark"] {
   --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
-  --aw-accent: #4493f8; --aw-warn: #d29922; --surface-2: #21262d; --surface: #161b22;
+  --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+  --surface-2: #21262d; --surface: #161b22;
 }
 * { box-sizing: border-box; }
 body {
@@ -80,6 +84,27 @@ a { color: var(--aw-accent); }
 .aw-modal-may { color: var(--fg); font-weight: 400; }
 .aw-chip-rigor-gate { color: var(--aw-accent); border: 1px solid var(--aw-accent); }
 .aw-chip-rigor-contract { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Phase is a lifecycle, and the question it answers is "can I rely on this?". `approved` and a
+   capability's `current` are settled and take the done tone; `proposed` is waiting on an operator
+   decision and takes warn; `exploring` and `archived` are quiet for opposite reasons — one has not
+   arrived yet, the other has been superseded. Deliberately NOT the accent: this document already
+   spends accent on links and on MUST, and a third meaning would empty it of any. `kind` keeps the
+   plain chip on purpose — it is a category, not a state, and hue there ranks nothing. */
+.aw-chip-phase-done { color: var(--aw-ok); border: 1px solid var(--aw-ok); }
+.aw-chip-phase-waiting { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+.aw-chip-phase-quiet { color: var(--muted); }
+.aw-chip-phase-archived { color: var(--muted); text-decoration: line-through; }
+/* An unresolved question blocks `propose`, so it is a real state and not a label. Resolved stays
+   the plain chip — the reader needs to find what is still open, not celebrate what is closed. */
+.aw-chip-open { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Limits is where a reader is most likely to be misled, and it read identically to Checked. */
+.aw-limits { color: var(--aw-warn); }
+/* The first screenful was entirely monochrome, so the document read as texty however the
+   requirements below were coloured. This puts the same modal scheme where the eye lands first,
+   carrying counts rather than decoration. */
+.aw-summary { margin: 0 0 1.5rem; font-size: .9rem; color: var(--muted); }
+.aw-summary .aw-count { font-weight: 600; }
+.aw-summary-sep { color: var(--border); margin: 0 .45rem; }
 .aw-rationale { color: var(--muted); font-size: .9rem; }
 .aw-refs { font-size: .82rem; color: var(--muted); }
 .aw-note { color: var(--muted); font-style: italic; }
@@ -152,6 +177,55 @@ RIGOR_META = "aw-spec-rigor"
 # the warn tone. Any value not in this mapping (should not occur; spec_rigor.set_rigor validates
 # on the way in) renders as the plain neutral chip rather than raising here.
 _RIGOR_TONE = {"gate": "gate", "contract": "contract"}
+
+# Values are the phases in hub/hub/spec_lifecycle.py. A phase not in this mapping renders as the
+# plain neutral chip rather than raising, the same way an unknown rigor does.
+_PHASE_TONE = {
+    "approved": "done",
+    "current": "done",
+    "proposed": "waiting",
+    "exploring": "quiet",
+    "archived": "archived",
+}
+
+
+def _summary(payload: SpecPayload) -> str:
+    """Counts, in the modal scheme, above the fold.
+
+    Only what the payload itself knows. Coverage — whether a requirement has work linked — is the
+    Hub's, not the renderer's, and claiming it here would state something this function cannot see.
+    """
+    if not payload.requirements:
+        return ""
+
+    by_tone: Dict[str, int] = {}
+    for requirement in payload.requirements:
+        tone = _MODAL_TONE.get(requirement.modal, "may")
+        by_tone[tone] = by_tone.get(tone, 0) + 1
+
+    parts: List[str] = []
+    for tone, label in (("must", "MUST"), ("should", "SHOULD"), ("may", "MAY")):
+        count = by_tone.get(tone, 0)
+        if count:
+            parts.append(
+                f'<span class="aw-modal aw-modal-{tone}"><span class="aw-count">{count}</span> '
+                f"{label}</span>"
+            )
+
+    tail = [f'<span class="aw-count">{len(payload.requirements)}</span> requirements']
+    if payload.acceptance_criteria:
+        tail.append(f'<span class="aw-count">{len(payload.acceptance_criteria)}</span> criteria')
+    if payload.tasks:
+        tail.append(f'<span class="aw-count">{len(payload.tasks)}</span> tasks')
+    unresolved = sum(1 for question in payload.open_questions if not question.resolved)
+    if unresolved:
+        tail.append(
+            f'<span class="aw-limits"><span class="aw-count">{unresolved}</span> '
+            f'open question{"s" if unresolved != 1 else ""}</span>'
+        )
+
+    sep = '<span class="aw-summary-sep">·</span>'
+    return f'<p class="aw-summary">{sep.join(parts + tail)}</p>'
 
 
 def requirement_anchor(identifier: str) -> str:
@@ -233,7 +307,8 @@ def _open_questions(payload: SpecPayload) -> str:
     items = []
     for question in payload.open_questions:
         state = "resolved" if question.resolved else "open"
-        items.append(f'<li><span class="aw-chip">{state}</span>{_e(question.question)}</li>')
+        chip = "aw-chip" if question.resolved else "aw-chip aw-chip-open"
+        items.append(f'<li><span class="{chip}">{state}</span>{_e(question.question)}</li>')
     return "<ul>" + "".join(items) + "</ul>"
 
 
@@ -246,7 +321,7 @@ def _evidence(payload: SpecPayload) -> str:
     if checked:
         body += f"<h3>Checked</h3>{checked}"
     if limits:
-        body += f"<h3>Limits</h3>{limits}"
+        body += f'<h3 class="aw-limits">Limits</h3>{limits}'
     return body
 
 
@@ -298,6 +373,8 @@ def render_document(
 
     rigor_tone = _RIGOR_TONE.get(rigor, "")
     rigor_chip_class = f"aw-chip aw-chip-rigor-{rigor_tone}" if rigor_tone else "aw-chip"
+    phase_tone = _PHASE_TONE.get(phase, "")
+    phase_chip_class = f"aw-chip aw-chip-phase-{phase_tone}" if phase_tone else "aw-chip"
 
     return (
         "<!DOCTYPE html>\n"
@@ -313,8 +390,9 @@ def render_document(
         "</head>\n<body>\n"
         f"<h1>{_e(payload.title)}</h1>\n"
         f'<p class="aw-meta"><span class="aw-chip">{_e(payload.kind)}</span>'
-        f'<span class="aw-chip">{_e(phase)}</span>'
+        f'<span class="{phase_chip_class}">{_e(phase)}</span>'
         f'<span class="{rigor_chip_class}">{_e(rigor)}</span></p>\n'
+        f"{_summary(payload)}\n"
         f"{sections}\n"
         f"{embed_payload(stored_payload)}\n"
         "</body>\n</html>\n"

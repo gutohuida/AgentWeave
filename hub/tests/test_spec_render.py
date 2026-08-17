@@ -397,3 +397,125 @@ def test_a_document_with_no_identity_block_has_no_retirements():
     assert read_retired(None) == {}
     assert read_retired({}) == {}
     assert read_retired({IDENTITY_FIELD: {"requirements": {}}}) == {}
+
+
+# ---------------------------------------------------------------------------
+# Colour that carries information
+# ---------------------------------------------------------------------------
+
+
+def test_the_phase_chip_takes_a_tone_per_lifecycle_state():
+    """Phase answers "can I rely on this?", so each state reads differently. `approved` and a
+    capability's `current` are settled, `proposed` waits on an operator, `exploring` has not
+    arrived and `archived` has been superseded."""
+    for phase, expected_class in (
+        ("approved", "aw-chip-phase-done"),
+        ("current", "aw-chip-phase-done"),
+        ("proposed", "aw-chip-phase-waiting"),
+        ("exploring", "aw-chip-phase-quiet"),
+        ("archived", "aw-chip-phase-archived"),
+    ):
+        html = _render(_payload(), phase=phase)
+        assert f'class="aw-chip {expected_class}">{phase}' in html
+
+
+def test_an_unknown_phase_falls_back_to_the_plain_chip():
+    """A phase this mapping does not know renders neutral rather than raising, the same way an
+    unknown rigor does."""
+    html = _render(_payload(), phase="something-new")
+    assert 'class="aw-chip">something-new' in html
+
+
+def test_the_kind_chip_is_never_toned():
+    """kind is a category, not a state. Hue there would rank things that have no ranking."""
+    html = _render(_payload(), phase="approved")
+    assert 'class="aw-chip">change-spec' in html
+
+
+def test_the_phase_tone_is_never_the_accent():
+    """The document already spends the accent on links and on MUST. A third meaning would empty
+    it of any, so the phase scheme uses the done/warn tones instead."""
+    for phase in ("approved", "current", "proposed", "exploring", "archived"):
+        html = _render(_payload(), phase=phase)
+        chip = re.search(r'class="aw-chip aw-chip-phase-[a-z]+"', html)
+        assert chip is not None
+        assert "accent" not in chip.group(0)
+
+
+def test_an_unresolved_question_is_toned_and_a_resolved_one_is_not():
+    """An unresolved question blocks propose, so it is a state and not a label."""
+    payload = _payload(
+        open_questions=[
+            {"question": "Still deciding?", "resolved": False},
+            {"question": "Settled.", "resolved": True},
+        ]
+    )
+    html = _render(payload)
+    assert 'class="aw-chip aw-chip-open">open' in html
+    assert 'class="aw-chip">resolved' in html
+
+
+def test_limits_is_toned_and_checked_is_not():
+    """Limits is where a reader is most likely to be misled; it read identically to Checked."""
+    payload = _payload(evidence={"checked": ["Read the code"], "limits": ["Not run live"]})
+    html = _render(payload)
+    assert '<h3 class="aw-limits">Limits</h3>' in html
+    assert "<h3>Checked</h3>" in html
+
+
+def test_the_summary_counts_requirements_by_modal_in_the_modal_scheme():
+    """The first screenful was monochrome however the requirements below were coloured."""
+    payload = _payload(
+        requirements=[
+            _requirement("a", modal="MUST"),
+            _requirement("b", modal="SHALL"),
+            _requirement("c", modal="SHOULD"),
+            _requirement("d", modal="MAY"),
+        ]
+    )
+    html = _render(payload, {"a": "FR-1", "b": "FR-2", "c": "FR-3", "d": "FR-4"})
+    summary = html.split('<p class="aw-summary">')[1].split("</p>")[0]
+    # SHALL folds into MUST, exactly as the requirement list itself tones it.
+    assert '<span class="aw-count">2</span> MUST' in summary
+    assert '<span class="aw-count">1</span> SHOULD' in summary
+    assert '<span class="aw-count">1</span> MAY' in summary
+    assert '<span class="aw-count">4</span> requirements' in summary
+
+
+def test_the_summary_reports_unresolved_questions_and_stays_silent_when_there_are_none():
+    with_open = _render(
+        _payload(
+            requirements=[_requirement("a")],
+            open_questions=[{"question": "Undecided?", "resolved": False}],
+        ),
+        {"a": "FR-1"},
+    )
+    assert "1</span> open question" in with_open
+
+    resolved_only = _render(
+        _payload(
+            requirements=[_requirement("a")],
+            open_questions=[{"question": "Decided.", "resolved": True}],
+        ),
+        {"a": "FR-1"},
+    )
+    assert "open question" not in resolved_only.split('<p class="aw-summary">')[1].split("</p>")[0]
+
+
+def test_a_document_with_no_requirements_has_no_summary():
+    """Nothing to count is not the same as counting zero, and a bar of zeroes is noise."""
+    assert 'class="aw-summary"' not in _render(_payload())
+
+
+def test_the_summary_claims_no_coverage_it_cannot_see():
+    """Whether a requirement has work linked is the Hub's knowledge, not the renderer's."""
+    payload = _payload(requirements=[_requirement("a")])
+    summary = _render(payload, {"a": "FR-1"}).split('<p class="aw-summary">')[1].split("</p>")[0]
+    assert "linked" not in summary
+    assert "coverage" not in summary.lower()
+
+
+def test_the_done_tone_is_defined_in_every_theme_block():
+    """--aw-ok is read by the phase chip, so a block that omits it would render an unstyled chip
+    in that mode. Mirrors the neutral pinning test above."""
+    assert _STYLE.count("--aw-ok:") == 4
