@@ -6,8 +6,8 @@
   "started_at": "2026-08-17T10:14:49+01:00",
   "stop_at": "2026-08-17T15:00:00+01:00",
   "stop_when_queue_empties": true,
-  "iteration": 7,
-  "last_heartbeat": "2026-08-17T10:41:41+01:00",
+  "iteration": 8,
+  "last_heartbeat": "2026-08-17T10:43:36+01:00",
   "session_stopped": null,
   "release_shape": {
     "version": "1.0.0",
@@ -77,9 +77,10 @@
     {
       "id": "R8-changelog-1-0-0",
       "title": "Write the 1.0.0 CHANGELOG",
-      "status": "pending",
+      "status": "done",
       "why": "`CHANGELOG.md`'s `[Unreleased]` still describes pilot-mode removal, and the last entry — 0.42.0, 2026-07-24 — documents the `spec` role, `agentweave spec push` and `roles.json`, all since deleted. 776 commits have no release notes.",
-      "detail": "The spine is the 81 openspec changes archived since the v0.42.0 tag; get the list with `git log v0.42.0..HEAD --diff-filter=A --name-only -- 'openspec/changes/archive/*/proposal.md'`. Do NOT enumerate 81 entries — group them by the story: the Hub became the only runtime; the CLI went from 56 commands to 5; runners/agents/charters replaced fixed roles; operator-in-the-loop (permissions, questions, backstop); the spec flow the Hub owns; accounting and budgets; local multi-project. Then a BREAKING section carrying, at minimum: the Python floor raise (R5), the single-version scheme and retired `hub-v*` tags (R7), `agentweave-ai` now depending on `agentweave-hub` (R4), the deleted CLI commands, and the deleted watchdog/messaging/local+git transports/role subsystem. Fold the stale `[Unreleased]` content into 1.0.0 or delete it if superseded. State plainly what is NOT in 1.0.0: charter scope and default skills, skill invocation, agent templates, the pywebview desktop shell."
+      "detail": "The spine is the 81 openspec changes archived since the v0.42.0 tag; get the list with `git log v0.42.0..HEAD --diff-filter=A --name-only -- 'openspec/changes/archive/*/proposal.md'`. Do NOT enumerate 81 entries — group them by the story: the Hub became the only runtime; the CLI went from 56 commands to 5; runners/agents/charters replaced fixed roles; operator-in-the-loop (permissions, questions, backstop); the spec flow the Hub owns; accounting and budgets; local multi-project. Then a BREAKING section carrying, at minimum: the Python floor raise (R5), the single-version scheme and retired `hub-v*` tags (R7), `agentweave-ai` now depending on `agentweave-hub` (R4), the deleted CLI commands, and the deleted watchdog/messaging/local+git transports/role subsystem. Fold the stale `[Unreleased]` content into 1.0.0 or delete it if superseded. State plainly what is NOT in 1.0.0: charter scope and default skills, skill invocation, agent templates, the pywebview desktop shell.",
+      "outcome": "1.0.0 entry written. Stale [Unreleased] (pilot mode) folded in and removed. All figures measured from git, not estimated: 81 archived changes, 67 migrations, 56->5 CLI commands. Sections: what it is now / Breaking / Fixed in this release / Not in this release."
     },
     {
       "id": "R9-readme-and-docs-accuracy",
@@ -110,8 +111,8 @@
       "detail": "PRECONDITION, CHECK IT EXPLICITLY: every CI job on the PR is green and finished. Then merge the PR to master. `hub-image.yml` fires on any master push touching `hub/` and will build the Docker image. Then tag `v1.0.0` and `gh release create v1.0.0` with notes drawn from R8's CHANGELOG. Watch `publish.yml` to completion — after R7 it must publish BOTH `agentweave-ai` and `agentweave-hub` from that one tag; if only one job fires, the R7 re-gating is wrong and that is the highest-priority fix. VERIFY, do not assume: `pip download agentweave-ai==1.0.0` into a temp dir, or `pip install` into a throwaway venv, and confirm `agentweave --version` reports 1.0.0 and that it pulled `agentweave-hub` with it (R4's whole point). Confirm the GHCR image published and the Pages docs site rebuilt. Do NOT create a `hub-v1.0.0` tag."
     }
   ],
-  "current": "R8-changelog-1-0-0",
-  "next_action": "R8: write the 1.0.0 CHANGELOG. Spine is the 81 openspec changes archived since the v0.42.0 tag - get them with git log v0.42.0..HEAD --diff-filter=A --name-only -- 'openspec/changes/archive/*/proposal.md'. Do NOT enumerate 81; group by story: Hub became the only runtime; CLI 56 commands -> 5; runners/agents/charters replaced fixed roles; operator-in-the-loop; the Hub-owned spec flow; accounting and budgets; local multi-project. Then a BREAKING section: Python floor 3.11, single-version scheme with hub-v* retired, agentweave-ai now depends on agentweave-hub, deleted CLI commands, deleted watchdog/messaging/transports/roles. Fold or delete the stale [Unreleased] block (it describes pilot-mode removal). State what is NOT in 1.0.0: charter scope and default skills, skill invocation, agent templates, pywebview desktop shell.",
+  "current": "R9-readme-and-docs-accuracy",
+  "next_action": "R9: README and live docs accuracy. (1) docs/reference/mcp-tools.md documents 9 tools; hub/hub/mcp_server.py has 21 @mcp.tool() decorators - reconcile. CLAUDE.md's '11 tools' is stale too. (2) README.md: a 1.0.0 pass - what AgentWeave is now, the corrected install (pip install agentweave-ai then agentweave), the five CLI commands. (3) Verify every command in installation.md and quickstart.md against create_parser() in src/agentweave/cli.py. (4) Spot-check docs/index.md, guides/dashboard.md, architecture/overview.md for deleted subsystems. (5) docs/reference/cli-commands.md looked correct in prep - verify, do not rewrite. Re-run mkdocs build --strict after.",
   "limits": [
     "OUTWARD-FACING ACTIONS ARE AUTHORISED THIS RUN — this INVERTS the previous run's standing rule, deliberately. Pushing, opening a PR, merging to master, tagging, and creating a GitHub release are all in scope, in R11/R12 order. Everything else outward-facing is not: no force-push, no history rewriting on any shared branch, no deleting or moving existing tags or releases, no touching the four releases already published.",
     "NEVER release on a red or still-running CI. `gh pr checks` must show every job green and FINISHED before the PR merges, and the merge must be green before the tag exists. The operator chose 'Full auto, but only on green CI' with that as the hard rule.",

@@ -356,3 +356,41 @@ workflow" step and an explicit note that a PyPI version can never be reused.
 
 **Verified:** all three workflows parse, and both `publish.yml` jobs now show the same `if:`. Both
 distributions build at 1.0.0.
+
+---
+
+## Iteration 7 — 11:35 — R8: the 1.0.0 CHANGELOG
+
+`[Unreleased]` described pilot-mode removal, and the newest released entry — 0.42.0, dated
+2026-07-24 — documented the `spec` role, `agentweave spec push` and `roles.json`, every one of which
+has since been deleted. 776 commits had no release notes at all.
+
+The stale `[Unreleased]` block is gone rather than preserved: pilot mode's removal is one line in a
+release that removes the watchdog, the messaging subsystem, both non-HTTP transports and the role
+subsystem, so it belongs inside 1.0.0's Breaking section, not above it as separate news.
+
+**Figures in the entry are measured, not estimated:**
+
+| Claim | How |
+|---|---|
+| 81 changes archived since 0.42.0 | `git log v0.42.0..HEAD --diff-filter=A --name-only -- 'openspec/changes/archive/*/proposal.md'` |
+| 67 migrations | `git diff --name-only --diff-filter=A v0.42.0..HEAD -- hub/hub/migrations/versions/` |
+| 56 CLI commands → 5 | `git show v0.42.0:src/agentweave/cli.py \| grep -c '^def cmd_'` against the same count today |
+| watchdog, messaging, runner, roles, local + git transports existed at 0.42.0 | `git cat-file -e v0.42.0:src/agentweave/<file>` for each |
+| 9 starter charters, 21 MCP tools | read from `charters.json` and a count of `@mcp.tool()` |
+
+Structured as: what the product is now (seven paragraphs, one per subsystem, no enumeration of the
+81); **Breaking**, which is the section that matters to anyone upgrading — the 3.11 floor, the new
+dependency, the retired `hub-v*` scheme, the 51 removed commands with the two replacements spelled
+out, the deleted subsystems, and `agentweave.yml` no longer being read; **Fixed in this release
+specifically**, for the six defects this run found and closed, since they are the only entries a
+reader can act on today; and **Not in this release**, naming the charter-scope, skill-invocation,
+agent-template and pywebview gaps so they read as deferred rather than forgotten.
+
+**Verified:** the file's heading structure is intact — `## [1.0.0] - 2026-08-17` at line 9, `##
+[0.42.0]` still below it at 98 — and `mkdocs build --strict` is still clean.
+
+**A trap worth recording.** The Windows interpreter cannot see Git Bash's `/tmp`: a heredoc written
+to `/tmp/entry.md` and read back by `python` fails with `FileNotFoundError: '\tmp\entry.md'`,
+because Git Bash's `/tmp` maps somewhere Windows paths do not reach. Stage intermediate files inside
+the repository and delete them, rather than in `/tmp`, whenever both shells need to see one.

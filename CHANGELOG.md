@@ -6,17 +6,93 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
-## [Unreleased]
+## [1.0.0] - 2026-08-17
 
-### Removed (CLI + Hub)
-- **Pilot mode removed entirely.** The per-agent `pilot` flag (manual control, disables
-  auto-execution) and its session-registration mechanism are gone: `agentweave agent configure
-  --pilot`/`--no-pilot`, `agentweave session register`, the MCP `register_session` tool, the
-  Hub's `POST /agents/{name}/pilot` and `POST /agents/{name}/register-session` endpoints, the
-  `Agent.pilot`/`Agent.registered_session_id` DB columns (dropped via migration `0013`), and the
-  Hub UI's pilot badge/toggle on the agent detail panel. Session continuity for Hub-managed
-  agents is already covered by the existing session picker; kimi's pilot-only agent-YAML
-  generation is removed along with it.
+**AgentWeave is one product with one version.** `agentweave-ai` and `agentweave-hub` are released
+together from a single `v*` tag, and `pip install agentweave-ai` now installs the whole thing.
+
+This release is the end of a rewrite, not an increment. Between 0.42.0 and here, 81 changes were
+designed, built and archived, and 67 database migrations landed. The product that existed at 0.42.0
+— a multi-runtime CLI with a watchdog, a filesystem and git collaboration substrate, and 56
+commands — is gone. What replaced it is a local application: you install one package, run one
+command, and work in a window.
+
+### The shape of it now
+
+- **The Hub is the only runtime.** It owns execution, state and identity. There is no second
+  runtime, no filesystem collaboration substrate and no git transport. The CLI does only what
+  cannot be done from inside the app: start it, diagnose why it will not start, stop it, reset it.
+- **Runners, agents and charters replaced fixed roles.** A runner is reusable execution capability
+  (a CLI, a model, flags); an agent is an addressable identity bound to at most one runner and one
+  charter; a charter is an editable markdown behaviour contract injected into turn context. Nine
+  starter charters ship. The old fixed role enum, its role files and every role-derived API and UI
+  field are gone.
+- **Operator-in-the-loop.** An agent can stop and involve you rather than guess: a permissions
+  posture per run, `ask_user` for 1–4 structured questions, and a backstop that flags a completed
+  run whose final text asks a question it never routed. Timeouts are per-agent.
+- **A specification flow the Hub owns.** Documents with a real lifecycle — exploring, proposed,
+  approved, archived — plus capability documents holding current behaviour outside that machine.
+  Requirements carry stable identifiers that survive rewording and reordering; evidence names what
+  produced it and what it was produced against; coverage is one computation with one precedence.
+  Rigor (sketch, contract, gate) decides whether an agent edits a document directly or proposes an
+  edit for you to accept.
+- **Scheduled jobs, and loops.** A job carrying a purpose and an optional stop condition is a loop;
+  its queue is the tasks that name it.
+- **Accounting and budgets.** Normalised token telemetry per turn, aggregated per agent and per
+  project, presented as allowance-first and explicitly API-equivalent — and reported as unavailable
+  rather than as zero when a runner does not say.
+- **Local multi-project.** One Hub owns many projects, each bound to a working directory, each
+  isolated in its own database rows and its own event stream.
+
+### Breaking
+
+- **Python 3.11 or newer.** The floor was `>=3.8`, which had stopped being true: the CLI's job is
+  to start the Hub, and the Hub has always required 3.11 — so a 3.8 user could install the CLI and
+  then not run the product. With `agentweave-ai` now depending on `agentweave-hub`, it is
+  unsatisfiable rather than merely misleading.
+- **`agentweave-ai` now depends on `agentweave-hub`.** This is the point: one install. If you were
+  installing both by hand, stop; if you were installing only `agentweave-ai`, you now get a working
+  product instead of a CLI that could not start anything.
+- **One tag releases everything. The `hub-v*` tag scheme is retired.** Releases and Docker images
+  already published under it are untouched and keep working, but nothing new is published there.
+  A pinned `hub-v*` image tag will simply stop receiving updates.
+- **51 of the 56 CLI commands are gone.** What remains: bare `agentweave` (start the app),
+  `doctor`, `status`, `stop`, `reset`. In particular `agentweave init`, `agentweave hub start` and
+  the entire agent, message, task, session and role command families no longer exist — the app is
+  where that work happens. Bare `agentweave` replaces `agentweave hub start`, and
+  `agentweave --docker` replaces `agentweave hub start --docker`.
+- **Deleted and not coming back:** the watchdog, the messaging subsystem, the local and git
+  transports, the role subsystem, and pilot mode with its session-registration mechanism. HTTP to
+  the Hub is the only transport.
+- **`agentweave.yml` is no longer read or written.** Configuration lives in the Hub.
+
+### Fixed in this release specifically
+
+- **The documented Docker install did not work.** `hub/docker-compose.yml` defaulted to
+  `agentweave-hub:audit`, a local development build, while the documentation told users to download
+  that file and run `docker compose up -d`. It now defaults to the published
+  `ghcr.io/gutohuida/agentweave-hub:latest`.
+- **Which database a Docker deployment used depended on the directory it was launched from.** The
+  compose file had no project `name:`, so Compose derived one — and the real name of the `hub-data`
+  volume — from the launch directory's basename.
+- **A single-agent project was told about a team.** Turn context appended a `### Team` section
+  unconditionally, listing the reader and then instructing it to address peers. A project with one
+  agent now gets no team section at all.
+- **`alembic downgrade` could not roll back past the capability-document migration**, and, once
+  fixed, could not roll forward again. Both directions of `0074` now rewrite rows while neither the
+  constraint they satisfy nor the one they will satisfy is in force.
+- **A loop with `stop_when_queue_empties` disabled itself on its first tick** if it was created
+  before its work existed. "Empty" now means drained: the condition arms only once the queue has
+  held a task.
+- **The documentation build had been failing since July**, on 34 broken links, and the Hub test job
+  in CI had been failing since July on a missing import. Both fixed; the legacy multi-runtime
+  documentation is kept in the repository for history but no longer published.
+
+### Not in this release
+
+Stated so it is not mistaken for an oversight: charters have no scope or default-skills structure
+and scope is not enforced; there is no skill-invocation surface and no agent templates; and the
+desktop shell is still a chromeless browser window rather than a native one.
 
 ---
 ## [0.42.0] - 2026-07-24
