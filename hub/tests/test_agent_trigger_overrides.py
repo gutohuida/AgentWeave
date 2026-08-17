@@ -257,6 +257,11 @@ async def test_a_conversation_whose_model_changed_attributes_usage_per_turn(
                     headers=auth_headers,
                 )
                 assert first.status_code == 200
+                # A trigger returns 200 with status="queued" when the agent is busy, and then no
+                # run happens and nothing is broadcast. The test only ever checked the status code,
+                # so a queued turn looked identical to a completed one until the assertion at the
+                # end failed for a reason it could not name.
+                assert first.json()["status"] != "queued", first.json()
                 await _await_background_run()
 
         models_seen = drain_models()
@@ -281,6 +286,7 @@ async def test_a_conversation_whose_model_changed_attributes_usage_per_turn(
                     headers=auth_headers,
                 )
                 assert second.status_code == 200
+                assert second.json()["status"] != "queued", second.json()
                 await _await_background_run()
 
         models_seen += drain_models()
