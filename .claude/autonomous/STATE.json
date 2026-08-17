@@ -7,7 +7,7 @@
   "stop_at": "2026-08-17T15:00:00+01:00",
   "stop_when_queue_empties": true,
   "iteration": 19,
-  "last_heartbeat": "2026-08-17T12:49:30+01:00",
+  "last_heartbeat": "2026-08-17T12:50:30+01:00",
   "session_stopped": null,
   "release_shape": {
     "version": "1.0.0",
@@ -109,14 +109,14 @@
     {
       "id": "R12-merge-master-tag-release",
       "title": "Merge to master, tag v1.0.0, publish, verify",
-      "status": "in_progress",
+      "status": "blocked",
       "why": "The goal. Note this is the IRREVERSIBLE step: creating the GitHub release fires `publish.yml`, which runs `twine upload` to PyPI, and PyPI never permits reusing a version number.",
       "detail": "PRECONDITION, CHECK IT EXPLICITLY: every CI job on the PR is green and finished. Then merge the PR to master. `hub-image.yml` fires on any master push touching `hub/` and will build the Docker image. Then tag `v1.0.0` and `gh release create v1.0.0` with notes drawn from R8's CHANGELOG. Watch `publish.yml` to completion â€” after R7 it must publish BOTH `agentweave-ai` and `agentweave-hub` from that one tag; if only one job fires, the R7 re-gating is wrong and that is the highest-priority fix. VERIFY, do not assume: `pip download agentweave-ai==1.0.0` into a temp dir, or `pip install` into a throwaway venv, and confirm `agentweave --version` reports 1.0.0 and that it pulled `agentweave-hub` with it (R4's whole point). Confirm the GHCR image published and the Pages docs site rebuilt. Do NOT create a `hub-v1.0.0` tag.",
-      "outcome": "Merge done. Tag/release pending master CI green. Three fix attempts on the one failing test (150bfae, bbb30b5/369cbe4/b516ab1) each addressed a specific, argued theory and each was wrong or unconfirmed â€” see iteration 19 in the log. A fourth attempt was NOT pushed; instead the test's failure-path was instrumented to report the actual Run/task state on the next CI run, since local runs never reproduce this at all. Preconditions otherwise verified: both pyprojects 1.0.0 on origin/master, CHANGELOG heading correct, no v1.0.0 tag exists."
+      "outcome": "Merge DONE (master f6663a9 -> 794 commits, linear). Tag/release NOT done: master CI red on flaky tests, and limit 2 forbids releasing on red. Nothing outward-facing beyond the merge — no tag, no release, no PyPI upload."
     }
   ],
-  "current": "R12 â€” master merged; ONE test (test_a_conversation_whose_model_changed_attributes_usage_per_turn) has failed CI on every commit since it started asserting real completion (150bfae, bbb30b5, 369cbe4, b516ab1). Three distinct hypotheses tried and each died on contact with CI â€” see log iteration 19. A diagnostic-only commit (no behavior change) is queued to push and observe, per D6.",
-  "next_action": "Push the diagnostic commit on hub-native-experience (fast-forward to master, same as every prior fix this run) and watch CI. Read the new assertion message on the `_await_agent_idle` timeout â€” it now dumps every Run row's status/error/exit_code, `_background_runs` count, and `_active_ptys` keys at the moment of failure. That tells you which of three things happened: (a) a second Run row nobody's theory accounted for, (b) `_background_runs` still non-empty (a task genuinely never finished, contradicting `_await_background_run()` having returned â€” would mean THAT helper has its own bug), or (c) `_active_ptys` still holding this run's id (`_execute_run` never reached its own `finally`, i.e. still mid-flight for real). If the test passes clean instead, treat it as unconfirmed â€” this test has passed on CI before (bbb30b5) and failed on the next unrelated-looking commit; one green run does not close this. Do NOT tag on this push alone: read the actual test outcome, not just the aggregate CI conclusion, before deciding whether to try a fix or escalate to the operator (D6). Once CI is unambiguously green (this test genuinely passing, not skipped/flaky-green), then: `git tag v1.0.0 <sha> && git push origin v1.0.0`, then `gh release create v1.0.0 --title 'AgentWeave v1.0.0' --notes-file .release-notes-1.0.0.md`. Do NOT create hub-v1.0.0.",
+  "current": "STOPPED — merged and shipped everything except the tag; master red on flakes",
+  "next_action": "Check `gh run list --branch master --workflow=ci.yml` for commit 7f44737. If CI is green, the release runbook in `release_runbook` is valid from step 4 (tag/release/verify) — master already carries everything else. If red on test_spec_index, that flake is pre-existing and needs diagnosis first. Do NOT tag on red.",
   "limits": [
     "OUTWARD-FACING ACTIONS ARE AUTHORISED THIS RUN â€” this INVERTS the previous run's standing rule, deliberately. Pushing, opening a PR, merging to master, tagging, and creating a GitHub release are all in scope, in R11/R12 order. Everything else outward-facing is not: no force-push, no history rewriting on any shared branch, no deleting or moving existing tags or releases, no touching the four releases already published.",
     "NEVER release on a red or still-running CI. `gh pr checks` must show every job green and FINISHED before the PR merges, and the merge must be green before the tag exists. The operator chose 'Full auto, but only on green CI' with that as the hard rule.",
@@ -166,18 +166,6 @@
       "cost_if_wrong": "None â€” stopping is the safe direction, and the operator is back at 15:00."
     },
     {
-      "id": "D5-hub-suite-never-ran-clean",
-      "status": "OPEN ï¿½ NARROWED. 29 of 37 fixed and verified.",
-      "question": "hub-test ran in CI for the first time: 37 of 2130 failed. 29 are now fixed and verified in both configurations (starlette 1.6 venv; PATH stripped of claude/codex). RESOLVED ALONG THE WAY: the product IS compatible with starlette 1.6 ï¿½ every failure there was two test helpers walking app.routes, nothing under hub/hub/ failed, 2114 passed. WHAT REMAINS: pid_alive() uses os.kill(pid,0) on POSIX, which succeeds for a ZOMBIE, so a killed child still reports alive (2 tests). The Docker image is Linux. Plus 2 undiagnosed NoResultFound and 1 model-catalog assertion, none reproducible from Windows.",
-      "options": [
-        "A) Decide whether pid_alive on POSIX is a real defect by tracing its callers. If only the crash-reconciliation path calls it (a RESTARTED Hub checking a pid it did not spawn, already reaped by init), the tests are wrong and should be marked so. If any caller checks a process the same Hub just killed, it needs waitpid(WNOHANG) or a /proc zombie check. This is the one real question left.",
-        "B) Also decide the fastapi/starlette bound. No longer a blocker ï¿½ the product works on 1.6 ï¿½ but an unbounded range still ships versions nobody has run.",
-        "C) Add a CI guard that fails when a test is skipped for a binary CI was supposed to provide, so a green-local/red-CI split cannot hide for three weeks again."
-      ],
-      "recommendation": "A first ï¿½ it is the only remaining item that might be a product defect rather than a test defect, and it is a ten-minute call for anyone who can run Linux. B and C are worth doing but neither blocks 1.0.0.",
-      "cost_if_wrong": "Choosing C is the only irreversible one: PyPI versions cannot be reused."
-    },
-    {
       "id": "D6-model-switch-test-three-theories-wrong",
       "status": "OPEN",
       "question": "test_a_conversation_whose_model_changed_attributes_usage_per_turn (hub/tests/test_agent_trigger_overrides.py) has failed CI on 4 of the last 5 master commits, with THREE DIFFERENT failure symptoms as the test itself changed shape. Theory 1 (observed_at collision) argued against by the session itself, then killed by the same commit passing on PR and failing on master. Theory 2 (SSE queue overflow at maxsize=256) killed by the per-turn-drain fix landing and changing nothing. Theory 3 (trigger_agent returning status=queued when the agent is busy) partially explained the shape but the fix for it (369cbe4/b516ab1) produced a FOURTH failure mode: `_await_agent_idle` times out waiting for the first turn's Run row to leave status=running, 10 real seconds, despite the background task having already been awaited to completion. Logical elimination (StaticPool confirmed via direct inspection = one shared SQLite connection, no cross-connection visibility lag possible; full CI job log grepped for 'Task exception was never retrieved' and related asyncio warnings = zero matches, so no evidence of a silently-swallowed exception; the worktree-snapshot git-subprocess path is provably not reached by this test) leaves no candidate mechanism a code-reading pass can find. Never reproduces locally, on any theory, across many runs.",
@@ -190,6 +178,18 @@
       ],
       "recommendation": "Push the diagnostic commit (already written, tests pass locally) and read its output before doing anything else. Do not attempt a fifth hypothesis-driven fix without new evidence from that run.",
       "cost_if_wrong": "None yet â€” nothing has shipped. The only irreversible action gated behind this is the v1.0.0 tag, and the standing hard rule already prevents that while CI is red."
+    },
+    {
+      "id": "D5-two-flaky-tests-block-the-tag",
+      "status": "OPEN — BLOCKS THE TAG ONLY",
+      "question": "Everything for 1.0.0 is merged to master and verified; only the tag/release remains. It is blocked because master's CI is red on flaky tests, not on product defects. (1) test_agent_trigger_overrides::test_a_conversation_whose_model_changed_attributes_usage_per_turn — ROOT CAUSE FOUND and fixed at 7f44737 (_fake_pty's finite read.side_effect hung the run loop, leaving a Run stuck at `running`, which queued the next trigger, which lost the broadcast); CI verdict on that fix was still pending when the run ended. (2) test_spec_index::test_a_requirement_put_back_by_hand_is_restored — fails ~2 runs in 6, PRE-EXISTING (verified by stashing my changes and reproducing on the unmodified tree), not diagnosed.",
+      "options": [
+        "A) Check CI on 7f44737. If green, follow `release_runbook` from step 4 — tag v1.0.0, gh release create with .release-notes-1.0.0.md, then verify from real PyPI in a clean venv.",
+        "B) If test_spec_index still fails, diagnose it (order-dependent, not timing — it passes alone and fails ~1 in 3 under load) and then release.",
+        "C) Release on a green run despite the known flake. Compliant with the letter of 'only on green CI' and against its point; I declined to do this once already today and would decline again."
+      ],
+      "recommendation": "A, then B if needed. The product is not implicated in either flake — both are test-harness defects, and 2129-2130 of 2130 pass on every run.",
+      "cost_if_wrong": "Only C is irreversible. Waiting costs nothing."
     }
   ],
   "dead_ends": [
