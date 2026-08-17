@@ -182,6 +182,88 @@ class TestProfileFlag:
         assert message is None
 
 
+class TestPortRequiredForNamedProfile:
+    """D6 "Port" (round-2 cold review), task 1.8/2.9 — a named profile with no explicit `--port`
+    must error rather than silently resolve to `DEFAULT_HUB_PORT`, since a named profile's
+    database and PID-file namespacing do nothing to prevent a TCP-level bind collision with the
+    default profile's own instance.
+
+    `--port` defaults to `None` (not `DEFAULT_HUB_PORT`) on every subparser that carries it,
+    specifically so "not passed" and "passed and happens to equal 8000" are distinguishable —
+    the parser-level tests below guard that sentinel directly, since a plain `default=8000`
+    would make the whole check unreachable.
+    """
+
+    def test_named_profile_without_port_is_an_error(self):
+        from agentweave.cli import DEFAULT_HUB_PORT, _hub_require_port_for_named_profile
+
+        message = _hub_require_port_for_named_profile("dev", None)
+        assert message is not None
+        assert "--profile" in message
+        assert "--port" in message
+        assert "dev" in message
+        assert str(DEFAULT_HUB_PORT) in message
+
+    def test_default_profile_without_port_is_fine(self):
+        from agentweave.cli import _hub_require_port_for_named_profile
+
+        assert _hub_require_port_for_named_profile("default", None) is None
+        assert _hub_require_port_for_named_profile("", None) is None
+
+    def test_named_profile_with_explicit_port_is_fine(self):
+        from agentweave.cli import _hub_require_port_for_named_profile
+
+        assert _hub_require_port_for_named_profile("dev", 8010) is None
+
+    def test_parser_port_default_is_none_not_8000(self):
+        """Guards the sentinel itself: if `--port` ever regresses to `default=8000` on any of
+        these three subparsers, the passed-vs-default distinction above becomes unreachable and
+        this whole check goes silently dead."""
+        from agentweave.cli import create_parser
+
+        parser = create_parser()
+        assert parser.parse_args([]).port is None
+        assert parser.parse_args(["status"]).port is None
+        assert parser.parse_args(["stop"]).port is None
+        # reset has no --port at all (design.md D6) — nothing to check there.
+
+        assert parser.parse_args(["--port", "8010"]).port == 8010
+        assert parser.parse_args(["status", "--port", "8010"]).port == 8010
+        assert parser.parse_args(["stop", "--port", "8010"]).port == 8010
+
+    def test_cmd_hub_start_rejects_named_profile_without_port(self, capsys):
+        import argparse
+
+        from agentweave.cli import cmd_hub_start
+
+        args = argparse.Namespace(
+            port=None, profile="dev", local=False, docker=False, no_detach=False, app=True
+        )
+        assert cmd_hub_start(args) == 1
+        captured = capsys.readouterr()
+        assert "--port" in captured.out
+
+    def test_cmd_status_rejects_named_profile_without_port(self, capsys):
+        import argparse
+
+        from agentweave.cli import cmd_status
+
+        args = argparse.Namespace(port=None, profile="dev")
+        assert cmd_status(args) == 1
+        captured = capsys.readouterr()
+        assert "--port" in captured.out
+
+    def test_cmd_stop_rejects_named_profile_without_port(self, capsys):
+        import argparse
+
+        from agentweave.cli import cmd_stop
+
+        args = argparse.Namespace(port=None, profile="dev", local=False)
+        assert cmd_stop(args) == 1
+        captured = capsys.readouterr()
+        assert "--port" in captured.out
+
+
 class TestDownloadWithSha256:
     """S9 — verify SHA256 of downloaded Hub docker-compose.yml and .env
     via a new _download_with_sha256 helper.

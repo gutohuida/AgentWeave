@@ -75,7 +75,7 @@ name are both process/config-level, not schema.
       `--profile` alone (no `--port`) still resolves to `DEFAULT_HUB_PORT` today, which is exactly
       the gap 1.8 (not yet implemented) closes by erroring instead — left open deliberately, per the
       note below.
-- [ ] 1.8 **Added 2026-08-17, round-2 cold review (`design.md` D6, "Port").** When `--profile` names
+- [x] 1.8 **Added 2026-08-17, round-2 cold review (`design.md` D6, "Port").** When `--profile` names
       anything other than `"default"` and `--port` was not explicitly passed on the command line
       (distinguish "not passed" from "passed and happens to equal 8000" — argparse's plain
       `default=8000` on `--port` cannot tell the two apart, so this needs an explicit
@@ -84,6 +84,16 @@ name are both process/config-level, not schema.
       resolving to `DEFAULT_HUB_PORT` — closes the port-collision gap round 1's D6 left open (a named
       profile with no `--port` would otherwise try to bind the same port the default profile normally
       uses). Applies to bare `agentweave`, `agentweave status`, and `agentweave stop`.
+      Done (iteration 5): used the sentinel-default approach, not `sys.argv` inspection. `--port` on
+      all three subparsers (`agentweave`'s top-level parser, `status_parser`, `stop_parser`) now
+      defaults to `None` instead of `8000` — `reset_parser` has no `--port` at all, so it needed no
+      change. A new pure helper, `_hub_require_port_for_named_profile(profile, port)`, returns an
+      error message when `profile not in (None, "", "default")` and `port is None`, else `None`
+      (mirrors `_hub_resolve_database_source`'s `(value, message)` shape already established for
+      D6). `cmd_hub_start`, `cmd_status` and `cmd_stop` each call it immediately after reading
+      `args.port`/`args.profile`, `print_error` and `return 1` if it fires, then resolve
+      `port = port if port is not None else DEFAULT_HUB_PORT` — so every other line in those three
+      functions still sees a concrete int exactly as before, unaware profiles exist.
 
 ## 2. Backend tests — agent-verifiable
 
@@ -166,12 +176,31 @@ name are both process/config-level, not schema.
       to the old hardcoded `HUB_DIR / "data"`, confirmed the profile test went red (profile `a`'s
       directory survived — the "no data found, nothing to destroy" path fired instead, since the
       hardcoded default-profile dir didn't exist in the fixture), restored, confirmed both green.
-- [ ] 2.9 **Added 2026-08-17, round-2 cold review (D6, task 1.8).** A test that
+- [x] 2.9 **Added 2026-08-17, round-2 cold review (D6, task 1.8).** A test that
       `agentweave --profile dev` (no `--port`) exits with an error rather than resolving to
       `DEFAULT_HUB_PORT` — the regression test for the port-collision gap found in round 2. Also
       assert the positive case still works: `agentweave --profile dev --port 8010` does not raise the
       same error. Mutation-check: temporarily remove the passed-vs-default check from 1.8, confirm
       this test fails, then restore.
+      Done (iteration 5): new `TestPortRequiredForNamedProfile` class in `tests/test_cli.py`, seven
+      tests — the helper directly (named-without-port errors and names both flags plus the port
+      number; default-profile-without-port and named-with-port are both silently fine), a
+      parser-level sentinel guard (`create_parser().parse_args([])`/`["status"]`/`["stop"]` all give
+      `port is None`, and `--port 8010` on each still parses to `8010` — this guards against `--port`
+      regressing back to `default=8000`, which would make the whole check unreachable), and one
+      integration test per command (`cmd_hub_start`/`cmd_status`/`cmd_stop`, each called directly
+      with a `Namespace(profile="dev", port=None, ...)`, asserting `== 1` and `"--port"` in stdout).
+      Mutation-checked by hand exactly as instructed: replaced `_hub_require_port_for_named_profile`'s
+      body with `return None`, reran — 4 of the 7 new tests went red (the helper test itself, and all
+      three command-level tests; `cmd_hub_start`'s red output showed it had gone on to try starting a
+      real Hub instance and failed on `agentweave-hub is not installed`, confirming the guard was the
+      only thing stopping it, not some other early return), restored, reran — all 7 green again. Full
+      CLI suite: 375 passed, 3 skipped (up from 368/3 — +7, matching the new tests exactly since 2.9
+      added no other coverage). `ruff check`, `black --check --target-version py311` and `mypy` clean
+      on `src/agentweave/cli.py` and `tests/test_cli.py`. No spec delta needed — `specs/app-lifecycle/
+      spec.md`'s "A named profile selects a separate, deliberate instance" requirement and its
+      "A named profile without an explicit port is rejected" scenario (added in the round-2 review
+      that raised 1.8/2.9) already state exactly this behavior; only `tasks.md` needed updating.
 
 ## 3. Desktop window (D3, D5)
 

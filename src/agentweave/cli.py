@@ -72,8 +72,13 @@ def cmd_status(args: argparse.Namespace) -> int:
     import urllib.error as _uerr
     import urllib.request as _req
 
-    port = getattr(args, "port", 8000)
+    port = getattr(args, "port", None)
     profile = getattr(args, "profile", "default")
+    port_error = _hub_require_port_for_named_profile(profile, port)
+    if port_error:
+        print_error(port_error)
+        return 1
+    port = port if port is not None else DEFAULT_HUB_PORT
     hub_url = _hub_url(port)
     health_url = _hub_health_url(port)
 
@@ -139,8 +144,13 @@ def cmd_stop(args: argparse.Namespace) -> int:
     """Stop a running Hub-owned runtime instance (native process or Docker container)."""
     import subprocess as _sp
 
-    port = getattr(args, "port", 8000)
+    port = getattr(args, "port", None)
     profile = getattr(args, "profile", "default")
+    port_error = _hub_require_port_for_named_profile(profile, port)
+    if port_error:
+        print_error(port_error)
+        return 1
+    port = port if port is not None else DEFAULT_HUB_PORT
     local = getattr(args, "local", False)
 
     # --- Native mode: check PID file first ---
@@ -544,6 +554,27 @@ def _hub_profile_data_dir(profile: str = "default") -> Path:
     return HUB_DIR / "data"
 
 
+def _hub_require_port_for_named_profile(profile: str, port: Optional[int]) -> Optional[str]:
+    """Return an error message if a named profile was given without an explicit `--port`.
+
+    `--port` defaults to `None` on every subparser that carries it (not `DEFAULT_HUB_PORT`)
+    specifically so this check can distinguish "not passed" from "passed and happens to equal
+    8000" — a plain `default=8000` cannot tell the two apart. A named profile silently falling
+    back to `DEFAULT_HUB_PORT` would bind the same port the default profile normally uses;
+    profile-namespaced database and PID-file paths do nothing to prevent that collision, because
+    they namespace identity, not the socket (`design.md` D6, "Port"). The default profile is
+    unaffected: `None` there resolves to `DEFAULT_HUB_PORT` with no error, exactly as before this
+    check existed.
+    """
+    if profile and profile != "default" and port is None:
+        return (
+            f"--profile '{profile}' needs an explicit --port "
+            f"(a named profile does not default to port {DEFAULT_HUB_PORT}, "
+            "to avoid colliding with the default profile's instance)"
+        )
+    return None
+
+
 def _hub_resolve_database_source(old_db_url: Optional[str], profile: str, db_path: Path) -> tuple:
     """Decide the effective `DATABASE_URL` and what (if anything) to tell the operator.
 
@@ -884,8 +915,13 @@ def _hub_native_start(
 
 def cmd_hub_start(args: argparse.Namespace) -> int:
     """Start the AgentWeave Hub."""
-    port = getattr(args, "port", 8000)
+    port = getattr(args, "port", None)
     profile = getattr(args, "profile", "default")
+    port_error = _hub_require_port_for_named_profile(profile, port)
+    if port_error:
+        print_error(port_error)
+        return 1
+    port = port if port is not None else DEFAULT_HUB_PORT
     local = getattr(args, "local", False)
     docker = getattr(args, "docker", False) or local
     no_detach = getattr(args, "no_detach", False)
@@ -1130,7 +1166,13 @@ For more help: https://github.com/gutohuida/AgentWeave
         version=f"%(prog)s {__version__}",
     )
     parser.add_argument(
-        "--port", type=int, default=8000, help="Port to run the Hub on (default: 8000)"
+        "--port",
+        type=int,
+        default=None,
+        help=(
+            "Port to run the Hub on (default: 8000; required if --profile names a non-default "
+            "profile)"
+        ),
     )
     parser.add_argument(
         "--docker", action="store_true", help="Run the Hub via Docker instead of natively"
@@ -1165,14 +1207,22 @@ For more help: https://github.com/gutohuida/AgentWeave
 
     status_parser = subparsers.add_parser("status", help="Check whether the Hub is running")
     status_parser.add_argument(
-        "--port", type=int, default=8000, help="Port to check (default: 8000)"
+        "--port",
+        type=int,
+        default=None,
+        help="Port to check (default: 8000; required if --profile names a non-default profile)",
     )
     status_parser.add_argument(
         "--profile", type=str, default="default", help="Named Hub instance to check"
     )
 
     stop_parser = subparsers.add_parser("stop", help="Stop a running Hub instance")
-    stop_parser.add_argument("--port", type=int, default=8000, help="Port to stop (default: 8000)")
+    stop_parser.add_argument(
+        "--port",
+        type=int,
+        default=None,
+        help="Port to stop (default: 8000; required if --profile names a non-default profile)",
+    )
     stop_parser.add_argument(
         "--local", action="store_true", help="Docker dev mode: stop the ./hub/ compose project"
     )
