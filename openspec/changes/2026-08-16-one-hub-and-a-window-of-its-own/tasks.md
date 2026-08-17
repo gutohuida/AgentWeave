@@ -5,15 +5,22 @@ name are both process/config-level, not schema.
 
 ## 1. Global instance state (D1, D2, D6)
 
-- [ ] 1.1 `hub/hub/config.py`'s `database_url` default becomes
+- [x] 1.1 `hub/hub/config.py`'s `database_url` default becomes
       `f"sqlite+aiosqlite:///{(Path.home() / '.agentweave' / 'hub' / 'data' / 'agentweave.db').as_posix()}"`,
       computed inline (`design.md` D1 — no cross-package import). Keep it a `pydantic-settings`
       field default so `DATABASE_URL` (native mode, Docker's `environment:` block) still overrides
       it exactly as today.
-- [ ] 1.2 Add a top-level `name: agentweave` to `hub/docker-compose.yml` (`design.md` D2).
-- [ ] 1.3 Do not touch `_hub_native_start` (`src/agentweave/cli.py:664`) — it already computes the
+- [x] 1.2 Add a top-level `name: agentweave` to `hub/docker-compose.yml` (`design.md` D2). **Already
+      done** — `7cd6184` ("R3: make the documented Docker install work") pinned `name: agentweave`
+      before this change was even proposed. Verified live: the key is present and task 2.3's test
+      passes against it. No edit needed here.
+- [x] 1.3 Do not touch `_hub_native_start` (`src/agentweave/cli.py:664`) — it already computes the
       same absolute path independently and sets `DATABASE_URL` before `hub.main` is imported.
       Confirm by reading, not by assumption, that this task does not need to change that function.
+      Confirmed by reading `_hub_native_start` (`cli.py:679-720`): `HUB_DIR.mkdir(...)`, then
+      `data_dir = HUB_DIR / "data"`, `db_path = data_dir / "agentweave.db"`, and `DATABASE_URL` is
+      set in `os.environ` before `hub.main` (and therefore `hub.config.settings`) is ever imported —
+      independent of 1.1's default, exactly as `design.md` D1 says. Not touched.
 - [ ] 1.4 **Added 2026-08-16, resolves amendment A3 (`design.md` D6).** Add `--profile <name>`
       (default `"default"`) to `agentweave`'s bare-invocation argument parser and to
       `agentweave status`/`agentweave stop`. Wire it into `_hub_native_start`'s database-path
@@ -46,7 +53,7 @@ name are both process/config-level, not schema.
 
 ## 2. Backend tests — agent-verifiable
 
-- [ ] 2.1 A drift test asserting `hub.config.Settings().database_url` (with `DATABASE_URL` unset in
+- [x] 2.1 A drift test asserting `hub.config.Settings().database_url` (with `DATABASE_URL` unset in
       the test's environment) and `HUB_DIR / "data" / "agentweave.db"` from
       `src/agentweave/cli.py` resolve to the identical path on the same interpreter — the test
       `design.md` D1 names to guard the two independently-computed constants against drifting apart.
@@ -54,20 +61,36 @@ name are both process/config-level, not schema.
       `agentweave-hub`'s test environment cannot import `agentweave` (separate distributions —
       confirm which is true in this repo's actual test setup before writing this), express the same
       assertion as two hardcoded-path-shape checks compared against each other instead, and say so
-      in the test's own docstring rather than silently changing what it proves.
-- [ ] 2.2 A test that constructs `Settings` with `DATABASE_URL` unset in the environment and asserts
+      in the test's own docstring rather than silently changing what it proves. Confirmed live: this
+      repo's own interpreter can import both `agentweave` and `hub` directly, so the direct-import
+      form was used, not the fallback. `hub/tests/test_config.py::TestDatabaseUrlDriftAgainstCli`.
+- [x] 2.2 A test that constructs `Settings` with `DATABASE_URL` unset in the environment and asserts
       the resulting `database_url` is an **absolute** path under `Path.home() / ".agentweave"`, not
       the old `data/agentweave.db` relative default — this is the regression test for the bug itself
       (direct `uvicorn hub.main:app`, no CLI involved).
       Mutation-check it: temporarily revert `config.py`'s default to the old relative string, confirm
-      this test fails, then restore.
-- [ ] 2.3 A test (plain YAML parse, not a live `docker compose` invocation, unless the CI/test
+      this test fails, then restore. `hub/tests/test_config.py::TestDatabaseUrlDefault`. Mutation
+      check run by hand: reverted the default, confirmed both this test and 2.1's drift test go red,
+      restored, confirmed both pass again. **A real trap found while writing this test, worth
+      recording:** `monkeypatch.delenv("DATABASE_URL")` alone is not enough to isolate the field
+      default — this machine's actual `hub/.env` sets `DATABASE_URL` explicitly (the trial Hub's own
+      override, per `STATE.json`), and `pydantic-settings` falls back to the `.env` file when the OS
+      environment doesn't have the variable. The test constructs `Settings(_env_file=None)` to bypass
+      that fallback and isolate the field default itself.
+- [x] 2.3 A test (plain YAML parse, not a live `docker compose` invocation, unless the CI/test
       environment already has Compose available — check first) asserting
       `hub/docker-compose.yml` declares a top-level `name:` key equal to `"agentweave"`.
-      Mutation-check by temporarily removing the key and confirming the test fails.
-- [ ] 2.4 Confirm (rerun, not just re-read) that `hub/tests/test_migrations.py` and
+      Mutation-check by temporarily removing the key and confirming the test fails. Confirmed:
+      Compose is not available in this test environment, used plain YAML parse via `pyyaml` (already
+      a transitive dependency, importable). Mutation-checked by hand: removed the `name:` line, ran
+      the test, confirmed red, restored, confirmed green.
+      `hub/tests/test_config.py::TestDockerComposeProjectNamePinned`.
+- [x] 2.4 Confirm (rerun, not just re-read) that `hub/tests/test_migrations.py` and
       `hub/tests/test_project_persistence.py` still pass unmodified — no migration in this change,
       so their head assertions do not move. Record the actual pass/fail counts, not an assumption.
+      Reran both files together: **58 passed, 1 skipped** (the skip predates this change — unrelated
+      to D1/D2). `hub/hub/config.py` was the only file this iteration changed under `hub/hub/`;
+      neither test file was touched.
 - [ ] 2.5 **Added 2026-08-16 (D6).** A test that `agentweave --profile a --port <p1>` and
       `agentweave --profile b --port <p2>` resolve to two distinct database paths and two distinct
       PID filenames, extending `TestTwoInstancesDoNotCollide`'s existing pattern in
