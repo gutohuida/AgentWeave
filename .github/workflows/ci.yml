@@ -26,8 +26,14 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
+        # The Hub goes in first, from this checkout, because `agentweave-ai` now depends on
+        # `agentweave-hub` — one product, one install. Resolving that from PyPI here would
+        # demand a version that only exists after this commit is released, so CI would need
+        # the release to pass and the release would need CI to pass. Installing the local
+        # copy first satisfies the requirement before pip ever looks outward.
+        pip install -e ./hub
         pip install -e ".[dev]"
-    
+
     - name: Lint with ruff
       if: matrix.python-version == '3.11' && matrix.os == 'ubuntu-latest'
       run: |
@@ -72,6 +78,21 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -e ".[dev]"
+
+    - name: Install the CLI package
+      # `working-directory: hub` is a job default, so this step overrides it to reach the repo
+      # root. Four Hub tests import `agentweave` (test_agent_output_stream, test_session_sync,
+      # test_task_transitions, test_agent_tool_surface_phase7); without this the job dies with
+      # `ModuleNotFoundError: No module named 'agentweave'`, which is what it has been doing on
+      # master since 2026-07-29. It passes locally only because the CLI happens to be installed
+      # editable on the developer's machine.
+      #
+      # After the Hub, not before: `agentweave-ai` depends on `agentweave-hub`, and the step
+      # above has already satisfied that from this checkout, so pip never reaches for a PyPI
+      # version that does not exist until this commit ships.
+      working-directory: .
+      run: |
+        pip install -e .
 
     - name: Test Hub with pytest
       run: |

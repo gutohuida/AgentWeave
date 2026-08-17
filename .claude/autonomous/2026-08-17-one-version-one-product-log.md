@@ -61,3 +61,41 @@ branch, which would have lost the brief.
 `10:03 GMTST`; the skill records that Git Bash on this machine prints UTC while labelling it +0100,
 so **every timestamp in this log is stamped from PowerShell**. A heartbeat written from Git Bash
 would land an hour in the future and stall the driver until real time caught up.
+
+---
+
+## Iteration 1 — 10:20 — R1: the CI job that has been red since July
+
+**Done.** `.github/workflows/ci.yml`, two jobs touched.
+
+`hub-test` sets `working-directory: hub` as a job default and only ever installed the Hub, so the
+four Hub tests that import `agentweave` — `test_agent_output_stream.py`, `test_session_sync.py`,
+`test_task_transitions.py`, `test_agent_tool_surface_phase7.py` — died with
+`ModuleNotFoundError: No module named 'agentweave'`. That is the exact failure sitting on master
+since 2026-07-29. It passes on this machine only because the CLI is installed editable
+machine-wide, which is a property of the machine and not of the repository. Added a step with an
+explicit `working-directory: .` that installs the root package.
+
+**Found while doing it — a chicken-and-egg R1 had to absorb.** R4 will make `agentweave-ai` depend
+on `agentweave-hub`. Once it does, `pip install -e ".[dev]"` at the root asks PyPI for
+`agentweave-hub>=1.0.0`, which will not exist until this very commit is released — so CI would need
+the release and the release would need CI. Both jobs now install the Hub **from this checkout
+first**, which satisfies the requirement before pip ever looks outward. In `hub-test` that meant
+putting the CLI install *after* the Hub install, not before, which is the opposite of the order I
+first wrote.
+
+**Checked, not assumed:**
+
+- The CLI suite does not need the Hub installed. `tests/test_hub_commands.py:437` stubs
+  `sys.modules["hub.main"]` *deliberately*, and its docstring explains why: this repo's `hub/`
+  directory has no top-level `__init__.py`, so a bare `import hub` from the repo root can resolve
+  to it as an implicit namespace package instead of the installed `agentweave-hub`. The stub is
+  independent of what is installed, so adding the Hub to that job cannot disturb it.
+- The `build` job is unaffected: `python -m build` reads metadata and does not resolve runtime
+  dependencies.
+- The workflow still parses, and step order is right — verified by loading it with `yaml.safe_load`
+  and printing each job's steps with their effective working directory, rather than by reading it.
+
+**Distrust this until R11.** GitHub Actions cannot be run locally. Everything above is reasoning
+over the workflow file; the first real evidence is the PR run. R1 is the one queue item whose
+verification is deferred by construction.

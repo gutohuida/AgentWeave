@@ -6,8 +6,8 @@
   "started_at": "2026-08-17T10:14:49+01:00",
   "stop_at": "2026-08-17T15:00:00+01:00",
   "stop_when_queue_empties": true,
-  "iteration": 1,
-  "last_heartbeat": "2026-08-17T10:14:49+01:00",
+  "iteration": 2,
+  "last_heartbeat": "2026-08-17T10:16:30+01:00",
   "session_stopped": null,
   "release_shape": {
     "version": "1.0.0",
@@ -21,9 +21,10 @@
     {
       "id": "R1-ci-hub-test-installable",
       "title": "Make the CI hub-test job able to import agentweave",
-      "status": "pending",
+      "status": "done",
       "why": "This exact failure has been red on master since 2026-07-29 and would fail the release PR on its first run. `hub/tests/` imports `agentweave` (test_agent_output_stream.py:213, test_agent_tool_surface_phase7.py:58, test_task_transitions.py:36) but the job only runs `pip install -e \".[dev]\"` from inside `hub/`, so the CLI package is absent: `ModuleNotFoundError: No module named 'agentweave'`. Local runs pass only because the CLI is installed editable machine-wide, which is a property of this machine and not of CI.",
-      "detail": "In `.github/workflows/ci.yml`, the `hub-test` job. Add a step installing the repository root package before the Hub's own install — `pip install -e .` from the repo root, then `pip install -e \".[dev]\"` in `hub/` (the job sets `working-directory: hub`, so the root install needs an explicit `working-directory: .`). Verify by reading the job top to bottom afterwards; there is no way to run GitHub Actions locally, so this one is confirmed by the PR run in R10, not before."
+      "detail": "In `.github/workflows/ci.yml`, the `hub-test` job. Add a step installing the repository root package before the Hub's own install — `pip install -e .` from the repo root, then `pip install -e \".[dev]\"` in `hub/` (the job sets `working-directory: hub`, so the root install needs an explicit `working-directory: .`). Verify by reading the job top to bottom afterwards; there is no way to run GitHub Actions locally, so this one is confirmed by the PR run in R10, not before.",
+      "outcome": "Both jobs install the Hub from the checkout first, then the CLI. Absorbed R4's PyPI chicken-and-egg. UNVERIFIED until the PR run in R11 � Actions cannot run locally."
     },
     {
       "id": "R2-docs-build-green",
@@ -103,8 +104,8 @@
       "detail": "PRECONDITION, CHECK IT EXPLICITLY: every CI job on the PR is green and finished. Then merge the PR to master. `hub-image.yml` fires on any master push touching `hub/` and will build the Docker image. Then tag `v1.0.0` and `gh release create v1.0.0` with notes drawn from R8's CHANGELOG. Watch `publish.yml` to completion — after R7 it must publish BOTH `agentweave-ai` and `agentweave-hub` from that one tag; if only one job fires, the R7 re-gating is wrong and that is the highest-priority fix. VERIFY, do not assume: `pip download agentweave-ai==1.0.0` into a temp dir, or `pip install` into a throwaway venv, and confirm `agentweave --version` reports 1.0.0 and that it pulled `agentweave-hub` with it (R4's whole point). Confirm the GHCR image published and the Pages docs site rebuilt. Do NOT create a `hub-v1.0.0` tag."
     }
   ],
-  "current": "R1-ci-hub-test-installable",
-  "next_action": "Cut `autonomous/2026-08-17-one-version-one-product` from `hub-native-experience` at c6aec88 (the tree is clean; verify with `git status --short` first). Then do R1: in `.github/workflows/ci.yml`, the `hub-test` job sets `working-directory: hub` and runs only `pip install -e \".[dev]\"`, so `agentweave` is never installed — add a step before it that installs the repo root package with an explicit `working-directory: .`. This is the failure that has been red on master since 2026-07-29 and it cannot be verified locally; it is confirmed by the PR run in R11. Commit and push, then move to R2, which CAN be verified locally and is the largest single chunk (34 mkdocs warnings to zero).",
+  "current": "R2-docs-build-green",
+  "next_action": "R2: get `mkdocs build --strict` to zero warnings. Run `\"C:/Users/huida/AppData/Local/Programs/Python/Python311/python.exe\" -m mkdocs build --strict` from the repo root and iterate. 34 warnings at last count: 28 inside docs/archive/legacy-multi-runtime/ (pre-authorised: exclude that tree from the built site via mkdocs `exclude_docs` + drop its nav entry, rather than repairing links for a deleted product), 3 in docs/guides/aw-spec-workflow.md (delete the page and its mkdocs.yml:63 nav entry � the skill it documents no longer exists), 1 in docs/reference/hub-api.md (links ../guides/ai-jobs.md), 1 in docs/contributing/development.md (links ../guides/adding-new-agents.md), 1 'pages not in nav'.",
   "limits": [
     "OUTWARD-FACING ACTIONS ARE AUTHORISED THIS RUN — this INVERTS the previous run's standing rule, deliberately. Pushing, opening a PR, merging to master, tagging, and creating a GitHub release are all in scope, in R11/R12 order. Everything else outward-facing is not: no force-push, no history rewriting on any shared branch, no deleting or moving existing tags or releases, no touching the four releases already published.",
     "NEVER release on a red or still-running CI. `gh pr checks` must show every job green and FINISHED before the PR merges, and the merge must be green before the tag exists. The operator chose 'Full auto, but only on green CI' with that as the hard rule.",
