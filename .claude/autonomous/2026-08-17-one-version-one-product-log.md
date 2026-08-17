@@ -900,3 +900,44 @@ first half was wrong — it was a real test defect with a precise mechanism, not
 happens to survive (the product code was never at fault, and `record_context_usage`'s guard ordering
 — my other suspect — is exonerated), but I stated more confidence in "flake" than I had earned.
 Master is red until this lands, so it must land before any tag.
+
+---
+
+## Iteration 18 — 12:15 — wrong twice on the same test; stop theorising, make it assert
+
+**The per-turn drain did not fix it.** Master's CI on `150bfae` failed identically: both drains ran,
+the first turn's `gpt-5.6-sol` was captured, and the second turn's event simply was not there. So
+the queue-overflow theory is **disproven** — the queue was empty when the second turn started.
+
+That is two wrong theories on one test:
+
+1. **`observed_at` collision** — argued against by myself (predicts the wrong platform), then
+   properly killed by the same commit passing on the PR run and failing on master.
+2. **SSE queue overflow at `maxsize=256`** — killed by the per-turn drain landing and changing
+   nothing. The A/B at `maxsize=8` was real and the fix is a genuine improvement, but it was not
+   *this* bug.
+
+The pattern in both: I found a mechanism that *could* produce the symptom and stopped looking. A
+mechanism that can explain a symptom is not evidence that it did.
+
+**CI results so far** — mostly failing, occasionally passing, always green locally:
+
+    cf5429c  (PR)      FAIL
+    6aa86f3  (PR)      PASS
+    6aa86f3  (master)  FAIL
+    150bfae  (master)  FAIL
+
+**Third hypothesis, and this time the test asserts it rather than me believing it.**
+`trigger_agent` returns **200 with `status="queued"`** when the agent is busy
+(`agent_trigger.py:846-855`) — no run happens and nothing is broadcast. The test only ever checked
+`status_code == 200`, so a queued turn was indistinguishable from a completed one right up until the
+final assertion failed for a reason it could not name.
+
+Both turns now assert `status != "queued"` with the response body in the message. Whatever CI says
+next is informative: if it fails there, the cause is confirmed exactly and the fix is to wait for the
+turn instead of assuming it ran; if it passes there and still fails at the end, this theory dies too
+and the test has still gained an assertion it should always have had.
+
+**Time check:** 12:15, stop at 15:00. One diagnostic round is affordable; open-ended chasing is not.
+If this round does not identify the cause, the run stops with master at one known failure — down
+from 37 — and hands over rather than guessing a fourth time.

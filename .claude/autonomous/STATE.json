@@ -6,8 +6,8 @@
   "started_at": "2026-08-17T10:14:49+01:00",
   "stop_at": "2026-08-17T15:00:00+01:00",
   "stop_when_queue_empties": true,
-  "iteration": 14,
-  "last_heartbeat": "2026-08-17T11:27:13+01:00",
+  "iteration": 18,
+  "last_heartbeat": "2026-08-17T12:01:42+01:00",
   "session_stopped": null,
   "release_shape": {
     "version": "1.0.0",
@@ -101,22 +101,22 @@
     {
       "id": "R11-merge-and-drive-ci",
       "title": "Merge to hub-native-experience, open the PR to master, drive CI green",
-      "status": "blocked",
+      "status": "done",
       "why": "CI has NEVER run on this branch — `ci.yml` triggers only on pushes to master and PRs targeting master, so all 776 commits are unvalidated by CI. A PR is the only way to get the full matrix to run BEFORE master is touched. Pushing straight to master would make master the place where 776 commits of untested compatibility are discovered.",
       "detail": "Fast-forward `hub-native-experience` from the autonomous branch, push it, then `gh pr create --base master --head hub-native-experience`. Watch with `gh pr checks` / `gh run list --branch hub-native-experience`. Fix what it reports and push again; each cycle is minutes, so batch fixes rather than pushing one at a time. Expect R1's fix to be confirmed or refuted here — it is the one change that cannot be verified locally. DO NOT MERGE THE PR ON A RED OR STILL-RUNNING CI. If CI reveals a genuine PRODUCT bug rather than infrastructure, fix it if it is small and understood; if it is not, stop, leave the PR open, and write it up — an unreleased product is recoverable and a bad 1.0.0 on PyPI is not.",
-      "outcome": "PR #1 open (base master, head cebb542). Docs GREEN both rounds. CI green on all 6 matrix legs, ui-test and build. hub-test RAN FOR THE FIRST TIME (R1 fixed the install failure that had masked it since 2026-07-29) and reported 37 failed / 2093 passed. Not a regression: those 37 have never run outside a Windows box with claude and codex installed. RELEASE HELD."
+      "outcome": "PR #1 MERGED. master fast-forwarded f6663a9->6aa86f3 (794 commits, linear), then fixed forward to 150bfae. All 37 CI failures resolved: 17 PATH, 12 starlette route-introspection, 2 pid_alive, 2 workspace launchability, 2 platform skips, 1 SSE queue-overflow test defect. Docs deployed to Pages; GHCR image rebuilt (digest changed, verified)."
     },
     {
       "id": "R12-merge-master-tag-release",
       "title": "Merge to master, tag v1.0.0, publish, verify",
-      "status": "blocked",
+      "status": "in_progress",
       "why": "The goal. Note this is the IRREVERSIBLE step: creating the GitHub release fires `publish.yml`, which runs `twine upload` to PyPI, and PyPI never permits reusing a version number.",
       "detail": "PRECONDITION, CHECK IT EXPLICITLY: every CI job on the PR is green and finished. Then merge the PR to master. `hub-image.yml` fires on any master push touching `hub/` and will build the Docker image. Then tag `v1.0.0` and `gh release create v1.0.0` with notes drawn from R8's CHANGELOG. Watch `publish.yml` to completion — after R7 it must publish BOTH `agentweave-ai` and `agentweave-hub` from that one tag; if only one job fires, the R7 re-gating is wrong and that is the highest-priority fix. VERIFY, do not assume: `pip download agentweave-ai==1.0.0` into a temp dir, or `pip install` into a throwaway venv, and confirm `agentweave --version` reports 1.0.0 and that it pulled `agentweave-hub` with it (R4's whole point). Confirm the GHCR image published and the Pages docs site rebuilt. Do NOT create a `hub-v1.0.0` tag.",
-      "outcome": "Not started. Blocked by R11 and by limit 2 (never release on red CI). Nothing outward-facing has happened."
+      "outcome": "Merge done. Tag/release pending master CI green on 150bfae. Preconditions verified: both pyprojects 1.0.0 on origin/master, CHANGELOG heading correct, no v1.0.0 tag exists."
     }
   ],
-  "current": "STOPPED � awaiting operator decision",
-  "next_action": "BLOCKED ON THE OPERATOR for D5-A (pid_alive on POSIX). 29 of 37 test failures are fixed, committed and pushed at 8f027be; CI is verifying them. Do NOT merge or tag while hub-test is red. Read openspec/explorations/2026-08-17-the-hub-suite-has-never-run-clean.md. The release runbook in `release_runbook` is still valid from step 1 once hub-test is green.",
+  "current": "R12 � master merged and fixed; waiting on master CI before the tag",
+  "next_action": "When CI on master 150bfae is green: `git tag v1.0.0 150bfae && git push origin v1.0.0`, then `gh release create v1.0.0 --title 'AgentWeave v1.0.0' --notes-file .release-notes-1.0.0.md` (untracked, in the repo root). That fires publish.yml: publish-hub FIRST (publish needs it), then publish. Then verify from real PyPI in a clean venv: pip install agentweave-ai==1.0.0, confirm `agentweave --version` is 1.0.0 and that agentweave-hub 1.0.0 came with it. Do NOT create hub-v1.0.0. If CI is red, do NOT tag.",
   "limits": [
     "OUTWARD-FACING ACTIONS ARE AUTHORISED THIS RUN — this INVERTS the previous run's standing rule, deliberately. Pushing, opening a PR, merging to master, tagging, and creating a GitHub release are all in scope, in R11/R12 order. Everything else outward-facing is not: no force-push, no history rewriting on any shared branch, no deleting or moving existing tags or releases, no touching the four releases already published.",
     "NEVER release on a red or still-running CI. `gh pr checks` must show every job green and FINISHED before the PR merges, and the merge must be green before the tag exists. The operator chose 'Full auto, but only on green CI' with that as the hard rule.",
