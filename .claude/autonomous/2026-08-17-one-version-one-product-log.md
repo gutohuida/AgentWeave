@@ -545,3 +545,32 @@ won that race there would be a window — short, but real — in which `pip inst
 resolves to 1.0.0 and then cannot find `agentweave-hub>=1.0.0`. `publish` now `needs:
 publish-hub`. That closes **D2** in `decisions_for_user`, which had been left open as
 "verify in R12's smoke test" — better to remove the race than to check for it afterwards.
+
+**Round 2 — the docs fix confirmed.** Disambiguating the two jobs both named `build` by run id
+rather than by name, which is what made the round-1 verdict ambiguous:
+
+| Run | Workflow | Result |
+|---|---|---|
+| `32017616528` | **Docs** | `build: SUCCESS`, `deploy: SKIPPED` (deploy is push-only) |
+| `32017616594` | **CI** | matrix legs green as they land; `build` waits on `needs: test` |
+
+The Docs workflow is green **for the first time since 2026-07-29**.
+
+**A scare worth recording: the local `master` ref is stale.** `git rev-parse origin/master` returned
+`f6663a9` while `git log master` had been reporting `eedbe46` all session, which reads exactly like
+somebody pushing to master underneath the run. It is not: the local `refs/heads/master` was last
+updated whenever it was last checked out and has sat there since. Fetched and measured against the
+remote ref explicitly:
+
+    origin/master  f6663a9
+    HEAD           98dfff3
+    ahead  794     behind  0
+
+So the fast-forward is valid, and origin/master's three extra commits are already contained in this
+branch. **The PR body's "789 commits" is understated** — that figure came from the stale local ref;
+against the real base it is 794. The PR itself was always opened against GitHub's `master`, so the
+diff it shows was never wrong.
+
+Lesson for the merge: there is no local `master` worth trusting, so the merge is a direct
+fast-forward push, `git push origin hub-native-experience:master` — no local branch, no merge
+commit, history stays linear.
