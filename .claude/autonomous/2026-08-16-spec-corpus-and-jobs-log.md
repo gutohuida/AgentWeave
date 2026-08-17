@@ -1064,3 +1064,98 @@ after, since the bundle fingerprint folds in `git status --porcelain` (the same 
 N2 and N2b both already hit). Section 5 depends on section 4's response shape, which is now stable
 and committed. Section 7 (driven against the running Hub) still waits until section 5 lands, per
 tasks.md's own note — no point restarting the trial Hub before there's a UI to exercise it with.
+
+## Entry 12 — N3 implementation slice 3: the UI layer (tasks.md section 5) + a real design gap closed
+
+**2026-08-17T02:19:42+01:00.** Implemented tasks.md section 5 in full — `many-named-loops` now has a
+working UI: creating a job can opt it into being a loop, and a loop's card shows its purpose, stop
+condition, queue and current item.
+
+**API (`hub/ui/src/api/jobs.ts`, `hub/ui/src/api/tasks.ts`):** `Job` gains `loop?: LoopSummary | null`;
+`JobCreate`/`JobUpdate` gain the three/four loop fields, all optional — `JobForm.tsx` only spreads
+them into the submit payload when the collapsed section was actually opened (`loopEnabled`), never as
+`purpose: ''`/`stop_when_queue_empties: false` defaults, matching design D6's server-side "`purpose is
+not None`" opt-in rule from the client side too. `useTasks()` gains `loopId?: string`, read the same
+way `excludeArchivedCompleted` already is; the two are mutually exclusive in the querystring builder
+(`loopId` wins if both are somehow passed), matching the server's `if/elif` chain exactly — confirmed
+`useTasks({ loopId })` alone covers `JobCard`'s need, so no second `useLoopTasks` hook was added.
+
+**UI (`JobForm.tsx`, `JobCard.tsx`, `JobsPage.tsx`, `App.tsx`):** `JobForm` gets a collapsed-by-default
+"Make this a loop" toggle revealing a purpose textarea, a `datetime-local` stop-at input, and a
+stop-when-queue-empties checkbox. `JobCard` gains a new `LoopBlock` sub-component, rendered only when
+`job.loop` is present — purpose, an Active/Stopped badge, the stop reason when stopped, queue counts
+per status, the current item (title + status), and an open-questions count. `LoopBlock` owns its own
+`useTasks({ loopId })` call so a plain job never triggers that fetch at all. The current-item line is
+the click target: clicking it calls `onOpenTasks` with every task id the loop's own `useTasks` fetch
+returned — the identical `setActiveTaskIds` cross-tab mechanism `SpecDocumentTasksLink` already proved
+live for the spec-coverage bar. `onOpenTasks` is threaded `App.tsx` (where it does
+`setActiveTaskIds` + `navigateTo(..., 'tasks')`, byte-for-byte the same shape as the existing spec-
+coverage wiring a few lines above it) → `JobsPage.tsx` → `JobCard.tsx`.
+
+**A real design gap found while wiring the click-through, not assumed away:** `LoopSummary` — in both
+`hub/hub/schemas/jobs.py` and its frontend mirror — never carried the `Loop` row's own `id`. Design D2
+scopes `GET /tasks?loop_id=` by `Task.loop_id`, which stores the *loop's* id, not the *job's* — the two
+are different values (`Loop.job_id` is a separate unique column). Without `loop.id` in the response, no
+caller anywhere could ever construct a working `?loop_id=` query; the "current item, linking into the
+task board scoped to `?loop_id=`" line in tasks.md 5.4 was, as written, unimplementable. Added `id: str`
+to `LoopSummary` and populated it at both construction sites in `hub/hub/api/v1/jobs.py`
+(`_batch_loop_summaries`, used by `get_job`/`list_jobs`/`update_job`, and `create_job`'s zero-history
+construction) — checked first that no test constructs a bare `LoopSummary(...)` or asserts on the
+response dict missing `id` (none do; existing assertions only check `loop["purpose"]`), so this was a
+strict addition with no call site to update elsewhere.
+
+**Tests added (task 6.5), all passing:**
+- `hub/ui/src/__tests__/jobCard.test.tsx` (new, 4 cases): a plain job shows no loop block even
+  expanded; a loop with purpose/queue/current-item/open-questions renders all of it and an "Active"
+  badge scoped inside the block (disambiguated from the job header's own "Active"/"Paused" badge via
+  `within`); a stopped loop shows "Stopped" and its reason and "No current item"; clicking the current
+  item calls `onOpenTasks` with every task id the mocked `useTasks({ loopId })` returned, and is not
+  clickable at all when `onOpenTasks` is omitted.
+- `hub/ui/src/__tests__/tasksApi.test.tsx` (+1 case): `useTasks({ loopId, excludeArchivedCompleted })`
+  requests `?loop_id=<id>` only — confirms the priority ordering, not just that `loopId` works alone.
+
+**Verified, not trusted:**
+- `npx tsc --noEmit` → clean (caught the missing frontend `LoopSummary.id` immediately — the JobCard
+  code referencing `loop.id` failed to compile before the backend fix was even written, which is what
+  surfaced the gap in the first place, before any test did).
+- `npx vitest run` on the two new/changed test files → 9/9 passed, before the full suite run.
+- `npm test` (full suite) → **948 passed** — the 943 baseline plus exactly the 5 new cases (4 + 1),
+  no other change anywhere. `npm run lint` → clean. `npm run build` → clean (one pre-existing >500kB
+  chunk-size warning, unrelated to this slice).
+- `pytest hub/tests/test_jobs.py hub/tests/test_scheduler.py hub/tests/test_jobs_crud.py
+  hub/tests/test_tasks.py -q` → 60 passed, 3 skipped, before the full-suite run (confirms the
+  `LoopSummary.id` addition broke nothing in the job/loop/task test files specifically).
+- `pytest hub/tests/ -n 8 -q` → run **twice**. First run: 2101 passed, 1 failed
+  (`test_agent_trigger.py::test_spawn_failure_marks_run_failed`), 11 skipped — reran that one test
+  standalone (`pytest tests/test_agent_trigger.py::test_spawn_failure_marks_run_failed -q`) and it
+  passed, confirming the exact known `-n 8` xdist flake `verified_green_at_20e963e` already named
+  rather than a regression from this slice's changes. Second full run, started in the background while
+  other verification proceeded: **2102 passed, 11 skipped, zero failures** — the flake did not recur,
+  and the count exactly matches the unchanged baseline (this slice added no new Python test).
+- `pytest tests/ -n 4 -q` → **362 passed, 3 skipped** — exact match, untouched by this slice.
+- `ruff check hub/ src/` and `black --check` (whole tree) → clean.
+- `npx openspec validate --changes --strict` → 20/20. `--specs --strict` → 30/30.
+
+**The two-pass bundle-refresh discipline, followed exactly as tasks.md 5.5 specifies:** built and
+refreshed `hub/hub/static/ui` once before staging (`8814d1d`), then, per the standing rule this session
+already hit twice (N2, N2b) — the fingerprint folds in `git status --porcelain`, so a pre-commit
+refresh always stamps a dirty-tree suffix a post-commit clean tree can't reproduce — rebuilt and
+refreshed a second time against the clean, committed tree. Confirmed via `git status` that only
+`ui-build-stamp.json` changed the second time (same asset content hash, `index-BqLeC6Wd.js`), committed
+separately as `619fd5a`.
+
+tasks.md: section 5 (5.1-5.5) and 6.5/6.6/6.7 checked off, all with their verification recorded inline.
+Sections 1-6 of `many-named-loops` are now fully implemented and green. Remaining: section 7 (driven
+against the running trial Hub — not yet restarted onto this commit), section 8 (human-only, cannot be
+completed unattended — will be recorded as findable-but-unverified rather than ticked), section 9
+(user test guide — tasks.md already has a draft; needs checking against what actually got built rather
+than assumed correct).
+
+`next_action` set to tasks.md section 7: restart the trial Hub onto `619fd5a` (checking the owning
+process's actual `CreationDate`, not just `/health`, per N2b's standing lesson), then drive 7.1-7.4 —
+a `stop_when_queue_empties` loop with an empty queue skipping its fire and disabling itself; a second
+loop with one task naming it firing normally and recording `JobRun.conversation_id`; `GET /tasks?loop_id=`
+and `GET /jobs/{id}`'s `loop.queue`/`loop.current_task` both reflecting the seeded task; then a full
+teardown of every row created, confirmed by `git status` staying clean (this repo is that project's own
+working directory, so nothing here should ever go dirty from a live-Hub check). Sections 8 and 9 close
+out N3 once section 7 lands. Once N3 is fully closed, `current` advances to `N4-q6-decisions`.
