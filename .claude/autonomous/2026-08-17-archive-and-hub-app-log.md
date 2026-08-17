@@ -54,3 +54,32 @@ the repo root — a document seeded this afternoon for the taste pass, in the ot
 `AgentWeave` project. It is there deliberately for A2 to archive. `CLAUDE.md` forbids committing
 `spec/` at the root; leave it untracked. `aw-loop10` is the operator's real trial data and is not
 to be touched.
+
+---
+
+## 19:45 — Objective 1 is done: v1.0.1 is released and verified
+
+CI went fully green on `5e63004` (`hub-test` included), so the tag was created on the commit CI
+actually tested rather than on whatever `master` happened to be.
+
+- Tag `v1.0.1` → `5e63004`, release published.
+- `Publish to PyPI` green, and the ordering held: `publish-hub` finished 18:21:39Z, `publish`
+  started 18:21:42Z, so the dependency was on the index before the dependent was uploaded.
+- `Publish Hub Docker image` green.
+- **Verified as an artefact, not as a green tick**: a clean venv installed `agentweave-ai==1.0.1`
+  from real PyPI and `agentweave --version` reports 1.0.1.
+
+**A defect found by that verification, recorded as D4 and deliberately NOT fixed here.** The clean
+install pulled `agentweave-hub` **1.0.0**, not 1.0.1, and pip was satisfied: `pyproject.toml` pins
+`agentweave-hub>=1.0.0`. Almost everything in 1.0.1 — the UI bundle, `spec_render.py`,
+`runner_parsing.py` — ships in the *hub* package, so `pip install --upgrade agentweave-ai` can
+leave an upgrader running 1.0.0's Hub with none of the release. Both are on the index now, so a
+fresh install today is fine; the exposure is upgraders. Fixing it means another release, which is
+outward-facing and therefore not this run's to make.
+
+The index also lagged again, exactly as it did for 1.0.0: the JSON API and the simple index both
+served the old version for a minute or so after a successful upload. Worth knowing before
+concluding a publish failed.
+
+**Handing over now.** The driver is installed and armed; `last_heartbeat` is backdated so the first
+firing takes the branch rather than standing down. A1 is next.

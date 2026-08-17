@@ -82,6 +82,13 @@
       "status": "OPEN",
       "question": "The 1.0.1 work (renderer colour, composer rework, cost removal, ticket redesign, palette fix) was implemented directly, outside any openspec change. Under the repository's own convention that should have been a change proposal with tasks and specs.",
       "default": "Shipped as 1.0.1 regardless -- it is real, tested and released. Worth retro-covering with one change so the specs match the code; a good candidate for A4's roadmap rather than something to do silently."
+    },
+    {
+      "id": "D4-hub-pin-is-too-loose",
+      "status": "OPEN - found during the 1.0.1 release, not fixed",
+      "question": "pyproject.toml pins `agentweave-hub>=1.0.0`. Essentially everything in 1.0.1 lives in the hub package (the UI bundle, spec_render.py, runner_parsing.py), so `pip install --upgrade agentweave-ai` leaves an existing agentweave-hub 1.0.0 in place -- already satisfied by the pin -- and delivers NONE of the release. Observed live: a clean venv install of agentweave-ai==1.0.1 resolved agentweave-hub 1.0.0 while the hub's own 1.0.1 was still propagating to the index, and pip was content.",
+      "default": "Not fixed in this run and NOT for the loop to fix -- correcting it means another release, which is outward-facing. If 'one product, one version' is the intent, the pin should track the release version rather than a floor. A fresh install today gets 1.0.1 of both, so this affects upgraders, not new users.",
+      "cost_if_wrong": "An upgrading user silently runs 1.0.0's Hub and sees none of 1.0.1."
     }
   ],
   "known_debts": [
