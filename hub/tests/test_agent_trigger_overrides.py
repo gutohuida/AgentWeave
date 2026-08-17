@@ -1,6 +1,7 @@
 """Per-conversation runtime overrides on POST /agent/trigger
 (2026-08-04-hub-model-control-and-provisioning)."""
 
+import asyncio
 import json
 from unittest.mock import patch
 
@@ -219,23 +220,29 @@ async def test_a_conversation_whose_model_changed_attributes_usage_per_turn(
     project_id = status.json()["project_id"]
     queue = sse_manager.subscribe(project_id)
 
-    def drain_models():
-        """Take the context_warning models broadcast so far, and empty the queue.
+    async def await_model(timeout=5.0):
+        """Wait for the next `context_warning` model, rather than assuming one has arrived.
 
-        Drained after **each** turn rather than once at the end, and that is the whole point:
-        `sse_manager.subscribe` hands out an `asyncio.Queue(maxsize=256)` and `broadcast` does
-        `put_nowait` inside `except asyncio.QueueFull: pass` — a deliberate "drop rather than block
-        a slow consumer". Letting two full turns of streamed output accumulate in one 256-slot
-        queue means the tail is discarded **by design**, and the second turn's `context_warning`
-        was exactly what fell off. That is why this failed on CI and passed here: it is
-        queue-depth dependent, not platform dependent — the same commit did both.
+        Two reasons this waits instead of draining once.
+
+        The delivery is asynchronous and awaiting the run task does not guarantee it has landed,
+        so an immediate drain is a race — and it is a race CI lost roughly half the time while
+        this machine won it every time. A bounded wait removes the race without hiding anything:
+        if a reading genuinely never arrives, this still fails, just with an accurate complaint.
+
+        And it drains per turn, which matters independently: `sse_manager.subscribe` hands out an
+        `asyncio.Queue(maxsize=256)` and `broadcast` does `put_nowait` inside
+        `except asyncio.QueueFull: pass` — dropping rather than blocking a slow consumer. Letting
+        two turns of streamed output pile up in one queue puts the tail at risk by design.
         """
-        seen = []
-        while not queue.empty():
-            event = queue.get_nowait()
-            if event.event == "context_warning":
-                seen.append(json.loads(event.data)["model"])
-        return seen
+        deadline = asyncio.get_running_loop().time() + timeout
+        while asyncio.get_running_loop().time() < deadline:
+            while not queue.empty():
+                event = queue.get_nowait()
+                if event.event == "context_warning":
+                    return json.loads(event.data)["model"]
+            await asyncio.sleep(0.05)
+        raise AssertionError("no context_warning was broadcast within the timeout")
 
     try:
         first_spawn = _fake_pty(
@@ -264,7 +271,7 @@ async def test_a_conversation_whose_model_changed_attributes_usage_per_turn(
                 assert first.json()["status"] != "queued", first.json()
                 await _await_background_run()
 
-        models_seen = drain_models()
+        models_seen = [await await_model()]
 
         conversation_id = first.json()["conversation_id"]
         second_spawn = _fake_pty(
@@ -289,7 +296,7 @@ async def test_a_conversation_whose_model_changed_attributes_usage_per_turn(
                 assert second.json()["status"] != "queued", second.json()
                 await _await_background_run()
 
-        models_seen += drain_models()
+        models_seen.append(await await_model())
         assert models_seen == ["gpt-5.6-sol", "gpt-5.4-mini"]
     finally:
         sse_manager.unsubscribe(project_id, queue)
