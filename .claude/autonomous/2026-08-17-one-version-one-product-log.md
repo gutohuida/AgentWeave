@@ -574,3 +574,65 @@ diff it shows was never wrong.
 Lesson for the merge: there is no local `master` worth trusting, so the merge is a direct
 fast-forward push, `git push origin hub-native-experience:master` — no local branch, no merge
 commit, history stays linear.
+
+---
+
+## Iteration 12 — 12:15 — R11 STOPS THE RELEASE. `hub-test` runs, and 37 tests fail
+
+**The release is not being made.** Merge and tag are both held. The PR stays open.
+
+R1's fix worked — that is what produced this. `hub-test` had been failing at the *install* step since
+2026-07-29, never reaching `pytest`. With `agentweave` importable it ran the Hub suite in CI for the
+first time and reported:
+
+    37 failed, 2093 passed, 11 skipped, in 290s
+
+against **2130 passed / 11 skipped** on this machine. Nothing regressed. **37 tests have never been
+executed anywhere except a Windows box with `claude` and `codex` installed.**
+
+Full breakdown in `openspec/explorations/2026-08-17-the-hub-suite-has-never-run-clean.md`. In short:
+17 need a runner binary on PATH; 12 walk `app.routes` and now meet Starlette's `_IncludedRouter`
+wrappers; 4 are Windows-only behaviour unguarded on Linux; 3 are undiagnosed (2 `NoResultFound`, 1
+model-catalog).
+
+### The part that is not a test problem
+
+CI resolved **starlette 1.6.0 / fastapi 0.141.1**. This machine has **starlette 0.52.1 / fastapi
+0.136.3**. A major version boundary, crossed silently, because `hub/pyproject.toml` says
+`"fastapi>=0.110"` with **no upper bound** — so `pip install agentweave-ai` hands a user a Starlette
+major release this codebase has never been tested against.
+
+Stated precisely rather than dramatically: **no product breakage is demonstrated.** Every
+`_IncludedRouter` failure is in test code introspecting the routing table, not in `hub/hub/**`, and
+2093 tests passed on starlette 1.6 including the httpx-driven API tests. Route *introspection*
+changed; route *resolution* did not. But no product *compatibility* is demonstrated either — the
+suite that would establish it is the one that has never run clean.
+
+### Why I stopped instead of fixing it
+
+`D4` pre-authorised exactly this: fix it if small and understood, otherwise stop and write it up.
+It is understood. It is not small — 37 tests, five causes, six files — and two things make repairing
+it inside the release change a bad trade:
+
+1. **The Linux failures cannot be reproduced here.** Fixing them means guessing and iterating
+   through 5–25 minute CI rounds, blind, with unreviewed test-infrastructure changes riding into a
+   1.0.0.
+2. **Fixing all 37 would not settle the release question anyway.** Either 1.0.0 pins an upper bound
+   — changing what every user gets — or it ships unbounded and users get an untested major version.
+   That is a product decision, not a mechanical repair, and it is the operator's.
+
+The instruction was "guarantee a new version published" *and* "never release on red CI". Those two
+are now in conflict, and the conflict is the finding: the suite has never passed in a clean
+environment. A 1.0.0 that papers over that is exactly what a 1.0.0 should not do. An unreleased
+1.0.0 costs a few hours; a published one cannot be withdrawn.
+
+### State at the stop
+
+- **PR #1 open**, base `master`, head `cebb542`. Docs green on both commits. CI green on everything
+  except `hub-test`.
+- **Nothing outward-facing has happened.** No merge, no tag, no release, no PyPI upload. `v1.0.0`
+  does not exist locally or on origin. The four published releases are untouched.
+- All 12 queue items are done or resolved **except** the merge/tag half of R11 and all of R12.
+- Everything else in the run is committed and pushed and stands on its own: the CI and docs fixes,
+  the Docker install repair, the one-product install, the 3.11 floor, the solo-agent Team block, the
+  version unification, the CHANGELOG, and the documentation pass.
