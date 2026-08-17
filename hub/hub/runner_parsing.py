@@ -349,9 +349,11 @@ def parse_claude_line(line: str, *, source: str = "claude") -> ParsedLine:
                 message=_claude_result_error_message(data, str(subtype)),
             )
         else:
-            cost = data.get("total_cost_usd")
-            summary = f"Completed (cost: ${cost:.4f})" if cost is not None else "Completed"
-            event = status_event("completed", summary=summary)
+            # The cost of a single turn is not what a reader of a conversation is there for, and
+            # it ended every interaction with a number nobody acts on. The figure is not lost:
+            # `accounting` above carries `cost_usd_micros` into the accounting tables, which is
+            # where spend belongs and where the Budgets surface reads it from.
+            event = status_event("completed", summary="Completed")
         return ParsedLine(
             events=[event],
             usage=usage_sample,
