@@ -226,9 +226,8 @@ async def test_successful_trigger_returns_run_id_and_spawns(app, auth_headers, b
             '{"type":"result","subtype":"success","is_error":false,"session_id":"sess-live-1"}\n',
         ]
     )
-    # Nested, not parenthesized multi-context `with`: this suite's linter targets
-    # Python 3.8 (see test_hub_commands.py's identical comment) — parenthesized
-    # multi-context managers are 3.9+ only.
+    # Nested rather than combined: SIM117 is disabled for this suite as a style choice
+    # (see pyproject.toml's per-file-ignores), not a compatibility requirement.
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
         with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
             resp = await app.post(
@@ -765,8 +764,9 @@ async def test_run_without_usage_records_unavailable_once(app, auth_headers, bin
     fake_spawn = _fake_pty(
         ['{"type":"result","subtype":"success","is_error":false,"session_id":"s-none"}\n']
     )
-    with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn), patch(
-        "hub.launchability.shutil.which", return_value="/usr/bin/claude"
+    with (
+        patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn),
+        patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"),
     ):
         response = await app.post(
             "/api/v1/projects/proj-test/agent/trigger",

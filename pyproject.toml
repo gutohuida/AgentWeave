@@ -17,28 +17,33 @@ classifiers = [
     "Intended Audience :: Developers",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
-requires-python = ">=3.8"
-dependencies = []
+# 3.11, matching the Hub. The old `>=3.8` had stopped being true well before it was changed: the
+# CLI's only job is to start the Hub, the Hub has always required 3.11, so a 3.8 user could install
+# this package and then not run the product. `dependencies` below makes that unsatisfiable rather
+# than merely misleading.
+requires-python = ">=3.11"
+# AgentWeave is one product. `pip install agentweave-ai` used to give you a CLI whose primary entry
+# point — bare `agentweave`, which starts the Hub and opens the app window — could not work, because
+# the Hub was a second package you had to know to install. There is no cycle: hub/hub/ never imports
+# agentweave at runtime.
+dependencies = ["agentweave-hub>=1.0.0"]
 
 [project.optional-dependencies]
-mcp = ["fastmcp>=2.0; python_version >= '3.10'", "pyyaml>=6.0"]
+# The `python_version >= '3.10'` markers that used to guard fastmcp are gone with the 3.11 floor —
+# there is no longer an interpreter in range that cannot have it.
+mcp = ["fastmcp>=2.0", "pyyaml>=6.0"]
 jobs = ["croniter>=2.0"]
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
     # Upper bounds on the three tools CI *gates* on. Unpinned, a new major breaks
-    # the build with no code change: black 26's style reformatted 78 files and
-    # mypy 2 refused `python_version = "3.8"` outright, both discovered as CI
-    # failures rather than as a deliberate upgrade. Floors stay low so the 3.8/3.9
-    # matrix legs can still resolve `.[dev]` — lint only runs on the 3.11 leg.
+    # the build with no code change: black 26's style reformatted 78 files, which
+    # was discovered as a CI failure rather than as a deliberate upgrade.
     "black>=23.0,<27",
     "ruff>=0.1.0,<0.16",
     "mypy>=1.0,<3",
@@ -46,7 +51,7 @@ dev = [
     "types-PyYAML>=6.0",
 ]
 docs = ["mkdocs>=1.6", "mkdocs-material>=9.5"]
-all = ["fastmcp>=2.0; python_version >= '3.10'", "croniter>=2.0", "pyyaml>=6.0"]
+all = ["fastmcp>=2.0", "croniter>=2.0", "pyyaml>=6.0"]
 
 [project.urls]
 Homepage = "https://github.com/gutohuida/AgentWeave"
@@ -67,20 +72,29 @@ agentweave = ["templates/*", "templates/skills/*"]
 
 [tool.black]
 line-length = 100
-target-version = ["py38", "py39", "py310", "py311", "py312"]
+target-version = ["py311", "py312"]
 
 [tool.ruff]
 line-length = 100
+# Stated rather than inferred from `requires-python`, so that raising the floor again does not
+# silently switch on another batch of pyupgrade rules mid-release.
+target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "SIM"]
-ignore = ["E501", "UP045", "UP006", "UP037"]
+# The `UP` entries are a deliberate deferral, not a disagreement. Raising the floor from 3.8 to
+# 3.11 in 1.0.0 made ruff propose 310 modernisations at once — 204 `typing.Dict` → `dict`
+# (UP035), 92 `timezone.utc` → `datetime.UTC` (UP017), 13 `asyncio.TimeoutError` → `TimeoutError`
+# (UP041), one str-enum (UP042). Every one is correct and none is a bug, but 310 mechanical edits
+# across the codebase in the same change as a release is risk with no reader benefit, and 204 of
+# them are not auto-fixable. Modernise in its own change, deleting these entries as each is done.
+ignore = ["E501", "UP045", "UP006", "UP037", "UP035", "UP017", "UP041", "UP042"]
 
 [tool.ruff.lint.per-file-ignores]
-# Stacked `with patch(...)` is the idiomatic shape for these tests, and the CLI
-# suite must run on 3.8/3.9, which have no parenthesized context managers — so
-# "combine into one `with`" means a single overlong line or backslash
-# continuations, both worse than the nesting SIM117 objects to.
+# Stacked `with patch(...)` is the idiomatic shape for these tests. Parenthesized context managers
+# are available on the 3.11 floor, so this is now a style preference rather than the compatibility
+# requirement it originally was — kept because rewriting hundreds of stacked blocks to satisfy
+# SIM117 would be churn with no reader benefit.
 "tests/**" = ["SIM117"]
 "hub/tests/**" = ["SIM117"]
 
@@ -101,11 +115,10 @@ extend-immutable-calls = [
 ]
 
 [tool.mypy]
-# Not the package's runtime floor, which stays at `requires-python = ">=3.8"`.
-# mypy 2 refuses to target anything below 3.10 ("Python 3.8 is not supported"),
-# so this is the lowest version it will accept. Actual 3.8/3.9 compatibility is
-# covered by the CI test matrix, which runs pytest on both.
-python_version = "3.10"
+# Now simply the package's runtime floor. This used to be a compromise: the floor was 3.8 but
+# mypy 2 refuses to target anything below 3.10, so the two disagreed and the gap was covered by
+# running pytest on the 3.8/3.9 matrix legs. With the floor at 3.11 there is nothing to reconcile.
+python_version = "3.11"
 warn_return_any = false
 warn_unused_configs = true
 disallow_untyped_defs = true

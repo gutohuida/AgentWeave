@@ -379,8 +379,9 @@ async def test_relocate_repairs_and_redrains_queued_work(
         ['{"type":"result","subtype":"success","is_error":false,"session_id":"sess-1"}\n']
     )
 
-    with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn), patch(
-        "hub.launchability.shutil.which", return_value="/usr/bin/claude"
+    with (
+        patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn),
+        patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"),
     ):
         response = await app.post(
             "/api/v1/projects/proj-test/relocate",

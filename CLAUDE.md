@@ -107,7 +107,9 @@ entire point of the migration.
 ## Project Context
 
 You are working on the **AgentWeave Framework** — a multi-agent AI collaboration platform consisting of:
-- **CLI** (`src/agentweave/`) — Python 3.8+, zero runtime dependencies, published as `agentweave-ai` on PyPI
+- **CLI** (`src/agentweave/`) — Python 3.11+, published as `agentweave-ai` on PyPI. It has exactly
+  one runtime dependency, `agentweave-hub`, added in 1.0.0 so `pip install agentweave-ai` is the
+  whole install. The CLI's own code still imports nothing outside the stdlib; do not add a second.
 - **Hub** (`hub/`) — FastAPI backend + React/Vite dashboard, self-hosted via Docker
 - **Documentation** (`docs/`) — MkDocs with Material theme, deployed to GitHub Pages
 

@@ -407,8 +407,9 @@ def test_mcp_reports_a_refusal_as_a_failure_carrying_the_reachable_set():
     )
     error.read = lambda: body  # type: ignore[method-assign]
 
-    with patch("hub.mcp_server._bound_token", return_value="aw_run_x"), patch(
-        "urllib.request.urlopen", side_effect=error
+    with (
+        patch("hub.mcp_server._bound_token", return_value="aw_run_x"),
+        patch("urllib.request.urlopen", side_effect=error),
     ):
         with pytest.raises(HubAPIError) as excinfo:
             _hub_request("PATCH", "/tasks/task-1", {"status": "approved"})

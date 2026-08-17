@@ -185,3 +185,70 @@ leave the shell at the root for the *next* call — the cwd persists per-call, s
 from `hub/` and silently returned nothing. It looked like "no stale compose commands remain" when in
 fact two were sitting in `release-process.md`. Re-run from an absolute path when a search comes back
 suspiciously clean.
+
+---
+
+## Iteration 4 — 10:55 — R4 + R5: one install, and the floor that follows from it
+
+Taken together because R4 forces R5 and they edit the same surface.
+
+**R4 — `pip install agentweave-ai` is now the whole install.** `dependencies` was `[]`, so the
+documented install gave a CLI whose primary entry point could not work: bare `agentweave` forces app
+mode and spawns `python -m uvicorn hub.main:app`, which needs a package the user had to find on
+another line of the page and install separately. Added `agentweave-hub>=1.0.0`.
+
+**Verified by building the artefact, not by reading the file.** `python -m build`, then reading the
+wheel's own METADATA:
+
+    Requires-Python: >=3.11
+    Requires-Dist: agentweave-hub>=1.0.0
+    Classifier: Programming Language :: Python :: 3.11
+    Classifier: Programming Language :: Python :: 3.12
+
+The `python_version >= 3.10` markers that used to guard fastmcp are gone from the `mcp` and `all`
+extras — with a 3.11 floor there is no interpreter in range that cannot have it.
+
+**R5 — floor raised to 3.11**, proactively rather than on discovering breakage. Two reasons, the
+first stronger: agentweave-hub requires 3.11, so after R4 a `>=3.8` claim is not merely optimistic,
+it is unsatisfiable. And it was already untrue — a 3.8 user could install the CLI and then not run
+the product, which is the whole product. Touched requires-python, the classifiers, black's
+target-version, mypy's python_version (a documented compromise at 3.10, because mypy 2 refuses
+anything lower — nothing left to reconcile now), and the CI matrix, now 3.11 and 3.12 on all three
+operating systems.
+
+### The thing that nearly turned this into a 310-file change
+
+Ruff infers target-version from requires-python. Raising the floor switched on a batch of pyupgrade
+rules and the lint went from clean to **310 errors** in a single edit:
+
+    204  UP035   typing.Dict and friends  ->  deprecated-import
+     92  UP017   timezone.utc             ->  datetime.UTC
+     13  UP041   asyncio.TimeoutError     ->  TimeoutError
+      1  UP042   str enum
+
+Every one is correct. None is a bug. **204 are not auto-fixable.** 310 mechanical edits across the
+codebase in the same change as a release is risk with no reader benefit, and it is not what was
+scoped. So target-version is now **stated explicitly** rather than inferred — a future floor raise
+cannot silently do this again — and those four rules sit in `ignore` with a comment recording that
+they are a deferral, not a disagreement, to be deleted one at a time by a modernisation change.
+Logged in STATE.json under `deferred_followups`.
+
+Black's four files were a different matter: the 3.11 target lets it use parenthesized context
+managers, which is deterministic and semantics-preserving, so I let it reformat rather than pinning
+it. Three stale "this suite runs on 3.8/3.9 in CI" comments were rewritten — they justified a style
+choice with a compatibility requirement that no longer exists.
+
+**Also fixed here, found during prep:** installation.md documented `agentweave hub start` and
+`agentweave hub start --docker`, neither of which exists — there is no `hub` subcommand at all.
+Rewrote the page's framing entirely; it opened with "AgentWeave consists of two parts", which is the
+exact idea 1.0.0 retires. It now says install one package, run one command, and lists the four
+lifecycle commands that do exist. The dev-install section installs ./hub first so pip resolves the
+new dependency locally rather than reaching for an unreleased version. CLAUDE.md's "zero runtime
+dependencies" line is updated with the reason it changed and a warning not to add a second.
+
+**Gates, all measured after the change:** black clean (391 files), ruff clean, mypy clean,
+hub suite **2128 passed / 11 skipped**, CLI suite **362 passed / 3 skipped** — identical to the
+pre-change baseline, so the floor raise broke nothing.
+
+**Not verified:** that a real `pip install agentweave-ai==1.0.0` resolves from PyPI. It cannot be —
+agentweave-hub 1.0.0 does not exist yet. That is R12's smoke test, and D2 in decisions_for_user.

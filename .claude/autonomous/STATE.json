@@ -6,8 +6,8 @@
   "started_at": "2026-08-17T10:14:49+01:00",
   "stop_at": "2026-08-17T15:00:00+01:00",
   "stop_when_queue_empties": true,
-  "iteration": 4,
-  "last_heartbeat": "2026-08-17T10:20:39+01:00",
+  "iteration": 5,
+  "last_heartbeat": "2026-08-17T10:30:03+01:00",
   "session_stopped": null,
   "release_shape": {
     "version": "1.0.0",
@@ -45,16 +45,18 @@
     {
       "id": "R4-one-product-install",
       "title": "Make `pip install agentweave-ai` a working product",
-      "status": "pending",
+      "status": "done",
       "why": "THE core meaning of 'agentweave is one thing' in shipping terms. `pyproject.toml` has `dependencies = []`, so the documented `pip install agentweave-ai` (installation.md:12) gives a CLI whose primary entry point cannot work: bare `agentweave` forces app mode (`cli.py:1146`) and `_hub_native_start` spawns `python -m uvicorn hub.main:app`, which needs `agentweave-hub` installed. The user must find line 41 and install a second package. Verified during prep that there is NO dependency cycle: `hub/hub/` imports `agentweave` nowhere at runtime, and `agentweave-hub`'s dependency list does not mention the CLI.",
-      "detail": "Add `agentweave-hub>=1.0.0` to `pyproject.toml`'s `dependencies`. NOTE THE ORDERING TRAP: that pin cannot resolve on PyPI until 1.0.0 of the Hub is actually published, and both publish from the same tag in the same workflow run — so the release either works because both land together, or the CLI is briefly unresolvable. Prefer `agentweave-hub>=1.0.0` and confirm in R12's smoke test; if PyPI ordering turns out to break the install, that is a decisions_for_user entry, not a silent unpin. This change also FORCES the Python floor raise in R5 — `agentweave-hub` requires >=3.11, so a CLI depending on it cannot claim >=3.8. Also update CLAUDE.md's 'zero runtime dependencies' description of the CLI, which stops being true here, and fix `installation.md:42` and `:55`, which document `agentweave hub start` and `agentweave hub start --docker` — commands that DO NOT EXIST. The CLI has five: bare invocation, `doctor`, `status`, `stop`, `reset`. The Docker equivalent is `agentweave --docker`."
+      "detail": "Add `agentweave-hub>=1.0.0` to `pyproject.toml`'s `dependencies`. NOTE THE ORDERING TRAP: that pin cannot resolve on PyPI until 1.0.0 of the Hub is actually published, and both publish from the same tag in the same workflow run — so the release either works because both land together, or the CLI is briefly unresolvable. Prefer `agentweave-hub>=1.0.0` and confirm in R12's smoke test; if PyPI ordering turns out to break the install, that is a decisions_for_user entry, not a silent unpin. This change also FORCES the Python floor raise in R5 — `agentweave-hub` requires >=3.11, so a CLI depending on it cannot claim >=3.8. Also update CLAUDE.md's 'zero runtime dependencies' description of the CLI, which stops being true here, and fix `installation.md:42` and `:55`, which document `agentweave hub start` and `agentweave hub start --docker` — commands that DO NOT EXIST. The CLI has five: bare invocation, `doctor`, `status`, `stop`, `reset`. The Docker equivalent is `agentweave --docker`.",
+      "outcome": "dependencies = agentweave-hub>=1.0.0. VERIFIED by building the wheel and reading its METADATA. installation.md rewritten (it documented `agentweave hub start`, which does not exist, and opened with \"two parts\"). CLAUDE.md updated."
     },
     {
       "id": "R5-python-floor-3-11",
       "title": "Raise the Python floor to 3.11 across the board",
-      "status": "pending",
+      "status": "done",
       "why": "Operator decision, taken proactively rather than reactively. Two independent reasons: (a) R4 makes the CLI depend on a package that requires >=3.11, so the declared >=3.8 floor becomes unsatisfiable; (b) the >=3.8 floor is ALREADY a lie today — a 3.8 user can install `agentweave-ai` and then cannot start the Hub, which is the entire product. CI has never run this branch's 776 commits against 3.8/3.9/3.10 and only 3.11 is available on this machine, so keeping the floor means an unbounded fix-the-breakage hunt discovered through push-and-wait cycles, which does not fit the window.",
-      "detail": "`pyproject.toml`: `requires-python = \">=3.11\"`; drop the 3.8/3.9/3.10 classifiers; add 3.13 only if it is actually tested. `.github/workflows/ci.yml`: reduce the matrix `python-version` to the supported set (3.11, 3.12) across all three OSes. Check `[tool.mypy]` and `[tool.black]`/`[tool.ruff]` target-version settings in `pyproject.toml` for a pinned `python_version = \"3.8\"` and raise it — the dev-extra comment at `pyproject.toml:39` records that mypy 2 refused `python_version = \"3.8\"` outright, so this may also allow relaxing the `mypy<3` upper bound (do NOT relax it in the same commit; that is a separate risk). Record the floor raise in the CHANGELOG as a BREAKING change. Rejected: fixing 3.8 breakage to preserve the floor, and try-then-fall-back — both were offered and the operator chose the raise."
+      "detail": "`pyproject.toml`: `requires-python = \">=3.11\"`; drop the 3.8/3.9/3.10 classifiers; add 3.13 only if it is actually tested. `.github/workflows/ci.yml`: reduce the matrix `python-version` to the supported set (3.11, 3.12) across all three OSes. Check `[tool.mypy]` and `[tool.black]`/`[tool.ruff]` target-version settings in `pyproject.toml` for a pinned `python_version = \"3.8\"` and raise it — the dev-extra comment at `pyproject.toml:39` records that mypy 2 refused `python_version = \"3.8\"` outright, so this may also allow relaxing the `mypy<3` upper bound (do NOT relax it in the same commit; that is a separate risk). Record the floor raise in the CHANGELOG as a BREAKING change. Rejected: fixing 3.8 breakage to preserve the floor, and try-then-fall-back — both were offered and the operator chose the raise.",
+      "outcome": "requires-python >=3.11, classifiers, black target, mypy python_version, CI matrix 3.11+3.12. Ruff inferred a new target and produced 310 pyupgrade hits - all correct, none a bug, 204 not auto-fixable. Pinned target-version explicitly and DEFERRED those four rules via ignore, with the reason recorded. Gates identical to baseline: 2128 / 362."
     },
     {
       "id": "R6-single-agent-team-block",
@@ -106,8 +108,8 @@
       "detail": "PRECONDITION, CHECK IT EXPLICITLY: every CI job on the PR is green and finished. Then merge the PR to master. `hub-image.yml` fires on any master push touching `hub/` and will build the Docker image. Then tag `v1.0.0` and `gh release create v1.0.0` with notes drawn from R8's CHANGELOG. Watch `publish.yml` to completion — after R7 it must publish BOTH `agentweave-ai` and `agentweave-hub` from that one tag; if only one job fires, the R7 re-gating is wrong and that is the highest-priority fix. VERIFY, do not assume: `pip download agentweave-ai==1.0.0` into a temp dir, or `pip install` into a throwaway venv, and confirm `agentweave --version` reports 1.0.0 and that it pulled `agentweave-hub` with it (R4's whole point). Confirm the GHCR image published and the Pages docs site rebuilt. Do NOT create a `hub-v1.0.0` tag."
     }
   ],
-  "current": "R4-one-product-install",
-  "next_action": "R4: make `pip install agentweave-ai` a working product. Add `agentweave-hub>=1.0.0` to pyproject.toml's `dependencies` (currently `[]`). No cycle exists � verified in prep that hub/hub/ never imports agentweave at runtime. Then fix installation.md:42 and :55, which document `agentweave hub start` and `agentweave hub start --docker` � commands that DO NOT EXIST; the CLI has bare invocation plus doctor/status/stop/reset, and the Docker form is `agentweave --docker`. Also update CLAUDE.md's 'zero runtime dependencies' claim about the CLI, which stops being true. NOTE the version pin is only satisfiable once R7 sets hub/pyproject.toml to 1.0.0 � CI installs ./hub from the checkout first (done in R1), so local resolution is fine.",
+  "current": "R6-single-agent-team-block",
+  "next_action": "R6: stop emitting a Team section to solo users. hub/hub/api/v1/agents.py around 1227-1244 appends the ### Team block unconditionally, falling back to 'No other agents are registered in this project yet.' Umbrella task 13.9 requires omitting the roster AND all collaboration instruction ENTIRELY when the project has one agent. Omit the whole block, heading included, when the agent count is 1; add a test asserting absence for a one-agent project and presence for a two-agent one. Then run pytest hub/tests/ -n 8.",
   "limits": [
     "OUTWARD-FACING ACTIONS ARE AUTHORISED THIS RUN — this INVERTS the previous run's standing rule, deliberately. Pushing, opening a PR, merging to master, tagging, and creating a GitHub release are all in scope, in R11/R12 order. Everything else outward-facing is not: no force-push, no history rewriting on any shared branch, no deleting or moving existing tags or releases, no touching the four releases already published.",
     "NEVER release on a red or still-running CI. `gh pr checks` must show every job green and FINISHED before the PR merges, and the merge must be green before the tag exists. The operator chose 'Full auto, but only on green CI' with that as the hard rule.",
@@ -191,5 +193,12 @@
     "stop_at": "2026-08-17T15:00:00",
     "role": "BACKUP to the interactive session; stands down while last_heartbeat is <25 min old",
     "installed_at": "2026-08-17T10:14:49+01:00"
-  }
+  },
+  "deferred_followups": [
+    {
+      "id": "modernise-pyupgrade",
+      "what": "310 ruff pyupgrade modernisations (UP035/UP017/UP041/UP042) deferred in 1.0.0 via [tool.ruff.lint] ignore. Correct, mechanical, 204 not auto-fixable. Delete the ignore entries one at a time in a dedicated change.",
+      "raised": "2026-08-17 iteration 4 (R5)"
+    }
+  ]
 }

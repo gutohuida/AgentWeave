@@ -1,24 +1,39 @@
 # Installation
 
-AgentWeave consists of two parts: the **CLI** (Python package) and the **Hub** (self-hosted server, native by default with optional Docker support).
+AgentWeave is one application. Installing it and running it are one command each.
 
-## CLI Installation
+It requires **Python 3.11+**.
 
-The CLI requires **Python 3.8+**.
-
-### Basic Install
+## Install
 
 ```bash
 pip install agentweave-ai
 ```
 
-### With MCP Support (Recommended)
+That is the whole install. `agentweave-ai` brings the Hub — the local server and the web interface
+it serves — with it; you do not install a second package.
+
+## Run
 
 ```bash
-pip install "agentweave-ai[mcp]"
+agentweave
 ```
 
-This includes `fastmcp` and `pyyaml` for the MCP server and declarative configuration. The core CLI supports Python 3.8+, but the `fastmcp` dependency is installed only on Python 3.10+, so use Python 3.10 or newer for MCP mode.
+This starts the Hub natively via uvicorn, scaffolds `~/.agentweave/hub/` (database, `.env`), runs
+migrations, opens the directory you ran it from as a project, and opens the app in its own window.
+No Docker required.
+
+The app is at **http://localhost:8000**, and stays there if you would rather use a normal browser
+tab. `agentweave --port 8010` moves it.
+
+The other four commands exist for when it will not start, or when you want it to stop:
+
+```bash
+agentweave doctor    # check environment readiness
+agentweave status    # is it running?
+agentweave stop      # stop it
+agentweave reset     # destroy local Hub state and start clean
+```
 
 ### Development Install
 
@@ -27,32 +42,19 @@ If you're contributing to AgentWeave:
 ```bash
 git clone https://github.com/gutohuida/AgentWeave.git
 cd AgentWeave
+pip install -e ./hub
 pip install -e ".[dev]"
 ```
 
-## Hub Installation
+The Hub goes in first, from the checkout, so pip resolves `agentweave-ai`'s dependency on it
+locally instead of fetching a release from PyPI.
 
-The Hub runs **natively** by default — no Docker required. Docker remains supported for
-coordination-only or remote deployments.
+## Docker (Advanced)
 
-### Automatic Setup (Recommended)
-
-```bash
-pip install agentweave-hub
-agentweave hub start
-```
-
-This runs the Hub via uvicorn on the host, scaffolds `~/.agentweave/hub/` (database, `.env`),
-runs migrations, and fetches the API key.
-
-The Hub will be available at **http://localhost:8000**.
-
-### Docker Setup (Advanced)
-
-For a containerized instance instead — e.g. a coordination-only or remote deployment:
+For a containerized instance instead — a remote or headless deployment:
 
 ```bash
-agentweave hub start --docker
+agentweave --docker
 ```
 
 This requires **Docker** and **Docker Compose**, downloads the configuration, starts the
@@ -113,10 +115,11 @@ both. `AW_HUB_IMAGE` is the supported way to point it at an image you built your
 ## Verify Installation
 
 ```bash
+agentweave --version
 agentweave --help
-aw --help                    # alias
-agentweave --help            # lifecycle CLI
-agentweave hub status        # check Hub status
+aw --help                    # `aw` is an alias for `agentweave`
+agentweave status            # is the Hub running?
+agentweave doctor            # runtimes, ports, database, permissions
 ```
 
 ## Next Steps

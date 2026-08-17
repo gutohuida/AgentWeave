@@ -129,8 +129,8 @@ class TestHubStartCommand:
         args.local = False
         args.no_detach = False
         args.app = False
-        # Kept nested: parenthesized multi-context `with` is a syntax error on
-        # Python 3.8/3.9, which this suite still runs against in CI.
+        # Kept nested rather than combined: SIM117 is disabled for this suite because
+        # rewriting hundreds of stacked blocks would be churn with no reader benefit.
         with patch("agentweave.cli._docker_available", return_value=True):  # noqa: SIM117
             with patch("agentweave.cli.urllib.request.urlopen", return_value=mock_response):
                 result = cmd_hub_start(args)
@@ -192,8 +192,8 @@ class TestAppModeBrowser:
         """Test that no candidate path existing returns None."""
         from agentweave.cli import _find_app_mode_browser
 
-        # Kept nested: parenthesized multi-context `with` is a syntax error on
-        # Python 3.8/3.9, which this suite still runs against in CI.
+        # Kept nested rather than combined: SIM117 is disabled for this suite because
+        # rewriting hundreds of stacked blocks would be churn with no reader benefit.
         with patch("agentweave.cli.Path.exists", return_value=False):  # noqa: SIM117
             with patch("agentweave.cli.shutil.which", return_value=None):
                 assert _find_app_mode_browser() is None

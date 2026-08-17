@@ -114,9 +114,12 @@ async def test_operator_turn_starts_while_budget_is_exhausted(
     await _set_budget_and_usage(limit=100, used=100)
     await _queue(name, "operator")
 
-    with patch(
-        "hub.api.v1.agent_trigger.PtySession.spawn", _completed_claude_spawn("operator-session")
-    ), patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+    with (
+        patch(
+            "hub.api.v1.agent_trigger.PtySession.spawn", _completed_claude_spawn("operator-session")
+        ),
+        patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"),
+    ):
         scheduled = await schedule_agent("proj-test", name)
         assert scheduled.response is not None
         await asyncio_gather_background_runs()
@@ -136,9 +139,13 @@ async def test_autonomous_turn_below_budget_persists_initiator(
     await _set_budget_and_usage(limit=101, used=100)
     await _queue(name, "agent")
 
-    with patch(
-        "hub.api.v1.agent_trigger.PtySession.spawn", _completed_claude_spawn("autonomous-session")
-    ), patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+    with (
+        patch(
+            "hub.api.v1.agent_trigger.PtySession.spawn",
+            _completed_claude_spawn("autonomous-session"),
+        ),
+        patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"),
+    ):
         scheduled = await schedule_agent("proj-test", name)
         assert scheduled.response is not None
         await asyncio_gather_background_runs()
@@ -158,9 +165,12 @@ async def test_increasing_budget_reschedules_retained_autonomous_work(
     entry_id = await _queue(name, "agent")
     assert (await schedule_agent("proj-test", name)).waiting_reason == "token budget exhausted"
 
-    with patch(
-        "hub.api.v1.agent_trigger.PtySession.spawn", _completed_claude_spawn("resumed-session")
-    ), patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+    with (
+        patch(
+            "hub.api.v1.agent_trigger.PtySession.spawn", _completed_claude_spawn("resumed-session")
+        ),
+        patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"),
+    ):
         response = await app.patch(
             "/api/v1/projects/proj-test/accounting/budget",
             json={"token_budget": 200},
