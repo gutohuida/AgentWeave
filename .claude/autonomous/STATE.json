@@ -1,247 +1,103 @@
 {
-  "purpose": "Ship AgentWeave 1.0.0 to master and publish it. AgentWeave is ONE product with ONE version from this release on: the separate `agentweave-hub` version line and the `hub-v*` tag scheme retire, `pip install agentweave-ai` becomes a working product on its own, and the documentation and README describe the thing that actually exists rather than the multi-runtime product that was deleted. Fix everything that stands in the way of that, merge to master, tag, release.",
-  "branch": "autonomous/2026-08-17-one-version-one-product",
-  "parent_branch": "hub-native-experience",
-  "parent_sha": "e45b014",
-  "started_at": "2026-08-17T10:14:49+01:00",
-  "stop_at": "2026-08-17T15:00:00+01:00",
-  "stop_when_queue_empties": true,
-  "iteration": 20,
-  "last_heartbeat": "2026-08-17T14:19:00+01:00",
-  "session_stopped": null,
-  "release_shape": {
-    "version": "1.0.0",
-    "applies_to": "BOTH pyproject.toml (agentweave-ai) and hub/pyproject.toml (agentweave-hub), in lockstep, forever from now on.",
-    "tag": "v1.0.0",
-    "retired": "The `hub-v*` tag scheme. Do not create a `hub-v1.0.0` tag. `publish.yml`'s `publish-hub` job must be re-gated onto `v*` so BOTH distributions publish from the single tag, and `hub-image.yml`'s tag trigger must move from `hub-v*` to `v*`.",
-    "why_1_0_0": "Operator decision, 2026-08-17. Since v0.42.0 the branch deleted the watchdog, messaging, both non-HTTP transports, the role subsystem and 51 of 56 CLI commands. Nothing of the 0.42 CLI surface survives; semver calls that major, and 1.0.0 is also the product signal that the Hub-owned local app is the thing now.",
-    "rejected": "CLI 1.0.0 with Hub staying on 0.36.0, and staying pre-1.0 on both. Both were rejected by the operator's follow-up: 'We can stop the old hub and old versions where it is. Now agentweave is one thing.' Two version lines for one product is the thing being removed."
-  },
+  "purpose": "Implement the Archive change, then work on the Hub desktop app, then draft a roadmap. Objective 1 (release 1.0.1) was done by the interactive session on master before this branch was cut.",
+  "branch": "autonomous/2026-08-17-archive-and-hub-app",
+  "parent_branch": "master",
+  "parent_sha": "5e63004",
+  "started_at": "2026-08-17T19:35:00+01:00",
+  "stop_at": "2026-08-17T22:00:00+01:00",
+  "stop_when_queue_empties": false,
+  "iteration": 0,
+  "last_heartbeat": "2026-08-17T19:35:00+01:00",
+  "session_stopped": false,
+
   "queue": [
     {
-      "id": "R1-ci-hub-test-installable",
-      "title": "Make the CI hub-test job able to import agentweave",
-      "status": "done",
-      "why": "This exact failure has been red on master since 2026-07-29 and would fail the release PR on its first run. `hub/tests/` imports `agentweave` (test_agent_output_stream.py:213, test_agent_tool_surface_phase7.py:58, test_task_transitions.py:36) but the job only runs `pip install -e \".[dev]\"` from inside `hub/`, so the CLI package is absent: `ModuleNotFoundError: No module named 'agentweave'`. Local runs pass only because the CLI is installed editable machine-wide, which is a property of this machine and not of CI.",
-      "detail": "In `.github/workflows/ci.yml`, the `hub-test` job. Add a step installing the repository root package before the Hub's own install — `pip install -e .` from the repo root, then `pip install -e \".[dev]\"` in `hub/` (the job sets `working-directory: hub`, so the root install needs an explicit `working-directory: .`). Verify by reading the job top to bottom afterwards; there is no way to run GitHub Actions locally, so this one is confirmed by the PR run in R10, not before.",
-      "outcome": "Both jobs install the Hub from the checkout first, then the CLI. Absorbed R4's PyPI chicken-and-egg. UNVERIFIED until the PR run in R11 � Actions cannot run locally."
+      "id": "A1-archive-confirmation",
+      "title": "Archiving a document must confirm, and say it cannot be undone",
+      "status": "open",
+      "why": "Operator judgement, 2026-08-17: 'Archived should have a confirmation popup telling it irreversible.' Archive IS genuinely one-way -- spec_lifecycle.TRANSITIONS has no edge out of `archived`, and the code says so explicitly -- while the two controls beside it (Approve, Reopen) are both reversible. Deleting a project makes the operator type its name; archiving a document, which cannot be undone at all, asks nothing.",
+      "where": "hub/ui/src/components/spec/ -- the phase bar that renders Approve/Archive/Reopen. There is an existing confirm pattern in the project delete flow; reuse it rather than inventing a second convention.",
+      "done_when": "Clicking Archive opens a confirmation naming the document and stating plainly that archiving cannot be undone; cancelling leaves the phase unchanged; confirming archives it. Tests cover both branches."
     },
     {
-      "id": "R2-docs-build-green",
-      "title": "Get `mkdocs build --strict` to zero warnings",
-      "status": "done",
-      "why": "The Docs workflow has been red since 2026-07-29 and gates the GitHub Pages deploy. It is `--strict`, so any warning aborts. Measured locally during prep: 34 warnings, not the 1 the old CI log showed — the tree has drifted a long way since.",
-      "detail": "Run `\"C:/Users/huida/AppData/Local/Programs/Python/Python311/python.exe\" -m mkdocs build --strict` and iterate to zero. mkdocs and mkdocs-material were installed during prep specifically so this is a local loop rather than a push-and-wait. The 34 break down as: 28 inside `docs/archive/legacy-multi-runtime/` (retired pages cross-linking to each other and to deleted pages), 3 in `docs/guides/aw-spec-workflow.md`, 1 in `docs/reference/hub-api.md` (links `../guides/ai-jobs.md`), 1 in `docs/contributing/development.md` (links `../guides/adding-new-agents.md`), and 1 'pages not in nav'. PRE-AUTHORISED DEFAULT for the 28: exclude `docs/archive/legacy-multi-runtime/` from the built site entirely rather than repairing links in documentation for a product that no longer exists — keep the files in git for history, drop them from `nav` and from the build (mkdocs `exclude_docs`). Rejected: repairing 28 links, which spends the window publishing docs for the deleted multi-runtime product. For `aw-spec-workflow.md`: the skill it documents no longer exists (`src/agentweave/templates/skills/` has no `aw-spec-workflow`, and the `references/` directory it links is gone) — delete the page and its `mkdocs.yml:63` nav entry. For the 2 live-doc links, repair or remove the link as the surrounding sentence requires.",
-      "outcome": "mkdocs build --strict: 0 warnings, VERIFIED by running it. Excluded docs/archive/legacy-multi-runtime/ from the site (29 of the 34), deleted docs/guides/aw-spec-workflow.md (3), rewrote 2 live-doc sentences whose links pointed into the archived tree."
+      "id": "A2-archived-is-visible",
+      "title": "An archived document should look archived, in the document and in navigation",
+      "status": "open",
+      "why": "Same operator judgement: 'more visual indication that is archived both on the file and on the navigation bar'. Today an archived document reads almost exactly like an approved one.",
+      "where": "hub/hub/spec_render.py already has `.aw-chip-phase-archived` (muted + line-through) from the 1.0.1 renderer work -- verify it actually reads as archived, and strengthen the document-level treatment if not. The navigation side is hub/ui/src/components/spec/SpecDocumentPicker.tsx, which already has an 'Archived' group label.",
+      "done_when": "An archived document is unmistakable at a glance both when open and in the document list. Note the renderer only affects NEWLY rendered documents -- use spec_service.rerender_phase to refresh an existing one, and say so in the log.",
+      "fixture": "The AgentWeave project (proj-5e960453) has one approved document, spec/changes/quiet-hours-for-agent-notifications/spec.html, seeded for exactly this. aw-loop10 (proj-ff695d96) is the operator's real trial data -- do not archive or modify anything in it."
     },
     {
-      "id": "R3-docker-compose-install-path",
-      "title": "Repair the documented Docker install",
-      "status": "done",
-      "why": "`docs/getting-started/installation.md:80-94` tells users to curl `hub/docker-compose.yml` and run `docker compose up -d`. That file's `image:` defaults to `agentweave-hub:audit`, a local audit build; unqualified, it resolves to Docker Hub, where this project publishes nothing. The published image is `ghcr.io/gutohuida/agentweave-hub` (`hub-image.yml:15`). Regression, not oversight: `64e972d` 'Restore GHCR image in docker-compose.yml' put the right reference in and `0bb8480` 'fix(hub): build and use locally-built image in dev workflow' replaced it.",
-      "detail": "In `hub/docker-compose.yml`: (1) set `image: ${AW_HUB_IMAGE:-ghcr.io/gutohuida/agentweave-hub:latest}`; (2) delete the comment above it, which claims a fallback to 'the published v0.31.2 image' that `${VAR:-default}` syntax cannot express and which was never true; (3) add a top-level `name: agentweave` so Compose stops deriving its project prefix — and therefore the real name of the `hub-data` volume, and therefore WHICH DATABASE YOU GET — from the launch directory's basename; (4) add a `build:` section pointing at the Dockerfile so `docker compose up --build -d`, which `installation.md:104` documents as the from-source path, has something to build (there is no `build:` key in the file today, so that documented command is a no-op that then fails on the pull). Item (3) is the user-facing half of Q6's global-state bug and is being taken here because it is four lines and independent of the pywebview half, which is out of scope.",
-      "outcome": "GHCR image (verified pullable via docker manifest inspect; old default verified DENIED), name: agentweave pinned. NO build: section � adding one would break the curl-only install, since Compose builds rather than pulls when both are declared. From-source paths in installation.md and release-process.md now go through AW_HUB_IMAGE. Container never started (daemon down)."
+      "id": "A3-hub-app",
+      "title": "Work on the Hub desktop app",
+      "status": "open",
+      "why": "Operator: 'then work on the hub app'. The specified, unstarted change for this is openspec/changes/2026-08-16-one-hub-and-a-window-of-its-own -- 0 of 34 tasks done. It covers the native window AND the global-instance fix: bare `agentweave` currently opens a different database depending on the directory it was launched from, which is incoherent for a desktop app. Q6/pywebview was explicitly out of scope during the 1.0.0 release; it is in scope now.",
+      "where": "openspec/changes/2026-08-16-one-hub-and-a-window-of-its-own/{proposal,design,tasks}.md -- read all three before touching code. Work its tasks in order.",
+      "done_when": "As many of its tasks as fit the time, each committed with its task ticked. Do NOT tick a task because a plan for it exists."
     },
     {
-      "id": "R4-one-product-install",
-      "title": "Make `pip install agentweave-ai` a working product",
-      "status": "done",
-      "why": "THE core meaning of 'agentweave is one thing' in shipping terms. `pyproject.toml` has `dependencies = []`, so the documented `pip install agentweave-ai` (installation.md:12) gives a CLI whose primary entry point cannot work: bare `agentweave` forces app mode (`cli.py:1146`) and `_hub_native_start` spawns `python -m uvicorn hub.main:app`, which needs `agentweave-hub` installed. The user must find line 41 and install a second package. Verified during prep that there is NO dependency cycle: `hub/hub/` imports `agentweave` nowhere at runtime, and `agentweave-hub`'s dependency list does not mention the CLI.",
-      "detail": "Add `agentweave-hub>=1.0.0` to `pyproject.toml`'s `dependencies`. NOTE THE ORDERING TRAP: that pin cannot resolve on PyPI until 1.0.0 of the Hub is actually published, and both publish from the same tag in the same workflow run — so the release either works because both land together, or the CLI is briefly unresolvable. Prefer `agentweave-hub>=1.0.0` and confirm in R12's smoke test; if PyPI ordering turns out to break the install, that is a decisions_for_user entry, not a silent unpin. This change also FORCES the Python floor raise in R5 — `agentweave-hub` requires >=3.11, so a CLI depending on it cannot claim >=3.8. Also update CLAUDE.md's 'zero runtime dependencies' description of the CLI, which stops being true here, and fix `installation.md:42` and `:55`, which document `agentweave hub start` and `agentweave hub start --docker` — commands that DO NOT EXIST. The CLI has five: bare invocation, `doctor`, `status`, `stop`, `reset`. The Docker equivalent is `agentweave --docker`.",
-      "outcome": "dependencies = agentweave-hub>=1.0.0. VERIFIED by building the wheel and reading its METADATA. installation.md rewritten (it documented `agentweave hub start`, which does not exist, and opened with \"two parts\"). CLAUDE.md updated."
-    },
-    {
-      "id": "R5-python-floor-3-11",
-      "title": "Raise the Python floor to 3.11 across the board",
-      "status": "done",
-      "why": "Operator decision, taken proactively rather than reactively. Two independent reasons: (a) R4 makes the CLI depend on a package that requires >=3.11, so the declared >=3.8 floor becomes unsatisfiable; (b) the >=3.8 floor is ALREADY a lie today — a 3.8 user can install `agentweave-ai` and then cannot start the Hub, which is the entire product. CI has never run this branch's 776 commits against 3.8/3.9/3.10 and only 3.11 is available on this machine, so keeping the floor means an unbounded fix-the-breakage hunt discovered through push-and-wait cycles, which does not fit the window.",
-      "detail": "`pyproject.toml`: `requires-python = \">=3.11\"`; drop the 3.8/3.9/3.10 classifiers; add 3.13 only if it is actually tested. `.github/workflows/ci.yml`: reduce the matrix `python-version` to the supported set (3.11, 3.12) across all three OSes. Check `[tool.mypy]` and `[tool.black]`/`[tool.ruff]` target-version settings in `pyproject.toml` for a pinned `python_version = \"3.8\"` and raise it — the dev-extra comment at `pyproject.toml:39` records that mypy 2 refused `python_version = \"3.8\"` outright, so this may also allow relaxing the `mypy<3` upper bound (do NOT relax it in the same commit; that is a separate risk). Record the floor raise in the CHANGELOG as a BREAKING change. Rejected: fixing 3.8 breakage to preserve the floor, and try-then-fall-back — both were offered and the operator chose the raise.",
-      "outcome": "requires-python >=3.11, classifiers, black target, mypy python_version, CI matrix 3.11+3.12. Ruff inferred a new target and produced 310 pyupgrade hits - all correct, none a bug, 204 not auto-fixable. Pinned target-version explicitly and DEFERRED those four rules via ignore, with the reason recorded. Gates identical to baseline: 2128 / 362."
-    },
-    {
-      "id": "R6-single-agent-team-block",
-      "title": "Stop telling solo users about a team they do not have",
-      "status": "done",
-      "why": "Umbrella task 13.9, confirmed open twice (2026-08-12 and the 2026-08-17 N6 triage). `hub/hub/api/v1/agents.py:1227-1244` appends a `### Team` section unconditionally, falling back to 'No other agents are registered in this project yet.' The requirement is to omit the roster AND all collaboration instruction ENTIRELY in a single-agent project. Emitting a Team section stating the team is empty is the opposite of the requirement, it is in every turn's context, and 1.0.0's headline journey is a single user opening the app.",
-      "detail": "In `hub/hub/api/v1/agents.py` around 1227-1244, omit the whole `### Team` block — heading included — when the project has exactly one agent. Add a test asserting the section is absent for a one-agent project and present for a two-agent one. This is the only §13 item in scope: the charter-scope, skill-invocation and agent-template gaps are genuinely ABSENT rather than half-built (Charter is `id`/`project_id`/`name`/`content` and the UI promises nothing more), so they are a CHANGELOG 'not in this release' line, not a defect.",
-      "outcome": "Team block omitted entirely when there are no peers (roster includes self, so the test is peers not length). _tool_surface_lines gained has_peers so its \"roster above\" sentence stops dangling. Two tests, MUTATION-CHECKED by reverting to `if roster:` and confirming a named test fails. Hub suite 2130 passed."
-    },
-    {
-      "id": "R7-unify-versioning",
-      "title": "One version, one tag, one product",
-      "status": "done",
-      "why": "The operator's 'agentweave is one thing'. Today there are two version lines (0.42.0 / 0.35.0), two tag schemes (`v*` / `hub-v*`) and two release entries per cycle. From 1.0.0 there is one of each.",
-      "detail": "Set BOTH `pyproject.toml:7` and `hub/pyproject.toml:7` to `1.0.0`. In `.github/workflows/publish.yml`: the `publish` job's `if:` currently excludes `hub-v` prefixed tags and the `publish-hub` job requires them — re-gate BOTH jobs onto `v*` so one tag publishes both distributions. In `.github/workflows/hub-image.yml`: change the tag trigger from `hub-v*` to `v*`. Rewrite `docs/contributing/release-process.md` for the single-tag flow; it currently documents the two-tag dance and its `docker compose up --build -d` lines inherit R3's problem. Grep the whole repository for `hub-v` before declaring this done.",
-      "outcome": "Both pyproject files 1.0.0. publish.yml both jobs on v*; hub-image.yml tag trigger v*. PROVEN in a clean venv against real wheels: pip install agentweave-ai==1.0.0 pulled agentweave-hub 1.0.0, agentweave --version = 1.0.0, import hub.main OK. Tag-push firing confirmed by 11 historical runs. Also swept Makefile (install order, hub-build), found the pre-existing docker-compose.build.yml override and pointed everything at it, fixed PyPI metadata (Beta->Stable, dropped kimi/gemini), rewrote release-process.md."
-    },
-    {
-      "id": "R8-changelog-1-0-0",
-      "title": "Write the 1.0.0 CHANGELOG",
-      "status": "done",
-      "why": "`CHANGELOG.md`'s `[Unreleased]` still describes pilot-mode removal, and the last entry — 0.42.0, 2026-07-24 — documents the `spec` role, `agentweave spec push` and `roles.json`, all since deleted. 776 commits have no release notes.",
-      "detail": "The spine is the 81 openspec changes archived since the v0.42.0 tag; get the list with `git log v0.42.0..HEAD --diff-filter=A --name-only -- 'openspec/changes/archive/*/proposal.md'`. Do NOT enumerate 81 entries — group them by the story: the Hub became the only runtime; the CLI went from 56 commands to 5; runners/agents/charters replaced fixed roles; operator-in-the-loop (permissions, questions, backstop); the spec flow the Hub owns; accounting and budgets; local multi-project. Then a BREAKING section carrying, at minimum: the Python floor raise (R5), the single-version scheme and retired `hub-v*` tags (R7), `agentweave-ai` now depending on `agentweave-hub` (R4), the deleted CLI commands, and the deleted watchdog/messaging/local+git transports/role subsystem. Fold the stale `[Unreleased]` content into 1.0.0 or delete it if superseded. State plainly what is NOT in 1.0.0: charter scope and default skills, skill invocation, agent templates, the pywebview desktop shell.",
-      "outcome": "1.0.0 entry written. Stale [Unreleased] (pilot mode) folded in and removed. All figures measured from git, not estimated: 81 archived changes, 67 migrations, 56->5 CLI commands. Sections: what it is now / Breaking / Fixed in this release / Not in this release."
-    },
-    {
-      "id": "R9-readme-and-docs-accuracy",
-      "title": "Make the README and the live docs describe what exists",
-      "status": "done",
-      "why": "Explicit operator instruction this session: 'update the documentation and readme'. Measured during prep: the live docs are mostly short and already rewritten, so this is a correctness pass, not a rewrite. But `docs/reference/mcp-tools.md` documents 9 tools where `hub/hub/mcp_server.py` has 21 `@mcp.tool()` decorators — less than half the surface. CLAUDE.md's '11 tools' is stale too.",
-      "detail": "(1) `docs/reference/mcp-tools.md`: reconcile against the 21 actual `@mcp.tool()` functions. (2) README.md: a 1.0.0 pass — what AgentWeave is now (one local app, Hub-owned execution, spec-driven), the corrected install (`pip install agentweave-ai`, then `agentweave`), and the five CLI commands. (3) `docs/getting-started/installation.md` and `quickstart.md`: verify every command against `create_parser()` in `src/agentweave/cli.py` — R4 already names two that do not exist. (4) `docs/index.md`, `docs/guides/dashboard.md`, `docs/architecture/overview.md`: spot-check for the deleted subsystems. (5) `docs/reference/cli-commands.md` was checked during prep and looks correct — verify, do not rewrite. Re-run `mkdocs build --strict` after.",
-      "outcome": "mcp-tools.md rewritten: documented 12 of 21 tools and denied the existence of one that ships. Verified by a two-way diff against @mcp.tool() names. Same technique on the CLI found task-lifecycle.md documenting `agentweave task update`, deleted with the other 51 commands. Install instructions fixed in index.md, quickstart.md and README (all said uv tool install ... --with agentweave-hub). README badge 3.8->3.11, dev install order fixed. CLAUDE.md 11->21 tools. cli-commands.md verified already correct."
-    },
-    {
-      "id": "R10-full-local-gates",
-      "title": "Run every gate locally and get them green",
-      "status": "done",
-      "why": "The PR run in R11 costs minutes per cycle. Everything checkable locally should be green before it starts.",
-      "detail": "With `PY=\"C:/Users/huida/AppData/Local/Programs/Python/Python311/python.exe\"`: `$PY -m pytest hub/tests/ -n 8 -q`; `$PY -m pytest tests/ -n 4 -q`; `cd hub/ui && npm test` and `npm run lint`; `$PY -m ruff check src/ hub/ tests/` and `$PY -m black --check src/ hub/hub/ hub/tests/ tests/` — NOTE both at CI's exact scope, which is wider than `src/ hub/hub/` and caught a real error during prep; `$PY -m mypy src/`; `$PY -m mkdocs build --strict`; `npx openspec validate --changes --strict`. If `hub/ui/src` changed at all, `cd hub/ui && npm run build` then `$PY scripts/refresh_ui_bundle.py` and commit `hub/ui/src` and `hub/hub/static/ui` TOGETHER. Baseline to beat, measured this morning at c6aec88: hub 2128 passed/11 skipped, CLI 362/3 skipped, UI 957, lint clean, ruff clean, black clean, mypy clean, openspec 8/8.",
-      "outcome": "All 9 green: hub 2130/11, CLI 362/3, UI 957, UI lint, ruff, black, mypy, mkdocs --strict (previously failing), openspec 8/8. No UI bundle rebuild needed - hub/ui/src unchanged this run, verified by git diff."
-    },
-    {
-      "id": "R11-merge-and-drive-ci",
-      "title": "Merge to hub-native-experience, open the PR to master, drive CI green",
-      "status": "done",
-      "why": "CI has NEVER run on this branch — `ci.yml` triggers only on pushes to master and PRs targeting master, so all 776 commits are unvalidated by CI. A PR is the only way to get the full matrix to run BEFORE master is touched. Pushing straight to master would make master the place where 776 commits of untested compatibility are discovered.",
-      "detail": "Fast-forward `hub-native-experience` from the autonomous branch, push it, then `gh pr create --base master --head hub-native-experience`. Watch with `gh pr checks` / `gh run list --branch hub-native-experience`. Fix what it reports and push again; each cycle is minutes, so batch fixes rather than pushing one at a time. Expect R1's fix to be confirmed or refuted here — it is the one change that cannot be verified locally. DO NOT MERGE THE PR ON A RED OR STILL-RUNNING CI. If CI reveals a genuine PRODUCT bug rather than infrastructure, fix it if it is small and understood; if it is not, stop, leave the PR open, and write it up — an unreleased product is recoverable and a bad 1.0.0 on PyPI is not.",
-      "outcome": "PR #1 MERGED. master fast-forwarded f6663a9->6aa86f3 (794 commits, linear), then fixed forward to 150bfae. All 37 CI failures resolved: 17 PATH, 12 starlette route-introspection, 2 pid_alive, 2 workspace launchability, 2 platform skips, 1 SSE queue-overflow test defect. Docs deployed to Pages; GHCR image rebuilt (digest changed, verified)."
-    },
-    {
-      "id": "R12-merge-master-tag-release",
-      "title": "Merge to master, tag v1.0.0, publish, verify",
-      "status": "blocked",
-      "why": "The goal. Note this is the IRREVERSIBLE step: creating the GitHub release fires `publish.yml`, which runs `twine upload` to PyPI, and PyPI never permits reusing a version number.",
-      "detail": "PRECONDITION, CHECK IT EXPLICITLY: every CI job on the PR is green and finished. Then merge the PR to master. `hub-image.yml` fires on any master push touching `hub/` and will build the Docker image. Then tag `v1.0.0` and `gh release create v1.0.0` with notes drawn from R8's CHANGELOG. Watch `publish.yml` to completion — after R7 it must publish BOTH `agentweave-ai` and `agentweave-hub` from that one tag; if only one job fires, the R7 re-gating is wrong and that is the highest-priority fix. VERIFY, do not assume: `pip download agentweave-ai==1.0.0` into a temp dir, or `pip install` into a throwaway venv, and confirm `agentweave --version` reports 1.0.0 and that it pulled `agentweave-hub` with it (R4's whole point). Confirm the GHCR image published and the Pages docs site rebuilt. Do NOT create a `hub-v1.0.0` tag.",
-      "outcome": "Merge DONE (master f6663a9 -> 794 commits, linear). Tag/release NOT done: master CI red on flaky tests, and limit 2 forbids releasing on red. Nothing outward-facing beyond the merge, no tag, no release, no PyPI upload. UPDATE (iteration 20, 14:10): the scheduled driver (PID 21828) found and fixed the REAL root cause of the model-switch flake (7f44737, _fake_pty's finite side_effect list raising StopIteration inside an executor, hanging the run loop) and pushed it to master via ec25ca5 -- verified locally, 70/70 tests on that fixture pass. It then stalled for 55+ minutes with zero file writes and flat CPU (mid-investigation of a second, pre-existing flake, test_spec_index) -- taken over rather than left to block the release. CI on ec25ca5 STILL failed the model-switch test, but with a materially different diagnostic than before (the one added in iteration 19): error=None, exit_code=None, but _active_ptys and _background_runs both empty -- proving the run's task had genuinely finished with NO exception recorded, yet the Run row never left status=\"running\". Two more targeted diagnostics pushed and both came back negative: (a) wrapping the run body in `except Exception` -- CI on 897ebec failed identically, error stayed None, ruling out every ordinary exception; (b) widening to `except (Exception, asyncio.CancelledError)` -- pushed as 66e1cbc, awaiting CI. Both are genuine production hardening independent of whether they explain this flake (a Run stuck at \"running\" forever blocks all future turns for that agent in production too, not just in this test)."
+      "id": "A4-roadmap",
+      "title": "Draft what to work on next",
+      "status": "open",
+      "why": "Operator: 'if there is still time you can work out some roadmap of things that we should work on next'. Only start this if A1-A3 are done or blocked.",
+      "where": "Write to openspec/explorations/2026-08-17-what-to-work-on-next.md. Base it on the repository's own record -- unarchived openspec changes, open findings in openspec/explorations/, the 21 human-only taste tasks (see .claude/TASTE-PASS-2026-08-17.md, untracked), and the two known debts below. Do not invent market research that was not done; if you cite a market claim, say where it came from or label it an assumption.",
+      "done_when": "One exploration file, ranked, each item with a reason and a rough size. It is a proposal for the operator, not a decision."
     }
   ],
-  "current": "Iteration 20 (14:10) -- took over from a stalled driver process. Root cause of the ORIGINAL model-switch flake found and fixed (finite side_effect list). A SECOND, deeper flake in the same test remains open: the run's task completes with _active_ptys/_background_runs both empty and error=None, yet Run.status never leaves \"running\". Two hardening fixes pushed (except Exception, then except (Exception, CancelledError)) as live tests of that mechanism -- watching CI on 66e1cbc now.",
-  "next_action": "Check `gh run list --branch master --limit 3` for commit 66e1cbc. If hub-test passes: this really was cancellation, or was fixed by coincidence -- do NOT declare victory on one green run given this test's history (it passed once before on bbb30b5 and failed on the very next unrelated-looking commit); consider a repeat push-free re-run of the SAME commit if time allows. If hub-test fails again: read `run.error` in the new diagnostic output. Non-empty error names a real cause (act on it, this is now evidence, not a guess). Empty-string error confirms CancelledError specifically and opens a genuinely new question -- what cancels this task, since no code in the repo calls `.cancel()` on it (grepped, confirmed). Still error=None despite this widened catch would mean the exception net is STILL not wide enough (there is nothing broader than BaseException) OR -- more likely at that point -- the premise is wrong and the finalize block's own `db.commit()` is not actually persisting despite no exception, which would need a StaticPool/aiosqlite-specific investigation, not another except clause. If stop_at (15:00) arrives first: STOP, do not tag, leave master exactly as CI left it, and hand this off -- see D6.",
+
+  "current": "A1-archive-confirmation",
+  "next_action": "Read openspec/changes/2026-08-16-the-corpus-keeps-what-shipped/{design,tasks}.md for the Archive control's existing design intent, then find the phase bar component under hub/ui/src/components/spec/ that renders Approve/Archive/Reopen. Add a confirmation dialog for Archive only, reusing the project-delete confirm pattern already in this codebase, stating that archiving cannot be undone. Cancelling must leave the phase untouched. Add UI tests for confirm and cancel. Then run, in CI's own order: `cd hub/ui && npm run lint && npx tsc --noEmit && npm test`. Commit, push, rewrite this file, append to the log.",
+
   "limits": [
-    "OUTWARD-FACING ACTIONS ARE AUTHORISED THIS RUN — this INVERTS the previous run's standing rule, deliberately. Pushing, opening a PR, merging to master, tagging, and creating a GitHub release are all in scope, in R11/R12 order. Everything else outward-facing is not: no force-push, no history rewriting on any shared branch, no deleting or moving existing tags or releases, no touching the four releases already published.",
-    "NEVER release on a red or still-running CI. `gh pr checks` must show every job green and FINISHED before the PR merges, and the merge must be green before the tag exists. The operator chose 'Full auto, but only on green CI' with that as the hard rule.",
-    "PYPI IS IRREVERSIBLE. A version number, once uploaded, can never be reused — only superseded. Read both `pyproject.toml` version lines out loud against `release_shape.version` before creating the tag. If anything about the release looks wrong at that moment, stop and write it up; a delayed 1.0.0 costs nothing and a wrong one is permanent.",
-    "The version is 1.0.0 for BOTH distributions, and the tag is `v1.0.0`. Do not create `hub-v1.0.0`. Do not invent a different number.",
-    "NO NEW RUNTIME DEPENDENCIES beyond the one this run exists to add — `agentweave-hub` as a dependency of `agentweave-ai` (R4). pywebview remains UNAUTHORISED; Q6's desktop shell is explicitly out of scope. Dev/verification tooling installed locally is fine and already happened: mkdocs and mkdocs-material were installed during prep.",
-    "OUT OF SCOPE, chosen by the operator against the alternatives: driving the UI and acting on findings; the pywebview desktop shell (Q6); archiving the finished openspec changes. Do not start any of them, even with time left — if R12 completes early, stop.",
-    "Do not touch the trial Hub on :8010 or its database at `~/.agentweave/hub/profiles/beta/agentweave.db`. Nothing in this queue needs a running Hub.",
-    "Standing repo rules, unchanged: stage paths explicitly and never `git add -A`; never commit `kimichanges.md`/`kimiwork.md`; `approve_tool_call` keeps no return annotation; `hub/hub/mcp_server.py` imports only stdlib + fastmcp; commit `hub/ui/src` and `hub/hub/static/ui` together via `scripts/refresh_ui_bundle.py`; never create `.agentweave/`, `agentweave.yml` or `spec/` as stray test output at the repo root."
+    "Stay on this branch. No commits, merges or rebases onto master. Merging is the operator's decision, made awake.",
+    "Nothing outward-facing: no publish, no release, no tag, no PR, no force-push, no history rewriting. Pushing THIS branch every iteration is required.",
+    "Nothing destructive: do not delete or modify aw-loop10 (proj-ff695d96), any database, or the operator's trial data.",
+    "Never mark a task complete because a plan for it exists.",
+    "Every claim is measured or labelled unverified.",
+    "CLAUDE.md applies in full. In particular: never create .agentweave/, agentweave.yml or spec/ at the repository root. Note spec/changes/quiet-hours-.../spec.html already exists there as untracked taste-pass scratch -- leave it, never commit it.",
+    "ALWAYS run `npm run lint` before pushing UI work. CI runs it at --max-warnings 0 and it is not covered by `npm test` -- this exact gap turned the 1.0.1 release red once already today."
   ],
+
   "environment": {
-    "python": "USE `C:/Users/huida/AppData/Local/Programs/Python/Python311/python.exe` EXPLICITLY. Bare `python` on PATH resolves to `C:/Users/huida/AppData/Local/hermes/hermes-agent/venv/Scripts/python.exe`, which has no pytest_asyncio and fails conftest collection with `ModuleNotFoundError`. This cost real time during prep to diagnose; do not rediscover it.",
-    "working_directory": "Run pytest from the REPO ROOT with paths like `hub/tests/test_x.py`. The Bash tool's cwd persists between calls, so a stray `cd hub` earlier makes a later `hub/tests/...` path fail with 'file or directory not found' — check `pwd` when a path that should exist reports missing.",
-    "mkdocs": "Installed during prep (mkdocs 1.6.1 + mkdocs-material) specifically so R2 is a local iterate-to-green loop instead of push-and-wait. `$PY -m mkdocs build --strict` reproduces the CI Docs job exactly.",
-    "gh_cli": "Authenticated as gutohuida with scopes gist, read:org, repo — sufficient to push, open and merge PRs, create tags and create releases.",
-    "suite_timing": "`pytest hub/tests/ -n 8` takes ~90s; the CLI suite ~7s; `npm test` ~20s; `mkdocs build --strict` a few seconds. All well inside the command cap — the old 'seven minutes, run in chunks' note no longer applies with -n 8.",
-    "baseline_green_at_c6aec88": "hub 2128 passed / 11 skipped; CLI 362 passed / 3 skipped; UI 957 passed; UI lint clean; ruff clean at CI scope; black clean at CI scope; mypy clean; openspec 8/8 strict. Measured 2026-08-17 morning. Any regression from these numbers is this run's doing."
+    "python": "C:/Users/huida/AppData/Local/Programs/Python/Python311/python.exe",
+    "hub_url": "http://127.0.0.1:8010",
+    "hub_start_detached": "Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{CommandLine='cmd.exe /c \"cd /d C:\\Users\\huida\\Documents\\projects\\AgentWeave\\hub && C:\\Users\\huida\\AppData\\Local\\Programs\\Python\\Python311\\python.exe -m uvicorn hub.main:app --host 127.0.0.1 --port 8010 > %TEMP%\\agentweave-hub.log 2>&1\"'}",
+    "hub_api_key": "read it from hub/.env",
+    "ui_screenshot_harness": "scripts/taste_shots.py -- seeds sessionStorage/localStorage, drives to a document, screenshots both themes and reads computed styles. `python scripts/taste_shots.py --key <aw_live_...> --project <proj-id>`. scripts/uishot.py captures a plain URL.",
+    "hub_tests": "pytest hub/tests takes ~8 minutes and exceeds the 600s command cap -- run in file chunks or in the background",
+    "ui_bundle": "after changing hub/ui/src, run `npm run build` then `python scripts/refresh_ui_bundle.py`, and commit hub/ui/src and hub/hub/static/ui together"
   },
+
   "decisions_for_user": [
     {
-      "id": "D1-cli-no-longer-dependency-free",
-      "status": "PRE-AUTHORISED",
-      "question": "R4 makes `agentweave-ai` depend on `agentweave-hub`, ending the 'zero runtime dependencies' property CLAUDE.md states as a design fact.",
-      "default": "Proceed. It is the direct shipping consequence of 'agentweave is one thing' — the alternative is a documented install that produces a CLI which cannot start the product. Update CLAUDE.md's description in the same commit.",
-      "cost_if_wrong": "Low and reversible before the tag: unpick the dependency and restore the two-step install. After the tag it needs a 1.0.1."
-    },
-    {
-      "id": "D2-pypi-publish-ordering",
-      "status": "CLOSED",
-      "question": "`agentweave-ai==1.0.0` will pin `agentweave-hub>=1.0.0`, and both publish from the same tag in the same workflow run. If the CLI's upload wins the race, there is a window where `pip install agentweave-ai` cannot resolve.",
-      "default": "Proceed and verify in R12's smoke test rather than pre-solving it. If the install genuinely fails, record it here rather than silently unpinning — an unpinned dependency reintroduces exactly the broken install R4 exists to fix.",
-      "cost_if_wrong": "A short window of unresolvable installs, fixed by a re-run of the publish job rather than a new version.",
-      "resolution": "Removed rather than verified: publish now `needs: publish-hub`, so the dependency is on PyPI before the dependent is uploaded. There is no window left to smoke-test for."
-    },
-    {
-      "id": "D3-docker-tag-scheme-change",
+      "id": "D1-merge-this-branch",
       "status": "OPEN",
-      "question": "R7 moves `hub-image.yml`'s tag trigger from `hub-v*` to `v*`. Anyone pinned to a `hub-v*` image tag keeps working (old tags are untouched) but gets no new images under that scheme.",
-      "default": "Proceed; the existing images and tags are left alone. Note it in the CHANGELOG's BREAKING section so a pinned user finds out by reading rather than by going stale.",
-      "cost_if_wrong": "Low — the images already published are immutable and unaffected."
+      "question": "Whether to merge autonomous/2026-08-17-archive-and-hub-app into master, and whether as a merge or a cherry-pick of the commits that carry real work.",
+      "default": "Left for the operator, awake. The branch is disposable by design."
     },
     {
-      "id": "D4-product-bug-found-by-ci",
-      "status": "PRE-AUTHORISED",
-      "question": "If the PR's CI run surfaces a genuine product bug rather than infrastructure — the likeliest source being the 3.12 leg or a non-Windows OS leg, neither of which has ever run against this branch.",
-      "default": "Fix it if it is small and understood. If it is not, STOP: leave the PR open, do not merge, do not tag, and write it up. An unreleased product is recoverable; a bad 1.0.0 on PyPI is permanent.",
-      "cost_if_wrong": "None — stopping is the safe direction, and the operator is back at 15:00."
+      "id": "D2-taste-pass-outstanding",
+      "status": "OPEN",
+      "question": "17 of the 21 human-only taste tasks across the six 2026-08-16 changes are still unjudged, and 9 of those are blocked only on seeded fixtures (a throwaway project, a document that declares tasks, a capability document, a job with a loop). Four were effectively judged by the operator today: spec-legibility 7.1, 7.2, 7.3 and conversation-formatting 6.2.",
+      "default": "Not this run's job unless the queue empties. Seeding is free; only conversation-formatting 6.2's live half and 6.3 need a real agent turn, which costs tokens."
     },
     {
-      "id": "D6-model-switch-test-three-theories-wrong",
-      "status": "OPEN — SIX THEORIES DEAD, RECOMMEND A HUMAN OR A DEBUGGER NEXT, NOT A SEVENTH GUESS",
-      "question": "test_a_conversation_whose_model_changed_attributes_usage_per_turn (hub/tests/test_agent_trigger_overrides.py) has failed CI on 6 of the last 7 master commits. ORIGINAL root cause (theories 1-3, all in the log's iteration 18-19) FOUND and FIXED at 7f44737: `_fake_pty`'s finite `read.side_effect` list raised `StopIteration` inside an executor, silently hanging the run loop forever — verified against 70 tests on that fixture. That fix is real, correct, and stays. BUT it did not make the test pass: a SECOND, deeper bug in the same test surfaced immediately after, and TWO MORE theories aimed at it are now also dead. Diagnostic instrumentation added in iteration 19 (dumps Run row status/error/exit_code, `_background_runs` count, `_active_ptys` keys on timeout) proved: the run's background task genuinely completes (`_active_ptys` and `_background_runs` both empty every time) with NO exception recorded (`error=None`), yet the Run row never leaves `status=\"running\"`. Theory 4 (an ordinary `Exception` between the finalize block's status assignment and its own `db.commit()`) — added `except Exception`, pushed as 897ebec, CI failed identically, `error` stayed `None`. Theory 5 (`asyncio.CancelledError`, a `BaseException` not an `Exception`, so invisible to theory 4's guard) — widened to `except (Exception, asyncio.CancelledError)`, pushed as 66e1cbc, CI failed a THIRD time with the exact same `error=None`. Between them these two catch everything a `try/except` can catch, so no exception of any kind is occurring. The remaining candidate a code read supports, UNCONFIRMED: `run = await db.get(Run, run_id)` inside the finalize block's own `async with async_session_factory() as db:` returns `None` for this specific session, even though the row demonstrably exists (the test's own diagnostic query, a separate session, finds it every time) — silently skipping the `if run:` block that sets status/error, with no exception because there is none to throw. Full mechanism for `db.get()` missing a row on a `StaticPool`-shared single SQLite connection not found by reading SQLAlchemy's session/identity-map semantics; this is a real gap in understanding, not a confirmed answer.",
-      "default": "STOPPED after theory 5, deliberately, with 44 minutes still on the clock. Both hardening commits (897ebec, 66e1cbc) ship regardless — a Run stuck at `running` forever is a real production reliability gap independent of whether either one explains this specific CI symptom (turn_scheduler.py:37-43 refuses a new turn for an agent with any run still `running`, so this would silently and permanently stop an agent in production too). The tag does not ship: master is still red on this one test.",
-      "options": [
-        "Check whether `run.pid` (set in the FIRST db block after spawn succeeds, before the finalize block) is populated on the next CI failure's Run row — if the diagnostic is extended to report it. Non-null pid proves the run row WAS visible to an earlier session in the same task; if the finalize session's `db.get()` still can't find it, that narrows the db.get() hypothesis to something in-between, not \"the row never existed for this task.\"",
-        "Reproduce with a debugger or with verbose SQLAlchemy echo=True logging on an actual GitHub Actions Linux runner (via a throwaway workflow_dispatch run if needed) — this bug has never once reproduced locally across dozens of attempts by two independent processes, which is itself informative: something about the CI runner's timing, not the code path in the abstract, is necessary to trigger it.",
-        "Quarantine: mark this one test xfail/skip with a linked follow-up issue, ship 1.0.0 without it. NOT taken unilaterally by any iteration so far, and should not be, without operator sign-off — the test exists for a real spec requirement ('agent-context-usage: Usage SHALL be attributed to the model that ran each turn'), and skipping it to force green trades a real coverage gap for a release date, which is exactly the shortcut the standing hard rule ('never release on red or still-running CI') exists to prevent by other means.",
-        "Escalate to the operator directly — six theories deep on one test is past the point where another automated iteration guessing a seventh is the right use of the remaining time."
-      ],
-      "recommendation": "Bring this to the operator when they return at 15:00 rather than let an unattended iteration try a seventh theory. If the operator wants automated investigation to continue, the `db.get()`-returns-`None` hypothesis is the one concrete unconfirmed lead left; everything else a `try/except` could catch has now been tried and ruled out.",
-      "cost_if_wrong": "None yet — nothing has shipped. The only irreversible action gated behind this is the v1.0.0 tag, and the standing hard rule already prevents that while CI is red."
-    },
-    {
-      "id": "D5-two-flaky-tests-block-the-tag",
-      "status": "OPEN — UPDATED iteration 20: CI verdict on 7f44737 is IN, and it was not clean",
-      "question": "Everything for 1.0.0 is merged to master and verified; only the tag/release remains. (1) test_agent_trigger_overrides::test_a_conversation_whose_model_changed_attributes_usage_per_turn — its ORIGINAL failure mode's root cause WAS found and fixed at 7f44737 (_fake_pty's finite read.side_effect hung the run loop). But CI on that exact commit (ec25ca5, which carries 7f44737) still failed this test, with a DIFFERENT, deeper symptom — see D6 for the full account: two more theories (a plain Exception, then widened to include CancelledError) have since been tried and both died the same way. This is not one bug with a pending CI verdict; it is at least two bugs in the same test, one fixed and confirmed, one still open after three total CI attempts. (2) test_spec_index::test_a_requirement_put_back_by_hand_is_restored — fails ~2 runs in 6, PRE-EXISTING (verified by stashing changes and reproducing on the unmodified tree), still not diagnosed at all; no iteration has spent time on it since it was first noticed, because (1) has not cleared.",
-      "options": [
-        "A) Continue on (1) per D6's recommendation — most likely as a decision with the operator, not another unattended guess.",
-        "B) Once (1) is green (or quarantined by an explicit operator decision), diagnose (2): order-dependent, not pure timing — passes alone, fails roughly 1 in 3 under load.",
-        "C) Release on a green run despite a known flake. Compliant with the letter of 'only on green CI' and against its point; declined twice already today (once by the driver, once by this iteration) and would be declined again absent an explicit operator override."
-      ],
-      "recommendation": "A, then B. The product is not implicated in either flake — both are test-harness defects — but (1)'s actual mechanism is still not understood, which is a different, more serious state than 'known cause, verdict pending.'",
-      "cost_if_wrong": "Only C is irreversible. Waiting costs nothing — a delayed 1.0.0 costs nothing, per the standing rule."
+      "id": "D3-today-s-work-was-outside-openspec",
+      "status": "OPEN",
+      "question": "The 1.0.1 work (renderer colour, composer rework, cost removal, ticket redesign, palette fix) was implemented directly, outside any openspec change. Under the repository's own convention that should have been a change proposal with tasks and specs.",
+      "default": "Shipped as 1.0.1 regardless -- it is real, tested and released. Worth retro-covering with one change so the specs match the code; a good candidate for A4's roadmap rather than something to do silently."
     }
   ],
-  "dead_ends": [
-    "Bare `python` is the hermes venv, not the test interpreter. See `environment.python`.",
-    "`agentweave` cannot be started from this repo's root: `python -m uvicorn` puts the cwd on `sys.path[0]`, so the repo's own `hub/` shadows the installed `hub` package and the spawned child dies with `ImportError: cannot import name '__version__' from 'hub'` 60s later, output already at DEVNULL. Nothing in this queue needs a running Hub, so simply do not start one.",
-    "`pytest --timeout=` fails collection with exit 4 — pytest-timeout is not installed.",
-    "PowerShell here-strings (`@'...'@`) passed through the Bash tool are taken literally and corrupt commit subjects. Use a Bash heredoc.",
-    "`pytest hub/tests/ tests/` together fails collection — run them as separate commands.",
-    "Reasoning from git log ordering about whether the UI bundle is stale is unreliable; grep the built bundle for a literal instead. A prior session concluded 244 lines were never built and was wrong.",
-    "A migrate-from-zero database is not a valid migration harness here — `init_db` runs `create_all` THEN `alembic upgrade head`. Use `create_all` + `stamp <prev>` + `upgrade head`.",
-    "The review addendum's guess that the UI fingerprint is over-broad because it includes `__tests__` is WRONG — `ui_source_fingerprint` already excludes it via a git pathspec, verified: `git ls-files -s -- . ':(exclude)__tests__'` returns 0 of 103 test files. A stale stamp means the script was not re-run, nothing more."
+
+  "known_debts": [
+    "The test fixture's StaticPool shares ONE sqlite connection across every session in the process, so any concurrent session can roll back another's pending write. Proven: 105/200 commits lost with a concurrent poller vs 0/200 without. test_a_conversation_whose_model_changed_attributes_usage_per_turn is xfailed because of it. A file-backed DATABASE_URL is NOT a drop-in fix -- it HUNG the suite when tried; it needs WAL plus a busy timeout.",
+    "The hub suite is ~100% fixture overhead: create_app() 121ms + drop_all/create_all across 43 tables 88ms = ~240ms per test x 2130 = ~510s against 477s observed. Session-scoping the app and schema would take it from 8 minutes to about 1."
   ],
-  "prep_notes": {
-    "prepared_at": "2026-08-17T10:30:00+01:00",
-    "prepared_by": "Claude Opus 5 (1M context), interactive session, operator awake",
-    "operator_intent_verbatim": [
-      "I want you to do the prep for a autonomous run until 15 of fixing anything that needs fixing, merging and guarantee that there is a new agentweave version on master published to github.",
-      "The purpose of this run is to have a clean agentweave version pushed on master, update the documentation and readme. We can stop the old hub and old versions where it is. Now agentweave is one thing"
-    ],
-    "created_this_session": "No new spec or exploration was needed — every queue item is a defect with a located line number or a mechanical release step, so there is nothing for a spec to decide. What WAS created: mkdocs installed locally, which converted R2 from an unverifiable CI failure into a local loop and immediately revealed the real size of the problem (34 warnings, not the 1 the last CI log showed).",
-    "found_during_prep": [
-      "`agentweave-ai` has `dependencies = []`, so the documented `pip install agentweave-ai` yields a CLI that cannot start the Hub. This is the sharpest instance of 'agentweave is not one thing yet' and became R4.",
-      "`installation.md:42` and `:55` document `agentweave hub start`, a command that no longer exists — the CLI has five and none is `hub`.",
-      "`docs/reference/mcp-tools.md` documents 9 tools; `mcp_server.py` has 21 `@mcp.tool()` decorators. CLAUDE.md's '11 tools' is also stale.",
-      "`mkdocs build --strict` fails with 34 warnings locally, 28 of them inside the retired `docs/archive/legacy-multi-runtime/` tree.",
-      "`hub/docker-compose.yml` has no `build:` key at all, so the documented `docker compose up --build -d` from-source path has nothing to build even before the image name problem.",
-      "Confirmed no dependency cycle blocks R4: `hub/hub/` never imports `agentweave` at runtime."
-    ],
-    "explicitly_not_in_scope": "Driving the UI; pywebview/Q6; archiving the four near-done openspec changes; the §13 charter-scope / skill-invocation / agent-template features (absent by design, not broken — they belong in the CHANGELOG as 'not in this release'). All four were offered to the operator and not selected.",
-    "readiness": "READY. Every queue item names a file and usually a line; the two hardest unknowns (CI behaviour, PyPI ordering) are pre-authorised with a stop-rather-than-guess default; the irreversible step has an explicit precondition. The single largest risk is R11 — 776 commits meeting CI for the first time — which is why the PR exists rather than a direct push to master."
-  },
+
   "driver": {
-    "kind": "Windows Scheduled Task 'AgentWeaveAutonomousSession'",
-    "interval_minutes": 20,
-    "stop_at": "2026-08-17T15:00:00",
-    "role": "BACKUP to the interactive session; stands down while last_heartbeat is <25 min old",
-    "installed_at": "2026-08-17T10:14:49+01:00"
-  },
-  "deferred_followups": [
-    {
-      "id": "modernise-pyupgrade",
-      "what": "310 ruff pyupgrade modernisations (UP035/UP017/UP041/UP042) deferred in 1.0.0 via [tool.ruff.lint] ignore. Correct, mechanical, 204 not auto-fixable. Delete the ignore entries one at a time in a dedicated change.",
-      "raised": "2026-08-17 iteration 4 (R5)"
-    }
-  ],
-  "release_runbook": [
-    "1. WAIT for every check on PR #1 to be SUCCESS/SKIPPED and FINISHED. The commit under test must be the one being merged (currently cebb542). `hub-test` is the long pole: CI runs 2130 tests serially, ~15-25 min.",
-    "2. MERGE by fast-forward push, not a merge commit: `git push origin hub-native-experience:master`. There is no trustworthy local `master` (refs/heads/master is stale at eedbe46; the real base is origin/master f6663a9, and HEAD is 794 ahead / 0 behind). GitHub auto-closes PR #1 when the commits land.",
-    "3. The master push fires ci.yml again, docs.yml (which DEPLOYS to Pages this time - `deploy` is push-only), and hub-image.yml (paths hub/** matches; 634 files under hub/ changed). WAIT for ci.yml on master to be green - limit 2 says the merge must be green before the tag exists.",
-    "4. TAG AND RELEASE. Read both pyproject.toml version lines aloud against 1.0.0 first. `git tag v1.0.0 && git push origin v1.0.0`, then `gh release create v1.0.0 --title 'AgentWeave v1.0.0' --notes-file .release-notes-1.0.0.md`. Do NOT create hub-v1.0.0.",
-    "5. Creating the release fires publish.yml. `publish-hub` runs FIRST (publish now `needs: publish-hub`), so agentweave-hub reaches PyPI before agentweave-ai, which depends on it. Both jobs are gated on refs/tags/v - if only one fires, the re-gating is wrong and is the top priority to fix.",
-    "6. VERIFY THE ARTEFACT, not the workflow: fresh venv, `pip install agentweave-ai==1.0.0` from real PyPI, confirm `agentweave --version` is 1.0.0 AND that agentweave-hub 1.0.0 came with it. Then confirm the GHCR image published and the Pages site rebuilt.",
-    "7. Delete the untracked .release-notes-1.0.0.md afterwards; it is scratch, never committed."
-  ]
+    "kind": "Windows Scheduled Task running headless `claude -p`",
+    "why": "ScheduleWakeup and CronCreate both die with the interactive session -- measured 2026-08-15, nine hours asked for and forty minutes delivered. The operator is out; only an OS task survives.",
+    "stands_down_if": "STATE.json's last_heartbeat is fresher than the grace window, meaning a live session holds the branch"
+  }
 }
