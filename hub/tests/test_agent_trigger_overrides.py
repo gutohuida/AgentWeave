@@ -6,7 +6,10 @@ import json
 from unittest.mock import patch
 
 import pytest
+from sqlalchemy import select
 
+from hub.db.engine import async_session_factory
+from hub.db.models import Run
 from hub.sse import sse_manager
 from tests.test_agent_trigger import (
     _await_background_run,
@@ -201,6 +204,33 @@ async def test_a_new_conversation_does_not_inherit_a_previous_conversations_over
     assert overrides_by_id[second.json()["conversation_id"]] in (None, {})
 
 
+async def _await_agent_idle(project_id, agent, timeout=10.0):
+    """Wait until no run for *agent* is still `running`.
+
+    `_await_background_run()` awaits the asyncio task, which is **not** the same thing as the `Run`
+    row having reached a terminal status — the commit can trail the task on a busy machine.
+
+    That difference is not cosmetic. `turn_scheduler.schedule_agent` refuses to start a turn while
+    a run for the agent is still `running` (`turn_scheduler.py:37-43`), and `trigger_agent` then
+    returns **200 with `status="queued"`** — the input is accepted, the turn never happens, and
+    nothing is broadcast for it. A test that only checks the status code cannot tell that apart
+    from a turn that ran, which is exactly how this cost four attempts to find.
+    """
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout
+    while loop.time() < deadline:
+        async with async_session_factory() as db:
+            running = await db.execute(
+                select(Run).where(
+                    Run.project_id == project_id, Run.agent == agent, Run.status == "running"
+                )
+            )
+            if running.scalars().first() is None:
+                return
+        await asyncio.sleep(0.05)
+    raise AssertionError(f"{agent} still had a running run after {timeout}s")
+
+
 @pytest.mark.asyncio
 async def test_a_conversation_whose_model_changed_attributes_usage_per_turn(
     app, auth_headers, bind_runner
@@ -272,6 +302,7 @@ async def test_a_conversation_whose_model_changed_attributes_usage_per_turn(
                 await _await_background_run()
 
         models_seen = [await await_model()]
+        await _await_agent_idle(project_id, "model-switch")
 
         conversation_id = first.json()["conversation_id"]
         second_spawn = _fake_pty(
