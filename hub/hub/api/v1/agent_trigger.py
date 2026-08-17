@@ -128,6 +128,37 @@ _background_runs: set = set()
 # the only place the PTY-or-pipe session instance exists. The legacy internal name remains
 # to avoid churning lifecycle code that does not depend on the transport type.
 _active_ptys: Dict[str, PipeSession | PtySession] = {}
+# Diagnostic-only, in the same spirit as the dump in `test_agent_trigger_overrides`
+# `_await_agent_idle`: an ordered breadcrumb of the path `_execute_run` took, per run_id.
+#
+# Why this exists rather than a seventh hypothesis. CI on `beb212b` measured a run that finished
+# — `_active_ptys` empty (the `finally` below pops it) and `_background_runs` empty — while its
+# `Run` row still read `status='running' error=None exit_code=None ended_at=None`. That triple of
+# `None`s is what makes it worth instrumenting: the `except (Exception, CancelledError)` handler
+# would have written `error`, and the normal path's status chain ends in a bare `else` and then
+# assigns `status`/`exit_code`/`ended_at` unconditionally, so *neither* ran to completion. Six
+# theories died guessing at which; this records which, so the next red CI answers instead.
+#
+# Entries are kept even for runs that ended cleanly, because the failure being chased *does* reach
+# the `finally` — dropping on the way out would erase precisely the trail worth reading. Bounded by
+# eviction of the oldest instead, so a long-lived Hub cannot accumulate these.
+_run_trace: Dict[str, List[str]] = {}
+_RUN_TRACE_LIMIT = 32
+
+
+def _trace(run_id: str, step: str) -> None:
+    """Record one breadcrumb for *run_id*. Never raises — a diagnostic must not break a run."""
+    try:
+        steps = _run_trace.setdefault(run_id, [])
+        if len(_run_trace) > _RUN_TRACE_LIMIT:
+            for stale in list(_run_trace)[: len(_run_trace) - _RUN_TRACE_LIMIT]:
+                if stale != run_id:
+                    _run_trace.pop(stale, None)
+        steps.append(step)
+    except Exception:  # pragma: no cover - diagnostics must never mask the real failure
+        pass
+
+
 # run_ids currently executing over the Codex app-server transport (task 2.8). This path has
 # no PtySession/PipeSession to register in `_active_ptys` — `codex_appserver.run_turn` owns
 # its own subprocess internally — so the stop endpoint and shutdown teardown need a separate
@@ -1303,6 +1334,7 @@ async def _execute_run(
         return
 
     _active_ptys[run_id] = pty
+    _trace(run_id, "spawned")
     try:
         async with async_session_factory() as db:
             run = await db.get(Run, run_id)
@@ -1415,7 +1447,9 @@ async def _execute_run(
         if buffer.strip():
             await _flush_line(buffer)
 
+        _trace(run_id, "read_loop_done")
         exit_code = await loop.run_in_executor(None, pty.wait)
+        _trace(run_id, f"wait={exit_code!r}")
 
         if runner == "codex" and session_id:
             codex_home = Path(env["CODEX_HOME"]) if env and env.get("CODEX_HOME") else None
@@ -1461,8 +1495,29 @@ async def _execute_run(
         else:
             final_status, lifecycle_event = "failed", "run_failed"
 
+        _trace(run_id, f"finalize_enter status={final_status}")
         async with async_session_factory() as db:
             run = await db.get(Run, run_id)
+            if run is None:
+                # Loud on purpose. This was a bare `if run:` with no `else`, so a finalize that
+                # could not see its own row did nothing and said nothing: no exception, no log and
+                # no `error` field, while the row stays `running` for good.
+                # `turn_scheduler.schedule_agent` then refuses every later turn for the agent
+                # (`turn_scheduler.py:37-43`) and `trigger_agent` answers 200/`queued` to each, so
+                # the agent goes quietly deaf while every surface still reads "running". That is
+                # the same unbounded outage the `except` handler below was widened to prevent,
+                # reached by a second route — and a run that ends but cannot record that it ended
+                # is a defect wherever it comes from, so it is reported rather than swallowed.
+                _trace(run_id, "ROW_MISSING")
+                logger.error(
+                    "Run %s for %r finished (%s, exit %r) but its row was not visible to the "
+                    "finalizing session, so the terminal status could not be recorded. The row "
+                    "stays 'running' and the agent will queue every later turn.",
+                    run_id,
+                    agent,
+                    final_status,
+                    exit_code,
+                )
             if run:
                 run.status = final_status
                 run.exit_code = exit_code
@@ -1515,6 +1570,7 @@ async def _execute_run(
                 else []
             )
             await db.commit()
+            _trace(run_id, f"finalize_committed run_seen={run is not None}")
             # The run boundary. After the commit, so the check reads the run's final state, and
             # outside the `if run` block for the same reason — a missing run row is not a
             # divergence, and `evaluate_run_end` says so itself.
@@ -1606,6 +1662,7 @@ async def _execute_run(
         # everything else. Re-raised below, once the row is marked, to preserve real cancellation
         # semantics for anything that legitimately depends on it propagating.
         logger.exception("Unhandled error in run %s for %r", run_id, agent)
+        _trace(run_id, f"except={type(exc).__name__}:{exc!s:.120}")
         already_terminal = False
         async with async_session_factory() as db:
             run = await db.get(Run, run_id)
@@ -1642,6 +1699,7 @@ async def _execute_run(
         if isinstance(exc, asyncio.CancelledError):
             raise
     finally:
+        _trace(run_id, "finally")
         _active_ptys.pop(run_id, None)
         _stop_requested.discard(run_id)
 
@@ -1997,8 +2055,21 @@ async def _execute_codex_appserver_run(
         # them for the exec path (AgentOutputPanel's handoff-detection, see below).
         exit_code = 0 if final_status == "completed" else 1
 
+        _trace(run_id, f"appserver_finalize_enter status={final_status}")
         async with async_session_factory() as db:
             run = await db.get(Run, run_id)
+            if run is None:
+                # The same silent skip as in `_execute_run`, reported the same way and for the same
+                # reason — this transport stalls an agent just as completely as the other one.
+                _trace(run_id, "ROW_MISSING")
+                logger.error(
+                    "Run %s for %r finished (%s) over the app-server transport but its row was not "
+                    "visible to the finalizing session, so the terminal status could not be "
+                    "recorded. The row stays 'running' and the agent will queue every later turn.",
+                    run_id,
+                    agent,
+                    final_status,
+                )
             if run:
                 run.status = final_status
                 run.exit_code = exit_code

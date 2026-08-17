@@ -242,16 +242,32 @@ async def _await_agent_idle(project_id, agent, timeout=10.0):
             select(Run).where(Run.project_id == project_id, Run.agent == agent)
         )
         rows = [
+            # `pid` is set in the FIRST db block after the spawn succeeds, well before the finalize
+            # block. A non-null pid therefore proves the row was visible to an *earlier* session in
+            # this same task — so if the finalize session still cannot see it, the fault is
+            # somewhere between the two, not "the row never existed for this task" (D6, option 1).
             f"run={r.id} status={r.status!r} error={r.error!r} exit_code={r.exit_code!r} "
-            f"ended_at={r.ended_at!r}"
+            f"ended_at={r.ended_at!r} pid={r.pid!r}"
             for r in all_runs.scalars().all()
         ]
+    # The breadcrumb trail `_execute_run` leaves per run_id. The previous dump established what
+    # the end state was; it could not say which path produced it. A trail ending at `finally` with
+    # no `finalize_committed` means the finalize never ran; one ending at `ROW_MISSING` means it
+    # ran and could not see its own row; `finalize_committed run_seen=True` with the row still
+    # `running` would mean the commit itself did not persist, which is a different problem again.
+    traces = {
+        run_id: steps
+        for run_id, steps in agent_trigger_module._run_trace.items()
+        if any(run_id == r.split()[0].removeprefix("run=") for r in rows)
+    } or dict(agent_trigger_module._run_trace)
+
     raise AssertionError(
         f"{agent} still had a running run after {timeout}s\n"
         f"  Run rows for this project/agent: {rows}\n"
         f"  _background_runs (should be empty if _await_background_run already ran): "
         f"{len(agent_trigger_module._background_runs)} pending\n"
-        f"  _active_ptys keys: {list(agent_trigger_module._active_ptys.keys())}"
+        f"  _active_ptys keys: {list(agent_trigger_module._active_ptys.keys())}\n"
+        f"  _run_trace: {traces}"
     )
 
 
