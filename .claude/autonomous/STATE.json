@@ -7,7 +7,7 @@
   "stop_at": "2026-08-17T22:00:00+01:00",
   "stop_when_queue_empties": false,
   "iteration": 10,
-  "last_heartbeat": "2026-08-17T21:39:18+01:00",
+  "last_heartbeat": "2026-08-17T21:00:28+01:00",
   "session_stopped": false,
   "queue": [
     {
