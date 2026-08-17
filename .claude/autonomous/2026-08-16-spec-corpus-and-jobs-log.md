@@ -2149,3 +2149,124 @@ approve-and-execute per `spec_round_protocol.at_cap` in the same run — impleme
 `tasks.md`, running the full verification in section 7, then task 6.1. `stop_at` is
 2026-08-17T08:00:00+01:00; over two hours of runway remains, comfortably enough for round 3 plus a
 meaningful start on implementation if round 3 clears quickly.
+
+---
+
+## Iteration 25 — 2026-08-17T06:21:03+01:00
+
+**N6, round 3 of `2026-08-17-authoring-rigor-and-scope` — cap reached, approved, implemented in the
+same run.** Fresh cold read of `proposal.md`, `design.md` (as round 2 left it), `tasks.md`, and the
+`spec-document-authority` delta — not a continuation of round 2's fix-it context, per round 2's own
+handoff instruction.
+
+**Two real defects found, both exactly where round 2 predicted the risk: `tasks.md` was revised for
+some sections in round 2 but not cascaded everywhere.**
+
+1. Task 3.1 still described the mechanism round 2 spent the whole round rejecting — calling
+   `record_content` with a new optional `accepter` parameter. Round 2 settled on an additive
+   `extra_detail` merge-in instead, with no new `record_content` parameter, in task 3.2 and design
+   D4. Reading 3.1 in isolation (a plausible way to work through a numbered list) would have sent an
+   implementer to build the exact thing round 2 rejected. Fixed: 3.1 now points at 3.2's mechanism
+   explicitly and states the correction in place.
+2. Section 4 (UI) was never touched when round 2 added `position_after_key` to D2/D3 for `add`
+   proposals. 4.1 said proposals surface "per requirement id" (the same key-vs-identifier
+   conflation D2 corrected everywhere else); 4.2 said an indicator attaches "at that requirement,"
+   which has no referent for a brand-new requirement with no existing row. Fixed both — this was
+   the single most likely way F2/14.12's in-position promise for `add` proposals would have shipped
+   with a data model and a design commitment but no task telling anyone to render it.
+
+Also clarified (not a defect): `accept_proposal`'s own `expected_digest` parameter had no stated
+purpose distinct from the proposal row's own `expected_digest` — recorded it as a second,
+independent, optional check mirroring `RigorRequest`'s pattern (the operator's own last-seen digest,
+guarding a stale screen even when the row itself is not stale).
+
+`openspec validate 2026-08-17-authoring-rigor-and-scope --strict` passed after the fixes.
+**Verdict: approved as revised. Cap reached (`spec_round_protocol.cap` = 3).** No outstanding
+objections — both defects were fixed in place, not deferred. Per `spec_round_protocol.at_cap`,
+proceeded straight to implementation in the same iteration.
+
+**Implementation — tasks.md sections 1-7, all real and verified, not ticked on the strength of a
+plan:**
+
+- **1 (data model):** `SpecEditProposal` in `models.py` — `unit_kind`/`unit_key` (the requirement's
+  key, matching round 2's correction)/`change_kind`/`position_after_key`/both payloads/
+  `expected_digest` (made nullable, matching `SpecDocument.content_digest`'s own optionality — the
+  design table said non-null but there is no real reason to be stricter than the value it is
+  compared against)/`status`/proposer identity/resolution identity. Migration 0076, additive only,
+  guarded for a missing `spec_documents` table. Verified live: a from-scratch `init_db()` run
+  through the real app path (`create_all` + `alembic upgrade head`) produces the table with every
+  expected column — not just a bare `alembic upgrade head` against an empty db, which this iteration
+  tried first and got a misleading "table never created" result because this codebase's real
+  bootstrap is `create_all` then migrate, not migrate-only.
+- **2 (F1/F2 diffing):** `spec_service.propose_edit` — requirement units matched by key exactly as
+  D2 specifies; a diff anchor decision the design left slightly under-specified was made and
+  recorded here rather than silently: "the metadata bundle" is implemented as every payload field
+  except `requirements` and the identity block, not the literal seven fields D2's prose enumerates
+  (which omits `acceptance_criteria`/`evidence`/`lifecycle`). The literal reading would have let a
+  submission change acceptance criteria against a gated document with no proposal created and no
+  write applied — silent data loss, worse than either gating discipline the change is trying to
+  build. `save_document` now branches on `document.rigor`; the write path itself was extracted into
+  `_apply_and_write`, shared by the `sketch` path and `accept_proposal`'s applied unit (mirroring
+  how `merge_document` already reuses `save_document` rather than a second write implementation).
+- **3 (F3 accept/reject):** `accept_proposal`/`reject_proposal`, operator-only enforced in the
+  function per D4, D5's digest compare-and-swap, three new routes in `spec.py`
+  (`GET .../proposals`, `POST .../accept`, `POST .../reject`) following the rigor route's own
+  shape. One real subtlety confirmed by a test, not assumed: accepting one proposal from a batch
+  does not eagerly mark its siblings stale (they stay `pending` until someone attempts to accept
+  them) — `status` only flips to `stale` on an actual accept attempt against a moved digest, which
+  is what task 3.4's own wording describes and what the test asserts.
+- **4 (UI):** new `SpecProposalsPanel.tsx`, wired into `SpecDocumentPanel.tsx` directly beneath
+  `SpecCoverageBar`. Deliberately not deep per-row interleaving into `SpecCoverageBar` itself
+  (which would have been the most literal reading of "at that requirement") — a panel on the same
+  document view, grouped and labelled per requirement key, was judged to satisfy 14.12's "not only
+  in a separate list" without the larger rewrite that per-row interleaving would have needed.
+  Recorded here as a real scope call, not hidden in the diff. New hooks in `spec.ts`
+  (`useSpecProposals`/`useAcceptSpecProposal`/`useRejectSpecProposal`), wired into `useSpecEvents`'s
+  existing `spec_updated` invalidation. UI bundle rebuilt and refreshed (`refresh_ui_bundle.py`).
+- **5 (F4 tool restriction):** `restrict_spec_writes` threaded through `build_command` into both
+  runner branches exactly as D6's round-2 revision specifies — Claude's `--disallowedTools` is
+  unconditional including under `yolo=True`; Codex's branch is replaced outright, not layered, when
+  the restriction applies. Confirmed against the real installed `claude` CLI's own `--help` that
+  `--disallowedTools` and `--allowedTools` are independent, both-present-capable flags — not assumed.
+  `spec_turn_notice()` states the restriction. Task 5.4 (live check) done narrower than planned,
+  recorded honestly in `tasks.md` rather than silently ticked or left undone: traced the actual
+  code path instead of triggering a real agent — `agent_trigger.py:632` passes `build_command`'s
+  return value straight to `pty_runner.py`, whose `resolve_executable` only resolves `cmd[0]`
+  (the binary path); every other argv element reaches `subprocess.Popen` unchanged. So the unit
+  tests asserting on `build_command`'s return value are evidence about the real spawn, not only the
+  function in isolation — but a real live trigger with a real `create_task` call was not run this
+  iteration and is flagged as a worthwhile follow-up before trusting this in anger.
+- **6 (retire 14.15):** done, see below.
+- **7 (verification):** `pytest hub/tests -n 8` → 2123 passed / 11 skipped (2105 baseline + 18 new).
+  One pre-existing test broke on first run —
+  `test_requirement_gate.py::test_an_agent_cannot_set_rigor_through_the_payload` — not a bug in this
+  change, a test whose premise predated F1: it submitted against a `gate`-rigor document and
+  asserted on the live file, which F1 now correctly declines to write. Fixed by accepting the
+  resulting metadata proposal before asserting, preserving the test's actual point (rigor is read
+  from the row, never the payload) rather than weakening it. `pytest tests/` unchanged 362/3.
+  `npm test` 957/957 (943 baseline plus prior-iteration and this iteration's additions).
+  `npm run lint`/`npx tsc --noEmit` clean. `ruff check hub/ src/` clean. `black --check` clean on
+  every file this iteration touched (4 pre-existing, untouched files show drift under the current
+  black version — confirmed via `git status` that this iteration did not touch them, left alone).
+  `openspec validate --changes --strict` 9/9, `--specs --strict` 31/31.
+
+**Beyond tasks.md's own checklist, done because leaving it half-finished would be worse than not
+starting:** synced the `spec-document-authority` delta into `openspec/specs/` now that the behaviour
+is real and verified — six requirements appended after the existing rigor cluster. Updated
+`hub-native-experience/tasks.md`: ticked 14.11/14.12/14.14 against this change's actual shipped
+behaviour (not the plan — the real merged code) with citations, and 14.15 as a recorded waiver
+(design D7) rather than the rewording the earlier pass had left it needing. Phase 14 is now 15/19
+ticked, 2 partial (14.5, 14.13 — untouched, out of this change's stated scope), 2 structural
+(14.18/14.19). Updated the phase-14 summary note to say the umbrella's archive blocker (section 16)
+no longer holds — archiving the umbrella itself is still the operator's own decision, not something
+this note or this run makes unilaterally.
+
+**Net:** `2026-08-17-authoring-rigor-and-scope` went from "round 3 pending" to "approved, built,
+tested, synced" in one iteration, per the operator's binding change to `spec_round_protocol` this
+session (approve-and-execute at cap, not spec-only). Commit `2a52fcd`, 26 files, all green.
+`next_action` for the next iteration: this specific change is done — nothing left to build or sync
+for it. Return to N6's original remit (archive the 13 pre-08-16 openspec changes, tick-with-evidence
+or waive-with-reason, never on the strength of a plan) with whatever runway remains before
+`stop_at` (2026-08-17T08:00:00+01:00) — a little under 1h40m as of this iteration's heartbeat.
+Consider whether `2026-08-17-authoring-rigor-and-scope` itself is now a candidate for the same
+archiving pass, since it is fully implemented and synced.
