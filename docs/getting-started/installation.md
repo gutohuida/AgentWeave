@@ -49,6 +49,17 @@ pip install -e ".[dev]"
 The Hub goes in first, from the checkout, so pip resolves `agentweave-ai`'s dependency on it
 locally instead of fetching a release from PyPI.
 
+### If you've been running the Hub directly
+
+Bare `agentweave` has always stored its database at `~/.agentweave/hub/data/agentweave.db`, and
+nothing about that changes here. This note is only for a development checkout run a different
+way — `uvicorn hub.main:app` directly, or `docker compose up` from varying directories — where
+older versions could resolve a different, directory-relative database (or Docker volume) per
+launch location. That is fixed going forward, but on upgrade it is **not** migrated automatically:
+existing data stays exactly where it was, and nothing copies or moves it for you. If you want that
+data at the new shared location, copy the database file yourself — a one-line operation, not
+something the CLI does on your behalf.
+
 ## Docker (Advanced)
 
 For a containerized instance instead — a remote or headless deployment:

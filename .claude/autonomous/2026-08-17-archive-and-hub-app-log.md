@@ -532,3 +532,66 @@ D4's non-migration decision in plain language), then move to **A4 (the roadmap)*
 per the queue's own stated order ("Only start this if A1-A3 are done or blocked" — A3 will be as
 done as an autonomous driver can make it once 5.1 lands, since section 6 is inherently
 human-only and was never this driver's to complete).
+
+
+## Iteration 7 (2026-08-17T20:56+01:00)
+
+**A3 task 5.1 done, closing the change's every agent-doable task; A4 (the roadmap) done. The
+original four-item queue is now fully closed.**
+
+**5.1** — read `README.md` and `docs/index.md` in full before touching either, per iteration 6's
+own instruction not to guess which was authoritative. Neither turned out to be it: `README.md`
+shows only bare `pip install agentweave-ai` + `agentweave`, no `--docker`/`--local` mention at all;
+`docs/index.md` is a landing page that points onward rather than documenting flags itself. Grepped
+`docs/` directly and found the real home — `docs/getting-started/installation.md`, which has `## Run`
+and `## Docker (Advanced)` with the actual `--docker`/`--local` examples 5.1 refers to. Added a new
+"### If you've been running the Hub directly" subsection there, between "Development Install" and
+"Docker (Advanced)": states bare `agentweave`'s database path is unchanged, names the two pre-fix
+patterns from `design.md` D4's population 2 (direct `uvicorn hub.main:app`, `docker compose up` from
+varying directories), and says migrating existing data to the new global path is a manual one-line
+file copy the CLI does not perform. Docs-only, no code, no test — `openspec validate --changes
+--strict` still 8/8. Ticked 5.1 in `tasks.md` with a done-note naming the file and explaining why it
+beat the two false leads. **Section 3 and section 5 of the change are now fully closed; only section
+6 (human-only verification, 6.1-6.7) remains, and it was never this driver's to complete.**
+
+**A4** — wrote `openspec/explorations/2026-08-17-what-to-work-on-next.md`, ranked in four tiers with
+a reason and a rough size on every item, exactly as `done_when` asks, and closing with an explicit
+line that it is a proposal, not something the next session should treat as pre-approved:
+
+- **Tier 1 (unblocks other things, do first):** judge the remaining taste-pass tasks (17 of 21 still
+  unjudged, 9 blocked only on free fixture seeding per `.claude/TASTE-PASS-2026-08-17.md`'s own "what
+  I can set up next" list); archive the six code-complete 2026-08-16 changes once judged; resolve
+  `decisions_for_user` D1 (this branch's own fate).
+- **Tier 2 (infra debts, no user-visible payoff):** trace `pid_alive`'s POSIX zombie-check callers,
+  decide the `fastapi`/`starlette` version bound, make CI assert it's testing a clean environment,
+  fix the shared-connection `StaticPool` test-fixture bug and then session-scope the fixture for
+  speed — all four cite `openspec/explorations/2026-08-17-the-hub-suite-has-never-run-clean.md` and
+  this branch's own `known_debts` by name rather than re-deriving the findings.
+- **Tier 3 (housekeeping bigger than it looks):** reconcile or retire
+  `2026-07-30-hub-native-experience`, which still has 48 of 188 tasks open — measured with a grep
+  count across every change's `tasks.md`, not assumed — much of which now likely overlaps later
+  shipped work (Runner/Agent/Charter separation, the spec flow) under a different name; retro-cover
+  1.0.1 with a change per D3; fix the loose `agentweave-hub` pin per D4.
+- **Tier 4 (forward architecture):** summarizes rather than duplicates
+  `openspec/explorations/2026-08-17-architecture-proposals.md`'s three already-written proposals
+  (A: loops as a fourth roster citizen — cheapest; B: a spec-drift verification loop — highest
+  leverage; C: retire `STATE.json`, run this very session as a `Loop` — most consequential, least
+  ready), since that document, written earlier this session, already did the thinking A4 asked for.
+
+No market research was invented; every claim in the file traces to a named file already in the
+repository. Verified: `openspec validate --changes --strict` 8/8 (the roadmap file is an exploration,
+not a change, so nothing validates it directly — read back in full instead).
+
+**Both landed in one commit**, alongside the STATE.json update marking A1-A4 all `done`. Time check:
+started this iteration at 20:53, finished writing both pieces by ~21:10, comfortably inside the
+20:56:39 heartbeat and the 22:00 `stop_at` — no rushing was needed for either piece.
+
+**The queue is empty, but `stop_when_queue_empties` is false**, so this iteration does not stand
+down — `next_action` hands the next firing a self-directed, low-risk continuation drawn from the
+roadmap's own Tier 1: seed the three free taste-pass fixtures (a throwaway project, a declaring
+document with tasks/evidence/one archived, a capability document and a job with a loop) against the
+**trial Hub's empty AgentWeave project only**, never `aw-loop10`, and never the judging itself, which
+stays the operator's. A fallback is named (Tier 2's smallest item, the version-bound decision) if the
+fixture work doesn't fit the remaining runway, and an explicit caution against starting the riskier
+`StaticPool` fixture fix without a full iteration's budget, since a related prior attempt hung the
+suite.

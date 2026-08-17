@@ -364,12 +364,23 @@ is green."
 
 ## 5. Migration decision — no code, a documented non-action (D4)
 
-- [ ] 5.1 State in the CLI's install docs (wherever bare `agentweave`/`--docker`/`--local` are already
+- [x] 5.1 State in the CLI's install docs (wherever bare `agentweave`/`--docker`/`--local` are already
       documented — `docs/` or `README.md`, whichever currently covers it) that anyone who has been
       running the Hub via direct `uvicorn hub.main:app` or `docker compose up` from varying
       directories may find their data at the pre-fix location after upgrading, and that copying the
       database file to the new global path is a manual, one-line step, not something the CLI does
       for them. No code task — `design.md` D4 explicitly decided against writing a migration tool.
+      Done: `README.md` only shows bare `pip install agentweave-ai` + `agentweave` (no
+      `--docker`/`--local` mention at all), and `docs/index.md` is a landing page that points
+      onward — neither is where the flags are actually documented. `docs/getting-started/
+      installation.md` is: it's the file with `## Run`, `## Docker (Advanced)` and the
+      `--docker`/`--local` examples task 5.1 refers to, so the paragraph landed there, as a new
+      "### If you've been running the Hub directly" subsection between "Development Install" and
+      "Docker (Advanced)" — its two audiences (direct-uvicorn contributors, directory-varying
+      Docker dev use) are exactly `design.md` D4's population 2. Plain language, no code: states
+      bare `agentweave`'s path is unchanged, names the two pre-fix patterns, and says the migration
+      is a manual one-line file copy the CLI does not perform. Docs-only — nothing to run beyond
+      reading the rendered file back, which was done.
 
 ## 6. Human-only verification
 
