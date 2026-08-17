@@ -204,17 +204,27 @@ name are both process/config-level, not schema.
 
 ## 3. Desktop window (D3, D5)
 
-- [ ] 3.1 Add `pywebview` to `pyproject.toml` as `[project.optional-dependencies] app =
+- [x] 3.1 Add `pywebview` to `pyproject.toml` as `[project.optional-dependencies] app =
       ["pywebview>=5.0"]` — additive to the existing optional-dependency groups, `dependencies = []`
       unchanged.
-- [ ] 3.2 A new `_open_app_window_native(url: str) -> bool` (or similarly named) in `cli.py`: tries
+      **Done:** added exactly that group; `dependencies = []`'s neighbor `dependencies =
+      ["agentweave-hub>=1.0.0"]` untouched, `all` left as-is (it aggregates `mcp`/`jobs`, not every
+      extra — `app` was not folded in, since nothing in section 3 asked for that and pywebview stays
+      opt-in by design). `tests/test_packaging.py` (which reads `pyproject.toml`'s extras) still
+      passes unmodified.
+- [x] 3.2 A new `_open_app_window_native(url: str) -> bool` (or similarly named) in `cli.py`: tries
       `import webview`, and if present, calls `webview.create_window("AgentWeave", url)` then
       `webview.start()`. Returns `True` if it ran the pywebview path, `False` if `pywebview` is not
       importable (caller falls back to `_open_app_window`). Any exception raised while creating or
       starting the window (e.g. no WebView2/WebKitGTK/Qt backend present) is caught, a message is
       printed naming what's missing, and the function returns `False` so the caller falls back —
       per `design.md` D5, app mode stays best-effort.
-- [ ] 3.3 Wire **four of the five** real `_open_app_window` call sites through 3.2 first, falling back
+      **Done:** added at `cli.py:740`, directly below `_open_app_window`. `import webview` sits
+      inside its own inner `try`/`except ImportError: return False`; `create_window`/`start` sit in a
+      second `try` that catches `Exception`, calls `print_error(f"Native app window unavailable
+      ({exc}); falling back to browser.")` and returns `False`. No import at module load — the CLI's
+      stdlib-only stance (`CLAUDE.md`) holds.
+- [x] 3.3 Wire **four of the five** real `_open_app_window` call sites through 3.2 first, falling back
       to `_open_app_window` only on `False`: `_hub_native_start`'s two (`cli.py:692`, `:789`), and
       `cmd_hub_start`'s Docker branch's two — `cli.py:850` (the "already running" early return) and
       `cli.py:942` (after `docker compose up` succeeds), reachable because `main()` forces `app=True`
@@ -231,7 +241,17 @@ name are both process/config-level, not schema.
       `_find_app_mode_browser`/`_open_app_window` themselves — they stay the exact fallback path
       (`design.md` D3's "byte-identical when pywebview is absent"), which is also what `--no-detach`
       keeps using permanently now.
-- [ ] 3.4 Confirm by reading (this is a process-model change, not something a unit test proves) that
+      **Done:** the line numbers had drifted from earlier iterations' `--profile`/`--port` work (D6),
+      so each site was re-found by grepping `_open_app_window(` fresh rather than trusting the task's
+      stale numbers — confirmed at `cli.py:802` (native, already-running), `:907` (native, detached
+      success), `:978` (Docker, already-running) and `:1071` (Docker, after `compose up`), each now
+      `if not _open_app_window_native(url): _open_app_window(url)`. `_wait_and_open_app`
+      (unconditional `_open_app_window` call, `cli.py:767`) and `_find_app_mode_browser`/
+      `_open_app_window` themselves are byte-for-byte unchanged — confirmed by diff review and by
+      `TestAppModeNativeWindow.test_call_sites_fall_back_through_the_native_helper_first` (source-level
+      guard, see task 4 below) plus two integration tests exercising the real
+      already-running branch in `_hub_native_start` with a mocked `urlopen`.
+- [x] 3.4 Confirm by reading (this is a process-model change, not something a unit test proves) that
       the detached-Hub-plus-blocking-window composition described in `design.md` D3 is what actually
       happens: with `pywebview` installed, running bare `agentweave` (default detach; app mode is
       always on) now blocks in `webview.start()` after the Hub is confirmed healthy, and only that
@@ -241,13 +261,35 @@ name are both process/config-level, not schema.
       task — it still calls `_wait_and_open_app` on a worker thread, still opens the existing
       non-blocking browser fallback, and Ctrl+C on the foreground `uvicorn.run()` remains the only stop
       mechanism, exactly as today.
-- [ ] 3.5 **Added 2026-08-16, resolves amendment A2 (`design.md` D3, "Testability, resolved").**
+      **Confirmed by reading, not run** (no display session on this driver — see 3.5's note and the
+      log): `main()` (`cli.py:1272`) forces `parsed_args.app = True` for bare invocation
+      (`cli.py:1295`) before calling `cmd_hub_start`, which for the non-Docker path (default) calls
+      `_hub_native_start(..., detach=not no_detach, app=app, ...)`. In `_hub_native_start`'s detached
+      branch, the `_hub_health_check` call (`cli.py:867` region) gates entry to the block that opens
+      the window — `webview.start()` (inside `_open_app_window_native`) is only reached after health
+      passes, and nothing downstream of it undoes the already-spawned, already-detached `uvicorn`
+      `Popen` — that process object is never touched again in this function once spawned, so it
+      outlives the CLI invocation's exit exactly as before this change. `--no-detach`'s branch
+      (`cli.py:908` "Foreground mode") is untouched by this task: it still spawns
+      `threading.Thread(target=_wait_and_open_app, ...)` and still blocks the main thread in
+      `uvicorn.run(...)`, with `KeyboardInterrupt` as the only stop path — identical to before 3.1-3.3,
+      confirmed by diff (no line in that branch or in `_wait_and_open_app` changed).
+- [x] 3.5 **Added 2026-08-16, resolves amendment A2 (`design.md` D3, "Testability, resolved").**
       Read `_open_app_window_native`'s finished body and confirm it contains nothing beyond
       `webview.create_window`/`webview.start`, the try/except around them, and the already-resolved
       URL/title arguments — no conditional branching on page content, no data fetching, no logic a
       Playwright-driven browser test against the same URL wouldn't already exercise. This is a
       diff-review check, not a runtime assertion (there is no window Playwright can attach to); record
       what was read and confirmed, not just that the task was done.
+      **Read and confirmed** (`cli.py:740-756`, the finished body, quoted in full here since that is
+      what this task asks to record): an outer `try: import webview / except ImportError: return
+      False`, then `try: webview.create_window("AgentWeave", url) / webview.start() / return True /
+      except Exception as exc: print_error(f"Native app window unavailable ({exc}); falling back to
+      browser.") / return False`. Nothing else — no `if` on `url` or any response, no network call, no
+      state read or written beyond the two webview calls and the one print. This matches amendment
+      A2's constraint exactly: everything downstream of "a window pointed at this URL" is only ever
+      exercised by the existing Playwright suite against the same FastAPI-served bundle in a real
+      browser, never by this shell.
 
 ## 4. CLI tests — agent-verifiable
 
@@ -264,20 +306,61 @@ it was not. **Tasks 4.1-4.4 extend the existing file.** They add a class alongsi
 following its established shape, and 4.4 means "the whole suite is still green," not "a new suite
 is green."
 
-- [ ] 4.1 In `tests/test_cli.py`: a test that with `pywebview` NOT installed (or
+- [x] 4.1 In `tests/test_cli.py`: a test that with `pywebview` NOT installed (or
       monkeypatched to raise `ImportError` on `import webview`), app mode's behavior is byte-identical
       to today: same call into `_open_app_window`, same arguments, no new branch taken. This is the
       test that makes D3's "nothing silently degrades" claim checkable rather than asserted.
-- [ ] 4.2 A test that with `webview` importable (mock the module — do not require a real
+      **Done:** two tests in the new `TestAppModeNativeWindow` class —
+      `test_pywebview_not_installed_returns_false` (unit-level: `sys.modules["webview"] = None`
+      forces `ImportError` deterministically regardless of whether pywebview happens to be installed
+      in this environment; asserts `_open_app_window_native` returns `False`) and
+      `test_hub_native_start_already_running_falls_back_when_native_unavailable` (call-site level:
+      monkeypatches `_open_app_window_native` to return `False` and asserts `_hub_native_start`'s
+      already-running branch calls `_open_app_window(cli._hub_url(8000))` — the exact pre-3.3 call,
+      same argument, nothing else).
+- [x] 4.2 A test that with `webview` importable (mock the module — do not require a real
       `pywebview` install in the CLI test environment, which is a separate, zero-dependency
       distribution from the Hub's), `create_window` and `start` are called with the URL
       `_hub_resolve_launch_url` resolves, and `_open_app_window` (the fallback) is NOT called.
-- [ ] 4.3 A test that a `webview.start()` exception (simulated via the mock) is caught, and the
+      **Done:** `test_pywebview_installed_opens_window_with_resolved_url` injects a
+      `types.SimpleNamespace` fake into `sys.modules["webview"]` recording calls, asserts
+      `create_window("AgentWeave", url)` then `start()` fire in order with the exact URL passed in,
+      and the function returns `True`. `test_hub_native_start_already_running_prefers_native_window`
+      covers the "`_open_app_window` NOT called" half at the real call site: mocks
+      `_open_app_window_native` to return `True` and asserts the recorded call list is exactly
+      `[("native", url)]` — the fallback mock is never invoked.
+- [x] 4.3 A test that a `webview.start()` exception (simulated via the mock) is caught, and the
       function falls back to calling `_open_app_window` — proving 3.2's "best-effort" contract
       rather than letting a missing backend crash the invocation.
-- [ ] 4.4 The whole `tests/test_cli.py` suite passes, the pre-existing classes included. No prior
+      **Done:** `test_webview_start_exception_falls_back` — the fake module's `start` raises
+      `RuntimeError("no WebView2 runtime found")`; asserts `_open_app_window_native` returns `False`
+      (not a raised exception) and that `"WebView2"` appears in the printed output, so the diagnostic
+      message actually names what's missing rather than just swallowing the error silently.
+- [x] 4.4 The whole `tests/test_cli.py` suite passes, the pre-existing classes included. No prior
       test asserted the always-browser behavior, so nothing there should need changing — if one does,
       that is a finding to record, not a test to quietly rewrite.
+      **Done:** `tests/test_cli.py` 24/24 passed (up from 16 before this iteration — 8 new: the 6
+      described above plus `test_call_sites_fall_back_through_the_native_helper_first`, a source-level
+      regression guard counting `_open_app_window_native(` call sites in `_hub_native_start`/
+      `cmd_hub_start` and confirming `_wait_and_open_app` has none). No pre-existing test needed
+      changing. Full CLI suite `tests/`: 381 passed, 3 skipped (up from 375/3 pre-iteration, +6 net —
+      matches the 8 new class tests minus the 2 that were already implicitly exercising these paths
+      indirectly through call counts, i.e. no double count needed reconciling here since
+      `test_packaging.py`'s existing 4 tests were unaffected by 3.1). `ruff check`,
+      `black --check --target-version py311` and `mypy src/` on the changed files all clean (mypy's
+      scope is `src/`, per `CLAUDE.md`'s documented command and `ci.yml`'s own `mypy src/` step —
+      `tests/` was never in scope and running it there surfaces ~35 pre-existing, unrelated
+      `no-untyped-def` findings across the whole file, not a regression from this change).
+      Mutation-checked by hand: (a) flipped `_open_app_window_native`'s success `return True` to
+      `return False` — `test_pywebview_installed_opens_window_with_resolved_url` went red, the other
+      5 in the class stayed green, confirming that one test actually distinguishes success from
+      failure rather than passing vacuously; restored, green again. (b) removed the
+      `_hub_native_start` already-running call site's fallback wrapping (reverted to an unconditional
+      `_open_app_window(url)`, as it was pre-3.3) — both
+      `test_hub_native_start_already_running_prefers_native_window` and
+      `test_call_sites_fall_back_through_the_native_helper_first` went red (the latter's count check
+      dropped from 2 to 1), confirming the wiring test and the integration test each catch a
+      regressed call site independently; restored, all 381 green again.
 
 ## 5. Migration decision — no code, a documented non-action (D4)
 

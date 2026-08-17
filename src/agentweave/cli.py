@@ -737,6 +737,26 @@ def _open_app_window(url: str) -> None:
     webbrowser.open(url)
 
 
+def _open_app_window_native(url: str) -> bool:
+    """Open `url` in a native OS window via pywebview.
+
+    Returns True if the pywebview path ran, False if pywebview is not installed
+    or failed to open a window (caller falls back to `_open_app_window`).
+    """
+    try:
+        import webview  # type: ignore[import]
+    except ImportError:
+        return False
+
+    try:
+        webview.create_window("AgentWeave", url)
+        webview.start()
+        return True
+    except Exception as exc:
+        print_error(f"Native app window unavailable ({exc}); falling back to browser.")
+        return False
+
+
 def _wait_and_open_app(port: int, cwd: Optional[Path]) -> None:
     """Poll for Hub health, open/register `cwd`, then open the app-mode window.
 
@@ -779,7 +799,8 @@ def _hub_native_start(
                 url = _hub_resolve_launch_url(port, cwd)
                 if app:
                     print_info("Opening Hub in app mode...")
-                    _open_app_window(url)
+                    if not _open_app_window_native(url):
+                        _open_app_window(url)
                 return 0
     except Exception:
         pass
@@ -883,7 +904,8 @@ def _hub_native_start(
             url = _hub_resolve_launch_url(port, cwd)
             if app:
                 print_info("Opening Hub in app mode...")
-                _open_app_window(url)
+                if not _open_app_window_native(url):
+                    _open_app_window(url)
         else:
             # Foreground mode — block until Ctrl+C
             if is_first_run and api_key:
@@ -952,7 +974,8 @@ def cmd_hub_start(args: argparse.Namespace) -> int:
                 print_info(f"Hub is already running at {hub_url}")
                 if app:
                     print_info("Opening Hub in app mode...")
-                    _open_app_window(hub_url)
+                    if not _open_app_window_native(hub_url):
+                        _open_app_window(hub_url)
                 return 0
     except Exception:
         pass
@@ -1044,7 +1067,8 @@ def cmd_hub_start(args: argparse.Namespace) -> int:
     print_success(f"Hub ready at {hub_url}")
     if app:
         print_info("Opening Hub in app mode...")
-        _open_app_window(hub_url)
+        if not _open_app_window_native(hub_url):
+            _open_app_window(hub_url)
     return 0
 
 

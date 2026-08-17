@@ -264,6 +264,164 @@ class TestPortRequiredForNamedProfile:
         assert "--port" in captured.out
 
 
+class TestAppModeNativeWindow:
+    """D3/D5, tasks 3.2-3.3, 4.1-4.3 — pywebview opens a native OS window when it is
+    installed and a backend is available; otherwise app mode is byte-identical to the
+    pre-existing chromeless-browser-or-tab behavior (`_open_app_window`).
+
+    `_open_app_window_native` does `import webview` inside the function body (never at
+    module load, per CLAUDE.md's stdlib-only stance on the CLI's own code), so it is
+    tested here by injecting a fake module into `sys.modules` rather than requiring a
+    real pywebview install — the same trick used to force an ImportError deterministically
+    regardless of whether pywebview happens to be present in the test environment.
+
+    Design.md D3's amendment A2 already settled that no Playwright test can drive
+    pywebview's actual window, so these tests exercise `_open_app_window_native` and its
+    call sites' wiring in isolation, not a real window.
+    """
+
+    def test_pywebview_not_installed_returns_false(self, monkeypatch):
+        """4.1 — with pywebview unimportable, the function reports it can't run the
+        native path so the caller falls back to `_open_app_window` unchanged."""
+        import sys
+
+        from agentweave.cli import _open_app_window_native
+
+        # sys.modules[name] = None is the documented way to force `import name` to raise
+        # ImportError, regardless of whether the real package happens to be installed.
+        monkeypatch.setitem(sys.modules, "webview", None)
+        assert _open_app_window_native("http://127.0.0.1:8000") is False
+
+    def test_pywebview_installed_opens_window_with_resolved_url(self, monkeypatch):
+        """4.2 — create_window/start receive the exact title and URL
+        `_hub_resolve_launch_url` already resolves, and the function reports True (the
+        caller's signal not to also call `_open_app_window`)."""
+        import sys
+        import types
+
+        from agentweave.cli import _open_app_window_native
+
+        calls = []
+        fake_webview = types.SimpleNamespace(
+            create_window=lambda title, url: calls.append(("create_window", title, url)),
+            start=lambda: calls.append(("start",)),
+        )
+        monkeypatch.setitem(sys.modules, "webview", fake_webview)
+
+        result = _open_app_window_native("http://127.0.0.1:8010/?project=proj-1")
+        assert result is True
+        assert calls == [
+            ("create_window", "AgentWeave", "http://127.0.0.1:8010/?project=proj-1"),
+            ("start",),
+        ]
+
+    def test_webview_start_exception_falls_back(self, monkeypatch, capsys):
+        """4.3 — a broken backend (e.g. no WebView2/WebKitGTK/Qt) must not crash the
+        invocation. It's caught, a message naming what happened is printed, and the
+        function reports False so the caller opens the browser fallback instead."""
+        import sys
+        import types
+
+        from agentweave.cli import _open_app_window_native
+
+        def _boom():
+            raise RuntimeError("no WebView2 runtime found")
+
+        fake_webview = types.SimpleNamespace(create_window=lambda title, url: None, start=_boom)
+        monkeypatch.setitem(sys.modules, "webview", fake_webview)
+
+        assert _open_app_window_native("http://127.0.0.1:8000") is False
+        assert "WebView2" in capsys.readouterr().out
+
+    def test_hub_native_start_already_running_prefers_native_window(self, monkeypatch):
+        """Exercises a real call site (task 3.3's first of four): `_hub_native_start`'s
+        already-running branch tries `_open_app_window_native` before `_open_app_window`,
+        and does not call the fallback when the native path reports success."""
+        import urllib.request
+
+        from agentweave import cli
+
+        class FakeResp:
+            status = 200
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc_info):
+                return False
+
+        monkeypatch.setattr(urllib.request, "urlopen", lambda *a, **k: FakeResp())
+
+        calls = []
+        monkeypatch.setattr(
+            cli, "_open_app_window_native", lambda url: calls.append(("native", url)) or True
+        )
+        monkeypatch.setattr(cli, "_open_app_window", lambda url: calls.append(("fallback", url)))
+
+        result = cli._hub_native_start(
+            port=8000, detach=True, app=True, cwd=None, profile="default"
+        )
+        assert result == 0
+        assert calls == [("native", cli._hub_url(8000))]
+
+    def test_hub_native_start_already_running_falls_back_when_native_unavailable(self, monkeypatch):
+        """4.1's byte-identical claim, exercised at the real call site rather than just the
+        helper in isolation: when `_open_app_window_native` reports it couldn't run (e.g.
+        pywebview absent), the exact same `_open_app_window(url)` call fires as it always
+        has — same URL, no new branch."""
+        import urllib.request
+
+        from agentweave import cli
+
+        class FakeResp:
+            status = 200
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc_info):
+                return False
+
+        monkeypatch.setattr(urllib.request, "urlopen", lambda *a, **k: FakeResp())
+
+        calls = []
+        monkeypatch.setattr(cli, "_open_app_window_native", lambda url: False)
+        monkeypatch.setattr(cli, "_open_app_window", lambda url: calls.append(("fallback", url)))
+
+        result = cli._hub_native_start(
+            port=8000, detach=True, app=True, cwd=None, profile="default"
+        )
+        assert result == 0
+        assert calls == [("fallback", cli._hub_url(8000))]
+
+    def test_call_sites_fall_back_through_the_native_helper_first(self):
+        """4.4 / source-level regression guard for task 3.3's wiring as a whole: both real
+        functions with app-mode call sites (`_hub_native_start`'s two, `cmd_hub_start`'s
+        Docker branch's two) must try `_open_app_window_native` before falling back. The
+        fifth site, `_wait_and_open_app` (the `--no-detach` foreground path), is a
+        deliberate, named exception (design.md D3) and must keep calling
+        `_open_app_window` unconditionally — pywebview requires the main thread, which
+        `_wait_and_open_app`'s worker thread is not.
+        """
+        import inspect
+
+        from agentweave import cli
+
+        for fn in (cli._hub_native_start, cli.cmd_hub_start):
+            src = inspect.getsource(fn)
+            assert src.count("_open_app_window_native(") == 2, (
+                f"{fn.__name__} should wire exactly two call sites through "
+                "_open_app_window_native (task 3.3)"
+            )
+
+        wait_src = inspect.getsource(cli._wait_and_open_app)
+        assert "_open_app_window_native" not in wait_src, (
+            "_wait_and_open_app must keep the unconditional browser fallback (design.md D3's "
+            "named exception) — it must not be wired through _open_app_window_native"
+        )
+        assert "_open_app_window(" in wait_src
+
+
 class TestDownloadWithSha256:
     """S9 — verify SHA256 of downloaded Hub docker-compose.yml and .env
     via a new _download_with_sha256 helper.

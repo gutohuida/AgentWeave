@@ -51,6 +51,9 @@ dev = [
     "types-PyYAML>=6.0",
 ]
 docs = ["mkdocs>=1.6", "mkdocs-material>=9.5"]
+# Genuinely optional: `_open_app_window_native` (cli.py) imports it inside a guarded try at its one
+# call site, never at module load, so `dependencies = []` above stays true without this extra.
+app = ["pywebview>=5.0"]
 all = ["fastmcp>=2.0", "croniter>=2.0", "pyyaml>=6.0"]
 
 [project.urls]
