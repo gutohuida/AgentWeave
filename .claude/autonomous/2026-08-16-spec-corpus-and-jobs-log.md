@@ -1899,3 +1899,81 @@ are real product gaps, not paperwork, and per iteration 20's framing this was al
 span more than one iteration. `next_action` below hands off the concrete next step: the 14.1-14.17
 scenario-level mapping pass, since that is the single item most likely to move phase 14 from "mostly
 unknown" to "mostly closed by successor, small real remainder" the way phases 9-12 already are.
+
+---
+
+## Iteration 22 — 2026-08-17T05:08:10+01:00
+
+**N6, picking up iteration 21's own handoff: the section-14 scenario-level mapping pass, done for
+real instead of by heading.** Read `requirement-traceability`, `spec-document-authority`,
+`spec-chat-session` and `task-lifecycle-governance` in full (2375 lines) against each of
+14.1-14.19's exact wording, and spot-checked the UI-facing claims against the actual tree rather
+than trusting spec prose alone: `hub/requirement_coverage.py:51-54` defines the exact seven
+coverage states 14.4 names, `hub/api/v1/spec.py:389`/`453` call it from the API,
+`ui/src/components/spec/SpecCoverageBar.tsx`/`SpecPhaseBar.tsx` render coverage and rigor inline on
+the document (confirming 14.4's "inline where the requirement is read" and 14.9's rigor display),
+and `openspec/specs/` (30 entries, listed) confirmed neither `spec-traceability` nor
+`spec-authoring` — 14.18's own names — exists.
+
+**11 of 19 ticked, each against a cited scenario:** 14.1 (identifier stability/no-recycle plus the
+no-identifier diagnostic), 14.2 (task-requirement links surviving completion, unserved-vs-unfinished
+distinguished by coverage precedence), 14.3 (evidence records with actor/digest, run-credential
+attribution), 14.4 (the coverage state list, "an agent's report awaits review", inline display
+spot-checked), 14.6 (drift detection, never-an-edit, three-way operator resolution), 14.7
+(bidirectional navigation, verbatim), 14.8 ("Two surfaces agree"), 14.9 (rigor defaulting to sketch,
+promotion/demotion recorded, evidence preserved on demotion), 14.10 (the gate refusing approval —
+ticked on the "work gets through to done" reading of the item's word "completion", not the literal
+`completed` status, since task-lifecycle-governance has a scenario *named* "Completion is not
+blocked by the gate" distinguishing the two; recorded as a caveat rather than silently ticking past
+the mismatch), 14.16 (spec-chat-session's entire purpose exceeds "same standard" — it reuses the one
+composer rather than building a second implementation), 14.17 (documents are files in the project
+tree, external edits reported via digest divergence rather than silently lost or auto-merged).
+
+**2 partial, left unticked with the specific missing piece recorded** rather than forced either way:
+14.5 — stale-vs-absent is a real distinct coverage rank (covered), but "allow an operator to mark a
+change editorial" has no such mechanism; the shipped design instead auto-excludes rationale-only
+edits from the digest computation, which serves a similar end but is not an operator action on a
+specific change. 14.13 — one on-ramp of three is shipped and scenario-verified ("grow from
+conversation", spec-chat-session's "The operator can start an exploration by creating a document",
+UI at `SpecDocumentPicker.tsx`); "derive from implementation" and "start from a template" have no
+requirement anywhere in the four specs.
+
+**3 confirmed real gaps, left open, not paperwork:** 14.11 (no rigor-gated *editing mode* — sketches
+and gates are edited identically; only the rigor label and its enforcement differ), 14.12 (no
+in-position/per-field proposal mechanism — authoring today is whole-document submit/validate), 14.14
+(nothing bounds an authoring agent away from performing discovered implementation work rather than
+proposing it). **14.15 confirmed as the suspected rejected design**, not a gap — `submit_spec_document`
+and siblings are MCP tools, and CLAUDE.md's "still prohibited" list already rules out invoking the
+`aw-*` skills the item asks to make "reachable from the workspace"; it needs re-wording or explicit
+retirement, not implementation. **14.18 stays unticked on principle**: the two capability names it
+references don't exist and never will under those names; ticking it would assert a fact (those two
+specs pass verification) that's false on its face regardless of how much real verification happened
+under the four real names. **14.19** is the phase's `/handoff` marker, not a verifiable behaviour —
+left alone as always.
+
+All of this is recorded in `tasks.md` itself with per-item citations, not just in this log — the
+same discipline iteration 21 used for section 13, extended to a phase with more than double the
+open items. The old heading-hypothesis note from iteration 21 is kept below the new one, marked
+superseded, rather than deleted — it turned out directionally right but was explicitly not supposed
+to be load-bearing, and the record of *why* the guess and the real pass differ (or, more often here,
+lined up) is worth keeping.
+
+**Verified the edit didn't break anything:** `openspec validate --changes --strict` → 8/8, unchanged
+— only `openspec/changes/2026-07-30-hub-native-experience/tasks.md` prose/checkboxes changed, no
+proposal/design/spec-delta touched, no source file touched, so the Python/UI suites were not
+re-run — nothing in them could have been invalidated by an unarchived change's prose. `git status`
+confirmed the single-file diff before committing.
+
+**Net for N6:** phase 14 went from 0 ticked / 19 heading-hypothesised to 11 ticked / 2 partial / 3
+confirmed-gap / 1 confirmed-superseded / 2 structurally-unticked — a real, cited reduction, the
+largest single movement N6 has made on this umbrella in one iteration. The umbrella is still not
+archivable: 14.11/14.12/14.14 are genuine unbuilt product surface and 14.15 needs a rewording
+decision, and section 16's closeout still names phase 14 as the concrete blocker. `next_action`
+below hands off the next concrete step iteration 21 already named and this one confirmed is real:
+open a fresh openspec change proposing 14.11 (rigor-gated editing mode), 14.12 (in-position
+individually-acceptable proposals), and 14.14 (scope authoring assistance away from performing
+discovered implementation work), and retiring/rewording 14.15 in the same change since a change
+that's already touching this territory is the natural place to close out the superseded item too.
+Only after that change exists (or a recorded decision not to build it) does phase 14 close and
+section 16's archive decision become reachable. Sections 15-16 remain untouched, both still
+downstream of 14 exactly as iteration 21 left them.

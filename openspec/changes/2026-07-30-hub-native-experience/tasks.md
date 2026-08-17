@@ -1573,84 +1573,180 @@ projects API and no UI. `hub-visual-language` depends on this.*
 > cross-machine reconciliation from the problem, but file authority, stable identifiers, database
 > indexing, and external-editor changes still need a decision. Do not implement from this list.
 
-> **Update (2026-08-17) — N6 triage pass, NOT a verification pass. This phase looks unbuilt in the
-> 2026-08-12 note above because that note predates the entire trial-Hub-owned spec flow, which
-> shipped 2026-08-12 through tonight (2026-08-16/17) under different capability names:
+> **Update (2026-08-17T05:08+01:00, iteration 22) — scenario-level verification pass, superseding the
+> heading-hypothesis note below it in history but kept for the record.** Read
 > `requirement-traceability`, `spec-document-authority`, `spec-chat-session`, and
-> `task-lifecycle-governance`, none of which existed when this phase was last touched. This is the
-> exact "absence by name is not evidence of being unsynced" trap section 16.2's note already names
-> for phases 9-12 — it plausibly applies here too, at greater scale, and nobody has done the mapping.
+> `task-lifecycle-governance` in full (2375 lines total) against each of 14.1-14.19's exact wording,
+> not just headings, and spot-checked the claims that read as UI-facing against the actual tree
+> rather than trusting spec prose alone: `hub/requirement_coverage.py` defines exactly the seven
+> states 14.4 names (`AWAITING_REVIEW`, `IN_PROGRESS`, `NOT_STARTED`, etc., lines 51-54) with the
+> precedence spec-document-authority describes; `hub/api/v1/spec.py:389`/`453` call it from the API;
+> `ui/src/components/spec/SpecCoverageBar.tsx` and `SpecPhaseBar.tsx` render coverage and rigor
+> inline on the document, not on a separate screen; `openspec/specs/` has 30 entries and neither
+> `spec-traceability` nor `spec-authoring` (14.18's names) is among them — confirmed absent, not
+> reassessed from memory.
 >
-> A first read of those four specs' requirement headings suggests real coverage for most of this
-> phase: 14.1 (stable identifiers) ~ `requirement-traceability`'s "A requirement is addressable
-> outside its document" and spec-document-authority's "The Hub mints requirement identifiers and
-> they are stable"; 14.2 (task links requirements) ~ "Work is linked to the requirements it serves";
-> 14.3 (evidence records) ~ "Evidence names what produced it and what it was produced against";
-> 14.4/14.8 (verification state, coverage) ~ "Coverage is one computation with one precedence"; 14.5/
-> 14.6 (stale evidence, drift) ~ "A changed implementation raises a candidate, never an edit"; 14.7
-> (bidirectional navigation) ~ "navigable in both directions"; 14.9 (rigor declaration) ~
-> spec-document-authority's "A document declares how strictly it is enforced" / "Only the operator
-> changes rigor" / "Rigor is only raised on a document that can be enforced"; 14.10 (gate
-> enforcement) ~ task-lifecycle-governance's "Approval is refused while a gated requirement is
-> unverified" — and iteration 19 of tonight's own N6 fallback work built exactly this gate's
-> approval-time report. 14.16/14.17 (workspace standard, plain/portable with divergence reported) ~
-> spec-chat-session's width/legibility requirements and spec-document-authority's digest/divergence
-> requirement.
+> **Ticked below, each against a specific scenario, not a heading:** 14.1 (identifier stability,
+> reordering, no-recycle — `spec-document-authority`'s "Rewording a requirement preserves its
+> identifier" / "Reordering requirements preserves their identifiers" / "A removed requirement's
+> identifier is not recycled"; unidentified-requirement reporting — `requirement-traceability`'s
+> "A requirement that is structurally invalid or carries no identifier SHALL be reported as a
+> diagnostic"); 14.2 ("A task names the requirements it serves" / "Links survive completion" / the
+> coverage precedence distinguishing "linked work not started" from "no linked work at all"); 14.3
+> ("Evidence carries its actor and digest" / "An agent cannot claim to be another actor"); 14.4 (the
+> coverage state list plus "An agent's report awaits review" for the never-an-assertion clause,
+> confirmed inline in the UI per the spot-check above); 14.6 ("A changed footprint is noticed" /
+> "Drift never rewrites the document" / the three-way operator resolution in
+> "A changed implementation raises a candidate, never an edit"); 14.7 (the two "navigable in both
+> directions" scenarios verbatim); 14.8 ("Two surfaces agree" / project-level coverage reporting);
+> 14.9 (defaults to sketch, promotion/demotion recorded, "Demotion keeps what was established"
+> preserves evidence); 14.10 (task-lifecycle-governance's "Approval is refused while a gated
+> requirement is unverified", with the caveat below); 14.16 (spec-chat-session's entire purpose is
+> this item — it reuses the one composer rather than building a second implementation, which is a
+> stronger claim than merely matching a "standard"); 14.17 (documents are files under the project
+> tree — "A specification document is a file in the project working directory" — and external edits
+> are reported via digest divergence rather than silently lost — "An externally edited document is
+> reported, not overwritten").
 >
-> **Genuinely uncertain, not just unmapped:** 14.11 (agent edits direct on sketches, proposals on
-> contracts/gates — a *rigor-gated editing mode*, not just a rigor *label*), 14.12 (in-position,
-> individually-acceptable proposals with no residue on rejection), 14.13 (the three on-ramps: derive
-> from implementation, grow from conversation, start from a template), 14.14 (scope authoring
-> assistance to specs only; discovered implementation work is proposed, not performed), and 14.15
-> (aw-spec-* skills reachable from the workspace — plausibly a rejected design now that
-> `submit_spec_document` and friends are MCP tools rather than skills, per CLAUDE.md's "still
-> prohibited" list; if so this item needs re-wording, not building).
+> **14.10's caveat, worth recording rather than silently ticking past:** the item's own wording says
+> "refuse **completion**"; the shipped gate refuses **approval**, and
+> task-lifecycle-governance has a scenario named exactly for the distinction —
+> "Completion is not blocked by the gate". This looks like the phase-14 author using "completion" to
+> mean "getting the work through to done", which the approval-gate reading satisfies; it is not the
+> `completed` status specifically. Ticking on that reading, not on the literal status name.
 >
-> **This is a name-mapping hypothesis, not a verified closure — do not tick any 14.x box on the
-> strength of this note.** Closing this phase needs the same per-requirement, per-scenario check
-> 16.2 already prescribes for phases 9-12, done fresh against the current 30 specs rather than
-> assumed from headings. That is real, substantial work — comparable in size to N2 tonight — and
-> belongs to a dedicated iteration (or its own openspec change, since some of 14.11-14.15 may turn
-> out to be real product gaps worth speccing rather than paperwork). Recommended next step for
-> whoever picks this up: read `requirement-traceability`, `spec-document-authority`,
-> `spec-chat-session`, and `task-lifecycle-governance` in full against each of 14.1-14.17's exact
-> wording, tick what a scenario genuinely covers, and open a fresh change for whatever from
-> 14.11-14.15 turns out to still be missing rather than trying to shoehorn it into this 2026-07-30
-> umbrella.
+> **Left open, confirmed as real gaps rather than reassessed as unmapped:** 14.11 (no rigor-gated
+> *editing mode* exists — sketches and gates are edited identically today; only the rigor *label* and
+> its enforcement differ) and 14.12 (no in-position, individually-acceptable proposal mechanism exists
+> anywhere in the four specs — authoring today is whole-document submit/validate, not proposal/accept
+> per-field) and 14.14 (no requirement anywhere scopes an authoring agent away from performing
+> discovered implementation work — the turn-context requirements state phase and procedure but say
+> nothing about this boundary). These three are genuine unbuilt product surface, not a documentation
+> gap.
+>
+> **Partially covered, not ticked:** 14.5 — "distinguish stale from absent" is a real, separate rank
+> in the coverage precedence (covered), but "retain superseded evidence" is implicit rather than
+> stated (nothing says evidence is deleted, but nothing scenario-confirms it is kept either) and
+> "allow an operator to mark a change editorial" has no such mechanism — the shipped design instead
+> excludes rationale-only edits from the digest computation itself ("A reworded rationale is not a
+> changed requirement"), which serves the same end but is not an operator action on a specific
+> change. 14.13 — one of the three named on-ramps is shipped and scenario-verified
+> (spec-chat-session's "The operator can start an exploration by creating a document" is
+> "grow from conversation"; `ui/src/components/spec/SpecDocumentPicker.tsx` is the UI control,
+> spot-checked); "derive from implementation" and "start from a template" have no requirement or
+> scenario anywhere in the four specs. Both left unticked; recorded here so the next pass does not
+> re-derive them.
+>
+> **14.15 confirmed as the suspected rejected design, not a gap.** `submit_spec_document` and its
+> siblings are MCP tools (`hub/mcp_server.py`), and CLAUDE.md's "Still prohibited" table lists
+> invoking the `aw-*` skills as a product-source concern, not a workspace feature. The item as worded
+> asks to make removed skills "reachable from the workspace", which the product's own direction
+> already ruled out. Needs re-wording (or explicit retirement with a reason), not implementation —
+> left unticked because ticking would say the skills are reachable, which they deliberately are not.
+>
+> **14.18 cannot be ticked on its own terms** — `spec-traceability` and `spec-authoring` do not exist
+> under those names (confirmed against the current 30-entry `openspec/specs/` listing) and never
+> will; the four real capability specs shipped under different names. This verification pass *is*
+> that check, done against the real names, but the box names capabilities that no longer exist to
+> verify against — ticking it would assert a fact (that those two named specs pass verification)
+> that is false on its face regardless of how much real verification happened under other names.
+> Leaving unticked with this note is the honest state, matching the pattern section 16.2 already used
+> for other renamed capabilities.
+>
+> **Net: 11 of 19 ticked** (14.1-14.4, 14.6-14.10, 14.16-14.17), each against a cited scenario, not a
+> heading. **3 confirmed real gaps** (14.11, 14.12, 14.14) belong in a fresh openspec change, not this
+> umbrella — 14.15 needs re-wording alongside them since a change proposing the gaps is the natural
+> place to also retire the superseded item. **2 partial** (14.5, 14.13) are real but incomplete;
+> recorded with the specific missing piece so a fresh change can pick either up without re-deriving
+> this pass. **14.18/14.19 stay unticked as structural** — 18 names dead capabilities, 19 is the
+> phase's `/handoff` marker, neither is a verifiable product behaviour.
+>
+> Phase 14 is therefore substantially real (11/19, more once the fresh change lands) rather than
+> "mostly unknown" — but it is not archivable yet: 14.11/14.12/14.14 are genuine unbuilt surface, and
+> section 16's closeout still names phase 14 as the blocker for archiving this whole umbrella.
 
-- [ ] 14.1 Add stable, visible requirement identifiers; report unidentified requirements; never
+> ---
+>
+> **Superseded heading-hypothesis note (2026-08-17, iteration 21) — kept for history, do not use for
+> ticking.** A first read of the four specs' requirement *headings* (not scenarios) suggested the
+> same rough shape the pass above confirmed: 14.1-14.10 plausibly covered, 14.11-14.15 genuinely
+> uncertain, 14.16/14.17 plausibly covered. The heading-level guess turned out to be directionally
+> right but not load-bearing — see the scenario-level pass above for what actually ticks and why.
+
+- [x] 14.1 Add stable, visible requirement identifiers; report unidentified requirements; never
       reissue a retired identifier; keep identifiers stable across rewording, reordering, relocation.
-- [ ] 14.2 Let a task declare the requirements it serves; persist the link past completion; report
+      *(2026-08-17: `spec-document-authority` "The Hub mints requirement identifiers and they are
+      stable" + `requirement-traceability`'s no-identifier diagnostic — see note above.)*
+- [x] 14.2 Let a task declare the requirements it serves; persist the link past completion; report
       unserved requirements distinctly from unfinished ones.
-- [ ] 14.3 Add evidence records carrying kind, origin, time, and the responsible agent/operator and
+      *(2026-08-17: `requirement-traceability` "Work is linked to the requirements it serves" +
+      coverage precedence distinguishing not-started from no-linked-work.)*
+- [x] 14.3 Add evidence records carrying kind, origin, time, and the responsible agent/operator and
       run; refuse anonymous evidence.
-- [ ] 14.4 Derive and display a verification state per requirement — not started, in progress,
+      *(2026-08-17: `requirement-traceability` "Evidence names what produced it and what it was
+      produced against" + "An agent cannot claim to be another actor".)*
+- [x] 14.4 Derive and display a verification state per requirement — not started, in progress,
       evidence awaiting review, verified — inline where the requirement is read. An agent's assertion
       is never verification.
+      *(2026-08-17: `hub/requirement_coverage.py` states + "An agent's report awaits review";
+      inline rendering spot-checked in `SpecCoverageBar.tsx`/`SpecPhaseBar.tsx`.)*
 - [ ] 14.5 Stale evidence when a requirement's meaning changes; distinguish stale from absent; retain
       superseded evidence; allow an operator to mark a change editorial.
-- [ ] 14.6 Detect and report drift where linked implementation changes without its requirement;
+      *(2026-08-17: partial — stale-vs-absent is a real distinct coverage rank; "mark a change
+      editorial" has no operator action, only automatic rationale-exclusion from the digest. See
+      note above; left open for the fresh change.)*
+- [x] 14.6 Detect and report drift where linked implementation changes without its requirement;
       require deliberate resolution; change nothing automatically.
-- [ ] 14.7 Make traceability navigable both ways.
-- [ ] 14.8 Add project verification coverage, derived from the same per-requirement state.
-- [ ] 14.9 Add the rigor declaration (sketch / contract / gate), defaulting to sketch; record
+      *(2026-08-17: `requirement-traceability` "A changed implementation raises a candidate, never an
+      edit" — all four scenarios match.)*
+- [x] 14.7 Make traceability navigable both ways.
+      *(2026-08-17: `requirement-traceability` "navigable in both directions", verbatim.)*
+- [x] 14.8 Add project verification coverage, derived from the same per-requirement state.
+      *(2026-08-17: `requirement-traceability` "Coverage is one computation with one precedence" +
+      "Two surfaces agree".)*
+- [x] 14.9 Add the rigor declaration (sketch / contract / gate), defaulting to sketch; record
       promotion and demotion; preserve evidence on demotion.
-- [ ] 14.10 Enforce the gate: refuse completion against a gate whose requirements lack accepted
+      *(2026-08-17: `spec-document-authority` "A document declares how strictly it is enforced" +
+      "Demotion keeps what was established".)*
+- [x] 14.10 Enforce the gate: refuse completion against a gate whose requirements lack accepted
       evidence, identifying which.
+      *(2026-08-17: `task-lifecycle-governance` "Approval is refused while a gated requirement is
+      unverified" — ticked on the "work gets through to done" reading of "completion", not the
+      literal `completed` status; see the caveat in the note above.)*
 - [ ] 14.11 Make agent edits direct on sketches and proposals on contracts and gates; attribute
       accepted changes to both proposer and accepter.
+      *(2026-08-17: confirmed real gap — no rigor-gated editing mode exists anywhere in the four
+      specs. Belongs in a fresh openspec change.)*
 - [ ] 14.12 Build authoring against a visible document: in-position proposals, individually
       acceptable, rejection leaving no residue.
+      *(2026-08-17: confirmed real gap — no in-position/per-field proposal mechanism exists;
+      authoring today is whole-document submit/validate. Belongs in a fresh openspec change.)*
 - [ ] 14.13 Add the on-ramps — derive from implementation, grow from conversation, start from a
       template; mark derived specifications and start them as sketches.
+      *(2026-08-17: partial — "grow from conversation" is shipped
+      (`spec-chat-session`'s "The operator can start an exploration by creating a document",
+      `SpecDocumentPicker.tsx`); "derive from implementation" and "start from a template" have no
+      requirement anywhere. Left open for the fresh change.)*
 - [ ] 14.14 Scope authoring assistance to specifications; discovered implementation work is proposed,
       not performed.
+      *(2026-08-17: confirmed real gap — nothing in the four specs bounds an authoring agent away
+      from performing discovered implementation work. Belongs in a fresh openspec change.)*
 - [ ] 14.15 Make `aw-spec-explore`, `aw-spec-propose`, `aw-spec-apply`, `aw-spec-reindex`, and
       `aw-verify` reachable from the workspace; invert `aw-verify` to attach evidence to requirements.
-- [ ] 14.16 Bring the specification workspace to the same standard as the agent conversation.
-- [ ] 14.17 Keep specifications plain and portable; reconcile external edits without losing links or
+      *(2026-08-17: confirmed superseded design, not a gap — `submit_spec_document` and siblings are
+      MCP tools, and CLAUDE.md lists invoking the `aw-*` skills as still prohibited. Needs
+      re-wording/retirement in the same fresh change, not implementation.)*
+- [x] 14.16 Bring the specification workspace to the same standard as the agent conversation.
+      *(2026-08-17: `spec-chat-session`'s entire purpose — reuses the one composer rather than a
+      second implementation, which exceeds "same standard".)*
+- [x] 14.17 Keep specifications plain and portable; reconcile external edits without losing links or
       evidence.
+      *(2026-08-17: `spec-document-authority` "A specification document is a file in the project
+      working directory" + "An externally edited document is reported, not overwritten".)*
 - [ ] 14.18 Verify against `spec-traceability` and `spec-authoring`.
+      *(2026-08-17: cannot be ticked on its own terms — those two names do not exist in the current
+      30-entry `openspec/specs/`. This pass is that verification, done against the real names; see
+      note above for why the box itself stays unticked.)*
 - [ ] 14.19 **`/handoff`**
 
 ## 15. Approval gates in the conversation
