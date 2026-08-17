@@ -662,3 +662,63 @@ Committed, pushed. Runway to `stop_at` (2026-08-17T22:00+01:00) had ~35 minutes 
 iteration's commit landed — comfortable, but item 2's own estimate (~20 min) plus verification and
 write-up would have been tight for a fresh investigation, so the next firing should start item 2
 fresh rather than this one attempting it rushed.
+
+## Iteration 9 (2026-08-17T21:22+01:00)
+
+**Self-directed continuation, item 2: seeded a declaring document + task + evidence, and used the
+already-archived document from item 2's own reasoning.** Verified position first: branch correct,
+`git log` top commit `32e19be` matched STATE.json, tree clean except the same three pre-existing
+untracked items (`.claude/TASTE-PASS-2026-08-17.md`, `hub/seed_taste_doc.py`, `spec/`). No
+reconciliation needed.
+
+**Read before writing any code**, per `next_action`'s own instruction after iteration 8's
+mid-course correction: `hub/hub/requirement_links.py` (identifiers are `FR-\d+`, minted per
+document — the quiet-hours payload's own `r1`..`r7` keys are not identifiers), the four target
+tasks' real text in `openspec/changes/2026-08-16-spec-surface-legibility/tasks.md` (7.4, 7.5) and
+`openspec/changes/2026-08-16-the-board-scoped-by-document/tasks.md` (5.1, 5.2 — the latter's own
+"User test guide" section 6 gave the exact recipe: approve a document that declares a task, approve
+the task, archive the document), and `hub/hub/task_transitions.py` for the real transition graph
+(`pending → in_progress → completed → under_review → approved`, both actor kinds allowed on every
+edge here since the operator is self-approving, which the machine explicitly permits — `design D9`).
+
+**What was done**, all via the live trial Hub API (port 8010), Bearer auth
+(`aw_live_58ab7d84a1bf7b34eb2d1b424875bacd` from `hub/.env`), targeting `proj-5e960453` only:
+- Confirmed via `GET /project/spec/requirements?document=...` that
+  `spec/changes/quiet-hours-for-agent-notifications/spec.html` (A2's fixture) already carries
+  minted identifiers FR-1..FR-7, and via `GET /project/documents` that it is **already
+  `archived`** — a leftover from iteration 2's own Archive-button testing, untouched since. Using
+  it directly (rather than creating a second document) meant "declaring document" and "archived
+  document" could be the same fixture, which is closer to the real scenario the board-scoped
+  change's test guide describes than two separate documents would have been.
+- `POST /tasks` created `task-a4f8e3f4` ("Record a quiet window per project") with
+  `requirement_ids: ["FR-1", "FR-5"]` and `spec_document` set to that path — response confirmed
+  `spec_document_id: "spdoc-77157ff0"` was derived, and both requirement links resolved.
+- `PATCH /tasks/{id}` four times walked it `pending → in_progress → completed → under_review →
+  approved`, each response's `status` field confirmed before the next call.
+- `POST /project/spec/evidence` recorded `ev-5e7bd066` against FR-1 (`kind: manual_observation`,
+  linked to the task); `POST /project/spec/evidence/{id}/decision` rejected it with a reason.
+
+**Verified live**, against the same endpoints the UI itself calls, not just by reasoning about the
+code:
+- `GET /tasks?exclude_archived_completed=true` → `[]` — the approved task on the archived document
+  is correctly excluded. This is the literal mechanism 5.1's "board reads as tidy" depends on.
+- `GET /tasks?spec_document_id=spdoc-77157ff0` → `[task-a4f8e3f4]` — the document-scoped fetch
+  5.2's "tasks declared" link and 7.4's board↔document navigation both use.
+- `GET /project/spec/coverage?document=...` → FR-1 `state: "rejected"`, FR-5 (also linked to the
+  task, no evidence submitted for it) `state: "in_progress"` — the two states 7.5 asks the operator
+  to tell apart genuinely differ here, not just by label.
+
+`.claude/TASTE-PASS-2026-08-17.md` updated: a new "Screen: the board and document" section added to
+Part 1 with the four newly-unblocked tasks (7.4, 7.5, 5.1 full form, 5.2) and what to click to judge
+each; their rows removed from Part 2's blocked table; "what I can set up next" item 2 marked done;
+judgeable-item count corrected 11 → 15 (counted by grepping Part 1's checkboxes, not asserted from
+memory). No code changed — no pytest run, consistent with iteration 8's precedent for pure-seeding
+work; `git status --short` confirms `spec/`, `hub/seed_taste_doc.py` untouched and `testbed/` stays
+gitignored.
+
+**Deliberately not attempted:** item 3 (a capability document and a job with a loop) and item 4
+(binding a runner for a real agent turn, which costs tokens) — left in the doc's own list, per
+`next_action`'s stated fallback order, for the next firing or the operator.
+
+Committed, pushed. Runway to `stop_at` (2026-08-17T22:00+01:00) had ~35 minutes left when this
+iteration's commit landed.
