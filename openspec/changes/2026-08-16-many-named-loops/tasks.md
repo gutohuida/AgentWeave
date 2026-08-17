@@ -180,21 +180,40 @@ check the owning process's `CreationDate` against the commit being tested, not o
 status field — a stale process from an earlier iteration can keep answering `/health: ok` while
 running old code.
 
-- [ ] 7.1 Create a job with a `stop_when_queue_empties` loop and no tasks naming it yet; fire it
+- [x] 7.1 Create a job with a `stop_when_queue_empties` loop and no tasks naming it yet; fire it
       manually (`POST /jobs/{id}/run`) and confirm the fire is skipped, `loop.stop_reason` names the
-      empty queue, and the job's `enabled` flips to `false` in a subsequent `GET`.
-- [ ] 7.2 Create a second loop, add a `Task` naming it via `spec_document_id`-free direct creation
-      (or via whatever the actual task-creation path in this session's environment supports —
-      directly-minted run credential, matching N2/N2b's own verification technique), fire the job,
-      confirm the fire proceeds (queue not empty) and `JobRun.conversation_id` is populated —
-      recorded by checking `GET /jobs/{id}` history entries carry a conversation id, or by a direct
-      DB read if the history schema does not surface it (check `JobRunResponse` before assuming).
-- [ ] 7.3 `GET /tasks?loop_id=<loop>` returns the seeded task; `GET /jobs/{id}` shows `loop.queue`,
-      `loop.current_task` reflecting it.
-- [ ] 7.4 Teardown: delete every row this verification created, confirm `git status` clean afterward
+      empty queue, and the job's `enabled` flips to `false` in a subsequent `GET`. Verified live
+      against the trial Hub (restarted onto this commit first — confirmed by the owning PID's actual
+      `CreationDate`, not just `/health`): manual fire returned `409` with `"loop queue is empty"`,
+      and the subsequent `GET` showed `enabled: false` and `loop.stop_reason` naming it.
+- [x] 7.2 Create a second loop, add a `Task` naming it via direct creation (`TaskCreate` has no
+      client-settable `loop_id` — confirmed by reading the schema — so this used a direct SQLite
+      insert, the same technique N2/N2b used for a run credential), fire the job, confirm the fire
+      proceeds (queue not empty) and `JobRun.conversation_id` is populated. `JobRunResponse` and
+      `get_job`'s hand-built history dict both omit `conversation_id` (checked before assuming, per
+      the task's own instruction) — read directly from `job_runs` instead: populated on the row the
+      fire created. The manual fire did not report the empty-queue skip (confirming `_loop_stop_reason`
+      passed once the queue held one task); `trigger_agent_directly` then raised its own "no runner
+      bound" `TriggerAgentError` for the placeholder agent name, caught by `schedule_agent` — no real
+      process was spawned, and `conversation_id` was already committed before that call, so the
+      no-runner outcome downstream does not affect what this task verifies.
+- [x] 7.3 `GET /tasks?loop_id=<loop>` returns the seeded task; `GET /jobs/{id}` shows `loop.queue`,
+      `loop.current_task` reflecting it. Verified: `queue.pending >= 1` and `current_task.id` matched
+      the seeded task's id.
+- [x] 7.4 Teardown: delete every row this verification created, confirm `git status` clean afterward
       (this repo is the trial project's own working directory, per this session's standing practice).
+      Script (`testbed/scratch/n3_live_verify.py`, gitignored) deletes its own tasks/loops/jobs/runs
+      in a `finally` block; `git status --porcelain` confirmed clean after the run — 16/16 checks
+      passed.
 
 ## 8. Human-only verification
+
+**Cannot be completed unattended — findable, not verified.** A live screenshot this iteration
+(`?project=proj-5e960453&tab=jobs`, expanded card) shows a job named `screenshot-loop-demo` with a
+green "Active" loop badge, its purpose text, "Queue: 1 pending: 1", and a blue clickable current-item
+line — consistent with both items below, but an agent cannot judge "does this look unchanged" or
+"does this read as an extension, not a second concept" the way an operator's own eye can. Left
+unticked for the operator to confirm against a live Hub.
 
 - [ ] 8.1 **Does a plain job's card look unchanged?** Open the Jobs page with a mix of loop and
       non-loop jobs; confirm a job created before this change (or created without loop fields) shows
@@ -204,6 +223,17 @@ running old code.
       attached to, not a different kind of thing bolted on beside it.
 
 ## 9. User test guide
+
+**Checked this iteration against the actually-implemented UI** — a live screenshot of an expanded
+`JobCard` with a purpose, one pending task and a clickable current item matched steps 1-2 exactly
+(purpose text, "Queue: 1 pending: 1", the current item as a blue link). One correction made to step 4
+below: a direct DB check after a manual fire that hit the empty-queue stop showed the scheduler still
+creates a `Conversation` row before either skip check runs (`_do_fire_job` builds/reuses the
+conversation at lines ~317-334, then checks `_job_agent_skip_reason` and `_loop_stop_reason`
+afterward, committing whichever branch it takes together with the already-`session.add`-ed
+conversation) — pre-existing scheduler behaviour, not introduced by this change, and true of the
+older agent-skip path too. The row carries no message and triggers no turn, so "the agent is not
+triggered" is accurate and is what the guide now says; "does not start a new conversation" was not.
 
 **Setup.** Hub running on `:8010`. A project with the agent-job allowance enabled (or operator-driven
 creation, which needs none).
@@ -218,8 +248,10 @@ creation, which needs none).
    - *Expect:* the queue count drops to zero open tasks; the current item clears.
 4. **The loop stops itself.** Either wait for the job's next cron fire or trigger it manually ("Run"
    on the card).
-   - *Expect:* the fire does not start a new conversation; the card now shows the loop as stopped,
-     with a reason naming the empty queue, and the "Active" badge is gone.
+   - *Expect:* the agent is not triggered and no turn is queued for it; the card now shows the loop as
+     stopped, with a reason naming the empty queue, and the loop block's own "Active" badge becomes
+     "Stopped" (the job's separate header badge changes from "Active" to "Paused" at the same time,
+     since the fire also disabled the job).
 5. **A plain job is unaffected.** Create a second job without expanding the loop section.
    - *Expect:* its card never shows a loop block, at any point in this walkthrough.
 

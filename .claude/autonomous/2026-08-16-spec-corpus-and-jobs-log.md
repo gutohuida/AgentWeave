@@ -1159,3 +1159,87 @@ and `GET /jobs/{id}`'s `loop.queue`/`loop.current_task` both reflecting the seed
 teardown of every row created, confirmed by `git status` staying clean (this repo is that project's own
 working directory, so nothing here should ever go dirty from a live-Hub check). Sections 8 and 9 close
 out N3 once section 7 lands. Once N3 is fully closed, `current` advances to `N4-q6-decisions`.
+
+## Entry 13 — N3 closes: section 7 driven live, section 8 recorded, section 9 corrected. No code changed.
+
+**2026-08-17T02:43:11+01:00.** Closed out `many-named-loops` entirely. No source file changed this
+iteration — only `openspec/changes/2026-08-16-many-named-loops/tasks.md` (sections 7-9) and this log.
+`current` advances to `N4-q6-decisions`.
+
+**Restart, done correctly this time:** the running Hub (PID 22760) predated `619fd5a` by two hours
+(`CreationDate` 00:21:54 vs the commit landing ~02:19) — `/health` still reported `{"status":"ok"}`
+with no `ui_stale`, exactly the trap N2b's own finding named. Killed it, freed `:8010`, restarted from
+`hub/` per the documented command; the new process (PID 32276, `CreationDate` 02:35:09) is after every
+commit on this branch.
+
+**Section 7, driven against the live trial Hub** (`testbed/scratch/n3_live_verify.py`, gitignored,
+deleted after this run rather than kept — nothing later in the queue needs a job/loop live check the
+way N2b's document/task script was kept for reuse): 16/16 assertions passed.
+- 7.1: a `stop_when_queue_empties` loop created with zero tasks, fired manually via
+  `POST /jobs/{id}/run` → **409** `"loop queue is empty"`. Subsequent `GET` showed `enabled: false`
+  and `loop.stop_reason` naming it — exactly design D4's contract.
+- 7.2: `TaskCreate` has no client-settable `loop_id` (confirmed by reading the schema before assuming
+  a task-creation endpoint would take one) — seeded the task with a direct SQLite insert, the same
+  technique N2/N2b used for a run credential. Fired the second loop's job: the manual fire did *not*
+  report the empty-queue skip (confirming `_loop_stop_reason` read the seeded task and let the fire
+  proceed). `JobRunResponse` and `get_job`'s hand-built history dict both omit `conversation_id`
+  (checked, per the task's own instruction, before assuming) — read `job_runs.conversation_id`
+  directly instead: populated. Downstream, `trigger_agent_directly` raised its own "no runner bound"
+  `TriggerAgentError` for the placeholder agent name (it has no `Agent` row at all), caught by
+  `schedule_agent` — confirmed by reading `agent_trigger.py:299` first that this is a graceful,
+  no-spawn refusal, not a real process launch, before firing anything against the live instance.
+  `conversation_id` was already committed on the `JobRun` row before that call, so the no-runner
+  outcome downstream never touched what this task verifies.
+- 7.3: `GET /tasks?loop_id=<loop>` returned the seeded task; `GET /jobs/{id}` showed
+  `loop.queue.pending >= 1` and `loop.current_task.id` matching it.
+- 7.4: the script's own `finally` block deleted every task/loop/job/run row it created;
+  `git status --porcelain` empty afterward.
+
+**A real design detail found while writing 7.2's teardown check, not assumed away:** `Conversation`
+rows are created *before* either `_job_agent_skip_reason` or `_loop_stop_reason` runs in
+`_do_fire_job` (`scheduler.py` lines ~317-334 build/reuse the conversation; both skip checks come
+after, and whichever branch commits, commits the already-`session.add`-ed conversation along with
+it). Verified directly: firing a brand-new empty-queue loop still leaves behind exactly one
+`Conversation` row for that agent, carrying no message. Pre-existing scheduler behaviour — true of
+the older agent-skip path too, not introduced by this change — so out of scope to change tonight, but
+it made the draft user test guide's step 4 claim ("the fire does not start a new conversation")
+false in a way an operator could actually notice. Not queued as a fix (scope ceiling: model + API +
+visibility only); recorded in `prep_notes.backlog` below for whoever picks up loop/scheduler work
+next.
+
+**Section 8, human-only, left unticked with reasoning recorded inline** (tasks.md now says why): a
+live screenshot this iteration — `?project=proj-5e960453&tab=jobs`, card expanded via
+`page.get_by_label("Expand job details")` — shows a job named `screenshot-loop-demo` with a green
+"Active" loop badge, its purpose text, "Queue: 1 pending: 1", and a blue clickable current-item line
+("Fix flaky test_agent_trigger.py (pending)"). Consistent with both 8.1 and 8.2's intent, but "does
+this look unchanged" and "does this read as an extension, not a second concept" are judgments an
+agent should not tick on the operator's behalf. Screenshot and demo job/task were throwaway
+(`testbed/scratch/n3_expand_shot.py`, deleted after use) and torn down via direct SQL delete;
+`git status` confirmed clean.
+
+**Section 9, checked against the actual UI, one correction made:** steps 1-2 of the draft guide
+matched the screenshot exactly (purpose text, queue count, current-item link) — confirmed rather than
+assumed. Step 4's "the fire does not start a new conversation" was corrected to "the agent is not
+triggered and no turn is queued for it," per the `Conversation`-row finding above, and a note was
+added distinguishing the loop block's own "Active"/"Stopped" badge from the job header's separate
+"Active"/"Paused" badge (`JobCard.tsx` lines 26 and 125-127 render two different badges with
+overlapping label text — the guide's "the 'Active' badge is gone" was ambiguous about which one).
+
+**Verified, not trusted:** `npx openspec validate --changes --strict` → 20/20, unchanged (only
+`tasks.md` checkbox/prose edits, no spec-delta touched). No Python or UI test suite re-run this
+iteration — no source file changed, so `verified_green_at_iteration_12_commit_619fd5a` still holds as
+the baseline for the next code-touching iteration.
+
+`many-named-loops` is now 33/35 tasks checked (the 2 remaining are 8.1/8.2, explicitly left to the
+operator). Left unarchived deliberately — archiving an openspec change is not gated behind the same
+operator-only rule as archiving a *spec document* inside the product (that is N2's own concern), but
+N6's own scope is "the 13 pre-08-16 changes"; `many-named-loops` is dated 2026-08-16 and completing
+tonight, so it is not stale backlog and archiving it is left to whoever runs N6 or the operator,
+not automatic on task completion.
+
+`next_action` set to N4-q6-decisions: read the "# Amendments — 2026-08-16, before implementation"
+section at the end of `openspec/changes/2026-08-16-one-hub-and-a-window-of-its-own/design.md` and
+resolve A1 (verify-only, already fixed), A2 (pywebview forfeits Playwright testability), and A3 (the
+instance-profile concept, `cmd_reset`'s blast radius, repo-root shadowing). Run the spec-round
+protocol on the revision. **SPEC ONLY — do not implement**; at_cap's approve-and-execute does not
+apply to N4 because implementation would need pywebview, which is not authorised.
