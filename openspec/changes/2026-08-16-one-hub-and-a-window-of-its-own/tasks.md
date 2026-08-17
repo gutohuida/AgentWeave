@@ -34,6 +34,15 @@ name are both process/config-level, not schema.
 - [ ] 1.7 Do not add Docker profile support, a remembered per-profile default port, a
       `agentweave profile list` command, or a rename/delete-profile subcommand — `design.md` D6 names
       these as open follow-ups, not part of this task.
+- [ ] 1.8 **Added 2026-08-17, round-2 cold review (`design.md` D6, "Port").** When `--profile` names
+      anything other than `"default"` and `--port` was not explicitly passed on the command line
+      (distinguish "not passed" from "passed and happens to equal 8000" — argparse's plain
+      `default=8000` on `--port` cannot tell the two apart, so this needs an explicit
+      passed-vs-default check, e.g. a sentinel default or `sys.argv` inspection, not a value
+      comparison), exit with a clear error naming both `--profile` and `--port` rather than silently
+      resolving to `DEFAULT_HUB_PORT` — closes the port-collision gap round 1's D6 left open (a named
+      profile with no `--port` would otherwise try to bind the same port the default profile normally
+      uses). Applies to bare `agentweave`, `agentweave status`, and `agentweave stop`.
 
 ## 2. Backend tests — agent-verifiable
 
@@ -70,6 +79,12 @@ name are both process/config-level, not schema.
 - [ ] 2.8 A test that `agentweave reset --profile a` deletes only profile `a`'s directory when both
       `a` and `b` have data present, and that bare `agentweave reset` (no `--profile`) does not touch
       `profiles/` at all.
+- [ ] 2.9 **Added 2026-08-17, round-2 cold review (D6, task 1.8).** A test that
+      `agentweave --profile dev` (no `--port`) exits with an error rather than resolving to
+      `DEFAULT_HUB_PORT` — the regression test for the port-collision gap found in round 2. Also
+      assert the positive case still works: `agentweave --profile dev --port 8010` does not raise the
+      same error. Mutation-check: temporarily remove the passed-vs-default check from 1.8, confirm
+      this test fails, then restore.
 
 ## 3. Desktop window (D3, D5)
 
@@ -185,6 +200,10 @@ is green."
       `agentweave stop --profile dev` and confirm the default instance is unaffected. Confirm
       `agentweave reset --profile dev` removes only that profile's data by checking the default
       profile's data is still present afterward.
+- [ ] 6.7 **Added 2026-08-17, round-2 cold review (D6, task 1.8).** Run `agentweave --profile dev`
+      with no `--port` and confirm the error message names both flags and is legible — not a raw
+      argparse traceback — and that no process ends up listening on the default port under the `dev`
+      profile's name.
 
 ## 7. User test guide
 
@@ -215,10 +234,16 @@ or `pip install agentweave-ai` (for the global-state steps, no extra needed).
      projects as the default instance. `agentweave status --profile dev` reports it separately from
      `agentweave status` (default). Stopping it (`agentweave stop --profile dev`) does not affect the
      default instance from step 1.
+   - *Now try it without `--port`:* run `agentweave --profile dev` alone.
+   - *Expect:* the command exits with an error naming both `--profile` and `--port` — it does not
+     start a second Hub on the same default port the instance from step 1 is using.
 
 **Where it would go wrong:** if step 1 shows a different project list or a fresh empty state after
 switching directories, the global-state fix did not take. If step 4's second instance shares the
-default instance's project list or database, profile isolation did not take. If step 2's window has
+default instance's project list or database, profile isolation did not take. If running
+`agentweave --profile dev` without `--port` starts a Hub anyway instead of erroring, the
+port-collision guard did not take — check whether it is quietly sharing the default instance's port.
+If step 2's window has
 browser chrome
 (tabs, an address bar) despite `pywebview` being installed, the native-window path silently fell
 back without saying so — that is a defect, not a taste call.

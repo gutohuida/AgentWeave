@@ -1334,3 +1334,84 @@ cold review finds no blocking gap, record APPROVE and this change is 3-round-eli
 *future* iteration's implementation pass — implementation is still gated on `pywebview` authorization
 per `limits`, so approval alone does not trigger `at_cap`'s execute clause here. If the review does
 find gaps, fix them in the same iteration if small, or record a targeted round-3 next_action if not.
+
+## Entry 15 — N4 round 2 (cold review): one real gap found and fixed — a named profile with no `--port` would silently collide with the default profile's port. APPROVE recorded. N4 done; `current` advances to N5.
+
+**2026-08-17T03:07:40+01:00.** Worked N4-q6-decisions, round 2: a cold review of the amended
+`2026-08-16-one-hub-and-a-window-of-its-own` change as it stood after iteration 14's round 1 — fresh
+read, not a continuation of that iteration's own authoring context, checking the four questions
+`next_action` posed.
+
+**(1) Does D6 close A3's three named consequences?** The three original ones (dual-writer via
+`DATABASE_URL`, blind `stop`/`status` via the PID file, ambiguous `reset` blast radius) all check out
+against D6's database/PID-file/reset text. But cold review found a **fourth**, self-inflicted by D6
+and never in A3's original table because A3 predates D6: read `src/agentweave/cli.py` directly (not
+assumed from the design's own prose) and confirmed `--port` already defaults to `DEFAULT_HUB_PORT`
+(8000) on every subparser — bare invocation (`cli.py:1076`), `status` (`:1105`), `stop` (`:1109`).
+Round 1's D6 said "`--port` stays required alongside `--profile`" but nothing in `tasks.md` or the
+spec delta actually enforced that — an operator who ran `agentweave --profile dev` without `--port`
+would silently resolve to the same port the default profile normally uses, a real TCP-level bind
+collision that profile-namespaced database and PID-file paths do nothing to prevent (they namespace
+*identity*, not the socket). This is exactly the kind of gap "does it close the consequences, not just
+gesture at them" was written to catch.
+
+**Fixed in this same round, not deferred**, per `next_action`'s instruction that a small gap gets
+fixed inline: `design.md`'s D6 "Port" bullet now states the requirement is enforced, not aspirational,
+and explains why (`--port`'s existing `default=8000` means an operator who forgets it gets a value,
+not an error, unless something checks). Added `tasks.md` **1.8** (implementation — flags the
+passed-vs-default distinction argparse's plain `default=8000` can't make on its own, so this needs a
+sentinel or `sys.argv` check, not a value comparison) and **2.9** (regression test, mutation-checked).
+Added a **new spec scenario**, "A named profile without an explicit port is rejected," under the
+`app-lifecycle` ADDED requirement, plus a SHALL sentence in the requirement body. Added **6.7**
+(human-only: confirm the error message is legible, not a raw traceback) and a fourth bullet to
+section 7 step 4's user guide walking an operator through the failure case, plus a matching line in
+"Where it would go wrong."
+
+**(2) Is the A2 thin-shell constraint concrete enough for task 3.5?** One looseness closed: D3's
+allowed list ("no logic beyond `webview.create_window`/`webview.start`, the fallback's exception
+catch...") did not say whether task 3.2's mandated diagnostic print on a caught exception counted as
+part of "the exception catch" or as forbidden extra logic — a reviewer checking 3.5 would have had to
+guess. Closed by naming the print explicitly as part of the permitted catch, in both D3's paragraph and
+the amendments-resolved note.
+
+**(3) Do the tasks (now nine after 1.8/2.9) cover D6 end to end — flag parsing, path resolution, PID
+namespacing, reset scoping, `DATABASE_URL` precedence — without a gap?** Re-checked item by item
+against that five-part list: 1.4 (flag + resolution + precedence), 1.5 (PID), 1.6 (reset), 2.5-2.8 each
+mirror an implementation task with a test, 2.9 now covers the port gap. No further gap found.
+
+**(4) Is anything now inconsistent across the edited files?** Checked task-to-scenario references
+(2.5 against `TestTwoInstancesDoNotCollide`, 6.6/6.7 against the spec's "Two profiles do not collide,"
+"Reset targets exactly one profile," and the new "A named profile without an explicit port is
+rejected" scenarios, section 7 against the same) — all consistent. `proposal.md` was left untouched
+this round (confirmed by `git status --porcelain` — only `design.md`, `tasks.md`, and the spec delta
+changed): it documents D6 at the same level of detail it always has (no PID-filename shape, no port
+requirement) and adding one task-level detail without the others would have made the inconsistency
+worse, not better.
+
+**Verdict recorded in `design.md`'s new "Round 2 — cold review, 2026-08-17" section: APPROVE**, with
+the port gap fixed inline rather than deferred to a round 3. Task count: 30 → 32 (21 original + this
+round's 1.8/2.9; iteration 14's D6 additions already brought it from 21 to 30).
+
+**Verified, not trusted:** `npx openspec validate --changes --strict` → 20/20, this change clean after
+all of this round's edits. Gapless numbering re-confirmed with `grep -n "^- \[ \] [0-9]"` across the
+whole file. `git status --porcelain` showed exactly the three edited files, nothing else — no source
+file touched, so `verified_green_at_iteration_12_commit_619fd5a` still holds as the Python/UI baseline
+(unchanged since iteration 12, N4 never touched source).
+
+**Still SPEC ONLY.** No `pywebview` installed, no `--profile`/`--port`-requirement code written.
+`at_cap`'s approve-and-execute does not apply here — approving the *spec round* is not the same gate as
+authorizing the *dependency* `limits` withholds; the change is 3-round-eligible again but implementation
+stays blocked on `pywebview` until the operator says otherwise.
+
+**N4-q6-decisions is done — both rounds closed, change approved for a future implementation pass.**
+`current` advances to `N5-architecture-proposals`. `next_action`: read
+`openspec/explorations/2026-08-15-where-agentweave-fits.md` (178 lines); first correct its §2 error in
+place or via a dated addendum — it currently concludes "the operator has, in practice, already run the
+comparison and picked the competitor for the harder job," which the operator has directly said is
+false: "The one thing that it got wrong is that I chose the openspec before my spec. It was just a
+matter that my spec didn't exist when I started with agentweave. So until it catches up in maturity I
+could not use it." — chronology, not a verdict. Then
+propose one or more architectures building from the exploration's surviving narrow claim (durable
+cross-session state, addressable bound identity, an operator-facing UI), accounting for a world where
+tonight's N2 (archive/capability phases) and N3 (many-named-loops) have already shipped. Thinking
+documents only, no code — same shape as N1.

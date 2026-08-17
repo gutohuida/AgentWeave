@@ -142,6 +142,11 @@ from the default profile's path and from every other named profile's.
 An explicit `DATABASE_URL` environment variable SHALL continue to override whatever path profile
 resolution would otherwise compute, exactly as it does today without `--profile`.
 
+A `--profile <name>` value other than `"default"` SHALL require an explicit `--port` argument. If
+`--port` was not explicitly given, the system SHALL exit with an error naming both flags rather than
+silently resolving to the default port, because that default port is the same one the default
+profile normally runs on.
+
 `agentweave reset` SHALL target only the default profile's data unless invoked with
 `--profile <name>`, in which case it SHALL target only that named profile's data. `agentweave reset`
 SHALL NOT delete more than one profile's data in a single invocation.
@@ -171,3 +176,9 @@ SHALL NOT delete more than one profile's data in a single invocation.
 - **WHEN** `agentweave reset --profile a` is run while profiles `a` and `b` both have data
 - **THEN** only profile `a`'s data is deleted
 - **AND** profile `b`'s data is untouched
+
+#### Scenario: A named profile without an explicit port is rejected
+
+- **WHEN** `agentweave --profile dev` is run with no `--port` argument
+- **THEN** the system exits with an error naming both `--profile` and `--port`
+- **AND** it does not start a Hub instance on the default port

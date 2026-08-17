@@ -130,12 +130,13 @@ window on Windows — there is no Playwright backend for it, and the only theore
 (`--remote-debugging-port` + CDP attach) is not exposed or supported by pywebview. This is accepted,
 not solved, on the strength of a binding constraint this decision now states explicitly rather than
 argues informally: the native-window shell (`_open_app_window_native`, task 3.2) SHALL contain no
-logic beyond `webview.create_window`/`webview.start`, the fallback's exception catch, and the
-URL/title arguments `_hub_resolve_launch_url` already resolves — no conditional rendering, no data
-fetching, nothing window-specific a bug could hide that the identical URL served to a real browser
-would not also exhibit. Enforced by task 3.5 (a diff-review/line-count check against `_open_app_
-window_native`'s body, not a runtime assertion — there is nothing to execute against a window
-Playwright cannot open). Everything downstream of "a window pointed at this URL" — every page, every
+logic beyond `webview.create_window`/`webview.start`, the fallback's exception catch (including the
+single diagnostic message it prints naming what's missing, per task 3.2 — that print is part of the
+permitted catch, not extra logic), and the URL/title arguments `_hub_resolve_launch_url` already
+resolves — no conditional rendering, no data fetching, nothing window-specific a bug could hide that
+the identical URL served to a real browser would not also exhibit. Enforced by task 3.5 (a
+diff-review/line-count check against `_open_app_window_native`'s body, not a runtime assertion —
+there is nothing to execute against a window Playwright cannot open). Everything downstream of "a window pointed at this URL" — every page, every
 interaction — is already exercised by the existing Playwright suite against the identical
 FastAPI-served bundle in a real browser. That is a stronger claim than "we didn't test it" and a
 weaker one than "the shell is proven," and this design states the difference rather than implying
@@ -217,9 +218,18 @@ are singletons today into one named identity:
   at the default port, so the filename alone identifies which profile it belongs to and it can never
   collide with the default profile's file at the same port.
 - **Port.** Unaffected for the default profile. A named profile has no port of its own in this
-  decision — `--port` stays required alongside `--profile` when the operator wants a specific one.
-  Remembering a profile's last-used port is a real convenience but optional, and not what closes A3
-  (the ambiguity A3 named was collision and blast radius, not needing to retype `--port`).
+  decision, and `--port` already defaults to `DEFAULT_HUB_PORT` (8000) on every subparser today
+  (`cli.py:1076,1105,1109`) — silently reusing that default for a named profile would let it collide
+  with the default profile's own instance at the TCP level, a bind conflict that profile-namespaced
+  database and PID-file paths do nothing to prevent, because those namespace *identity*, not the
+  socket. So: when `--profile` names anything other than `"default"`, `--port` becomes a required
+  argument — the CLI SHALL exit with a clear error naming both flags rather than silently defaulting
+  to 8000. **Caught in round-2 cold review (2026-08-17):** the amendment's original phrase "`--port`
+  stays required" was aspirational, not enforced anywhere in round 1's D6 text or `tasks.md` — nothing
+  upstream would have caught the omission, since `--port`'s existing `default=8000` means an operator
+  who forgets it gets a value, not an error. Remembering a profile's last-used port so this
+  requirement could be dropped is a real convenience but optional, and not what closes A3 (the
+  ambiguity A3 named was collision and blast radius, not needing to retype `--port`).
 
 **`DATABASE_URL` still wins, unchanged.** The already-shipped minimal fix made `DATABASE_URL` an
 explicit override; `--profile` computes a *default* database path the same way the bare CLI does
@@ -363,6 +373,10 @@ stated resolution rather than re-deriving one from the objections alone.
   requirement task (3.5) can check. Playwright still cannot drive the WebView2 window itself; that
   limitation is accepted and named, not solved, and the design says so rather than implying coverage
   it doesn't have.
+  **Sharpened in round-2 cold review (2026-08-17):** the allowed list now explicitly names the
+  diagnostic print on a caught exception (task 3.2's "a message is printed naming what's missing") as
+  part of the permitted "fallback's exception catch," closing a reading under which task 3.5's
+  reviewer would have to guess whether that print counts as extra logic.
 - **A3 — resolved with D6 (named profiles), added above.** `--profile <name>` on `agentweave`/
   `status`/`stop`, a profile-namespaced database path and PID file, and `reset --profile <name>`
   scoping reset's blast radius to one profile. Docker's profile-equivalent is named and explicitly
@@ -376,3 +390,56 @@ change did not evaluate D6, because D6 did not exist yet. The spec-round protoco
 approve-and-execute at cap for the *original* proposal; this revision restarts that count at round 1
 for the amended scope, per the operator's own framing of these amendments as needing "a further review
 round" before implementation begins — not a continuation of the original count.
+
+---
+
+# Round 2 — cold review, 2026-08-17
+
+A fresh read (not a continuation of round 1's own authoring context) of `design.md`, `proposal.md`,
+the `app-lifecycle` spec delta, and `tasks.md` as they stood after round 1, checking the four
+questions the round-1 `next_action` posed.
+
+**(1) Does D6 close A3's three named consequences?** Database and PID-file namespacing and
+`reset --profile` scoping all check out against A3's table — verified by re-reading, not re-deriving.
+But cold review surfaced a **fourth** consequence D6 itself introduces and A3's original table never
+named, because A3 predates D6: a named profile with no explicit `--port` would silently resolve to
+`DEFAULT_HUB_PORT` (8000, confirmed live at `cli.py:1076,1105,1109` — every subparser defaults it),
+the same port the default profile normally runs on. Profile-namespaced database and PID-file paths do
+not prevent this — they namespace *identity*, not the TCP socket — so two profiles started without
+distinct `--port` values would collide at bind time, or worse, whichever started first would silently
+"win" the port while the second's process failed in a way neither the database path nor the PID
+filename would explain. **Fixed this round**, not deferred: D6's "Port" bullet above now makes
+`--port` a required argument whenever `--profile` is not `"default"`, with the CLI erroring out by
+name rather than defaulting into a collision. New tasks 1.8 (implementation) and 2.9 (regression test)
+added to `tasks.md`; spec delta gets a new scenario. This is exactly the kind of gap the round-2
+charter asked for — "not just gesture at" the consequences — the original three were closed cleanly,
+the gap was in a fourth D6 introduced itself.
+
+**(2) Is the A2 thin-shell constraint concrete enough for task 3.5 to be checkable?** Mostly, with one
+looseness closed this round: D3's allowed list ("no logic beyond `webview.create_window`/
+`webview.start`, the fallback's exception catch, ...") did not say whether the diagnostic message task
+3.2 requires printing on a caught exception counted as part of "the exception catch" or as forbidden
+extra logic — a reviewer checking 3.5 would have had to guess. Closed by naming the print explicitly
+as part of the permitted catch, in both D3 and the amendments-resolved note above.
+
+**(3) Do the seven new tasks (now nine, after this round's 1.8/2.9) cover D6 end to end — flag
+parsing, path resolution, PID namespacing, reset scoping, `DATABASE_URL` precedence — without a gap?**
+Yes, re-checked task by task against that five-item list: 1.4 (flag + path resolution +
+`DATABASE_URL` precedence), 1.5 (PID namespacing), 1.6 (reset scoping), 2.5-2.8 mirror each
+implementation task with a test, 2.9 now covers the port-collision gap found in (1). No further gap
+found.
+
+**(4) Is anything now inconsistent across the four edited files?** Checked task-to-scenario references
+(2.5 against `TestTwoInstancesDoNotCollide`, 6.6 against the spec's "Two profiles do not collide" and
+"Reset targets exactly one profile" scenarios, section 7 step 4 against the same) — all consistent.
+No stale cross-reference found.
+
+**Verdict: APPROVE**, with the port-requirement gap fixed in this same round rather than deferred to a
+round 3 — small enough to close immediately per `next_action`'s instruction. This change is
+3-round-eligible again for a future iteration's implementation pass. Implementation remains gated on
+`pywebview` authorization per `STATE.json`'s `limits`; approval alone does not trigger `at_cap`'s
+execute clause here, because that gate is about the spec-round count, not about dependency
+authorization, and the two are independent.
+
+**Verified, not trusted:** `npx openspec validate --changes --strict` after this round's edits — see
+the log entry for the actual result.
