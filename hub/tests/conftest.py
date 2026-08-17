@@ -1,10 +1,13 @@
 """Shared test fixtures for AgentWeave Hub."""
 
 import os
+import traceback
+from collections import deque
 
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import event
 
 # Use in-memory SQLite for tests
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
@@ -19,6 +22,35 @@ from hub.project_workspace import (
     # A module-level constant holding the unpatched original, not a function alias.
     resolve_project_workspace as _REAL_RESOLVE_PROJECT_WORKSPACE,  # noqa: N812
 )  # noqa: E402
+
+# --- temporary diagnostic, remove once the model-switch flake is closed ---------------
+#
+# `sqlite+aiosqlite:///:memory:` resolves to a **StaticPool**: one DBAPI connection shared by
+# every session in the process. SQLAlchemy tracks transaction state per Session, SQLite tracks
+# it per connection, so a second session opening and closing concurrently ends the transaction
+# out from under the first and discards its pending UPDATE — the first session's `commit()`
+# still returns cleanly. Measured in isolation at 105/200 lost with a concurrent poller against
+# 0/200 without, which matches the CI failure rate of the one test still red on master.
+#
+# That establishes the mechanism. This names the culprit: every ROLLBACK on the shared
+# connection is recorded with the hub/tests frames that issued it, so the assertion in
+# `_await_agent_idle` can print who ended the transaction rather than infer it.
+connection_events: deque = deque(maxlen=40)
+
+
+def _record(kind: str) -> None:
+    frames = [
+        f"{f.filename.rsplit(os.sep, 1)[-1]}:{f.lineno} {f.name}"
+        for f in traceback.extract_stack()
+        if (f"{os.sep}hub{os.sep}" in f.filename or f"{os.sep}tests{os.sep}" in f.filename)
+        and "conftest.py" not in f.filename
+    ]
+    connection_events.append(f"{kind} <- {' | '.join(frames[-4:])}")
+
+
+event.listens_for(engine.sync_engine, "rollback")(lambda conn: _record("ROLLBACK"))
+event.listens_for(engine.sync_engine, "commit")(lambda conn: _record("COMMIT"))
+# --- end temporary diagnostic ---------------------------------------------------------
 
 
 @pytest_asyncio.fixture

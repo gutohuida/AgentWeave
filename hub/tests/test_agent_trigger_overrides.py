@@ -11,6 +11,7 @@ from sqlalchemy import select
 from hub.db.engine import async_session_factory
 from hub.db.models import Run
 from hub.sse import sse_manager
+from tests import conftest
 from tests.test_agent_trigger import (
     _await_background_run,
     _bind_codex_exec_runner,
@@ -267,7 +268,11 @@ async def _await_agent_idle(project_id, agent, timeout=10.0):
         f"  _background_runs (should be empty if _await_background_run already ran): "
         f"{len(agent_trigger_module._background_runs)} pending\n"
         f"  _active_ptys keys: {list(agent_trigger_module._active_ptys.keys())}\n"
-        f"  _run_trace: {traces}"
+        f"  _run_trace: {traces}\n"
+        # Every COMMIT/ROLLBACK on the one shared connection, newest last. The finalize's own
+        # COMMIT should appear; a ROLLBACK from another session sitting between the finalize's
+        # flush and that COMMIT is the mechanism, and these frames name which session it was.
+        f"  connection_events (oldest first):\n    " + "\n    ".join(conftest.connection_events)
     )
 
 
