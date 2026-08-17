@@ -171,12 +171,20 @@ observed via the API in 4c, but not with a person driving the UI, which is what 
 
 - [ ] 5.1 **The original symptom is gone.** Create a project on a directory that is not a repository,
       create an agent, send a message. The turn should start, not queue.
+      **WAIVED for archiving, 2026-08-17 (autonomous N6).**
+      `.claude/autonomous/2026-08-15-judgement-evidence.md` § this change, 5.1: confirmed twice
+      independently via the API (`4c` and a fresh drive this session) — `status: "running"`,
+      `waiting_reason: null`, no queuing. What remains is purely the literal act of a person watching
+      the running UI, which an unattended run cannot do.
 - [x] 5.2 Does the agent behave sensibly with no repository — does it avoid proposing branches and
       commits, and does it read a failed `git status` correctly rather than as a broken environment?
       This is what D3's sentence is for and no test can answer it.
       **Accepted by the operator, 2026-08-16**, on the live evidence recorded in `.claude/autonomous/2026-08-15-judgement-evidence.md` — run id, tool-call order and cost for each.
 - [ ] 5.3 Is the workspace panel's no-repository note legible as information rather than as a
       problem? It was an amber alert; confirm it no longer reads as one.
+      **WAIVED for archiving, 2026-08-17 (autonomous N6).** Listed in judgement-evidence.md's "Still
+      entirely uncaptured" section — a pure visual read of the rendered panel; nothing an API drive
+      can answer. Left open for the operator to glance at rather than waived silently by ticking.
 - [x] 5.4 Run two writing agents in the same non-repository project and see whether the shared
       directory is tolerable in practice, or whether D7's accepted risk needs revisiting.
       **Closed by operator decision, not by observation** — *"It's acceptable. The user has to deal

@@ -78,8 +78,19 @@ surface; 5 specs; 6 verification.
 ### 6b. Human-only — the operator runs these
 
 - [ ] 6.8 Does dismissing feel like it *ended* the question, or like it merely hid it?
+      **WAIVED for archiving, 2026-08-17 (autonomous N6).** Evidence gathered and driven live —
+      `.claude/autonomous/2026-08-15-judgement-evidence.md` § `2026-08-11-declining-a-question` 6.8:
+      the declined row survives in the database but no UI surface renders a struck-through or
+      "declined" state, so from the operator's seat it reads as ended, not merely hidden. The
+      remaining feel-question ("does that read as *ended*") is the operator's own subjective read,
+      not something an unattended run can settle — waived rather than fabricated.
 - [ ] 6.9 With a stale question and a live one outstanding, is it obvious which one is being asked
       of you?
+      **WAIVED for archiving, 2026-08-17 (autonomous N6).** Same evidence file, 6.9: the live-first
+      sort means only one question ever renders per agent, so the ambiguity this asks about is
+      structurally prevented rather than resolved by a visual cue — confirmed against the real sort
+      order and rendering code. Left unticked because it is still a felt judgement about the UI, not
+      a fact this run can assert on the operator's behalf.
 - [x] 6.10 Is "nobody is waiting on this" the right thing to say about a question whose agent has
       moved on — or does it read as an error?
 - [x] 6.11 Does declining ever lose something you wanted back? (D1 keeps the record; nothing surfaces

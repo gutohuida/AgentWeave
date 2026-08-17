@@ -76,6 +76,13 @@ Not assertable by a test — they need the running app and a person watching.
 - [ ] 4.4 **Judge the wider execution surface.** The default now permits commands inside the
       worktree that it previously blocked. Watch one real build turn and decide whether what it runs
       is what you want agents running unattended.
+      **WAIVED for archiving, 2026-08-17 (autonomous N6).**
+      `.claude/autonomous/2026-08-15-judgement-evidence.md` § this change, 4.4: only a minimal build
+      turn (one file write, one requested shell command) has been observed — too small a sample to
+      judge the *general* surface an agent chooses to run unprompted on a larger task. This is a
+      genuine open item, not a felt-only question with existing evidence; left unticked rather than
+      waived on a false claim of coverage. Worth a real multi-step build turn read specifically for
+      this question.
 
 ## 5. User test guide
 

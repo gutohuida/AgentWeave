@@ -89,6 +89,10 @@ grounded in the repository, and it stopped. No `ask_user`. No OpenSpec.
       as the skill-written ones, and this is the first agent-authored document to judge. Evidence:
       `.claude/autonomous/2026-08-15-judgement-evidence.md`, `the-spec-tool-reaches-the-agent` 6.1 —
       the operator's own read, not the loop's.
+      **WAIVED for archiving, 2026-08-17 (autonomous N6).** Evidence supplied in the file above
+      (9 requirements, per-requirement rationale and acceptance criteria, prior write-up called it
+      "good"); the readability verdict is explicitly the operator's own read, not something this run
+      can substitute.
 - [x] 6.2 Run the same flow with a **Claude** agent. Everything here was Codex. Done by `speccer`
       (Claude, Spec Author charter) in the `aw-loop10` drive, `run-d3b6f7c5`/`run-462fb78e` —
       write-up: judgement-evidence.md 6.2.
@@ -98,6 +102,12 @@ grounded in the repository, and it stopped. No `ask_user`. No OpenSpec.
 - [ ] 6.4 **The ten-minute turn timeout.** An interview of several rounds plus operator thinking time
       exceeds it; one loop run died that way. Not touched by this change and worth its own look,
       because the exploration flow is the feature that produces long turns.
+      **WAIVED for archiving, 2026-08-17 (autonomous N6).**
+      `.claude/autonomous/2026-08-15-judgement-evidence.md` § this change, 6.4: a design question —
+      whether the exploration flow needs a longer or resumable timeout — not an observation this
+      change's own scope covers or an unattended run can decide. Recorded here rather than in
+      `STATE.json.decisions_for_user`, matching the evidence file's own note that it's the
+      operator's call whether it earns its own line.
 - [x] 6.5 Decide whether a turn triggered with no `conversation_id` should open a new conversation
       every time. The UI always sends one, so this is not reached from the app — but jobs and peer
       messages do not, and 1.10 shows how convincingly a cold start imitates continuity.

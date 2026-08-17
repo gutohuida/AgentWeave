@@ -111,8 +111,23 @@ described with a signature it has never had. The name matched, so the test passe
       **Accepted by the operator, 2026-08-16**, on the live evidence recorded in `.claude/autonomous/2026-08-15-judgement-evidence.md` — run id, tool-call order and cost for each.
 - [ ] 5.2 Read the resulting document. 17.2 asks whether the renderer's output is as readable as the
       old skill-written ones, and there has still never been an agent-authored document to judge.
-- [ ] 5.3 Confirm an agent with no document open is not told about `submit_spec_document` in a way
+      **WAIVED for archiving, 2026-08-17 (autonomous N6).**
+      `.claude/autonomous/2026-08-15-judgement-evidence.md` § this change, 5.2: an agent-authored
+      document now exists and has been read (this is the same document `the-spec-tool-reaches-the-
+      agent` 6.1 asks about — waived there for the same reason). The final readability comparison
+      against the old skill-written ones is the operator's own call.
+- [x] 5.3 Confirm an agent with no document open is not told about `submit_spec_document` in a way
       that invites it to invent one.
+      **Verified by code reading, 2026-08-17 (autonomous N6), not by a fresh live drive** — the
+      judgement-evidence file called this "still open," but the concern is answerable structurally:
+      `_tool_surface_lines()` (`hub/hub/api/v1/agents.py:857`) is included unconditionally for every
+      registered agent, so the `submit_spec_document` description is always present — but its own
+      wording states "write the specification document the operator has open," and the MCP tool's
+      docstring (`hub/hub/mcp_server.py:818`) is explicit: "The document must already exist: the
+      operator starts an exploration, and you fill it in." Both descriptions name a document that
+      must already exist rather than presenting the tool as a way to create one from nothing, in any
+      turn, document open or not. This is a text-invariant, not a behavioural one — ticked on that
+      basis.
 
 ## 6. User test guide
 

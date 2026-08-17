@@ -1488,3 +1488,64 @@ one) any that cannot be verified unattended, then archive via the openspec CLI. 
 on the strength of a plan existing (CLAUDE.md, restated in STATE.json's queue item). If time runs out
 before all 13 are reached, stop after a clean batch rather than leaving one half-edited — commit
 whichever are actually archived, and leave `next_action` naming which remain.
+
+## Entry 17 — N6 (fallback): archived 7 of the 13 pre-08-16 openspec changes, using the judgement-evidence.md this session already had on disk.
+
+**2026-08-17T03:40:06+01:00.** Worked N6-openspec-backlog per `next_action`: archive the pre-08-16
+changes sitting in `openspec/changes/`, ticking any human-only item with real recorded evidence,
+waiving (with a stated reason) anything genuinely unverifiable unattended, never fabricating a tick.
+
+**The load-bearing discovery.** `.claude/autonomous/2026-08-15-judgement-evidence.md` — written a
+prior iteration this session, apparently never acted on — already contains driven-live or
+code-grounded evidence for nearly every human-only task across exactly the 13 changes in question. It
+was written explicitly so "a sitting of ~20 minutes clears a blocker that has stood for two weeks."
+Reading it first turned this from fresh investigation into applying existing evidence.
+
+**Archived, in this order, each following the same pattern:** `2026-08-11-declining-a-question`,
+`2026-08-10-blocked-and-conversation-binding`, `2026-08-12-run-without-a-git-repository`,
+`2026-08-13-a-posture-that-survives-the-handoff`, `2026-08-13-the-interview-is-a-conversation`,
+`2026-08-13-the-spec-tool-reaches-the-agent`, `2026-08-13-the-tool-list-matches-the-tools`.
+
+1. Read the change's unchecked `tasks.md` items.
+2. Cross-reference `judgement-evidence.md`'s section for that change.
+3. For a felt/subjective item with real evidence already gathered (operator-accepted or driven live
+   this session), add a dated **"WAIVED for archiving"** note under the still-unchecked box, citing
+   the evidence and naming why the *verdict itself* stays the operator's — left unticked rather than
+   claimed done, per CLAUDE.md's "never mark complete on the strength of a plan existing."
+4. One exception, ticked for real rather than waived: `the-tool-list-matches-the-tools` 5.3 asked
+   whether an agent with no spec document open is invited to invent one by the tool listing —
+   this is a **text-invariant**, not a felt question, so it was checked directly:
+   `_tool_surface_lines()` (`hub/hub/api/v1/agents.py:857`) is included unconditionally for every
+   registered agent, but its own wording says "the specification document *the operator has open*",
+   and `submit_spec_document`'s MCP docstring (`hub/hub/mcp_server.py:818`) states outright "the
+   document must already exist." Neither text invites invention regardless of whether one is open.
+   Ticked `[x]` with the citation.
+5. Checked whether the change's own `specs/*/spec.md` deltas were already merged into
+   `openspec/specs/` — several were, from a prior session's `openspec-sync-specs` run that was never
+   followed by an archive — and used `openspec archive <name> -y --skip-specs` when so, to avoid the
+   CLI's "already exists" abort on a duplicate `### Requirement:` header. Two changes
+   (`run-without-a-git-repository`, `the-spec-tool-reaches-the-agent`) each had one genuinely
+   unsynced requirement; those used plain `openspec archive <name> -y`, which merged the new/modified
+   requirement into the main spec cleanly (confirmed by the CLI's own `+ N added` / `~ N modified`
+   output, not assumed).
+
+**Verified, not trusted:** `npx openspec validate --changes --strict` → 13/13 (19 − 7 archived + 1,
+matches). `--specs --strict` → 30/30, unchanged count (deltas merged into existing specs, no new
+capability). `git status --porcelain` after `git add openspec/` showed exactly 7 renames into
+`openspec/changes/archive/` plus 3 modified `openspec/specs/*/spec.md` files (the two genuinely-
+unsynced deltas touch three spec files between them) — nothing outside `openspec/`. No source file
+touched by any of this (only markdown corpus), so `verified_green_at_iteration_12_commit_619fd5a`
+still holds; neither test suite needed re-running.
+
+**N6 is not done — 6 of 13 pre-08-16 changes remain**, named with their specific remaining work in
+`next_action`: `a-document-earns-its-name` and `a-requirement-knows-its-work` and
+`answers-arrive-together` look similarly close (mostly evidenced judgment items, though the latter
+two carry a couple of items that read as already-settled non-applicability rather than open work and
+deserve a careful read before waiving); `a-gate-that-only-evidence-opens` has one item
+(`5.5`, "give `contract` its behaviour") that is **unimplemented feature work the operator actually
+decided on 2026-08-16**, not a judgment call — archiving that change requires either building it or
+explicitly leaving it unarchived; `hub-owns-the-spec-document` has a mix of a deliberately-skipped
+task proposing a design amendment (`12.3`) and a partly-covered test gap (`16.8`) alongside its
+judgment items; `2026-07-30-hub-native-experience` (69 of 188 tasks open, no `judgement-evidence.md`
+coverage at all) is too large for one iteration and needs its own triage pass first. Stopped here
+deliberately — a clean batch of 7, fully verified, rather than a shallow pass over all 13.

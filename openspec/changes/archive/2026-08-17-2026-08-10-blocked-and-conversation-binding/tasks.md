@@ -141,12 +141,31 @@ surface; 7 specs; 8 verification.
 
 - [ ] 8.10 When an agent asks you something mid-task, does the board tell you *that* is why nothing
       is moving — without you having to work it out?
+      **WAIVED for archiving, 2026-08-17 (autonomous N6).** Evidence in
+      `.claude/autonomous/2026-08-15-judgement-evidence.md` § this change, 8.10: driven live — the
+      blocked task renders "Waiting on you" plus the question text verbatim, and sorts to the top of
+      In Progress. Whether that reads as *quick to notice* rather than merely present is the
+      operator's own read, not something this run can assert.
 - [ ] 8.11 Does a waiting task read as "someone needs you" rather than as a failure?
+      **WAIVED for archiving, 2026-08-17 (autonomous N6).** Same evidence file, 8.11: the heading is
+      literally "Waiting on you" with a distinct color token from a failed/rejected task, by design
+      intent recorded in the component's own comment. Whether it actually lands as an invitation
+      rather than an alarm is the operator's felt judgement.
 - [ ] 8.12 Now that every turn of a bound conversation is checked: is the volume of stalled markers
       informative or is it noise? **This is the real answer to the previous change's Open Question 1**,
       which could not be judged while only the first turn was checked
+      **WAIVED for archiving, 2026-08-17 (autonomous N6).** Same evidence file, 8.12: structurally,
+      a blocked task and a divergent task are two different signals, and blocked only fires on a
+      genuinely unanswered blocking question — nothing manufactures markers from noise. Whether the
+      resulting *count* reads as signal or clutter needs the operator's own board lived-with over
+      time, which a single unattended session cannot simulate.
 - [ ] 8.13 Does a conversation staying bound ever surprise you — does it keep attributing work to a
       task you had moved on from?
+      **WAIVED for archiving, 2026-08-17 (autonomous N6).** Same evidence file, 8.13: binding
+      releases automatically at a terminal task status by design (code comment states why it stays
+      bound through `completed`/`under_review`); the one known gap is a task abandoned by hand
+      without a status change, which has no timeout release. Whether that gap is ever actually
+      encountered is a lived-board judgement, not a fact this run can assert.
 
 ### 8c. User test guide
 

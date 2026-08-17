@@ -81,6 +81,13 @@ All in `hub/tests/test_exploring_interview_medium.py`.
       **Accepted by the operator, 2026-08-16**, on the live evidence recorded in `.claude/autonomous/2026-08-15-judgement-evidence.md` — run id, tool-call order and cost for each.
 - [ ] 5.5 Compare against `aw-spec-explore` directly if you still have it, since that is the bar you
       named.
+      **WAIVED for archiving, 2026-08-17 (autonomous N6).**
+      `.claude/autonomous/2026-08-15-judgement-evidence.md` § this change, 5.5: answerable only
+      indirectly — the skill was deleted along with the rest of the CLI messaging/local-role
+      subsystem, so a literal side-by-side is no longer possible. The nearest comparison (old
+      skill-driven run vs. new charter+floor run) is already written up there and in this change's
+      own task 1.4. No further evidence can be gathered unattended; a literal `aw-spec-explore`
+      re-run cannot happen because the artefact being compared against no longer exists.
 
 ## 6. User test guide
 

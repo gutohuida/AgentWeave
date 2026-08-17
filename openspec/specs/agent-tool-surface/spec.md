@@ -14,9 +14,7 @@ effects*, while the next one required an agent to read the task ledger and recei
 contradiction recorded in `openspec/explorations/2026-08-02-product-direction.md`. The effect-only
 sentence is replaced by the least-privilege read boundary that document prescribes; the prohibition
 on reading around the delivery system is preserved unchanged.
-
 ## Requirements
-
 ### Requirement: The Hub supplies state; the tool surface carries intent
 
 The system SHALL supply everything an agent needs in order to begin a turn — its queued entries,
@@ -123,67 +121,32 @@ NOT apply its effect, whatever database that instance holds.
 
 ### Requirement: One tool surface, configured automatically
 
-The Hub SHALL expose a single tool surface for agents. A second, separately maintained surface with
-equivalent tools MUST NOT exist.
+The Hub SHALL configure one tool surface for a spawned run, and an agent SHALL receive it without
+the operator wiring anything by hand.
 
-Because the Hub starts the agent, it SHALL supply the agent's tool configuration when starting it.
-An operator MUST NOT be required to edit an agent client's configuration file to make the tool
-surface available.
+**The surface SHALL be verified as the process actually serves it.** The server is spawned as a
+script, and a check that imports the module instead observes a different program: an import executes
+the whole file, while running it as a script stops wherever the entry-point guard is and never
+returns. A tool defined below that guard registers for every importing test and for no agent.
 
-A tool surface the Hub has configured SHALL be invocable by the agent it was configured for. The
-Hub MUST NOT start a run whose tool surface it has configured but which it knows the agent cannot
-call. Where a provider requires approval before a tool call proceeds, the Hub SHALL supply that
-approval as part of starting the run.
+Verification SHALL therefore spawn the server the way the Hub spawns it, from a working directory
+that is not the package root, and read the advertised tools over the transport. The spawned surface
+and the imported surface SHALL be equal, and a difference SHALL fail rather than be reported.
 
-Granting that approval MUST NOT weaken any other protection the operator selected for the run. In
-particular, the agent's filesystem sandboxing SHALL be unchanged by whatever makes the tool surface
-callable, and an approval the Hub grants for its own tool surface MUST NOT extend to any other
-action the agent attempts.
+#### Scenario: The served surface is read from a spawned process
 
-Where a provider offers a mode in which approvals can be answered per request and a mode in which
-they cannot, the Hub SHALL use the mode that preserves the operator's protections.
+- **WHEN** the tool surface is verified
+- **THEN** the server is started as a subprocess and its tools are listed over its transport
 
-#### Scenario: Tools are available without operator configuration
+#### Scenario: Spawning and importing agree
 
-- **WHEN** an agent is started by the Hub for the first time
-- **THEN** its tool surface is available
-- **AND** the operator edited no agent client configuration file
+- **WHEN** the tools advertised by the spawned server differ from those registered on import
+- **THEN** the difference is reported as a failure, naming which tools are missing from which
 
-#### Scenario: Only one surface exists
+#### Scenario: A tool below the entry-point guard is caught
 
-- **WHEN** the available tools are inspected
-- **THEN** exactly one surface provides them
-
-#### Scenario: A configured tool can actually be called
-
-- **WHEN** an agent started by the Hub calls a tool from its configured surface
-- **THEN** the call proceeds to the Hub
-- **AND** is not refused for want of an approval the operator was never asked for
-
-#### Scenario: Collaboration does not cost the sandbox
-
-- **WHEN** an agent whose run is filesystem-sandboxed calls a tool from its configured surface
-- **THEN** the call proceeds
-- **AND** the run remains filesystem-sandboxed
-
-#### Scenario: The approval does not generalise
-
-- **WHEN** the Hub approves a tool call on its own tool surface
-- **AND** the same agent then attempts an action outside the protections the operator selected
-- **THEN** that action is refused
-- **AND** the tool-surface approval did not authorise it
-
-#### Scenario: The Hub answers approvals rather than delegating them to a policy
-
-- **WHEN** a provider offers a mode in which each approval is answered individually
-- **THEN** the Hub uses that mode
-- **AND** does not adopt a blanket policy that would approve unrelated actions
-
-#### Scenario: An uninvocable surface is refused, not pretended
-
-- **WHEN** the Hub determines that a run's tool surface cannot be made invocable
-- **THEN** the Hub records a diagnostic naming the reason
-- **AND** does not present the run as having a working tool surface
+- **WHEN** a tool is defined after the block that starts the server
+- **THEN** verification fails, rather than passing because the check imported the module
 
 ### Requirement: An agent is told the address of the Hub that started it
 
@@ -331,3 +294,4 @@ deliberately use is described SHALL continue to hold.
 
 - **WHEN** generated context describes the agent's tools
 - **THEN** every tool the agent can deliberately use is still described
+
