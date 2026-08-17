@@ -261,3 +261,72 @@ exact payload shape) still 6/6 since nothing there changed. Bundle rebuilt (`npm
 
 **Next:** Q3 — a visible "Working…" indicator with an elapsed-time counter in the composer, replacing
 reliance on the header's small `animate-pulse` dot.
+
+---
+
+## Entry 4 — 2026-08-18T00:03+01:00 · Q3 done: a Working indicator with an elapsed counter, in the composer
+
+**Attempted:** put a louder, better-placed signal that the agent is actively responding right next
+to the composer, per the operator's complaint that the header's small `animate-pulse` status dot
+isn't enough.
+
+**Timestamp source, decided up front.** Prep flagged two candidate fields (`session_started_at`,
+`AgentSession.started_at`) as unconfirmed for a *live* run and said to derive from the `run_started`
+SSE event if neither held up. Checked all three before writing anything: `session_started_at` is
+about the current provider session, not this turn; `AgentSession.started_at` is on session objects
+returned by a different endpoint, same mismatch; and `run_started`'s own SSE payload
+(`agent_trigger.py:1315-1320`, `:1807-1812`) carries `agent`/`run_id`/`runner`/`model` only — no
+timestamp of its own beyond the outer `SSEEvent.timestamp`, which is broadcast time, not run-start
+time. None of the three is the thing prep was hoping for. Rather than plumb a new backend field for
+one UI counter, added `useElapsedSeconds(active)`
+(`hub/ui/src/hooks/useElapsedSeconds.ts`) — it times locally from the moment `isRunning` flips
+false→true (`Date.now()`, 1s `setInterval`), which is already the same signal the composer's
+placeholder text was already keying off. The one known gap: a run already in progress when the panel
+mounts (e.g. switching agents mid-turn) reads from when it was *observed*, not from when it truly
+began — the same class of imprecision the header dot already had, not a new one introduced here.
+
+**The fix.** `Composer.tsx`'s control row (trailing slot, beside the send button) now renders three
+`animate-pulse` dots plus `Working · {formatElapsedSeconds(elapsed)}` whenever `isRunning` is true —
+`0s`–`59s` as bare seconds, `m:ss` at and beyond a minute. Reused Tailwind's existing `animate-pulse`
+rather than inventing new keyframes (three staggered instances read as a sequence, and
+`index.css`'s blanket `prefers-reduced-motion` rule already caps every animation in the app, this one
+included, with no extra work). **The header pill stays** — it is the only place *every* agent status
+(not just running) is visible, including with the composer scrolled out of view or collapsed; keeping
+both is not an accidental duplication, it is two different jobs at two different distances from the
+operator's eyes, and the commit message says so.
+
+**Verified three ways:**
+
+1. **Unit/render tests**, `composerWorkingIndicator.test.tsx`: `formatElapsedSeconds` at the 60s
+   boundary (`59` → `59s`, `60` → `1:00`); the indicator is absent while idle; it appears at exactly
+   `Working · 0s` the instant `isRunning` flips true and reads `Working · 3s` after 3 fake-timer
+   seconds; it disappears the instant `isRunning` flips back to false; and — the trap this class of
+   hook invites — a *second* run after an idle gap restarts the count from `0s` rather than resuming
+   whatever the first run left behind. Full `hub/ui` suite: **973 passed** (967 → 973, +6). `npx tsc
+   --noEmit` and `npm run lint -- --max-warnings 0` both clean.
+2. **A real live turn against the trial Hub on :8010** — reused the `q2verify` agent in
+   `proj-b44fac0c` from Q2's verification (still present, still idle beforehand). A throwaway
+   Playwright script (`testbed/scratch/shot_working_indicator.py`, written and deleted in the same
+   turn per its scratch convention) sent a message designed to take a few seconds to generate,
+   captured the indicator's text immediately after it appeared and again ~3s later, in both themes:
+   light `Working · 0s` → `Working · 3s`, dark `Working · 1s` → `Working · 4s`. The counter visibly
+   advancing between two real captures — not a single static screenshot — is what actually proves it
+   ticks. Screenshots viewed directly: three green dots and the counter sit cleanly in the control row
+   in both themes, legible against both backgrounds.
+3. **Post-run settle**: polled the agent's status a few seconds after the turn and it read `idle`,
+   with the indicator gone in the next render — matching the "disappears on completion" unit test
+   against a real run, not just a synthetic prop flip.
+
+**What a reviewer should distrust:**
+
+- The "already running when the panel mounts" gap above is real and not covered by any test — every
+  test and every live drive here observed the transition from idle, none opened the panel mid-run.
+- The live verification's two turns overlapped (the dark-theme send queued behind the light-theme
+  turn still finishing) — harmless for what was being checked, but means the dark capture's numbers
+  reflect a turn that had already been running a moment before the browser navigated to it, not a
+  fresh 0s start; the *ticking* is still real, just the absolute numbers are not clean instrumentation.
+- Only Claude/Haiku was driven live, per the operator's stated ceiling — Codex's `isRunning` plumbing
+  is identical (`agent.status === 'running'` is provider-agnostic) but was not separately watched.
+
+**Next:** Q4 — a distinct control to reopen an existing spec document, alongside Explore rather than
+buried inside it.
