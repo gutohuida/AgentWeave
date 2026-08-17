@@ -713,3 +713,38 @@ are undiagnosed for the same reason.
 
 **Gates after all of this:** hub suite **2130 passed / 11 skipped**, ruff clean, black clean —
 unchanged from baseline, so nothing here regressed the environment that was already working.
+
+---
+
+## Iteration 14 — 13:35 — `pid_alive` resolved by caller trace: not a product defect
+
+I said this could not be settled from Windows. That was wrong — it needed a **caller trace**, not a
+Linux box, and the trace is decisive.
+
+    pid_alive          <- run_reconciliation.py:41   (the only product caller)
+    reconcile_interrupted_runs <- main.py:275         (the only caller, inside lifespan(), AT BOOT)
+
+    terminate_all_active_runs  -> terminate_process_tree   ... and never calls pid_alive at all
+
+At boot, every pid on a `running` `Run` row belongs to a process spawned by a **previous, now-dead
+Hub**. Those orphans were re-parented to init and reaped by it. **They cannot be zombies relative to
+this process** — a zombie exists only for its own parent. And `terminate_all_active_runs`, the
+shutdown path, deliberately does not check liveness at all: it kills, returns a count, and leaves
+status transitions to reconciliation on the next boot, with a comment saying why.
+
+So **there is no product path in which a Hub asks `pid_alive` about a process it just killed.** The
+zombie window exists only inside a single process that both spawns and checks — which is precisely
+what the *test* does, and nothing else does.
+
+**`pid_alive` is not a defect. The two tests assert a property the product never relies on.** The
+right repair is in the tests: reap the child before checking, since they are the only code that ever
+occupies that window.
+
+This is worth noticing as a pattern. Twice today I have called something unverifiable when it was
+merely unverifiable *the way I first reached for*. The bundle-staleness lesson already in
+`dead_ends` is the same shape: grep the artefact instead of reasoning from commit order. Here: trace
+the callers instead of trying to run the platform.
+
+**Still genuinely undiagnosed:** `test_project_workspace_unavailable`'s two `NoResultFound` and one
+model-catalog assertion. Those are behavioural differences with no obvious mechanism from here, and
+I am not guessing at them.

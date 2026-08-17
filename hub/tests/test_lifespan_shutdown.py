@@ -36,6 +36,14 @@ def test_hub_shutdown_kills_a_real_tracked_process():
             pass  # lifespan startup runs on __enter__, shutdown runs on __exit__
 
         for _ in range(50):
+            # `session.isalive()` first, and it is load-bearing on POSIX: a SIGKILLed child
+            # stays a **zombie** until its parent reaps it, and `pid_alive()` uses
+            # `os.kill(pid, 0)`, which succeeds for a zombie. This process is the parent, so
+            # nothing reaps it unless the test does. ptyprocess's `isalive()` calls
+            # `waitpid(WNOHANG)` and reaps. The product never occupies this window — its only
+            # `pid_alive` caller runs at boot against pids from a *previous* Hub, long since
+            # re-parented to init and reaped — so this is the test's problem, not the code's.
+            session.isalive()
             if not pid_alive(pid):
                 break
             time.sleep(0.1)

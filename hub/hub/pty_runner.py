@@ -142,6 +142,16 @@ def pid_alive(pid: int) -> bool:
     process before the Hub restarts, this returns a false "still alive." Narrow window in
     practice (pid reuse takes many process spawns), and closing it fully would need tracking
     process start time or command line, which the `Run` row doesn't carry.
+
+    Second limitation, and the reason it does not bite: on POSIX `os.kill(pid, 0)` succeeds for a
+    **zombie**, so a child this process killed but has not reaped still reads as alive. The single
+    caller cannot reach that state — `reconcile_interrupted_runs` runs once in `lifespan()` startup,
+    against pids recorded by a *previous* Hub process, whose orphans were re-parented to init and
+    reaped by it; a zombie only exists for its own parent. The shutdown path
+    (`terminate_all_active_runs`) kills without ever asking this function. Only a test that both
+    spawns and checks occupies that window, and those reap explicitly before asserting. If a future
+    caller checks liveness of a process this same Hub killed, it needs `waitpid(WNOHANG)` or a
+    `/proc/<pid>/stat` state check — do not assume this function alone is enough there.
     """
     if IS_WINDOWS:
         import ctypes
