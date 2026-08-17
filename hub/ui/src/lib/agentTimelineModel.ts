@@ -15,6 +15,17 @@ export function entryCategory(entry: TimelineEntry): EntryCategory {
   return 'message'
 }
 
+/** `runner_parsing.py`'s successful-turn sentinel — `status_event("completed", ...)`, kept on the
+ * wire because the Handoff flow's separate SSE broadcast depends on the run having *some* typed
+ * end marker to key off (see `agent_trigger.py`'s "Kept alongside the typed lifecycle event"
+ * comment) — but the operator does not want its rendered text ("Completed") ending every turn.
+ * A `status` entry for a still-open phase (e.g. codex's "plan") is unrelated and still renders. */
+export function isSuccessCompletionEntry(entry: TimelineEntry): boolean {
+  if (entry.kind !== 'agent_output' || entry.output_kind !== 'status') return false
+  const payload = entry.payload as Record<string, unknown> | null | undefined
+  return payload?.phase === 'completed'
+}
+
 export interface TimelineTurn {
   /** null for a legacy row with no recorded run (pre-Phase-3 data). */
   runId: string | null

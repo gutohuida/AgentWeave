@@ -12,6 +12,7 @@ import {
   entryCategory,
   findPairedResult,
   groupIntoTurns,
+  isSuccessCompletionEntry,
   reduceTurnBlocks,
   runStatusByRunId,
   type RunLifecycleStatus,
@@ -251,6 +252,9 @@ function TurnBody({
           return <WorkBlockDisclosure key={block.id} entries={block.entries} />
         }
         const entry = block.entry
+        // No end-of-turn text for a normal successful run (operator: "We don't want any
+        // end-of-conversation message"). The event itself is untouched — only its card here.
+        if (isSuccessCompletionEntry(entry)) return null
         if (entryCategory(entry) === 'result') {
           return <ResultCard key={entry.id} entry={entry} turnKey={turnKey} />
         }
