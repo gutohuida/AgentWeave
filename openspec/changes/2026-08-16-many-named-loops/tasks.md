@@ -181,19 +181,21 @@ check the owning process's `CreationDate` against the commit being tested, not o
 status field — a stale process from an earlier iteration can keep answering `/health: ok` while
 running old code.
 
-- [ ] 7.1 Create a job with a `stop_when_queue_empties` loop, add a task naming it, take that task to
+- [x] 7.1 Create a job with a `stop_when_queue_empties` loop, add a task naming it, take that task to
       a terminal status, then fire manually (`POST /jobs/{id}/run`) and confirm the fire is skipped,
       `loop.stop_reason` names the empty queue, and the job's `enabled` flips to `false` in a
       subsequent `GET`. Then repeat with a loop whose queue has *never* held a task and confirm the
       fire proceeds instead (design D4a).
 
-      **Superseded and needs re-running.** The original 7.1 verified the no-tasks-yet case *stopping*
-      the loop, and did so live against the trial Hub (restarted onto that commit first — confirmed
-      by the owning PID's actual `CreationDate`, not just `/health`): manual fire returned `409` with
-      `"loop queue is empty"`, and the subsequent `GET` showed `enabled: false`. That result was
-      real, and it is now the wrong behaviour — the operator ruled on 2026-08-17 that the condition
-      means drained rather than never-filled. `hub/tests/test_scheduler.py` covers both cases; the
-      live re-run has not been done.
+      **Re-run live 2026-08-17 (autonomous iteration 10), against the running trial Hub, matching the
+      current, corrected behaviour.** Drained case: `job-8d959810`'s task walked
+      `pending → in_progress → completed → under_review → approved` (terminal for loop-binding),
+      then `POST /jobs/job-8d959810/run` → `409 {"detail":"loop queue is empty"}`; subsequent `GET`
+      showed `enabled: false`, `loop.stop_reason: "loop queue is empty"`. Never-filled case:
+      `job-0b490274`'s loop fired with zero tasks ever added → `200 {"success":true,...}`; subsequent
+      `GET` showed `enabled: true`, `loop.stop_reason: null`. Both match the operator's 2026-08-17
+      ruling and `hub/tests/test_scheduler.py`'s coverage. Fixture left live in the trial Hub for
+      human-only tasks 8.1/8.2 — see `.claude/TASTE-PASS-2026-08-17.md`.
 - [x] 7.2 Create a second loop, add a `Task` naming it via direct creation (`TaskCreate` has no
       client-settable `loop_id` — confirmed by reading the schema — so this used a direct SQLite
       insert, the same technique N2/N2b used for a run credential), fire the job, confirm the fire

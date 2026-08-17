@@ -108,6 +108,49 @@ Verified live, against the same endpoints the UI itself calls, before writing th
       language), or do they compete/look like two different features?
       *(the-board-scoped-by-document 5.2)*
 
+### Screen: a capability document, and Jobs — loops
+
+Seeded by the autonomous run (iteration 10, 2026-08-17T21:37+01:00) against the **live trial Hub
+API**, in the empty **AgentWeave** project (`proj-5e960453`). One correction to this file's own
+"The Hub is running" section above: the live trial Hub's actual database is `hub/data/agentweave.db`
+(confirmed by writing to it directly and reading the change back through the API), not the beta
+profile path CLAUDE.md's start recipe names — the two may have diverged if this Hub process was
+started a different way than documented. Worth checking which is current before the next Hub
+restart; not chased further this iteration.
+
+- A **capability**-kind document was created via the operator route (`POST .../project/documents`,
+  `kind: "capability"`): `spdoc-21c033ed` at `spec/capabilities/quiet-hours/spec.html`, phase
+  `current` — capability documents skip the normal exploring→archived lifecycle entirely; `current`
+  is a dead end with no transition out, confirmed by reading `spec_lifecycle.py` before creating it,
+  not by trying and catching a failure.
+- Two jobs, both with loops (`stop_when_queue_empties: true`):
+  - `job-8d959810` ("taste-pass demo loop") — its task was created, walked to `approved` (a
+    terminal status for loop-binding purposes), then the job was fired manually. Confirmed live:
+    `409 loop queue is empty`, the job's `enabled` flipped to `false`, `loop.stop_reason` reads
+    "loop queue is empty". This is the *drained* case.
+  - `job-0b490274` ("taste-pass never-filled loop") — fired manually **before** any task was ever
+    added to its queue. Confirmed live: `200`, fire proceeded normally, `enabled` stayed `true`,
+    `stop_reason` stayed `null` — the *never-filled* case is not treated as empty. A second task was
+    then added and left `pending`, so the job now shows an active loop with one item queued (a
+    better visual than an empty one for judging 8.1/8.2).
+  - `job-aa9e8c7e` ("taste-pass plain job (no loop)") — an ordinary job with no `purpose` and no
+    `stop_when_queue_empties`, for contrast against the two loop jobs when judging 8.1.
+- This also **completes many-named-loops 7.1** itself (not just a human-only task) — it is agent-
+  verifiable and was re-run live per its own "superseded, needs re-running" note: both the drained
+  case and the never-filled case now match the operator's 2026-08-17 ruling (empty means drained,
+  not never-filled). Tick 7.1 in `openspec/changes/2026-08-16-many-named-loops/tasks.md` yourself,
+  or ask the next iteration to.
+
+- [ ] **10.2** — open `spec/capabilities/quiet-hours/spec.html`. With no controls rendering for
+      `current`, does the phase bar read as "nothing to decide here," or does it look broken/empty?
+      *(the-corpus-keeps-what-shipped 10.2)*
+- [ ] **8.1** — open **Jobs**. Compare `job-aa9e8c7e` (plain) against the two loop jobs. Does the
+      plain job's card look unchanged — no loop block, no visual regression? *(many-named-loops 8.1)*
+- [ ] **8.2** — on `job-0b490274` (active loop, one task pending), does the loop block read as "this
+      job, plus a purpose and a stop condition," or as a second, competing concept bolted on beside
+      the job? Compare against `job-8d959810`, now stopped, for what a finished loop looks like too.
+      *(many-named-loops 8.2)*
+
 ### Screen: Projects — deleting one
 A disposable project now exists in the trial Hub, seeded by the autonomous run
 (`autonomous/2026-08-17-archive-and-hub-app`, iteration 8, 2026-08-17T21:08+01:00) via
@@ -141,8 +184,6 @@ content that doesn't resemble real use is worse than not judging.
 
 | Task | Needs |
 |---|---|
-| corpus **10.2** (capability document's phase bar quiet?) | a `capability`-kind document — none exists |
-| many-named-loops **7.1, 8.1, 8.2** | jobs and loops — none in this DB |
 | delete-project **6.4** (empty-state after deleting the last project) | a *second, scratch* Hub instance to delete down to zero — not the live trial Hub |
 
 **Two need live agent turns, which cost money:**
@@ -162,7 +203,9 @@ That's a spend decision, so it's yours. A runner must be bound first.
    second, scratch Hub instance, not more seeding on this one.
 2. ~~Seed a declaring document + tasks + evidence, and archive one~~ — **done** (iteration 9, see
    above): unblocks 7.4, 7.5, 5.1, 5.2.
-3. **A capability document and a job with a loop** — unblocks 10.2, 7.1, 8.1, 8.2 (~15 min).
+3. ~~A capability document and a job with a loop~~ — **done** (iteration 10, see above): unblocks
+   10.2, 8.1, 8.2 (human-only) and closed 7.1 outright (agent-verifiable, re-run live).
 4. **Bind a runner and drive one real agent turn** — unblocks 6.2, 6.3 (costs tokens).
 
-Doing 3 would take the pass from 15 judgeable items to 18.
+Doing 3 took the pass from 15 judgeable items to 18 (7.1 no longer counts — it's closed, not
+judgeable).

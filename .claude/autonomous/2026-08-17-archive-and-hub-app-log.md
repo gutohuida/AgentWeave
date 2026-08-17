@@ -722,3 +722,79 @@ gitignored.
 
 Committed, pushed. Runway to `stop_at` (2026-08-17T22:00+01:00) had ~35 minutes left when this
 iteration's commit landed.
+
+## Iteration 10 (2026-08-17T21:38+01:00)
+
+**Self-directed continuation, item 3: seeded a capability document and two loop-bearing jobs, and
+closed many-named-loops 7.1 outright.** Verified position first: branch correct
+(`autonomous/2026-08-17-archive-and-hub-app`), `git log` top commit `6bf7c95` matched STATE.json,
+tree clean except the same three pre-existing untracked items. No reconciliation needed. Runway was
+short — iteration started at 21:29:54+01:00 against a 22:00:00+01:00 `stop_at`, roughly 30 minutes —
+so this iteration used a research subagent (Explore) to get exact payload shapes for both fixtures
+before writing any code, rather than reading the source directly, to keep the live-API work inside
+the remaining budget.
+
+**Read before acting:** the subagent's report was checked against the actual source before use
+(`hub/hub/api/v1/spec.py`'s `DocumentCreate`, `hub/hub/spec_lifecycle.py`'s capability-phase
+handling, `hub/hub/schemas/jobs.py`'s `JobCreate` and its loop-opt-in comment, `hub/hub/scheduler.py`'s
+`_loop_stop_reason` for the actual drained-vs-never-filled logic, `hub/hub/run_task_binding.py`'s
+`TERMINAL_FOR_BINDING = ("approved", "rejected")`).
+
+**A real discrepancy found first:** the trial Hub's actual database is `hub/data/agentweave.db`
+(11MB, confirmed by writing to it directly via `sqlite3` and reading the change back through the live
+API), not `~/.agentweave/hub/profiles/beta/agentweave.db` that CLAUDE.md's documented start recipe
+names — an `UPDATE` against the profile path affected 0 rows because that copy is stale (unchanged
+since 02:41, 5 tasks total) while the real one is live and current. This means the currently-running
+Hub process was started some way other than the documented `cd hub && DATABASE_URL=... agentweave
+--port 8010` recipe — worth the operator's attention before the next Hub restart, since restarting
+onto the documented recipe would silently swap in the stale 5-task database. Not chased further —
+out of scope for a fixture-seeding iteration, and CLAUDE.md itself already flags
+`hub/data/agentweave.db` as a real, gitignored, untracked file that "nothing runs against... now",
+which this iteration's finding contradicts. Recorded in the taste-pass doc and here rather than
+silently worked around.
+
+**What was done**, all via the live trial Hub API (port 8010), Bearer auth from `hub/.env`, target
+`proj-5e960453` only:
+- `POST /project/documents` created `spdoc-21c033ed` at `spec/capabilities/quiet-hours/spec.html`,
+  `kind: "capability"` — response confirmed `phase: "current"`, the dead-end phase capability
+  documents use (no `transition()` target is legal for it, confirmed by reading
+  `spec_lifecycle.py` before creating it).
+- `POST /jobs` twice, both with `stop_when_queue_empties: true` (the loop opt-in): `job-8d959810`
+  ("taste-pass demo loop") and `job-0b490274` ("taste-pass never-filled loop"). `POST /tasks` created
+  a plain task for each; since `TaskCreate`/`TaskUpdate` have no `loop_id` field (`extra="forbid"`,
+  confirmed by reading both schemas), each task's `loop_id` was set by a direct `UPDATE tasks SET
+  loop_id=... WHERE id=...` against `hub/data/agentweave.db` — the same technique a prior
+  investigation used for the equivalent no-REST-field gap.
+- **many-named-loops 7.1 re-run live**, closing it rather than just seeding for a human: walked
+  `job-8d959810`'s task `pending → in_progress → completed → under_review → approved` (terminal for
+  loop-binding per `TERMINAL_FOR_BINDING`), then `POST /jobs/job-8d959810/run` → `409
+  {"detail":"loop queue is empty"}`, subsequent `GET` showed `enabled: false`,
+  `loop.stop_reason: "loop queue is empty"`. Then fired `job-0b490274`'s loop with zero tasks ever
+  added → `200 {"success":true,...}`, subsequent `GET` showed `enabled: true`, `stop_reason: null`.
+  Both match the operator's 2026-08-17 ruling (empty means drained, not never-filled) that made the
+  original 7.1 result wrong. Ticked 7.1 in
+  `openspec/changes/2026-08-16-many-named-loops/tasks.md` with the live evidence inline.
+- Added a second task to `job-0b490274`'s loop afterward (left `pending`, not fired) so it shows an
+  *active* loop with visible queue content for the human-only tasks below, rather than the just-fired
+  empty state. Created a third, plain job (`job-aa9e8c7e`, no loop fields) for the "mix of loop and
+  non-loop jobs" contrast 8.1 asks for.
+
+**`.claude/TASTE-PASS-2026-08-17.md` updated:** new "Screen: a capability document, and Jobs —
+loops" section in Part 1 covering 10.2, 8.1, 8.2 (human-only, now judgeable) and documenting 7.1's
+closure inline; the database-path discrepancy noted there too, in case it explains something the
+operator sees while judging; Part 2's blocked table lost its loops/capability row (only 6.4 remains
+blocked); "what I can set up next" item 3 marked done; judgeable-item count corrected 15 → 18 (7.1
+no longer counts toward it — it's closed, not pending judgement).
+
+**Verified:** `npx openspec validate --changes --strict` 8/8 clean after the tasks.md edit. No pytest
+run — no `hub/` or `src/` code changed, only two doc-shaped files and live API/DB fixture state,
+consistent with iterations 8-9's precedent for pure-seeding work. `git status --short` confirmed only
+the two intended files modified (both tracked); `hub/seed_taste_doc.py` and `spec/` remain untracked
+and untouched, same as every prior iteration.
+
+**Deliberately not attempted:** item 4 (bind a runner and drive one real agent turn — costs tokens,
+needs explicit sign-off) and Tier 2's smallest fallback item, since item 3 fit the runway on its own.
+This closes every item on the taste-pass doc's own "what I can set up next" list except item 4.
+
+Committed, pushed. Runway to `stop_at` (2026-08-17T22:00+01:00) had roughly 20 minutes left when
+this iteration's commit landed.
