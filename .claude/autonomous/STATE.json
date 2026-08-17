@@ -7,7 +7,7 @@
   "stop_at": "2026-08-17T08:00:00+01:00",
   "stop_when_queue_empties": true,
   "iteration": 13,
-  "last_heartbeat": "2026-08-17T02:43:11+01:00",
+  "last_heartbeat": "2026-08-17T02:05:35+01:00",
   "spec_round_protocol": {
     "why": "Carried from the 2026-08-15/16 runs: one iteration authors the spec, the next reviews it cold, until a reviewer approves. The cap stops an artifact iterating forever.",
     "cap": 3,
