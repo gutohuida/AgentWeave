@@ -6,6 +6,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
+## [1.0.1] - 2026-08-17
+
+Legibility, found by driving the product rather than reading it.
+
+### Changed
+- **A turn's work is answerable at a glance.** The work block lost its box, and its header now says
+  what is inside — files written, and failed calls in red — so the decision to expand can be made
+  without expanding. Expanding a call renders the command it actually ran instead of repeating its
+  label, and lays it out underneath rather than beside. An edit shows `+N −N` before it is opened.
+- **Per-tool icons cover every runner.** Codex's `shell` and every `agentweave.*` MCP call rendered
+  the same fallback wrench, so the icons could not be scanned. Only Claude's tool names were mapped.
+- **A ticket opens as a centred panel** over a dimmed board rather than a narrow side tab, and now
+  carries more than the card it came from: status with its change control beside it, priority,
+  assignee with the agent's live state, created/updated, and the spec key it was declared under.
+- **Spec documents colour by meaning.** Phase, unresolved questions and evidence limits take a tone;
+  a summary line counts requirements by modal above the fold. `kind` stays neutral deliberately —
+  it is a category, not a state. Applies to newly rendered documents.
+- **A turn no longer ends with its cost.** The figure still reaches the accounting tables, which is
+  where spend belongs.
+
+### Fixed
+- **The command palette ranked conversations above everything.** A conversation's whole opening
+  prompt was its search text, so a prompt naming a task, a document and an agent matched all three
+  and Enter never reached what was typed.
+
+---
 ## [1.0.0] - 2026-08-17
 
 **AgentWeave is one product with one version.** `agentweave-ai` and `agentweave-hub` are released
