@@ -188,3 +188,76 @@ behaviour is correct.
 
 **Next:** Q2 — remove the end-of-conversation message, keeping the events that Handoff detection
 scans for.
+
+---
+
+## Entry 3 — 2026-08-17T23:48+01:00 · Q2 done: no end-of-conversation message for a successful turn
+
+**Attempted:** remove the rendered "Completed" text the operator sees at the end of every
+successful turn, while keeping both underlying status events intact (decision N2 — Handoff
+detection and the failed-run error path must both survive).
+
+**Where it actually lived.** `runner_parsing.py:356` (`status_event("completed", summary="Completed")`)
+is a persisted `agent_output` row with `output_kind="status"`, `payload.phase="completed"`. It flows
+through to the main conversation view (`AgentTimeline.tsx`), where `entryCategory` already classified
+any `status`/`diagnostic` output_kind as a `'result'` block, rendered as a visible `ResultCard` — that
+card, showing the literal word "Completed", is what the operator was looking at. The *other* surface
+named in the queue item, `agent_trigger.py`'s two `kind="status"`/`phase="completed"` SSE broadcasts
+(:1569, :2090), turned out to be a red herring for this particular complaint: those are never persisted
+(no `persist_event` call, unlike the `queue_entry_queued` broadcasts right above them) — they only ever
+reach `useAgentOutput`'s live `lines` state, which `AgentOutputPanel.tsx` explicitly does not render
+into the conversation any more (a comment there says so: its only consumer used to be the deleted
+handoff-readiness effect). So there was only one rendering site to fix, not two.
+
+**The fix, UI-only.** Added `isSuccessCompletionEntry(entry)` to `agentTimelineModel.ts` — true only
+for `kind="agent_output"`, `output_kind="status"`, `payload.phase==="completed"`. `AgentTimeline.tsx`'s
+`TurnBody` now returns `null` for that one entry instead of a `ResultCard`, ahead of the existing
+`entryCategory === 'result'` check. Nothing else about `entryCategory` or `ResultCard` changed — a
+mid-turn status phase (codex's `"plan"`) still renders exactly as before, and a failed run's
+`error_event` (`kind="error"`, a structurally different code path — `MessageEntry`'s `isError` branch)
+is untouched. Zero backend files changed.
+
+**Verified three ways, not just asserted:**
+
+1. **Unit tests** on the helper itself: `completed` phase → true; `plan` phase → false; `diagnostic`
+   output_kind with `phase: completed` → false (wrong output_kind, must not falsely match); an
+   `error`-kind entry → false (proves the failed-run path was never at risk).
+2. **AgentTimeline render tests**: a two-entry successful turn (`text` + `status/completed`) renders
+   the text but not "Completed" and mounts no `result-card-*` testid; a `status/plan` entry still
+   renders its `ResultCard`; a `kind="error"` entry's text still renders. Full `hub/ui` suite, run
+   last after every test file above was in its final state: **967 passed** (961 recorded in handoff
+   0054, +6 new tests this iteration — 3 in `agentTimeline.test.tsx`, 3 in `agentTimelineModel.test.ts`).
+3. **A real live turn against the trial Hub on :8010** — not a fixture. Created a throwaway Haiku 4.5
+   runner and agent (`q2verify`) in `proj-b44fac0c` ("Throwaway (taste pass)"), sent
+   "Reply with exactly the word: pong. Nothing else.", waited for it to finish. Fetched the persisted
+   chat history directly: the `status`/`completed` entry is there, byte-identical in shape to before
+   (`{phase: completed, summary: Completed}`) — **the event survived**, confirming N2's hard
+   constraint. Then drove an actual headless Chromium session (seeded `sessionStorage`/`localStorage`
+   the same way `taste_shots.py` does, since no existing script targets a specific agent's
+   conversation) to the real running app on :8010, screenshotted the conversation, and read both the
+   image and the page's plain text: the turn visibly ends right after "pong" — no chip, no "Completed"
+   anywhere in `document.body.innerText`. The one-off driver script was written to `testbed/scratch/`
+   and deleted after use, per its own README.
+
+**Checks before commit:** `npx tsc --noEmit` clean, `npm run lint -- --max-warnings 0` clean, full
+`npm test` 966/966, `hub/tests/test_agent_output_stream.py` (the closest backend coverage of this
+exact payload shape) still 6/6 since nothing there changed. Bundle rebuilt (`npm run build`) and
+`hub/hub/static/ui` + its stamp refreshed via `scripts/refresh_ui_bundle.py`, committed together with
+`hub/ui/src` as CLAUDE.md requires.
+
+**What a reviewer should distrust:**
+
+- The live-turn verification used a throwaway runner/agent left behind in `proj-b44fac0c` (harmless —
+  that project exists for exactly this). Not cleaned up; the operator can delete it or leave it as
+  future taste-pass scratch.
+- Only the *successful*-turn path was driven live. The failed-run guarantee rests on the backend being
+  provably untouched (diffed: zero lines changed outside `hub/ui/`) plus the unit test asserting the
+  new helper never matches an `error`-kind entry — not on an actual live failure being forced and
+  watched. Forcing a real API error live was judged not worth spending turn budget on, given the
+  backend code path itself has zero diff.
+- Codex's `status_event("plan", ...)` mid-turn card was checked only via a synthetic unit/render test,
+  not a live Codex turn (Codex was not part of tonight's ceiling — Claude-only per the operator's
+  stated budget).
+
+**Next:** Q3 — a visible "Working…" indicator with an elapsed-time counter in the composer, replacing
+reliance on the header's small `animate-pulse` dot.
