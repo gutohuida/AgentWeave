@@ -60,7 +60,6 @@ nav:
     - getting-started/installation.md
     - getting-started/quickstart.md
   - Guides:
-    - guides/aw-spec-workflow.md
     - guides/dashboard.md
   - Reference:
     - reference/cli-commands.md
@@ -81,8 +80,14 @@ nav:
       - Changes: archive/2026-q2-hardening/changes.md
     - Autonomous Dev Loop (shelved):
       - archive/autonomous-dev-loop/index.md
-    - Legacy multi-runtime documentation:
-      - archive/legacy-multi-runtime/README.md
+
+# The legacy multi-runtime documentation is kept in git for history but is no longer published.
+# It describes the watchdog, the local and git transports, the role subsystem and the multi-runtime
+# CLI — every one of which was deleted before 1.0.0. Its 28 cross-links resolve to pages that no
+# longer exist, and repairing them would only make a deleted product's manual navigable. Read it at
+# docs/archive/legacy-multi-runtime/ in the repository if you need to know how the old shape worked.
+exclude_docs: |
+  archive/legacy-multi-runtime/
 
 extra:
   social:

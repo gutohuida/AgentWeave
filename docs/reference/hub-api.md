@@ -146,7 +146,9 @@ AI Jobs endpoints for scheduled recurring agent tasks.
 }
 ```
 
-See [AI Jobs Guide](../guides/ai-jobs.md) for detailed usage.
+Jobs are created and managed in the app's Jobs page. A job carrying a purpose and an optional stop
+condition is a **loop** — the same record, wearing an intent — and its queue is the tasks that name
+it.
 
 ### Status
 

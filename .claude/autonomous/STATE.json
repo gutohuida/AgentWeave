@@ -6,8 +6,8 @@
   "started_at": "2026-08-17T10:14:49+01:00",
   "stop_at": "2026-08-17T15:00:00+01:00",
   "stop_when_queue_empties": true,
-  "iteration": 2,
-  "last_heartbeat": "2026-08-17T10:16:30+01:00",
+  "iteration": 3,
+  "last_heartbeat": "2026-08-17T10:18:01+01:00",
   "session_stopped": null,
   "release_shape": {
     "version": "1.0.0",
@@ -29,9 +29,10 @@
     {
       "id": "R2-docs-build-green",
       "title": "Get `mkdocs build --strict` to zero warnings",
-      "status": "pending",
+      "status": "done",
       "why": "The Docs workflow has been red since 2026-07-29 and gates the GitHub Pages deploy. It is `--strict`, so any warning aborts. Measured locally during prep: 34 warnings, not the 1 the old CI log showed â€” the tree has drifted a long way since.",
-      "detail": "Run `\"C:/Users/huida/AppData/Local/Programs/Python/Python311/python.exe\" -m mkdocs build --strict` and iterate to zero. mkdocs and mkdocs-material were installed during prep specifically so this is a local loop rather than a push-and-wait. The 34 break down as: 28 inside `docs/archive/legacy-multi-runtime/` (retired pages cross-linking to each other and to deleted pages), 3 in `docs/guides/aw-spec-workflow.md`, 1 in `docs/reference/hub-api.md` (links `../guides/ai-jobs.md`), 1 in `docs/contributing/development.md` (links `../guides/adding-new-agents.md`), and 1 'pages not in nav'. PRE-AUTHORISED DEFAULT for the 28: exclude `docs/archive/legacy-multi-runtime/` from the built site entirely rather than repairing links in documentation for a product that no longer exists â€” keep the files in git for history, drop them from `nav` and from the build (mkdocs `exclude_docs`). Rejected: repairing 28 links, which spends the window publishing docs for the deleted multi-runtime product. For `aw-spec-workflow.md`: the skill it documents no longer exists (`src/agentweave/templates/skills/` has no `aw-spec-workflow`, and the `references/` directory it links is gone) â€” delete the page and its `mkdocs.yml:63` nav entry. For the 2 live-doc links, repair or remove the link as the surrounding sentence requires."
+      "detail": "Run `\"C:/Users/huida/AppData/Local/Programs/Python/Python311/python.exe\" -m mkdocs build --strict` and iterate to zero. mkdocs and mkdocs-material were installed during prep specifically so this is a local loop rather than a push-and-wait. The 34 break down as: 28 inside `docs/archive/legacy-multi-runtime/` (retired pages cross-linking to each other and to deleted pages), 3 in `docs/guides/aw-spec-workflow.md`, 1 in `docs/reference/hub-api.md` (links `../guides/ai-jobs.md`), 1 in `docs/contributing/development.md` (links `../guides/adding-new-agents.md`), and 1 'pages not in nav'. PRE-AUTHORISED DEFAULT for the 28: exclude `docs/archive/legacy-multi-runtime/` from the built site entirely rather than repairing links in documentation for a product that no longer exists â€” keep the files in git for history, drop them from `nav` and from the build (mkdocs `exclude_docs`). Rejected: repairing 28 links, which spends the window publishing docs for the deleted multi-runtime product. For `aw-spec-workflow.md`: the skill it documents no longer exists (`src/agentweave/templates/skills/` has no `aw-spec-workflow`, and the `references/` directory it links is gone) â€” delete the page and its `mkdocs.yml:63` nav entry. For the 2 live-doc links, repair or remove the link as the surrounding sentence requires.",
+      "outcome": "mkdocs build --strict: 0 warnings, VERIFIED by running it. Excluded docs/archive/legacy-multi-runtime/ from the site (29 of the 34), deleted docs/guides/aw-spec-workflow.md (3), rewrote 2 live-doc sentences whose links pointed into the archived tree."
     },
     {
       "id": "R3-docker-compose-install-path",
@@ -104,8 +105,8 @@
       "detail": "PRECONDITION, CHECK IT EXPLICITLY: every CI job on the PR is green and finished. Then merge the PR to master. `hub-image.yml` fires on any master push touching `hub/` and will build the Docker image. Then tag `v1.0.0` and `gh release create v1.0.0` with notes drawn from R8's CHANGELOG. Watch `publish.yml` to completion â€” after R7 it must publish BOTH `agentweave-ai` and `agentweave-hub` from that one tag; if only one job fires, the R7 re-gating is wrong and that is the highest-priority fix. VERIFY, do not assume: `pip download agentweave-ai==1.0.0` into a temp dir, or `pip install` into a throwaway venv, and confirm `agentweave --version` reports 1.0.0 and that it pulled `agentweave-hub` with it (R4's whole point). Confirm the GHCR image published and the Pages docs site rebuilt. Do NOT create a `hub-v1.0.0` tag."
     }
   ],
-  "current": "R2-docs-build-green",
-  "next_action": "R2: get `mkdocs build --strict` to zero warnings. Run `\"C:/Users/huida/AppData/Local/Programs/Python/Python311/python.exe\" -m mkdocs build --strict` from the repo root and iterate. 34 warnings at last count: 28 inside docs/archive/legacy-multi-runtime/ (pre-authorised: exclude that tree from the built site via mkdocs `exclude_docs` + drop its nav entry, rather than repairing links for a deleted product), 3 in docs/guides/aw-spec-workflow.md (delete the page and its mkdocs.yml:63 nav entry — the skill it documents no longer exists), 1 in docs/reference/hub-api.md (links ../guides/ai-jobs.md), 1 in docs/contributing/development.md (links ../guides/adding-new-agents.md), 1 'pages not in nav'.",
+  "current": "R3-docker-compose-install-path",
+  "next_action": "R3: repair hub/docker-compose.yml. (1) image: ${AW_HUB_IMAGE:-ghcr.io/gutohuida/agentweave-hub:latest} — it currently defaults to `agentweave-hub:audit`, a local dev build that resolves to Docker Hub where nothing is published; (2) delete the comment above it claiming a v0.31.2 fallback that ${VAR:-default} cannot express; (3) add top-level `name: agentweave` so Compose stops deriving the hub-data volume name — and therefore which database you get — from the launch directory; (4) add a `build:` section pointing at the Dockerfile so the documented `docker compose up --build -d` has something to build. Then check `docker compose config` parses if docker is available; if not, validate the YAML with python and say so.",
   "limits": [
     "OUTWARD-FACING ACTIONS ARE AUTHORISED THIS RUN â€” this INVERTS the previous run's standing rule, deliberately. Pushing, opening a PR, merging to master, tagging, and creating a GitHub release are all in scope, in R11/R12 order. Everything else outward-facing is not: no force-push, no history rewriting on any shared branch, no deleting or moving existing tags or releases, no touching the four releases already published.",
     "NEVER release on a red or still-running CI. `gh pr checks` must show every job green and FINISHED before the PR merges, and the merge must be green before the tag exists. The operator chose 'Full auto, but only on green CI' with that as the hard rule.",

@@ -99,3 +99,33 @@ first wrote.
 **Distrust this until R11.** GitHub Actions cannot be run locally. Everything above is reasoning
 over the workflow file; the first real evidence is the PR run. R1 is the one queue item whose
 verification is deferred by construction.
+
+---
+
+## Iteration 2 — 10:28 — R2: docs build green, 34 warnings to zero
+
+**Done, and verified by running it.** `mkdocs build --strict` now completes with **zero warnings**
+in 0.47s. It has been red since 2026-07-29.
+
+The 34 warnings had four causes, not thirty-four:
+
+- **29 — the legacy archive.** `docs/archive/legacy-multi-runtime/` was moved wholesale at some
+  point and its relative links were never rewritten, so every `../reference/foo.md` inside it now
+  resolves to `archive/reference/foo.md`. 28 broken links plus one "pages not in nav" listing the
+  same tree. **Excluded the tree from the built site** via `exclude_docs` and dropped its nav entry.
+  The files stay in git — `git ls-files` still lists all 21 — they are simply no longer published.
+  Repairing 28 links would have made a deleted product's manual navigable: it documents the
+  watchdog, both dead transports, the role subsystem and the multi-runtime CLI, none of which exist.
+- **3 — `docs/guides/aw-spec-workflow.md`.** Deleted, with its `mkdocs.yml` nav entry. The skill it
+  documents is gone (`src/agentweave/templates/skills/` has no `aw-spec-workflow`) and so is the
+  `references/` directory it linked into.
+- **1 — `docs/contributing/development.md:87`**, linking `../guides/adding-new-agents.md`. Replaced
+  the sentence rather than the link: agents are created in the app now, so there is no file to add
+  one to, and the useful pointer is to the runner/MCP-tool/UI-component recipes in `CLAUDE.md`.
+- **1 — `docs/reference/hub-api.md:149`**, linking `../guides/ai-jobs.md`. Same treatment; replaced
+  with a sentence saying where jobs are managed and noting that a job carrying a purpose and a stop
+  condition *is* a loop, which is the shape N3 shipped.
+
+**Checked, not assumed:** the two archive sections that were NOT excluded — `2026-q2-hardening` and
+`autonomous-dev-loop` — still build into `site/archive/`, and `site/archive/legacy-multi-runtime`
+does not exist. `site/` is gitignored (`.gitignore:50`), so the build leaves no residue.

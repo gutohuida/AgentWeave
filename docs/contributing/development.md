@@ -84,7 +84,10 @@ The dashboard will be at **http://localhost:5173** and proxies `/api` to the Hub
 
 ## Adding a New Feature
 
-See [Adding New Agents](../guides/adding-new-agents.md) for a concrete example of extending AgentWeave.
+Agents are created in the app, not in configuration — the roster, its runners and its charters are
+Hub-owned records, so there is no file to add one to. The nearest thing to "extending AgentWeave"
+in code is adding a runner (`hub/hub/runner_commands.py`), an MCP tool (`hub/hub/mcp_server.py`) or
+a UI surface (`hub/ui/src/components/`); `CLAUDE.md` carries the recipe for each.
 
 ## Pull Request Checklist
 
