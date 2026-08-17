@@ -1,9 +1,22 @@
+# Pinned, so Compose stops deriving the project prefix from whatever directory you launched from.
+# Without it the `hub-data` volume's real name is `<dirname>_hub-data`, which means the database you
+# get depends on where you ran the command — the same directory-sensitive state bug that made bare
+# `agentweave` feel like a different app per folder.
+name: agentweave
+
 services:
   hub:
-    # Prefer the locally-built `agentweave-hub:audit` image (built by
-    # `make hub-full-build`) so audit-branch code is in use. Falls back
-    # to the published v0.31.2 image if no local build exists.
-    image: ${AW_HUB_IMAGE:-agentweave-hub:audit}
+    # The published image. `docker compose up -d` is the documented install
+    # (docs/getting-started/installation.md), so this default has to be something a user can
+    # actually pull; set AW_HUB_IMAGE to override with a local build.
+    image: ${AW_HUB_IMAGE:-ghcr.io/gutohuida/agentweave-hub:latest}
+    # No `build:` section, deliberately. The documented install has the user curl THIS FILE ALONE
+    # into an empty directory — no Dockerfile, no source. Compose builds instead of pulling when a
+    # service declares both `build` and `image` and the image is not already local, so adding one
+    # would turn the primary install into a build failure. Building from source is
+    #   docker build -t agentweave-hub:dev .
+    #   AW_HUB_IMAGE=agentweave-hub:dev docker compose up -d
+    # which is what AW_HUB_IMAGE exists for.
     ports:
       - "${AW_PORT:-8000}:8000"
     volumes:

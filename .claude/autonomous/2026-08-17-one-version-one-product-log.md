@@ -113,7 +113,9 @@ The 34 warnings had four causes, not thirty-four:
   point and its relative links were never rewritten, so every `../reference/foo.md` inside it now
   resolves to `archive/reference/foo.md`. 28 broken links plus one "pages not in nav" listing the
   same tree. **Excluded the tree from the built site** via `exclude_docs` and dropped its nav entry.
-  The files stay in git — `git ls-files` still lists all 21 — they are simply no longer published.
+  The files stay in git — `git ls-files` lists 18 of them — they are simply no longer published.
+  (An earlier draft of this entry said 21; that was the count of *all* `docs/archive/**` markdown
+  across the three archive sections, not the excluded tree.)
   Repairing 28 links would have made a deleted product's manual navigable: it documents the
   watchdog, both dead transports, the role subsystem and the multi-runtime CLI, none of which exist.
 - **3 — `docs/guides/aw-spec-workflow.md`.** Deleted, with its `mkdocs.yml` nav entry. The skill it
@@ -129,3 +131,57 @@ The 34 warnings had four causes, not thirty-four:
 **Checked, not assumed:** the two archive sections that were NOT excluded — `2026-q2-hardening` and
 `autonomous-dev-loop` — still build into `site/archive/`, and `site/archive/legacy-multi-runtime`
 does not exist. `site/` is gitignored (`.gitignore:50`), so the build leaves no residue.
+
+---
+
+## Iteration 3 — 10:40 — R3: the documented Docker install actually works
+
+**Done, and verified against the real registry.**
+
+`hub/docker-compose.yml` defaulted to `image: agentweave-hub:audit` — a local dev build. Unqualified,
+that resolves to Docker Hub. The documented install (`docs/getting-started/installation.md:80-94`)
+tells the user to curl this exact file and run `docker compose up -d`, so the primary self-host path
+was pulling an image nobody can pull.
+
+**Both halves measured, not reasoned about:**
+
+```
+docker manifest inspect agentweave-hub:audit                    -> denied / unauthorized
+docker manifest inspect ghcr.io/gutohuida/agentweave-hub:latest -> 200, schemaVersion 2, layers present
+```
+
+The old default is genuinely unpullable and the new one is genuinely public. That is the mutation
+check for this fix.
+
+Also added a top-level `name: agentweave`. Without it Compose derives its project prefix from the
+launch directory's basename, so the `hub-data` volume is really `<dirname>_hub-data` — **which
+database you get depends on where you ran the command.** This is the user-facing half of Q6's
+global-state bug, taken here because it is one line and independent of the pywebview half.
+
+### A regression I nearly shipped
+
+I first added a `build:` section, to give the documented `docker compose up --build -d` something to
+build — there was none, so that command was a no-op that then failed on the pull. **That would have
+broken the primary install.** Compose builds rather than pulls when a service declares both `build`
+and `image` and the image is not already local, and the manual-setup user curls the compose file
+into an empty directory with no Dockerfile in it. They would have got a build failure where they
+previously got a pull failure — no better.
+
+I could not settle Compose's precedence empirically: the Docker daemon is not running on this
+machine (`docker manifest inspect` talks to the registry directly, which is why the checks above
+still worked). So I chose the design that is correct **whichever way it resolves** — no `build:`
+section at all, and building from source goes through `AW_HUB_IMAGE`, which is what that variable
+already existed for. Updated both documented from-source paths to match
+(`installation.md`, `release-process.md`).
+
+**Verified:** `docker compose config` resolves with `name: agentweave`, the GHCR image, and no build
+section. `mkdocs build --strict` still 0 warnings after the doc edits.
+
+**NOT verified:** no container was started. A full `docker compose up -d` would prove the image
+boots, but the daemon is down and that would be testing the published image rather than this change.
+
+**Trap re-encountered, already in the brief:** `cd hub && ... ; cd ..` inside one Bash call does not
+leave the shell at the root for the *next* call — the cwd persists per-call, so a follow-up grep ran
+from `hub/` and silently returned nothing. It looked like "no stale compose commands remain" when in
+fact two were sitting in `release-process.md`. Re-run from an absolute path when a search comes back
+suspiciously clean.

@@ -6,8 +6,8 @@
   "started_at": "2026-08-17T10:14:49+01:00",
   "stop_at": "2026-08-17T15:00:00+01:00",
   "stop_when_queue_empties": true,
-  "iteration": 3,
-  "last_heartbeat": "2026-08-17T10:18:01+01:00",
+  "iteration": 4,
+  "last_heartbeat": "2026-08-17T10:20:39+01:00",
   "session_stopped": null,
   "release_shape": {
     "version": "1.0.0",
@@ -37,9 +37,10 @@
     {
       "id": "R3-docker-compose-install-path",
       "title": "Repair the documented Docker install",
-      "status": "pending",
+      "status": "done",
       "why": "`docs/getting-started/installation.md:80-94` tells users to curl `hub/docker-compose.yml` and run `docker compose up -d`. That file's `image:` defaults to `agentweave-hub:audit`, a local audit build; unqualified, it resolves to Docker Hub, where this project publishes nothing. The published image is `ghcr.io/gutohuida/agentweave-hub` (`hub-image.yml:15`). Regression, not oversight: `64e972d` 'Restore GHCR image in docker-compose.yml' put the right reference in and `0bb8480` 'fix(hub): build and use locally-built image in dev workflow' replaced it.",
-      "detail": "In `hub/docker-compose.yml`: (1) set `image: ${AW_HUB_IMAGE:-ghcr.io/gutohuida/agentweave-hub:latest}`; (2) delete the comment above it, which claims a fallback to 'the published v0.31.2 image' that `${VAR:-default}` syntax cannot express and which was never true; (3) add a top-level `name: agentweave` so Compose stops deriving its project prefix â€” and therefore the real name of the `hub-data` volume, and therefore WHICH DATABASE YOU GET â€” from the launch directory's basename; (4) add a `build:` section pointing at the Dockerfile so `docker compose up --build -d`, which `installation.md:104` documents as the from-source path, has something to build (there is no `build:` key in the file today, so that documented command is a no-op that then fails on the pull). Item (3) is the user-facing half of Q6's global-state bug and is being taken here because it is four lines and independent of the pywebview half, which is out of scope."
+      "detail": "In `hub/docker-compose.yml`: (1) set `image: ${AW_HUB_IMAGE:-ghcr.io/gutohuida/agentweave-hub:latest}`; (2) delete the comment above it, which claims a fallback to 'the published v0.31.2 image' that `${VAR:-default}` syntax cannot express and which was never true; (3) add a top-level `name: agentweave` so Compose stops deriving its project prefix â€” and therefore the real name of the `hub-data` volume, and therefore WHICH DATABASE YOU GET â€” from the launch directory's basename; (4) add a `build:` section pointing at the Dockerfile so `docker compose up --build -d`, which `installation.md:104` documents as the from-source path, has something to build (there is no `build:` key in the file today, so that documented command is a no-op that then fails on the pull). Item (3) is the user-facing half of Q6's global-state bug and is being taken here because it is four lines and independent of the pywebview half, which is out of scope.",
+      "outcome": "GHCR image (verified pullable via docker manifest inspect; old default verified DENIED), name: agentweave pinned. NO build: section — adding one would break the curl-only install, since Compose builds rather than pulls when both are declared. From-source paths in installation.md and release-process.md now go through AW_HUB_IMAGE. Container never started (daemon down)."
     },
     {
       "id": "R4-one-product-install",
@@ -105,8 +106,8 @@
       "detail": "PRECONDITION, CHECK IT EXPLICITLY: every CI job on the PR is green and finished. Then merge the PR to master. `hub-image.yml` fires on any master push touching `hub/` and will build the Docker image. Then tag `v1.0.0` and `gh release create v1.0.0` with notes drawn from R8's CHANGELOG. Watch `publish.yml` to completion â€” after R7 it must publish BOTH `agentweave-ai` and `agentweave-hub` from that one tag; if only one job fires, the R7 re-gating is wrong and that is the highest-priority fix. VERIFY, do not assume: `pip download agentweave-ai==1.0.0` into a temp dir, or `pip install` into a throwaway venv, and confirm `agentweave --version` reports 1.0.0 and that it pulled `agentweave-hub` with it (R4's whole point). Confirm the GHCR image published and the Pages docs site rebuilt. Do NOT create a `hub-v1.0.0` tag."
     }
   ],
-  "current": "R3-docker-compose-install-path",
-  "next_action": "R3: repair hub/docker-compose.yml. (1) image: ${AW_HUB_IMAGE:-ghcr.io/gutohuida/agentweave-hub:latest} — it currently defaults to `agentweave-hub:audit`, a local dev build that resolves to Docker Hub where nothing is published; (2) delete the comment above it claiming a v0.31.2 fallback that ${VAR:-default} cannot express; (3) add top-level `name: agentweave` so Compose stops deriving the hub-data volume name — and therefore which database you get — from the launch directory; (4) add a `build:` section pointing at the Dockerfile so the documented `docker compose up --build -d` has something to build. Then check `docker compose config` parses if docker is available; if not, validate the YAML with python and say so.",
+  "current": "R4-one-product-install",
+  "next_action": "R4: make `pip install agentweave-ai` a working product. Add `agentweave-hub>=1.0.0` to pyproject.toml's `dependencies` (currently `[]`). No cycle exists — verified in prep that hub/hub/ never imports agentweave at runtime. Then fix installation.md:42 and :55, which document `agentweave hub start` and `agentweave hub start --docker` — commands that DO NOT EXIST; the CLI has bare invocation plus doctor/status/stop/reset, and the Docker form is `agentweave --docker`. Also update CLAUDE.md's 'zero runtime dependencies' claim about the CLI, which stops being true. NOTE the version pin is only satisfiable once R7 sets hub/pyproject.toml to 1.0.0 — CI installs ./hub from the checkout first (done in R1), so local resolution is fine.",
   "limits": [
     "OUTWARD-FACING ACTIONS ARE AUTHORISED THIS RUN â€” this INVERTS the previous run's standing rule, deliberately. Pushing, opening a PR, merging to master, tagging, and creating a GitHub release are all in scope, in R11/R12 order. Everything else outward-facing is not: no force-push, no history rewriting on any shared branch, no deleting or moving existing tags or releases, no touching the four releases already published.",
     "NEVER release on a red or still-running CI. `gh pr checks` must show every job green and FINISHED before the PR merges, and the merge must be green before the tag exists. The operator chose 'Full auto, but only on green CI' with that as the hard rule.",

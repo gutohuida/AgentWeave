@@ -28,8 +28,13 @@ Create a GitHub release with the new version tag. The CI workflow (`publish.yml`
 
 ```bash
 cd hub
-docker compose up --build -d
+docker build -t agentweave-hub:dev .
+AW_HUB_IMAGE=agentweave-hub:dev docker compose up -d
 ```
+
+The compose file has no `build:` section — end users download it on its own, with no source
+alongside it, and Compose builds instead of pulling when a service declares both `build` and
+`image`. `AW_HUB_IMAGE` is how you point it at a local build.
 
 ### Full Rebuild
 
