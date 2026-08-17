@@ -402,3 +402,77 @@ existing-document branch already hides Explore entirely once a document is open)
 
 **Next:** Q5 — promote "Open existing project" to equal billing with "Add project" in the sidebar,
 including wiring `ProjectRailNav`, which is missing the callback entirely today.
+
+
+---
+
+## Entry 6 — 2026-08-18T00:31+01:00 · Q5 done: "Open existing project" promoted to equal billing
+
+**Attempted:** make opening an already-registered project as visible and reachable as creating a
+new one, per the operator's complaint that "the only option is Create project."
+
+**Confirmed the diagnosis before touching anything.** Everything the feature needs already
+existed and worked: `ProjectManagerModal` already serves both `'open'` and `'create'` modes,
+`App.tsx` already wired `onOpenExisting` to arm `'open'` mode, and the native folder dialog /
+in-app directory browser / path input were all functional. The only defect was the entry point:
+`Sidebar.tsx`'s expanded rail rendered "Open existing project" as a bare 15px `folder_open` icon
+button with no visible label in a small header row, while "Add project" was a full-width labelled
+button at the bottom — different weight, different place, reads as two different tiers of feature
+rather than two equally valid actions. Separately, `CompactRail` (the queue item called it
+`ProjectRailNav`; no component by that name exists in this codebase — `CompactRail` is what
+renders when `compact={true}`) was passed `onCreateProject` but never `onOpenExisting`, so in that
+view opening an existing project was not merely hard to see, it was structurally unreachable —
+there was no button wired to call it at all.
+
+**The fix.** `Sidebar.tsx`'s expanded (non-compact) branch: removed the header-row icon-only
+button entirely, keeping only the recency/tree view toggle there. At the bottom of the project
+list, replaced the lone full-width "Add project" button with a two-button row —
+`data-testid="open-existing-project"` labelled "Open existing" and `data-testid="create-new-project"`
+labelled "Add project", both `variant="outline" size="md"`, `flex-1` so they split the width
+evenly. `CompactRail` gained a new required `onOpenExisting` prop, threaded from its one call site,
+and now renders an `open-existing-project` icon button (folder_open) directly above the existing
+`create-new-project` icon button (folder_plus), both `icon-sm` ghost buttons with accessible
+`aria-label`s — the same equal-footing relationship as the expanded view, adapted to the icon-only
+idiom that view already uses everywhere else.
+
+**Verified three ways:**
+
+1. **Unit/render tests.** Added one test to `projectRail.test.tsx`'s "the collapsed rail" describe
+   block asserting both `open-existing-project` and `create-new-project` render in compact mode
+   and each fires its own callback exactly once — the existing expanded-rail test for the same
+   pair (`'offers distinct open-existing and create-new actions'`) already covered that half.
+   Full `hub/ui` suite: **976 passed** (975 → 976, +1). `npx tsc --noEmit` and
+   `npm run lint -- --max-warnings 0` both clean.
+2. **A real end-to-end reopen against the trial Hub on :8010.** A throwaway Playwright script
+   (`testbed/scratch/shot_open_existing_project.py`, deleted after use) confirmed the expanded
+   rail's two buttons read "Open existing" and "Add project" side by side; clicked the new button,
+   confirmed the modal opened titled "Open existing project"; typed this repository's own absolute
+   path (`C:\Users\huida\Documents\projects\AgentWeave`) into the Directory path field — genuinely
+   dogfooding, since this repo is already registered as `proj-5e960453` — and clicked "Open
+   project". The app navigated to the AgentWeave project overview, its Activity tab showing a
+   fresh "project opened" event. `GET /api/v1/projects` afterward still returned exactly the same
+   three project IDs (`proj-5e960453`, `proj-b44fac0c`, `proj-ff695d96`) — no duplicate project was
+   created by opening a path that was already registered, which is the failure mode this control
+   could plausibly have had and didn't.
+3. **The compact rail, separately.** Collapsed the rail in the same script and confirmed
+   `open-existing-project` renders there too, with `aria-label="Open existing project"` —
+   the previously-unreachable path, now reachable and screenshotted.
+
+**What a reviewer should distrust:**
+
+- Visible label text is "Open existing" (not the full "Open existing project") on the expanded
+  button, to fit beside "Add project" in a 252px-wide rail without wrapping; the `aria-label` and
+  `title` both carry the full phrase, so this is a visual truncation, not an accessibility gap —
+  not independently re-verified against a narrower custom sidebar width (`width` prop range
+  180–420px) beyond the default.
+- The native folder dialog itself (`openNativeFolderDialog`, OS-level) was not driven — the live
+  check went through the modal's manual path-entry field instead, which is pre-existing,
+  unmodified code already covered by `ProjectManagerModal`'s own tests; today's changes never
+  touched that dialog's wiring.
+- Only the expanded and compact rail states were driven live; the `agentSettings` and
+  `configuration` rail branches were not touched by this change and were not re-checked.
+
+**Next:** Q6 — stop the console window flashing during normal app use. `pty_runner.py` is the only
+spawn site with `CREATE_NO_WINDOW` today; every other bare subprocess call in `hub/hub/` needs a
+shared helper and a guard test, and the operator's own eyes watching for the flash matter more here
+than the test suite does.
