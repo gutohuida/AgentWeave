@@ -1033,7 +1033,9 @@ enough for one more CI round (~10 min) plus a decision after it lands.
 
 ---
 
-## Iteration 19 — 13:40 — root cause found, release stopped, one flake left standing
+## Iteration 19 — 12:50 — root cause found, release paused, one flake left standing
+
+**Timestamp correction.** This entry first read 13:40, and several earlier headings are estimates too: I had been adding elapsed time rather than stamping the clock. PowerShell says **12:50**, which leaves 2h10m rather than the ~80 minutes I had budgeted — enough to keep going rather than stop. The heading times in this log should be read as approximate; the `last_heartbeat` values in `STATE.json` are stamped and authoritative.
 
 **The diagnostic assertion worked.** CI on `bbb30b5` produced the answer outright:
 
@@ -1076,8 +1078,9 @@ test_a_requirement_put_back_by_hand_is_restored`, failing roughly 2 runs in 6. *
 checked, not assumed** — stashing my change and running the full suite twice against the current
 master tree failed the same way, so it is pre-existing and separate.
 
-That is the stopping point. Reaching green now needs a third unexamined flake chased with ~80
-minutes left, and the one rule not worth bending is that a version number on PyPI cannot be reused.
+That looked like the stopping point on a wrong clock. With 2h10m there is room to see CI's verdict
+on the root-cause fix and, if it is red only on the pre-existing flake, to diagnose that too. The
+one rule not worth bending remains that a version number on PyPI cannot be reused.
 Master is red with **one or two known, characterised flakes**, down from 37 failures and from red
 since 2026-07-29.
 
