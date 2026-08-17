@@ -330,3 +330,75 @@ operator's eyes, and the commit message says so.
 
 **Next:** Q4 — a distinct control to reopen an existing spec document, alongside Explore rather than
 buried inside it.
+
+---
+
+## Entry 5 — 2026-08-18T00:18+01:00 · Q4 done: a distinct control to reopen an existing spec
+
+**Attempted:** give the composer a second, distinct control alongside Explore that reopens a
+document not currently attached to the conversation — the operator's complaint was that leaving a
+conversation or closing the document panel left no way back except starting a fresh exploration.
+
+**Confirmed the diagnosis before touching anything.** `ComposerSpecControl.tsx`'s no-document
+branch rendered only the Explore toggle; `onOpenPicker` was already threaded all the way down from
+`ConversationView.tsx`'s `openPicker` (the same callback the Ctrl+K shortcut and the document-open
+pill both use to launch the real `SpecDocumentPicker`), but nothing in the no-document branch ever
+called it. The picker itself needed no changes — it was simply unreachable from that one state.
+
+**The trap this one actually had, found while wiring it rather than in prep's notes.**
+`onOpenSpecPicker` is not a single well-defined "open the picker" callback across every caller —
+`NewConversationSurface.tsx` aliases it to `() => setExploring(true)`, the same handler as
+`onStartExploration`, because that surface has no conversation yet to attach an existing document
+to and therefore no real picker to open. Reusing `onOpenPicker` for the new button would have put a
+button on that surface labelled "Open an existing specification document" that actually just armed
+Explore — a control that lies about what it does. Instead of reusing the overloaded prop, I added a
+new one, `onOpenExistingSpec`, threaded through `Composer.tsx` → `AgentOutputPanel.tsx`, optional
+end to end. `ConversationView.tsx` wires it to `openPicker` (a real picker exists there);
+`NewConversationSurface.tsx` does not pass it, so the component renders no second control on that
+surface at all, rather than a working-differently-than-labelled one.
+
+**The fix.** `ComposerSpecControl.tsx`'s no-document branch now renders `composer-open-existing-spec`
+next to `composer-start-exploration` whenever `onOpenExisting` is provided and the control is not
+`armed` (armed means a document is about to be created from the first message — reopening a
+different one mid-arm would silently discard that intent, so it is hidden then, matching how the
+existing-document branch already hides Explore entirely once a document is open). Icon is
+`folder_search`, distinct from Explore's `article`.
+
+**Verified three ways:**
+
+1. **Unit/render tests.** `specChatSurface.test.tsx` gained a test asserting both controls render
+   in a real mounted `ConversationView` with no document open, and that clicking the new one opens
+   the actual `SpecDocumentPicker` dialog (`findByRole('dialog')` named "Search documents") — not a
+   mock. `newConversationSurface.test.tsx` gained a test asserting the new control is *absent* on
+   that surface, proving the optional-prop gating actually gates rather than merely compiling.
+   Full `hub/ui` suite: **975 passed** (973 → 975). `npx tsc --noEmit` and
+   `npm run lint -- --max-warnings 0` both clean.
+2. **A real session against the trial Hub on :8010.** Opened `q2verify`'s existing conversation in
+   `proj-b44fac0c` (left over from Q2/Q3's verification, no document attached) via a throwaway
+   Playwright script. Both controls rendered; clicking the new one opened the real picker dialog.
+   Created one scratch document via the API (`teal-roc`, `spec/changes/teal-roc/spec.html`) so
+   there was something concrete to select — the picker's own tree browsing and selection mechanics
+   are pre-existing, unmodified code, already covered by `specPickerTree.test.tsx`, so this was
+   about proving the *new wiring* reaches them, not re-proving the tree itself. Selecting it from
+   the tree produced a "Spec: teal-roc" pill in the composer and opened the document panel beside
+   the conversation — the full reopen path end to end, screenshotted at each step.
+3. **The gate, not just the button.** The new-conversation-surface test above is the thing that
+   would have caught silently reusing `onOpenPicker` for both the label and the wrong behaviour —
+   worth stating because that reuse was the natural first draft and was caught by writing the test
+   before assuming the prop was safe to share.
+
+**What a reviewer should distrust:**
+
+- The scratch document `teal-roc` was left in `proj-b44fac0c`, per that project's stated purpose —
+  not cleaned up, and the throwaway Playwright script was deleted after use per `testbed/README.md`.
+- `armed` is always `false` in `ConversationView` today (nothing passes `specArmed` there); the
+  `!armed` guard on the new button is only exercised, live, on `NewConversationSurface` — and that
+  surface never renders the new button at all (no `onOpenExisting`), so the guard's *interaction*
+  with a truly armed state is asserted only by inference from the code, not observed live. If a
+  future surface passes both `specArmed` and `onOpenExisting` together, that combination has not
+  been driven.
+- Only Claude-side surfaces were driven live; nothing here touches runner-specific code, so this is
+  a low-risk gap, not a skipped requirement.
+
+**Next:** Q5 — promote "Open existing project" to equal billing with "Add project" in the sidebar,
+including wiring `ProjectRailNav`, which is missing the callback entirely today.
