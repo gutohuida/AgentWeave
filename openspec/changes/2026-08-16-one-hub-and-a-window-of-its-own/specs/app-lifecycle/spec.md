@@ -127,3 +127,47 @@ only stop mechanism for a `--no-detach` start, exactly as before this change.
   app mode, not a native window
 - **AND** the foreground `uvicorn` server keeps running attached to the invoking terminal, stopped
   only by Ctrl+C, exactly as it did before this change
+
+### Requirement: A named profile selects a separate, deliberate instance
+
+The system SHALL accept a `--profile <name>` argument on `agentweave`, `agentweave status`, and
+`agentweave stop`, defaulting to `"default"` when omitted. A profile SHALL resolve to its own
+database path and its own PID file, independent of every other profile's.
+
+The default profile SHALL resolve to the same database path this capability already specifies
+(unaffected by this requirement — no existing install migrates). A named profile other than
+`"default"` SHALL resolve to a database path beneath `~/.agentweave/hub/profiles/<name>/`, distinct
+from the default profile's path and from every other named profile's.
+
+An explicit `DATABASE_URL` environment variable SHALL continue to override whatever path profile
+resolution would otherwise compute, exactly as it does today without `--profile`.
+
+`agentweave reset` SHALL target only the default profile's data unless invoked with
+`--profile <name>`, in which case it SHALL target only that named profile's data. `agentweave reset`
+SHALL NOT delete more than one profile's data in a single invocation.
+
+#### Scenario: Two profiles do not collide
+
+- **WHEN** `agentweave --profile a --port 8010` and `agentweave --profile b --port 8011` are both
+  running at once
+- **THEN** each resolves to its own database file and its own PID file
+- **AND** `agentweave stop --profile a` stops only the `a` profile's instance, leaving `b` running
+
+#### Scenario: The default profile is unaffected by profile support existing
+
+- **WHEN** `agentweave` is run with no `--profile` argument
+- **THEN** it resolves to exactly the database path this capability already specifies for bare
+  invocation, unchanged by the existence of named profiles
+
+#### Scenario: An explicit DATABASE_URL still wins over profile resolution
+
+- **WHEN** `agentweave --profile a` is run with `DATABASE_URL` set in the environment
+- **THEN** the system uses the `DATABASE_URL` value, not the path profile `a` would otherwise resolve
+  to
+- **AND** the system states which one took effect
+
+#### Scenario: Reset targets exactly one profile
+
+- **WHEN** `agentweave reset --profile a` is run while profiles `a` and `b` both have data
+- **THEN** only profile `a`'s data is deleted
+- **AND** profile `b`'s data is untouched

@@ -125,6 +125,25 @@ would not reliably work regardless of that thread question, because this call si
 lifetime is governed by `uvicorn.run()` on the main thread returning on Ctrl+C — not by the window
 closing, which is what this requirement's exit contract (above) describes for the other four sites.
 
+**Testability, resolved (amendment A2, 2026-08-17):** Playwright cannot drive `pywebview`'s WebView2
+window on Windows — there is no Playwright backend for it, and the only theoretical route
+(`--remote-debugging-port` + CDP attach) is not exposed or supported by pywebview. This is accepted,
+not solved, on the strength of a binding constraint this decision now states explicitly rather than
+argues informally: the native-window shell (`_open_app_window_native`, task 3.2) SHALL contain no
+logic beyond `webview.create_window`/`webview.start`, the fallback's exception catch, and the
+URL/title arguments `_hub_resolve_launch_url` already resolves — no conditional rendering, no data
+fetching, nothing window-specific a bug could hide that the identical URL served to a real browser
+would not also exhibit. Enforced by task 3.5 (a diff-review/line-count check against `_open_app_
+window_native`'s body, not a runtime assertion — there is nothing to execute against a window
+Playwright cannot open). Everything downstream of "a window pointed at this URL" — every page, every
+interaction — is already exercised by the existing Playwright suite against the identical
+FastAPI-served bundle in a real browser. That is a stronger claim than "we didn't test it" and a
+weaker one than "the shell is proven," and this design states the difference rather than implying
+full coverage either way. If the shell ever grows logic beyond window lifecycle — a custom menu, a
+native file dialog, IPC — that logic becomes untested by construction and this testability claim no
+longer holds; a future change adding any of those must re-open this question rather than assume it is
+still covered.
+
 Inverting the threading model instead — giving `webview.start()` the main thread and moving
 `uvicorn.run()`'s foreground server to a worker thread, matching pywebview's documented pattern — was
 considered and rejected here. `--no-detach` exists so a developer (or this run's own driver, which
@@ -179,6 +198,58 @@ backend is unavailable."
 
 **Explicitly not solved here:** vendoring or auto-installing a Linux webview backend. Out of scope,
 named as an open cost in `proposal.md`'s Non-Goals, consistent with the exploration's Section 5.
+
+## D6 — Named profiles: `--profile` selects a database, PID file and (optionally) a port together
+
+**Decision (resolves amendment A3, 2026-08-17):** add a `--profile <name>` flag, default `"default"`,
+to `agentweave` and `agentweave status`/`agentweave stop`. A profile resolves the three things that
+are singletons today into one named identity:
+
+- **Database.** The default profile keeps exactly today's corrected path
+  (`Path.home() / ".agentweave" / "hub" / "data" / "agentweave.db"`, D1) — no migration, no existing
+  install moves. A named profile resolves to
+  `Path.home() / ".agentweave" / "hub" / "profiles" / <name> / "agentweave.db"`, created on first use.
+  Profiles live *beside* `data/`, sibling under `HUB_DIR`, not inside it — so a profile-naive caller
+  (direct `uvicorn`, no `--profile` reaching it) is unaffected and D1's default is untouched.
+- **PID file.** `_hub_pid_file(port)` is already per-port (`cli.py:431`, the already-shipped minimal
+  fix). This decision namespaces it per-profile too: the default profile is unchanged
+  (`hub.pid` / `hub-<port>.pid`); a named profile is `hub-<profile>-<port>.pid` unconditionally, even
+  at the default port, so the filename alone identifies which profile it belongs to and it can never
+  collide with the default profile's file at the same port.
+- **Port.** Unaffected for the default profile. A named profile has no port of its own in this
+  decision — `--port` stays required alongside `--profile` when the operator wants a specific one.
+  Remembering a profile's last-used port is a real convenience but optional, and not what closes A3
+  (the ambiguity A3 named was collision and blast radius, not needing to retype `--port`).
+
+**`DATABASE_URL` still wins, unchanged.** The already-shipped minimal fix made `DATABASE_URL` an
+explicit override; `--profile` computes a *default* database path the same way the bare CLI does
+today, it does not add a second source of truth on top of an explicit override. If both are given,
+`DATABASE_URL` wins and the CLI prints which one took effect, so the two never silently disagree.
+
+**`cmd_reset --profile <name>`.** Without `--profile`, `cmd_reset` targets only the default profile's
+`data/` directory, exactly as today — it does not enumerate or sweep `profiles/`. With
+`--profile <name>`, it targets only that profile's directory. There is no sweep-everything mode in
+this decision (no `--profile all`); deleting every profile is done one at a time, deliberately,
+matching `CLAUDE.md`'s guidance against destructive shortcuts. This is what closes A3's stated
+consequence: "with any additional instance, reset's blast radius is ambiguous" — after D6, `reset`'s
+blast radius is always exactly one profile, named or default, never inferred.
+
+**Docker is out of scope for this decision.** `docker compose up` has no CLI flag to carry a profile
+through, and D2's `name: agentweave` pin already gives Docker one fixed instance — a profile-equivalent
+for Docker (e.g. a per-profile `COMPOSE_PROJECT_NAME`) is a real future need but a separate one; the
+exploration and A3 both raised only the CLI-side gap.
+
+**Why a flag, not a config file.** Every other instance-selecting input this CLI already has
+(`--port`, `--docker`/`--local`, `--no-detach`) is a flag decided at invocation, not a persisted
+preference; `--profile` is the same shape of choice — "which instance am I talking to right now" —
+made the same way.
+
+**What this decision deliberately does not do**, named so a future round does not have to rediscover
+them rather than silently included or silently dropped: a profile does not get its own remembered
+default port; there is no `agentweave profile list` / discovery surface; there is no rename or
+delete-profile subcommand beyond `reset --profile <name>`; `agentweave status` with no `--profile`
+argument shows only the default profile, not every profile on the machine. Each is a real UX question
+an operator should decide awake, not one this spec-only round should default through.
 
 ## Naming and scope of the affected spec
 
@@ -271,3 +342,37 @@ have to agree about which owns `DATABASE_URL`, the PID file and `reset`; one cha
 **Cost if this is deferred instead:** the minimal fix above already makes two instances work via
 `DATABASE_URL` and `--port`, so nothing is blocked — but the operator carries the paths by hand,
 and `reset`'s blast radius stays ambiguous with a second instance present.
+
+---
+
+# Amendments resolved — 2026-08-17, round 1 (authored)
+
+All three amendments above are resolved in this revision. Recorded here so the next round reviews a
+stated resolution rather than re-deriving one from the objections alone.
+
+- **A1 — resolved, verify-only, no change needed.** Re-checked live: `tests/test_cli.py` exists (not
+  created by this change), currently holds four test classes —`TestTransportJsonAtomicWrite`,
+  `TestSubprocessRunHasTimeout`, `TestTwoInstancesDoNotCollide`, `TestDownloadWithSha256` — confirming
+  the already-shipped minimal fix (`c330431`) landed with its own test. `tasks.md` section 4 already
+  carries the 2026-08-16 correction acknowledging the file exists and instructing extension, not
+  creation; no further edit was needed there. This amendment was closed before this session, this
+  entry only confirms it stayed closed.
+- **A2 — resolved by a binding thin-shell constraint, not a process change.** D3 above now states
+  explicitly that `_open_app_window_native` SHALL carry no logic beyond window lifecycle and the
+  existing fallback — the informal argument the three review rounds never made explicit is now a
+  requirement task (3.5) can check. Playwright still cannot drive the WebView2 window itself; that
+  limitation is accepted and named, not solved, and the design says so rather than implying coverage
+  it doesn't have.
+- **A3 — resolved with D6 (named profiles), added above.** `--profile <name>` on `agentweave`/
+  `status`/`stop`, a profile-namespaced database path and PID file, and `reset --profile <name>`
+  scoping reset's blast radius to one profile. Docker's profile-equivalent is named and explicitly
+  deferred, not silently dropped. `proposal.md`, the `app-lifecycle` spec delta, and `tasks.md` are
+  updated in this same revision to carry D6 through to implementable tasks and a testable
+  requirement — this was not left as a design-only decision the way A2's mitigation could be.
+
+**Scope change this revision makes to the change as a whole:** D6 adds new CLI surface (`--profile`)
+and a new spec requirement; it is not purely editorial. The round-3 gate that originally shipped this
+change did not evaluate D6, because D6 did not exist yet. The spec-round protocol's cap is 3 with
+approve-and-execute at cap for the *original* proposal; this revision restarts that count at round 1
+for the amended scope, per the operator's own framing of these amendments as needing "a further review
+round" before implementation begins — not a continuation of the original count.

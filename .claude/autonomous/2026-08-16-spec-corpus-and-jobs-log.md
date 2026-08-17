@@ -1243,3 +1243,94 @@ resolve A1 (verify-only, already fixed), A2 (pywebview forfeits Playwright testa
 instance-profile concept, `cmd_reset`'s blast radius, repo-root shadowing). Run the spec-round
 protocol on the revision. **SPEC ONLY — do not implement**; at_cap's approve-and-execute does not
 apply to N4 because implementation would need pywebview, which is not authorised.
+
+## Entry 14 — N4 round 1 (authored): all three amendments resolved in Q6's own design.md, proposal.md, spec delta, and tasks.md. No code changed.
+
+**2026-08-17T02:53:43+01:00.** Worked N4-q6-decisions. Read the "# Amendments — 2026-08-16, before
+implementation" section at the end of
+`openspec/changes/2026-08-16-one-hub-and-a-window-of-its-own/design.md` and resolved all three in
+place. Only four files touched, all inside that change directory — `design.md`, `proposal.md`,
+`specs/app-lifecycle/spec.md`, `tasks.md` — confirmed via `git status --porcelain` before writing
+this entry. No source file changed. `current` stays `N4-q6-decisions`; this is round 1 of the
+spec-round protocol on the amended scope (see below for why the round count restarts).
+
+**A1 — verified, not touched.** Re-checked live rather than trusting the amendment's own claim:
+`tests/test_cli.py` exists, holds four classes (`TestTransportJsonAtomicWrite`,
+`TestSubprocessRunHasTimeout`, `TestTwoInstancesDoNotCollide`, `TestDownloadWithSha256`) — confirmed
+by `grep -n "^class Test"`. `tasks.md` section 4 already carries the 2026-08-16 correction
+acknowledging the file exists and instructing extension, not creation. This amendment was closed
+before this iteration; recorded a verification note in `design.md`'s new "Amendments resolved"
+section rather than leaving it silently implied.
+
+**A2 — resolved by making the mitigation a binding constraint, not an argument.** The amendment's own
+text already contained the right answer ("that argument only works if the shell stays thin... D3 must
+say so") — it just hadn't been written into D3 as a requirement. Added a "Testability, resolved"
+paragraph to D3 in `design.md`: `_open_app_window_native` SHALL contain no logic beyond
+`webview.create_window`/`webview.start`, the fallback's exception catch, and the already-resolved
+URL/title arguments. Backed it with a new task (`tasks.md` 3.5) — a diff-review check, explicitly not
+a runtime assertion, since there is no window Playwright can attach to test against. Playwright still
+cannot drive the WebView2 window itself; that limitation is named as accepted, not solved, both in
+`design.md` and in a new sentence added to `proposal.md`'s Impact section, rather than left implicit.
+
+**A3 — resolved with a new design decision, D6 ("Named profiles"), carried through to an
+implementable spec.** This was the larger piece of work — the amendment's own sketch (`--profile
+dev --port 8010`, a profile carries the database/PID file/port together, profiles live beside
+`data/`) became D6 in `design.md`, grounded against the actual current code (`_hub_pid_file` at
+`cli.py:431`, its seven call sites at `cli.py:151,158,431,454,787,799,975`, `cmd_reset` at
+`cli.py:966`) rather than restated from the amendment alone — confirmed by reading `cli.py` directly
+before writing D6, not assumed from the amendment's table. D6 makes explicit what the amendment left
+open only as a sketch: `DATABASE_URL` still wins over `--profile`-computed paths (unchanged rule, now
+stated for the profile case too); `cmd_reset --profile <name>` scopes to exactly one profile with no
+sweep-all mode; Docker gets no profile-equivalent in this decision (named, deferred); and a short list
+of things D6 deliberately does NOT do (profile discovery, a remembered per-profile port, rename/delete
+beyond `reset`) so a future round doesn't have to rediscover the boundary. Carried through the whole
+document set, not left as a design-only decision the way A2's mitigation could be:
+- `proposal.md` — new "What Changes" bullet, a new "Non-Goals" pair (Docker profile-equivalent;
+  discovery/port-memory/rename-delete), and a Testability line in Impact for A2.
+- `specs/app-lifecycle/spec.md` — new ADDED requirement "A named profile selects a separate,
+  deliberate instance" with five scenarios (no-collision, default-profile-unaffected,
+  DATABASE_URL-still-wins, reset-scopes-to-one-profile — the last one directly answering A3's
+  "reset's blast radius is ambiguous" complaint).
+- `tasks.md` — seven new tasks: 1.4-1.7 (flag, PID namespacing, `cmd_reset --profile`, explicit
+  non-scope), 2.5-2.8 (collision test extending `TestTwoInstancesDoNotCollide`'s existing pattern,
+  default-unaffected regression test, `DATABASE_URL`-wins test, reset-scoping test), 6.6 (human-only:
+  run two profiles side by side, confirm independent stop/reset), and a fourth numbered step added to
+  the user test guide (section 7) walking an operator through starting a second named instance
+  alongside the default one. Task count: 21 → 30. Verified the insertion didn't break numbering —
+  `grep -n "^- \[ \] [0-9]"` over the whole file shows a clean, gapless sequence in every section.
+
+**One ordering mistake caught and fixed before commit:** first pass inserted new task 3.5
+(A2's thin-shell check) *before* the pre-existing 3.4, out of numeric order in the file body despite
+being numbered after it. Caught by re-reading the section after the edit rather than trusting the
+edit succeeded silently; swapped the two blocks so 3.4 precedes 3.5 in both number and position.
+
+**Why round 1, not a continuation of the original count:** the round-3 gate that originally shipped
+this change (referenced by `spec_round_protocol` in `STATE.json`) evaluated the *original* 21-task
+proposal — D6 did not exist yet, so that gate never saw it. Recorded explicitly in `design.md`'s new
+"Amendments resolved" section: this revision restarts the round count at 1 for the amended scope,
+consistent with the operator's own framing of the amendments needing "a further review round" before
+implementation, not framed as continuing the original count toward the cap.
+
+**Verified, not trusted:** `npx openspec validate --changes --strict` → 20/20, including this change
+clean. No source file touched, so `verified_green_at_iteration_12_commit_619fd5a` still holds as the
+Python/UI baseline — nothing here required re-running either suite.
+
+**Still SPEC ONLY, per `next_action`'s instruction — no pywebview installed, no `--profile` code
+written.** `at_cap`'s approve-and-execute does not apply to N4 for the same reason it did not before
+this iteration: implementing D3 needs `pywebview`, which `limits` explicitly withholds authorization
+for.
+
+`next_action`: round 2 of the spec-round protocol on this amended `one-hub-and-a-window-of-its-own` —
+a **cold** review (a fresh read of `design.md`, `proposal.md`, the spec delta, and `tasks.md` as they
+now stand, not a continuation of this iteration's own authoring context) checking specifically: (1)
+does D6 actually close A3's three named consequences (dual-writer collision, blind `stop`/`status`,
+ambiguous `reset` blast radius) — not just gesture at them; (2) is the thin-shell constraint added for
+A2 concrete enough that task 3.5 is actually checkable, or does it still leave room for judgment calls
+disguised as a check; (3) do the seven new tasks in section 1/2/6/7 collectively cover D6 end to end
+(flag parsing, path resolution, PID namespacing, reset scoping, and the DATABASE_URL-precedence edge
+case) without a gap; (4) is anything now inconsistent across the four edited files (e.g., a task
+referencing a scenario name that does not match the spec delta's actual requirement title). If the
+cold review finds no blocking gap, record APPROVE and this change is 3-round-eligible again for a
+*future* iteration's implementation pass — implementation is still gated on `pywebview` authorization
+per `limits`, so approval alone does not trigger `at_cap`'s execute clause here. If the review does
+find gaps, fix them in the same iteration if small, or record a targeted round-3 next_action if not.

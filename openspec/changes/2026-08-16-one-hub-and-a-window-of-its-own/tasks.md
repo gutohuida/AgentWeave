@@ -3,7 +3,7 @@
 No database migration in this change — `config.py`'s default and `docker-compose.yml`'s project
 name are both process/config-level, not schema.
 
-## 1. Global instance state (D1, D2)
+## 1. Global instance state (D1, D2, D6)
 
 - [ ] 1.1 `hub/hub/config.py`'s `database_url` default becomes
       `f"sqlite+aiosqlite:///{(Path.home() / '.agentweave' / 'hub' / 'data' / 'agentweave.db').as_posix()}"`,
@@ -14,6 +14,26 @@ name are both process/config-level, not schema.
 - [ ] 1.3 Do not touch `_hub_native_start` (`src/agentweave/cli.py:664`) — it already computes the
       same absolute path independently and sets `DATABASE_URL` before `hub.main` is imported.
       Confirm by reading, not by assumption, that this task does not need to change that function.
+- [ ] 1.4 **Added 2026-08-16, resolves amendment A3 (`design.md` D6).** Add `--profile <name>`
+      (default `"default"`) to `agentweave`'s bare-invocation argument parser and to
+      `agentweave status`/`agentweave stop`. Wire it into `_hub_native_start`'s database-path
+      computation: default profile unchanged (D1's path); named profile resolves to
+      `HUB_DIR / "profiles" / <name> / "agentweave.db"`. Preserve the existing rule that an explicit
+      `DATABASE_URL` in the environment wins regardless of `--profile` — print which one took effect
+      when both are present.
+- [ ] 1.5 Namespace `_hub_pid_file(port)` by profile too: extend its signature (or add a sibling
+      helper) so a named profile always produces `hub-<profile>-<port>.pid`, even at
+      `DEFAULT_HUB_PORT`, while the default profile's filenames are byte-identical to today
+      (`hub.pid` / `hub-<port>.pid`) — confirm by reading `_hub_pid_file`'s current callers
+      (`cli.py:151,158,431,454,787,799,975`) before changing its signature, so every call site passes
+      the profile it means.
+- [ ] 1.6 `cmd_reset` gets a `--profile <name>` argument. Without it, behavior is unchanged (targets
+      only the default profile's `data/`). With it, targets only that profile's directory under
+      `HUB_DIR / "profiles" / <name>`. Do not add a sweep-all mode (`design.md` D6 — deliberately
+      excluded).
+- [ ] 1.7 Do not add Docker profile support, a remembered per-profile default port, a
+      `agentweave profile list` command, or a rename/delete-profile subcommand — `design.md` D6 names
+      these as open follow-ups, not part of this task.
 
 ## 2. Backend tests — agent-verifiable
 
@@ -39,6 +59,17 @@ name are both process/config-level, not schema.
 - [ ] 2.4 Confirm (rerun, not just re-read) that `hub/tests/test_migrations.py` and
       `hub/tests/test_project_persistence.py` still pass unmodified — no migration in this change,
       so their head assertions do not move. Record the actual pass/fail counts, not an assumption.
+- [ ] 2.5 **Added 2026-08-16 (D6).** A test that `agentweave --profile a --port <p1>` and
+      `agentweave --profile b --port <p2>` resolve to two distinct database paths and two distinct
+      PID filenames, extending `TestTwoInstancesDoNotCollide`'s existing pattern in
+      `tests/test_cli.py` rather than duplicating its setup.
+- [ ] 2.6 A test that bare `agentweave` (no `--profile`) still resolves to exactly the pre-D6
+      database path — the regression test proving D6 did not move the default profile.
+- [ ] 2.7 A test that `DATABASE_URL` set in the environment overrides `--profile`'s computed path,
+      and that the CLI's output names which one took effect.
+- [ ] 2.8 A test that `agentweave reset --profile a` deletes only profile `a`'s directory when both
+      `a` and `b` have data present, and that bare `agentweave reset` (no `--profile`) does not touch
+      `profiles/` at all.
 
 ## 3. Desktop window (D3, D5)
 
@@ -79,6 +110,13 @@ name are both process/config-level, not schema.
       task — it still calls `_wait_and_open_app` on a worker thread, still opens the existing
       non-blocking browser fallback, and Ctrl+C on the foreground `uvicorn.run()` remains the only stop
       mechanism, exactly as today.
+- [ ] 3.5 **Added 2026-08-16, resolves amendment A2 (`design.md` D3, "Testability, resolved").**
+      Read `_open_app_window_native`'s finished body and confirm it contains nothing beyond
+      `webview.create_window`/`webview.start`, the try/except around them, and the already-resolved
+      URL/title arguments — no conditional branching on page content, no data fetching, no logic a
+      Playwright-driven browser test against the same URL wouldn't already exercise. This is a
+      diff-review check, not a runtime assertion (there is no window Playwright can attach to); record
+      what was read and confirmed, not just that the task was done.
 
 ## 4. CLI tests — agent-verifiable
 
@@ -141,6 +179,12 @@ is green."
 - [ ] 6.5 If Q4a's screenshot harness (`scripts/uishot.py`) is available, it screenshots a browser
       page, not a native OS window — pywebview's own window is out of its reach. Confirm this
       limitation before expecting a screenshot of the desktop window itself.
+- [ ] 6.6 **Added 2026-08-16 (D6).** Run `agentweave --profile dev --port 8010` alongside an
+      already-running default-profile instance; confirm both `agentweave status` (default) and
+      `agentweave status --profile dev` report correctly and independently, then
+      `agentweave stop --profile dev` and confirm the default instance is unaffected. Confirm
+      `agentweave reset --profile dev` removes only that profile's data by checking the default
+      profile's data is still present afterward.
 
 ## 7. User test guide
 
@@ -165,8 +209,16 @@ or `pip install agentweave-ai` (for the global-state steps, no extra needed).
    step 2, run `agentweave status`.
    - *Expect:* the Hub is still reported as running — closing the window does not stop it, the same
      way closing a browser tab never did.
+4. **Start a second, named instance.** With the default instance still running from step 1, run
+   `agentweave --profile dev --port 8010` from any directory.
+   - *Expect:* a second Hub starts on port 8010 with its own empty project list, not the same
+     projects as the default instance. `agentweave status --profile dev` reports it separately from
+     `agentweave status` (default). Stopping it (`agentweave stop --profile dev`) does not affect the
+     default instance from step 1.
 
 **Where it would go wrong:** if step 1 shows a different project list or a fresh empty state after
-switching directories, the global-state fix did not take. If step 2's window has browser chrome
+switching directories, the global-state fix did not take. If step 4's second instance shares the
+default instance's project list or database, profile isolation did not take. If step 2's window has
+browser chrome
 (tabs, an address bar) despite `pywebview` being installed, the native-window path silently fell
 back without saying so — that is a defect, not a taste call.

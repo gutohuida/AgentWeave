@@ -63,6 +63,12 @@ pairs with a FastAPI-backend-plus-built-frontend in exactly AgentWeave's shape.
   per-folder *project* registration changes; only the Hub's own single-instance state (database,
   bootstrap credentials, one running process) becomes launch-path-independent, matching
   `CLAUDE.md`'s existing "Local multi-project boundary" section.
+- **A `--profile <name>` flag names a second, deliberate instance** (`design.md` D6, added
+  2026-08-17 to resolve amendment A3), so the fix above does not leave "exactly one instance is
+  reachable" as the new trap it replaces "a different instance per launch directory" with. A profile
+  carries its own database (`~/.agentweave/hub/profiles/<name>/agentweave.db`) and its own PID file;
+  the default profile is unchanged and unaffected. `reset --profile <name>` scopes reset's blast
+  radius to one profile instead of leaving it ambiguous once a second instance exists.
 
 ## Impact
 
@@ -85,6 +91,10 @@ this is a real behavior change to the **default** experience of every normal lau
 `--app` framing might suggest, something only scripts that opt into a flag would notice. Recorded,
 not hidden.
 
+**Testability** — the native desktop window (D3) cannot be driven by Playwright; this is accepted, not
+solved, and D3 now states the binding constraint (a thin, logic-free shell) that keeps that gap
+narrow rather than open-ended (`design.md` D3, "Testability, resolved").
+
 ## Non-Goals
 
 - **Not Tauri or PyTauri.** Best-specced option in the exploration's own comparison, but needs a Rust
@@ -102,3 +112,10 @@ not hidden.
   `%LOCALAPPDATA%`/`~/Library/Application Support`/XDG placement). `Path.home() / ".agentweave"`
   already resolves correctly on every OS and needs no new dependency; a future proposal can weigh
   that refinement against the CLI's zero-runtime-dependency stance on its own.
+- **Not a Docker profile-equivalent.** D6 (`--profile`) is CLI-only; `docker compose up` still
+  produces the one instance D2 already pins. A per-profile `COMPOSE_PROJECT_NAME` is a real future
+  need, named in `design.md` D6 and left for a change that actually needs it.
+- **Not profile discovery, a default-port-per-profile, or a rename/delete-profile command.** D6
+  ships `--profile <name>` on `agentweave`/`status`/`stop` and `reset --profile <name>` only. Listing
+  every profile on the machine, remembering a profile's last-used port, and renaming or deleting a
+  profile beyond `reset` are named open follow-ups in `design.md` D6, not silently included.
