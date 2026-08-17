@@ -270,3 +270,98 @@ already did real verification work. Left for the next firing, in task order, sta
 **A3 continues** — section 1 tasks 1.4-1.8, then sections 2 (D6 tests, 2.5-2.9), 3 (the desktop
 window itself, D3/D5), 4 (CLI tests for it), 5 (docs, D4), 6-7 (human-only, not this loop's to
 judge).
+
+---
+
+## 20:18 — Iteration 4: A3 section 1, tasks 1.4-1.7 (the `--profile` flag)
+
+Verified the branch (`autonomous/2026-08-17-archive-and-hub-app`) and `git log` head (`b269dbb`,
+then `44a1ae5`) matched `STATE.json` before touching anything, per standing practice.
+
+Re-read `design.md` D6 in full, including the round-2 amendment about the port-collision gap, before
+starting, per `next_action`'s instruction — it's long and this is the largest remaining slice of
+section 1.
+
+**1.4 — `--profile <name>` on the bare parser, `status`, `stop`.** Added to `create_parser()`,
+default `"default"` on all three. Wired into `_hub_native_start` via two new pure helpers rather than
+inline logic, so the decisions are independently testable without spawning a Hub:
+
+- `_hub_profile_data_dir(profile)` — default profile returns `HUB_DIR / "data"` (unchanged); a named
+  profile returns `HUB_DIR / "profiles" / <name>`.
+- `_hub_resolve_database_source(old_db_url, profile, db_path)` — an explicit `DATABASE_URL` always
+  wins (unchanged from before profiles existed); returns `(db_url, message_or_None)`, and
+  `_hub_native_start` prints the message when one comes back. The message only fires for a named
+  profile — silent for `"default"`, matching today's behavior exactly.
+
+**1.5 — namespaced PID files.** `_hub_pid_file(port, profile)` and `_hub_pid_running(port, profile)`
+both gained the `profile` kwarg (default `"default"`, so every existing caller that doesn't know
+about profiles keeps working unchanged). Read all seven call sites `tasks.md` names
+(`cli.py:151,158,431,454,787,799,975`) before editing — still accurate, cli.py hadn't moved since
+that line was written. All seven now pass `profile` through: `cmd_stop`'s two unlinks,
+`_hub_pid_running` itself, `_hub_native_start`'s write and its failed-health-check unlink, and
+`cmd_reset`. Named-profile filenames are unconditionally `hub-<profile>-<port>.pid`, even at
+`DEFAULT_HUB_PORT`, so the filename alone identifies the profile and can never collide with the
+default profile's file at the same port — exactly D6's stated shape.
+
+**1.6 — `cmd_reset --profile <name>`.** New arg on `reset_parser`, default `"default"`. `cmd_reset`'s
+`data_dir` now comes from `_hub_profile_data_dir(profile)` instead of a hardcoded `HUB_DIR / "data"`;
+`pid_file` and the pre-destroy `_hub_pid_running` call both take `profile` too. No sweep-all mode
+added, per D6's explicit exclusion. Left `.env`/logs (`--all`) profile-agnostic on purpose — the
+`.env` file (API key, ticket secret) is shared across every profile by design, and neither this task
+nor D6 say otherwise, so `--all` still means "also remove the shared config," not "also remove this
+profile's config." The confirmation banner now names the profile when one is given.
+
+**1.7 — confirmed, not implemented (it's a no-op task).** Re-checked none of the four named
+follow-ups snuck in: no Docker profile support (the Docker branch of `cmd_hub_start` reads `profile`
+off `args` for symmetry but never uses it), no remembered per-profile port, no
+`agentweave profile list`, no rename/delete-profile subcommand. Ticked alongside 1.4-1.6 since it
+needed no code, just confirmation — free to close in the same iteration.
+
+**Tests 2.5-2.8, all mutation-checked by hand, not just written.** New `TestProfileFlag` class in
+`tests/test_cli.py` (pure, no-I/O style, matching `TestTwoInstancesDoNotCollide` next to it):
+distinct-paths-and-PID-files for two named profiles (2.5), default-profile byte-identity against the
+literal pre-D6 constants (2.6), and all four DATABASE_URL-present/absent × profile-named/default
+combinations for `_hub_resolve_database_source` (2.7). New `TestResetCommand` class in
+`tests/test_hub_commands.py` (`cmd_reset` had **zero** prior test coverage — checked before writing,
+not assumed) for 2.8: `reset --profile a` deletes only `a`'s directory when both `a` and `b` have
+data, and bare `reset` touches only `data/`, never `profiles/`. Each of the four mutated by hand
+(disabled the guarded branch, confirmed red, restored, confirmed green) — specifics recorded in
+`tasks.md`'s own done-notes rather than repeated here.
+
+**2.7's scope note.** Task 2.7 as written could be read as wanting a full `_hub_native_start` run
+with `capsys` proving the printed message. Chose not to: reaching that path for real needs a stubbed
+`hub.main`, mocked migrations and a mocked `subprocess.Popen`
+(`TestNativeStartProjectLifecycle`'s existing pattern), which is heavier than the decision itself
+warrants once it's a pure, directly-testable function. `_hub_native_start`'s own existing regression
+guard (`TestTwoInstancesDoNotCollide::test_native_start_prefers_an_explicit_database_url`) was
+updated to assert it still calls `_hub_resolve_database_source` and still exports the result, so the
+wiring itself has a guard too — just not fused into the same test as the decision logic.
+
+**A real breakage caught and fixed, not just avoided.** `black --check` flagged `src/agentweave/cli.py`
+after the edits (two lines exceeded the wrap width `black` prefers once the new code was in place —
+the `_hub_resolve_database_source` signature and the `--profile` help string's escaped quote).
+Reformatted with `black --target-version py311` (this machine's `black` otherwise targets a newer
+Python than the repo's floor, per the same trap iteration 3's log recorded), then reran the full
+suite, `ruff`, `black --check` and `mypy` to confirm the reformat changed nothing behaviorally.
+
+**Verified beyond the new tests:**
+- Full CLI suite: **368 passed, 3 skipped** (up from iteration 3's 362/3 — 6 new tests, all
+  accounted for). `tests/test_cli.py` and `tests/test_hub_commands.py` alone: 50 passed.
+- `ruff check src/ tests/`: clean. `black --check --target-version py311` on the three changed
+  files: clean (after the reformat above). `mypy src/agentweave/cli.py`: clean.
+- `openspec validate --changes --strict`: 8/8, including this change.
+- `hub/tests/test_config.py` + `test_migrations.py` + `test_project_persistence.py` rerun: 62
+  passed, 1 pre-existing skip — unaffected, since this iteration touched only
+  `src/agentweave/cli.py` and its own tests, not `hub/hub/`.
+- A direct `create_parser().parse_args([...])` smoke test (bare, bare with `--profile`+`--port`,
+  `status --profile`, `stop --profile --port`, `reset --profile --yes`, bare `reset`) confirmed the
+  parser actually resolves `--profile` the way the unit tests assume, independent of them.
+
+Committed `e9f00f6`, pushed.
+
+**Left for the next firing, deliberately:** task 1.8 (the round-2 port-required-when-profile-is-named
+guard) and its test 2.9 — `next_action` explicitly permitted stopping after 1.4-1.6 if the whole
+1.4-1.8 slice didn't fit, and 1.8's passed-vs-default `--port` distinction is a different kind of
+problem (argparse can't express it with a plain `default=`) worth its own focused pass rather than a
+rushed tail-end addition. Once 1.8/2.9 land, section 1 (D1/D2/D6) is fully closed and A3 moves to
+section 3, the desktop window itself.
