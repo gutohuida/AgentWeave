@@ -26,7 +26,7 @@ const CHANGE = 'spec/changes/queued-message-delivery/spec.html'
 
 let listResult: {
   data: {
-    specs: { path: string; title?: string; kind?: string; state?: string; parent?: string | null; order?: number }[]
+    specs: { path: string; title?: string; kind?: string; state?: string; parent?: string | null; order?: number; phase?: string }[]
     home: string | null
     diagnostics: unknown[]
     missing: unknown[]
@@ -126,6 +126,26 @@ describe('the Spec screen', () => {
     renderPage(null)
     expect(screen.getByText('No specification yet')).toBeInTheDocument()
     expect(screen.queryByTestId('spec-page-tree')).not.toBeInTheDocument()
+  })
+
+  it('says so, rather than loading forever, when every document is archived', () => {
+    // Archiving is a phase transition, not a move, so a project can have documents on disk with
+    // none of them resolvable as "current" — resolveSelection then has nothing to hand back, the
+    // effect never calls onOpenDocument, and without this branch the screen sat on "Loading…" with
+    // no visible way out (Ctrl+K still worked, but nothing on screen said so).
+    listResult = {
+      data: {
+        specs: [{ path: HOME, title: 'Specification', kind: 'baseline', state: 'filed', parent: null, order: 0, phase: 'archived' }],
+        home: HOME,
+        diagnostics: [],
+        missing: [],
+      },
+      isLoading: false,
+      refetch: () => {},
+    }
+    renderPage(null)
+    expect(screen.getByText('Everything here is archived')).toBeInTheDocument()
+    expect(screen.queryByText('Loading…')).not.toBeInTheDocument()
   })
 
   it('opens the picker with Ctrl+K from here too', async () => {

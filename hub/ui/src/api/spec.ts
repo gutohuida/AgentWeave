@@ -17,6 +17,10 @@ export interface SpecEntry {
   parent?: string | null
   order?: number
   state?: 'filed' | 'unindexed' | 'unfiled'
+  /** The Hub's own lifecycle phase for this path, when a document record exists for it. Archiving
+   *  is a phase transition and does not relocate the file, so a document can be `archived` here
+   *  while its path still sits outside `spec/changes/archive/` — the tree has to check both. */
+  phase?: string | null
 }
 
 export interface SpecDocument {

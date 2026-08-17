@@ -73,8 +73,12 @@ export interface SpecSearchResults {
 const DEFAULT_ORDER = Number.MAX_SAFE_INTEGER
 const ARCHIVE_DATE_RE = /^(\d{4}-\d{2}-\d{2})-(.*)$/
 
-function isArchived(path: string): boolean {
-  return path.startsWith(ARCHIVE_PREFIX)
+/** A document is archived if its path says so (the openspec-style `archive/` convention) or if
+ *  the Hub's own record does (a phase transition, which never moves the file). Either is enough:
+ *  a document filed under `archive/` is archived even if some future flow left its phase behind,
+ *  and one whose phase says `archived` is archived even though the file never moved. */
+function isArchived(path: string, phase?: string | null): boolean {
+  return path.startsWith(ARCHIVE_PREFIX) || phase === 'archived'
 }
 
 /** `spec/changes/archive/2026-07-29-add-x/spec.html` -> date + change name. */
@@ -101,7 +105,7 @@ function deriveTitle(path: string): string {
 }
 
 function toNode(entry: SpecEntry): SpecNode {
-  const archived = isArchived(entry.path)
+  const archived = isArchived(entry.path, entry.phase)
   const { date, name } = parseArchiveSegment(entry.path)
   return {
     path: entry.path,

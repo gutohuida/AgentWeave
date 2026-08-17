@@ -136,11 +136,13 @@ export function SpecTree({ inventory, currentPath = null, onSelect, density = 'd
               fontSize: 12,
               textAlign: 'left',
               cursor: row.node?.missing ? 'not-allowed' : 'pointer',
-              opacity: row.node?.missing ? 0.55 : 1,
+              // Archived is dimmed but still openable, unlike missing — one is drift, the other is
+              // a document the operator can still choose to read, just not one that is current.
+              opacity: row.node?.missing ? 0.55 : row.node?.archived ? 0.65 : 1,
               borderRadius: 'var(--radius-sm)',
             }}
           >
-            <Icon name="article" size={12} />
+            <Icon name={row.node?.archived ? 'archive' : 'article'} size={12} />
             <span className="truncate">{row.label}</span>
             <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--text-3)' }}>
               {trailingLabel(row.label, row.path, row.node)}

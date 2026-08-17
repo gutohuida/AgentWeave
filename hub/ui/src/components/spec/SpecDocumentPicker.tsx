@@ -195,7 +195,12 @@ export function SpecDocumentPicker({
               <>
                 <GroupLabel>Archived</GroupLabel>
                 {results.archived.map((node) => (
-                  <button key={node.path} type="button" style={rowStyle} onClick={() => choose(node)}>
+                  <button
+                    key={node.path}
+                    type="button"
+                    style={{ ...rowStyle, opacity: 0.65 }}
+                    onClick={() => choose(node)}
+                  >
                     <span className="truncate">{node.title}</span>
                     <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--text-3)' }}>
                       {node.archiveDate ?? node.path}

@@ -90,8 +90,20 @@ async def list_specs(
     project_id, _ = project
     workspace = await _workspace(session, project_id)
     state = spec_documents.compute_state(workspace)
+
+    # Archiving is a phase transition (`POST .../documents/phase?to=archived`), and it does not
+    # relocate the file — a document archived this way stays wherever it was filed. The index-based
+    # tree above cannot see that: it only knows a path, not what the Hub's own record says about it.
+    # Without this, an archived document reads as an ordinary current one everywhere the tree is
+    # drawn, which is the defect the operator actually reported.
+    phases = {
+        document.path: document.phase
+        for document in await spec_lifecycle.list_documents(session, project_id)
+    }
+    specs = [{**entry, "phase": phases.get(entry["path"])} for entry in state.specs]
+
     return {
-        "specs": state.specs,
+        "specs": specs,
         "home": state.home,
         "manifest": state.index,
         "missing": state.missing,

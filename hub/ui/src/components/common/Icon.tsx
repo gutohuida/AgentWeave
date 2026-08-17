@@ -3,6 +3,7 @@ import {
   Activity,
   AlertCircle,
   AlertTriangle,
+  Archive,
   ArrowDown,
   ArrowLeft,
   BadgeCheck,
@@ -76,6 +77,7 @@ import {
  */
 const ICONS: Record<string, LucideIcon> = {
   add: Plus,
+  archive: Archive,
   arrow_downward: ArrowDown,
   arrow_left: ArrowLeft,
   article: FileText,

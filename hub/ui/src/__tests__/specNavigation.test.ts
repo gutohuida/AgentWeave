@@ -217,6 +217,34 @@ describe('spec navigation — history separation (FR-2)', () => {
     expect(group.entries.map((e) => e.path)).toEqual([dated, undated])
     expect(local.byPath.get(undated)?.archiveDate).toBeNull()
   })
+
+  it('treats a phase-archived document as archived even though its file never moved', () => {
+    // Archiving is a phase transition (`POST .../documents/phase?to=archived`); it does not
+    // relocate the file. A document can be archived while its path still sits under
+    // `spec/changes/<name>/`, nowhere near ARCHIVE_PREFIX — the Hub's own phase is the only signal
+    // for that case, and the tree has to check it or the document reads as an ordinary current one.
+    const path = 'spec/changes/quiet-hours-for-agent-notifications/spec.html'
+    const local = buildInventory(
+      response({
+        specs: [filed(path, { title: 'Quiet hours', phase: 'archived' })],
+      })
+    )
+
+    const node = local.byPath.get(path)
+    expect(node?.archived).toBe(true)
+    expect(node?.archiveDate).toBeNull()
+
+    const paths: string[] = []
+    const walk = (nodes: typeof local.library) => {
+      for (const n of nodes) {
+        paths.push(n.node.path)
+        walk(n.children)
+      }
+    }
+    walk(local.library)
+    expect(paths).not.toContain(path)
+    expect(local.history.flatMap((g) => g.entries.map((e) => e.path))).toContain(path)
+  })
 })
 
 describe('spec navigation — selection fallback (FR-4)', () => {

@@ -89,6 +89,33 @@ async def test_an_approved_document_archives(app, auth_headers, run_headers, tmp
 
 
 @pytest.mark.asyncio
+async def test_the_specs_tree_reports_phase_for_a_document_that_never_moved(
+    app, auth_headers, run_headers, tmp_path
+):
+    """Archiving is a phase transition, not a move — `PATH` here is `spec/changes/archive-demo/
+    spec.html`, nowhere near `spec/changes/archive/`. The tree the UI builds its navigation from
+    has no other way to learn the document is archived, so `/project/specs` has to carry the phase
+    alongside the path rather than leaving archived-detection to a directory convention this flow
+    never follows."""
+    await _approved_document(app, auth_headers, run_headers)
+
+    listed = await app.get(f"{BASE}/specs", headers=auth_headers)
+    before = {s["path"]: s.get("phase") for s in listed.json()["specs"]}
+    assert before[PATH] == "approved"
+
+    await app.post(
+        f"{BASE}/documents/phase",
+        params={"path": PATH, "to": "archived"},
+        json={"reason": "shipped"},
+        headers=auth_headers,
+    )
+
+    listed = await app.get(f"{BASE}/specs", headers=auth_headers)
+    after = {s["path"]: s.get("phase") for s in listed.json()["specs"]}
+    assert after[PATH] == "archived"
+
+
+@pytest.mark.asyncio
 async def test_archiving_does_not_touch_tasks(app, auth_headers, run_headers, tmp_path):
     await _approved_document(app, auth_headers, run_headers)
     tasks_before = await app.get("/api/v1/projects/proj-test/tasks", headers=auth_headers)

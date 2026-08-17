@@ -79,6 +79,22 @@ export function SpecPage({ document: openDocument, anchor, onOpenDocument, onOpe
     )
   }
 
+  // Every document present is archived (or missing) — resolveSelection above has nothing to hand
+  // to onOpenDocument and the effect never fires, so without this branch the screen sits on
+  // "Loading…" forever with no visible way out. Ctrl/Cmd+K still works — its listener is registered
+  // unconditionally above — but nothing on screen says so.
+  if (!isLoading && !openDocument && resolveSelection(inventory, null, specList?.home) === null) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <EmptyState
+          icon="archive"
+          title="Everything here is archived"
+          description="Open a document from history — press Ctrl/Cmd+K, or choose one from the rail."
+        />
+      </div>
+    )
+  }
+
   return (
     <div className="flex h-full min-w-0 overflow-hidden" data-testid="spec-page">
       <div className="min-h-0 min-w-0 flex-1">
