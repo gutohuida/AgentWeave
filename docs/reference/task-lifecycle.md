@@ -25,20 +25,20 @@ pending → assigned → in_progress → completed → under_review → approved
 
 ## Transitions
 
-Typical happy-path transition:
+The happy path runs `pending → assigned → in_progress → completed → under_review → approved`, and
+`revision_needed` loops back to `in_progress`.
 
-```bash
-agentweave task update <task_id> --status assigned
-agentweave task update <task_id> --status in_progress
-agentweave task update <task_id> --status completed
-agentweave task update <task_id> --status approved
-```
+Transitions come from two places, and neither is the CLI:
 
-Requesting revision:
+- **The operator**, on the task board in the app.
+- **An agent**, through `update_task(task_id, status)` on the
+  [agent tool surface](mcp-tools.md), attributed to the run that called it.
 
-```bash
-agentweave task update <task_id> --status revision_needed --note "Fix error handling in auth.py"
-```
+Every transition is recorded with its origin, so a task's history says who moved it and why.
+
+**Approval is gated by evidence.** Approving a task whose requirements are declared by a `gate`-rigor
+document integrates nothing until evidence for those requirements has been accepted — the operator is
+told there is nothing to merge rather than the task silently completing.
 
 ## Task Structure
 

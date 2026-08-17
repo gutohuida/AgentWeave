@@ -3,14 +3,10 @@
 ## Install
 
 ```bash
-uv tool install agentweave-ai --with agentweave-hub
+pip install agentweave-ai
 ```
 
-You can also install both packages into a virtual environment:
-
-```bash
-pip install agentweave-ai agentweave-hub
-```
+One package, and it brings the Hub with it. Requires Python 3.11+.
 
 ## Launch
 

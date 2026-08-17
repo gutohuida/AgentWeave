@@ -394,3 +394,54 @@ agent-template and pywebview gaps so they read as deferred rather than forgotten
 to `/tmp/entry.md` and read back by `python` fails with `FileNotFoundError: '\tmp\entry.md'`,
 because Git Bash's `/tmp` maps somewhere Windows paths do not reach. Stage intermediate files inside
 the repository and delete them, rather than in `/tmp`, whenever both shells need to see one.
+
+---
+
+## Iteration 8 — 11:50 — R9: the README and docs now describe what exists
+
+**`docs/reference/mcp-tools.md` was the worst of it.** It documented 12 tools against 21 decorated
+`@mcp.tool()` functions — the entire specification and evidence surface was missing
+(`submit_spec_document`, `read_spec_document`, `rename_spec_document`, `record_evidence`,
+`list_evidence`, `decide_evidence`, `recall`, `submit_checkpoint_notes`). Worse than incomplete: its
+"Intentionally absent" section said there is *no tool for checkpoints* while `submit_checkpoint_notes`
+sits on the server, and its "Command-path parity" section described `agentweave agent request` and
+`agentweave checkpoint`, neither of which has existed for some time.
+
+Rewritten from the authoritative descriptions in `_tool_surface_lines()`, grouped by what the agent
+is trying to do, with `approve_tool_call` explained as the one registered function that is
+deliberately *not* a capability — it is the harness endpoint for "ask me" permission mode.
+
+**Verified by comparison, not by reading.** A script extracts every `@mcp.tool()` name from
+`mcp_server.py` and every backticked call from the document, and diffs both ways:
+
+    server tools: 21
+    MISSING from doc: none
+    documented but not a tool: none
+
+The second direction matters as much as the first — a document naming a tool that does not exist
+sends an agent looking for it, which is the failure `_tool_surface_lines()`' own docstring records.
+
+**Then the same technique against the CLI, and it found another one.** Extracted the real
+subcommands from `create_parser()` (`doctor`, `reset`, `status`, `stop` — everything else is bare
+invocation plus flags) and checked every `agentweave <word>` in the live docs and README against it.
+`docs/reference/task-lifecycle.md:31-40` documented `agentweave task update --status ...`, a command
+family deleted with the other 51. Replaced with where transitions actually come from — the task
+board, or an agent calling `update_task` — plus the evidence gate on approval. Re-ran the check:
+every documented invocation now exists.
+
+**Install instructions, in three more places.** `docs/index.md`, `docs/getting-started/quickstart.md`
+and `README.md` all still said `uv tool install agentweave-ai --with agentweave-hub`, and quickstart
+additionally offered `pip install agentweave-ai agentweave-hub`. All now `pip install agentweave-ai`.
+The README's Python badge said 3.8+; its development section installed the CLI before the Hub, which
+would now reach PyPI for an unreleased version; and its opening paragraph was written as a list of
+things that had been retired, which is the right framing for a migration note and the wrong one for
+a 1.0.0 front page.
+
+`CLAUDE.md`'s "(11 tools)" is now 21, with the note that 20 are agent-callable.
+
+**Checked and found already correct** — `docs/reference/cli-commands.md`, which matches the parser's
+subcommands and flags exactly. Verified rather than rewritten.
+
+**Verified:** `mkdocs build --strict` clean; both automated cross-checks pass; no live doc contains
+watchdog / role / transport / `agentweave.yml` references (the one remaining `agentweave.yml` hit is
+the README telling contributors not to create one).

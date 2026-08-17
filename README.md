@@ -1,27 +1,24 @@
 # AgentWeave
 
-[![Python Version](https://img.shields.io/badge/python-3.8%2B-blue)](https://www.python.org/)
+[![Python Version](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 [![PyPI version](https://badge.fury.io/py/agentweave-ai.svg)](https://pypi.org/project/agentweave-ai/)
 
-AgentWeave is a self-hosted workspace where multiple AI coding agents collaborate through one
-Hub-owned runtime. The Hub provides the dashboard, agent execution, REST/SSE APIs, and the shared
-agent capability plane. Legacy watchdog, local transport, Git transport, and collaboration CLI
-workflows have been retired.
+AgentWeave is a local application where several AI coding agents work on your projects together,
+against specifications you approve. It runs on your machine: one process owns execution, state and
+identity, and serves the interface you work in.
+
+Requires **Python 3.11+**.
 
 ## Quick start
 
-Install the CLI and native Hub together:
-
 ```bash
-uv tool install agentweave-ai --with agentweave-hub
-```
-
-Then start AgentWeave:
-
-```bash
+pip install agentweave-ai
 agentweave
 ```
+
+That is the whole thing. `agentweave-ai` brings the Hub — the local server and its interface — with
+it; there is no second package to install and no configuration to write.
 
 The first launch creates user-local Hub state, runs database migrations, starts the native Hub,
 registers the current directory as a project, and opens its overview at `http://localhost:8000`.
@@ -89,6 +86,7 @@ project is navigation, not authentication.
 ## Development
 
 ```bash
+pip install -e ./hub          # first: agentweave-ai depends on agentweave-hub
 pip install -e ".[dev]"
 py -3.11 -m pytest tests/ -q
 
@@ -101,9 +99,11 @@ npm run test -- --run
 npm run build
 ```
 
-Exercise stateful product commands only inside `testbed/` or another throwaway directory. This
-repository is the AgentWeave framework source and must not acquire root `.agentweave/`,
-`agentweave.yml`, or `spec/` runtime state.
+The Hub is installed first so pip resolves the dependency from this checkout rather than fetching a
+release from PyPI.
+
+Exercise stateful product commands only inside `testbed/` or another throwaway directory, and never
+let this repository acquire a root `agentweave.yml`.
 
 ## Repository layout
 

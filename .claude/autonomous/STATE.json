@@ -6,8 +6,8 @@
   "started_at": "2026-08-17T10:14:49+01:00",
   "stop_at": "2026-08-17T15:00:00+01:00",
   "stop_when_queue_empties": true,
-  "iteration": 8,
-  "last_heartbeat": "2026-08-17T10:43:36+01:00",
+  "iteration": 9,
+  "last_heartbeat": "2026-08-17T10:46:17+01:00",
   "session_stopped": null,
   "release_shape": {
     "version": "1.0.0",
@@ -85,9 +85,10 @@
     {
       "id": "R9-readme-and-docs-accuracy",
       "title": "Make the README and the live docs describe what exists",
-      "status": "pending",
+      "status": "done",
       "why": "Explicit operator instruction this session: 'update the documentation and readme'. Measured during prep: the live docs are mostly short and already rewritten, so this is a correctness pass, not a rewrite. But `docs/reference/mcp-tools.md` documents 9 tools where `hub/hub/mcp_server.py` has 21 `@mcp.tool()` decorators — less than half the surface. CLAUDE.md's '11 tools' is stale too.",
-      "detail": "(1) `docs/reference/mcp-tools.md`: reconcile against the 21 actual `@mcp.tool()` functions. (2) README.md: a 1.0.0 pass — what AgentWeave is now (one local app, Hub-owned execution, spec-driven), the corrected install (`pip install agentweave-ai`, then `agentweave`), and the five CLI commands. (3) `docs/getting-started/installation.md` and `quickstart.md`: verify every command against `create_parser()` in `src/agentweave/cli.py` — R4 already names two that do not exist. (4) `docs/index.md`, `docs/guides/dashboard.md`, `docs/architecture/overview.md`: spot-check for the deleted subsystems. (5) `docs/reference/cli-commands.md` was checked during prep and looks correct — verify, do not rewrite. Re-run `mkdocs build --strict` after."
+      "detail": "(1) `docs/reference/mcp-tools.md`: reconcile against the 21 actual `@mcp.tool()` functions. (2) README.md: a 1.0.0 pass — what AgentWeave is now (one local app, Hub-owned execution, spec-driven), the corrected install (`pip install agentweave-ai`, then `agentweave`), and the five CLI commands. (3) `docs/getting-started/installation.md` and `quickstart.md`: verify every command against `create_parser()` in `src/agentweave/cli.py` — R4 already names two that do not exist. (4) `docs/index.md`, `docs/guides/dashboard.md`, `docs/architecture/overview.md`: spot-check for the deleted subsystems. (5) `docs/reference/cli-commands.md` was checked during prep and looks correct — verify, do not rewrite. Re-run `mkdocs build --strict` after.",
+      "outcome": "mcp-tools.md rewritten: documented 12 of 21 tools and denied the existence of one that ships. Verified by a two-way diff against @mcp.tool() names. Same technique on the CLI found task-lifecycle.md documenting `agentweave task update`, deleted with the other 51 commands. Install instructions fixed in index.md, quickstart.md and README (all said uv tool install ... --with agentweave-hub). README badge 3.8->3.11, dev install order fixed. CLAUDE.md 11->21 tools. cli-commands.md verified already correct."
     },
     {
       "id": "R10-full-local-gates",
@@ -111,8 +112,8 @@
       "detail": "PRECONDITION, CHECK IT EXPLICITLY: every CI job on the PR is green and finished. Then merge the PR to master. `hub-image.yml` fires on any master push touching `hub/` and will build the Docker image. Then tag `v1.0.0` and `gh release create v1.0.0` with notes drawn from R8's CHANGELOG. Watch `publish.yml` to completion — after R7 it must publish BOTH `agentweave-ai` and `agentweave-hub` from that one tag; if only one job fires, the R7 re-gating is wrong and that is the highest-priority fix. VERIFY, do not assume: `pip download agentweave-ai==1.0.0` into a temp dir, or `pip install` into a throwaway venv, and confirm `agentweave --version` reports 1.0.0 and that it pulled `agentweave-hub` with it (R4's whole point). Confirm the GHCR image published and the Pages docs site rebuilt. Do NOT create a `hub-v1.0.0` tag."
     }
   ],
-  "current": "R9-readme-and-docs-accuracy",
-  "next_action": "R9: README and live docs accuracy. (1) docs/reference/mcp-tools.md documents 9 tools; hub/hub/mcp_server.py has 21 @mcp.tool() decorators - reconcile. CLAUDE.md's '11 tools' is stale too. (2) README.md: a 1.0.0 pass - what AgentWeave is now, the corrected install (pip install agentweave-ai then agentweave), the five CLI commands. (3) Verify every command in installation.md and quickstart.md against create_parser() in src/agentweave/cli.py. (4) Spot-check docs/index.md, guides/dashboard.md, architecture/overview.md for deleted subsystems. (5) docs/reference/cli-commands.md looked correct in prep - verify, do not rewrite. Re-run mkdocs build --strict after.",
+  "current": "R10-full-local-gates",
+  "next_action": "R10: run every gate locally and get them green before the PR. With PY=C:/Users/huida/AppData/Local/Programs/Python/Python311/python.exe from the repo root: pytest hub/tests/ -n 8 -q; pytest tests/ -n 4 -q; cd hub/ui && npm test and npm run lint; ruff check src/ hub/ tests/; black --check src/ hub/hub/ hub/tests/ tests/; mypy src/; mkdocs build --strict; npx openspec validate --changes --strict. hub/ui/src has NOT changed this run, so no bundle rebuild should be needed - confirm with git diff --name-only against the branch point before skipping it. Baseline to beat: hub 2130/11, CLI 362/3, UI 957, openspec 8/8.",
   "limits": [
     "OUTWARD-FACING ACTIONS ARE AUTHORISED THIS RUN — this INVERTS the previous run's standing rule, deliberately. Pushing, opening a PR, merging to master, tagging, and creating a GitHub release are all in scope, in R11/R12 order. Everything else outward-facing is not: no force-push, no history rewriting on any shared branch, no deleting or moving existing tags or releases, no touching the four releases already published.",
     "NEVER release on a red or still-running CI. `gh pr checks` must show every job green and FINISHED before the PR merges, and the merge must be green before the tag exists. The operator chose 'Full auto, but only on green CI' with that as the hard rule.",

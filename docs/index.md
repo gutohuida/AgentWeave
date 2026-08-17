@@ -7,7 +7,7 @@ the operator dashboard.
 ## Quick start
 
 ```bash
-uv tool install agentweave-ai --with agentweave-hub
+pip install agentweave-ai
 agentweave
 ```
 
