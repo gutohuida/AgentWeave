@@ -75,6 +75,10 @@ class TestResolveExecutable:
             resolve_executable([])
 
 
+@pytest.mark.skipif(
+    not IS_WINDOWS,
+    reason="`.cmd`/`.bat` shim unwrapping is Windows-only; there are no shims to unwrap on POSIX",
+)
 class TestCmdShimUnwrapping:
     """A `.cmd` shim runs under cmd.exe, which truncates its command line at the first raw
     newline — so a multi-line `-p` prompt loses everything after line one. `claude` installs

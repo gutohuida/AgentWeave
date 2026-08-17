@@ -636,3 +636,80 @@ environment. A 1.0.0 that papers over that is exactly what a 1.0.0 should not do
 - Everything else in the run is committed and pushed and stands on its own: the CI and docs fixes,
   the Docker install repair, the one-product install, the 3.11 floor, the solo-agent Team block, the
   version unification, the CHANGELOG, and the documentation pass.
+
+---
+
+## Iteration 13 — 13:00 — the stop was premature: 29 of the 37 are fixed and verified
+
+I stopped an hour ago calling this "understood but not small". With better evidence that judgement
+was wrong, so I resumed — timeboxed, and with a rule that I fix nothing I cannot verify locally.
+**29 of 37 are now fixed, each verified in both configurations.** The remaining 8 include something
+that is not a test problem at all.
+
+### The starlette question, answered with evidence rather than left open
+
+Built a venv pinned to CI's exact resolution — **fastapi 0.141.1 / starlette 1.6.0** against this
+machine's 0.136.3 / 0.52.1 — and ran the whole suite in it:
+
+    starlette 1.6.0:  16 failed, 2114 passed
+
+Of those 16, 3 fail only because that scratch venv had no `agentweave` installed. **Every genuine
+failure was one message** — `no <METHOD> <path> route with a body model` — from two tests that walk
+`app.routes`. Nothing in `hub/hub/**` failed. **The product is compatible with starlette 1.6; two
+test helpers were not.**
+
+Starlette 1.x keeps included routers as `_IncludedRouter` wrappers instead of flattening them, the
+real `APIRoute`s nest inside, and each carries a **relative** path. So a scan of `app.routes` found
+nothing — and reported it as "no such route", which reads like a missing endpoint rather than a
+changed data structure. That is the dangerous part: `test_spec_documents_api`'s route check proves an
+*absence*, so on starlette 1.x it would have passed **vacuously** if the assertion had been shaped
+the other way round.
+
+`hub/tests/_routing.py` now walks either shape. Getting it right took three attempts and the first
+two were wrong in instructive ways, both recorded in its docstring: `include_context.prefix` is the
+*parent's* prefix, not the wrapper's own contribution, and a route inside a router already carries
+that router's prefix in `.path`. Only **strict ancestors** accumulate.
+
+**Verified the way that actually settles it:** the helper produces an **identical set of 140 paths
+on both starlette versions**. Both affected test files then pass on both: 35 passed, 35 passed.
+
+### The PATH cluster, reproduced locally rather than fixed blind
+
+Stripped `claude` and `codex` from PATH and reproduced **exactly 17 failures**, matching CI. Two
+causes, two small fixes:
+
+- **16** — `run_turn` resolves the executable *before* it spawns, and the fixture patched only
+  `spawn`. One extra `monkeypatch.setattr` for `resolve_executable`. Binary resolution is
+  `test_pty_runner`'s subject; this file's subject is the notification loop.
+- **1** — `test_trigger_directly_refuses_when_no_address_is_known` omitted the
+  `hub.launchability.shutil.which` patch that **its 33 siblings in the same file all carry**, so it
+  failed on `claude` missing instead of asserting the address error it exists to pin.
+
+Both verified with the binaries hidden **and** present. One test, `test_spawn_failure_broadcasts_
+run_failed_event`, failed once during this and then passed alone and twice more in the pair — a
+flake, recorded as a flake rather than counted as a fix.
+
+Plus two platform skips that are simply correct: `ctypes.windll` cannot be patched into existence on
+POSIX, and there are no `.cmd` shims to unwrap there.
+
+### Where I stopped, and why it is a real boundary
+
+Four remain that I cannot verify from Windows, and **at least two of them look like a product bug,
+not a test bug**:
+
+`pid_alive()` uses `os.kill(pid, 0)` on POSIX. That **succeeds for a zombie** — a SIGKILLed child
+stays present until reaped — so after `terminate_process_tree()` the process still reports alive.
+That is exactly the `assert True is False` in `test_pty_runner::test_kills_a_long_running_process`
+and `test_lifespan_shutdown::test_hub_shutdown_kills_a_real_tracked_process`.
+
+It matters because **the Docker image is Linux**. A Hub shutting down there would believe its
+children are still running. The docstring's own reasoning — that `pid_alive` exists for a *restarted*
+Hub checking a process it did not spawn, where re-parenting to init means no zombie — is why this is
+probably narrow in practice. But "probably narrow" is not something to establish on a platform I
+cannot run.
+
+Two more (`test_project_workspace_unavailable`'s `NoResultFound` ×2) and one model-catalog assertion
+are undiagnosed for the same reason.
+
+**Gates after all of this:** hub suite **2130 passed / 11 skipped**, ruff clean, black clean —
+unchanged from baseline, so nothing here regressed the environment that was already working.

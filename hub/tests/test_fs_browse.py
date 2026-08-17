@@ -83,6 +83,13 @@ class TestListDirectoryUnit:
 class TestListRootsUnit:
     """composer/chrome refinement §9.1."""
 
+    @pytest.mark.skipif(
+        os.name != "nt",
+        reason=(
+            "patches ctypes.windll, which only exists on Windows — the module attribute cannot be "
+            "patched into being on POSIX, so this asserts nothing there"
+        ),
+    )
     def test_windows_reports_only_drives_present_in_the_logical_drive_bitmask(self):
         # Bit 0 (A) and bit 2 (C) set — B and every other letter absent.
         with patch("hub.fs_browse.os.name", "nt"):  # noqa: SIM117

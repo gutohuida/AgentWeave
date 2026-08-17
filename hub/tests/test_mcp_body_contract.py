@@ -24,8 +24,9 @@ from typing import Any, Dict
 from unittest.mock import MagicMock
 
 import pytest
-from fastapi.routing import APIRoute
 from pydantic import BaseModel, ValidationError
+
+from ._routing import iter_api_routes
 
 AGENT_ACTIONS_PREFIX = "/api/v1/agent-actions"
 
@@ -47,10 +48,16 @@ def _request_model(app, method: str, path: str) -> type[BaseModel]:
     request would.
     """
     full_path = f"{AGENT_ACTIONS_PREFIX}{path}"
-    for route in app.routes:
-        if not isinstance(route, APIRoute):
+    for template, route in iter_api_routes(app):
+        if method not in route.methods:
             continue
-        if method not in route.methods or not route.path_regex.match(full_path):
+        # `template` is the full path with parameters still in `{braces}`; `route.path_regex` only
+        # understands the route's own tail, because a router's prefix is not part of it on newer
+        # Starlette. Match the tail and require the prefix to be a literal match.
+        prefix = template[: len(template) - len(route.path)]
+        if not full_path.startswith(prefix):
+            continue
+        if not route.path_regex.match(full_path[len(prefix) :]):
             continue
         for field in route.dependant.body_params:
             annotation = field.field_info.annotation

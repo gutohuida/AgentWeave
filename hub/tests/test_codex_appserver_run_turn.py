@@ -74,6 +74,12 @@ def _patch_spawn(monkeypatch, fake_session):
     async def _fake_spawn(cmd, *, cwd=None, env=None):
         return fake_session
 
+    # `run_turn` resolves the executable *before* it spawns, so patching `spawn` alone still left
+    # these 16 tests requiring a real `codex` on PATH — which every developer machine here has and
+    # no CI runner does. They were green locally and had never once run in CI, because `hub-test`
+    # was failing at its install step. Resolution is `test_pty_runner`'s subject, not this file's:
+    # what is under test here is `run_turn`'s notification-handling loop against a scripted session.
+    monkeypatch.setattr(codex_appserver, "resolve_executable", lambda cmd: list(cmd))
     monkeypatch.setattr(codex_appserver.AppServerProcess, "spawn", _fake_spawn)
 
 

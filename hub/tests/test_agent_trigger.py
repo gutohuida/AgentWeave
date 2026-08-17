@@ -1417,15 +1417,22 @@ async def test_trigger_directly_refuses_when_no_address_is_known(
         await db.commit()
         await db.refresh(conversation)
 
-        with patch("hub.bound_address.get", return_value=None):
-            with pytest.raises(agent_trigger.TriggerAgentError) as excinfo:
-                await agent_trigger.trigger_agent_directly(
-                    project_id="proj-test",
-                    agent="no-addr-agent",
-                    message="hi",
-                    conversation_id=conversation.id,
-                    session=db,
-                )
+        # The launchability patch its 33 siblings in this file all carry, and this one lacked.
+        # Without it the turn fails earlier, on `claude` not being installed, and the assertion
+        # below reads "Runner CLI 'claude' was not found in PATH" instead of the address error the
+        # test exists to pin. Green on any developer machine, red anywhere else.
+        with patch(
+            "hub.launchability.shutil.which", return_value="/usr/bin/claude"
+        ):  # noqa: SIM117
+            with patch("hub.bound_address.get", return_value=None):
+                with pytest.raises(agent_trigger.TriggerAgentError) as excinfo:
+                    await agent_trigger.trigger_agent_directly(
+                        project_id="proj-test",
+                        agent="no-addr-agent",
+                        message="hi",
+                        conversation_id=conversation.id,
+                        session=db,
+                    )
 
     assert excinfo.value.status_code == 409
     assert "HUB_URL" in excinfo.value.detail

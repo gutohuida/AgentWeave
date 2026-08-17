@@ -17,6 +17,8 @@ from hub.db.models import Run, SpecDocumentEvent
 from hub.main import create_app
 from hub.spec_payload import SCHEMA_VERSION, extract_payload
 
+from ._routing import iter_api_routes
+
 BASE = "/api/v1/projects/proj-test/project"
 AGENT = "/api/v1/agent-actions/spec/documents"
 PATH = "spec/changes/demo/spec.html"
@@ -487,10 +489,14 @@ async def test_document_events_are_append_only_with_no_route_to_change_or_delete
     adds rows — an earlier event's fields never change underneath it.
     """
     application = create_app()
+    # Walked through `iter_api_routes` rather than `application.routes` directly: newer Starlette
+    # keeps included routers as wrappers, so the top-level list holds almost no real routes and a
+    # direct scan would find nothing and pass vacuously — which is the worst outcome for a test
+    # whose whole job is to prove an absence.
     event_routes = [
-        (route.path, sorted(getattr(route, "methods", None) or []))
-        for route in application.routes
-        if "spec" in route.path.lower() and "event" in route.path.lower()
+        (path, sorted(getattr(route, "methods", None) or []))
+        for path, route in iter_api_routes(application)
+        if "spec" in path.lower() and "event" in path.lower()
     ]
     assert event_routes == [], f"no route may touch a spec document event, found {event_routes}"
 
