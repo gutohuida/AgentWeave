@@ -23,6 +23,7 @@ import asyncio
 import logging
 import os
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -149,6 +150,15 @@ _RUN_TRACE_LIMIT = 32
 def _trace(run_id: str, step: str) -> None:
     """Record one breadcrumb for *run_id*. Never raises — a diagnostic must not break a run."""
     try:
+        # Same clock and task identity the test's connection-event listener stamps, so the two
+        # sequences interleave and the rollbacks landing inside the finalize can be read off
+        # directly rather than inferred.
+        try:
+            task = asyncio.current_task()
+            who = task.get_name() if task is not None else "no-task"
+        except RuntimeError:
+            who = "no-loop"
+        step = f"{time.monotonic():.6f} {step} task={who}"
         steps = _run_trace.setdefault(run_id, [])
         if len(_run_trace) > _RUN_TRACE_LIMIT:
             for stale in list(_run_trace)[: len(_run_trace) - _RUN_TRACE_LIMIT]:

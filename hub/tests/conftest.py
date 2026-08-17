@@ -1,7 +1,8 @@
 """Shared test fixtures for AgentWeave Hub."""
 
+import asyncio
 import os
-import traceback
+import time
 from collections import deque
 
 import pytest
@@ -35,17 +36,21 @@ from hub.project_workspace import (
 # That establishes the mechanism. This names the culprit: every ROLLBACK on the shared
 # connection is recorded with the hub/tests frames that issued it, so the assertion in
 # `_await_agent_idle` can print who ended the transaction rather than infer it.
-connection_events: deque = deque(maxlen=40)
+connection_events: deque = deque(maxlen=250)
 
 
 def _record(kind: str) -> None:
-    frames = [
-        f"{f.filename.rsplit(os.sep, 1)[-1]}:{f.lineno} {f.name}"
-        for f in traceback.extract_stack()
-        if (f"{os.sep}hub{os.sep}" in f.filename or f"{os.sep}tests{os.sep}" in f.filename)
-        and "conftest.py" not in f.filename
-    ]
-    connection_events.append(f"{kind} <- {' | '.join(frames[-4:])}")
+    # Identify by asyncio task and wall-clock, not by stack. These handlers run inside
+    # SQLAlchemy's greenlet, so `traceback.extract_stack()` sees only the greenlet's own frames
+    # and the application frames are not on it — measured on 0ffd376, where every captured frame
+    # list came back empty. The awaiting task, by contrast, is still the current task across the
+    # greenlet switch, and `_run_trace` stamps the same clock, so the two interleave exactly.
+    try:
+        task = asyncio.current_task()
+        who = task.get_name() if task is not None else "no-task"
+    except RuntimeError:
+        who = "no-loop"
+    connection_events.append(f"{time.monotonic():.6f} {kind} task={who}")
 
 
 event.listens_for(engine.sync_engine, "rollback")(lambda conn: _record("ROLLBACK"))
