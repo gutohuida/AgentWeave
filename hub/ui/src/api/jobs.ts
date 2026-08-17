@@ -13,6 +13,22 @@ export interface JobRun {
   error_summary?: string
 }
 
+/** A job's loop state, present only when the job opted into being a loop (design D6). */
+export interface LoopSummary {
+  /** The `Loop` row's own id — what `GET /tasks?loop_id=` actually scopes by, distinct from the
+   *  job's id. */
+  id: string
+  purpose: string
+  stop_at?: string
+  stop_when_queue_empties: boolean
+  stop_reason?: string
+  stopped_at?: string
+  /** status -> count of this loop's non-fetched-yet-terminal tasks, keyed by `Task.status`. */
+  queue: Record<string, number>
+  current_task?: { id: string; title: string; status: string } | null
+  open_questions: number
+}
+
 export interface Job {
   id: string
   project_id: string
@@ -29,6 +45,7 @@ export interface Job {
   run_count: number
   last_session_id?: string
   history?: JobRun[]
+  loop?: LoopSummary | null
 }
 
 export interface JobCreate {
@@ -40,6 +57,12 @@ export interface JobCreate {
   enabled?: boolean
   id?: string
   source?: 'local' | 'hub'
+  // Loop opt-in (design D6): the Hub creates a `Loop` row iff at least one of these is present in
+  // the request body. Omit all three entirely — never send `purpose: ''` or
+  // `stop_when_queue_empties: false` — unless the caller actually means to opt this job into a loop.
+  purpose?: string
+  stop_at?: string
+  stop_when_queue_empties?: boolean
 }
 
 export interface JobUpdate {
@@ -49,6 +72,12 @@ export interface JobUpdate {
   cron?: string
   session_mode?: 'new' | 'resume'
   enabled?: boolean
+  // Same opt-in rule as `JobCreate` — omit unless the loop section was touched. Supplying any of
+  // these for a job with no existing loop is a 400 unless this is the update that creates one.
+  purpose?: string
+  stop_at?: string
+  stop_when_queue_empties?: boolean
+  stop_reason?: string
 }
 
 export function useJobs() {

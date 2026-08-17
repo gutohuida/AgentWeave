@@ -158,6 +158,7 @@ async def _batch_loop_summaries(
     summaries: Dict[str, LoopSummary] = {}
     for job_id, loop in loop_by_job.items():
         summaries[job_id] = LoopSummary(
+            id=loop.id,
             purpose=loop.purpose,
             stop_at=loop.stop_at,
             stop_when_queue_empties=loop.stop_when_queue_empties,
@@ -249,6 +250,7 @@ async def create_job(
         session.add(loop)
         await session.commit()
         loop_summary = LoopSummary(
+            id=loop.id,
             purpose=loop.purpose,
             stop_at=loop.stop_at,
             stop_when_queue_empties=loop.stop_when_queue_empties,

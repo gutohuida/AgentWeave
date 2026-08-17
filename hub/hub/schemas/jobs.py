@@ -68,6 +68,9 @@ class JobRunResponse(BaseModel):
 
 
 class LoopSummary(BaseModel):
+    # The `Loop` row's own id — distinct from the job's id `Task.loop_id`/`GET /tasks?loop_id=`
+    # actually scope by (design D2). Without it, a caller cannot build that query string at all.
+    id: str
     purpose: str
     stop_at: Optional[datetime] = None
     stop_when_queue_empties: bool

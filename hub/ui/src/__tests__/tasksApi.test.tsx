@@ -61,6 +61,23 @@ describe('useTasks', () => {
       'http://hub.test/api/v1/projects/proj-1/tasks?exclude_archived_completed=true',
     ])
   })
+
+  it('requests ?loop_id=<id> when asked, taking priority over excludeArchivedCompleted', async () => {
+    const seen: string[] = []
+    globalThis.fetch = ((url: string) => {
+      seen.push(url)
+      return Promise.resolve({ ok: true, status: 200, json: async () => [] } as Response)
+    }) as typeof fetch
+
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const { result } = renderHook(
+      () => useTasks({ loopId: 'loop-1', excludeArchivedCompleted: true }),
+      { wrapper: wrapper(client) },
+    )
+    await waitFor(() => expect(result.current.data).toBeDefined())
+
+    expect(seen).toEqual(['http://hub.test/api/v1/projects/proj-1/tasks?loop_id=loop-1'])
+  })
 })
 
 describe('useDocumentTasks', () => {

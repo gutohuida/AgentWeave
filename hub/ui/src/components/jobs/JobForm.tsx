@@ -27,6 +27,15 @@ export function JobForm({ onSubmit, onCancel, isPending }: JobFormProps) {
   const [sessionMode, setSessionMode] = useState<'new' | 'resume'>('new')
   const [error, setError] = useState('')
 
+  // "Make this a loop" — collapsed by default. `loopEnabled` tracks whether the operator ever
+  // opened the section, which is what decides whether the loop fields are sent at all (task 5.1):
+  // a controlled textarea that always renders `purpose=""` must not, by that fact alone, opt every
+  // job into being a loop the server's `purpose is not None` rule would then honor.
+  const [loopEnabled, setLoopEnabled] = useState(false)
+  const [purpose, setPurpose] = useState('')
+  const [stopAt, setStopAt] = useState('')
+  const [stopWhenQueueEmpties, setStopWhenQueueEmpties] = useState(false)
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
@@ -56,6 +65,13 @@ export function JobForm({ onSubmit, onCancel, isPending }: JobFormProps) {
       session_mode: sessionMode,
       enabled: true,
       source: 'hub',
+      ...(loopEnabled
+        ? {
+            purpose: purpose.trim(),
+            ...(stopAt ? { stop_at: new Date(stopAt).toISOString() } : {}),
+            stop_when_queue_empties: stopWhenQueueEmpties,
+          }
+        : {}),
     })
   }
 
@@ -209,6 +225,64 @@ export function JobForm({ onSubmit, onCancel, isPending }: JobFormProps) {
                 </span>
               </label>
             </div>
+          </div>
+
+          {/* Loop section — collapsed by default */}
+          <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+            <button
+              type="button"
+              onClick={() => setLoopEnabled(!loopEnabled)}
+              className="flex items-center gap-1.5 text-[11px] font-medium"
+              style={{ color: 'var(--text-3)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+              aria-expanded={loopEnabled}
+            >
+              <Icon name={loopEnabled ? 'expand_less' : 'expand_more'} size={16} />
+              Make this a loop
+            </button>
+
+            {loopEnabled && (
+              <div className="space-y-3 mt-3">
+                <div>
+                  <label className="block mb-1.5 text-[11px] font-medium" style={{ color: 'var(--text-3)' }}>
+                    Purpose
+                  </label>
+                  <textarea
+                    value={purpose}
+                    onChange={(e) => setPurpose(e.target.value)}
+                    placeholder="What is this loop for?"
+                    rows={2}
+                    className="resize-none"
+                    style={inputStyle}
+                    disabled={isPending}
+                  />
+                </div>
+
+                <div>
+                  <label className="block mb-1.5 text-[11px] font-medium" style={{ color: 'var(--text-3)' }}>
+                    Stop at (optional)
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={stopAt}
+                    onChange={(e) => setStopAt(e.target.value)}
+                    style={inputStyle}
+                    disabled={isPending}
+                  />
+                </div>
+
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={stopWhenQueueEmpties}
+                    onChange={(e) => setStopWhenQueueEmpties(e.target.checked)}
+                    disabled={isPending}
+                  />
+                  <span className="text-xs" style={{ color: 'var(--text)' }}>
+                    Stop when the queue is empty
+                  </span>
+                </label>
+              </div>
+            )}
           </div>
 
           {/* Error */}

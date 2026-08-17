@@ -128,17 +128,21 @@ export function useRetryTaskIntegration(taskId: string) {
   })
 }
 
-export function useTasks(options?: { excludeArchivedCompleted?: boolean }) {
+/** `loopId` and `excludeArchivedCompleted` both scope the same query on the Hub (an `elif` chain,
+ *  `hub/hub/api/v1/tasks.py`), so passing both is not meaningful — callers pick one. */
+export function useTasks(options?: { excludeArchivedCompleted?: boolean; loopId?: string }) {
   const { isConfigured, selectedProjectId: projectId } = useConfigStore()
   const excludeArchivedCompleted = options?.excludeArchivedCompleted ?? false
+  const loopId = options?.loopId
   return useQuery<Task[]>({
-    queryKey: ['project', projectId, 'tasks', { excludeArchivedCompleted }],
-    queryFn: () =>
-      getJson<Task[]>(
-        `/api/v1/projects/${projectId}/tasks${
-          excludeArchivedCompleted ? '?exclude_archived_completed=true' : ''
-        }`,
-      ),
+    queryKey: ['project', projectId, 'tasks', { excludeArchivedCompleted, loopId }],
+    queryFn: () => {
+      const params = new URLSearchParams()
+      if (loopId) params.set('loop_id', loopId)
+      else if (excludeArchivedCompleted) params.set('exclude_archived_completed', 'true')
+      const qs = params.toString()
+      return getJson<Task[]>(`/api/v1/projects/${projectId}/tasks${qs ? `?${qs}` : ''}`)
+    },
     enabled: isConfigured && !!projectId,
   })
 }

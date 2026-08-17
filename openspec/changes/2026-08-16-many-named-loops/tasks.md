@@ -91,7 +91,7 @@
 
 ## 5. UI (`hub/ui/src`)
 
-- [ ] 5.1 `hub/ui/src/api/jobs.ts`: extend the `Job` type with the optional `loop` field; extend
+- [x] 5.1 `hub/ui/src/api/jobs.ts`: extend the `Job` type with the optional `loop` field; extend
       `JobCreate`/`JobUpdate` request shapes with the three/four loop fields, all optional and
       **omitted from the request body**, not sent as `""`/`false`, when the loop section (5.3) is
       collapsed. Design D6's opt-in rule is `purpose is not None` server-side — a controlled form
@@ -99,18 +99,34 @@
       being a loop the moment the request shape includes the field at all, regardless of whether the
       operator ever touched the collapsed section. Confirmed in round 2's cold review: this is a real
       client-side boundary, not merely a server-side one, since the server cannot distinguish "sent
-      empty on purpose" from "sent empty because the form always sends it."
-- [ ] 5.2 `hub/ui/src/api/tasks.ts`: `useTasks()` options gain `loopId?: string`, applied the same
+      empty on purpose" from "sent empty because the form always sends it." Implemented via
+      `JobForm.tsx`'s spread-only-when-`loopEnabled` shape (5.3). ALSO FIXED THIS SLICE: `LoopSummary`
+      (both `hub/hub/schemas/jobs.py` and `hub/ui/src/api/jobs.ts`) was missing its own `id` — the
+      design never gave the frontend a way to build `?loop_id=<loop id>` at all, since `Task.loop_id`
+      scopes by the `Loop` row's own id, not the job's. Added `id: str`/`id: string` and populated it
+      at both `LoopSummary(...)` call sites in `hub/hub/api/v1/jobs.py` (`_batch_loop_summaries` and
+      `create_job`'s zero-history construction).
+- [x] 5.2 `hub/ui/src/api/tasks.ts`: `useTasks()` options gain `loopId?: string`, applied the same
       way `specDocumentId`/`excludeArchivedCompleted` already are; add `useLoopTasks(loopId)` mirroring
       `useDocumentTasks`, or confirm `useTasks({ loopId })` alone already covers `JobCard`'s need
-      before adding a second hook that does the same thing under a different name.
-- [ ] 5.3 `hub/ui/src/components/jobs/JobForm.tsx`: collapsed-by-default "Make this a loop" section —
-      purpose (textarea), stop time (datetime input), "stop when queue is empty" (checkbox).
-- [ ] 5.4 `hub/ui/src/components/jobs/JobCard.tsx`: render a loop block when `job.loop` is present —
+      before adding a second hook that does the same thing under a different name. Confirmed:
+      `useTasks({ loopId })` alone covers it — no second hook. `loopId` takes priority over
+      `excludeArchivedCompleted` in the querystring builder, matching the server's `elif` chain
+      (design D2): passing both is not meaningful, so the client never sends both.
+- [x] 5.3 `hub/ui/src/components/jobs/JobForm.tsx`: collapsed-by-default "Make this a loop" section —
+      purpose (textarea), stop time (datetime input), "stop when queue is empty" (checkbox). Loop
+      fields spread into the `onSubmit` payload only when the section was expanded (`loopEnabled`),
+      never as empty-string/false defaults.
+- [x] 5.4 `hub/ui/src/components/jobs/JobCard.tsx`: render a loop block when `job.loop` is present —
       purpose, stop condition/reason if stopped, queue counts by status, current item (title +
       status, linking into the task board scoped to `?loop_id=`), open-questions count. No change to
-      a plain job's card.
-- [ ] 5.5 `cd hub/ui && npm run build && python ../../scripts/refresh_ui_bundle.py`, twice — once
+      a plain job's card. New `LoopBlock` sub-component owns its own `useTasks({ loopId })` call so a
+      plain job never triggers it; the current-item line is the click target that calls `onOpenTasks`
+      with every task id the loop's fetch returned — the same `setActiveTaskIds` mechanism
+      `SpecDocumentTasksLink` already proved (design D5). `onOpenTasks` threaded
+      `App.tsx` → `JobsPage.tsx` → `JobCard.tsx`, identical shape to the existing spec-coverage wiring
+      already in `App.tsx`.
+- [x] 5.5 `cd hub/ui && npm run build && python ../../scripts/refresh_ui_bundle.py`, twice — once
       before commit, once after, per the standing rule this session has now hit on N2 and N2b both
       (the fingerprint folds in `git status --porcelain`).
 
@@ -137,14 +153,23 @@
       loop regardless of status, mirroring 3.1's own `spec_document_id` test shape from the prior
       change. Confirm `GET /api/v1/agent-actions/tasks` (the D7 regression's actual live surface)
       still returns `200` after 4.5's change, not just the direct-router test.
-- [ ] 6.5 UI: `hub/ui/src/__tests__/` — a test for `JobCard`'s loop block rendering (present when
+- [x] 6.5 UI: `hub/ui/src/__tests__/` — a test for `JobCard`'s loop block rendering (present when
       `job.loop` is set, absent otherwise, queue counts and current item shown correctly) and for
       `useTasks({ loopId })`/whatever hook 5.2 lands on requesting the right query string.
+      `jobCard.test.tsx` (new, 4 cases: no block for a plain job even expanded, full block with
+      purpose/queue/current-item/open-questions, stopped state, click-through to `onOpenTasks` with
+      every loop task id) plus one case added to the existing `tasksApi.test.tsx` for
+      `useTasks({ loopId })`'s querystring, including that it wins over `excludeArchivedCompleted`
+      when both are passed.
 - [x] 6.6 `pytest hub/tests/ -n 8` and `pytest tests/ -n 4` — record counts against this session's
-      `20e963e` baseline (2093/11, 362/3) in the log. Recorded this iteration: hub 2102/11 (+9, exactly
-      the tests added in 6.2-6.4), CLI 362/3 (unchanged, untouched by this slice).
-- [ ] 6.7 `cd hub/ui && npm test && npm run lint && npx tsc --noEmit` — record counts against the
-      `943/943` baseline. Deferred to section 5 (UI) — no UI code touched yet.
+      `20e963e` baseline (2093/11, 362/3) in the log. Recorded this iteration: hub 2102/11 (unchanged —
+      this slice touched only `jobs.py`'s schema/API adding `LoopSummary.id`, no new Python test; one
+      `test_agent_trigger.py::test_spawn_failure_marks_run_failed` failure under `-n 8` reproduced the
+      exact same known xdist flake `verified_green_at_20e963e` already named — confirmed by rerunning
+      it standalone, passed), CLI 362/3 (unchanged, untouched by this slice).
+- [x] 6.7 `cd hub/ui && npm test && npm run lint && npx tsc --noEmit` — record counts against the
+      `943/943` baseline. `npm test`: 948/948 (943 baseline + 5 new: 4 `jobCard.test.tsx` + 1
+      `tasksApi.test.tsx`). `npm run lint`: clean. `npx tsc --noEmit`: clean.
 - [x] 6.8 `ruff check hub/ src/`, `black --check` on every touched file. Clean.
 - [x] 6.9 `npx openspec validate --changes --strict` and `--specs --strict` — both clean (20/20, 30/30).
 

@@ -356,7 +356,16 @@ export default function App() {
         />
       )
     } else if (destination.tab === 'jobs') {
-      projectContent = <JobsPage />
+      projectContent = (
+        <JobsPage
+          // A loop's queue/current-item link, clicked: same cross-tab filter mechanism as the
+          // spec coverage bar's task-count link above — switch to Tasks, filtered.
+          onOpenTasks={(taskIds) => {
+            useTaskFilterStore.getState().setActiveTaskIds(taskIds)
+            navigateTo(projectDestination(destination.projectId, 'tasks'))
+          }}
+        />
+      )
     } else if (destination.tab === 'activity') {
       projectContent = (
         <div className="flex h-full flex-col">

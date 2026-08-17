@@ -4,6 +4,7 @@ import { Icon } from '@/components/common/Icon'
 import { Badge } from '@/components/common/Badge'
 import { Button } from '@/components/ui/button'
 import { Job, JobRun } from '@/api/jobs'
+import { useTasks } from '@/api/tasks'
 
 interface JobCardProps {
   job: Job
@@ -12,6 +13,9 @@ interface JobCardProps {
   onResume: (id: string) => void
   onDelete: (id: string) => void
   isPending: boolean
+  /** A loop's queue count or current item, clicked: switch to the Tasks tab filtered to this
+   *  loop's tasks. Same mechanism `SpecDocumentTasksLink` already proved live (design D5). */
+  onOpenTasks?: (taskIds: string[]) => void
 }
 
 function getStatusVariant(enabled: boolean): 'default' | 'secondary' | 'success' {
@@ -80,7 +84,98 @@ function RunHistory({ runs }: { runs?: JobRun[] }) {
   )
 }
 
-export function JobCard({ job, onRun, onPause, onResume, onDelete, isPending }: JobCardProps) {
+/**
+ * A job's loop state, rendered only when `job.loop` is present — a plain job's card must not
+ * change shape at all (human-only check 8.1). Its own component rather than inline in `JobCard`
+ * so the `useTasks({ loopId })` fetch — needed only to build the task-id list `onOpenTasks`
+ * expects — only ever runs for a job that actually has a loop.
+ */
+function LoopBlock({ job, onOpenTasks }: { job: Job; onOpenTasks?: (taskIds: string[]) => void }) {
+  const loop = job.loop
+  const { data: loopTasks } = useTasks(loop ? { loopId: loop.id } : undefined)
+
+  if (!loop) return null
+
+  const totalQueued = Object.values(loop.queue).reduce((sum, n) => sum + n, 0)
+  const canOpenQueue = Boolean(onOpenTasks && loopTasks && loopTasks.length > 0)
+  const openQueue = () => {
+    if (onOpenTasks && loopTasks) onOpenTasks(loopTasks.map((t) => t.id))
+  }
+  const linkStyle: React.CSSProperties = {
+    background: 'none',
+    border: 'none',
+    color: 'var(--blue)',
+    cursor: 'pointer',
+    padding: 0,
+    font: 'inherit',
+    textAlign: 'left',
+  }
+
+  return (
+    <div
+      className="pt-3 space-y-2"
+      style={{ borderTop: '1px dashed var(--border)' }}
+      data-testid="job-loop-block"
+    >
+      <div className="flex items-center gap-1.5">
+        <Icon name="all_inclusive" size={14} style={{ color: 'var(--blue)' }} />
+        <span className="text-[11px] font-medium" style={{ color: 'var(--text-2)' }}>
+          Loop
+        </span>
+        <Badge variant={loop.stop_reason ? 'secondary' : 'success'} className="text-[10px]">
+          {loop.stop_reason ? 'Stopped' : 'Active'}
+        </Badge>
+      </div>
+
+      {loop.purpose && (
+        <p className="text-xs" style={{ color: 'var(--text)' }}>
+          {loop.purpose}
+        </p>
+      )}
+
+      {loop.stop_reason && (
+        <p className="text-[11px]" style={{ color: 'var(--amber)' }}>
+          Stopped: {loop.stop_reason}
+        </p>
+      )}
+
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>
+          Queue: {totalQueued}
+        </span>
+        {Object.entries(loop.queue).map(([status, count]) => (
+          <Badge key={status} variant="secondary" className="text-[10px]">
+            {status}: {count}
+          </Badge>
+        ))}
+      </div>
+
+      {loop.current_task ? (
+        canOpenQueue ? (
+          <button type="button" onClick={openQueue} style={linkStyle} className="text-[11px]">
+            {loop.current_task.title} ({loop.current_task.status})
+          </button>
+        ) : (
+          <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>
+            {loop.current_task.title} ({loop.current_task.status})
+          </p>
+        )
+      ) : (
+        <p className="text-[11px]" style={{ color: 'var(--text-3)', opacity: 0.6 }}>
+          No current item
+        </p>
+      )}
+
+      {loop.open_questions > 0 && (
+        <p className="text-[11px]" style={{ color: 'var(--amber)' }}>
+          {loop.open_questions} open question{loop.open_questions === 1 ? '' : 's'}
+        </p>
+      )}
+    </div>
+  )
+}
+
+export function JobCard({ job, onRun, onPause, onResume, onDelete, isPending, onOpenTasks }: JobCardProps) {
   const [expanded, setExpanded] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
@@ -215,6 +310,9 @@ export function JobCard({ job, onRun, onPause, onResume, onDelete, isPending }: 
               <p className="text-[11px] font-medium mb-2" style={{ color: 'var(--text-3)' }}>Recent Runs</p>
               <RunHistory runs={job.history} />
             </div>
+
+            {/* Loop — absent entirely for a plain job */}
+            {job.loop && <LoopBlock job={job} onOpenTasks={onOpenTasks} />}
 
             {/* IDs footer */}
             <div className="pt-3 flex items-center gap-2" style={{ borderTop: '1px solid var(--border)' }}>

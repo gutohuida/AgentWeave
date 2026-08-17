@@ -14,7 +14,12 @@ import {
   JobCreate,
 } from '@/api/jobs'
 
-export function JobsPage() {
+interface JobsPageProps {
+  /** A loop's queue/current-item link, clicked: switch to the Tasks tab filtered to it. */
+  onOpenTasks?: (taskIds: string[]) => void
+}
+
+export function JobsPage({ onOpenTasks }: JobsPageProps) {
   const { data: jobs, isLoading } = useJobs()
   const [showForm, setShowForm] = useState(false)
   const [filter, setFilter] = useState<'all' | 'active' | 'paused'>('all')
@@ -118,6 +123,7 @@ export function JobsPage() {
                 onResume={resumeJob.mutate}
                 onDelete={deleteJob.mutate}
                 isPending={isPending}
+                onOpenTasks={onOpenTasks}
               />
             ))}
           </div>
