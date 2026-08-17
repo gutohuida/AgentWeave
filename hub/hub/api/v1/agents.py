@@ -854,8 +854,13 @@ UNDESCRIBED_TOOLS = {
 }
 
 
-def _tool_surface_lines() -> List[str]:
+def _tool_surface_lines(*, has_peers: bool = True) -> List[str]:
     """Describe every tool an agent can call, with the values its constrained parameters take.
+
+    `has_peers` is False in a project with one agent. The closing sentence otherwise points at
+    "the roster above", and in that case there is no roster above to point at — the Team section is
+    omitted entirely (task 13.9). The tools themselves stay described either way, because they stay
+    callable: `request_agent` is in fact how a single-agent project stops being one.
 
     Naming a tool without its accepted values is what produced the Codex failure: the turn
     preamble listed four tool names and nothing else, so agents guessed `message_type="text"` and
@@ -957,8 +962,13 @@ def _tool_surface_lines() -> List[str]:
         f"{values(JobSessionMode)}. Requires the operator's scheduled-work allowance.",
         "- `delete_job(job_id)`, `toggle_job(job_id, enabled)`, `run_job(job_id)` — same allowance.",
         "",
-        "Address a peer by its exact name from the roster above. There is no inbox tool: "
-        "everything addressed to you already appears in this turn.",
+        (
+            "Address a peer by its exact name from the roster above. There is no inbox tool: "
+            "everything addressed to you already appears in this turn."
+            if has_peers
+            else "You are the only agent in this project. There is no inbox tool: everything "
+            "addressed to you already appears in this turn."
+        ),
         "",
     ]
 
@@ -1225,8 +1235,17 @@ async def _render_hub_agent_context(
                 )
             lines.append("")
 
-    lines.append("### Team")
-    if roster:
+    # A project with nobody else in it gets no Team section at all — not a Team section saying the
+    # team is empty. `roster` includes the agent being addressed (that is what the `<- you` marker
+    # is for), so "is anyone else here" is a question about peers, not about the roster's length.
+    #
+    # The old `else` branch printed "No other agents are registered in this project yet." on every
+    # single-agent turn. Naming the absence is worse than saying nothing: it puts collaboration in
+    # the agent's head, invites it to wonder who it should be waiting for, and costs context on
+    # every turn of the journey a first-time user actually takes.
+    peers = [row for row in roster if row.name != agent]
+    if peers:
+        lines.append("### Team")
         for row in roster:
             meta = dict(row.config or {})
             bound = roster_runners.get(row.runner_id)
@@ -1240,9 +1259,7 @@ async def _render_hub_agent_context(
         lines.append(
             "Address a peer by the exact name above when sending a message or assigning a task."
         )
-    else:
-        lines.append("- No other agents are registered in this project yet.")
-    lines.append("")
+        lines.append("")
 
     quality = (session_data or {}).get("quality") or {}
     if quality:
@@ -1287,7 +1304,7 @@ async def _render_hub_agent_context(
             "their ordinary command equivalents. Inbound state is already supplied."
         )
         lines.append("")
-        lines.extend(_tool_surface_lines())
+        lines.extend(_tool_surface_lines(has_peers=bool(peers)))
     else:
         lines.append("## Registration")
         lines.append("")

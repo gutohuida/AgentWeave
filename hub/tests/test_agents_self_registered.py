@@ -698,3 +698,56 @@ async def test_a_configured_agent_can_be_described(app, auth_headers):
     )
     assert resp.status_code == 200
     assert resp.json()["description"] == "The one the session config declared."
+
+
+@pytest.mark.asyncio
+async def test_single_agent_project_gets_no_team_section(app, auth_headers):
+    """A project with one agent is told nothing about a team (umbrella task 13.9).
+
+    The requirement is to omit the roster *and all collaboration instruction* entirely, not to
+    render a Team section stating the team is empty. The old text — "No other agents are registered
+    in this project yet." — is the opposite of that, and it landed in every turn of the journey a
+    first-time user actually takes.
+    """
+    resp = await app.post(
+        "/api/v1/projects/proj-test/agents/register",
+        json={"name": "solo", "contact_mode": "poll"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+
+    resp = await app.get(
+        "/api/v1/projects/proj-test/agents/agent-context?agent=solo", headers=auth_headers
+    )
+    assert resp.status_code == 200
+    context = resp.json()["context"]
+
+    assert "### Team" not in context
+    assert "No other agents are registered" not in context
+    assert "Address a peer" not in context
+    # The tools are still described — they are still callable, and `request_agent` is how a
+    # single-agent project stops being one.
+    assert "request_agent" in context
+    assert "You are the only agent in this project." in context
+
+
+@pytest.mark.asyncio
+async def test_team_section_returns_as_soon_as_there_is_a_peer(app, auth_headers):
+    """The mutation check for the test above: one more agent and the whole block is back."""
+    for name in ("solo", "second"):
+        resp = await app.post(
+            "/api/v1/projects/proj-test/agents/register",
+            json={"name": name, "contact_mode": "poll"},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+
+    resp = await app.get(
+        "/api/v1/projects/proj-test/agents/agent-context?agent=solo", headers=auth_headers
+    )
+    context = resp.json()["context"]
+
+    assert "### Team" in context
+    assert "`solo`" in context and "`second`" in context
+    assert "Address a peer by the exact name above" in context
+    assert "You are the only agent in this project." not in context

@@ -6,8 +6,8 @@
   "started_at": "2026-08-17T10:14:49+01:00",
   "stop_at": "2026-08-17T15:00:00+01:00",
   "stop_when_queue_empties": true,
-  "iteration": 5,
-  "last_heartbeat": "2026-08-17T10:30:03+01:00",
+  "iteration": 6,
+  "last_heartbeat": "2026-08-17T10:34:18+01:00",
   "session_stopped": null,
   "release_shape": {
     "version": "1.0.0",
@@ -61,9 +61,10 @@
     {
       "id": "R6-single-agent-team-block",
       "title": "Stop telling solo users about a team they do not have",
-      "status": "pending",
+      "status": "done",
       "why": "Umbrella task 13.9, confirmed open twice (2026-08-12 and the 2026-08-17 N6 triage). `hub/hub/api/v1/agents.py:1227-1244` appends a `### Team` section unconditionally, falling back to 'No other agents are registered in this project yet.' The requirement is to omit the roster AND all collaboration instruction ENTIRELY in a single-agent project. Emitting a Team section stating the team is empty is the opposite of the requirement, it is in every turn's context, and 1.0.0's headline journey is a single user opening the app.",
-      "detail": "In `hub/hub/api/v1/agents.py` around 1227-1244, omit the whole `### Team` block — heading included — when the project has exactly one agent. Add a test asserting the section is absent for a one-agent project and present for a two-agent one. This is the only §13 item in scope: the charter-scope, skill-invocation and agent-template gaps are genuinely ABSENT rather than half-built (Charter is `id`/`project_id`/`name`/`content` and the UI promises nothing more), so they are a CHANGELOG 'not in this release' line, not a defect."
+      "detail": "In `hub/hub/api/v1/agents.py` around 1227-1244, omit the whole `### Team` block — heading included — when the project has exactly one agent. Add a test asserting the section is absent for a one-agent project and present for a two-agent one. This is the only §13 item in scope: the charter-scope, skill-invocation and agent-template gaps are genuinely ABSENT rather than half-built (Charter is `id`/`project_id`/`name`/`content` and the UI promises nothing more), so they are a CHANGELOG 'not in this release' line, not a defect.",
+      "outcome": "Team block omitted entirely when there are no peers (roster includes self, so the test is peers not length). _tool_surface_lines gained has_peers so its \"roster above\" sentence stops dangling. Two tests, MUTATION-CHECKED by reverting to `if roster:` and confirming a named test fails. Hub suite 2130 passed."
     },
     {
       "id": "R7-unify-versioning",
@@ -108,8 +109,8 @@
       "detail": "PRECONDITION, CHECK IT EXPLICITLY: every CI job on the PR is green and finished. Then merge the PR to master. `hub-image.yml` fires on any master push touching `hub/` and will build the Docker image. Then tag `v1.0.0` and `gh release create v1.0.0` with notes drawn from R8's CHANGELOG. Watch `publish.yml` to completion — after R7 it must publish BOTH `agentweave-ai` and `agentweave-hub` from that one tag; if only one job fires, the R7 re-gating is wrong and that is the highest-priority fix. VERIFY, do not assume: `pip download agentweave-ai==1.0.0` into a temp dir, or `pip install` into a throwaway venv, and confirm `agentweave --version` reports 1.0.0 and that it pulled `agentweave-hub` with it (R4's whole point). Confirm the GHCR image published and the Pages docs site rebuilt. Do NOT create a `hub-v1.0.0` tag."
     }
   ],
-  "current": "R6-single-agent-team-block",
-  "next_action": "R6: stop emitting a Team section to solo users. hub/hub/api/v1/agents.py around 1227-1244 appends the ### Team block unconditionally, falling back to 'No other agents are registered in this project yet.' Umbrella task 13.9 requires omitting the roster AND all collaboration instruction ENTIRELY when the project has one agent. Omit the whole block, heading included, when the agent count is 1; add a test asserting absence for a one-agent project and presence for a two-agent one. Then run pytest hub/tests/ -n 8.",
+  "current": "R7-unify-versioning",
+  "next_action": "R7: one version, one tag. Set BOTH pyproject.toml:7 and hub/pyproject.toml:7 to 1.0.0. In .github/workflows/publish.yml re-gate BOTH jobs onto v* (the `publish` job currently excludes hub-v prefixed tags, and `publish-hub` requires them) so one tag publishes both distributions. In .github/workflows/hub-image.yml move the tag trigger from hub-v* to v*. Rewrite docs/contributing/release-process.md for the single-tag flow. Then grep the whole repo for 'hub-v' before declaring it done, and check the Makefile's hub-full-build target still exists.",
   "limits": [
     "OUTWARD-FACING ACTIONS ARE AUTHORISED THIS RUN — this INVERTS the previous run's standing rule, deliberately. Pushing, opening a PR, merging to master, tagging, and creating a GitHub release are all in scope, in R11/R12 order. Everything else outward-facing is not: no force-push, no history rewriting on any shared branch, no deleting or moving existing tags or releases, no touching the four releases already published.",
     "NEVER release on a red or still-running CI. `gh pr checks` must show every job green and FINISHED before the PR merges, and the merge must be green before the tag exists. The operator chose 'Full auto, but only on green CI' with that as the hard rule.",

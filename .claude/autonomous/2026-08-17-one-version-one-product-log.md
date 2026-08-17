@@ -252,3 +252,40 @@ pre-change baseline, so the floor raise broke nothing.
 
 **Not verified:** that a real `pip install agentweave-ai==1.0.0` resolves from PyPI. It cannot be —
 agentweave-hub 1.0.0 does not exist yet. That is R12's smoke test, and D2 in decisions_for_user.
+
+---
+
+## Iteration 5 — 11:05 — R6: a project of one is no longer told about its team
+
+Umbrella task 13.9, open since the 2026-08-12 reconciliation pass and re-confirmed by the
+2026-08-17 N6 triage.
+
+`hub/hub/api/v1/agents.py` appended a `### Team` section on every turn, unconditionally. The
+important detail is that `roster` **includes the agent being addressed** — that is what the `<- you`
+marker is for — so a single-agent project did not take the empty branch. It rendered a Team section
+containing exactly one entry, the reader itself, followed by *"Address a peer by the exact name
+above when sending a message or assigning a task."* Collaboration instruction for a team of one, in
+every turn of the journey a first-time user actually takes.
+
+The `else` branch, *"No other agents are registered in this project yet."*, was close to
+unreachable — it needs a roster the reader is not in.
+
+So the question is about **peers, not roster length**: `peers = [row for row in roster if row.name
+!= agent]`, and the whole block including its heading is omitted when that is empty.
+
+**One thing followed from it that the task did not name.** `_tool_surface_lines()` ends with
+"Address a peer by its exact name from **the roster above**" — a dangling reference once there is no
+roster above. It now takes `has_peers` (keyword, defaulting True so the six existing tests that call
+it bare are unaffected) and says "You are the only agent in this project" instead. The tools
+themselves stay described in both cases, deliberately: they remain callable, and `request_agent` is
+precisely how a single-agent project stops being one.
+
+**Verified, and mutation-checked.** Two tests: one asserting a single-agent project has no
+`### Team`, no "No other agents are registered", no "Address a peer", but still describes
+`request_agent`; one asserting the entire block returns as soon as a second agent exists. Then the
+check that makes them worth anything — reverted the condition to the old `if roster:` and confirmed
+`test_single_agent_project_gets_no_team_section` **fails**, then restored. A test that passes
+against both the old and new code proves nothing, which is exactly the trap this skill records.
+
+**Full hub suite: 2130 passed / 11 skipped** — the baseline 2128 plus these two. black and ruff
+clean.
