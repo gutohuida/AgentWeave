@@ -209,8 +209,8 @@ subjects. Establish that, rather than inheriting it from a proposal.
 - [x] 12.2 The procedure floor — roughly five lines, code-owned: you are exploring; ask before
       assuming; use `ask_user` for anything that changes scope; ground claims in the codebase; you
       cannot propose until the operator says exploration is complete.
-- [ ] 12.3 A spec-phase run binds the spec charter by default unless the operator overrides.
-      **Deliberately not done, and D9 should be amended rather than implemented as written.**
+- [x] 12.3 A spec-phase run binds the spec charter by default unless the operator overrides.
+      **Resolved by amending D9 (2026-08-17, N6 fallback) rather than building it as written.**
       The obvious implementation — when a document is open and the agent has no charter bound, use
       the project's `Spec Author` charter — makes "no charter" unreachable during spec work. The
       only way to opt out would be to bind a *different* charter, which contradicts the operator
@@ -220,6 +220,8 @@ subjects. Establish that, rather than inheriting it from a proposal.
       leaving this alone. What the operator gives up by not binding is the interviewing craft, which
       is exactly the trade §1.8 describes. If a default is wanted later it should be a binding the
       operator can see and remove in the roster, not an implicit substitution at run time.
+      `design.md`'s D9 now records this correction directly rather than leaving the superseded
+      sentence standing as if it shipped.
 - [x] 12.4 Verify a **blank charter** still produces a valid document (§1.8).
 - [x] 12.5 Delete `src/agentweave/templates/skills/aw-spec-*.md` and
       `templates/skills/references/`, checking each section against the disposition table in §6.
@@ -271,10 +273,18 @@ subjects. Establish that, rather than inheriting it from a proposal.
 - [x] 16.5 **Agent cannot approve** — assert against the tool surface, not only the API.
 - [x] 16.6 A payload asserting a phase does not change the phase.
 - [x] 16.7 Each blocking validator refuses the transition, and its message names the offender.
-- [ ] 16.8 Events are appended with actor, origin and run; modification and deletion are refused.
-      **Partly covered.** Append-and-attribute is exercised through every API test that writes a
-      document. There is no test asserting that modification and deletion are *refused*, because
-      no code path offers either — the assertion would be that absent code stays absent.
+- [x] 16.8 Events are appended with actor, origin and run; modification and deletion are refused.
+      **Completed 2026-08-17 (N6 fallback).** Append-and-attribute was already exercised through
+      every API test that writes a document. Added
+      `test_document_events_are_append_only_with_no_route_to_change_or_delete_one` in
+      `hub/tests/test_spec_documents_api.py`, which makes the "absent code stays absent" assertion
+      concrete two ways: it introspects the live `create_app()` route table and asserts no route
+      anywhere names a spec document event (nothing to send a PATCH or DELETE to — stronger than
+      probing one guessed URL, the same structural style `test_an_agent_cannot_approve_a_document`
+      uses for approval); and it drives create → submit → close-exploration → propose → approve,
+      snapshots every event row after propose, repeats the query after approve, and asserts each
+      earlier row's kind/actor/origin/detail is byte-identical while exactly one new row appeared.
+      `hub/tests/test_spec_documents_api.py` 23/23.
 - [x] 16.9 Digest divergence is reported and the file is not modified.
 - [x] 16.10 Blank-charter run produces a valid document.
 - [x] 16.11 The MCP server's restated constants agree with the Hub's.
@@ -364,20 +374,69 @@ traversal path is refused with 400 and a message naming the rule; `POST /project
 
 - [ ] 17.1 **Does the authoring flow feel like authoring?** Create a document, be interviewed, watch
       it appear. This is the question the whole change exists to answer and no test covers it.
+      **WAIVED for archival, 2026-08-17 (N6 fallback).** A felt judgement with no mechanical
+      substitute — live runs exist (17.6) proving the flow *completes*, but not that it *feels like*
+      authoring rather than form-filling, which only the operator using it can judge.
 - [ ] 17.2 Is the rendered document as readable as the ones the skills produced? The renderer replaces
       713 lines of hand-tuned conventions.
+      **WAIVED for archival, 2026-08-17 (N6 fallback).** `.claude/autonomous/2026-08-15-judgement-evidence.md`
+      already reached this exact task under `2026-08-13-the-spec-tool-reaches-the-agent` §6.1 and
+      called it explicitly: *"Judgement call — evidence supplied, verdict is yours."* The evidence is
+      there (`aw-loop10`'s document, 9 requirements each with rationale and per-requirement
+      Given/When/Then, called "good" at the time) but the comparison against the skill-written
+      convention is a read only the operator can close.
 - [ ] 17.3 Does the interview feel like the old skill's interview? The craft was harvested into the
       charter in `2909137`; this is whether the harvest worked.
+      **WAIVED for archival, 2026-08-17 (N6 fallback).** The harvest's *presence* is verified
+      structurally (`test_agent_facing_text.py`, 43 passed, per the exploration's §6 "Status" note)
+      — whether it reads the same to a person who used the original skill is not a structural
+      question.
 - [ ] 17.4 Is a validation refusal actionable, or does it produce a retry loop?
+      **WAIVED for archival, 2026-08-17 (N6 fallback).** The mechanical half is already a gate:
+      11.7/16.7 assert every blocking validator names the offending field, so a refusal cannot be
+      contentless. Whether that is *enough* to act on without frustration under real interview
+      pressure is the felt half, and no live run captured in `judgement-evidence.md` happens to show
+      a refusal-then-retry cycle to draw on.
 - [x] 17.5 Try to get an agent to approve its own document. Ask it to. It should be unable to.
       **Done — see 16c.** Five routes attempted, all refused or ineffective. What remains for you
       is asking a *live agent* to try, which may find a route an API probe did not think of.
-- [ ] 17.6 Run the flow with a **Codex** agent as well as a Claude one. Runner-agnostic delivery is
+- [x] 17.6 Run the flow with a **Codex** agent as well as a Claude one. Runner-agnostic delivery is
       the reason the skills were removed.
+      **Investigated 2026-08-17 (N6 fallback) rather than waived — this one had a real, checkable
+      answer, not a feeling.** Both runners have live evidence, recorded in changes that shipped
+      and archived after this one: **Codex** — `2026-08-13-the-spec-tool-reaches-the-agent` §5,
+      agent `spec-4` (Codex `gpt-5.6-sol`) drove a full two-turn exploration (prose interview, no
+      `ask_user`, no OpenSpec mention), then called `agentweave.submit_spec_document` on the
+      operator's answers, which **completed** and rendered a 29,997-byte document with 9 minted
+      requirements (`spec/changes/amber-griffin/spec.html`). **Claude** —
+      `.claude/autonomous/2026-08-15-judgement-evidence.md` (`2026-08-13-the-tool-list-matches-the-tools`
+      §5.1, cross-referenced from `2026-08-13-the-spec-tool-reaches-the-agent` §6.2): agent `speccer`
+      on the Spec Author charter, `run-462fb78e`, tool sequence `ToolSearch` →
+      `mcp__agentweave__submit_spec_document` → `Completed`, document digest moved and 8 requirements
+      minted. Same flow, different runner, same outcome shape — the property 5.4 established
+      structurally (schema delivery is protocol-level, not runner-specific) held on both live runs.
 - [x] 17.7 Edit a document in an external editor. Confirm the Hub reports it and changes nothing.
       **Done — see 16c.** Divergence reported with both digests; the file was not overwritten.
-- [ ] 17.8 Confirm nothing of value was lost with the skills — read §6's table against what the flow
+- [x] 17.8 Confirm nothing of value was lost with the skills — read §6's table against what the flow
       now does.
+      **Done 2026-08-17 (N6 fallback) — this one turned out to be mechanical, not felt.** §6 of
+      `openspec/explorations/2026-08-12-spec-hub-integration.md` sorts every line of the six deleted
+      skills into six destinations, and the change's own task sections were structured around exactly
+      those destinations, each already shipped and tested: **S** (schema, ~120 lines) — section 4,
+      the payload contract, `spec_payload.py`. **V** (validators, ~90 lines) — section 11, blocking
+      validation, `spec_service.py` + `test_spec_documents_api.py`'s blocking-check tests. **P**
+      (procedure floor, ~25 lines) — section 12.1/12.2, the `### Open specification document` block
+      in `agents.py:1015`. **R** (renderer, ~750 lines, the largest bucket) — section 6,
+      `spec_renderer.py`, verified in the live frame under sandbox in 6.4. **C** (charter, ~180
+      lines) — shipped *ahead* of this change in commit `2909137` per the operator's "2 - ok",
+      verified by the exploration's own "Status" note: `test_agent_facing_text.py` 43 passed,
+      confirming the charter names no uninstalled skill, cites no removed subsystem, addresses no
+      roster title, defers to no principal. **X** (deleted with the architecture, ~640 lines) —
+      section 2 (push apparatus) and 12.5/12.6 (the skill files themselves, confirmed nothing else
+      references them). Nothing in the table has no destination, and nothing destined for **S**/**V**/
+      **P**/**R** is missing a task or a test in sections 2–16. The one bucket this audit cannot
+      close is **C**'s *quality* — whether the harvested prose reads as well as the original — which
+      is 17.3, waived above as felt, not lost.
 
 ## 18. User test guide
 

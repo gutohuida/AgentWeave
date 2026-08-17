@@ -163,8 +163,20 @@ The floor is roughly five lines. The delivery channel exists: `agent_trigger.py:
 `.agentweave/context/<agent>.md` every turn for both runners, and `agents.py:1015` already carries an
 `### Open specification document` section.
 
-**A spec-phase run binds the spec charter by default** unless the operator overrides — so "optional"
-means "you may remove it", not "you must remember to add it".
+**Corrected during implementation (task 12.3, 2026-08-17).** This decision originally continued:
+*"a spec-phase run binds the spec charter by default unless the operator overrides — so 'optional'
+means 'you may remove it', not 'you must remember to add it'."* Building it exposed the defect:
+the only way to override a default binding is to bind a *different* charter, which makes "no charter
+bound" unreachable during spec work — directly contradicting the premise this whole section opens
+with, §1.8's *"Not necessarily I want to use the charter for spec. Is good practice but I can skip
+it."* Auto-binding would turn skipping into something the operator cannot do.
+
+**What ships instead:** nothing binds a charter automatically. The procedure floor above is unaffected
+— it is code, not charter content, so it holds with or without one. What the operator loses by not
+binding is the interviewing craft (§1.8's stated trade, taken deliberately), not the obligation to
+interview, which the floor still carries. If a default is wanted later it should be a binding the
+operator can see and remove in the roster (a change to the seeding or roster UI), not an implicit
+substitution made at run time by the phase machine.
 
 ## D10 — Explore exits on an operator action
 

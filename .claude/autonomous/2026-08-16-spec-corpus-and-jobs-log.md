@@ -1697,3 +1697,120 @@ all — the largest and least-prepared, needs its own triage pass before any wai
 2+ iterations alone). `next_action` below picks up `hub-owns-the-spec-document` next, since it is
 the smaller of the two and closer to archivable; `hub-native-experience` stays last precisely because
 it needs a triage pass of its own before an iteration can make a dent in it.
+
+## Entry 20 — fixed a carried-over dirty tree, closed `hub-owns-the-spec-document`, archived it (12 of 13 done).
+
+**2026-08-17T04:46:45+01:00.** Step 2 of this iteration's own instructions ("verify the branch and
+`git log` match what STATE.json claims") found a real problem before any new work started: `git
+status` showed five files under `openspec/changes/2026-08-13-a-gate-that-only-evidence-opens/` as
+deleted-but-unstaged, surviving across iteration 19's commit *and* its own "release the branch"
+commit after it. Root cause: `openspec archive` moved those files into `openspec/changes/archive/`
+and iteration 19's commit added the archive copies, but never staged the deletion of the source
+directory — `git add -A` on a specific path only, not the whole tree, silently dropped the delete
+side of the move. Before touching it, diffed the archived copy against the last-committed source
+version to confirm nothing was lost: the archive copy was strictly newer (waived judgements ticked,
+task `5.5` marked built), so this was purely a missed `git add`, not content drift. Staged and
+committed the deletion (`c5db99a`) with `openspec validate` re-run clean (9/9 changes, 31/31 specs,
+both unchanged counts) before doing anything else. **Lesson for future iterations: after `openspec
+archive`, stage with a path that covers both the new `archive/` tree and the old change directory,
+or run `git add -A` and inspect — a partial `git add` of only the additions leaves deletions behind
+and pytest/openspec both stay green because neither one checks for orphaned working-tree state.**
+
+**Then picked up `next_action`: `2026-08-12-hub-owns-the-spec-document` (407-line `tasks.md`,
+88/92 at start, four remaining categories).**
+
+**`12.3`** ("a spec-phase run binds the spec charter by default") was already recorded as
+deliberately not built, with the task's own text arguing D9 should be amended rather than
+implemented as written — auto-binding makes "no charter" unreachable, which directly contradicts
+the operator decision the whole section rests on (*"Not necessarily I want to use the charter for
+spec... I can skip it"*). Read the reasoning in full, agreed with it, and did what the task itself
+asked for instead of leaving it dangling: amended `design.md`'s `D9` in place to record the
+correction — the superseded sentence stays legible as a quote, followed by why it was wrong and what
+ships instead (nothing auto-binds; the procedure floor in `12.2` is unaffected since it is code, not
+charter content). Ticked `12.3` as resolved-by-amendment, the same convention `D5a` already
+established for a mid-implementation correction in this same file.
+
+**`16.8`** ("events are appended... modification and deletion are refused") was partly covered —
+append-and-attribute was exercised everywhere, but nothing asserted refusal, because "no code path
+offers either" has no direct thing to assert against. Read `spec_lifecycle.record_event`'s own
+docstring (*"there is no update and no delete — by construction, not by policy"*) and made that
+checkable two ways, mirroring how `test_an_agent_cannot_approve_a_document` already checks approval
+against the actual route surface rather than the docstring's intention. New test in
+`hub/tests/test_spec_documents_api.py`: introspects the live `create_app()` route table and asserts
+no route anywhere names a spec document event (nothing exists to send a `PATCH` or `DELETE` to —
+confirmed this is a real constraint by first checking there genuinely is an unrelated `/events` SSE
+route in the app, so a blanket "no route contains 'event'" check would have been a false pass);
+then drives create → submit → close-exploration → propose, snapshots every event row, drives
+approve, and asserts every earlier row's kind/actor/origin/detail is byte-identical while exactly
+one new row appeared. First attempt asserted an exact `["created", "content", "phase"]` kind
+sequence and failed — `close-exploration` turned out to record its own `"phase"` event, distinct
+from `propose`'s — corrected to a length check instead of hard-coding a sequence nothing had
+verified. `hub/tests/test_spec_documents_api.py` 23/23 after the fix. `ruff check` and `black`
+both required a second pass — `black` wanted to reflow a wrapped multi-line `assert`'s parenthesized
+message differently than written by hand; applied `black`'s own reformatting rather than fighting it.
+
+**`17.6`** ("run the flow with a Codex agent as well as a Claude one") was the one item flagged for
+investigation rather than a waive-or-tick pass, because its own trail said "Codex half not done,
+still open" — a claim about a real gap, not a feeling, and therefore checkable. It turned out to be
+stale. Two changes that shipped and archived *after* this one already closed it live:
+**Codex** — `2026-08-13-the-spec-tool-reaches-the-agent` §5, agent `spec-4` (Codex `gpt-5.6-sol`)
+ran a full two-turn exploration (prose interview, no `ask_user`, no OpenSpec mention) and called
+`agentweave.submit_spec_document` on the operator's answers, which completed and rendered a
+29,997-byte document with 9 minted requirements. **Claude** —
+`.claude/autonomous/2026-08-15-judgement-evidence.md`'s `2026-08-13-the-tool-list-matches-the-tools`
+§5.1 (cross-referenced from the Codex change's own §6.2): agent `speccer`, `run-462fb78e`, tool
+sequence `ToolSearch` → `mcp__agentweave__submit_spec_document` → `Completed`. Same flow, different
+runner, same outcome shape — the property `5.4` established structurally (schema delivery is
+protocol-level, not runner-specific) held on both live runs. Ticked `17.6` with both artefacts cited
+rather than re-running anything live tonight, since the evidence already exists and re-deriving it
+would just be spending a live Codex/Claude turn to confirm what already happened.
+
+**`17.8`** ("confirm nothing of value was lost with the skills — read §6's table against what the
+flow now does") turned out to be mechanical rather than felt, once actually attempted instead of
+assumed. §6 of the exploration sorts every line of the six deleted skills into six destinations
+(**S**chema, **V**alidator, **P**rocedure floor, **R**enderer, **C**harter, e**X**deleted), and this
+change's own task sections 2–16 are structured around exactly those buckets, each already shipped
+and tested. Walked all six: nothing lacks a destination, nothing destined for S/V/P/R is missing a
+task or test, and C's *presence* (not its quality — that's `17.3`, left waived) is verified
+structurally by `test_agent_facing_text.py` per the exploration's own "Status" note. Ticked with the
+cross-reference.
+
+**`17.1`/`17.2`/`17.3`/`17.4`** waived, not ticked — genuine felt judgements ("does this feel like
+authoring", "is the interview as good as the old one", "is a refusal actionable under real
+pressure") with no mechanical substitute, matching the pattern from iterations 17-19. `17.2` in
+particular already had its own answer on file: `judgement-evidence.md` reached this exact task under
+a different change's numbering and called it explicitly *"Judgement call — evidence supplied,
+verdict is yours"* — quoted in the waive note rather than re-deciding it.
+
+**Verified, not trusted:** `pytest hub/tests/test_spec_documents_api.py -q` 23/23 (isolated, run
+first). `pytest hub/tests/ -n 8 -q` 2106 passed / 11 skipped (full suite — 2105 baseline + 1 new,
+run in the background while other work continued). `pytest tests/ -q` 362 passed / 3 skipped (CLI
+side, unchanged). `ruff check` clean, `black --check` clean on the touched file (both re-run after
+the reformat, not assumed from the first pass).
+
+**Archiving needed `--skip-specs`, and that needed its own verification before using it.**
+`openspec archive 2026-08-12-hub-owns-the-spec-document -y` aborted: `spec-chat-session ADDED failed
+... already exists`, and separately wanted to `create` new `aw-spec-workflow` and
+`spec-manifest-sync` specs from `REMOVED`-only deltas targeting specs that no longer exist. Rather
+than force it or skip verification, checked why: `ls openspec/specs/` confirmed `aw-spec-workflow`
+and `spec-manifest-sync` are already gone (task `15.2`'s removal already happened), and grepping
+`### Requirement:` headers in this change's four delta files against the live `spec-chat-session`
+and `spec-document-authority` spec.md files confirmed all 14 `ADDED`/`MODIFIED` requirements already
+exist there verbatim. The sync (tasks `15.1`/`15.3`/`15.4`/`15.5`, all already ticked `[x]` from the
+original 2026-08-12 implementation) had genuinely already happened; the change's own delta files
+were just the stale leftover proposal artifacts openspec normally clears at archive time. Re-running
+the sync would have created two phantom specs and duplicated two requirements. `--skip-specs` was
+therefore correct, not a shortcut — confirmed by `openspec validate --specs --strict` afterward
+still reading 31/31, the same count as before archiving.
+
+**This time staged both halves of the move in one `git add`** (`openspec/changes/2026-08-12-hub-owns-the-spec-document/
+openspec/changes/archive/2026-08-17-2026-08-12-hub-owns-the-spec-document/ hub/tests/test_spec_documents_api.py`),
+learning from this entry's own opening finding — `git status --porcelain` afterward showed clean
+renames (`R`), not orphaned deletions. `openspec validate --changes --strict` → 8/8 (down from 9, as
+expected). `--specs --strict` → 31/31 (unchanged, confirming no phantom spec was created).
+
+**N6: 12 of 13 pre-08-16 changes now archived — one left.** `2026-07-30-hub-native-experience` (69
+of 188 tasks open, no `judgement-evidence.md` coverage at all, no judgement round done for it yet
+unlike every other change in this batch) is explicitly too large for one iteration per iteration
+19's own assessment when it first surveyed the remaining two. `next_action` carries that forward
+unchanged: triage first, don't start ticking or waiving blind, expect 2+ iterations.

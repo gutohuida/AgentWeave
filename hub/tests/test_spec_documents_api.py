@@ -9,10 +9,12 @@ intention.
 """
 
 import pytest
+from sqlalchemy import select
 
 from hub.agent_auth import hash_run_token
 from hub.db.engine import async_session_factory
-from hub.db.models import Run
+from hub.db.models import Run, SpecDocumentEvent
+from hub.main import create_app
 from hub.spec_payload import SCHEMA_VERSION, extract_payload
 
 BASE = "/api/v1/projects/proj-test/project"
@@ -465,3 +467,64 @@ async def test_the_placeholder_never_becomes_the_title(app, auth_headers, tmp_pa
 async def test_an_explicit_path_is_still_honoured(app, auth_headers, tmp_path):
     created = await _create(app, auth_headers)
     assert created["path"] == PATH
+
+
+# ---------------------------------------------------------------------------
+# Events (D8) — append-only, nothing in this change reads them
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_document_events_are_append_only_with_no_route_to_change_or_delete_one(
+    app, auth_headers, run_headers, tmp_path
+):
+    """`spec_lifecycle.record_event` says "there is no update and no delete —
+    by construction, not by policy." Checked against the actual route table
+    rather than the docstring's intention, the same way approval is checked
+    in `test_an_agent_cannot_approve_a_document`: no route anywhere in the app
+    names a spec document event, so nothing exists to send a PATCH or DELETE
+    to. Then, behaviourally, a sequence of writes to one document only ever
+    adds rows — an earlier event's fields never change underneath it.
+    """
+    application = create_app()
+    event_routes = [
+        (route.path, sorted(getattr(route, "methods", None) or []))
+        for route in application.routes
+        if "spec" in route.path.lower() and "event" in route.path.lower()
+    ]
+    assert event_routes == [], f"no route may touch a spec document event, found {event_routes}"
+
+    await _create(app, auth_headers)
+    await _submit(app, run_headers, _document())
+    await app.post(
+        f"{BASE}/documents/close-exploration", params={"path": PATH}, headers=auth_headers
+    )
+    await app.post(f"{BASE}/documents/propose", params={"path": PATH}, headers=auth_headers)
+
+    async with async_session_factory() as session:
+        result = await session.execute(
+            select(SpecDocumentEvent).order_by(SpecDocumentEvent.created_at)
+        )
+        before = list(result.scalars().all())
+
+    assert len(before) >= 3, "create, submit and propose must each leave a row"
+    snapshot = {event.id: (event.kind, event.actor, event.origin, event.detail) for event in before}
+
+    await app.post(
+        f"{BASE}/documents/phase",
+        params={"path": PATH, "to": "approved"},
+        json={"reason": "looks right"},
+        headers=auth_headers,
+    )
+
+    async with async_session_factory() as session:
+        result = await session.execute(
+            select(SpecDocumentEvent).order_by(SpecDocumentEvent.created_at)
+        )
+        after = list(result.scalars().all())
+
+    assert len(after) == len(before) + 1, "approval adds one event and changes nothing else"
+    for event in after[: len(before)]:
+        assert (event.kind, event.actor, event.origin, event.detail) == snapshot[
+            event.id
+        ], "an earlier event must not change when a later one is recorded"
