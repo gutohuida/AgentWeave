@@ -443,3 +443,92 @@ a rushed tail addition here. It also cannot be verified end-to-end by this drive
 implemented: there is no display session to open a real pywebview window in, so only the
 fallback/absent-pywebview path is checkable here, and that must be stated plainly rather than
 implied to be more than it is.
+
+
+## Iteration 6 (2026-08-17T20:49+01:00)
+
+**A3 section 3 (D3, D5), tasks 3.1-3.5 and 4.1-4.4 — the desktop window itself — done.**
+Re-read `design.md` D3 and D5 fresh, as the previous iteration's `next_action` asked, rather than
+trusting the summary in memory: D3's threading argument (`webview.start()` needs the main thread,
+`--no-detach`'s main thread is already committed to `uvicorn.run()`) and amendment A2's testability
+constraint (`_open_app_window_native` may contain nothing beyond window-lifecycle calls, since
+Playwright cannot attach to a real pywebview window) both turned out to matter for the actual shape
+of the diff, not just as background.
+
+**3.1** — `pyproject.toml` gained `[project.optional-dependencies] app = ["pywebview>=5.0"]`,
+additive; `dependencies = []` (i.e. `agentweave-hub>=1.0.0`, the CLI's one runtime dep) untouched.
+Deliberately did *not* fold `app` into the `all` extra — `all` aggregates `mcp`/`jobs`, and nothing
+in section 3 asked for `app` to join it; pywebview stays genuinely opt-in.
+
+**3.2** — new `_open_app_window_native(url: str) -> bool` at `cli.py:740`, directly below
+`_open_app_window`. Two nested `try` blocks exactly as task 3.2 specifies: `import webview` /
+`except ImportError: return False`, then `webview.create_window("AgentWeave", url)` /
+`webview.start()` / `return True`, with `except Exception as exc: print_error(...); return False`
+around the second. No import at module load.
+
+**3.3** — wired the four real call sites. The task's own line numbers (`cli.py:692/789/850/942`)
+had drifted from earlier iterations' `--profile`/`--port` work and no longer pointed at the right
+lines, so each was re-found by grepping `_open_app_window(` fresh rather than trusting stale
+numbers — landed at `cli.py:802`, `:907`, `:978`, `:1071` (both `_hub_native_start` sites, both
+`cmd_hub_start` Docker-branch sites), each now `if not _open_app_window_native(url):
+_open_app_window(url)`. The fifth site, `_wait_and_open_app` (the `--no-detach` worker thread,
+`cli.py:767`), is untouched — still calls `_open_app_window` unconditionally, per D3's named
+exception.
+
+**3.4** — confirmed by reading, not by running (no display session on this driver): `main()`
+forces `parsed_args.app = True` for bare invocation before dispatching to `cmd_hub_start`; in the
+detached branch, `_open_app_window_native`'s `webview.start()` is only reached after
+`_hub_health_check` passes, and the already-spawned detached `uvicorn` `Popen` object is never
+touched again once spawned — it outlives the CLI invocation's exit exactly as before. The
+`--no-detach` branch is unchanged by diff: still spawns `_wait_and_open_app` on a worker thread,
+still blocks the main thread in `uvicorn.run()`, `KeyboardInterrupt` the only stop path.
+
+**3.5** — read `_open_app_window_native`'s finished body in full (quoted verbatim in `tasks.md`'s
+done-note) and confirmed it contains nothing beyond the two webview calls, the try/except around
+them, and the one diagnostic print — no conditional branching on page content, no data fetching,
+satisfying amendment A2's constraint exactly.
+
+**Section 4** — 8 new tests added to `tests/test_cli.py` in a new `TestAppModeNativeWindow` class,
+following the file's established shape (class docstring citing the design doc, `inspect.getsource`
+regression guards alongside behavioral ones). `import webview` is tested by injecting into
+`sys.modules` (`sys.modules["webview"] = None` forces `ImportError` deterministically; a
+`types.SimpleNamespace` fake exercises the success and exception paths) rather than requiring a
+real pywebview install, matching task 4.2's own instruction. Two of the eight go further than the
+task list asked and exercise a real call site (`_hub_native_start`'s already-running branch) with
+a mocked `urllib.request.urlopen`, not just the helper in isolation.
+
+**Verified:**
+- `tests/test_cli.py`: 24/24 passed (16 pre-existing + 8 new).
+- Full CLI suite `pytest tests/`: 381 passed, 3 skipped (up from 375/3 before this iteration).
+- `ruff check`, `black --check --target-version py311`, `mypy src/` on changed files: all clean.
+  (`mypy tests/test_cli.py` directly surfaces ~35 pre-existing `no-untyped-def` findings across the
+  whole file unrelated to this change — confirmed against `ci.yml`, which only ever runs
+  `mypy src/`; not a regression, just not what the file is normally checked against.)
+- `openspec validate --changes --strict`: 8/8.
+- **Mutation-checked by hand**, two separate mutations: (a) flipped
+  `_open_app_window_native`'s success `return True` to `return False` — exactly one test
+  (`test_pywebview_installed_opens_window_with_resolved_url`) went red, the other five in the class
+  stayed green, confirming it actually distinguishes success from failure; restored, green again.
+  (b) reverted one call site (`_hub_native_start`'s already-running branch) to its pre-3.3
+  unconditional `_open_app_window(url)` — both the integration test
+  (`test_hub_native_start_already_running_prefers_native_window`) and the source-level wiring guard
+  (`test_call_sites_fall_back_through_the_native_helper_first`, whose count check dropped from 2 to
+  1) went red independently; restored, all 381 green again.
+
+**Not done, and explicitly out of scope for this driver:** the actual success path (a real pywebview
+window opening) was never exercised — there is no display session here, only the
+absent/mocked-failure paths are checkable, exactly as flagged by the previous iteration and by
+`design.md` D3/D5 themselves. That is `tasks.md`'s section 6 (human-only verification, 6.2/6.3/6.4),
+not this driver's job.
+
+Committed `7c6a78d`, pushed. **Section 3 of A3 is now fully closed** (3.1-3.5, 4.1-4.4). Remaining
+in A3: section 5 (5.1, a documentation-only task about D4's migration non-decision — no code) and
+section 6 (human-only verification, not agent-doable). **A3 as a whole is now close to done** — the
+only things left are a doc paragraph and operator-run manual checks. Given the time this run has
+already spent and the remaining runway to `stop_at` (2026-08-17T22:00:00+01:00), the next firing
+should: finish A3 with **task 5.1** (a short, low-risk documentation addition — find wherever bare
+`agentweave`/`--docker`/`--local` are documented today, likely `README.md` or `docs/`, and state
+D4's non-migration decision in plain language), then move to **A4 (the roadmap)** if time remains,
+per the queue's own stated order ("Only start this if A1-A3 are done or blocked" — A3 will be as
+done as an autonomous driver can make it once 5.1 lands, since section 6 is inherently
+human-only and was never this driver's to complete).
