@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { format } from 'date-fns'
 import { Icon } from '@/components/common/Icon'
 import { MarkdownMessage } from '@/components/agents/MarkdownMessage'
-import { ToolEditDiff } from '@/components/agents/ToolEditDiff'
+import { ToolEditDiff, editDiffStat } from '@/components/agents/ToolEditDiff'
 import type { AgentSummary, AgentTimelineEvent } from '@/api/agents'
 import type { TimelineEntry } from '@/api/agentChat'
 import type { QueueStatus } from '@/api/queue'
@@ -278,6 +278,31 @@ function WorkBlockDisclosure({ entries }: { entries: TimelineEntry[] }) {
       ? ((new Date(entries[entries.length - 1].timestamp).getTime() - new Date(entries[0].timestamp).getTime()) / 1000).toFixed(1)
       : null
 
+  // What is worth knowing before opening this. "14 steps · 27.3s" says how much happened but not
+  // whether any of it matters — a block that only read files and one that rewrote three of them
+  // looked identical, so deciding whether to expand meant expanding. These are the two facts that
+  // change the answer: files this block wrote to, and calls that failed.
+  const highlights = useMemo(() => {
+    const filesTouched = new Set<string>()
+    let writes = 0
+    let failures = 0
+    for (const item of entries) {
+      const payload = item.payload as Record<string, unknown> | null | undefined
+      if (item.output_kind === 'tool_use' && typeof payload?.tool === 'string') {
+        if (WRITING_TOOLS.has(payload.tool)) {
+          writes += 1
+          // Only a real `file_path` names a file. `callDetail` falls back to the raw input for
+          // anything it cannot parse, and treating that as a path produced a "file" called
+          // `{not valid json` — a name is only shown when the payload actually carries one.
+          const fileName = writtenFileName(payload)
+          if (fileName) filesTouched.add(fileName)
+        }
+      }
+      if (item.output_kind === 'tool_result' && payload?.is_error === true) failures += 1
+    }
+    return { files: [...filesTouched], writes, failures }
+  }, [entries])
+
   return (
     <details open={open} className="work-disclosure rounded-lg overflow-hidden">
       <summary
@@ -285,19 +310,48 @@ function WorkBlockDisclosure({ entries }: { entries: TimelineEntry[] }) {
           e.preventDefault()
           setOpen((v) => !v)
         }}
-        className="flex items-center gap-2 px-[11px] py-[7px] text-[12.5px] cursor-pointer list-none"
-        style={{ color: 'var(--text-2)' }}
+        className="flex items-center gap-1.5 py-[3px] text-[11.5px] cursor-pointer list-none"
+        style={{ color: 'var(--text-3)' }}
       >
         <Icon
           name="expand_more"
-          size={13}
-          style={{ opacity: 0.6, transform: open ? undefined : 'rotate(-90deg)' }}
+          size={12}
+          style={{ opacity: 0.55, transform: open ? undefined : 'rotate(-90deg)' }}
         />
         Work · {entries.length} step{entries.length === 1 ? '' : 's'}
         {duration ? ` · ${duration}s` : ''}
+        {/* Louder than the step count deliberately: these are the reasons to open it. */}
+        {highlights.writes > 0 && (
+          <span
+            className="inline-flex items-center gap-1 shrink-0"
+            style={{ color: 'var(--text-2)' }}
+            title={
+              highlights.files.length > 0
+                ? `Wrote to ${highlights.files.join(', ')}`
+                : `${highlights.writes} write${highlights.writes === 1 ? '' : 's'}`
+            }
+          >
+            <Icon name="edit" size={11} />
+            {highlights.files.length === 1
+              ? highlights.files[0]
+              : highlights.files.length > 1
+                ? `${highlights.files.length} files`
+                : `${highlights.writes} edit${highlights.writes === 1 ? '' : 's'}`}
+          </span>
+        )}
+        {highlights.failures > 0 && (
+          <span
+            className="inline-flex items-center gap-1 shrink-0"
+            style={{ color: 'var(--red)' }}
+            title={`${highlights.failures} call${highlights.failures === 1 ? '' : 's'} failed`}
+          >
+            <Icon name="alert_triangle" size={11} />
+            {highlights.failures} failed
+          </span>
+        )}
       </summary>
       {open && (
-        <div className="px-[11px] py-[9px] text-[12.5px]" style={{ borderTop: '1px solid var(--border)', color: 'var(--text-2)' }}>
+        <div className="pl-[3px] py-1 text-[12px]" style={{ color: 'var(--text-2)' }}>
           {workRows.map((entry) => (
             <WorkRow key={entry.id} entry={entry} paired={findPairedResult(entries, entry)} />
           ))}
@@ -326,6 +380,67 @@ const TOOL_ICON: Record<string, { icon: string; label: string }> = {
 }
 const TOOL_ICON_FALLBACK = { icon: 'build' }
 
+/** Tools that change the workspace, as opposed to reading it. A block that wrote something is
+ *  worth opening; one that only looked at things usually is not. */
+const WRITING_TOOLS = new Set(['Edit', 'MultiEdit', 'Write', 'NotebookEdit', 'apply_patch'])
+
+/** The bare filename a write targeted, or '' when the payload does not carry a usable path. */
+function writtenFileName(payload: Record<string, unknown> | null | undefined): string {
+  const input = payload?.input
+  if (typeof input !== 'string') return ''
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(input)
+  } catch {
+    return ''
+  }
+  if (!parsed || typeof parsed !== 'object') return ''
+  const fields = parsed as Record<string, unknown>
+  const path = fields.file_path ?? fields.path
+  if (typeof path !== 'string' || !path.trim()) return ''
+  return path.split(/[\\/]/).pop() ?? ''
+}
+
+/** Codex and MCP name their tools differently from Claude, and every one of them was falling
+ * through to the wrench — so a run of `shell`, `shell`, `agentweave.get_task` rendered as three
+ * identical icons and the scanning the icons exist for was impossible. Measured on a real
+ * verifier turn before this existed. MCP tools are matched by their `server.tool` prefix rather
+ * than enumerated, since the tool set is whatever the operator has connected. */
+function toolVisual(toolName: unknown): { icon: string; label?: string } {
+  if (typeof toolName !== 'string' || !toolName) return TOOL_ICON_FALLBACK
+  const direct = TOOL_ICON[toolName]
+  if (direct) return direct
+  if (toolName === 'shell' || toolName === 'local_shell') return { icon: 'terminal', label: 'Shell' }
+  if (toolName.startsWith('agentweave.')) {
+    return { icon: 'hub', label: toolName.slice('agentweave.'.length) }
+  }
+  if (toolName.includes('.')) return { icon: 'extension', label: toolName.split('.').slice(-1)[0] }
+  // A name with no mapping and no namespace keeps the generic label it has always had: the
+  // content line is more informative than echoing the bare name back.
+  return TOOL_ICON_FALLBACK
+}
+
+/** The one field a reader actually wants from a call, per tool. `payload.input` is a JSON string
+ * (the runner sends it that way), so a call that reads "Called Bash" carries the command all
+ * along — it was simply never rendered, and expanding showed the label again instead. */
+function callDetail(payload: unknown): string {
+  const input = (payload as Record<string, unknown> | null | undefined)?.input
+  if (typeof input !== 'string' || !input.trim()) return ''
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(input)
+  } catch {
+    return input // Not JSON: show it as sent rather than nothing.
+  }
+  if (!parsed || typeof parsed !== 'object') return String(parsed)
+  const fields = parsed as Record<string, unknown>
+  for (const key of ['command', 'file_path', 'path', 'pattern', 'query', 'url', 'prompt']) {
+    const value = fields[key]
+    if (typeof value === 'string' && value.trim()) return value
+  }
+  return JSON.stringify(parsed, null, 2)
+}
+
 function WorkRow({ entry, paired }: { entry: TimelineEntry; paired?: TimelineEntry }) {
   const [expanded, setExpanded] = useState(false)
   // design.md D2 — declines (returns null) for anything not shaped like a single-pair edit;
@@ -338,9 +453,16 @@ function WorkRow({ entry, paired }: { entry: TimelineEntry; paired?: TimelineEnt
         ? entry.content || 'Tool call'
         : entry.content || 'Tool result'
   const toolName = (entry.payload as Record<string, unknown> | null | undefined)?.tool
-  const mapped = typeof toolName === 'string' ? TOOL_ICON[toolName] : undefined
-  const iconName = mapped?.icon ?? TOOL_ICON_FALLBACK.icon
-  const displayLabel = mapped?.label ?? label
+  const visual = toolVisual(toolName)
+  const iconName = visual.icon
+  const displayLabel = visual.label ?? label
+  const detail = callDetail(entry.payload)
+  // The size of the change, before opening it. "+12 −3" is the difference between a rename
+  // and a rewrite, and that is the decision the collapsed row exists to support.
+  const stat = entry.output_kind === 'tool_use' ? editDiffStat(entry.payload) : null
+  // The result body is worth reading; the tool_use content is just "Called X", which the label
+  // beside it already says. Repeating it was most of why expanding felt empty.
+  const resultBody = paired && paired.content !== entry.content ? paired.content : ''
   const statusSuffix = paired
     ? (paired.payload as Record<string, unknown> | null | undefined)?.is_error === true
       ? ' · failed'
@@ -349,19 +471,55 @@ function WorkRow({ entry, paired }: { entry: TimelineEntry; paired?: TimelineEnt
       ? ' · awaiting result'
       : ''
 
+  // A column, not a row. The expanded body used to be the fourth child of a `flex` row, so it
+  // laid out to the RIGHT of the label instead of underneath it — a wide, unreadable column of
+  // text beside the icon. The header keeps its own flex row; the body is its sibling below.
   return (
     <button
       onClick={() => setExpanded((v) => !v)}
-      className="flex gap-[.55rem] py-[2.5px] w-full text-left font-mono text-[12.5px]"
+      className="flex flex-col w-full text-left font-mono text-[12px] py-[2.5px]"
     >
-      <Icon name={iconName} size={13} style={{ color: 'var(--text-2)', marginTop: 1, flexShrink: 0 }} />
-      <b style={{ color: 'var(--text)', fontWeight: 500, minWidth: 64 }}>{displayLabel}</b>
-      <span style={{ color: 'var(--text-2)' }}>{statusSuffix.replace(' · ', '')}</span>
+      <span className="flex gap-[.55rem] items-baseline w-full min-w-0">
+        <Icon name={iconName} size={12} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
+        <b style={{ color: 'var(--text)', fontWeight: 500 }}>{displayLabel}</b>
+        {/* The call's own subject, inline and truncated. Scanning a run of six `shell` calls is
+            impossible when every row says only "shell". */}
+        {detail && !expanded && (
+          <span className="truncate min-w-0 flex-1" style={{ color: 'var(--text-3)' }}>
+            {detail.split('\n')[0]}
+          </span>
+        )}
+        {stat && (
+          <span className="flex-shrink-0 tabular-nums" title={`${stat.added} added, ${stat.removed} removed`}>
+            <span style={{ color: 'var(--green)' }}>+{stat.added}</span>{' '}
+            <span style={{ color: 'var(--red)' }}>−{stat.removed}</span>
+          </span>
+        )}
+        <span className="ml-auto flex-shrink-0" style={{ color: 'var(--text-3)' }}>
+          {statusSuffix.replace(' · ', '')}
+        </span>
+      </span>
       {expanded &&
         (editDiff ?? (
-          <span className="block whitespace-pre-wrap mt-0.5" style={{ color: 'var(--text-3)' }}>
-            {entry.content}
-            {paired && paired.content !== entry.content ? `\n${paired.content}` : ''}
+          <span className="block mt-1 ml-[1.15rem] space-y-1">
+            {detail && (
+              <span
+                className="block whitespace-pre-wrap px-2 py-1 rounded"
+                style={{ color: 'var(--text-2)', background: 'var(--surface-2, var(--surface))' }}
+              >
+                {detail}
+              </span>
+            )}
+            {resultBody && (
+              <span className="block whitespace-pre-wrap" style={{ color: 'var(--text-3)' }}>
+                {resultBody}
+              </span>
+            )}
+            {!detail && !resultBody && (
+              <span className="block" style={{ color: 'var(--text-3)' }}>
+                No input or output was recorded for this call.
+              </span>
+            )}
           </span>
         ))}
     </button>

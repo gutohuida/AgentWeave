@@ -617,9 +617,11 @@
     border-radius: var(--radius-sm);
     padding: 0 5px;
   }
+  /* No border and no fill. The work block is subordinate to the message it belongs to — a boxed,
+     filled panel drew more attention than the agent's own answer, which is the thing being read.
+     The disclosure arrow and the indent carry the grouping instead. */
   .work-disclosure {
-    border: 1px solid var(--border);
-    background: var(--surface);
+    background: transparent;
   }
   .work-disclosure summary,
   .fold-control {

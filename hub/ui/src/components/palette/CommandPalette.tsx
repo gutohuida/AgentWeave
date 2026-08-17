@@ -57,10 +57,24 @@ export function CommandPalette({
 
   const conversationRows = useMemo(
     () =>
-      conversations.map((conversation) => ({
-        conversation,
-        label: `${conversation.agent} — ${conversationLabel(conversation)}`,
-      })),
+      conversations.map((conversation) => {
+        // `conversationLabel` returns the conversation's whole opening prompt. Putting that in
+        // cmdk's `value` made every conversation match nearly any query — a prompt that says
+        // "Implement task-1f82d976 (Deadline-based admission decision) against spec document
+        // spdoc-…" matches the task's title, the document, and the agent's name, so typing any of
+        // them ranked six conversations above the thing actually named. Measured: with a task
+        // title typed, all six top hits were conversations and Enter never reached the task.
+        //
+        // The search text is the conversation's opening words, not its whole body. A long prompt
+        // also dilutes cmdk's score, so truncating makes the remaining matches rank properly.
+        const full = conversationLabel(conversation)
+        const title = full.length > 60 ? `${full.slice(0, 60).trimEnd()}…` : full
+        return {
+          conversation,
+          label: `${conversation.agent} — ${title}`,
+          searchText: `${conversation.agent} ${title}`,
+        }
+      }),
     [conversations],
   )
 
@@ -76,24 +90,6 @@ export function CommandPalette({
       <Command.List>
         <Command.Empty>No matches.</Command.Empty>
 
-        {conversationRows.length > 0 && (
-          <Command.Group heading="Conversations">
-            {conversationRows.map(({ conversation, label }) => (
-              <Command.Item
-                key={conversation.id}
-                value={`conversation-${conversation.id}-${label}`}
-                onSelect={() => {
-                  onOpenConversation(conversation.agent, conversation.id)
-                  close()
-                }}
-              >
-                <Icon name="chat" size={14} style={{ color: 'var(--text-3)' }} />
-                <span>{label}</span>
-              </Command.Item>
-            ))}
-          </Command.Group>
-        )}
-
         {agents.length > 0 && (
           <Command.Group heading="Agents">
             {agents.map((agent) => (
@@ -107,24 +103,6 @@ export function CommandPalette({
               >
                 <Icon name="smart_toy" size={14} style={{ color: 'var(--text-3)' }} />
                 <span>{agent.name}</span>
-              </Command.Item>
-            ))}
-          </Command.Group>
-        )}
-
-        {documents.length > 0 && (
-          <Command.Group heading="Spec documents">
-            {documents.map((document) => (
-              <Command.Item
-                key={document.id}
-                value={`document-${document.id}-${document.title}`}
-                onSelect={() => {
-                  onOpenDocument(document.path)
-                  close()
-                }}
-              >
-                <Icon name="description" size={14} style={{ color: 'var(--text-3)' }} />
-                <span>{document.title}</span>
               </Command.Item>
             ))}
           </Command.Group>
@@ -147,6 +125,42 @@ export function CommandPalette({
             ))}
           </Command.Group>
         )}
+        {documents.length > 0 && (
+          <Command.Group heading="Spec documents">
+            {documents.map((document) => (
+              <Command.Item
+                key={document.id}
+                value={`document-${document.id}-${document.title}`}
+                onSelect={() => {
+                  onOpenDocument(document.path)
+                  close()
+                }}
+              >
+                <Icon name="description" size={14} style={{ color: 'var(--text-3)' }} />
+                <span>{document.title}</span>
+              </Command.Item>
+            ))}
+          </Command.Group>
+        )}
+
+        {conversationRows.length > 0 && (
+          <Command.Group heading="Conversations">
+            {conversationRows.map(({ conversation, label, searchText }) => (
+              <Command.Item
+                key={conversation.id}
+                value={`conversation-${conversation.id}-${searchText}`}
+                onSelect={() => {
+                  onOpenConversation(conversation.agent, conversation.id)
+                  close()
+                }}
+              >
+                <Icon name="chat" size={14} style={{ color: 'var(--text-3)' }} />
+                <span>{label}</span>
+              </Command.Item>
+            ))}
+          </Command.Group>
+        )}
+
       </Command.List>
     </Command.Dialog>
   )

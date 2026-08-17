@@ -454,8 +454,11 @@ describe('AgentTimeline — WorkRow edit diff view (Q7 D2 section 3)', () => {
       />,
     )
     expandTheOnlyWorkRow()
-    const removedLine = container.querySelector('[style*="var(--red)"]')
-    const addedLine = container.querySelector('[style*="var(--green)"]')
+    // Scoped to the diff itself. The collapsed row now also carries a green/red "+N −N" summary,
+    // so an unscoped style selector picks that up instead of the first diff line.
+    const diff = container.querySelector('[data-testid="tool-edit-diff"]')
+    const removedLine = diff?.querySelector('[style*="var(--red)"]')
+    const addedLine = diff?.querySelector('[style*="var(--green)"]')
     expect(removedLine?.textContent).toBe('- foo')
     expect(addedLine?.textContent).toBe('+ bar')
     expect(screen.queryByText('Called Edit')).not.toBeInTheDocument()
@@ -472,7 +475,10 @@ describe('AgentTimeline — WorkRow edit diff view (Q7 D2 section 3)', () => {
       />,
     )
     expandTheOnlyWorkRow()
-    expect(screen.getByText('Called Edit')).toBeInTheDocument()
+    // The fallback is still "show the raw text", but the raw text is now the call's own input
+    // rather than its "Called Edit" label — the label is already on the row, so repeating it was
+    // the whole reason expanding a call felt empty. Input that will not parse is shown as sent.
+    expect(screen.getByText('{not valid json')).toBeInTheDocument()
   })
 
   it('falls back to the raw text when payload.truncated is true, even with a well-formed pair', () => {
@@ -495,7 +501,8 @@ describe('AgentTimeline — WorkRow edit diff view (Q7 D2 section 3)', () => {
       />,
     )
     expandTheOnlyWorkRow()
-    expect(screen.getByText('Called Edit')).toBeInTheDocument()
+    // Declining the diff still shows the call's input, which names what was attempted.
+    expect(screen.getByText(/old_string/)).toBeInTheDocument()
   })
 
   it('falls back to the raw text when new_string is missing (a synthetic fixture, not a real tool shape)', () => {
@@ -509,7 +516,7 @@ describe('AgentTimeline — WorkRow edit diff view (Q7 D2 section 3)', () => {
       />,
     )
     expandTheOnlyWorkRow()
-    expect(screen.getByText('Called Edit')).toBeInTheDocument()
+    expect(screen.getByText(/old_string/)).toBeInTheDocument()
   })
 
   it('falls back to the raw text for a real MultiEdit-shaped payload, since its pair lives inside edits[]', () => {
@@ -532,6 +539,12 @@ describe('AgentTimeline — WorkRow edit diff view (Q7 D2 section 3)', () => {
       />,
     )
     expandTheOnlyWorkRow()
-    expect(screen.getByText('Called MultiEdit')).toBeInTheDocument()
+    // MultiEdit's pair lives inside edits[], so the diff declines. The input is shown instead —
+    // and `file_path` outranks the raw JSON, because the file a MultiEdit touched is the one
+    // thing a reader wants from it. "Called MultiEdit" told them nothing.
+    // Twice, legitimately: once in the block's "wrote to" summary chip and once in the expanded
+    // call. Both are the file the write targeted, which is the point of showing it at all.
+    expect(screen.getAllByText('x').length).toBeGreaterThan(0)
+    expect(screen.queryByText('Called MultiEdit')).not.toBeInTheDocument()
   })
 })

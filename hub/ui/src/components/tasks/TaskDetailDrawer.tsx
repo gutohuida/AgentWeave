@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { formatDistanceToNow } from 'date-fns'
 import { Icon } from '@/components/common/Icon'
+import { StatusBadge } from '@/components/common/Badge'
 import { readableApiError } from '@/api/client'
 import {
   DIVERGENCE_POLICY_LABELS,
@@ -18,6 +20,35 @@ function statusLabel(status: string): string {
   return status.replace(/_/g, ' ')
 }
 
+/** One labelled fact in the ticket's field block. */
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <p
+        className="text-[10px] font-semibold uppercase tracking-wide mb-1"
+        style={{ color: 'var(--text-3)' }}
+      >
+        {label}
+      </p>
+      <div className="text-[12.5px] min-w-0" style={{ color: 'var(--text)' }}>
+        {children}
+      </div>
+    </div>
+  )
+}
+
+/** Absolute time for the title attribute — "2 days ago" is the right density for a field, but
+ *  the exact stamp is what someone reconciling against a log actually needs. */
+function exactTime(value: string): string {
+  const parsed = new Date(value)
+  return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString()
+}
+
+function relativeTime(value: string): string {
+  const parsed = new Date(value)
+  return Number.isNaN(parsed.getTime()) ? value : formatDistanceToNow(parsed, { addSuffix: true })
+}
+
 interface TaskDetailDrawerProps {
   task: Task | null
   onClose: () => void
@@ -28,14 +59,19 @@ interface TaskDetailDrawerProps {
 
 /**
  * The task, opened — everything the card's old inline expansion held (`design.md` D8), unchanged
- * in behaviour, relocated to a right-side panel with room to read it.
+ * in behaviour, with room to read it.
  *
- * A right-side drawer, not a centred modal: a modal covering the board loses the column context
- * ("which status is this in") a Jira-style ticket keeps visible at the edge. It closes the same
- * way `AgentCreateDialog.tsx`'s modal backdrop already does in this codebase — a click outside the
- * panel — so no new interaction convention is introduced, only a different geometry: there is no
- * dimming backdrop element here, because the board behind stays the thing being clicked, not a
- * scrim standing in for it.
+ * A centred panel over a dimmed backdrop — reversing this file's original right-side geometry on
+ * the operator's own judgement, 2026-08-17: *"I don't want a ticket that takes the whole screen
+ * like navigating to a new screen. Just that central popup that floats in the middle slightly
+ * obfuscating the background to focus on the ticket."*
+ *
+ * The argument the drawer was built on — that a right edge keeps the board's column context
+ * visible — did not survive contact: the panel read as a grey tab bolted to the side, and the
+ * column it came from is not what someone reading a ticket is looking for. Dimming the board
+ * instead says plainly that the ticket is the subject, and it is not a full screen, so the board
+ * is still there to return to. It closes the way every other dialog here does: click outside,
+ * or Escape.
  */
 export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetailDrawerProps) {
   const panelRef = useRef<HTMLDivElement>(null)
@@ -96,36 +132,52 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
 
   return (
     <div
-      ref={panelRef}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby={`task-drawer-title-${task.id}`}
-      data-testid={`task-drawer-${task.id}`}
+      // The scrim. Dims rather than hides: the board stays legible behind, so the ticket reads as
+      // something opened on top of the board and not as a screen navigated to.
       style={{
         position: 'fixed',
-        top: 0,
-        right: 0,
-        // Full height (`design.md` D8) — the drawer never itself has a shorter fixed height that
-        // would compete with the body's own scroll below.
-        bottom: 0,
-        width: 'min(480px, 100vw)',
+        inset: 0,
         display: 'flex',
-        flexDirection: 'column',
-        background: 'var(--surface)',
-        borderLeft: '1px solid var(--border)',
-        boxShadow: '-8px 0 24px rgba(0,0,0,0.18)',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '3vh 24px',
+        background: 'rgba(0, 0, 0, 0.32)',
+        backdropFilter: 'blur(1.5px)',
         zIndex: 50,
       }}
     >
       <div
-        className="shrink-0 flex items-start justify-between gap-3 p-4"
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={`task-drawer-title-${task.id}`}
+        data-testid={`task-drawer-${task.id}`}
+        style={{
+          // Wide enough for a description to have a line length worth reading, and capped so it
+          // never becomes the full screen. Height follows content up to the viewport, so a short
+          // ticket is a short panel rather than a full-height column of empty space.
+          width: 'min(760px, 100%)',
+          maxHeight: '94vh',
+          display: 'flex',
+          flexDirection: 'column',
+          background: 'var(--surface)',
+          border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-content, 10px)',
+          boxShadow: '0 16px 48px rgba(0,0,0,0.28)',
+          // Deliberately no `overflow: hidden` here, however tempting for the rounded corners:
+          // `design.md` D8 requires the body to be the only scrolling element, and a test pins
+          // it. Clipping the panel is a cosmetic want; clipping the ticket is a defect.
+        }}
+      >
+      <div
+        className="shrink-0 flex items-start justify-between gap-3 px-6 py-4"
         style={{ borderBottom: '1px solid var(--border)' }}
       >
         <div className="min-w-0">
-          <h2 id={`task-drawer-title-${task.id}`} className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
+          <h2 id={`task-drawer-title-${task.id}`} className="text-base font-semibold leading-snug" style={{ color: 'var(--text)' }}>
             {task.title}
           </h2>
-          <p className="text-[11px] mt-1" style={{ color: 'var(--text-3)' }}>
+          <p className="text-[11px] mt-1 font-mono" style={{ color: 'var(--text-3)' }}>
             {task.id}
           </p>
         </div>
@@ -146,15 +198,28 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
           no-clipping requirement; `tasks.md` 6.5). */}
       <div
         data-testid={`task-drawer-body-${task.id}`}
-        className="flex-1 p-4 space-y-3"
+        // Wider gutters and more air between blocks. At 480px with `p-4 space-y-3` every section
+        // ran into the next and the whole thing read as one wall; the width now allows a real
+        // line length, and the sections need to be told apart to benefit from it.
+        className="flex-1 px-6 py-5 space-y-5"
         style={{ overflowY: 'auto', minHeight: 0 }}
       >
-        {/* The operator's status control. Offers only the moves the map declares legal for an
-            operator from this status, so an illegal one is never presented and then refused. */}
-        {moves.length > 0 && (
-          <div>
-            <p className="text-[11px] font-medium mb-1" style={{ color: 'var(--text-3)' }}>Status</p>
-            <RowMenu
+        {/* The ticket's own facts, together. The card carried status, priority, assignee, agent
+            state and age; this panel showed none of them and offered only a bare "…" menu, so
+            opening a ticket lost information rather than gaining it — exactly backwards for the
+            surface with the most room. */}
+        <div
+          className="grid gap-x-6 gap-y-4 pb-1"
+          style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}
+        >
+          <Field label="Status">
+            <div className="flex items-center gap-2 flex-wrap">
+              <StatusBadge status={task.status} />
+              {/* The operator's status control, beside the status it changes rather than standing
+                  in for it. Offers only the moves the map declares legal from here, so an illegal
+                  one is never presented and then refused. */}
+              {moves.length > 0 && (
+                <RowMenu
               label={`Change status of ${task.title}`}
               testId={`task-status-menu-${task.id}`}
               persistent
@@ -181,10 +246,53 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
                     },
                   )
                 },
-              }))}
-            />
-          </div>
-        )}
+                  }))}
+                />
+              )}
+            </div>
+          </Field>
+
+          <Field label="Priority">
+            <StatusBadge status={task.priority} />
+          </Field>
+
+          <Field label="Assignee">
+            {task.assignee ? (
+              <span className="flex items-center gap-1.5 min-w-0">
+                <span className="truncate">@{task.assignee}</span>
+                {/* The agent's own state, which the card showed and this did not — the difference
+                    between "assigned to builder" and "builder is working on it right now". */}
+                {task.assignee_status && (
+                  <span className="text-[11px] shrink-0" style={{ color: 'var(--text-3)' }}>
+                    · {task.assignee_status}
+                  </span>
+                )}
+              </span>
+            ) : (
+              <span style={{ color: 'var(--text-3)' }}>Unassigned</span>
+            )}
+          </Field>
+
+          <Field label="Updated">
+            <span title={exactTime(task.updated)}>{relativeTime(task.updated)}</span>
+          </Field>
+
+          <Field label="Created">
+            <span title={exactTime(task.created_at)}>{relativeTime(task.created_at)}</span>
+          </Field>
+
+          {task.assigner && (
+            <Field label="Assigned by">
+              <span className="truncate block">{task.assigner}</span>
+            </Field>
+          )}
+
+          {task.spec_task_key && (
+            <Field label="Declared as">
+              <code className="text-[11.5px]">{task.spec_task_key}</code>
+            </Field>
+          )}
+        </div>
 
         {/* Naming what a hand-set block waits for. Required by the Hub, so the control collects it
             rather than sending a status that would be refused. */}
@@ -269,9 +377,9 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
         {/* Full description */}
         {task.description && (
           <div>
-            <p className="text-[11px] font-medium mb-1" style={{ color: 'var(--text-3)' }}>Description</p>
+            <p className="text-[11px] font-semibold uppercase tracking-wide mb-1.5" style={{ color: 'var(--text-3)' }}>Description</p>
             <p
-              className="text-xs p-2.5 rounded"
+              className="text-[12.5px] leading-relaxed p-3 rounded"
               style={{ color: 'var(--text)', background: 'var(--surface-3)', whiteSpace: 'pre-wrap' }}
             >
               {task.description}
@@ -289,8 +397,8 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
             this list has always shown every one, same as before this change. */}
         {task.requirement_links && task.requirement_links.length > 0 && (
           <div data-testid={`task-serves-${task.id}`}>
-            <p className="text-[11px] font-medium mb-1" style={{ color: 'var(--text-3)' }}>Serves</p>
-            <ul className="text-xs space-y-1" style={{ color: 'var(--text)' }}>
+            <p className="text-[11px] font-semibold uppercase tracking-wide mb-1.5" style={{ color: 'var(--text-3)' }}>Serves</p>
+            <ul className="text-[12.5px] leading-relaxed space-y-1.5" style={{ color: 'var(--text)' }}>
               {task.requirement_links.map((link) => {
                 const documentPath = documentPathById.get(link.document_id)
                 const anchor = link.anchor ? link.anchor.replace(/^#/, '') : link.identifier
@@ -333,8 +441,8 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
             a task that quietly lost a reference is the failure the links exist to prevent. */}
         {task.unresolved_requirements && task.unresolved_requirements.length > 0 && (
           <div>
-            <p className="text-[11px] font-medium mb-1" style={{ color: 'var(--text-3)' }}>Unresolved</p>
-            <ul className="text-xs space-y-1" style={{ color: 'var(--text-3)' }}>
+            <p className="text-[11px] font-semibold uppercase tracking-wide mb-1.5" style={{ color: 'var(--text-3)' }}>Unresolved</p>
+            <ul className="text-[12.5px] leading-relaxed space-y-1.5" style={{ color: 'var(--text-3)' }}>
               {task.unresolved_requirements.map((item) => (
                 <li key={item.reference}>
                   {item.reference} — {item.reason}
@@ -347,8 +455,8 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
         {/* Requirements, as the caller wrote them */}
         {task.requirements && task.requirements.length > 0 && (
           <div>
-            <p className="text-[11px] font-medium mb-1" style={{ color: 'var(--text-3)' }}>Requirements (as written)</p>
-            <ul className="list-disc list-inside text-xs space-y-1" style={{ color: 'var(--text)' }}>
+            <p className="text-[11px] font-semibold uppercase tracking-wide mb-1.5" style={{ color: 'var(--text-3)' }}>Requirements (as written)</p>
+            <ul className="list-disc list-inside text-[12.5px] leading-relaxed space-y-1.5" style={{ color: 'var(--text)' }}>
               {task.requirements.map((req, i) => (
                 <li key={i}>{req}</li>
               ))}
@@ -359,8 +467,8 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
         {/* Acceptance Criteria */}
         {task.acceptance_criteria && task.acceptance_criteria.length > 0 && (
           <div>
-            <p className="text-[11px] font-medium mb-1" style={{ color: 'var(--text-3)' }}>Acceptance Criteria</p>
-            <ul className="list-disc list-inside text-xs space-y-1" style={{ color: 'var(--text)' }}>
+            <p className="text-[11px] font-semibold uppercase tracking-wide mb-1.5" style={{ color: 'var(--text-3)' }}>Acceptance Criteria</p>
+            <ul className="list-disc list-inside text-[12.5px] leading-relaxed space-y-1.5" style={{ color: 'var(--text)' }}>
               {task.acceptance_criteria.map((criterion, i) => (
                 <li key={i}>{criterion}</li>
               ))}
@@ -371,8 +479,8 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
         {/* Deliverables */}
         {task.deliverables && task.deliverables.length > 0 && (
           <div>
-            <p className="text-[11px] font-medium mb-1" style={{ color: 'var(--text-3)' }}>Deliverables</p>
-            <ul className="list-disc list-inside text-xs space-y-1" style={{ color: 'var(--text)' }}>
+            <p className="text-[11px] font-semibold uppercase tracking-wide mb-1.5" style={{ color: 'var(--text-3)' }}>Deliverables</p>
+            <ul className="list-disc list-inside text-[12.5px] leading-relaxed space-y-1.5" style={{ color: 'var(--text)' }}>
               {task.deliverables.map((deliverable, i) => (
                 <li key={i}>{deliverable}</li>
               ))}
@@ -383,9 +491,9 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
         {/* Notes */}
         {task.notes && (
           <div>
-            <p className="text-[11px] font-medium mb-1" style={{ color: 'var(--text-3)' }}>Notes</p>
+            <p className="text-[11px] font-semibold uppercase tracking-wide mb-1.5" style={{ color: 'var(--text-3)' }}>Notes</p>
             <p
-              className="text-xs p-2.5 rounded"
+              className="text-[12.5px] leading-relaxed p-3 rounded"
               style={{ color: 'var(--text)', background: 'var(--surface-3)', whiteSpace: 'pre-wrap' }}
             >
               {task.notes}
@@ -398,7 +506,7 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
             the expensive one picks up what the cheap one dropped — and a policy that can only
             be set through an API is a policy nobody sets. */}
         <div>
-          <p className="text-[11px] font-medium mb-1" style={{ color: 'var(--text-3)' }}>
+          <p className="text-[11px] font-semibold uppercase tracking-wide mb-1.5" style={{ color: 'var(--text-3)' }}>
             If a run ends without moving this
           </p>
           <div className="flex flex-wrap items-center gap-1.5">
@@ -481,6 +589,7 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
             </div>
           )}
         </div>
+      </div>
       </div>
     </div>
   )

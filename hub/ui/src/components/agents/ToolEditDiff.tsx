@@ -6,12 +6,34 @@ import { tint } from '@/lib/colorTint'
  * payload has `old_string`/`new_string` at the top level and matches; `MultiEdit`'s pair lives
  * one level down inside `edits[]` and never matches — declines by design, not oversight.
  */
+/**
+ * How many lines an edit adds and removes, or null when this payload is not a single-pair edit.
+ *
+ * Shown on the collapsed row so the size of a change is legible before opening it: "+12 −3" is
+ * the difference between a rename and a rewrite, and deciding whether to expand is exactly the
+ * decision the collapsed row exists to support. Reuses the same parse as the diff itself, so the
+ * counts can never disagree with the lines rendered when it is opened.
+ */
+export function editDiffStat(
+  payload: Record<string, unknown> | null | undefined,
+): { added: number; removed: number } | null {
+  const lines = diffLinesForPayload(payload)
+  if (lines === null) return null
+  let added = 0
+  let removed = 0
+  for (const line of lines) {
+    if (line.added) added += 1
+    else if (line.removed) removed += 1
+  }
+  return added === 0 && removed === 0 ? null : { added, removed }
+}
+
 export function ToolEditDiff({ payload }: { payload: Record<string, unknown> | null | undefined }) {
   const lines = diffLinesForPayload(payload)
   if (lines === null) return null
 
   return (
-    <div className="mt-0.5 font-mono text-[12.5px]">
+    <div data-testid="tool-edit-diff" className="mt-0.5 font-mono text-[12.5px]">
       {lines.map((line, i) => (
         <div
           key={i}
