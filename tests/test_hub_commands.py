@@ -13,6 +13,7 @@ from agentweave.cli import (
     _hub_project_status_summary,
     _hub_resolve_launch_url,
     cmd_hub_start,
+    cmd_reset,
     cmd_status,
     cmd_stop,
 )
@@ -101,7 +102,7 @@ class TestHubStartCommand:
             result = cmd_hub_start(args)
             assert result == 0
             mock_native.assert_called_once_with(
-                port=args.port, detach=True, app=False, cwd=Path.cwd()
+                port=args.port, detach=True, app=False, cwd=Path.cwd(), profile=args.profile
             )
 
     def test_hub_start_docker_flag_no_docker(self, capsys):
@@ -162,7 +163,7 @@ class TestHubStartCommand:
             result = cmd_hub_start(args)
             assert result == 0
             mock_native.assert_called_once_with(
-                port=args.port, detach=True, app=True, cwd=Path.cwd()
+                port=args.port, detach=True, app=True, cwd=Path.cwd(), profile=args.profile
             )
 
     def test_hub_start_docker_already_running_opens_app(self, capsys):
@@ -572,3 +573,52 @@ class TestNativeStartProjectLifecycle:
         assert result == 0
         mock_open_project.assert_not_called()
         mock_open_window.assert_called_once_with("http://localhost:8000")
+
+
+class TestResetCommand:
+    """D6 — `reset --profile <name>` scopes destruction to exactly one profile, never a sweep."""
+
+    def test_reset_with_profile_deletes_only_that_profiles_directory(self, tmp_path, monkeypatch):
+        """`reset --profile a` must not touch profile `b`'s data even though both exist."""
+        monkeypatch.setattr("agentweave.cli.HUB_DIR", tmp_path / "hub")
+        profile_a_dir = tmp_path / "hub" / "profiles" / "a"
+        profile_b_dir = tmp_path / "hub" / "profiles" / "b"
+        profile_a_dir.mkdir(parents=True)
+        profile_b_dir.mkdir(parents=True)
+        (profile_a_dir / "agentweave.db").write_text("a", encoding="utf-8")
+        (profile_b_dir / "agentweave.db").write_text("b", encoding="utf-8")
+
+        args = MagicMock()
+        args.yes = True
+        args.all = False
+        args.profile = "a"
+
+        result = cmd_reset(args)
+
+        assert result == 0
+        assert not profile_a_dir.exists()
+        assert profile_b_dir.exists()
+        assert (profile_b_dir / "agentweave.db").exists()
+
+    def test_reset_without_profile_does_not_touch_profiles_dir(self, tmp_path, monkeypatch):
+        """Bare `reset` (no `--profile`) targets only the default profile's data/ — it does not
+        enumerate or sweep profiles/ (`design.md` D6: no `--profile all` mode)."""
+        monkeypatch.setattr("agentweave.cli.HUB_DIR", tmp_path / "hub")
+        default_data_dir = tmp_path / "hub" / "data"
+        profile_a_dir = tmp_path / "hub" / "profiles" / "a"
+        default_data_dir.mkdir(parents=True)
+        profile_a_dir.mkdir(parents=True)
+        (default_data_dir / "agentweave.db").write_text("default", encoding="utf-8")
+        (profile_a_dir / "agentweave.db").write_text("a", encoding="utf-8")
+
+        args = MagicMock()
+        args.yes = True
+        args.all = False
+        args.profile = "default"
+
+        result = cmd_reset(args)
+
+        assert result == 0
+        assert not default_data_dir.exists()
+        assert profile_a_dir.exists()
+        assert (profile_a_dir / "agentweave.db").exists()

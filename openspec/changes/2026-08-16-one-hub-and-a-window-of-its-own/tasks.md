@@ -21,26 +21,60 @@ name are both process/config-level, not schema.
       `data_dir = HUB_DIR / "data"`, `db_path = data_dir / "agentweave.db"`, and `DATABASE_URL` is
       set in `os.environ` before `hub.main` (and therefore `hub.config.settings`) is ever imported —
       independent of 1.1's default, exactly as `design.md` D1 says. Not touched.
-- [ ] 1.4 **Added 2026-08-16, resolves amendment A3 (`design.md` D6).** Add `--profile <name>`
+- [x] 1.4 **Added 2026-08-16, resolves amendment A3 (`design.md` D6).** Add `--profile <name>`
       (default `"default"`) to `agentweave`'s bare-invocation argument parser and to
       `agentweave status`/`agentweave stop`. Wire it into `_hub_native_start`'s database-path
       computation: default profile unchanged (D1's path); named profile resolves to
       `HUB_DIR / "profiles" / <name> / "agentweave.db"`. Preserve the existing rule that an explicit
       `DATABASE_URL` in the environment wins regardless of `--profile` — print which one took effect
       when both are present.
-- [ ] 1.5 Namespace `_hub_pid_file(port)` by profile too: extend its signature (or add a sibling
+      Done (iteration 4, 2026-08-17T20:2x+01:00): `--profile` added to the bare parser and to
+      `status`/`stop` subparsers, all defaulting to `"default"`. Database-path computation factored
+      into a new pure helper, `_hub_profile_data_dir(profile)` — default unchanged
+      (`HUB_DIR/data`), named resolves to `HUB_DIR/profiles/<name>`, both independently testable
+      without spawning anything. The DATABASE_URL-vs-profile precedence decision was also factored
+      out, into `_hub_resolve_database_source(old_db_url, profile, db_path)`, called from
+      `_hub_native_start` right before the existing `os.environ["DATABASE_URL"] = db_url` line —
+      it returns `(db_url, message_or_None)`; `_hub_native_start` prints the message when present.
+      DATABASE_URL always wins per the existing rule; the message only fires for a named profile
+      (silent for `"default"`, unchanged from before this task).
+- [x] 1.5 Namespace `_hub_pid_file(port)` by profile too: extend its signature (or add a sibling
       helper) so a named profile always produces `hub-<profile>-<port>.pid`, even at
       `DEFAULT_HUB_PORT`, while the default profile's filenames are byte-identical to today
       (`hub.pid` / `hub-<port>.pid`) — confirm by reading `_hub_pid_file`'s current callers
       (`cli.py:151,158,431,454,787,799,975`) before changing its signature, so every call site passes
       the profile it means.
-- [ ] 1.6 `cmd_reset` gets a `--profile <name>` argument. Without it, behavior is unchanged (targets
+      Done (iteration 4): confirmed by reading — all seven line numbers were still accurate at the
+      start of this task. `_hub_pid_file(port=None, profile="default")` now takes a `profile` kwarg;
+      for a named profile it always returns `hub-<profile>-<port>.pid` (falling back to
+      `DEFAULT_HUB_PORT` in the filename only if `port` itself is `None`, which no call site
+      currently passes). All seven call sites updated to pass their `profile` through:
+      `cmd_stop` (two unlinks), `_hub_pid_running` (which gained the same `profile` kwarg and
+      threads it to `_hub_pid_file`), `_hub_native_start` (write + unlink on the failed-health-check
+      path), and `cmd_reset`. Default profile's filenames confirmed byte-identical by a dedicated
+      test (`test_default_profile_pid_file_is_byte_identical_to_pre_profile_path`).
+- [x] 1.6 `cmd_reset` gets a `--profile <name>` argument. Without it, behavior is unchanged (targets
       only the default profile's `data/`). With it, targets only that profile's directory under
       `HUB_DIR / "profiles" / <name>`. Do not add a sweep-all mode (`design.md` D6 — deliberately
       excluded).
-- [ ] 1.7 Do not add Docker profile support, a remembered per-profile default port, a
+      Done (iteration 4): `reset_parser` gained `--profile`, default `"default"`. `cmd_reset` uses
+      `_hub_profile_data_dir(profile)` for its `data_dir` (was a hardcoded `HUB_DIR / "data"`) and
+      passes `profile` to `_hub_pid_file`/`_hub_pid_running`. No `--profile all` / sweep mode added.
+      `--all`'s existing behavior (also removing `.env`/logs) is unchanged and stays profile-agnostic
+      — `.env` is shared across profiles by design (this task and D6 are silent on namespacing it),
+      so `--all` still means "also remove the shared config," not "also remove this profile's
+      config." The confirmation banner now names the profile when one is given, so the operator sees
+      the scoped blast radius before confirming.
+- [x] 1.7 Do not add Docker profile support, a remembered per-profile default port, a
       `agentweave profile list` command, or a rename/delete-profile subcommand — `design.md` D6 names
       these as open follow-ups, not part of this task.
+      Confirmed (iteration 4): none of the four were added. `cmd_hub_start`'s Docker branch reads
+      `profile` from `args` (line included for parser-attribute symmetry with the native branch) but
+      never uses it — Docker still has exactly one instance, per D2. No `--profile` was added to
+      `doctor`. No list/rename/delete subcommand exists. No port is remembered per profile;
+      `--profile` alone (no `--port`) still resolves to `DEFAULT_HUB_PORT` today, which is exactly
+      the gap 1.8 (not yet implemented) closes by erroring instead — left open deliberately, per the
+      note below.
 - [ ] 1.8 **Added 2026-08-17, round-2 cold review (`design.md` D6, "Port").** When `--profile` names
       anything other than `"default"` and `--port` was not explicitly passed on the command line
       (distinguish "not passed" from "passed and happens to equal 8000" — argparse's plain
@@ -91,17 +125,47 @@ name are both process/config-level, not schema.
       Reran both files together: **58 passed, 1 skipped** (the skip predates this change — unrelated
       to D1/D2). `hub/hub/config.py` was the only file this iteration changed under `hub/hub/`;
       neither test file was touched.
-- [ ] 2.5 **Added 2026-08-16 (D6).** A test that `agentweave --profile a --port <p1>` and
+- [x] 2.5 **Added 2026-08-16 (D6).** A test that `agentweave --profile a --port <p1>` and
       `agentweave --profile b --port <p2>` resolve to two distinct database paths and two distinct
       PID filenames, extending `TestTwoInstancesDoNotCollide`'s existing pattern in
       `tests/test_cli.py` rather than duplicating its setup.
-- [ ] 2.6 A test that bare `agentweave` (no `--profile`) still resolves to exactly the pre-D6
+      Done (iteration 4): `TestProfileFlag.test_two_named_profiles_resolve_to_distinct_db_paths_and_pid_files`
+      in `tests/test_cli.py`, alongside (not inside) `TestTwoInstancesDoNotCollide` — same pure,
+      no-I/O style. Mutation-checked by hand: disabled `_hub_pid_file`'s named-profile branch
+      (`if False and profile and ...`), confirmed this test went red with a mismatched path
+      (`hub.pid` instead of `hub-a-8000.pid`), restored, confirmed green.
+- [x] 2.6 A test that bare `agentweave` (no `--profile`) still resolves to exactly the pre-D6
       database path — the regression test proving D6 did not move the default profile.
-- [ ] 2.7 A test that `DATABASE_URL` set in the environment overrides `--profile`'s computed path,
+      Done (iteration 4): `TestProfileFlag.test_default_profile_data_dir_is_byte_identical_to_pre_profile_path`
+      and `test_default_profile_pid_file_is_byte_identical_to_pre_profile_path`, both asserting
+      against `HUB_DIR / "data"` / `HUB_DIR / "hub.pid"` directly — the exact pre-D6 constants.
+- [x] 2.7 A test that `DATABASE_URL` set in the environment overrides `--profile`'s computed path,
       and that the CLI's output names which one took effect.
-- [ ] 2.8 A test that `agentweave reset --profile a` deletes only profile `a`'s directory when both
+      Done (iteration 4): `TestProfileFlag.test_explicit_database_url_overrides_profile_and_names_which_won`
+      tests the extracted `_hub_resolve_database_source` helper directly across all four
+      DATABASE_URL-present/absent x profile-named/default combinations, asserting both the winning
+      `db_url` and whether/what message is returned. Mutation-checked by hand: made the
+      DATABASE_URL-set branch return `db_path` instead of `old_db_url`, confirmed this test went red
+      (`explicit` URL no longer equalled the result), restored, confirmed green. Not tested via a
+      full `_hub_native_start` run with `capsys` — that path needs a stubbed `hub.main` and mocked
+      migrations/subprocess (`TestNativeStartProjectLifecycle`'s pattern in `test_hub_commands.py`),
+      which is heavier than the decision itself warrants once it is a pure, independently-tested
+      function; `_hub_native_start`'s own regression guard (`TestTwoInstancesDoNotCollide` in
+      `test_cli.py`) confirms it still calls the helper and still exports the result.
+- [x] 2.8 A test that `agentweave reset --profile a` deletes only profile `a`'s directory when both
       `a` and `b` have data present, and that bare `agentweave reset` (no `--profile`) does not touch
       `profiles/` at all.
+      Done (iteration 4): new `TestResetCommand` class in `tests/test_hub_commands.py` (`cmd_reset`
+      had no prior test coverage at all — checked before writing), two tests:
+      `test_reset_with_profile_deletes_only_that_profiles_directory` (profiles `a` and `b` both
+      seeded with a fake `agentweave.db`; `reset --profile a` must delete only `a`'s directory) and
+      `test_reset_without_profile_does_not_touch_profiles_dir` (default profile's `data/` and a named
+      profile's directory both seeded; bare `reset` deletes only `data/`). Both use
+      `monkeypatch.setattr("agentweave.cli.HUB_DIR", tmp_path / "hub")`, the existing pattern from
+      `TestNativeStartProjectLifecycle`. Mutation-checked by hand: reverted `cmd_reset`'s `data_dir`
+      to the old hardcoded `HUB_DIR / "data"`, confirmed the profile test went red (profile `a`'s
+      directory survived — the "no data found, nothing to destroy" path fired instead, since the
+      hardcoded default-profile dir didn't exist in the fixture), restored, confirmed both green.
 - [ ] 2.9 **Added 2026-08-17, round-2 cold review (D6, task 1.8).** A test that
       `agentweave --profile dev` (no `--port`) exits with an error rather than resolving to
       `DEFAULT_HUB_PORT` — the regression test for the port-collision gap found in round 2. Also

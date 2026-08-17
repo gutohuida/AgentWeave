@@ -73,11 +73,12 @@ def cmd_status(args: argparse.Namespace) -> int:
     import urllib.request as _req
 
     port = getattr(args, "port", 8000)
+    profile = getattr(args, "profile", "default")
     hub_url = _hub_url(port)
     health_url = _hub_health_url(port)
 
     # Check native PID first
-    pid = _hub_pid_running(port=port)
+    pid = _hub_pid_running(port=port, profile=profile)
     mode_label = "native" if pid is not None else "docker"
 
     try:
@@ -139,23 +140,24 @@ def cmd_stop(args: argparse.Namespace) -> int:
     import subprocess as _sp
 
     port = getattr(args, "port", 8000)
+    profile = getattr(args, "profile", "default")
     local = getattr(args, "local", False)
 
     # --- Native mode: check PID file first ---
-    pid = _hub_pid_running(port=port)
+    pid = _hub_pid_running(port=port, profile=profile)
     if pid is not None:
         if _hub_native_confirmed(port):
             print_info(f"Stopping Hub (native, PID {pid})...")
             _hub_kill_pid(pid)
             with contextlib.suppress(OSError):
-                _hub_pid_file(port).unlink()
+                _hub_pid_file(port, profile).unlink()
             print_success("Hub stopped")
             return 0
         # PID is alive but nothing is serving the Hub on the recorded port — most
         # likely a recycled PID owned by an unrelated process. Never kill it; just
         # discard the stale PID file and fall through to the Docker check.
         with contextlib.suppress(OSError):
-            _hub_pid_file(port).unlink()
+            _hub_pid_file(port, profile).unlink()
 
     # --- Docker mode ---
     import urllib.request as _req
@@ -428,8 +430,8 @@ def _download_with_sha256(
     return True
 
 
-def _hub_pid_file(port: Optional[int] = None) -> Path:
-    """Return the path to the native Hub PID file for `port`.
+def _hub_pid_file(port: Optional[int] = None, profile: str = "default") -> Path:
+    """Return the path to the native Hub PID file for `port` and `profile`.
 
     Per-port, because one machine can legitimately run more than one Hub: the instance you
     work in, and a throwaway one on another port and another `DATABASE_URL` that you test
@@ -438,20 +440,26 @@ def _hub_pid_file(port: Optional[int] = None) -> Path:
     kept running with nothing tracking it.
 
     `DEFAULT_HUB_PORT` keeps the historic unsuffixed name, so a Hub already running from an
-    older build is still found, reported and stopped by this one.
+    older build is still found, reported and stopped by this one. A named profile always gets
+    `hub-<profile>-<port>.pid`, even at `DEFAULT_HUB_PORT`, so its filename alone identifies
+    which profile it belongs to and it can never collide with the default profile's file at the
+    same port (`design.md` D6).
     """
+    if profile and profile != "default":
+        resolved_port = port if port is not None else DEFAULT_HUB_PORT
+        return HUB_DIR / f"hub-{profile}-{resolved_port}.pid"
     if port is None or port == DEFAULT_HUB_PORT:
         return HUB_DIR / "hub.pid"
     return HUB_DIR / f"hub-{port}.pid"
 
 
-def _hub_pid_running(port: Optional[int] = None) -> Optional[int]:
-    """Return the PID from the port's PID file if the process is alive, else None.
+def _hub_pid_running(port: Optional[int] = None, profile: str = "default") -> Optional[int]:
+    """Return the PID from the port's/profile's PID file if the process is alive, else None.
 
     If port is given, only returns the PID if the native process was started on that port.
     Removes a stale PID file if the process is no longer running.
     """
-    pid_file = _hub_pid_file(port)
+    pid_file = _hub_pid_file(port, profile)
     if not pid_file.exists():
         return None
     try:
@@ -522,6 +530,38 @@ def _hub_native_confirmed(port: int) -> bool:
             return resp.status == 200
     except Exception:
         return False
+
+
+def _hub_profile_data_dir(profile: str = "default") -> Path:
+    """Return the data directory for a Hub profile (`design.md` D6).
+
+    The default profile keeps its historic path (`HUB_DIR/data`) untouched; a named profile
+    gets its own directory under `HUB_DIR/profiles/<name>`, so two profiles' databases can
+    never collide with each other or with the default profile's.
+    """
+    if profile and profile != "default":
+        return HUB_DIR / "profiles" / profile
+    return HUB_DIR / "data"
+
+
+def _hub_resolve_database_source(old_db_url: Optional[str], profile: str, db_path: Path) -> tuple:
+    """Decide the effective `DATABASE_URL` and what (if anything) to tell the operator.
+
+    An explicit `DATABASE_URL` always wins, unchanged from before profiles existed — `--profile`
+    only computes a default database path, it does not add a second source of truth on top of an
+    explicit override (`design.md` D6). Returns `(db_url, message_or_None)`; the message names
+    which one took effect whenever a named profile is in play, so the two never silently disagree.
+    """
+    if old_db_url:
+        message = None
+        if profile and profile != "default":
+            message = f"Using DATABASE_URL from environment (--profile '{profile}' ignored)"
+        return old_db_url, message
+    db_url = f"sqlite+aiosqlite:///{db_path.as_posix()}"
+    message = None
+    if profile and profile != "default":
+        message = f"Using profile '{profile}' database at {db_path}"
+    return db_url, message
 
 
 def _hub_native_scaffold(data_dir: Path) -> tuple:
@@ -677,7 +717,11 @@ def _wait_and_open_app(port: int, cwd: Optional[Path]) -> None:
 
 
 def _hub_native_start(
-    port: int, detach: bool = True, app: bool = False, cwd: Optional[Path] = None
+    port: int,
+    detach: bool = True,
+    app: bool = False,
+    cwd: Optional[Path] = None,
+    profile: str = "default",
 ) -> int:
     """Start the Hub natively using uvicorn (no Docker).
 
@@ -710,12 +754,12 @@ def _hub_native_start(
         pass
 
     # 3. Clean up stale PID
-    _hub_pid_running(port=port)
+    _hub_pid_running(port=port, profile=profile)
 
     # 4. Compute db_url early — before any hub imports — so DATABASE_URL is set
     #    in os.environ before hub.config.settings is instantiated.
     HUB_DIR.mkdir(parents=True, exist_ok=True)
-    data_dir = HUB_DIR / "data"
+    data_dir = _hub_profile_data_dir(profile)
     data_dir.mkdir(parents=True, exist_ok=True)
     db_path = data_dir / "agentweave.db"
 
@@ -726,7 +770,9 @@ def _hub_native_start(
     # throwaway one you test against. Absent it, the path below is unchanged, so a plain
     # `agentweave` start still lands exactly where every existing install already has its data.
     _old_db_url = os.environ.get("DATABASE_URL")
-    db_url = _old_db_url or f"sqlite+aiosqlite:///{db_path.as_posix()}"
+    db_url, _db_source_message = _hub_resolve_database_source(_old_db_url, profile, db_path)
+    if _db_source_message:
+        print_info(_db_source_message)
     os.environ["DATABASE_URL"] = db_url
 
     try:
@@ -784,7 +830,7 @@ def _hub_native_start(
                     stderr=_sp.DEVNULL,
                 )
 
-            _hub_pid_file(port).write_text(f"{proc.pid}\n{port}", encoding="utf-8")
+            _hub_pid_file(port, profile).write_text(f"{proc.pid}\n{port}", encoding="utf-8")
             print_info(f"Starting Hub (native, PID {proc.pid}) on port {port}...")
 
             if not _hub_health_check(port=port, timeout=60):
@@ -796,7 +842,7 @@ def _hub_native_start(
                 # bind the port with no PID file left to track it.
                 _hub_kill_pid(proc.pid)
                 with contextlib.suppress(OSError):
-                    _hub_pid_file(port).unlink()
+                    _hub_pid_file(port, profile).unlink()
                 return 1
 
             print_success(f"Hub ready at {_hub_url(port)}")
@@ -839,13 +885,16 @@ def _hub_native_start(
 def cmd_hub_start(args: argparse.Namespace) -> int:
     """Start the AgentWeave Hub."""
     port = getattr(args, "port", 8000)
+    profile = getattr(args, "profile", "default")
     local = getattr(args, "local", False)
     docker = getattr(args, "docker", False) or local
     no_detach = getattr(args, "no_detach", False)
     app = getattr(args, "app", False)
 
     if not docker:
-        return _hub_native_start(port=port, detach=not no_detach, app=app, cwd=Path.cwd())
+        return _hub_native_start(
+            port=port, detach=not no_detach, app=app, cwd=Path.cwd(), profile=profile
+        )
 
     import subprocess as _sp
     import urllib.request as _req
@@ -969,10 +1018,15 @@ def cmd_reset(args: argparse.Namespace) -> int:
 
     yes = getattr(args, "yes", False)
     destroy_all = getattr(args, "all", False)
+    profile = getattr(args, "profile", "default")
 
-    data_dir = HUB_DIR / "data"
+    # Without --profile, reset targets only the default profile's data/ directory, exactly as
+    # before profiles existed — it does not enumerate or sweep profiles/. With --profile <name>,
+    # it targets only that profile's directory, so reset's blast radius is always exactly one
+    # profile, named or default, never inferred (`design.md` D6).
+    data_dir = _hub_profile_data_dir(profile)
     env_path = HUB_DIR / ".env"
-    pid_file = _hub_pid_file()
+    pid_file = _hub_pid_file(profile=profile)
 
     if not data_dir.exists() and not env_path.exists() and not pid_file.exists():
         print_info("No Hub data found. Nothing to destroy.")
@@ -984,7 +1038,10 @@ def cmd_reset(args: argparse.Namespace) -> int:
         targets.append(str(env_path))
         targets.append("any log files in " + str(HUB_DIR))
 
-    print_warning("This will permanently delete the following Hub data:")
+    if profile and profile != "default":
+        print_warning(f"This will permanently delete the following Hub data (profile '{profile}'):")
+    else:
+        print_warning("This will permanently delete the following Hub data:")
     for t in targets:
         print(f"  - {t}")
     if not destroy_all:
@@ -1002,7 +1059,7 @@ def cmd_reset(args: argparse.Namespace) -> int:
             return 0
 
     # Stop the Hub first if running
-    pid = _hub_pid_running()
+    pid = _hub_pid_running(profile=profile)
     if pid is not None:
         # Read the recorded port so we can confirm identity before killing.
         recorded_port: Optional[int] = None
@@ -1089,6 +1146,12 @@ For more help: https://github.com/gutohuida/AgentWeave
         dest="no_detach",
         help="Run in the foreground instead of detaching",
     )
+    parser.add_argument(
+        "--profile",
+        type=str,
+        default="default",
+        help='Named Hub instance to use, isolated from the default one (default: "default")',
+    )
 
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
@@ -1104,15 +1167,27 @@ For more help: https://github.com/gutohuida/AgentWeave
     status_parser.add_argument(
         "--port", type=int, default=8000, help="Port to check (default: 8000)"
     )
+    status_parser.add_argument(
+        "--profile", type=str, default="default", help="Named Hub instance to check"
+    )
 
     stop_parser = subparsers.add_parser("stop", help="Stop a running Hub instance")
     stop_parser.add_argument("--port", type=int, default=8000, help="Port to stop (default: 8000)")
     stop_parser.add_argument(
         "--local", action="store_true", help="Docker dev mode: stop the ./hub/ compose project"
     )
+    stop_parser.add_argument(
+        "--profile", type=str, default="default", help="Named Hub instance to stop"
+    )
 
     reset_parser = subparsers.add_parser("reset", help="Destroy local Hub state and start clean")
     reset_parser.add_argument("--yes", action="store_true", help="Skip confirmation prompt")
+    reset_parser.add_argument(
+        "--profile",
+        type=str,
+        default="default",
+        help="Only destroy this named profile's data, not the default profile's",
+    )
     reset_parser.add_argument(
         "--all", action="store_true", help="Also remove the .env config and API key"
     )

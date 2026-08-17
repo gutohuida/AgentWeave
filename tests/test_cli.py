@@ -95,18 +95,91 @@ class TestTwoInstancesDoNotCollide:
     def test_native_start_prefers_an_explicit_database_url(self, monkeypatch):
         """The source-level guard: `db_url` must fall back to the computed path rather than
         replace an explicit one. Asserted against the source because reaching the assignment
-        for real requires an installed hub package, a migration run and a spawned uvicorn."""
+        for real requires an installed hub package, a migration run and a spawned uvicorn.
+
+        The decision itself moved into `_hub_resolve_database_source` (D6, so `--profile` has a
+        single place to name which of DATABASE_URL/profile won) — this guard now checks
+        `_hub_native_start` still delegates to it and still exports the result, and
+        `TestProfileFlag` below tests the helper's actual precedence behaviour directly.
+        """
         import inspect
 
         from agentweave import cli
 
         src = inspect.getsource(cli._hub_native_start)
         assert (
-            'db_url = _old_db_url or f"sqlite+aiosqlite:///{db_path.as_posix()}"' in src
-        ), "regression: _hub_native_start no longer honours a pre-set DATABASE_URL"
+            "db_url, _db_source_message = _hub_resolve_database_source(_old_db_url, profile, db_path)"
+            in src
+        ), "regression: _hub_native_start no longer delegates the DATABASE_URL decision"
         assert (
             'os.environ["DATABASE_URL"] = db_url' in src
         ), "DATABASE_URL must still be exported before hub.config.settings is imported"
+
+
+class TestProfileFlag:
+    """D6 — `--profile <name>` isolates a database, PID file and (with `--port`) a port together.
+
+    The default profile must stay byte-identical to the pre-D6 paths; a named profile must never
+    collide with the default profile's or with another named profile's.
+    """
+
+    def test_default_profile_data_dir_is_byte_identical_to_pre_profile_path(self):
+        from agentweave.cli import HUB_DIR, _hub_profile_data_dir
+
+        assert _hub_profile_data_dir() == HUB_DIR / "data"
+        assert _hub_profile_data_dir("default") == HUB_DIR / "data"
+
+    def test_default_profile_pid_file_is_byte_identical_to_pre_profile_path(self):
+        from agentweave.cli import HUB_DIR, _hub_pid_file
+
+        assert _hub_pid_file() == HUB_DIR / "hub.pid"
+        assert _hub_pid_file(profile="default") == HUB_DIR / "hub.pid"
+        assert _hub_pid_file(8010, "default") == HUB_DIR / "hub-8010.pid"
+
+    def test_two_named_profiles_resolve_to_distinct_db_paths_and_pid_files(self):
+        from agentweave.cli import HUB_DIR, _hub_pid_file, _hub_profile_data_dir
+
+        assert _hub_profile_data_dir("a") == HUB_DIR / "profiles" / "a"
+        assert _hub_profile_data_dir("b") == HUB_DIR / "profiles" / "b"
+        assert _hub_profile_data_dir("a") != _hub_profile_data_dir("b")
+
+        # Even at DEFAULT_HUB_PORT, a named profile's PID file is unconditionally namespaced,
+        # so it can never collide with the default profile's file at the same port.
+        assert _hub_pid_file(8000, "a") == HUB_DIR / "hub-a-8000.pid"
+        assert _hub_pid_file(8010, "a") == HUB_DIR / "hub-a-8010.pid"
+        assert _hub_pid_file(8010, "b") == HUB_DIR / "hub-b-8010.pid"
+        assert _hub_pid_file(8010, "a") != _hub_pid_file(8010, "b")
+        assert _hub_pid_file(8000, "a") != _hub_pid_file(8000, "default")
+
+    def test_explicit_database_url_overrides_profile_and_names_which_won(self, tmp_path):
+        from agentweave.cli import _hub_resolve_database_source
+
+        db_path = tmp_path / "profiles" / "dev" / "agentweave.db"
+        explicit = "sqlite+aiosqlite:///explicit.db"
+
+        # DATABASE_URL set + named profile -> DATABASE_URL wins, message names both.
+        db_url, message = _hub_resolve_database_source(explicit, "dev", db_path)
+        assert db_url == explicit
+        assert message is not None
+        assert "DATABASE_URL" in message
+        assert "dev" in message
+
+        # DATABASE_URL set + default profile -> DATABASE_URL wins silently, unchanged from
+        # before profiles existed.
+        db_url, message = _hub_resolve_database_source(explicit, "default", db_path)
+        assert db_url == explicit
+        assert message is None
+
+        # No DATABASE_URL + named profile -> the computed profile path wins, named in the message.
+        db_url, message = _hub_resolve_database_source(None, "dev", db_path)
+        assert db_url == f"sqlite+aiosqlite:///{db_path.as_posix()}"
+        assert message is not None
+        assert "dev" in message
+
+        # No DATABASE_URL + default profile -> computed path wins silently, unchanged.
+        db_url, message = _hub_resolve_database_source(None, "default", db_path)
+        assert db_url == f"sqlite+aiosqlite:///{db_path.as_posix()}"
+        assert message is None
 
 
 class TestDownloadWithSha256:
