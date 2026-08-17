@@ -105,12 +105,23 @@ next queue item, or start a new conversation on the Hub's own initiative.
 - **AND** the loop is marked stopped with a reason naming the stop time
 - **AND** the job no longer fires on subsequent cron ticks
 
-#### Scenario: A firing with an empty queue is skipped when configured to stop on emptiness
+The queue-emptiness stop condition SHALL mean *drained*, not *never filled*. It SHALL take effect
+only once the loop's queue has held at least one task, so that a loop created before its work exists
+is not stopped on its first firing.
 
-- **WHEN** a job's cron would fire it, its loop has the queue-emptiness stop condition set, and the
-  loop's queue holds no task in a non-terminal status
+#### Scenario: A firing with a drained queue is skipped when configured to stop on emptiness
+
+- **WHEN** a job's cron would fire it, its loop has the queue-emptiness stop condition set, the
+  loop's queue has held at least one task, and it now holds no task in a non-terminal status
 - **THEN** that firing is skipped
 - **AND** the loop is marked stopped with a reason naming the empty queue
+
+#### Scenario: A loop whose queue has never held a task is not stopped by the emptiness condition
+
+- **WHEN** a job's cron would fire it, its loop has the queue-emptiness stop condition set, and no
+  task has ever named that loop
+- **THEN** that firing proceeds
+- **AND** the loop is not marked stopped and the job remains enabled
 
 #### Scenario: A loop with no stop condition never stops itself
 

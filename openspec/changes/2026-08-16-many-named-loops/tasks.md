@@ -147,8 +147,9 @@
 - [x] 6.3 Same file or a new one: `_loop_stop_reason` — a loop with `stop_at` in the past causes the
       next fire to be skipped, `job.enabled` becomes `False`, `loop.stop_reason`/`stopped_at` are set,
       and a subsequent manual `run_job` call also refuses (still disabled) rather than firing anyway.
-      A loop with `stop_when_queue_empties=True` and zero non-terminal `Task`s naming it stops the
-      same way; one with a single `pending` task does not stop.
+      A loop with `stop_when_queue_empties=True` whose queue has held a task and now has zero
+      non-terminal ones stops the same way; one with a single `pending` task does not stop; one
+      whose queue has never held a task does not stop either (design D4a).
 - [x] 6.4 `hub/tests/test_tasks.py`: `GET /tasks?loop_id=X` returns exactly the tasks naming that
       loop regardless of status, mirroring 3.1's own `spec_document_id` test shape from the prior
       change. Confirm `GET /api/v1/agent-actions/tasks` (the D7 regression's actual live surface)
@@ -180,12 +181,19 @@ check the owning process's `CreationDate` against the commit being tested, not o
 status field — a stale process from an earlier iteration can keep answering `/health: ok` while
 running old code.
 
-- [x] 7.1 Create a job with a `stop_when_queue_empties` loop and no tasks naming it yet; fire it
-      manually (`POST /jobs/{id}/run`) and confirm the fire is skipped, `loop.stop_reason` names the
-      empty queue, and the job's `enabled` flips to `false` in a subsequent `GET`. Verified live
-      against the trial Hub (restarted onto this commit first — confirmed by the owning PID's actual
-      `CreationDate`, not just `/health`): manual fire returned `409` with `"loop queue is empty"`,
-      and the subsequent `GET` showed `enabled: false` and `loop.stop_reason` naming it.
+- [ ] 7.1 Create a job with a `stop_when_queue_empties` loop, add a task naming it, take that task to
+      a terminal status, then fire manually (`POST /jobs/{id}/run`) and confirm the fire is skipped,
+      `loop.stop_reason` names the empty queue, and the job's `enabled` flips to `false` in a
+      subsequent `GET`. Then repeat with a loop whose queue has *never* held a task and confirm the
+      fire proceeds instead (design D4a).
+
+      **Superseded and needs re-running.** The original 7.1 verified the no-tasks-yet case *stopping*
+      the loop, and did so live against the trial Hub (restarted onto that commit first — confirmed
+      by the owning PID's actual `CreationDate`, not just `/health`): manual fire returned `409` with
+      `"loop queue is empty"`, and the subsequent `GET` showed `enabled: false`. That result was
+      real, and it is now the wrong behaviour — the operator ruled on 2026-08-17 that the condition
+      means drained rather than never-filled. `hub/tests/test_scheduler.py` covers both cases; the
+      live re-run has not been done.
 - [x] 7.2 Create a second loop, add a `Task` naming it via direct creation (`TaskCreate` has no
       client-settable `loop_id` — confirmed by reading the schema — so this used a direct SQLite
       insert, the same technique N2/N2b used for a run credential), fire the job, confirm the fire

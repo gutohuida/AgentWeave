@@ -52,7 +52,9 @@ already per-job), its own purpose, its own queue, its own stop condition.
 - **A loop's stop condition is enforced as one more skip-check the scheduler already has**, alongside
   the existing self-registered-poll-agent guard (`scheduler.py:_job_agent_skip_reason`). Before a
   scheduled or manual fire proceeds, if the firing job's loop has a `stop_at` in the past, or
-  `stop_when_queue_empties` is set and the loop's queue holds no open (non-terminal) task, the fire
+  `stop_when_queue_empties` is set and the loop's queue has held at least one task and now holds no
+  open (non-terminal) one — "empty" meaning drained rather than never-filled, so a loop created
+  before its work exists is not killed on its first tick (design D4a) — the fire
   is skipped exactly the way an existing skip already is — a `JobRun` with `status="skipped"` and a
   stated reason — and the loop is marked stopped with that reason, the job disabled, and removed from
   the scheduler. **This is the entire boundary of what "the Hub reacts to a stop condition" means

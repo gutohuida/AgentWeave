@@ -172,13 +172,29 @@ async def _loop_stop_reason(session: AsyncSession, job: AIJob) -> Optional[str]:
             )
         )
         if not open_count:
-            return "loop queue is empty"
+            ever_count = await session.scalar(
+                select(func.count(Task.id)).where(Task.loop_id == loop.id)
+            )
+            if ever_count:
+                return "loop queue is empty"
     return None
 ```
 
 reusing `TERMINAL_FOR_BINDING` (`hub/hub/run_task_binding.py:272`, already imported for the identical
 "no further work expected" idea by `-the-board-scoped-by-document`, design D1) rather than a second
 open/closed vocabulary.
+
+**D4a — "empty" means drained, not never-filled.** The `ever_count` check exists because a loop is
+created *before* the work it will run: "shorter dev loops that keep developing" describes a loop an
+operator sets up and then populates, and arming the condition at creation would disable it
+permanently (`job.enabled = False`) on its first cron tick, before it had ever run anything. The
+first firing of a brand-new loop is exactly the firing the operator wants.
+
+*Rejected: a `queue_was_populated` flag on `Loop`.* It would be a second copy of something the
+database already records — a task that reaches a terminal status keeps its `loop_id`, so the count
+of all tasks ever naming the loop is the queue's whole history, and a flag saying the same thing can
+drift from it. The cost of deriving it is one extra `COUNT` on a query that only runs when the queue
+is already empty, which is the cheap case.
 
 `_do_fire_job` calls it exactly where it already calls `_job_agent_skip_reason`, and a positive
 result is handled **identically to that existing skip path** — a `JobRun` with `status="skipped"`,

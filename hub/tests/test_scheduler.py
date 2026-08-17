@@ -17,7 +17,7 @@ from sqlalchemy import select
 import hub.api.v1.agent_trigger as agent_trigger
 from hub.db.engine import async_session_factory
 from hub.db.models import Agent, AIJob, InboundQueueEntry, JobRun, Loop, Message, Run, Task
-from hub.scheduler import JobScheduler
+from hub.scheduler import JobScheduler, _loop_stop_reason
 
 
 async def _make_job(db, *, suffix, agent, session_mode="new"):
@@ -226,10 +226,25 @@ async def test_loop_with_past_stop_at_skips_the_fire_and_disables_the_job():
 
 
 @pytest.mark.asyncio
-async def test_loop_with_stop_when_queue_empties_and_no_tasks_stops():
+async def test_loop_with_stop_when_queue_empties_and_a_drained_queue_stops():
+    """Every task the loop ever held has reached a terminal status — that is a drained queue."""
     async with async_session_factory() as db:
         job = await _make_job(db, suffix="empty-queue", agent="loop-agent-empty")
-        await _make_loop(db, job_id=job.id, purpose="drain the queue", stop_when_queue_empties=True)
+        loop = await _make_loop(
+            db, job_id=job.id, purpose="drain the queue", stop_when_queue_empties=True
+        )
+        db.add(
+            Task(
+                id="task-loop-drained-1",
+                project_id="proj-test",
+                # `approved`, not `completed` — TERMINAL_FOR_BINDING is ("approved", "rejected"),
+                # so a completed task is still open work awaiting review.
+                title="finished",
+                status="approved",
+                loop_id=loop.id,
+            )
+        )
+        await db.commit()
 
     scheduler = JobScheduler()
     async with async_session_factory() as db:
@@ -243,6 +258,36 @@ async def test_loop_with_stop_when_queue_empties_and_no_tasks_stops():
         assert refreshed_job.enabled is False
         loop = (await db.execute(select(Loop).where(Loop.job_id == job.id))).scalar_one()
         assert "queue is empty" in loop.stop_reason
+
+
+@pytest.mark.asyncio
+async def test_loop_with_stop_when_queue_empties_and_no_tasks_yet_keeps_running():
+    """A loop created before its work exists must not disable itself on its first tick.
+
+    Create-then-populate is the natural order for the "shorter dev loops that keep developing"
+    the stop condition is meant to serve. Arming "queue is empty" at creation would kill the loop
+    permanently (`job.enabled = False`) before it had ever run anything — so the condition means
+    *drained*, and a queue that has never held a task has not drained.
+    """
+    async with async_session_factory() as db:
+        job = await _make_job(db, suffix="unpopulated", agent="loop-agent-unpopulated")
+        await _make_loop(
+            db, job_id=job.id, purpose="about to be filled", stop_when_queue_empties=True
+        )
+
+    scheduler = JobScheduler()
+    async with async_session_factory() as db:
+        fresh_job = await db.get(AIJob, job.id)
+        reason = await _loop_stop_reason(db, fresh_job)
+
+    assert reason is None
+
+    async with async_session_factory() as db:
+        refreshed_job = await db.get(AIJob, job.id)
+        assert refreshed_job.enabled is True
+        loop = (await db.execute(select(Loop).where(Loop.job_id == job.id))).scalar_one()
+        assert loop.stop_reason is None
+        assert loop.stopped_at is None
 
 
 @pytest.mark.asyncio

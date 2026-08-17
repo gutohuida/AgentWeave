@@ -87,7 +87,19 @@ async def _loop_stop_reason(session: AsyncSession, job: AIJob) -> Optional[str]:
             )
         )
         if not open_count:
-            return "loop queue is empty"
+            # "Empty" means *drained*, not *never filled*. A loop is created before its work
+            # exists — that is the order "shorter dev loops that keep developing" implies, and
+            # arming this condition at creation would disable the loop on its first tick, before
+            # it had ever run anything, permanently (`job.enabled = False` below).
+            #
+            # Derived from the task rows rather than a flag on `Loop`: a task that has reached a
+            # terminal status still carries its `loop_id`, so the queue's whole history is already
+            # recorded and a column saying the same thing would be a second copy that can drift.
+            ever_count = await session.scalar(
+                select(func.count(Task.id)).where(Task.loop_id == loop.id)
+            )
+            if ever_count:
+                return "loop queue is empty"
     return None
 
 
