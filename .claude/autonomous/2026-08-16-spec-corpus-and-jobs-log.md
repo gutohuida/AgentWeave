@@ -1415,3 +1415,76 @@ propose one or more architectures building from the exploration's surviving narr
 cross-session state, addressable bound identity, an operator-facing UI), accounting for a world where
 tonight's N2 (archive/capability phases) and N3 (many-named-loops) have already shipped. Thinking
 documents only, no code — same shape as N1.
+
+## Entry 16 — N5: fixed the false §2 conclusion, then proposed three architectures grounded in tonight's own N2/N3. N5 done; `current` advances to N6 (fallback).
+
+**2026-08-17T03:21:35+01:00.** Worked N5-architecture-proposals as scoped by `next_action`.
+
+**Part 1 — the correction.** Read `openspec/explorations/2026-08-15-where-agentweave-fits.md` in
+full before touching anything, per the instruction not to build on top of a known-false conclusion.
+§2 closed with "...it means the operator has, in practice, already run the comparison and picked the
+competitor for the harder job (developing AgentWeave itself)." The operator said this directly, this
+session, before the run started: "The one thing that it got wrong is that I chose openspec before my
+spec... chronology, not a verdict." Fixed via a dated blockquote addendum inserted immediately after
+the sentence (left the original prose intact rather than silently rewriting history in a document
+whose own header says "nothing here is asserted from memory") — quotes the operator verbatim, states
+the correction, and notes the gap it points at (this repo needed a mature spec tool before its own
+spec tool was mature enough to use on itself) is one this migration is actively closing, not a
+standing preference. This was a two-line target but the instruction was explicit not to skip it even
+though it "looks like a one-liner."
+
+**Part 2 — three architecture proposals**, written in a new document,
+`openspec/explorations/2026-08-17-architecture-proposals.md`, built from the surviving narrow claim
+(durability, addressable bound identity, an operator-facing UI) rather than a re-survey, and
+deliberately accounting for tonight's own N2 (`2026-08-16-the-corpus-keeps-what-shipped`: archived
+phase, `kind='capability'` at phase `current`, operator-authored merge) and N3
+(`2026-08-16-many-named-loops`: `Loop` wraps `AIJob`, `Loop.purpose`/`stop_at`/
+`stop_when_queue_empties`, queue is `Task.loop_id`) having already shipped rather than treating them
+as hypothetical. Grounded both change summaries by reading their actual `proposal.md`/`design.md`
+this iteration rather than trusting memory of the STATE.json queue-item prose, which predates their
+implementation and could have drifted.
+
+- **Proposal A — loops as a fourth roster citizen.** `Loop` today has a free-text `purpose` and no
+  charter, no roster-page presence. Bind it to a charter (reusing the existing mechanism verbatim,
+  not forking it) and surface it on the same roster page as agents, badge-distinguished. Cheapest of
+  the three: one nullable FK column, one UI badge.
+- **Proposal B — a spec-drift verification loop.** N2 gives capability documents somewhere to live;
+  nothing re-reads them, so they can go stale the same day they're merged. Propose a named loop whose
+  queue is one task per capability document, checking shipped behaviour against the document and
+  recording divergence as `Evidence` — explicitly barred from editing the capability document itself,
+  because N2's authored-merge rule stays intact. Tied this back to the governance angle from
+  `where-agentweave-fits.md` §1 (EU AI Act / NIST audit-trail language) as the same shape turned
+  inward rather than chased as a buyer.
+- **Proposal C — retire `STATE.json`: run the autonomous session itself as a `Loop`.** The sharpest
+  test of the durability claim: this very run is proof by counterexample that the tool best
+  positioned to demonstrate durable cross-session state doesn't yet trust its own product to hold it.
+  Scoped honestly — explicitly does NOT propose the Hub firing Claude Code from inside a loop (N3's
+  scope ceiling, inherited deliberately) and names the real blocker (the autonomous session's actual
+  unit of work has no equivalent to "fire a Hub-registered agent through a Hub-managed runner," since
+  this process is neither). Recommended as the next exploration to deepen, not the next change to
+  propose.
+
+Also wrote an explicit "What NOT to build now" section (no second execution path beside `AIJob`; no
+exception letting the verification loop write capability documents; no forked charter-editing UI for
+loops) and a sequencing recommendation (A first if any ship — cheapest and makes B legible; B is the
+highest-leverage next *spec* change, keeps N2's `current` phase honest; C is highest long-term value
+but least ready to spec tonight).
+
+**Verified, not trusted:** `npx openspec validate --changes --strict` → 20/20 (exploration docs are
+outside `--changes` validation by design — this just confirms nothing else broke). `git status
+--porcelain` showed exactly the two intended files: the corrected `2026-08-15-...md` and the new
+`2026-08-17-...md`. No source file touched, so `verified_green_at_iteration_12_commit_619fd5a` still
+holds — nothing here required re-running either suite.
+
+**N5-architecture-proposals is done** — both the correction and the proposals, sized to one iteration
+as `next_action` allowed ("ship one solid document this iteration... rather than rushing a shallow
+survey" — three proposals in one document judged sufficient rather than shallow, since each is
+grounded in this session's own shipped changes rather than generic). `current` advances to
+`N6-openspec-backlog`, the fallback item: archive the pre-08-16 openspec changes sitting in
+`openspec/changes/` (13 of the current 19 unarchived predate 2026-08-16). `next_action`: for each
+pre-08-16 change, read its `tasks.md`, tick any human-only-verification item that has real recorded
+evidence from this session or a prior one, explicitly waive (with a stated reason, not an invented
+one) any that cannot be verified unattended, then archive via the openspec CLI. Do not tick anything
+on the strength of a plan existing (CLAUDE.md, restated in STATE.json's queue item). If time runs out
+before all 13 are reached, stop after a clean batch rather than leaving one half-edited — commit
+whichever are actually archived, and leave `next_action` naming which remain.

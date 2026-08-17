@@ -77,8 +77,21 @@ repository was told to prefer over its own product's dogfooded workflow is the s
 now the most-starred, most-actively-maintained open-source answer to the same problem AgentWeave's
 `aw-spec-workflow` ships to *its* users. That is not proof AgentWeave's version is worse — OpenSpec
 is file/CLI-based and agent-agnostic, where AgentWeave's is Hub-owned and wired to
-tasks/evidence/runs — but it means the operator has, in practice, already run the comparison and
-picked the competitor for the harder job (developing AgentWeave itself).
+tasks/evidence/runs.
+
+> **Correction — 2026-08-17.** The sentence originally here read: *"...but it means the operator
+> has, in practice, already run the comparison and picked the competitor for the harder job
+> (developing AgentWeave itself)."* The operator has said directly that this is false: *"The one
+> thing that it got wrong is that I chose openspec before my spec. It was just a matter that my
+> spec didn't exist when I started with AgentWeave. So until it catches up in maturity I could not
+> use it."* The choice was **chronology, not a verdict** — AgentWeave's Hub-owned spec flow did not
+> exist on 2026-08-02 when this repository needed a spec workflow immediately, and openspec did.
+> That gap has since closed: the spec flow shipped 2026-08-12/13 and has been driven end to end
+> live (`CLAUDE.md`'s opening section), and `openspec/changes/2026-08-16-*` is this session
+> deliberately trialling it on new work. The uncomfortable detail above still stands — AgentWeave's
+> own repo needed a mature spec tool before its own spec tool was mature enough to use on itself —
+> but it is a maturity gap this migration is actively closing, not a standing preference for the
+> competitor.
 
 **Governance and quality gates.** This is real and growing, but the growth is enterprise-shaped:
 EU AI Act Article 14 and NIST's AI RMF now require *"demonstrable human oversight that is trained,
