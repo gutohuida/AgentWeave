@@ -1584,6 +1584,50 @@ async def _execute_run(
         from ...turn_scheduler import schedule_agent
 
         await schedule_agent(project_id, agent)
+    except Exception as exc:
+        # Every step above this point is inside the same `try` and none of it is wrapped
+        # individually — so an exception anywhere between the spawn succeeding and this turn's
+        # own bookkeeping (title generation, the next-turn scheduler, ...) used to leave the
+        # `Run` row exactly where the spawn-success commit put it: `status="running"`, forever.
+        # `turn_scheduler.schedule_agent` refuses a new turn while one is `running`
+        # (`turn_scheduler.py:37-43`), so the agent silently queued every future trigger instead
+        # of running it — an unbounded outage with no error anywhere a human would see. Measured
+        # live in CI (`test_a_conversation_whose_model_changed_attributes_usage_per_turn`,
+        # 2026-08-17): `_active_ptys` and `_background_runs` both empty — the task had genuinely
+        # finished — while the `Run` row still read `running` with `error=None`, which is only
+        # possible if something threw before the finalize block's own `db.commit()`.
+        logger.exception("Unhandled error in run %s for %r", run_id, agent)
+        async with async_session_factory() as db:
+            run = await db.get(Run, run_id)
+            if run is None or run.status != "running":
+                # The turn itself already reached a terminal status (or the row is gone) before
+                # this exception happened, so whatever failed is downstream of a turn that
+                # already succeeded or failed cleanly. Overwriting that here would let unrelated
+                # bookkeeping failures relabel a completed run as failed.
+                return
+            run.status = "failed"
+            run.error = str(exc)
+            run.ended_at = datetime.now(timezone.utc)
+            await expire_pending_for_run(db, run_id)
+            returned = await return_run_entries(db, run_id)
+            await db.commit()
+            await _report_abandoned_entries(db, project_id, agent, run_id)
+            await _broadcast_run_lifecycle(
+                db,
+                project_id,
+                "run_failed",
+                agent=agent,
+                run_id=run_id,
+                **_transport_failure_fields(exc, conversation_id),
+            )
+            for entry_id in returned:
+                payload = {"entry_id": entry_id, "agent": agent, "run_id": run_id}
+                await persist_event(db, project_id, "queue_entry_queued", payload, agent=agent)
+                await sse_manager.broadcast(project_id, "queue_entry_queued", payload)
+        if returned:
+            from ...turn_scheduler import schedule_agent
+
+            await schedule_agent(project_id, agent)
     finally:
         _active_ptys.pop(run_id, None)
         _stop_requested.discard(run_id)
