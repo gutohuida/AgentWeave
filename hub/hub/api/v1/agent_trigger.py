@@ -159,6 +159,33 @@ def _trace(run_id: str, step: str) -> None:
         pass
 
 
+async def _peek(run_id: str, label: str) -> None:
+    """Re-read *run_id* in a fresh session and record what it says.
+
+    Temporary, and paired with `_run_trace`. The trail on `71ec2d0` showed the finalize block
+    finding its row (`run_seen=True`), assigning a terminal status and returning from
+    `await db.commit()` without error — while the test's own session still read the row at its
+    creation values. So the write is not surviving, and the question is no longer *whether* the
+    finalize ran but *what happens to the row afterwards*. Each of the steps that follow the commit
+    opens its own session (`evaluate_run_end` explicitly so), and any of them could be the one that
+    puts it back; reading the row between them says which, instead of a further hypothesis.
+
+    Records the engine identity too, because "two engines" is the other shape that fits a commit
+    that succeeds and a read that does not see it.
+    """
+    try:
+        async with async_session_factory() as session:
+            run = await session.get(Run, run_id)
+            state = (
+                "row-gone"
+                if run is None
+                else f"status={run.status!r} exit_code={run.exit_code!r} ended={run.ended_at is not None}"
+            )
+            _trace(run_id, f"peek[{label}] {state} engine={id(session.get_bind()):x}")
+    except Exception as exc:  # pragma: no cover - a diagnostic must not break a run
+        _trace(run_id, f"peek[{label}] FAILED {type(exc).__name__}")
+
+
 # run_ids currently executing over the Codex app-server transport (task 2.8). This path has
 # no PtySession/PipeSession to register in `_active_ptys` — `codex_appserver.run_turn` owns
 # its own subprocess internally — so the stop endpoint and shutdown teardown need a separate
@@ -1571,6 +1598,7 @@ async def _execute_run(
             )
             await db.commit()
             _trace(run_id, f"finalize_committed run_seen={run is not None}")
+            await _peek(run_id, "after-commit")
             # The run boundary. After the commit, so the check reads the run's final state, and
             # outside the `if run` block for the same reason — a missing run row is not a
             # divergence, and `evaluate_run_end` says so itself.
@@ -1582,7 +1610,9 @@ async def _execute_run(
             # abandoned on this attempt has genuinely dropped its work and must still be evaluated.
             if not returned:
                 await evaluate_run_end(run_id)
+                await _peek(run_id, "after-evaluate_run_end")
             await _report_abandoned_entries(db, project_id, agent, run_id)
+            await _peek(run_id, "after-report_abandoned")
             await _broadcast_run_lifecycle(
                 db,
                 project_id,
@@ -1593,6 +1623,7 @@ async def _execute_run(
                 session_id=session_id,
                 exit_code=exit_code,
             )
+            await _peek(run_id, "after-broadcast_lifecycle")
             for entry_id in returned:
                 payload = {"entry_id": entry_id, "agent": agent, "run_id": run_id}
                 await persist_event(db, project_id, "queue_entry_queued", payload, agent=agent)
@@ -1640,6 +1671,11 @@ async def _execute_run(
         from ...turn_scheduler import schedule_agent
 
         await schedule_agent(project_id, agent)
+        # The last point inside `_execute_run` that can see the row. If this reads `completed` and
+        # the test still reads `running`, whatever puts it back is outside this function entirely.
+        # Deliberately not repeated in the `finally`: awaiting there during a cancellation would
+        # raise `CancelledError` out of the diagnostic itself, and `finally` only pops two dicts.
+        await _peek(run_id, "end-of-try")
     except (Exception, asyncio.CancelledError) as exc:
         # Every step above this point is inside the same `try` and none of it is wrapped
         # individually — so an exception anywhere between the spawn succeeding and this turn's
