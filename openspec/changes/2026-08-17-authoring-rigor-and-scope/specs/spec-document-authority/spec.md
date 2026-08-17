@@ -8,11 +8,12 @@ A specification document whose rigor is `contract` or `gate` SHALL NOT apply an 
 directly to the live document. Instead, the Hub SHALL compute the difference between the submitted
 content and the document's currently stored content, and SHALL record one pending, individually
 addressable proposal per changed unit — each added, modified, or removed requirement, identified by
-its stable requirement identifier, plus one proposal covering the document's non-requirement content
-(summary, problem, scope, design, tasks, algorithms, open questions) as a single unit when any of it
-changes. The live document SHALL remain exactly as it was until an operator accepts a specific
-proposal. A document at `sketch` rigor is unaffected: an agent's submission continues to apply
-immediately.
+its key (the document-scoped handle an agent's submission carries; a requirement newly added by a
+proposal has no Hub-minted public identifier until the proposal is accepted), plus one proposal
+covering the document's non-requirement content (summary, problem, scope, design, tasks, algorithms,
+open questions) as a single unit when any of it changes. The live document SHALL remain exactly as it
+was until an operator accepts a specific proposal. A document at `sketch` rigor is unaffected: an
+agent's submission continues to apply immediately.
 
 #### Scenario: A submission against a gate-rigor document creates proposals instead of applying
 
@@ -100,9 +101,10 @@ not mistaken for either.
 
 WHEN an agent's turn is triggered with a specification document open, THEN the spawned run SHALL NOT
 be granted the ability to write or edit files in the project workspace for that turn, regardless of
-the document's phase or rigor. The turn's context SHALL state that discovered implementation work is
-to be proposed — for example, by creating a task — rather than performed directly. A turn triggered
-with no specification document open is unaffected.
+the document's phase or rigor, and regardless of the run's configured permission posture (including a
+posture that would otherwise skip permission prompts entirely). The turn's context SHALL state that
+discovered implementation work is to be proposed — for example, by creating a task — rather than
+performed directly. A turn triggered with no specification document open is unaffected.
 
 #### Scenario: A file-editing attempt during a spec-authoring turn is unavailable, not merely discouraged
 
@@ -110,6 +112,12 @@ with no specification document open is unaffected.
   identifies a code change needed to fix a discovered problem
 - **THEN** the run has no file-write tool available to make that change directly
 - **AND** the turn's context states that the discovery should be recorded as a proposed task instead
+
+#### Scenario: The restriction holds even under a permission posture that skips prompts
+
+- **WHEN** an agent is triggered with a specification document open and a permission posture that
+  would otherwise let every tool call proceed without a prompt
+- **THEN** the run still has no file-write tool available for that turn
 
 #### Scenario: A turn with no document open is unrestricted
 

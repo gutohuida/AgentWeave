@@ -7,8 +7,10 @@ scoping) so either can land first — F4 is sequenced last only because it touch
 
 ## 1. Data model — `spec_edit_proposals`
 
-- [ ] 1.1 Add `SpecEditProposal` to `hub/hub/db/models.py` per `design.md` D3's column table. Index on
-      `(document_id, status)`.
+- [ ] 1.1 Add `SpecEditProposal` to `hub/hub/db/models.py` per `design.md` D3's column table
+      (round-2 revision: `unit_key` is the requirement's **key**, not a minted identifier — an `add`
+      proposal has no identifier yet — and the table carries a nullable `position_after_key` for
+      rendering an `add` proposal in position). Index on `(document_id, status)`.
 - [ ] 1.2 New migration (next head after 0074) adding the table. Guard for a missing parent table the
       way 0033/0034/0073/0074 do. No `CheckConstraint` naming a column — `status`/`unit_kind`/
       `change_kind` are validated in the one writer function (D3), not at the schema layer.
@@ -18,9 +20,11 @@ scoping) so either can land first — F4 is sequenced last only because it touch
 ## 2. F1/F2 — the diff-and-propose path
 
 - [ ] 2.1 In `hub/hub/spec_service.py`, add `async def propose_edit(...)` per `design.md` D1/D2: diff
-      the incoming payload's requirements (by stable id) and metadata bundle against the document's
-      currently stored content; create one `SpecEditProposal` row per changed unit; create none for a
-      no-op submission.
+      the incoming payload's requirements (matched by **key** — round-2 correction; a minted
+      identifier does not exist for an `add` unit until acceptance) and metadata bundle against the
+      document's currently stored content; create one `SpecEditProposal` row per changed unit,
+      setting `position_after_key` for `add` units from the submitted requirement ordering; create
+      none for a no-op submission.
 - [ ] 2.2 In `save_document()`, branch on `document.rigor`: `sketch` keeps today's path unchanged;
       `contract`/`gate` calls `propose_edit()` instead of writing, and returns a `ProposeResult` (new
       response shape — created proposal ids/units, and which units were unchanged) instead of
@@ -39,13 +43,14 @@ scoping) so either can land first — F4 is sequenced last only because it touch
       `accept_proposal` refuses on digest mismatch (D5, sets `status="stale"`) and otherwise applies
       the unit, calls `spec_lifecycle.record_content` with the new optional `accepter` parameter
       alongside the existing proposer actor, sets `status="accepted"`.
-- [ ] 3.2 Extend `spec_lifecycle.record_content` (additive `accepter: Optional[Actor] = None`
-      parameter) so existing single-actor callers are unaffected and the accepted-proposal path can
-      record both names on the resulting `SpecDocumentEvent` — dual attribution needs both fields to
-      exist somewhere reachable from the event; if `SpecDocumentEvent` cannot cleanly carry a second
-      actor without its own schema change, use `SpecEditProposal`'s own
-      `proposer_actor_*`/`resolved_by_actor_name` columns as the attribution record instead and have
-      `record_content` cite the proposal id — decide and note which, do not silently assume.
+- [ ] 3.2 **Settled at round 2 — no longer an open decision.** Extend
+      `spec_lifecycle.record_content` with an additive `extra_detail: Optional[Dict[str, Any]] = None`
+      parameter, merged into the `detail` dict it already builds; existing callers are unaffected
+      (default `None` merges nothing). `accept_proposal` is the only caller that passes it:
+      `{"proposal_id": proposal.id, "proposer_actor_kind": ..., "proposer_actor_name": ...}`. The
+      event's own `actor` is the accepter (consistent with every other content-write event); the
+      proposer is reachable via `proposal_id` from `SpecEditProposal`, which already holds it in full.
+      `SpecDocumentEvent`'s schema is not touched — no migration needed for this task.
 - [ ] 3.3 Routes in `hub/hub/api/v1/spec.py`: `GET /documents/{path}/proposals` (list pending, each
       with both payloads for a diff view), `POST /documents/{path}/proposals/{id}/accept`, `POST
       .../reject` — following the existing `RigorRequest`/`_document_view` pattern.
@@ -72,18 +77,29 @@ scoping) so either can land first — F4 is sequenced last only because it touch
 
 ## 5. F4 — authoring turns lose file-write tools
 
-- [ ] 5.1 In `hub/hub/runner_commands.py`'s `build_command`, when the triggering call passes
-      `spec_document` (threaded from `agent_trigger.py:267` the same way it already reaches
-      `_spec_phase_for`), append `--disallowedTools "Edit,Write,NotebookEdit"` for Claude and force
-      `--sandbox read-only` for Codex, per `design.md` D6. Confirm the flag composes correctly with an
-      already-present `--allowedTools "mcp__agentweave__*"` (both can be present on the same command —
-      confirm the CLI accepts both, do not assume).
+- [ ] 5.1 In `hub/hub/runner_commands.py`, add a `spec_document`-shaped parameter to `build_command`
+      (it does not exist there today — round-2 correction: `spec_document` currently reaches
+      `trigger_agent_directly`, `agent_trigger.py:267`, for `_spec_phase_for`/`spec_turn_notice`, but
+      the `build_command(...)` call at `agent_trigger.py:500` does not pass it yet; this task adds
+      that one hop) and thread it into both branches per `design.md` D6, round-2 revision:
+      - Claude (`_build_claude_command`): append `--disallowedTools "Edit,Write,NotebookEdit"`
+        whenever the flag is set, **unconditionally — including when `yolo=True`**, a deliberate
+        divergence from the `if not yolo: cmd += ["--allowedTools", ...]` line right above it.
+        Confirm `--disallowedTools` and `--allowedTools "mcp__agentweave__*"` can both be present on
+        the same command — confirm the CLI accepts both, do not assume.
+      - Codex (`_build_codex_command`): when set, skip the existing `if yolo: ... else: ["--sandbox",
+        "workspace-write"]` branch entirely (the two are mutually exclusive flags, not a value to
+        override) and emit `["--sandbox", "read-only"]` in its place.
 - [ ] 5.2 Extend `spec_turn_notice()` (`hub/hub/launchability.py:222-264`) with a line stating the
       restriction is in effect and that discovered implementation work should be proposed via
       `create_task` — only once 5.1 makes it mechanically true, not before.
 - [ ] 5.3 Unit tests: `build_command` with `spec_document` set includes the restriction flag for both
-      Claude and Codex branches; `build_command` with `spec_document` unset is byte-identical to
-      before this change (regression guard — this is the path every non-spec turn takes).
+      Claude and Codex branches, **including a case with `yolo=True`** (Claude: `--disallowedTools`
+      still present alongside whatever `yolo` otherwise adds; Codex: `--sandbox read-only` present and
+      `--dangerously-bypass-approvals-and-sandbox` absent) — this is the exact case round 2 found
+      unaddressed, so it is the one most worth a regression test. `build_command` with `spec_document`
+      unset is byte-identical to before this change (regression guard — this is the path every
+      non-spec turn takes).
 - [ ] 5.4 Live check against the trial Hub (`testbed/scratch/`, gitignored, delete after): trigger an
       agent with a specification document open, confirm the spawned process's actual command line (not
       just the constructed string) carries the restriction; confirm `create_task` still succeeds in

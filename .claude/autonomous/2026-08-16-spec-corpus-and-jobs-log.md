@@ -2061,3 +2061,91 @@ open `record_content`-vs-proposal-columns attribution question needs settling be
 rather than being left for whoever implements it. If round 2 approves, or round 3 is reached, execute
 per `spec_round_protocol.at_cap` in the same run. `stop_at` is 2026-08-17T08:00:00+01:00; there is
 runway for at least a round 2 and plausibly round 3 plus a partial build before then.
+
+---
+
+## Iteration 24 — 2026-08-17T05:40:28+01:00
+
+**N6, round 2 of `2026-08-17-authoring-rigor-and-scope` — a genuine cold review, not a rubber stamp.**
+Read `proposal.md`, `design.md` (as round 1 left it), `tasks.md`, and the `spec-document-authority`
+delta fresh, then re-verified round 1's file:line grounding claims directly against the code rather
+than trusting the citations: `spec_service.py`, `spec_rigor.py`, `spec_identity.py`, `spec_payload.py`,
+`spec_reading.py`, `spec_lifecycle.py`, `models.py`, `runner_commands.py`, `agent_trigger.py`.
+
+**Four real, code-grounded defects found, all fixed in the same round rather than deferred:**
+
+1. **D2's "match by requirement id" was wrong, and the spec delta repeated it.** Verified:
+   `spec_payload.py`'s `Requirement.key` — not an identifier — is what an agent's submission carries
+   ("It is not the identifier and never appears in a link"); the public identifier is minted only
+   inside `save_document`'s write path (`spec_service.py:110-127`), which F1's entire premise is that
+   a `contract`/`gate` submission does not reach. An `add` proposal (a brand-new requirement) cannot be
+   matched "by id" against an id that does not exist yet. Fixed: the diff anchor is `key` everywhere —
+   design.md D2/D3, `tasks.md` 1.1/2.1, and the `spec-document-authority` delta's requirement text
+   (which had baked the wrong claim into the capability spec itself, not just the design doc).
+2. **No in-position anchor existed for `add` proposals**, despite F2/14.12 promising "in-position" —
+   an added requirement has no existing row to render at. Fixed: `SpecEditProposal` gains a nullable
+   `position_after_key` (D3), carrying the submission's own ordering forward so a new requirement
+   renders near its intended neighbour rather than in an undifferentiated pile. Considered and rejected
+   a numeric document index (breaks once another accepted proposal shifts the document under it) and
+   no position at all (violates 14.12's actual wording).
+3. **D6/F4 never addressed `yolo`, and it needed opposite treatment on the two runners.** Claude's
+   existing code skips a tool-restricting flag entirely under `yolo=True`
+   (`if not yolo: cmd += ["--allowedTools", ...]`, `runner_commands.py:218`) — copying that pattern for
+   F4 would have let a yolo-configured agent keep full file-write access on a spec-authoring turn,
+   silently defeating 14.14's SHALL for exactly the posture likeliest to act instead of propose. Codex's
+   `yolo` branch (`runner_commands.py:280-283`) picks a *different flag*
+   (`--dangerously-bypass-approvals-and-sandbox`), not a sandbox value — appending `--sandbox read-only`
+   beside it rather than in place of it would ship a contradictory command line. Fixed in D6 and
+   `tasks.md` 5.1/5.3: Claude's restriction is now unconditional (including under `yolo`); Codex checks
+   `spec_document` before the `yolo` branch and replaces it outright when set. Added a spec scenario
+   ("The restriction holds even under a permission posture that skips prompts") so this is a tested
+   requirement, not only a design note.
+4. **Task 3.2's open question is now decided, not left for the implementer.** `SpecEditProposal`
+   already carries full proposer *and* accepter identity (D3) with zero schema change needed anywhere
+   else. Settled: `record_content` gains a small additive `extra_detail` merge-in (not an `accepter`
+   parameter); `accept_proposal` passes `{"proposal_id": ..., "proposer_actor_kind": ...,
+   "proposer_actor_name": ...}` through it. `SpecDocumentEvent`'s own `actor` field stays the accepter,
+   consistent with every other content-write event; the proposer is one hop away via `proposal_id`.
+   `SpecDocumentEvent`'s schema is untouched — no second migration path needed for this.
+
+**Also caught, a grounding overclaim rather than a design defect:** round 1's D6 said `spec_document` is
+"already... read a second time by `build_command`" — checked directly and that plumbing does not exist:
+`spec_document` reaches `trigger_agent_directly` (`agent_trigger.py:267`) for `_spec_phase_for`, but the
+`build_command(...)` call at `agent_trigger.py:500` does not pass it, and `build_command`'s own
+signature has no such parameter. `tasks.md` 5.1 already described adding it correctly; only the design
+prose overclaimed the current state. Corrected in place.
+
+**What held up under direct verification, unchanged:** D1 (gate lives in `save_document`, no second MCP
+tool), D3's remaining columns, D4's operator-only enforcement mirroring `spec_rigor.set_rigor`'s actual
+code, D5's staleness-via-`expected_digest` compare-and-swap (checked line-for-line against
+`spec_rigor.py:96-104`'s existing implementation of the identical pattern), and D7's retirement of
+14.15 against CLAUDE.md's prohibited-skills table.
+
+**Verified after the fixes:** `openspec validate 2026-08-17-authoring-rigor-and-scope --strict` passes;
+`--changes --strict` 9/9 unchanged; `--specs --strict` unchanged 31/31 (delta correctly still unmerged —
+this is pre-implementation). `git status` confirms only this change's three files touched (`design.md`,
+`tasks.md`, the spec delta) — no source file changed this iteration, matching a spec-only round.
+
+**Verdict: round 1 not approved as written; approved as revised in this round.** Every defect found was
+fixable in place without reopening F1-F5's overall shape — no restart of the authoring round-trip.
+Recorded in `design.md`'s own "Round 2" section per the pattern this session's other multi-round changes
+already use, so a round-3 reviewer has a dated account of what changed and why rather than a bare diff.
+
+**Not done this iteration, deliberately:** no implementation, no round 3. The revision work above (four
+defects across a data model column, an attribution mechanism, and a security-relevant flag-ordering
+fix on two runners) is substantial enough to deserve its own fresh cold look rather than being waved
+through by the same pass that just wrote it — `spec_round_protocol` explicitly allows proceeding
+straight to the next round in the same run "if time allows," but does not require it, and forcing round
+3 into this iteration would mean reviewing my own fix with the context of having just written it, which
+is the exact failure mode the round protocol exists to avoid.
+
+**Net for N6:** round 2 is substantive — not a rubber stamp, four real fixes landed, one grounding claim
+corrected. `next_action` hands off round 3: a fresh cold read of the twice-revised artifact, focused on
+whether the round-2 additions (`key`-based matching, `position_after_key`, the unconditional-under-yolo
+Claude restriction, the `extra_detail` attribution mechanism) are now consistent everywhere they appear
+(design.md, the spec delta, tasks.md) and whether anything round 2 touched introduces a *new* gap the
+way round 1's design introduced these four. If round 3 finds only small or no further issues, proceed to
+approve-and-execute per `spec_round_protocol.at_cap` in the same run — implementing sections 1-7 of
+`tasks.md`, running the full verification in section 7, then task 6.1. `stop_at` is
+2026-08-17T08:00:00+01:00; over two hours of runway remains, comfortably enough for round 3 plus a
+meaningful start on implementation if round 3 clears quickly.
