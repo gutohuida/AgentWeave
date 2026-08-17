@@ -595,3 +595,70 @@ stays the operator's. A fallback is named (Tier 2's smallest item, the version-b
 fixture work doesn't fit the remaining runway, and an explicit caution against starting the riskier
 `StaticPool` fixture fix without a full iteration's budget, since a related prior attempt hung the
 suite.
+
+## Iteration 8 (2026-08-17T21:10+01:00)
+
+**Self-directed continuation from the roadmap's Tier 1: seeded the first of the three free
+taste-pass fixtures — the throwaway project.** The original A1-A4 queue closed in iteration 7;
+`stop_when_queue_empties` is false, so this iteration picked up `next_action`'s hand-off.
+
+Verified position first: `git branch --show-current` = the right branch, `git log` top commit
+`0a16966` matched STATE.json, tree clean except the three items STATE.json already knows about
+(`.claude/TASTE-PASS-2026-08-17.md`, `hub/seed_taste_doc.py`, `spec/` — all pre-existing, untracked
+taste-pass scratch per the queue's own `limits`). No reconciliation needed.
+
+**What was done:** `.claude/TASTE-PASS-2026-08-17.md`'s "what I can set up next" item 1 (a throwaway
+project, unblocking the delete-project-api human-only tasks). Chose the live HTTP API over
+`hub/seed_taste_doc.py`'s direct-DB-import pattern, deliberately — the trial Hub (port 8010) was
+already running and that script's own docstring says "run with the Hub stopped" (two separate SQLite
+writers risk a lock conflict); the REST endpoint is also literally what an operator would use, so
+seeding through it is a closer fixture to real use, not a shortcut.
+
+`mkdir testbed/throwaway-taste-project` (empty, so `POST /projects/create`'s "must not already
+exist" check would pass) then `Invoke-RestMethod POST /api/v1/projects/create` against
+`http://127.0.0.1:8010` with `AW_BOOTSTRAP_API_KEY` from `hub/.env`, body
+`{path: "...\testbed\throwaway-taste-project", name: "Throwaway (taste pass)"}`. First attempt
+failed (`invalid_project_path` — the directory already existed from the `mkdir`, and `/create`
+specifically requires it not to); removed the empty dir and re-ran, which let
+`ProjectLifecycleService.create_new` do its own `mkdir` + bind. Result: `proj-b44fac0c`, "Throwaway
+(taste pass)", `directory_state: "available"`. Confirmed via `GET /api/v1/projects` that all three
+projects now list: `proj-b44fac0c`, `proj-5e960453` (AgentWeave), `proj-ff695d96` (aw-loop10) —
+`aw-loop10` untouched, as `limits` requires.
+
+**Caught my own mistake before committing:** my first pass at updating `TASTE-PASS-2026-08-17.md`
+described the delete-project-api human-only tasks from memory rather than reading
+`openspec/changes/2026-08-16-delete-project-api/tasks.md` directly, and got 6.1-6.4 wrong — I wrote
+generic "does it feel weighty / does it disappear / is the directory untouched" bullets that didn't
+match the actual task text, and claimed the seeded project unblocked all four when 6.4 explicitly
+needs the *last* project deleted on a **separate scratch Hub instance**, not more content on this
+one. Re-read the real file (lines 285-302) and rewrote the section to match: 6.1 needs an agent and
+a conversation added to the project too (left for the operator, a few UI clicks); 6.2 needs the
+screenshot harness; 6.3 is the taste judgement on the confirmation's friction; 6.4 stays in Part 2,
+now with an honest reason (needs a second Hub process this driver did not start — closer to
+infrastructure than fixture seeding, and starting a second Hub instance felt like more than "seed
+one fixture" for the remaining runway). Moved 6.1-6.3 from Part 2's table into a new "Screen:
+Projects — deleting one" section in Part 1, added 6.4's row to Part 2 with its real blocker, and
+corrected the "what I can set up next" list and its judgeable-item count (7 → 11, not the earlier
+wrong "18" claim for item 1 alone).
+
+**Verified:** `GET /api/v1/projects` (above) confirms the project exists and is listed;
+`ls testbed/throwaway-taste-project/.agentweave/` confirms `ProjectLifecycleService` wrote the real
+marker (project creation went through the same code path a UI click would, not a DB shortcut);
+`git status --short` confirms `testbed/` stays untracked (gitignored) and nothing under it needed
+staging. No pytest run — no code changed, only a doc and a live API call outside the repo's test
+surface.
+
+**Deliberately not attempted this iteration:** items 2 and 3 (a declaring document with tasks and
+evidence, one archived; a capability document and a job with a loop). Both are structurally more
+involved than item 1 turned out to be — item 1's own mistake above is the reason: even the
+"simple" fixture needed a correction after not reading the source task text closely enough on the
+first pass, and items 2-3 require understanding an actual task-to-document linking mechanism
+(`document_path`) and an evidence-rejection scenario that this iteration did not investigate. Rather
+than rush both into the remaining ~35 minutes of runway at the same shallow-read risk, leaving them
+for a fresh iteration with a full budget. Committed this iteration's work now rather than let it sit
+uncommitted while investigating further.
+
+Committed, pushed. Runway to `stop_at` (2026-08-17T22:00+01:00) had ~35 minutes left when this
+iteration's commit landed — comfortable, but item 2's own estimate (~20 min) plus verification and
+write-up would have been tight for a fresh investigation, so the next firing should start item 2
+fresh rather than this one attempting it rushed.
