@@ -212,6 +212,7 @@ export function Sidebar({
           activeAgent={activeAgent}
           onOpenProject={onOpenProject}
           onOpenAgent={onOpenAgent}
+          onOpenExisting={onOpenExisting}
           onCreateProject={onCreateProject}
         />
       ) : spec ? (
@@ -295,23 +296,18 @@ export function Sidebar({
         <>
           <div className="flex items-center justify-between px-1 pb-2">
             <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>Projects</span>
-            <div className="flex items-center gap-0.5">
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                data-testid="rail-view-toggle"
-                data-view={railView}
-                aria-pressed={railView === 'recency'}
-                onClick={() => setRailView((view) => (view === 'tree' ? 'recency' : 'tree'))}
-                aria-label={railView === 'tree' ? 'Switch to recent conversations' : 'Switch to agent tree'}
-                title={railView === 'tree' ? 'Recent conversations' : 'Agent tree'}
-              >
-                <Icon name={railView === 'tree' ? 'schedule' : 'smart_toy'} size={15} />
-              </Button>
-              <Button variant="ghost" size="icon-xs" data-testid="open-existing-project" onClick={onOpenExisting} aria-label="Open existing project" title="Open existing project">
-                <Icon name="folder_open" size={15} />
-              </Button>
-            </div>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              data-testid="rail-view-toggle"
+              data-view={railView}
+              aria-pressed={railView === 'recency'}
+              onClick={() => setRailView((view) => (view === 'tree' ? 'recency' : 'tree'))}
+              aria-label={railView === 'tree' ? 'Switch to recent conversations' : 'Switch to agent tree'}
+              title={railView === 'tree' ? 'Recent conversations' : 'Agent tree'}
+            >
+              <Icon name={railView === 'tree' ? 'schedule' : 'smart_toy'} size={15} />
+            </Button>
           </div>
 
           <div className="min-h-0 flex-1 overflow-auto">
@@ -395,10 +391,16 @@ export function Sidebar({
             })}
           </div>
 
-          <Button variant="outline" size="md" data-testid="create-new-project" onClick={onCreateProject} aria-label="Add project" className="mt-3 w-full">
-            <Icon name="folder_plus" size={15} />
-            Add project
-          </Button>
+          <div className="mt-3 flex gap-2">
+            <Button variant="outline" size="md" data-testid="open-existing-project" onClick={onOpenExisting} aria-label="Open existing project" title="Open existing project" className="flex-1">
+              <Icon name="folder_open" size={15} />
+              Open existing
+            </Button>
+            <Button variant="outline" size="md" data-testid="create-new-project" onClick={onCreateProject} aria-label="Add project" title="Add project" className="flex-1">
+              <Icon name="folder_plus" size={15} />
+              Add project
+            </Button>
+          </div>
         </>
       )}
     </aside>
@@ -422,6 +424,7 @@ function CompactRail({
   activeAgent,
   onOpenProject,
   onOpenAgent,
+  onOpenExisting,
   onCreateProject,
 }: {
   projects: ProjectSummary[]
@@ -429,6 +432,7 @@ function CompactRail({
   activeAgent: string | null
   onOpenProject: (projectId: string) => void
   onOpenAgent: (projectId: string, agent: string) => void
+  onOpenExisting: () => void
   onCreateProject: () => void
 }) {
   return (
@@ -484,17 +488,28 @@ function CompactRail({
           )
         })}
       </nav>
-      <Button
-        variant="ghost"
-        size="icon-sm"
-        data-testid="create-new-project"
-        onClick={onCreateProject}
-        aria-label="Add project"
-        title="Add project"
-        className="mt-2 self-center"
-      >
-        <Icon name="folder_plus" size={15} />
-      </Button>
+      <div className="mt-2 flex flex-col items-center gap-1">
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          data-testid="open-existing-project"
+          onClick={onOpenExisting}
+          aria-label="Open existing project"
+          title="Open existing project"
+        >
+          <Icon name="folder_open" size={15} />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          data-testid="create-new-project"
+          onClick={onCreateProject}
+          aria-label="Add project"
+          title="Add project"
+        >
+          <Icon name="folder_plus" size={15} />
+        </Button>
+      </div>
     </>
   )
 }

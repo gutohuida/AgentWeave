@@ -192,6 +192,17 @@ describe('the collapsed rail', () => {
     expect(onOpenAgent).toHaveBeenCalledWith('proj-a', 'claude')
   })
 
+  it('offers open-existing alongside add-project when collapsed', () => {
+    const onOpenExisting = vi.fn()
+    const onCreateProject = vi.fn()
+    renderRail({ compact: true, onCompactChange: vi.fn(), onOpenExisting, onCreateProject })
+
+    fireEvent.click(screen.getByTestId('open-existing-project'))
+    fireEvent.click(screen.getByTestId('create-new-project'))
+    expect(onOpenExisting).toHaveBeenCalledOnce()
+    expect(onCreateProject).toHaveBeenCalledOnce()
+  })
+
   it('indicates the active project and agent', () => {
     renderRail({ compact: true, onCompactChange: vi.fn(), activeAgent: 'claude' })
     expect(screen.getByTestId('rail-compact-project-proj-a')).toHaveAttribute('data-active', 'true')
