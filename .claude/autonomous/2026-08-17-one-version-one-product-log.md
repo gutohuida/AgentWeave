@@ -837,3 +837,17 @@ runs where it is skipped), and the Docker image build — the last confirming th
 `hub-image.yml`'s `paths: [hub/**]` filter would match, since 634 files under `hub/` changed.
 
 Waiting for master's own CI before the tag. That is the last gate.
+
+**Two halves of the release verified against the world, not against a green tick:**
+
+- **The Docker image was genuinely rebuilt.** `ghcr.io/gutohuida/agentweave-hub:latest` moved from
+  config digest `sha256:ab4c7436…` (read earlier today, when checking that the *old* compose default
+  was unpullable) to `sha256:7db9605e…`. Same check, before and after, so the change is the evidence.
+- **The docs site deployed.** `https://gutohuida.github.io/AgentWeave/` returns 200 and its
+  installation page now says **Python 3.11**; the retired `guides/aw-spec-workflow/` returns **404**,
+  confirming the deletion propagated rather than merely being absent from a local build.
+
+One honest caveat on that: a grep for `pip install agentweave-ai` on the live page found nothing,
+because mkdocs-material splits code blocks into syntax-highlighting spans. The `Python 3.11` match
+and the 404 carry the claim; the pip line is not independently confirmed on the live site and I am
+not asserting it is.
