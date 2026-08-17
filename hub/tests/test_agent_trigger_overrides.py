@@ -218,6 +218,25 @@ async def test_a_conversation_whose_model_changed_attributes_usage_per_turn(
     status = await app.get("/api/v1/projects/proj-test/status", headers=auth_headers)
     project_id = status.json()["project_id"]
     queue = sse_manager.subscribe(project_id)
+
+    def drain_models():
+        """Take the context_warning models broadcast so far, and empty the queue.
+
+        Drained after **each** turn rather than once at the end, and that is the whole point:
+        `sse_manager.subscribe` hands out an `asyncio.Queue(maxsize=256)` and `broadcast` does
+        `put_nowait` inside `except asyncio.QueueFull: pass` — a deliberate "drop rather than block
+        a slow consumer". Letting two full turns of streamed output accumulate in one 256-slot
+        queue means the tail is discarded **by design**, and the second turn's `context_warning`
+        was exactly what fell off. That is why this failed on CI and passed here: it is
+        queue-depth dependent, not platform dependent — the same commit did both.
+        """
+        seen = []
+        while not queue.empty():
+            event = queue.get_nowait()
+            if event.event == "context_warning":
+                seen.append(json.loads(event.data)["model"])
+        return seen
+
     try:
         first_spawn = _fake_pty(
             [
@@ -239,6 +258,8 @@ async def test_a_conversation_whose_model_changed_attributes_usage_per_turn(
                 )
                 assert first.status_code == 200
                 await _await_background_run()
+
+        models_seen = drain_models()
 
         conversation_id = first.json()["conversation_id"]
         second_spawn = _fake_pty(
@@ -262,11 +283,7 @@ async def test_a_conversation_whose_model_changed_attributes_usage_per_turn(
                 assert second.status_code == 200
                 await _await_background_run()
 
-        models_seen = []
-        while not queue.empty():
-            event = queue.get_nowait()
-            if event.event == "context_warning":
-                models_seen.append(json.loads(event.data)["model"])
+        models_seen += drain_models()
         assert models_seen == ["gpt-5.6-sol", "gpt-5.4-mini"]
     finally:
         sse_manager.unsubscribe(project_id, queue)

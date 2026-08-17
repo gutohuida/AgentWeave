@@ -851,3 +851,52 @@ One honest caveat on that: a grep for `pip install agentweave-ai` on the live pa
 because mkdocs-material splits code blocks into syntax-highlighting spans. The `Python 3.11` match
 and the 404 carry the claim; the pip line is not independently confirmed on the live site and I am
 not asserting it is.
+
+---
+
+## Iteration 17 — 12:20 — the "flake" was a real defect, and master's red run proved it
+
+**Master's CI failed: 1 failed, 2124 passed** — the model-catalog test again. And that failure is the
+most useful thing that happened today, because **the same commit `6aa86f3` passed on the PR run and
+failed on master.** Same code, opposite results. That is proof of a race, and it also demolishes my
+earlier argument that the mechanism "predicts the wrong platform" — platform was never the variable.
+
+### The actual cause
+
+`sse.py:37-94`. `subscribe()` hands out an `asyncio.Queue(maxsize=256)`, and `broadcast()` does:
+
+    try:
+        q.put_nowait(event)
+    except asyncio.QueueFull:
+        pass          # "Slow consumer -- drop event rather than block"
+
+**Dropping is deliberate and correct.** The test was not: it subscribed one queue, ran **two entire
+agent turns** through it, and only then drained. Two turns of streamed output against 256 slots is
+queue-depth dependent — on a busier runner the tail falls off, and the tail is exactly where the
+second turn's `context_warning` lives.
+
+That explains every observation: intermittent, same-commit-both-ways, no platform correlation, and
+always the *second* model missing rather than a random one.
+
+### Verified by A/B under a forced overflow, not by "it passes now"
+
+It passed before the change too, so passing proves nothing. Shrinking the queue makes the failure
+deterministic, and then the two structures separate cleanly:
+
+    maxsize=8   OLD (drain once at the end):  1 failed
+    maxsize=8   NEW (drain after each turn):  1 passed
+
+`maxsize=3` fails both, correctly — a single turn exceeds three events, so there is nothing any
+draining strategy can do. `hub/hub/sse.py` was restored to 256 and `git diff` on it is empty: the
+product is untouched, the shrink existed only for the experiment.
+
+**Gates:** 2130 passed normally, **2130 passed with the runner binaries hidden**, ruff and black
+clean.
+
+### What this changes about the release
+
+I shipped the merge calling this "one known-flaky test… a follow-up, not a broken product". The
+first half was wrong — it was a real test defect with a precise mechanism, not noise. The conclusion
+happens to survive (the product code was never at fault, and `record_context_usage`'s guard ordering
+— my other suspect — is exonerated), but I stated more confidence in "flake" than I had earned.
+Master is red until this lands, so it must land before any tag.
