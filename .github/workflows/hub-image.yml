@@ -5,7 +5,10 @@ on:
     branches:
       - master
     tags:
-      - "hub-v*"
+      # `v*`, not `hub-v*`: from 1.0.0 AgentWeave has one version and one tag. The `hub-v*`
+      # scheme is retired — images already published under it are untouched and keep working,
+      # they just stop gaining new ones.
+      - "v*"
     paths:
       - "hub/**"
   workflow_dispatch:
@@ -38,7 +41,7 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=match,pattern=hub-v(.*),group=1
+            type=match,pattern=v(.*),group=1
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push

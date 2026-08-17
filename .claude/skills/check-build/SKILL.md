@@ -1,6 +1,6 @@
 ---
 name: check-build
-description: Check GitHub Actions CI build status for AgentWeave (publish.yml → PyPI, hub-image.yml → Docker, ci.yml → tests/lint/type-check). Usable standalone with /loop or callable from other skills. Accepts optional tag filters (e.g. "v0.10.0 hub-v0.4.0"). ci.yml is always shown from the latest master push regardless of tag filter.
+description: Check GitHub Actions CI build status for AgentWeave (publish.yml → PyPI, hub-image.yml → Docker, ci.yml → tests/lint/type-check). Usable standalone with /loop or callable from other skills. Accepts an optional tag filter (e.g. "v1.0.0"). ci.yml is always shown from the latest master push regardless of tag filter.
 ---
 
 Check the status of GitHub Actions CI builds for the AgentWeave repository.
@@ -9,7 +9,7 @@ Check the status of GitHub Actions CI builds for the AgentWeave repository.
 
 Other skills may invoke this skill via the Skill tool:
 ```
-skill: "check-build", args: "v<cli_version> hub-v<hub_version>"
+skill: "check-build", args: "v<version>"
 ```
 Returns the status table + one of: `BUILD_COMPLETE_SUCCESS`, `BUILD_COMPLETE_FAILURE`, or `BUILD_RUNNING`.
 

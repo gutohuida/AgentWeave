@@ -2,7 +2,9 @@
 
 # ── CLI (src/agentweave) ─────────────────────────────────────────────────────
 
-install-cli:
+# The Hub first: agentweave-ai depends on agentweave-hub, and installing the CLI alone would
+# send pip to PyPI for a version that may not be released yet.
+install-cli: install-hub
 	pip install -e ".[dev]"
 
 test-cli:
@@ -18,7 +20,7 @@ test-hub:
 
 # ── Both ─────────────────────────────────────────────────────────────────────
 
-install-all: install-cli install-hub
+install-all: install-cli
 
 test-all: test-cli test-hub
 
@@ -36,13 +38,13 @@ format-check:
 
 # ── Docker (Hub) ─────────────────────────────────────────────────────────────
 
+# The build override is what carries the `build:` section; the main compose file deliberately
+# has none, because end users download it alone and Compose would build instead of pulling.
 hub-build:
-	cd hub && docker compose up --build -d
+	cd hub && docker compose -f docker-compose.yml -f docker-compose.build.yml up --build -d
 
-# Default `hub-up` uses the locally-built `agentweave-hub:audit` image (built
-# by `hub-full-build`) so audit-branch code is actually run. Override with
-# `make hub-up AW_HUB_IMAGE=ghcr.io/gutohuida/agentweave-hub:latest` to
-# use the published release image instead.
+# `hub-up` pulls the published image by default. Point it at a local build with
+# `make hub-up AW_HUB_IMAGE=agentweave-hub:audit` after `make hub-full-build`.
 hub-up:
 	cd hub && docker compose up -d
 

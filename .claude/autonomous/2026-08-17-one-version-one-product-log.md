@@ -289,3 +289,70 @@ against both the old and new code proves nothing, which is exactly the trap this
 
 **Full hub suite: 2130 passed / 11 skipped** — the baseline 2128 plus these two. black and ruff
 clean.
+
+---
+
+## Iteration 6 — 11:20 — R7: one version, one tag, and the install proven before publishing
+
+**Versions.** `pyproject.toml` 0.42.0 → **1.0.0**, `hub/pyproject.toml` 0.35.0 → **1.0.0**. Nothing
+else carries a version literal: both packages derive `__version__` from installed package metadata
+at import time, so `release-process.md`'s instruction to also edit `src/agentweave/__init__.py` had
+been pointing at nothing for some time.
+
+**Tags.** `publish.yml`'s two jobs both key off `refs/tags/v` now — the `publish` job used to
+exclude `hub-v` prefixed tags and `publish-hub` used to require them, which is the two-scheme split
+being retired. `hub-image.yml`'s tag trigger moves `hub-v*` → `v*`, and its metadata pattern with
+it, so the image gets tagged `1.0.0` and `latest` from the same tag.
+
+**The `paths` filter worry, settled with evidence rather than reasoning.** `hub-image.yml` has both
+`tags: [v*]` and `paths: [hub/**]`, and path filters interacting with tag pushes is a known trap —
+if it suppressed the run there would be no Docker image for 1.0.0. Rather than reason about GitHub's
+semantics I asked this repository: `gh run list --workflow=hub-image.yml` shows **eleven
+tag-triggered runs, all successful**, `hub-v0.29.0` through `hub-v0.35.0`. It fires. (Caveat, stated
+because it matters: those tags all pointed at commits that touched `hub/**`, so this does not fully
+isolate the two filters — but the 1.0.0 merge touches `hub/**` heavily too, so the case is the same.)
+
+### Verified by installing the actual artefacts, in a clean venv, before anything is published
+
+Built both distributions, made an empty venv, and ran the one command a user runs:
+
+    pip install --find-links <dist> agentweave-ai==1.0.0
+
+    agentweave-ai   1.0.0
+    agentweave-hub  1.0.0          <- came along, unasked
+    $ agentweave --version
+    agentweave 1.0.0
+    $ python -c "import hub, hub.main"
+    hub 1.0.0 imports OK
+
+That is R4, R5 and R7 proven together against real wheels: one install command, both packages, the
+right version, and the module the CLI actually spawns importable. The venv was isolated under
+`/tmp` and has been deleted; the shared interpreter was never touched.
+
+**Swept for what else knew about two versions**, and found four things the queue item did not name:
+
+- **`Makefile`** — `install-all: install-cli install-hub` installed the CLI *first*, which now sends
+  pip to PyPI for an unreleased `agentweave-hub`. `install-cli` now depends on `install-hub`.
+- **`Makefile hub-build`** ran `docker compose up --build -d`, which R3 made a no-op by removing the
+  build section.
+- **`hub/docker-compose.build.yml` already exists** — a contributor override carrying exactly the
+  `build: .` section I deliberately kept out of the main file in R3. The repository had already
+  solved this; I had reinvented half of it. Everything now points at the override:
+  `hub-build`, `installation.md`, `release-process.md`.
+- **`make hub-up`'s comment** still said the default was the local `agentweave-hub:audit` image. It
+  is the published one now.
+
+Also updated the `check-build` skill (both the tracked `.claude/skills/` source and its untracked
+`.agents/` mirror), whose interface took `"v<cli> hub-v<hub>"` as two arguments.
+
+**PyPI-facing metadata, which is the release.** `Development Status :: 4 - Beta` → `5 -
+Production/Stable`; the description advertised "Claude, Kimi, Gemini, Codex" when the supported
+runners are claude/claude_proxy/native/codex, and the keywords listed kimi and gemini. Both fixed.
+`agentweave-hub`'s description now says it is installed with `agentweave-ai` rather than presenting
+itself as a standalone server.
+
+`release-process.md` rewritten for the single-tag flow, including the "verify the artefact, not the
+workflow" step and an explicit note that a PyPI version can never be reused.
+
+**Verified:** all three workflows parse, and both `publish.yml` jobs now show the same `if:`. Both
+distributions build at 1.0.0.

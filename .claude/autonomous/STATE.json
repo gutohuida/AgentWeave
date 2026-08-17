@@ -6,8 +6,8 @@
   "started_at": "2026-08-17T10:14:49+01:00",
   "stop_at": "2026-08-17T15:00:00+01:00",
   "stop_when_queue_empties": true,
-  "iteration": 6,
-  "last_heartbeat": "2026-08-17T10:34:18+01:00",
+  "iteration": 7,
+  "last_heartbeat": "2026-08-17T10:41:41+01:00",
   "session_stopped": null,
   "release_shape": {
     "version": "1.0.0",
@@ -69,9 +69,10 @@
     {
       "id": "R7-unify-versioning",
       "title": "One version, one tag, one product",
-      "status": "pending",
+      "status": "done",
       "why": "The operator's 'agentweave is one thing'. Today there are two version lines (0.42.0 / 0.35.0), two tag schemes (`v*` / `hub-v*`) and two release entries per cycle. From 1.0.0 there is one of each.",
-      "detail": "Set BOTH `pyproject.toml:7` and `hub/pyproject.toml:7` to `1.0.0`. In `.github/workflows/publish.yml`: the `publish` job's `if:` currently excludes `hub-v` prefixed tags and the `publish-hub` job requires them — re-gate BOTH jobs onto `v*` so one tag publishes both distributions. In `.github/workflows/hub-image.yml`: change the tag trigger from `hub-v*` to `v*`. Rewrite `docs/contributing/release-process.md` for the single-tag flow; it currently documents the two-tag dance and its `docker compose up --build -d` lines inherit R3's problem. Grep the whole repository for `hub-v` before declaring this done."
+      "detail": "Set BOTH `pyproject.toml:7` and `hub/pyproject.toml:7` to `1.0.0`. In `.github/workflows/publish.yml`: the `publish` job's `if:` currently excludes `hub-v` prefixed tags and the `publish-hub` job requires them — re-gate BOTH jobs onto `v*` so one tag publishes both distributions. In `.github/workflows/hub-image.yml`: change the tag trigger from `hub-v*` to `v*`. Rewrite `docs/contributing/release-process.md` for the single-tag flow; it currently documents the two-tag dance and its `docker compose up --build -d` lines inherit R3's problem. Grep the whole repository for `hub-v` before declaring this done.",
+      "outcome": "Both pyproject files 1.0.0. publish.yml both jobs on v*; hub-image.yml tag trigger v*. PROVEN in a clean venv against real wheels: pip install agentweave-ai==1.0.0 pulled agentweave-hub 1.0.0, agentweave --version = 1.0.0, import hub.main OK. Tag-push firing confirmed by 11 historical runs. Also swept Makefile (install order, hub-build), found the pre-existing docker-compose.build.yml override and pointed everything at it, fixed PyPI metadata (Beta->Stable, dropped kimi/gemini), rewrote release-process.md."
     },
     {
       "id": "R8-changelog-1-0-0",
@@ -109,8 +110,8 @@
       "detail": "PRECONDITION, CHECK IT EXPLICITLY: every CI job on the PR is green and finished. Then merge the PR to master. `hub-image.yml` fires on any master push touching `hub/` and will build the Docker image. Then tag `v1.0.0` and `gh release create v1.0.0` with notes drawn from R8's CHANGELOG. Watch `publish.yml` to completion — after R7 it must publish BOTH `agentweave-ai` and `agentweave-hub` from that one tag; if only one job fires, the R7 re-gating is wrong and that is the highest-priority fix. VERIFY, do not assume: `pip download agentweave-ai==1.0.0` into a temp dir, or `pip install` into a throwaway venv, and confirm `agentweave --version` reports 1.0.0 and that it pulled `agentweave-hub` with it (R4's whole point). Confirm the GHCR image published and the Pages docs site rebuilt. Do NOT create a `hub-v1.0.0` tag."
     }
   ],
-  "current": "R7-unify-versioning",
-  "next_action": "R7: one version, one tag. Set BOTH pyproject.toml:7 and hub/pyproject.toml:7 to 1.0.0. In .github/workflows/publish.yml re-gate BOTH jobs onto v* (the `publish` job currently excludes hub-v prefixed tags, and `publish-hub` requires them) so one tag publishes both distributions. In .github/workflows/hub-image.yml move the tag trigger from hub-v* to v*. Rewrite docs/contributing/release-process.md for the single-tag flow. Then grep the whole repo for 'hub-v' before declaring it done, and check the Makefile's hub-full-build target still exists.",
+  "current": "R8-changelog-1-0-0",
+  "next_action": "R8: write the 1.0.0 CHANGELOG. Spine is the 81 openspec changes archived since the v0.42.0 tag - get them with git log v0.42.0..HEAD --diff-filter=A --name-only -- 'openspec/changes/archive/*/proposal.md'. Do NOT enumerate 81; group by story: Hub became the only runtime; CLI 56 commands -> 5; runners/agents/charters replaced fixed roles; operator-in-the-loop; the Hub-owned spec flow; accounting and budgets; local multi-project. Then a BREAKING section: Python floor 3.11, single-version scheme with hub-v* retired, agentweave-ai now depends on agentweave-hub, deleted CLI commands, deleted watchdog/messaging/transports/roles. Fold or delete the stale [Unreleased] block (it describes pilot-mode removal). State what is NOT in 1.0.0: charter scope and default skills, skill invocation, agent templates, pywebview desktop shell.",
   "limits": [
     "OUTWARD-FACING ACTIONS ARE AUTHORISED THIS RUN — this INVERTS the previous run's standing rule, deliberately. Pushing, opening a PR, merging to master, tagging, and creating a GitHub release are all in scope, in R11/R12 order. Everything else outward-facing is not: no force-push, no history rewriting on any shared branch, no deleting or moving existing tags or releases, no touching the four releases already published.",
     "NEVER release on a red or still-running CI. `gh pr checks` must show every job green and FINISHED before the PR merges, and the merge must be green before the tag exists. The operator chose 'Full auto, but only on green CI' with that as the hard rule.",

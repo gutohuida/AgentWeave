@@ -4,8 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agentweave-hub"
-version = "0.35.0"
-description = "AgentWeave Hub — self-hosted FastAPI server for multi-agent collaboration"
+version = "1.0.0"
+# Installed as a dependency of `agentweave-ai`, not on its own — one product, one install.
+description = "AgentWeave's local server and web interface (installed with agentweave-ai)"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.110",

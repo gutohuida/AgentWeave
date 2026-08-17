@@ -4,16 +4,16 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agentweave-ai"
-version = "0.42.0"
-description = "Multi-agent AI collaboration framework (Claude, Kimi, Gemini, Codex, and more)"
+version = "1.0.0"
+description = "A local app for multi-agent, spec-driven development with Claude and Codex"
 readme = "README.md"
 license = {text = "MIT"}
 authors = [
     {name = "gutohuida"},
 ]
-keywords = ["claude", "kimi", "gemini", "codex", "collaboration", "agents", "ai", "code", "multi-agent"]
+keywords = ["claude", "codex", "collaboration", "agents", "ai", "code", "multi-agent", "spec-driven"]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
@@ -124,9 +124,8 @@ warn_unused_configs = true
 disallow_untyped_defs = true
 exclude = ["src/agentweave/mcp"]
 
-# alembic is an optional, lazily-imported dependency (only needed for
-# `agentweave hub start`'s native mode, provided by the separate agentweave-hub
-# package) and ships no type stubs for mypy to resolve.
+# alembic is lazily imported (only on the native start path, and provided by agentweave-hub)
+# and ships no type stubs for mypy to resolve.
 [[tool.mypy.overrides]]
 module = "alembic.*"
 ignore_missing_imports = true

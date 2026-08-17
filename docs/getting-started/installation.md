@@ -104,13 +104,12 @@ cd AgentWeave/hub
 cp .env.example .env
 # Optional: edit .env to set AW_BOOTSTRAP_API_KEY
 
-docker build -t agentweave-hub:dev .
-AW_HUB_IMAGE=agentweave-hub:dev docker compose up -d
+docker compose -f docker-compose.yml -f docker-compose.build.yml up --build -d
 ```
 
-The compose file carries no `build:` section on purpose — the manual setup above downloads it into
-a directory with no source in it, and Compose builds instead of pulling when a service declares
-both. `AW_HUB_IMAGE` is the supported way to point it at an image you built yourself.
+The main compose file carries no `build:` section on purpose — the manual setup above downloads it
+into a directory with no source in it, and Compose builds instead of pulling when a service declares
+both. `docker-compose.build.yml` is the override that adds one for contributors.
 
 ## Verify Installation
 
