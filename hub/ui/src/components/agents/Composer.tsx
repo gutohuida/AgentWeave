@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Icon } from '@/components/common/Icon'
 import { Button } from '@/components/ui/button'
 import { clearComposerDraft, getComposerDraft, setComposerDraft } from '@/lib/composerDrafts'
+import { formatElapsedSeconds, useElapsedSeconds } from '@/hooks/useElapsedSeconds'
 import {
   acceptTriggerResult,
   detectComposerTrigger,
@@ -103,6 +104,7 @@ export function Composer({
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const pendingCursorRef = useRef<number | null>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const workingElapsed = useElapsedSeconds(isRunning)
 
   const menuItems: ComposerTriggerMenuItem[] = trigger ? resolveTriggerResults(trigger, workspacePaths) : []
 
@@ -304,6 +306,37 @@ export function Composer({
           )}
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-2" data-slot="composer-control-row-trailing">
+          {/* The header's status pill (AgentOutputPanel.tsx) stays — it is the one place every
+              agent status (not just "running") is visible, including when this panel is
+              scrolled or the operator is looking elsewhere in the pane. This is the specific
+              answer to "the agent still looks stale while it's responding": right next to
+              where the operator is typing, animated, and counting up, so it cannot be missed
+              the way a small dot at the top of the pane was. */}
+          {isRunning && (
+            <span
+              className="inline-flex shrink-0 items-center gap-1.5 text-[11px]"
+              style={{ color: 'var(--text-3)' }}
+              data-testid="composer-working-indicator"
+            >
+              <span className="inline-flex items-center gap-[3px]" aria-hidden="true">
+                <span
+                  className="h-1 w-1 rounded-full animate-pulse"
+                  style={{ background: 'var(--green)', animationDelay: '0ms' }}
+                />
+                <span
+                  className="h-1 w-1 rounded-full animate-pulse"
+                  style={{ background: 'var(--green)', animationDelay: '200ms' }}
+                />
+                <span
+                  className="h-1 w-1 rounded-full animate-pulse"
+                  style={{ background: 'var(--green)', animationDelay: '400ms' }}
+                />
+              </span>
+              <span>
+                Working{workingElapsed !== null ? ` · ${formatElapsedSeconds(workingElapsed)}` : ''}
+              </span>
+            </span>
+          )}
           {disabledReason && (
             <span
               className="text-[11px]"
