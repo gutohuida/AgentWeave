@@ -152,8 +152,20 @@ Unblocked. **Both footprint paths ship together.**
 
 - [ ] 8.1 **Is the coverage state legible?** Open a document with requirements in several states and
       judge whether the reason each is in its state is apparent without reading the code.
+      **WAIVED for archiving, 2026-08-17.** `.claude/autonomous/2026-08-15-judgement-evidence.md`
+      §8.1: 8 requirements minted, all `active`, each with a readable key slug (e.g. `FR-1
+      deadline-replaces-urgent-flag`); none had evidence yet at observation time, so every one sat
+      at the "not started" end. "Partially answered. A document with requirements in *several*
+      states needs the build half of the loop, which was not reached. Still open." Left unticked —
+      the felt legibility call across a full state spread genuinely was not observed.
 - [ ] 8.2 **Does drift feel like a diagnostic or an accusation?** Change an implementation, look at
       the resulting candidate, and judge the wording.
+      **WAIVED for archiving, 2026-08-17.** judgement-evidence.md §8.2 has the exact operator-facing
+      copy: `hub/ui/src/components/spec/SpecCoverageBar.tsx:13`, the "Drifting" badge tooltip —
+      "The implementation changed after this was verified. Someone needs to say which one was
+      wrong." No other wording exists for this state; the API (`GET /spec/drift`) returns only
+      structured fields, so this string is the entire human-facing surface. The tone call itself
+      (diagnostic vs. accusation) stays the operator's; left unticked rather than claimed.
 - [x] 8.3 **Was the migration right on real data?** Inspect the links and unresolved references it
       produced for an existing project — this is the one step where being wrong is silent.
       **Done — see `.claude/autonomous/2026-08-15-judgement-evidence.md` §8.3.** Queried the live
@@ -162,6 +174,13 @@ Unblocked. **Both footprint paths ship together.**
       links found. A factual check, not a judgement call.
 - [ ] 8.4 **Choose the project's retention policy** and confirm the evidence tree is somewhere you
       would actually keep artifacts.
+      **WAIVED for archiving, 2026-08-17.** judgement-evidence.md §8.4: `Project.evidence_retention`
+      (`hub/hub/db/models.py:99`) defaults to `"never"` (five valid values: `on_acceptance`, `daily`,
+      `monthly`, `manual`, `never`); artifacts live at `<project-root>/evidence/`, "a tree an
+      operator can open, diff, move and archive with ordinary tools," not inside `.agentweave/` and
+      not in the database. Two calls named as genuinely the operator's: (a) whether `never` is the
+      right default for a long-running project, (b) whether `<project-root>/evidence/` beats
+      `.agentweave/evidence/`. Left unticked — both are preference, not correctness.
 - [x] 8.5 **Decide which agent, if any, holds `can_accept_evidence`** — and confirm that working
       without one still feels workable rather than obstructive.
       **Decided by the operator, 2026-08-16: nobody by default; the operator grants it.** This keeps

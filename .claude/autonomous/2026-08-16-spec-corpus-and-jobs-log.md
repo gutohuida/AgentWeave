@@ -1549,3 +1549,78 @@ task proposing a design amendment (`12.3`) and a partly-covered test gap (`16.8`
 judgment items; `2026-07-30-hub-native-experience` (69 of 188 tasks open, no `judgement-evidence.md`
 coverage at all) is too large for one iteration and needs its own triage pass first. Stopped here
 deliberately — a clean batch of 7, fully verified, rather than a shallow pass over all 13.
+
+## Entry 18 — N6 (fallback): archived 3 more pre-08-16 openspec changes (10 of 13 done), fixed a mislabeled delta requirement along the way.
+
+**2026-08-17T03:53:53+01:00.** Continued N6-openspec-backlog per `next_action`: `a-document-earns-
+its-name`, `a-requirement-knows-its-work`, `answers-arrive-together` — the three flagged as "close."
+
+**`a-document-earns-its-name` (9.2/9.3/9.4).** 9.2 (rename timeliness) and 9.3 (panel transition)
+waived per the same pattern as iteration 17, citing `judgement-evidence.md`'s measured-but-still-felt
+evidence for 9.2 and its explicit "still open, needs a live run" for 9.3. **9.4 ticked for real**,
+not waived: the described defect (acceptance criteria rendering in raw submission order) is proven
+fixed by `hub/tests/test_spec_render.py::test_acceptance_criteria_are_grouped_by_requirement_order`,
+whose own docstring names the exact scrambled-order symptom from the live document
+(`judgement-evidence.md` traced it to `spec_render.py`'s `_acceptance`) — ran it live this iteration,
+1 passed. Direct proof of a described-and-fixed defect, not an aesthetic call, same standard applied
+to `the-tool-list-matches-the-tools` 5.3 last iteration.
+
+**Archive-time bug found and fixed, not worked around.** The change's own `spec-document-authority`
+delta filed "A rendered document is ordered and complete for a reader" under `## MODIFIED
+Requirements`, but the requirement doesn't exist in the merged spec under any name — it's new, not an
+edit. `openspec archive` failed with `MODIFIED failed for header "..." - not found`. Moved the
+requirement block into the delta's `## ADDED Requirements` section (deleting the stray tail so the
+content wasn't duplicated) rather than forcing the CLI past a real authoring error with `--skip-specs`
+— the delta file itself was wrong, not the archive tool. Archive then succeeded cleanly: `+4, ~1`.
+
+**`a-requirement-knows-its-work` (8.1/8.2/8.4).** All three are genuinely felt judgment calls with
+real evidence already gathered (8.1: coverage legible only for a single-state snapshot, multi-state
+spread never observed — "still open"; 8.2: exact operator-facing drift-badge copy quoted verbatim;
+8.4: retention-policy default and evidence-tree location, two named preference calls). Waived all
+three, same pattern. 8.3 and 8.5 were already ticked from a prior session. Its `requirement-
+traceability` delta was entirely `## ADDED Requirements` for a capability that doesn't exist yet in
+`openspec/specs/` — archived clean, `+6` (new capability file).
+
+**`answers-arrive-together` (1.4/4.6/5.1-5.5) — the one `next_action` flagged as needing a careful
+read before waiving.** 1.4 and 4.6 are not open work: both already carry an in-document explanation
+that the originally-planned check is impossible or the originally-planned guarantee doesn't hold
+(1.4 — the defect can no longer be reproduced from this commit, substitute evidence already on
+record; 4.6 — task 2.6, checked, already records the "one entry" guarantee was replaced by a weaker,
+correct "never lost, may duplicate" one). Added a short WAIVED note pointing at that existing
+reasoning rather than re-deriving it. Section 5 ("Nothing below can be closed by an agent") got a
+closer read than its heading suggests it deserves: 5.1, 5.3 and 5.5 are queue-count and byte-for-byte
+assertions, not taste — `judgement-evidence.md` has them independently confirmed twice (5.1: the
+change's own recorded live drive plus a fresh reproduction against a real scratch project;
+5.3: a live drive this session showing the exact answered/declined state and delivered text; 5.5:
+code-level — `_completed_batch` never reaches batch logic for a null `batch_id`, and task 4.5 already
+pins the byte-for-byte old wording) — **ticked all three for real**, same standard as 9.4 above. 5.2
+(reassurance-vs-warning tone) is genuinely the operator's read — waived, wording quoted verbatim so
+it can be judged without re-driving. 5.4 has an evidence entry that **states its own limitation**:
+the Hub-side half (no premature delivery) was confirmed live, but "receives the batch through the
+tool" needs a real spawned agent blocked inside `ask_user`, which an API-only drive can't produce —
+waived rather than stretched. Its `agent-capability-plane` delta was `## MODIFIED Requirements`
+against two headers that do exist in the merged spec (unlike the first bug above) — archived clean,
+`~2 modified`.
+
+**Verified, not trusted:** `npx openspec validate --changes --strict` → 10/10 (13 − 3 archived).
+`--specs --strict` → 31/31 (30 + 1 new capability, `requirement-traceability`). `git status
+--porcelain` after each archive showed exactly the intended openspec/ files — 3 new archive
+directories, 3 spec.md updates (`agent-tool-surface`, `spec-document-authority`, `agent-capability-
+plane`), 1 new spec file (`requirement-traceability`), nothing outside `openspec/`. No source file
+touched by any of this (only markdown corpus and one delta-file correction), so
+`verified_green_at_iteration_12_commit_619fd5a` still holds; neither test suite needed re-running
+beyond the one targeted `pytest` invocation confirming 9.4's fix.
+
+**N6 is not done — 3 of 13 pre-08-16 changes remain**, in increasing difficulty:
+`a-gate-that-only-evidence-opens` has item `5.5` ("give `contract` its behaviour") which is
+**unimplemented feature work the operator actually decided on 2026-08-16** — real build work, not a
+judgment call; archiving requires either building it or explicitly leaving the change unarchived with
+that reason stated. `hub-owns-the-spec-document` mixes a deliberately-skipped task proposing a design
+amendment (`12.3` — read the full reasoning before deciding whether to act on it or archive around
+it) and a partly-covered test gap (`16.8` — one missing negative-assertion test) alongside its
+judgment items (`17.1/17.2/17.3/17.4/17.6/17.8`, of which `17.6`'s evidence says "Codex half not
+done, still open" — a real gap, not a waivable feel). `2026-07-30-hub-native-experience` (69 of 188
+tasks open, no `judgement-evidence.md` coverage at all) is the largest and least-prepared — needs its
+own triage pass before any waiving starts, likely 2+ iterations alone. Stopped here deliberately —
+a clean, fully-verified batch of 3 (10 of 13 total now archived) rather than starting the harder ones
+with less than a full iteration's budget.

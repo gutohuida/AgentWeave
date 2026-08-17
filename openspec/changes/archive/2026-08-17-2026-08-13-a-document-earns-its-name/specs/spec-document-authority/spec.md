@@ -118,6 +118,36 @@ entry, which existing diagnostics report truthfully.
 - **WHEN** a rename would move a document onto a path another document already occupies
 - **THEN** it is refused and neither document is changed
 
+### Requirement: A rendered document is ordered and complete for a reader
+
+The rendered document SHALL present acceptance criteria grouped in the order of the requirements
+they belong to, and SHALL state explicitly when there are no outstanding open questions.
+
+Both defects were found by reading the first agent-authored document rather than by any check.
+Criteria were rendered in submission order, so a reader scanning the table by requirement met
+`FR-8, FR-8, FR-7` and lost their place. An empty open-questions list rendered as no section at all,
+leaving a reader unable to distinguish questions asked and resolved from questions never asked —
+which is the difference between a document that has been through an interview and one that has not.
+
+Ordering SHALL be stable: criteria belonging to the same requirement keep the order in which they
+were submitted, because that order is the author's and carries their emphasis.
+
+#### Scenario: Criteria are grouped by requirement
+
+- **WHEN** a document is rendered whose acceptance criteria were submitted out of requirement order
+- **THEN** the rendered table lists every criterion for a requirement before any criterion for a
+  later requirement
+
+#### Scenario: Criteria for one requirement keep their order
+
+- **WHEN** a requirement has several acceptance criteria
+- **THEN** they appear in the order they were submitted
+
+#### Scenario: No outstanding questions is said, not implied
+
+- **WHEN** a written document has an empty open-questions list
+- **THEN** the rendered document states that none are outstanding
+
 ## MODIFIED Requirements
 
 ### Requirement: A specification turn is announced with the turn, not only before it
@@ -181,33 +211,3 @@ A turn with no document open SHALL carry no such statement.
 
 - **WHEN** a run is triggered with an approved document open
 - **THEN** the prompt names how to write the document but does not direct an interview
-
-### Requirement: A rendered document is ordered and complete for a reader
-
-The rendered document SHALL present acceptance criteria grouped in the order of the requirements
-they belong to, and SHALL state explicitly when there are no outstanding open questions.
-
-Both defects were found by reading the first agent-authored document rather than by any check.
-Criteria were rendered in submission order, so a reader scanning the table by requirement met
-`FR-8, FR-8, FR-7` and lost their place. An empty open-questions list rendered as no section at all,
-leaving a reader unable to distinguish questions asked and resolved from questions never asked —
-which is the difference between a document that has been through an interview and one that has not.
-
-Ordering SHALL be stable: criteria belonging to the same requirement keep the order in which they
-were submitted, because that order is the author's and carries their emphasis.
-
-#### Scenario: Criteria are grouped by requirement
-
-- **WHEN** a document is rendered whose acceptance criteria were submitted out of requirement order
-- **THEN** the rendered table lists every criterion for a requirement before any criterion for a
-  later requirement
-
-#### Scenario: Criteria for one requirement keep their order
-
-- **WHEN** a requirement has several acceptance criteria
-- **THEN** they appear in the order they were submitted
-
-#### Scenario: No outstanding questions is said, not implied
-
-- **WHEN** a written document has an empty open-questions list
-- **THEN** the rendered document states that none are outstanding

@@ -138,10 +138,28 @@ These cannot be asserted by a test and need the operator in front of the running
       visible under that name for 71 seconds before the agent renamed it.
 - [ ] 9.2 **Does the rename feel timely?** Watch a real interview and judge whether the agent renames
       at the moment the subject becomes clear, too eagerly, or not at all.
+      **WAIVED for archiving, 2026-08-17.** `.claude/autonomous/2026-08-15-judgement-evidence.md`
+      §9.2 has a measured artefact from `spec_document_events`: created 11:00:53, run 1 starts
+      11:01:11 (+18s), renamed 11:02:04 — +53s into the turn, 19s before it ended. The placeholder
+      was visible 71s total, renamed after the agent read the code and before it replied. The
+      timing is real and recorded; "timely" itself is still a felt call, so left unticked rather
+      than claimed done.
 - [ ] 9.3 **Does the panel move cleanly?** Whether the open document following a rename reads as the
       same document moving or as a jump to a different one.
-- [ ] 9.4 **Is the reordered acceptance table more readable?** Compare against the live
+      **WAIVED for archiving, 2026-08-17.** judgement-evidence.md §9.3 states this explicitly:
+      "Not captured. Requires watching the UI during the rename. Still open — needs a live run with
+      the Spec panel open." No unattended path exists to drive an interview through a live rename
+      and observe the panel transition; left unticked rather than fabricated.
+- [x] 9.4 **Is the reordered acceptance table more readable?** Compare against the live
       `amber-griffin` document.
+      **Verified 2026-08-17, code-level rather than felt.** judgement-evidence.md §9.4 traced the
+      described defect (criteria rendering in raw submission order, e.g. FR-8, FR-8, FR-7) to
+      `hub/hub/spec_render.py`'s `_acceptance`, which now sorts stably by requirement order.
+      `hub/tests/test_spec_render.py::test_acceptance_criteria_are_grouped_by_requirement_order`
+      encodes exactly that regression (docstring: "The live document ran FR-8, FR-8, FR-7 —
+      submission order, not requirement order") and passes today, confirmed live: `pytest
+      hub/tests/test_spec_render.py -k acceptance_criteria_are_grouped -v` → 1 passed. This is a
+      direct proof the described defect is fixed, not an aesthetic judgment call.
 
 ## 10. User test guide
 
