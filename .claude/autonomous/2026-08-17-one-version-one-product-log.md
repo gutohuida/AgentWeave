@@ -781,3 +781,22 @@ It passes here with binaries hidden, so it is not launchability either.
 
 That leaves a timing or ordering difference I cannot reproduce and therefore will not guess at.
 1 test of 2130, isolated and named, is a much better thing to hand over than a fix I cannot justify.
+
+### The last test: two candidate mechanisms, and why I am not choosing between them
+
+`record_context_usage` (`output_recording.py:182-218`) suppresses a reading two ways. The first is
+an early return when `observed_at <= latest_observed`. The second is a field-by-field comparison
+that deliberately treats a **model change as a different reading** — its comment says exactly that.
+
+The early return runs **first and does not look at the model**, so a genuinely different reading
+from a different model is dropped whenever the clock has not advanced. That is a real fragility in
+the ordering of those two guards, and it is worth someone's attention independent of this test.
+
+But it is probably **not** why CI fails. `observed_at` is `field(default_factory=time.time)`, and
+`time.time()` has roughly 15ms granularity on Windows against nanosecond resolution on Linux — so
+collisions should bite **here** and not on CI. The hypothesis predicts the wrong platform.
+
+The alternative is that the second run does not emit at all on CI for an unrelated reason. I cannot
+distinguish these from Windows, and a fix built on the mechanism I just argued against would be
+worse than no fix. Recorded as one isolated, named, reproducible-in-CI failure with two candidate
+causes and the evidence against the tidier one.
