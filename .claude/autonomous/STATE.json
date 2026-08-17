@@ -6,17 +6,18 @@
   "started_at": "2026-08-17T19:17:24+01:00",
   "stop_at": "2026-08-17T22:00:00+01:00",
   "stop_when_queue_empties": false,
-  "iteration": 0,
-  "last_heartbeat": "2026-08-17T18:00:00+01:00",
+  "iteration": 1,
+  "last_heartbeat": "2026-08-17T19:27:32+01:00",
   "session_stopped": false,
   "queue": [
     {
       "id": "A1-archive-confirmation",
       "title": "Archiving a document must confirm, and say it cannot be undone",
-      "status": "open",
+      "status": "done",
       "why": "Operator judgement, 2026-08-17: 'Archived should have a confirmation popup telling it irreversible.' Archive IS genuinely one-way -- spec_lifecycle.TRANSITIONS has no edge out of `archived`, and the code says so explicitly -- while the two controls beside it (Approve, Reopen) are both reversible. Deleting a project makes the operator type its name; archiving a document, which cannot be undone at all, asks nothing.",
       "where": "hub/ui/src/components/spec/ -- the phase bar that renders Approve/Archive/Reopen. There is an existing confirm pattern in the project delete flow; reuse it rather than inventing a second convention.",
-      "done_when": "Clicking Archive opens a confirmation naming the document and stating plainly that archiving cannot be undone; cancelling leaves the phase unchanged; confirming archives it. Tests cover both branches."
+      "done_when": "Clicking Archive opens a confirmation naming the document and stating plainly that archiving cannot be undone; cancelling leaves the phase unchanged; confirming archives it. Tests cover both branches.",
+      "done_note": "Iteration 1 (2026-08-17T19:27+01:00): ArchiveConfirmDialog.tsx added, wired into SpecPhaseBar.tsx. Verified: npm run lint clean, tsc --noEmit clean, npm test 959/959. Committed 510e21e (cherry-picked onto this branch after a real-time collision with the tail of the interactive handover briefly moved HEAD to master -- see the log's 19:27 entry), stamp fix 6f87eff. Pushed."
     },
     {
       "id": "A2-archived-is-visible",
@@ -44,8 +45,8 @@
       "done_when": "One exploration file, ranked, each item with a reason and a rough size. It is a proposal for the operator, not a decision."
     }
   ],
-  "current": "A1-archive-confirmation",
-  "next_action": "Read openspec/changes/2026-08-16-the-corpus-keeps-what-shipped/{design,tasks}.md for the Archive control's existing design intent, then find the phase bar component under hub/ui/src/components/spec/ that renders Approve/Archive/Reopen. Add a confirmation dialog for Archive only, reusing the project-delete confirm pattern already in this codebase, stating that archiving cannot be undone. Cancelling must leave the phase untouched. Add UI tests for confirm and cancel. Then run, in CI's own order: `cd hub/ui && npm run lint && npx tsc --noEmit && npm test`. Commit, push, rewrite this file, append to the log.",
+  "current": "A2-archived-is-visible",
+  "next_action": "First, verify the branch with `git branch --show-current` immediately before any git-mutating command this iteration, not just at the top of the turn -- iteration 1 found a real-time collision with the tail of the interactive handover briefly moved HEAD to master mid-turn, undetected until the commit had already landed there. Then: start (or confirm running) the trial Hub per environment.hub_start_detached, read hub/hub/spec_service.py for rerender_phase's signature, and use it to refresh spec/changes/quiet-hours-for-agent-notifications/spec.html (already approved, seeded for this) into archived so its NEW rendering can be inspected -- the renderer treatment (spec_render.py's aw-chip-phase-archived, muted + line-through on the chip only) currently only touches the phase chip, nothing else on the document. Screenshot it with scripts/taste_shots.py in both themes and judge honestly whether 'unmistakable at a glance' holds -- if not, strengthen the document-level treatment (e.g. a banner, a muted body treatment) in spec_render.py. Then check hub/ui/src/components/spec/SpecDocumentPicker.tsx's existing 'Archived' group label renders distinctly in the document list, not just grouped under a plain heading. Add or update tests for whatever code changes. Do NOT touch aw-loop10 (proj-ff695d96). Run npm run lint && npx tsc --noEmit && npm test if any UI file changes; run the relevant hub/tests/ file(s) if spec_render.py or spec_service.py change. Commit, push, rewrite this file, append to the log.",
   "limits": [
     "Stay on this branch. No commits, merges or rebases onto master. Merging is the operator's decision, made awake.",
     "Nothing outward-facing: no publish, no release, no tag, no PR, no force-push, no history rewriting. Pushing THIS branch every iteration is required.",

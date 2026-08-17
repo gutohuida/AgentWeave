@@ -83,3 +83,48 @@ concluding a publish failed.
 
 **Handing over now.** The driver is installed and armed; `last_heartbeat` is backdated so the first
 firing takes the branch rather than standing down. A1 is next.
+
+---
+
+## 19:27 — Iteration 1: A1, and a real-time collision with the tail of the handover
+
+**A1 done.** `SpecPhaseBar.tsx`'s Archive button (approved-only, confirmed present already) now
+opens `ArchiveConfirmDialog.tsx` — a new component, modelled on `DeleteProjectDialog.tsx`'s modal
+shape (`useDialogFocus`, `role="dialog"`, scrim) but with a single Confirm click rather than
+type-to-confirm, since archiving one document is a lighter action than deleting a project's entire
+history. The dialog names the document by title and states plainly that archiving cannot be undone.
+Cancel leaves the phase untouched — `setPhase.mutate` is now called only from the dialog's Confirm,
+never from the Archive button directly. Updated the one existing test that assumed a direct archive
+and added two more (cancel leaves phase untouched; confirm calls the phase route). Ran, in CI's own
+order: `npm run lint` (clean), `npx tsc --noEmit` (clean), `npm test` (959/959, the two "Error: boom"
+lines are `ErrorBoundary.test.tsx` deliberately throwing). Rebuilt the UI bundle and committed
+`hub/ui/src` and `hub/hub/static/ui` together, as required.
+
+**A real-time collision with the tail of the interactive session's handover, caught and fixed
+before anything shipped wrong.** This iteration started at 19:17:40, essentially the same instant
+the entry above says the interactive session was "handing over" — and that session's actual final
+commit (`5d8c7af`, 19:25:42) landed *during* this iteration's work, not before it. Two consequences,
+both caught:
+
+1. **The branch briefly moved to `master` mid-turn**, invisible to me because nothing I ran issued
+   a checkout — reflog shows the switch at 19:20:12, which is inside the window the other session
+   was tagging and verifying `v1.0.1` on `master`. My own `git commit` for A1 landed on `master` as
+   a result (visible only after the fact, since the commit succeeded silently). Caught immediately
+   by checking `git branch --show-current` right after the commit instead of trusting the check from
+   the top of the turn: cherry-picked the commit onto this branch (`510e21e`), then force-moved the
+   local `master` ref back to `origin/master` (a local-only correction — `master` had not been
+   pushed with the stray commit, confirmed via `git fetch` before touching it).
+2. **The UI build stamp recorded the wrong `src_commit`** (`5e63004`, `master`'s tip at that instant)
+   because `refresh_ui_bundle.py` shells out to `git rev-parse HEAD` at write time, and HEAD had
+   already moved by the time it ran — even though the copied bundle assets were themselves correct
+   (verified byte-identical on rebuild). Re-ran the script once HEAD was confirmed back on this
+   branch and committed the corrected stamp (`6f87eff`).
+
+Both fixes pushed clean, `refresh_ui_bundle.py --check` now passes. No data was lost and nothing
+shipped wrong — the underlying cause was two processes (this loop and the interactive session's own
+tail end) sharing one working directory during a handover window, not a bug in the archive-confirm
+work itself. Worth a driver-level fix if this repeats: a Bash tool call to `git checkout` or
+`git commit` should re-verify the branch immediately beforehand rather than relying on a check from
+the top of the turn, and this is now standing practice for every iteration after this one.
+
+**A2 is next** — the queue's own item, unstarted this iteration.
