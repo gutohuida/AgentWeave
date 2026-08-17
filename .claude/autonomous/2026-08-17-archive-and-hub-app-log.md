@@ -128,3 +128,64 @@ work itself. Worth a driver-level fix if this repeats: a Bash tool call to `git 
 the top of the turn, and this is now standing practice for every iteration after this one.
 
 **A2 is next** — the queue's own item, unstarted this iteration.
+
+---
+
+## 19:43 — Iteration 2: A2, and it was a real bug, not a styling gap
+
+**Started by verifying the branch and the log against reality, per the standing practice from
+iteration 1.** `git branch --show-current` matched STATE.json, `git log` matched the recorded SHAs.
+No collision this time.
+
+**A2 done, but not the way `next_action` framed it.** The instruction assumed the navigation
+already recognised the seeded document as archived and just needed a stronger visual treatment if
+`.aw-chip-phase-archived` didn't hold up. Screenshotting first (`scripts/taste_shots.py`, both
+themes) showed something worse: the document sat in the plain "changes" folder at full opacity,
+trailing label `spec.html`, no different from any current document. Reading `specNavigation.ts`
+explained why — `isArchived()` is `path.startsWith('spec/changes/archive/')`, nothing else. A1's
+Archive confirmation calls the phase-transition route, which sets `document.phase = "archived"` and
+re-renders the file **in place** — it does not move it into the `archive/` directory. Confirmed
+against `hub/tests/test_spec_archive.py`'s own fixture: `PATH = "spec/changes/archive-demo/
+spec.html"`, nowhere near the archive prefix, and the existing tests never checked what the tree
+does with it. Two disjoint concepts had been built — the DB's `phase` (what A1's button actually
+sets, what the phase bar and the renderer's own chip correctly read) and the path convention
+(what the tree, the picker's Archived group, and the document panel's own header badge actually
+checked) — and the product's real archiving flow only ever touches the first.
+
+**The fix:** `/project/specs` now joins the on-disk tree against each path's DB phase
+(`spec_lifecycle.list_documents`) and reports it alongside; `specNavigation.ts`'s `isArchived`
+takes both path and phase and returns true if either says so. `SpecNode.archived` — the single
+signal every consumer already reads — is now correct for both archiving mechanisms without
+touching the consumers. On top of that, archived rows in `SpecTree.tsx` and
+`SpecDocumentPicker.tsx` get a distinct archive-box icon (added `archive` to `Icon.tsx`'s mapping,
+there was no icon for it before) and reduced opacity, so the row itself carries the signal instead
+of relying on trailing text alone.
+
+**A second gap the fix surfaced, not introduced by it but newly reachable through it:** the seeded
+fixture project has exactly one document, and it is archived. Once the tree correctly excludes it
+from "current," `resolveSelection` has nothing to hand back, `SpecPage`'s auto-open effect never
+fires, and the screen sat on `Loading…` forever — Ctrl+K still worked (its listener is unconditional)
+but nothing on screen said so. Added an explicit empty state ("Everything here is archived — press
+Ctrl/Cmd+K, or choose one from the rail"). This is a narrow edge case today — most projects have a
+current document alongside their archive — but it was a real dead end, caught by actually driving
+the screen rather than trusting the diff.
+
+**Verified, not assumed:**
+- Screenshotted before (bug visible) and after (icon + dim + correct grouping + working empty
+  state) in both themes via `scripts/taste_shots.py`, plus a one-off script to open the document
+  directly and confirm the header's "Archived" pill now renders too (deleted after use, not
+  committed).
+- Backend: `hub/tests/test_spec_archive.py` gained a test asserting `/project/specs` reports the
+  phase change for a document whose path never moved; `test_spec.py`, `test_spec_archive.py`,
+  `test_spec_documents_api.py`, `test_spec_render.py` all green (92 passed).
+- Frontend: `specNavigation.test.ts` gained a test for the phase-only archived case (library
+  exclusion + history inclusion); `specPage.test.tsx` gained one for the empty-state branch.
+  `npm run lint` clean, `npx tsc --noEmit` clean, `npx vitest run` 961/961 (up from 959 baseline
+  plus the two new tests).
+- Rebuilt the UI bundle, `refresh_ui_bundle.py --check` passes.
+- Restarted the trial Hub to pick up the backend change (no `--reload`); confirmed `/health` before
+  re-screenshotting.
+
+Committed `92ea5d6`, pushed.
+
+**A3 is next** — the Hub desktop app change, 0/34 tasks, entirely unstarted.
