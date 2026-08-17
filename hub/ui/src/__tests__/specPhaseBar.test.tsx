@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { SpecPhaseBar } from '@/components/spec/SpecPhaseBar'
@@ -151,16 +151,40 @@ describe('SpecPhaseBar', () => {
     expect(screen.getByText('Archive')).toBeInTheDocument()
   })
 
-  it('archives through the phase route', async () => {
-    documents = [doc({ phase: 'approved' })]
+  it('asks for confirmation before archiving, naming the document', async () => {
+    documents = [doc({ phase: 'approved', title: 'Demo' })]
     renderBar()
 
     await userEvent.click(screen.getByText('Archive'))
 
-    expect(setPhase).toHaveBeenCalledWith({
-      path: 'spec/changes/demo/spec.html',
-      to: 'archived',
-    })
+    expect(setPhase).not.toHaveBeenCalled()
+    const dialog = screen.getByRole('dialog')
+    expect(dialog).toHaveTextContent('Demo')
+    expect(dialog).toHaveTextContent('cannot be undone')
+  })
+
+  it('leaves the phase untouched when the archive confirmation is cancelled', async () => {
+    documents = [doc({ phase: 'approved' })]
+    renderBar()
+
+    await userEvent.click(screen.getByText('Archive'))
+    await userEvent.click(screen.getByText('Cancel'))
+
+    expect(setPhase).not.toHaveBeenCalled()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('archives through the phase route once the confirmation is confirmed', async () => {
+    documents = [doc({ phase: 'approved' })]
+    renderBar()
+
+    await userEvent.click(screen.getByText('Archive'))
+    await userEvent.click(within(screen.getByRole('dialog')).getByText('Archive'))
+
+    expect(setPhase).toHaveBeenCalledWith(
+      { path: 'spec/changes/demo/spec.html', to: 'archived' },
+      expect.anything(),
+    )
   })
 
   it.each(['exploring', 'proposed', 'archived', 'current'])(

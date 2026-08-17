@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Icon } from '@/components/common/Icon'
+import { ArchiveConfirmDialog } from '@/components/spec/ArchiveConfirmDialog'
 import {
   useCloseExploration,
   useProposeSpecDocument,
@@ -26,6 +27,7 @@ export function SpecPhaseBar({ path }: { path: string }) {
   const setRigor = useSetSpecRigor()
   const [blocking, setBlocking] = useState<SpecBlockingFinding[]>([])
   const [rigorRefusal, setRigorRefusal] = useState<string[]>([])
+  const [confirmingArchive, setConfirmingArchive] = useState(false)
 
   const document = data?.documents.find((entry) => entry.path === path)
   if (!document) return null
@@ -38,6 +40,13 @@ export function SpecPhaseBar({ path }: { path: string }) {
     // so it reports rather than throws. Showing every finding at once matters:
     // one per attempt turns five problems into five round trips.
     setBlocking(result.blocking ?? [])
+  }
+
+  function onConfirmArchive() {
+    setPhase.mutate(
+      { path, to: 'archived' },
+      { onSuccess: () => setConfirmingArchive(false) },
+    )
   }
 
   async function onRigor(rigor: string) {
@@ -128,7 +137,7 @@ export function SpecPhaseBar({ path }: { path: string }) {
           <button
             type="button"
             disabled={busy}
-            onClick={() => setPhase.mutate({ path, to: 'archived' })}
+            onClick={() => setConfirmingArchive(true)}
             className="rounded-[var(--radius-sm)] px-2 py-1 hover:bg-[var(--row-hover)]"
           >
             Archive
@@ -202,6 +211,15 @@ export function SpecPhaseBar({ path }: { path: string }) {
             </li>
           ))}
         </ul>
+      )}
+
+      {confirmingArchive && (
+        <ArchiveConfirmDialog
+          title={document.title}
+          isPending={setPhase.isPending}
+          onCancel={() => setConfirmingArchive(false)}
+          onConfirm={onConfirmArchive}
+        />
       )}
     </div>
   )
