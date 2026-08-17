@@ -67,6 +67,9 @@ interface AgentOutputPanelProps {
   onOpenSpecPicker?: () => void
   onStartExploration?: () => void
   onStopExploring?: () => void
+  /** Reopen a document not currently attached to this conversation. See Composer's prop of the
+   *  same name for why this is distinct from `onOpenSpecPicker`. */
+  onOpenExistingSpec?: () => void
   specBusy?: boolean
 }
 
@@ -115,6 +118,7 @@ export function AgentOutputPanel({
   onOpenSpecPicker,
   onStartExploration,
   onStopExploring,
+  onOpenExistingSpec,
   specBusy = false,
 }: AgentOutputPanelProps) {
   // `lines` is no longer read here. Its only consumer was the effect that watched the output
@@ -933,6 +937,7 @@ export function AgentOutputPanel({
               onOpenSpecPicker={onOpenSpecPicker}
               onStartExploration={onStartExploration}
               onStopExploring={onStopExploring}
+              onOpenExistingSpec={onOpenExistingSpec}
               specBusy={specBusy}
               specDocumentLabel={specDocumentLabel}
             />

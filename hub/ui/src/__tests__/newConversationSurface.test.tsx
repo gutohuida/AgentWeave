@@ -229,6 +229,14 @@ describe('declaring an exploration before the first message', () => {
     expect(toggle).toHaveAttribute('aria-pressed', 'false')
   })
 
+  it('offers no reopen-existing control -- there is no picker here to open', () => {
+    // ConversationView wires a real one because it owns a SpecDocumentPicker; this surface has
+    // no conversation yet to attach an existing document to, so the control that reopens one
+    // must not render here at all rather than render and lie about what it does.
+    renderSurface('claude')
+    expect(screen.queryByTestId('composer-open-existing-spec')).not.toBeInTheDocument()
+  })
+
   it('shows the declaration as pressed, and lets it be taken back', () => {
     renderSurface('claude')
     const toggle = screen.getByTestId('composer-start-exploration')

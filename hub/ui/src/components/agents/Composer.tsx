@@ -61,6 +61,10 @@ export interface ComposerProps {
   onOpenSpecPicker?: () => void
   onStartExploration?: () => void
   onStopExploring?: () => void
+  /** Reopen a document not currently attached to this conversation. Optional -- omitted on
+   *  surfaces with no real picker to open (the new-conversation surface), where the second
+   *  control next to Explore does not render. */
+  onOpenExistingSpec?: () => void
   specArmed?: boolean
   specBusy?: boolean
   /** The open document's display name, for the Spec pill. `null` means none is open. */
@@ -91,6 +95,7 @@ export function Composer({
   onOpenSpecPicker,
   onStartExploration,
   onStopExploring,
+  onOpenExistingSpec,
   specArmed = false,
   specBusy = false,
   specDocumentLabel = null,
@@ -300,6 +305,7 @@ export function Composer({
               onOpenPicker={onOpenSpecPicker}
               onStartExploration={onStartExploration}
               onStopExploring={onStopExploring}
+              onOpenExisting={onOpenExistingSpec}
               armed={specArmed}
               busy={specBusy}
             />
