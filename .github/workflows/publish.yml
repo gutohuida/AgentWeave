@@ -9,6 +9,11 @@ jobs:
     # One product, one tag: `v*` publishes BOTH distributions. The exclusion of `hub-v` prefixed
     # tags that used to live here is gone with the scheme itself.
     if: startsWith(github.ref, 'refs/tags/v')
+    # The Hub must reach PyPI first. `agentweave-ai` depends on `agentweave-hub>=<this version>`,
+    # so if the CLI won the race there would be a window — however short — in which
+    # `pip install agentweave-ai` resolves to a version whose dependency does not exist yet.
+    # Ordering the jobs costs one sequential upload and removes the window entirely.
+    needs: publish-hub
     runs-on: ubuntu-latest
     
     steps:

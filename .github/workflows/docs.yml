@@ -38,6 +38,11 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
+          # The Hub from this checkout first. `agentweave-ai` depends on `agentweave-hub`, and
+          # resolving that from PyPI here would demand a version that only exists once this commit
+          # is released — CI would need the release, and the release would need CI. Same reason as
+          # the equivalent step in ci.yml.
+          pip install -e ./hub
           pip install -e ".[docs]"
 
       - name: Build site

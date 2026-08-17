@@ -471,3 +471,77 @@ straight after the UI tests, so it inherited `hub/ui` as its working directory a
 items found to validate"* — which scrolls past looking like success. Re-run from an absolute path it
 reports 8/8. Second occurrence today; the tell is a result that is suspiciously empty rather than
 suspiciously wrong.
+
+---
+
+## Iteration 10 — 12:20 — R11: CI meets these 789 commits for the first time
+
+Fast-forwarded `hub-native-experience` from the autonomous branch, pushed, and opened
+**[PR #1](https://github.com/gutohuida/AgentWeave/pull/1)** into `master`.
+
+This is the whole reason for a PR rather than a push. `ci.yml` triggers only on pushes to `master`
+and pull requests targeting it, so in 789 commits **no CI run has ever seen this work**. Pushing
+straight to master would have made master the place where that was discovered.
+
+### What it found: the same trap, in the workflow I did not fix
+
+`Docs / build` failed:
+
+    ERROR: Could not find a version that satisfies the requirement agentweave-hub>=1.0.0
+           (from agentweave-ai) (from versions: 0.34.1, 0.35.0)
+
+This is R4's chicken-and-egg, exactly as anticipated — and I fixed it in `ci.yml` only.
+`docs.yml` installs the root package too (`pip install -e ".[docs]"`), so it asks PyPI for a version
+that will not exist until this commit ships. Fixed the same way: install `./hub` from the checkout
+first.
+
+Then swept **every** workflow for the pattern rather than fixing the one that failed:
+
+    every root install:      ci.yml:36, ci.yml:81, ci.yml:96, docs.yml:46
+    any lacking ./hub first: none
+
+`publish.yml` is unaffected — `python -m build` reads metadata and does not resolve runtime
+dependencies.
+
+Worth naming plainly: R1's log entry said the CI fix could not be verified locally and the PR run
+would be its first real evidence. It was, and it caught a gap in my own reasoning within four
+minutes. That is what the PR was for.
+
+### What it confirmed
+
+| Check | Result |
+|---|---|
+| `test` × {ubuntu, macos, windows} × {3.11, 3.12} | **6/6 SUCCESS** |
+| `ui-test` | SUCCESS |
+| `build` (CI) | SUCCESS |
+| `Docs / build` | FAILURE → fixed, pending re-run |
+| `hub-test` | *(in flight)* |
+
+Six green matrix legs is the **first evidence the 3.11 floor holds anywhere but this machine**, and
+the first cross-OS signal this branch has ever had.
+
+### Verified while waiting: `pip install agentweave-ai` gives a complete app
+
+The single-install design is only real if the Hub wheel carries the interface. Built it and looked
+inside rather than trusting the `package-data` glob:
+
+    agentweave_hub-1.0.0-py3-none-any.whl
+    231 files | static/ui: 24 (index.html present, 1 js, 1 css)
+    charters: 10 | migrations: 76
+
+Also confirmed the merge touches **634 files under `hub/`**, so `hub-image.yml`'s `paths: [hub/**]`
+filter will match on the master push and the Docker image will build.
+
+**A held push, then a corrected decision.** I first held the `docs.yml` fix back, reasoning that
+pushing would cancel `hub-test` — the one job whose result I most needed, since it is R1's only
+verification. That reasoning was wrong twice over: `ci.yml` declares no `concurrency` block, so a
+new push does not cancel the in-flight run at all; and even if it did, the next run re-runs
+`hub-test` against identical code, so no signal was ever at risk. Pushed instead of waiting, which
+also folds the docs fix and the `publish.yml` ordering fix into one cycle.
+
+**One more thing found in the pre-flight, and fixed before it could matter.** `publish` and
+`publish-hub` had no ordering between them, so they would upload to PyPI in parallel. If the CLI
+won that race there would be a window — short, but real — in which `pip install agentweave-ai`
+resolves to 1.0.0 and then cannot find `agentweave-hub>=1.0.0`. `publish` now `needs:
+publish-hub`. That closes **D2** in `decisions_for_user`, which had been left open as
+"verify in R12's smoke test" — better to remove the race than to check for it afterwards.

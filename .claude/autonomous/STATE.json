@@ -6,8 +6,8 @@
   "started_at": "2026-08-17T10:14:49+01:00",
   "stop_at": "2026-08-17T15:00:00+01:00",
   "stop_when_queue_empties": true,
-  "iteration": 10,
-  "last_heartbeat": "2026-08-17T10:49:59+01:00",
+  "iteration": 11,
+  "last_heartbeat": "2026-08-17T10:55:07+01:00",
   "session_stopped": null,
   "release_shape": {
     "version": "1.0.0",
@@ -114,7 +114,7 @@
     }
   ],
   "current": "R11-merge-and-drive-ci",
-  "next_action": "R11: fast-forward hub-native-experience from this branch, push it, then `gh pr create --base master --head hub-native-experience`. That is the ONLY way CI has ever run against these 776 commits - ci.yml triggers on pushes to master and PRs targeting it, nothing else. Watch with `gh pr checks`. Expect R1's fix to be confirmed or refuted here; it is the one change that cannot be verified locally. DO NOT MERGE on red or still-running CI. If CI reveals a genuine PRODUCT bug rather than infrastructure, fix it only if small and understood; otherwise STOP, leave the PR open, write it up.",
+  "next_action": "R11 continued: PR #1 is open into master. Round 1 gave 6/6 test matrix legs, ui-test and CI build GREEN; Docs/build FAILED on the agentweave-hub>=1.0.0 resolution (the R4 chicken-and-egg, fixed in ci.yml but missed in docs.yml). docs.yml now installs ./hub first, and publish.yml's `publish` job now `needs: publish-hub` so the dependency reaches PyPI before the dependent. Push and wait for round 2. DO NOT MERGE until every check is green AND finished.",
   "limits": [
     "OUTWARD-FACING ACTIONS ARE AUTHORISED THIS RUN — this INVERTS the previous run's standing rule, deliberately. Pushing, opening a PR, merging to master, tagging, and creating a GitHub release are all in scope, in R11/R12 order. Everything else outward-facing is not: no force-push, no history rewriting on any shared branch, no deleting or moving existing tags or releases, no touching the four releases already published.",
     "NEVER release on a red or still-running CI. `gh pr checks` must show every job green and FINISHED before the PR merges, and the merge must be green before the tag exists. The operator chose 'Full auto, but only on green CI' with that as the hard rule.",
@@ -143,10 +143,11 @@
     },
     {
       "id": "D2-pypi-publish-ordering",
-      "status": "OPEN",
+      "status": "CLOSED",
       "question": "`agentweave-ai==1.0.0` will pin `agentweave-hub>=1.0.0`, and both publish from the same tag in the same workflow run. If the CLI's upload wins the race, there is a window where `pip install agentweave-ai` cannot resolve.",
       "default": "Proceed and verify in R12's smoke test rather than pre-solving it. If the install genuinely fails, record it here rather than silently unpinning — an unpinned dependency reintroduces exactly the broken install R4 exists to fix.",
-      "cost_if_wrong": "A short window of unresolvable installs, fixed by a re-run of the publish job rather than a new version."
+      "cost_if_wrong": "A short window of unresolvable installs, fixed by a re-run of the publish job rather than a new version.",
+      "resolution": "Removed rather than verified: publish now `needs: publish-hub`, so the dependency is on PyPI before the dependent is uploaded. There is no window left to smoke-test for."
     },
     {
       "id": "D3-docker-tag-scheme-change",
