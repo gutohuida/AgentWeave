@@ -2,14 +2,13 @@
   "purpose": "Ship AgentWeave 1.0.0 to master and publish it. AgentWeave is ONE product with ONE version from this release on: the separate `agentweave-hub` version line and the `hub-v*` tag scheme retire, `pip install agentweave-ai` becomes a working product on its own, and the documentation and README describe the thing that actually exists rather than the multi-runtime product that was deleted. Fix everything that stands in the way of that, merge to master, tag, release.",
   "branch": "autonomous/2026-08-17-one-version-one-product",
   "parent_branch": "hub-native-experience",
-  "parent_sha": "9343a31",
-  "started_at": "2026-08-17T10:30:00+01:00",
+  "parent_sha": "e45b014",
+  "started_at": "2026-08-17T10:14:49+01:00",
   "stop_at": "2026-08-17T15:00:00+01:00",
   "stop_when_queue_empties": true,
-  "iteration": 0,
-  "last_heartbeat": null,
+  "iteration": 1,
+  "last_heartbeat": "2026-08-17T10:14:49+01:00",
   "session_stopped": null,
-
   "release_shape": {
     "version": "1.0.0",
     "applies_to": "BOTH pyproject.toml (agentweave-ai) and hub/pyproject.toml (agentweave-hub), in lockstep, forever from now on.",
@@ -18,7 +17,6 @@
     "why_1_0_0": "Operator decision, 2026-08-17. Since v0.42.0 the branch deleted the watchdog, messaging, both non-HTTP transports, the role subsystem and 51 of 56 CLI commands. Nothing of the 0.42 CLI surface survives; semver calls that major, and 1.0.0 is also the product signal that the Hub-owned local app is the thing now.",
     "rejected": "CLI 1.0.0 with Hub staying on 0.36.0, and staying pre-1.0 on both. Both were rejected by the operator's follow-up: 'We can stop the old hub and old versions where it is. Now agentweave is one thing.' Two version lines for one product is the thing being removed."
   },
-
   "queue": [
     {
       "id": "R1-ci-hub-test-installable",
@@ -105,10 +103,8 @@
       "detail": "PRECONDITION, CHECK IT EXPLICITLY: every CI job on the PR is green and finished. Then merge the PR to master. `hub-image.yml` fires on any master push touching `hub/` and will build the Docker image. Then tag `v1.0.0` and `gh release create v1.0.0` with notes drawn from R8's CHANGELOG. Watch `publish.yml` to completion — after R7 it must publish BOTH `agentweave-ai` and `agentweave-hub` from that one tag; if only one job fires, the R7 re-gating is wrong and that is the highest-priority fix. VERIFY, do not assume: `pip download agentweave-ai==1.0.0` into a temp dir, or `pip install` into a throwaway venv, and confirm `agentweave --version` reports 1.0.0 and that it pulled `agentweave-hub` with it (R4's whole point). Confirm the GHCR image published and the Pages docs site rebuilt. Do NOT create a `hub-v1.0.0` tag."
     }
   ],
-
   "current": "R1-ci-hub-test-installable",
   "next_action": "Cut `autonomous/2026-08-17-one-version-one-product` from `hub-native-experience` at c6aec88 (the tree is clean; verify with `git status --short` first). Then do R1: in `.github/workflows/ci.yml`, the `hub-test` job sets `working-directory: hub` and runs only `pip install -e \".[dev]\"`, so `agentweave` is never installed — add a step before it that installs the repo root package with an explicit `working-directory: .`. This is the failure that has been red on master since 2026-07-29 and it cannot be verified locally; it is confirmed by the PR run in R11. Commit and push, then move to R2, which CAN be verified locally and is the largest single chunk (34 mkdocs warnings to zero).",
-
   "limits": [
     "OUTWARD-FACING ACTIONS ARE AUTHORISED THIS RUN — this INVERTS the previous run's standing rule, deliberately. Pushing, opening a PR, merging to master, tagging, and creating a GitHub release are all in scope, in R11/R12 order. Everything else outward-facing is not: no force-push, no history rewriting on any shared branch, no deleting or moving existing tags or releases, no touching the four releases already published.",
     "NEVER release on a red or still-running CI. `gh pr checks` must show every job green and FINISHED before the PR merges, and the merge must be green before the tag exists. The operator chose 'Full auto, but only on green CI' with that as the hard rule.",
@@ -119,7 +115,6 @@
     "Do not touch the trial Hub on :8010 or its database at `~/.agentweave/hub/profiles/beta/agentweave.db`. Nothing in this queue needs a running Hub.",
     "Standing repo rules, unchanged: stage paths explicitly and never `git add -A`; never commit `kimichanges.md`/`kimiwork.md`; `approve_tool_call` keeps no return annotation; `hub/hub/mcp_server.py` imports only stdlib + fastmcp; commit `hub/ui/src` and `hub/hub/static/ui` together via `scripts/refresh_ui_bundle.py`; never create `.agentweave/`, `agentweave.yml` or `spec/` as stray test output at the repo root."
   ],
-
   "environment": {
     "python": "USE `C:/Users/huida/AppData/Local/Programs/Python/Python311/python.exe` EXPLICITLY. Bare `python` on PATH resolves to `C:/Users/huida/AppData/Local/hermes/hermes-agent/venv/Scripts/python.exe`, which has no pytest_asyncio and fails conftest collection with `ModuleNotFoundError`. This cost real time during prep to diagnose; do not rediscover it.",
     "working_directory": "Run pytest from the REPO ROOT with paths like `hub/tests/test_x.py`. The Bash tool's cwd persists between calls, so a stray `cd hub` earlier makes a later `hub/tests/...` path fail with 'file or directory not found' — check `pwd` when a path that should exist reports missing.",
@@ -128,7 +123,6 @@
     "suite_timing": "`pytest hub/tests/ -n 8` takes ~90s; the CLI suite ~7s; `npm test` ~20s; `mkdocs build --strict` a few seconds. All well inside the command cap — the old 'seven minutes, run in chunks' note no longer applies with -n 8.",
     "baseline_green_at_c6aec88": "hub 2128 passed / 11 skipped; CLI 362 passed / 3 skipped; UI 957 passed; UI lint clean; ruff clean at CI scope; black clean at CI scope; mypy clean; openspec 8/8 strict. Measured 2026-08-17 morning. Any regression from these numbers is this run's doing."
   },
-
   "decisions_for_user": [
     {
       "id": "D1-cli-no-longer-dependency-free",
@@ -159,7 +153,6 @@
       "cost_if_wrong": "None — stopping is the safe direction, and the operator is back at 15:00."
     }
   ],
-
   "dead_ends": [
     "Bare `python` is the hermes venv, not the test interpreter. See `environment.python`.",
     "`agentweave` cannot be started from this repo's root: `python -m uvicorn` puts the cwd on `sys.path[0]`, so the repo's own `hub/` shadows the installed `hub` package and the spawned child dies with `ImportError: cannot import name '__version__' from 'hub'` 60s later, output already at DEVNULL. Nothing in this queue needs a running Hub, so simply do not start one.",
@@ -170,7 +163,6 @@
     "A migrate-from-zero database is not a valid migration harness here — `init_db` runs `create_all` THEN `alembic upgrade head`. Use `create_all` + `stamp <prev>` + `upgrade head`.",
     "The review addendum's guess that the UI fingerprint is over-broad because it includes `__tests__` is WRONG — `ui_source_fingerprint` already excludes it via a git pathspec, verified: `git ls-files -s -- . ':(exclude)__tests__'` returns 0 of 103 test files. A stale stamp means the script was not re-run, nothing more."
   ],
-
   "prep_notes": {
     "prepared_at": "2026-08-17T10:30:00+01:00",
     "prepared_by": "Claude Opus 5 (1M context), interactive session, operator awake",
@@ -189,5 +181,12 @@
     ],
     "explicitly_not_in_scope": "Driving the UI; pywebview/Q6; archiving the four near-done openspec changes; the §13 charter-scope / skill-invocation / agent-template features (absent by design, not broken — they belong in the CHANGELOG as 'not in this release'). All four were offered to the operator and not selected.",
     "readiness": "READY. Every queue item names a file and usually a line; the two hardest unknowns (CI behaviour, PyPI ordering) are pre-authorised with a stop-rather-than-guess default; the irreversible step has an explicit precondition. The single largest risk is R11 — 776 commits meeting CI for the first time — which is why the PR exists rather than a direct push to master."
+  },
+  "driver": {
+    "kind": "Windows Scheduled Task 'AgentWeaveAutonomousSession'",
+    "interval_minutes": 20,
+    "stop_at": "2026-08-17T15:00:00",
+    "role": "BACKUP to the interactive session; stands down while last_heartbeat is <25 min old",
+    "installed_at": "2026-08-17T10:14:49+01:00"
   }
 }
