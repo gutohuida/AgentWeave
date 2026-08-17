@@ -894,3 +894,70 @@ before and after the amendments. No code touched; green baseline from `20e963e` 
 `next_action` set to implementation, starting with tasks.md sections 1-3 (migration `0075`, models,
 scheduler) — the layers everything else depends on — leaving API/UI/tests for the iteration(s) after,
 the same incremental pacing N2/N2b used rather than attempting the whole tasks.md list in one turn.
+
+## Entry 10 — N3 implementation slice 1: migration 0075, models, scheduler wiring (sections 1-3)
+
+**2026-08-17T01:25:57+01:00.** Picked up mid-flight: the previous iteration (heartbeat taken over at
+01:04:08 per driver.log) had already written the full implementation for tasks.md sections 1-3 —
+migration `0075_add_loops_and_traceability.py`, the `Loop` model plus `Task.loop_id`/
+`JobRun.conversation_id` columns, and the scheduler's `_loop_stop_reason` check and
+`conversation_id` wiring in `_do_fire_job` — but exited without committing, leaving the tree dirty
+(driver.log's own note for that firing: "Still running. I'll wait for the completion notification,"
+i.e. it treated an in-process implementation as a background task and returned before it actually
+finished landing the commit). This iteration is a genuine continuation, not a redo: read every
+diff against the actual code before trusting it, then verified rather than re-implemented.
+
+**What was already there, checked line by line against the design:**
+- `hub/hub/migrations/versions/0075_add_loops_and_traceability.py` — three additive changes (new
+  `loops` table, `tasks.loop_id`, `job_runs.conversation_id`), each guarded for a missing table the
+  way `0071`/`0073` do, matching design and tasks.md 1.1/1.2 exactly. `downgrade()` reverses all
+  three in dependency order.
+- `hub/hub/db/models.py` — `Loop` class placed after `JobRun`, matching design D1: `job_id` unique
+  FK with `ondelete="CASCADE"`, `purpose` non-null defaulting `""`, `stop_at`/`stop_when_queue_empties`/
+  `stop_reason`/`stopped_at`, no `status` enum (round 2's rejection honoured). `Task.loop_id` beside
+  `spec_document_id` with the same "deliberately not a ForeignKey" comment reasoning. `JobRun.
+  conversation_id` beside `session_id` with a comment distinguishing resume-input from what-actually-
+  fired.
+- `hub/hub/scheduler.py` — `_loop_stop_reason(session, job)` checks `stop_at`/`stop_when_queue_empties`
+  against `Task.loop_id`-scoped non-terminal counts (using `TERMINAL_FOR_BINDING`, the same terminal
+  set the rest of the codebase already uses); wired into `_do_fire_job` after the existing
+  `_job_agent_skip_reason` check and before `new_entry(...)`, so it can only ever suppress a fire,
+  never cause one — matches round 2's D4 verification exactly. On stop: writes the `JobRun` as
+  `skipped` with the reason, stamps `loop.stop_reason`/`stopped_at`, sets `job.enabled = False`,
+  calls `self.remove_job(job.id)` (confirmed the right call — `_do_fire_job` is a `JobScheduler`
+  method with its own wrapper, not the module-level `get_scheduler()` path), persists `job_run_skipped`
+  and a new `loop_stopped` event, and broadcasts `loop_stopped` over SSE. `conversation_id=
+  conversation.id` added to the `JobRun(...)` construction (task 3.1).
+- Test files: `test_migrations.py`/`test_project_persistence.py` head assertions bumped `0074`→`0075`
+  (11 + 1 occurrences, matching the recount tasks.md 6.1 records, including two stale f-string
+  messages a naive replace would have missed). `test_project_delete_api.py` adds `Loop` to the
+  project-scoped-tables sweep test and seeds one row — checked this is actually exercised by
+  `project_lifecycle.py`'s generic `Base.metadata`-introspecting delete (`_project_scoped_tables()`,
+  `project_lifecycle.py:184`), not a hand-maintained table list, so `Loop` carrying `project_id` was
+  already swept correctly before this test even existed; the test documents that fact rather than
+  fixing a gap.
+
+**Verified rather than trusted:**
+- `pytest hub/tests/test_migrations.py hub/tests/test_project_persistence.py
+  hub/tests/test_project_delete_api.py -q` → 63 passed, 1 skipped.
+- `pytest hub/tests/ -n 8 -q` → **2093 passed, 11 skipped** — exact match to the `20e963e` baseline,
+  confirming the new migration/model/scheduler code introduced no regression anywhere else in the
+  suite.
+- `pytest tests/ -n 4 -q` → **362 passed, 3 skipped** — exact match to baseline (untouched by this
+  slice, run anyway per the standing discipline of never trusting a green claim without re-running).
+- `npx openspec validate --changes --strict` → 20/20 clean.
+- `ruff check` and `black --check` on every touched Python file → clean.
+- Did not re-run the alembic upgrade/downgrade/upgrade round-trip tasks.md 1.3 already recorded as
+  verified live by the prior iteration (`%TEMP%\aw_0075_test.db`) — `test_alembic_upgrade_head_fresh_file_db`
+  and the guarded-migration tests exercise the same upgrade path end to end and passed, which is
+  sufficient re-confirmation without repeating a manual scratch-file run.
+
+**Committed as-is, no code changes needed.** tasks.md sections 1-3 plus the 6.1 slice of section 6
+were already correctly implemented; this iteration's job was verification and landing, not authorship.
+Sections 4-9 (API, UI, remaining tests, live Hub verification, human-only, user test guide) remain.
+
+`next_action` set to tasks.md section 4 (API: `JobCreate`/`JobUpdate` schema fields, `create_job`/
+`update_job` Loop-row logic per D6, `LoopSummary`/`JobResponse.loop`, the D7 batch-query shape for
+`list_jobs`/`get_job`, and `list_tasks`'s `loop_id` filter including the `agent_actions.py` direct-
+call-site fix task 4.5 names). Section 4 has no UI dependency and no migration dependency beyond what
+just landed, so it is the next self-contained slice.
