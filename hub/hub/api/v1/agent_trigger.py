@@ -1584,7 +1584,7 @@ async def _execute_run(
         from ...turn_scheduler import schedule_agent
 
         await schedule_agent(project_id, agent)
-    except Exception as exc:
+    except (Exception, asyncio.CancelledError) as exc:
         # Every step above this point is inside the same `try` and none of it is wrapped
         # individually — so an exception anywhere between the spawn succeeding and this turn's
         # own bookkeeping (title generation, the next-turn scheduler, ...) used to leave the
@@ -1594,9 +1594,19 @@ async def _execute_run(
         # of running it — an unbounded outage with no error anywhere a human would see. Measured
         # live in CI (`test_a_conversation_whose_model_changed_attributes_usage_per_turn`,
         # 2026-08-17): `_active_ptys` and `_background_runs` both empty — the task had genuinely
-        # finished — while the `Run` row still read `running` with `error=None`, which is only
-        # possible if something threw before the finalize block's own `db.commit()`.
+        # finished — while the `Run` row still read `running` with `error=None`, which ruled out
+        # every regular `Exception` (an `except Exception` guard here, tried first, changed
+        # nothing — same symptom, same `error=None` on the next CI run). `CancelledError` is a
+        # `BaseException` in Python 3.8+, not an `Exception`, and nothing in this codebase calls
+        # `.cancel()` on this task (`_stop_requested` is a cooperative flag the read loop checks
+        # itself, not a cancellation) — but that only means no *known* caller does; a test
+        # transport or event-loop teardown cancelling an orphaned background task is exactly the
+        # kind of thing that would vanish from view rather than log anything, since asyncio's own
+        # default handler does not warn on an unretrieved `CancelledError` the way it does for
+        # everything else. Re-raised below, once the row is marked, to preserve real cancellation
+        # semantics for anything that legitimately depends on it propagating.
         logger.exception("Unhandled error in run %s for %r", run_id, agent)
+        already_terminal = False
         async with async_session_factory() as db:
             run = await db.get(Run, run_id)
             if run is None or run.status != "running":
@@ -1604,30 +1614,33 @@ async def _execute_run(
                 # this exception happened, so whatever failed is downstream of a turn that
                 # already succeeded or failed cleanly. Overwriting that here would let unrelated
                 # bookkeeping failures relabel a completed run as failed.
-                return
-            run.status = "failed"
-            run.error = str(exc)
-            run.ended_at = datetime.now(timezone.utc)
-            await expire_pending_for_run(db, run_id)
-            returned = await return_run_entries(db, run_id)
-            await db.commit()
-            await _report_abandoned_entries(db, project_id, agent, run_id)
-            await _broadcast_run_lifecycle(
-                db,
-                project_id,
-                "run_failed",
-                agent=agent,
-                run_id=run_id,
-                **_transport_failure_fields(exc, conversation_id),
-            )
-            for entry_id in returned:
-                payload = {"entry_id": entry_id, "agent": agent, "run_id": run_id}
-                await persist_event(db, project_id, "queue_entry_queued", payload, agent=agent)
-                await sse_manager.broadcast(project_id, "queue_entry_queued", payload)
-        if returned:
+                already_terminal = True
+            else:
+                run.status = "failed"
+                run.error = str(exc)
+                run.ended_at = datetime.now(timezone.utc)
+                await expire_pending_for_run(db, run_id)
+                returned = await return_run_entries(db, run_id)
+                await db.commit()
+                await _report_abandoned_entries(db, project_id, agent, run_id)
+                await _broadcast_run_lifecycle(
+                    db,
+                    project_id,
+                    "run_failed",
+                    agent=agent,
+                    run_id=run_id,
+                    **_transport_failure_fields(exc, conversation_id),
+                )
+                for entry_id in returned:
+                    payload = {"entry_id": entry_id, "agent": agent, "run_id": run_id}
+                    await persist_event(db, project_id, "queue_entry_queued", payload, agent=agent)
+                    await sse_manager.broadcast(project_id, "queue_entry_queued", payload)
+        if not already_terminal and returned:
             from ...turn_scheduler import schedule_agent
 
             await schedule_agent(project_id, agent)
+        if isinstance(exc, asyncio.CancelledError):
+            raise
     finally:
         _active_ptys.pop(run_id, None)
         _stop_requested.discard(run_id)
