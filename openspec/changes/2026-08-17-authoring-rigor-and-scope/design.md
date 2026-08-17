@@ -120,10 +120,19 @@ New functions in `spec_service.py` (co-located with `save_document`, the functio
   D1/D2's diff-and-record. Called from `save_document` when rigor gates, not from a new route.
 - `async def accept_proposal(session, document, proposal, *, actor, expected_digest=None) -> SaveResult`
   — refuses if `actor.kind != "operator"`; refuses if `proposal.status != "pending"`; refuses if
-  `document.content_digest != proposal.expected_digest` (D5); otherwise applies `proposed_payload` to
-  the live document at `unit_key`, calls `spec_lifecycle.record_content` (see the settled question
+  `document.content_digest != proposal.expected_digest` (D5 — the check that matters, comparing the
+  row's own captured digest against the document's current one); otherwise applies `proposed_payload`
+  to the live document at `unit_key`, calls `spec_lifecycle.record_content` (see the settled question
   below — no new `accepter` parameter), sets `status="accepted"`, `resolved_by_actor_name`,
-  `resolved_at`.
+  `resolved_at`. **Round 3 clarification — the function's own `expected_digest` parameter is a second,
+  optional, caller-supplied check, not a duplicate spelling of the D5 check above:** it mirrors
+  `RigorRequest`'s `expected_digest` (`spec.py:301-342`) — the digest the *operator's client* last saw
+  when it rendered the accept control, guarding against the operator acting on a stale screen even
+  when the proposal row itself is not stale (D5 already covers "the document moved under the
+  proposal"; this covers "the UI showing the accept button is itself out of date"). When provided, it
+  is checked against `document.content_digest` exactly like `set_rigor` already does; when omitted
+  (the parameter defaults to `None`), only the D5 check runs. The two checks are independent and both
+  refuse rather than apply on mismatch.
 
 **Round 2 settles task 3.2's open question, rather than leaving it for the implementer.** `record_content`
 does *not* grow an `accepter` parameter, and `SpecDocumentEvent` (`models.py:1721-1761`) is not
@@ -332,3 +341,64 @@ whether `tasks.md`'s section 2/3/5 wording needs updating to match D2/D4/D6's re
 implementation starts (a quick pass — the design changed, the task list describing it was not touched
 yet this round). If round 3 finds nothing beyond that reconciliation, proceed to approve-and-execute
 per `spec_round_protocol.at_cap` in the same run.
+
+---
+
+# Round 3 — cold review, 2026-08-17T05:56+01:00 (iteration 25), cap reached
+
+Fresh read of `proposal.md`, this design (as round 2 left it), `tasks.md`, and the
+`spec-document-authority` delta — not a continuation of round 2's fix-it context. Per round 2's own
+prediction, the focus was whether round 2's additions (`key`-based matching, `position_after_key`, the
+unconditional-under-`yolo` Claude restriction, the `extra_detail` attribution mechanism) are consistent
+everywhere they now appear, and whether they introduced a new gap.
+
+**Two real defects found, both exactly where round 2 flagged the risk — `tasks.md` was revised for
+some sections in round 2 but not cascaded everywhere:**
+
+1. **`tasks.md` 3.1 still described the mechanism round 2 explicitly rejected.** It read "calls
+   `spec_lifecycle.record_content` with the new optional `accepter` parameter alongside the existing
+   proposer actor" — the exact design D4/3.2 spent round 2 settling *against*, in favor of an additive
+   `extra_detail` merge-in with no new `record_content` parameter and no `SpecDocumentEvent` schema
+   change. Had this shipped unfixed, an implementer reading 3.1 in isolation (a plausible way to work
+   through a task list) would have built the parameter round 2 rejected, then hit 3.2 next and either
+   built a second, contradictory mechanism or had to stop and reconcile mid-implementation. Fixed:
+   3.1 now points at 3.2's `extra_detail` mechanism explicitly and states in-line that `record_content`
+   does not gain an `accepter` parameter, so the two tasks cannot be read as describing different
+   designs.
+2. **Section 4 (UI) was never updated for `position_after_key`,** despite round 2 adding it to D2/D3
+   specifically to satisfy 14.12's "in-position" wording for `add` proposals. 4.1 said proposals surface
+   "per requirement id" — the same `key`-vs-identifier conflation D2 corrected everywhere else, and
+   wrong for exactly the case (`add`) that has no identifier. 4.2 described attaching an indicator "at
+   that requirement," which has no referent for an `add` proposal — there is no existing requirement
+   row to attach to. Fixed: 4.1 now says `key`; 4.2 now states the `add` case explicitly — render inline
+   after the requirement named by `position_after_key`, or at the top if null, visually distinct as
+   proposed-not-real. Without this fix, F2/14.12's "in-position" promise for `add` proposals would have
+   had a data model (D3) and a design commitment (D2) but no task instructing anyone to build the render
+   path — the single most likely way this specific feature silently fails to ship despite everything
+   around it being correct.
+
+**One clarification, not a defect but worth recording:** `accept_proposal`'s own `expected_digest`
+parameter (D4) was present in the function signature with no stated purpose distinct from
+`proposal.expected_digest` — read literally, it looked like dead code or a second spelling of the same
+check. Clarified in D4: it is a second, independent, optional check mirroring `RigorRequest`'s pattern
+(the operator client's own last-seen digest, guarding against acting on a stale screen even when the
+proposal row itself is not stale) — not a duplicate of D5's core mechanism.
+
+**What held up, unchanged, verified again directly against the twice-revised text:** `key`-based
+matching is now consistent everywhere it appears — D2, D3's table, tasks 1.1/2.1/2.3, and the spec
+delta's "identified by its key" wording all agree. The unconditional-under-`yolo` Claude restriction and
+the Codex branch-replacement (D6, tasks 5.1/5.3) are consistent between design and tasks, including the
+explicit `yolo=True` test case in 5.3. The `extra_detail` attribution mechanism is now consistent
+between D4 and 3.2 (after fixing 3.1 above). No new gap was introduced by round 2's fixes themselves —
+both defects found here were round 1 content that round 2's fixes did not reach, not new mistakes round
+2 made.
+
+**Verified:** `openspec validate 2026-08-17-authoring-rigor-and-scope --strict` passes after the fixes.
+`--changes --strict` unchanged. `--specs --strict` unchanged (delta still correctly unmerged —
+implementation has not started as of this line).
+
+**Verdict: approved as revised in this round. Cap reached (`spec_round_protocol.cap` = 3).** Per
+`spec_round_protocol.at_cap`, proceeding to implementation in this same run: `tasks.md` sections 1-7 in
+order, then 6.1 once implementation is real and merged. No outstanding objections to record — both
+defects found this round were fixed in place, and the clarification is documentation, not an open
+question.

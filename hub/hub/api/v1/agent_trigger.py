@@ -507,6 +507,10 @@ async def trigger_agent_directly(
             yolo=yolo,
             mcp_command=mcp_command,
             extra_flags=runner_flags,
+            # F4 (`openspec/changes/2026-08-17-authoring-rigor-and-scope`, design D6): a turn
+            # triggered with a specification document open loses file-write tools, mechanically,
+            # regardless of phase, rigor or permission posture — a role boundary, not a rigor gate.
+            restrict_spec_writes=bool(spec_document),
             control_overrides=control_overrides,
         )
     except UnsupportedRunnerError as exc:

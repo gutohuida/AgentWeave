@@ -827,6 +827,12 @@ def submit_spec_document(
     You cannot approve a document, propose it, or set its phase. There is no argument here that
     does so. Approval is the operator's decision and is taken elsewhere.
 
+    At `sketch` rigor (the default) this writes the document immediately, as above. At `contract`
+    or `gate` rigor it does not: your submission is diffed against what is stored and recorded as
+    one pending proposal per changed requirement plus one for everything else, for an operator to
+    accept or reject. The response then carries `proposals`/`unchanged` instead of `identifiers`/
+    `divergence` — check which shape came back rather than assuming a write happened.
+
     `requirements` — objects with:
       `key`      stable handle, lowercase and hyphenated, unique in this document. Keep it across
                  rewordings: it is how the requirement's permanent identifier survives an edit.

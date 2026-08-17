@@ -115,6 +115,7 @@ def build_command(
     mcp_command: Optional[List[str]] = None,
     extra_flags: Optional[List[str]] = None,
     control_overrides: Optional[Dict[str, str]] = None,
+    restrict_spec_writes: bool = False,
 ) -> List[str]:
     """Build the full CLI invocation for one turn.
 
@@ -129,6 +130,12 @@ def build_command(
     (`model_catalog.render_control_args`); it does not itself reject an invalid value. Model
     selection is not part of this dict — it stays the dedicated ``model`` parameter above,
     which every runner already threads through its own command shape.
+
+    ``restrict_spec_writes`` set means this turn was triggered with a specification document open
+    (`openspec/changes/2026-08-17-authoring-rigor-and-scope` F4/design D6): the spawned run must
+    not be able to write or edit files, regardless of ``yolo`` — a role-boundary restriction, not a
+    permission posture, so it is applied unconditionally rather than folded into the yolo/no-yolo
+    branching each runner already does for its own, unrelated flags.
     """
     provider = catalog_provider_for_runner(runner)
     control_args = (
@@ -145,6 +152,7 @@ def build_command(
             mcp_command=mcp_command,
             extra_flags=extra_flags,
             control_args=control_args,
+            restrict_spec_writes=restrict_spec_writes,
         )
     if runner in ("claude", "claude_proxy", "native"):
         return _build_claude_command(
@@ -158,6 +166,7 @@ def build_command(
             extra_flags=extra_flags,
             control_args=control_args,
             control_overrides=control_overrides,
+            restrict_spec_writes=restrict_spec_writes,
         )
     raise UnsupportedRunnerError(
         f"runner {runner!r} is not yet supported for direct Hub spawn "
@@ -177,12 +186,21 @@ def _build_claude_command(
     extra_flags: Optional[List[str]] = None,
     control_args: Optional[List[str]] = None,
     control_overrides: Optional[Dict[str, str]] = None,
+    restrict_spec_writes: bool = False,
 ) -> List[str]:
     cmd = [cli, "--output-format", "stream-json", "--verbose"]
     if model:
         cmd += ["--model", model]
     if control_args:
         cmd += control_args
+    if restrict_spec_writes:
+        # Unconditional — including under `yolo=True`. The line just below this one skips
+        # `--allowedTools` entirely when yolo is set, because that flag governs a *permission
+        # prompt* yolo is explicitly meant to bypass. This flag governs which tools exist at all,
+        # a different axis (F4/design D6, round 2): a yolo-configured agent is exactly the run
+        # posture likeliest to act on a discovered fix instead of proposing one, so it is the one
+        # this restriction must not have an exception for.
+        cmd += ["--disallowedTools", "Edit,Write,NotebookEdit"]
     # An operator's `permission_mode` control arrives inside `control_args`, which is spliced in
     # above; the default posture below is appended *after* it and would win. Suppress the default
     # whenever the override supplied one, or the composer's Permissions pill would appear to work
@@ -255,6 +273,7 @@ def _build_codex_command(
     mcp_command: Optional[List[str]] = None,
     extra_flags: Optional[List[str]] = None,
     control_args: Optional[List[str]] = None,
+    restrict_spec_writes: bool = False,
 ) -> List[str]:
     cmd = [cli, "exec"]
     cmd += ["--json", "--skip-git-repo-check"]
@@ -277,7 +296,14 @@ def _build_codex_command(
         cmd += ["--model", model]
     if control_args:
         cmd += control_args
-    if yolo:
+    if restrict_spec_writes:
+        # Replaces the yolo/no-yolo branch entirely rather than layering on top of it — the two
+        # are mutually exclusive Codex flags, not a value this can override in place. Appending
+        # `--sandbox read-only` beside `--dangerously-bypass-approvals-and-sandbox` would ship a
+        # contradictory command line, so under this restriction `yolo` is not consulted at all
+        # (F4/design D6, round 2 — the restriction holds unconditionally, on both runners).
+        cmd += ["--sandbox", "read-only"]
+    elif yolo:
         cmd += ["--dangerously-bypass-approvals-and-sandbox"]
     else:
         cmd += ["--sandbox", "workspace-write"]

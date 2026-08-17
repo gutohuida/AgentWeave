@@ -241,6 +241,11 @@ def spec_turn_notice(phase: Optional[str]) -> Optional[str]:
         "[AgentWeave] SPECIFICATION TURN — this overrides any other specification workflow you "
         "know, including one installed on this machine. Do not use it, do not adopt its layout, "
         "and do not create its files. Mention it to the operator if you find one.",
+        # F4 (`openspec/changes/2026-08-17-authoring-rigor-and-scope`): mechanically true by the
+        # time this notice is read, not aspirational — stated so a refused write is recognized
+        # rather than discovered by trial and error.
+        "You have no file-write tool this turn. If you notice something in the code that needs "
+        "fixing, record it with `create_task` instead of trying to change it directly.",
     ]
     if phase == "exploring":
         lines += [

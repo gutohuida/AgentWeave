@@ -1761,6 +1761,65 @@ class SpecDocumentEvent(Base):
     )
 
 
+class SpecEditProposal(Base):
+    """One pending, individually acceptable edit against a `contract`/`gate`-rigor document.
+
+    `openspec/changes/2026-08-17-authoring-rigor-and-scope` design.md D1-D3. At `sketch` rigor an
+    agent's submission writes the live document directly, exactly as before this table existed; at
+    `contract`/`gate` it lands here instead, one row per changed unit (a requirement, or the whole
+    non-requirement metadata bundle), until an operator accepts or rejects it.
+
+    `unit_key` is the requirement's **key** (`spec_payload.Requirement.key`), never a minted
+    identifier — a brand-new (`add`) requirement has no identifier until the proposal that creates
+    it is accepted, since minting happens only inside `save_document`'s write path, which a gated
+    submission does not reach. Deliberately no `CheckConstraint` naming `status`/`unit_kind`/
+    `change_kind`: those are validated by the one writer function (`spec_service.propose_edit`),
+    the same way `SpecDocument.rigor` is, not by the schema — see that column's own comment for why
+    a table-level CHECK is the thing to avoid on a column that might need to change later.
+    """
+
+    __tablename__ = "spec_edit_proposals"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    document_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("spec_documents.id"), nullable=False
+    )
+    unit_kind: Mapped[str] = mapped_column(String(16), nullable=False)  # "requirement" | "metadata"
+    unit_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    change_kind: Mapped[str] = mapped_column(String(16), nullable=False)  # "add"|"modify"|"remove"
+    # `add` proposals only (D2): the key of the requirement this one was submitted immediately
+    # after, or null for "first". Lets the UI render a brand-new requirement near where the
+    # submission placed it instead of in an undifferentiated pile — the in-position anchor an
+    # `add` proposal would otherwise have no way to carry, since it has no existing row yet.
+    position_after_key: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    proposed_payload: Mapped[Any] = mapped_column(JSON, nullable=False)
+    previous_payload: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
+    # `document.content_digest` at proposal-creation time — the staleness compare-and-swap (D5),
+    # the same discipline `spec_rigor.set_rigor`'s own `expected_digest` already uses. Nullable to
+    # match `SpecDocument.content_digest`'s own optionality — a document promoted to `contract`/
+    # `gate` rigor is expected to already carry a digest (rigor promotion refuses an unwritten
+    # document), but there is no schema-level reason to make this column stricter than the value
+    # it is compared against.
+    expected_digest: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="pending", server_default="pending"
+    )  # "pending" | "accepted" | "rejected" | "stale"
+    proposer_actor_kind: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    proposer_actor_name: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    proposer_run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, nullable=False
+    )
+    resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Always an operator name when set — enforced in `spec_service.accept_proposal`/
+    # `reject_proposal`, not by a constraint, mirroring how `spec_rigor.set_rigor`'s operator-only
+    # check is enforced in code rather than in the schema.
+    resolved_by_actor_name: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    resolution_reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+
+    __table_args__ = (Index("ix_spec_edit_proposals_document_status", "document_id", "status"),)
+
+
 # A requirement removed from its document keeps its row: what it once demanded, and what was built
 # for it, is a question that outlives the requirement.
 SPEC_REQUIREMENT_STATES = ("active", "retired")

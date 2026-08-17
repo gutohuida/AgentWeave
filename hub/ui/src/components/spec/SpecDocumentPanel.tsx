@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from '@/components/common/Icon'
 import { SpecPhaseBar } from './SpecPhaseBar'
 import { SpecCoverageBar } from './SpecCoverageBar'
+import { SpecProposalsPanel } from './SpecProposalsPanel'
 import { SpecDocumentTasksLink } from './SpecDocumentTasksLink'
 import { Button } from '@/components/ui/button'
 import { useSpec, type SpecDiagnostic, type SpecListResponse } from '@/api/spec'
@@ -237,6 +238,11 @@ export function SpecDocumentPanel({
           product. Under the phase bar because it is about what the document *says*, not about
           reading it. */}
       <SpecCoverageBar path={path} onOpenTasks={onOpenTasks} />
+
+      {/* Pending proposals (design F1-F3) — a `contract`/`gate` submission lands here instead of
+          on the document itself. Directly beneath coverage, on the same document view, so a
+          pending change stays discoverable without a separate screen. */}
+      <SpecProposalsPanel path={path} />
       <SpecDocumentTasksLink path={path} onOpenTasks={onOpenTasks} />
 
       {/* Drift summary — only rendered when the Hub reports manifest drift. */}

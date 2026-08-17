@@ -47,6 +47,7 @@ from ...db.models import (
     Project,
     RequirementDrift,
     RequirementEvidence,
+    SpecEditProposal,
     SpecRequirement,
 )
 from ...spec_manifest import SpecPathError, validate_spec_path
@@ -366,6 +367,136 @@ async def rigor_history(
             for event in events
         ]
     }
+
+
+def _proposal_view(proposal: SpecEditProposal) -> dict:
+    return {
+        "id": proposal.id,
+        "unit_kind": proposal.unit_kind,
+        "unit_key": proposal.unit_key,
+        "change_kind": proposal.change_kind,
+        "position_after_key": proposal.position_after_key,
+        "proposed_payload": proposal.proposed_payload,
+        "previous_payload": proposal.previous_payload,
+        "status": proposal.status,
+        "proposer_actor_kind": proposal.proposer_actor_kind,
+        "proposer_actor_name": proposal.proposer_actor_name,
+        "created_at": proposal.created_at.isoformat(),
+        "resolved_at": proposal.resolved_at.isoformat() if proposal.resolved_at else None,
+        "resolved_by_actor_name": proposal.resolved_by_actor_name,
+        "resolution_reason": proposal.resolution_reason,
+    }
+
+
+async def _require_proposal(
+    session: AsyncSession, document_id: str, proposal_id: str
+) -> SpecEditProposal:
+    proposal = await session.get(SpecEditProposal, proposal_id)
+    if proposal is None or proposal.document_id != document_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="proposal not found")
+    return proposal
+
+
+@router.get("/documents/{path:path}/proposals")
+async def list_proposals(
+    path: str,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Pending proposals for one document — F2's in-position render reads this per document."""
+    project_id, _ = project
+    document = await _require_document(session, project_id, path)
+    result = await session.execute(
+        select(SpecEditProposal)
+        .where(SpecEditProposal.document_id == document.id, SpecEditProposal.status == "pending")
+        .order_by(SpecEditProposal.created_at)
+    )
+    return {"proposals": [_proposal_view(row) for row in result.scalars().all()]}
+
+
+class ProposalDecision(BaseModel):
+    reason: str = Field(default="", max_length=2000)
+    # The operator's own last-seen digest — a second, independent check from the proposal's own
+    # `expected_digest` (design D4, round-3 clarification). Optional so a caller that has not read
+    # the document can still act.
+    expected_digest: Optional[str] = Field(default=None, max_length=64)
+
+    model_config = {"extra": "forbid"}
+
+
+@router.post("/documents/{path:path}/proposals/{proposal_id}/accept")
+async def accept_proposal_route(
+    path: str,
+    proposal_id: str,
+    body: ProposalDecision,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Apply one pending proposal's unit, or refuse and say why. There is no agent equivalent."""
+    project_id, _ = project
+    document = await _require_document(session, project_id, path)
+    proposal = await _require_proposal(session, document.id, proposal_id)
+    workspace = await _workspace(session, project_id)
+
+    try:
+        result = await spec_service.accept_proposal(
+            session,
+            workspace,
+            document,
+            proposal,
+            actor=_operator(),
+            expected_digest=body.expected_digest,
+        )
+    except spec_service.ProposalRefusedError as exc:
+        # `accept_proposal` may have marked the row `stale` before raising — that mutation must
+        # survive this response, not be rolled back with everything else an exception discards.
+        await session.commit()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"message": str(exc), "code": exc.code},
+        ) from exc
+    except spec_service.SaveRefusedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"message": str(exc), "code": exc.code, "field": exc.field_path},
+        ) from exc
+
+    await session.commit()
+    await sse_manager.broadcast(
+        project_id, "spec_updated", {"path": result.path, "phase": result.phase}
+    )
+    return {
+        "path": result.path,
+        "phase": result.phase,
+        "identifiers": result.identifiers,
+        "blocking": result.blocking,
+        "proposal": _proposal_view(proposal),
+    }
+
+
+@router.post("/documents/{path:path}/proposals/{proposal_id}/reject")
+async def reject_proposal_route(
+    path: str,
+    proposal_id: str,
+    body: ProposalDecision,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Refuse a pending proposal. The live document is untouched — nothing to clean up."""
+    project_id, _ = project
+    document = await _require_document(session, project_id, path)
+    proposal = await _require_proposal(session, document.id, proposal_id)
+
+    try:
+        await spec_service.reject_proposal(session, proposal, actor=_operator(), reason=body.reason)
+    except spec_service.ProposalRefusedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"message": str(exc), "code": exc.code},
+        ) from exc
+
+    await session.commit()
+    return {"proposal": _proposal_view(proposal)}
 
 
 @router.get("/spec/coverage")

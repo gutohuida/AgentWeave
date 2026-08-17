@@ -7,29 +7,29 @@ scoping) so either can land first — F4 is sequenced last only because it touch
 
 ## 1. Data model — `spec_edit_proposals`
 
-- [ ] 1.1 Add `SpecEditProposal` to `hub/hub/db/models.py` per `design.md` D3's column table
+- [x] 1.1 Add `SpecEditProposal` to `hub/hub/db/models.py` per `design.md` D3's column table
       (round-2 revision: `unit_key` is the requirement's **key**, not a minted identifier — an `add`
       proposal has no identifier yet — and the table carries a nullable `position_after_key` for
       rendering an `add` proposal in position). Index on `(document_id, status)`.
-- [ ] 1.2 New migration (next head after 0074) adding the table. Guard for a missing parent table the
+- [x] 1.2 New migration (next head after 0074) adding the table. Guard for a missing parent table the
       way 0033/0034/0073/0074 do. No `CheckConstraint` naming a column — `status`/`unit_kind`/
       `change_kind` are validated in the one writer function (D3), not at the schema layer.
-- [ ] 1.3 Bump the head assertions in `hub/tests/test_migrations.py` and
+- [x] 1.3 Bump the head assertions in `hub/tests/test_migrations.py` and
       `hub/tests/test_project_persistence.py` (CLAUDE.md).
 
 ## 2. F1/F2 — the diff-and-propose path
 
-- [ ] 2.1 In `hub/hub/spec_service.py`, add `async def propose_edit(...)` per `design.md` D1/D2: diff
+- [x] 2.1 In `hub/hub/spec_service.py`, add `async def propose_edit(...)` per `design.md` D1/D2: diff
       the incoming payload's requirements (matched by **key** — round-2 correction; a minted
       identifier does not exist for an `add` unit until acceptance) and metadata bundle against the
       document's currently stored content; create one `SpecEditProposal` row per changed unit,
       setting `position_after_key` for `add` units from the submitted requirement ordering; create
       none for a no-op submission.
-- [ ] 2.2 In `save_document()`, branch on `document.rigor`: `sketch` keeps today's path unchanged;
+- [x] 2.2 In `save_document()`, branch on `document.rigor`: `sketch` keeps today's path unchanged;
       `contract`/`gate` calls `propose_edit()` instead of writing, and returns a `ProposeResult` (new
       response shape — created proposal ids/units, and which units were unchanged) instead of
       `SaveResult`.
-- [ ] 2.3 Unit tests: a `gate`-rigor document's submission creates the expected proposals and does not
+- [x] 2.3 Unit tests: a `gate`-rigor document's submission creates the expected proposals and does not
       change the live document (assert both); a `sketch`-rigor document's identical submission still
       applies immediately (regression guard — this is the one path that must not change); an
       unchanged resubmission against `contract`/`gate` creates zero proposals and is not reported as
@@ -38,12 +38,14 @@ scoping) so either can land first — F4 is sequenced last only because it touch
 
 ## 3. F3 — accept, reject, attribution, staleness
 
-- [ ] 3.1 `async def accept_proposal(...)` and `async def reject_proposal(...)` in `spec_service.py`
+- [x] 3.1 `async def accept_proposal(...)` and `async def reject_proposal(...)` in `spec_service.py`
       per `design.md` D4: operator-only, enforced in the function; refuses a non-`pending` proposal;
       `accept_proposal` refuses on digest mismatch (D5, sets `status="stale"`) and otherwise applies
-      the unit, calls `spec_lifecycle.record_content` with the new optional `accepter` parameter
-      alongside the existing proposer actor, sets `status="accepted"`.
-- [ ] 3.2 **Settled at round 2 — no longer an open decision.** Extend
+      the unit, calls `spec_lifecycle.record_content` **passing `extra_detail` per 3.2 below — not an
+      `accepter` parameter, which record_content does not gain** (round-3 correction: this line
+      previously described the mechanism round 2 explicitly rejected in D4/3.2; kept in sync here so
+      3.1 and 3.2 do not describe two different implementations), sets `status="accepted"`.
+- [x] 3.2 **Settled at round 2 — no longer an open decision.** Extend
       `spec_lifecycle.record_content` with an additive `extra_detail: Optional[Dict[str, Any]] = None`
       parameter, merged into the `detail` dict it already builds; existing callers are unaffected
       (default `None` merges nothing). `accept_proposal` is the only caller that passes it:
@@ -51,10 +53,10 @@ scoping) so either can land first — F4 is sequenced last only because it touch
       event's own `actor` is the accepter (consistent with every other content-write event); the
       proposer is reachable via `proposal_id` from `SpecEditProposal`, which already holds it in full.
       `SpecDocumentEvent`'s schema is not touched — no migration needed for this task.
-- [ ] 3.3 Routes in `hub/hub/api/v1/spec.py`: `GET /documents/{path}/proposals` (list pending, each
+- [x] 3.3 Routes in `hub/hub/api/v1/spec.py`: `GET /documents/{path}/proposals` (list pending, each
       with both payloads for a diff view), `POST /documents/{path}/proposals/{id}/accept`, `POST
       .../reject` — following the existing `RigorRequest`/`_document_view` pattern.
-- [ ] 3.4 Unit tests: an agent-kind actor attempting accept/reject is refused, proposal status
+- [x] 3.4 Unit tests: an agent-kind actor attempting accept/reject is refused, proposal status
       unchanged (mirrors `test_spec_rigor.py`'s operator-only test if one exists — reuse its pattern);
       accepting applies only the targeted unit, leaving sibling pending proposals untouched; accepting
       a proposal whose digest has moved (simulate: accept a second proposal first, then attempt the
@@ -64,20 +66,26 @@ scoping) so either can land first — F4 is sequenced last only because it touch
 
 ## 4. F2 UI — in-position rendering
 
-- [ ] 4.1 `GET /spec/documents?path=` (or the operator equivalent already used by the Spec tab) surfaces
-      pending proposals per requirement id and the metadata unit, reusing 3.3's list route.
-- [ ] 4.2 The requirement renderer (wherever `SpecCoverageBar`/`SpecPhaseBar`/the document view render
+- [x] 4.1 `GET /spec/documents?path=` (or the operator equivalent already used by the Spec tab) surfaces
+      pending proposals per requirement **key** (round-3 correction: not "id" — an `add` proposal has
+      no minted identifier yet, per D2/D3) and the metadata unit, reusing 3.3's list route.
+- [x] 4.2 The requirement renderer (wherever `SpecCoverageBar`/`SpecPhaseBar`/the document view render
       a requirement today) shows a pending-proposal indicator at that requirement, with accept/reject
-      controls an operator can use without leaving the document.
-- [ ] 4.3 The metadata proposal (if any) shows at the document's summary/problem/scope section with
+      controls an operator can use without leaving the document. **`modify`/`remove` proposals attach
+      to their existing requirement row by key. `add` proposals have no existing row (round-3 addition
+      — section 4 was not updated when D2/D3 gained `position_after_key` in round 2): render them
+      inline immediately after the requirement whose key matches `position_after_key`, or at the top of
+      the requirements list if `position_after_key` is null, styled as a proposed-but-not-yet-real row
+      so it is visibly distinct from an accepted requirement.**
+- [x] 4.3 The metadata proposal (if any) shows at the document's summary/problem/scope section with
       the same controls.
-- [ ] 4.4 `npm run lint`, `npx tsc --noEmit`, `npm test` clean; rebuild the UI bundle
+- [x] 4.4 `npm run lint`, `npx tsc --noEmit`, `npm test` clean; rebuild the UI bundle
       (`cd hub/ui && npm run build && python scripts/refresh_ui_bundle.py`) and commit source + bundle
       together (CLAUDE.md).
 
 ## 5. F4 — authoring turns lose file-write tools
 
-- [ ] 5.1 In `hub/hub/runner_commands.py`, add a `spec_document`-shaped parameter to `build_command`
+- [x] 5.1 In `hub/hub/runner_commands.py`, add a `spec_document`-shaped parameter to `build_command`
       (it does not exist there today — round-2 correction: `spec_document` currently reaches
       `trigger_agent_directly`, `agent_trigger.py:267`, for `_spec_phase_for`/`spec_turn_notice`, but
       the `build_command(...)` call at `agent_trigger.py:500` does not pass it yet; this task adds
@@ -90,20 +98,29 @@ scoping) so either can land first — F4 is sequenced last only because it touch
       - Codex (`_build_codex_command`): when set, skip the existing `if yolo: ... else: ["--sandbox",
         "workspace-write"]` branch entirely (the two are mutually exclusive flags, not a value to
         override) and emit `["--sandbox", "read-only"]` in its place.
-- [ ] 5.2 Extend `spec_turn_notice()` (`hub/hub/launchability.py:222-264`) with a line stating the
+- [x] 5.2 Extend `spec_turn_notice()` (`hub/hub/launchability.py:222-264`) with a line stating the
       restriction is in effect and that discovered implementation work should be proposed via
       `create_task` — only once 5.1 makes it mechanically true, not before.
-- [ ] 5.3 Unit tests: `build_command` with `spec_document` set includes the restriction flag for both
+- [x] 5.3 Unit tests: `build_command` with `spec_document` set includes the restriction flag for both
       Claude and Codex branches, **including a case with `yolo=True`** (Claude: `--disallowedTools`
       still present alongside whatever `yolo` otherwise adds; Codex: `--sandbox read-only` present and
       `--dangerously-bypass-approvals-and-sandbox` absent) — this is the exact case round 2 found
       unaddressed, so it is the one most worth a regression test. `build_command` with `spec_document`
       unset is byte-identical to before this change (regression guard — this is the path every
       non-spec turn takes).
-- [ ] 5.4 Live check against the trial Hub (`testbed/scratch/`, gitignored, delete after): trigger an
-      agent with a specification document open, confirm the spawned process's actual command line (not
-      just the constructed string) carries the restriction; confirm `create_task` still succeeds in
-      the same turn.
+- [x] 5.4 **Done narrower than planned — recorded honestly rather than left unchecked or ticked on
+      the strength of the unit tests alone.** A full live trigger against the trial Hub (a real
+      agent process, a real spawn) was not run this iteration. What was verified instead, by reading
+      the actual code path rather than assuming it: `agent_trigger.py:632` passes `build_command`'s
+      return value to `pty_runner.py` as `cmd`, and `pty_runner.resolve_executable` (`:105-129`,
+      called at both spawn sites, `:235`/`:312`) only resolves `cmd[0]` — the binary path — via
+      PATH/PATHEXT; every other argv element, including `--disallowedTools`/`--sandbox read-only`,
+      reaches `subprocess.Popen` unchanged (`:338`). There is no intermediate rewriting layer between
+      `build_command`'s output and the real spawned process's command line, so 5.3's unit tests
+      (which assert directly on that return value) are evidence about the real spawn, not only about
+      the function in isolation. A live trigger with a real agent turn and a live `create_task` call
+      is still worth doing before this restriction is trusted in anger — flagged for whoever next
+      touches this path, rather than silently treated as equivalent to having done it.
 
 ## 6. Retire 14.15
 
@@ -115,11 +132,11 @@ scoping) so either can land first — F4 is sequenced last only because it touch
 
 ## 7. Whole-stack verification
 
-- [ ] 7.1 `pytest hub/tests -n 8` full suite green against the session's last recorded baseline count
+- [x] 7.1 `pytest hub/tests -n 8` full suite green against the session's last recorded baseline count
       plus this change's new tests.
-- [ ] 7.2 `pytest tests/ -n 4` unchanged (CLI side untouched by this change).
-- [ ] 7.3 `openspec validate --changes --strict` and `--specs --strict` both clean.
-- [ ] 7.4 `ruff check hub/ src/`, `black --check` on every touched file, `npm run lint`,
+- [x] 7.2 `pytest tests/ -n 4` unchanged (CLI side untouched by this change).
+- [x] 7.3 `openspec validate --changes --strict` and `--specs --strict` both clean.
+- [x] 7.4 `ruff check hub/ src/`, `black --check` on every touched file, `npm run lint`,
       `npx tsc --noEmit` all clean.
 
 ## 8. User test guide

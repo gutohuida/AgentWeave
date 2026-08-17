@@ -771,7 +771,12 @@ async def test_the_document_itself_states_its_rigor(app, auth_headers, builder, 
 
 @pytest.mark.asyncio
 async def test_an_agent_cannot_set_rigor_through_the_payload(app, auth_headers, builder, tmp_path):
-    """The renderer takes rigor from the row. A payload field would be an agent lowering its own gate."""
+    """The renderer takes rigor from the row. A payload field would be an agent lowering its own gate.
+
+    At `gate` rigor a submission is only proposed, not applied
+    (`openspec/changes/2026-08-17-authoring-rigor-and-scope` F1) — accept the resulting metadata
+    proposal to reach the write this test is actually about, then check what got rendered.
+    """
     await _document(app, auth_headers, builder)
     await _set_rigor(app, auth_headers, "gate")
 
@@ -790,6 +795,16 @@ async def test_an_agent_cannot_set_rigor_through_the_payload(app, auth_headers, 
         },
         headers=builder,
     )
+    proposals = (await app.get(f"{BASE}/documents/{PATH}/proposals", headers=auth_headers)).json()[
+        "proposals"
+    ]
+    metadata_proposal = next(p for p in proposals if p["unit_kind"] == "metadata")
+    accepted = await app.post(
+        f"{BASE}/documents/{PATH}/proposals/{metadata_proposal['id']}/accept",
+        json={},
+        headers=auth_headers,
+    )
+    assert accepted.status_code == 200, accepted.text
 
     async with async_session_factory() as session:
         document = (

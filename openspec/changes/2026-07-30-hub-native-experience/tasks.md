@@ -1641,8 +1641,9 @@ projects API and no UI. `hub-visual-language` depends on this.*
 > siblings are MCP tools (`hub/mcp_server.py`), and CLAUDE.md's "Still prohibited" table lists
 > invoking the `aw-*` skills as a product-source concern, not a workspace feature. The item as worded
 > asks to make removed skills "reachable from the workspace", which the product's own direction
-> already ruled out. Needs re-wording (or explicit retirement with a reason), not implementation —
-> left unticked because ticking would say the skills are reachable, which they deliberately are not.
+> already ruled out. **Update, same day:** retired, not re-worded — `2026-08-17-authoring-rigor-and-scope`
+> design.md D7 records the retirement decision and this line now cites it and is ticked, on the
+> strength of that recorded decision rather than of the described behaviour existing.
 >
 > **14.18 cannot be ticked on its own terms** — `spec-traceability` and `spec-authoring` do not exist
 > under those names (confirmed against the current 30-entry `openspec/specs/` listing) and never
@@ -1653,17 +1654,22 @@ projects API and no UI. `hub-visual-language` depends on this.*
 > Leaving unticked with this note is the honest state, matching the pattern section 16.2 already used
 > for other renamed capabilities.
 >
-> **Net: 11 of 19 ticked** (14.1-14.4, 14.6-14.10, 14.16-14.17), each against a cited scenario, not a
-> heading. **3 confirmed real gaps** (14.11, 14.12, 14.14) belong in a fresh openspec change, not this
-> umbrella — 14.15 needs re-wording alongside them since a change proposing the gaps is the natural
-> place to also retire the superseded item. **2 partial** (14.5, 14.13) are real but incomplete;
-> recorded with the specific missing piece so a fresh change can pick either up without re-deriving
-> this pass. **14.18/14.19 stay unticked as structural** — 18 names dead capabilities, 19 is the
-> phase's `/handoff` marker, neither is a verifiable product behaviour.
+> **Net at first pass: 11 of 19 ticked** (14.1-14.4, 14.6-14.10, 14.16-14.17), each against a cited
+> scenario, not a heading. **3 confirmed real gaps** (14.11, 14.12, 14.14) belonged in a fresh openspec
+> change, not this umbrella — 14.15 needed re-wording alongside them since a change proposing the gaps
+> is the natural place to also retire the superseded item. **2 partial** (14.5, 14.13) are real but
+> incomplete; recorded with the specific missing piece so a fresh change can pick either up without
+> re-deriving this pass. **14.18/14.19 stay unticked as structural** — 18 names dead capabilities, 19
+> is the phase's `/handoff` marker, neither is a verifiable product behaviour.
 >
-> Phase 14 is therefore substantially real (11/19, more once the fresh change lands) rather than
-> "mostly unknown" — but it is not archivable yet: 14.11/14.12/14.14 are genuine unbuilt surface, and
-> section 16's closeout still names phase 14 as the blocker for archiving this whole umbrella.
+> **Update, same day (2026-08-17): 15 of 19 ticked.** `2026-08-17-authoring-rigor-and-scope` closed
+> all four of 14.11/14.12/14.14/14.15 — three by real, verified, merged implementation (F1-F4, both
+> test suites green, `openspec validate --changes --strict`/`--specs --strict` clean) and 14.15 by a
+> recorded retirement decision (D7), not a rewording. 14.5 and 14.13 remain the only partials; 14.18/
+> 14.19 remain structural. Phase 14 is therefore fully accounted for — 15 ticked, 2 partial with a
+> stated missing piece, 2 structurally unticked — and no longer the blocker section 16's closeout named
+> for archiving this whole umbrella. Whether to archive is still the operator's decision, not this
+> note's, but the fact that used to block it no longer holds.
 
 > ---
 >
@@ -1713,29 +1719,40 @@ projects API and no UI. `hub-visual-language` depends on this.*
       *(2026-08-17: `task-lifecycle-governance` "Approval is refused while a gated requirement is
       unverified" — ticked on the "work gets through to done" reading of "completion", not the
       literal `completed` status; see the caveat in the note above.)*
-- [ ] 14.11 Make agent edits direct on sketches and proposals on contracts and gates; attribute
+- [x] 14.11 Make agent edits direct on sketches and proposals on contracts and gates; attribute
       accepted changes to both proposer and accepter.
-      *(2026-08-17: confirmed real gap — no rigor-gated editing mode exists anywhere in the four
-      specs. Belongs in a fresh openspec change.)*
-- [ ] 14.12 Build authoring against a visible document: in-position proposals, individually
+      *(2026-08-17: implemented and merged by `2026-08-17-authoring-rigor-and-scope` (F1/F3) —
+      `spec_service.save_document` branches on `document.rigor`; `contract`/`gate` routes through
+      `propose_edit` instead of writing, and an accepted `SpecEditProposal` carries both
+      `proposer_actor_*` and `resolved_by_actor_name` distinctly. Was a confirmed gap earlier the
+      same day; closed same day by the change that gap named.)*
+- [x] 14.12 Build authoring against a visible document: in-position proposals, individually
       acceptable, rejection leaving no residue.
-      *(2026-08-17: confirmed real gap — no in-position/per-field proposal mechanism exists;
-      authoring today is whole-document submit/validate. Belongs in a fresh openspec change.)*
+      *(2026-08-17: implemented by the same change (F2) — pending proposals render per document in
+      `SpecProposalsPanel.tsx`, grouped by the requirement they target (`position_after_key` anchors
+      an `add` proposal that has no existing row yet); accept/reject act on one proposal without
+      touching siblings; a rejected proposal never touched the live document, so there is nothing to
+      clean up.)*
 - [ ] 14.13 Add the on-ramps — derive from implementation, grow from conversation, start from a
       template; mark derived specifications and start them as sketches.
       *(2026-08-17: partial — "grow from conversation" is shipped
       (`spec-chat-session`'s "The operator can start an exploration by creating a document",
       `SpecDocumentPicker.tsx`); "derive from implementation" and "start from a template" have no
-      requirement anywhere. Left open for the fresh change.)*
-- [ ] 14.14 Scope authoring assistance to specifications; discovered implementation work is proposed,
+      requirement anywhere. Left open — out of `2026-08-17-authoring-rigor-and-scope`'s scope, which
+      addressed 14.11/14.12/14.14/14.15 only.)*
+- [x] 14.14 Scope authoring assistance to specifications; discovered implementation work is proposed,
       not performed.
-      *(2026-08-17: confirmed real gap — nothing in the four specs bounds an authoring agent away
-      from performing discovered implementation work. Belongs in a fresh openspec change.)*
-- [ ] 14.15 Make `aw-spec-explore`, `aw-spec-propose`, `aw-spec-apply`, `aw-spec-reindex`, and
+      *(2026-08-17: implemented by the same change (F4) — a turn triggered with a specification
+      document open loses `Edit`/`Write`/`NotebookEdit` (Claude) or gets `--sandbox read-only`
+      (Codex), unconditionally including under a permission posture that would otherwise skip
+      prompts; `spec_turn_notice()` states the restriction and points at `create_task`.)*
+- [x] 14.15 Make `aw-spec-explore`, `aw-spec-propose`, `aw-spec-apply`, `aw-spec-reindex`, and
       `aw-verify` reachable from the workspace; invert `aw-verify` to attach evidence to requirements.
-      *(2026-08-17: confirmed superseded design, not a gap — `submit_spec_document` and siblings are
-      MCP tools, and CLAUDE.md lists invoking the `aw-*` skills as still prohibited. Needs
-      re-wording/retirement in the same fresh change, not implementation.)*
+      *(2026-08-17: waived, not implemented — retired as a superseded design by
+      `2026-08-17-authoring-rigor-and-scope` design.md D7. `submit_spec_document` and siblings are MCP
+      tools, not skills, and CLAUDE.md's "Still prohibited" table already rules out invoking the
+      `aw-*` skills at all. Ticked because the item is closed, on the strength of an explicit,
+      recorded retirement decision — not because the described behaviour was built.)*
 - [x] 14.16 Bring the specification workspace to the same standard as the agent conversation.
       *(2026-08-17: `spec-chat-session`'s entire purpose — reuses the one composer rather than a
       second implementation, which exceeds "same standard".)*

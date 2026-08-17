@@ -163,6 +163,7 @@ async def record_content(
     content: str,
     digests: Dict[str, str],
     title: str,
+    extra_detail: Optional[Dict[str, Any]] = None,
 ) -> SpecDocumentEvent:
     """Note that the document's content was rewritten, and by whom.
 
@@ -174,16 +175,27 @@ async def record_content(
     Takes no `kind` — a document's kind is fixed at creation (`create_document`) and the caller
     (`spec_service.save_document`) has already refused a payload whose `kind` disagrees with
     `document.kind` before this function is ever reached, so there is nothing left for it to vary.
+
+    `extra_detail`, when given, is merged into the event's `detail` dict alongside `requirements`.
+    Additive only — every existing caller passes nothing and is unaffected. The one caller that
+    does (`spec_service.accept_proposal`, `openspec/changes/2026-08-17-authoring-rigor-and-scope`
+    design D4) uses it to cite the `SpecEditProposal` this write came from, rather than growing this
+    function a second `accepter` parameter: the proposal row already carries full proposer and
+    accepter identity, and `SpecDocumentEvent.actor` staying "who wrote the file" — the accepter, for
+    an accepted proposal, consistent with every other content-write event — needs no schema change.
     """
     document.title = title
     document.content_digest = digest(content)
     document.requirement_digests = dict(digests)
+    detail: Dict[str, Any] = {"requirements": sorted(digests)}
+    if extra_detail:
+        detail.update(extra_detail)
     return await record_event(
         session,
         document,
         kind="content",
         actor=actor,
-        detail={"requirements": sorted(digests)},
+        detail=detail,
     )
 
 

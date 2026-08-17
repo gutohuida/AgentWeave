@@ -9,6 +9,7 @@ so nothing touches disk until everything that can be refused has been.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import update
@@ -23,10 +24,17 @@ from . import (
     spec_index,
     spec_lifecycle,
     spec_naming,
+    spec_rigor,
 )
-from .db.models import InboundQueueEntry, SpecDocument, SpecDocumentMerge
+from .db.models import InboundQueueEntry, SpecDocument, SpecDocumentMerge, SpecEditProposal
 from .project_workspace import ProjectWorkspace
-from .spec_payload import PayloadError, extract_payload, payload_to_dict, validate_payload
+from .spec_payload import (
+    PayloadError,
+    SpecPayload,
+    extract_payload,
+    payload_to_dict,
+    validate_payload,
+)
 from .spec_render import render_document
 from .utils import short_id
 
@@ -38,6 +46,23 @@ class SaveResult:
     identifiers: Dict[str, str] = field(default_factory=dict)
     blocking: List[Dict[str, Any]] = field(default_factory=list)
     divergence: Optional[Dict[str, str]] = None
+
+
+@dataclass
+class ProposeResult:
+    """What a `contract`/`gate`-rigor submission produced, instead of a write.
+
+    `openspec/changes/2026-08-17-authoring-rigor-and-scope` design D1: the live document is
+    untouched; `proposals` names what was created (one dict per changed unit — `id`, `unit_kind`,
+    `unit_key`, `change_kind`), and `unchanged` names units the submission left identical to what
+    is stored (including `"metadata"` when nothing in the non-requirement bundle differed) — not an
+    error, just nothing to propose.
+    """
+
+    path: str
+    phase: str
+    proposals: List[Dict[str, Any]] = field(default_factory=list)
+    unchanged: List[str] = field(default_factory=list)
 
 
 @dataclass
@@ -55,6 +80,14 @@ class SaveRefusedError(RuntimeError):  # noqa: N818 - "refused" is the outcome, 
         super().__init__(message)
 
 
+class ProposalRefusedError(RuntimeError):  # noqa: N818 - "refused" is the outcome, not a fault
+    """An accept/reject that may not happen, with the reason and a machine-readable code."""
+
+    def __init__(self, message: str, *, code: str) -> None:
+        self.code = code
+        super().__init__(message)
+
+
 async def save_document(
     session: AsyncSession,
     workspace: ProjectWorkspace,
@@ -62,8 +95,8 @@ async def save_document(
     raw_payload: Any,
     *,
     actor: spec_lifecycle.Actor,
-) -> SaveResult:
-    """Store a submission against an existing document.
+) -> Any:
+    """Store a submission against an existing document — or, at `contract`/`gate` rigor, propose it.
 
     Incompleteness is reported, not refused: a document under discussion is
     incomplete by definition, and it is the transition to `proposed` that cares.
@@ -75,6 +108,12 @@ async def save_document(
     reclassify what a document *is*. Both are checked before the approved-document refusal, the
     same way that refusal is checked before anything else, because none of the three depend on the
     document's phase to make sense.
+
+    Returns a `SaveResult` at `sketch` rigor (unchanged from before this function gained a second
+    branch) or a `ProposeResult` at `contract`/`gate` — `openspec/changes/2026-08-17-authoring-rigor-and-scope`
+    design D1. One tool, one payload shape; whether it applies immediately or waits for an operator
+    to accept it is the document's own property, read from `document.rigor`, never the caller's
+    choice.
     """
     try:
         payload = validate_payload(raw_payload)
@@ -105,6 +144,34 @@ async def save_document(
     # divergence below is reported rather than swallowed.
     existing_content = spec_documents.read_document(workspace, document.path)
     stored_before = extract_payload(existing_content) if existing_content else None
+
+    if document.rigor in (spec_rigor.CONTRACT, spec_rigor.GATE):
+        return await propose_edit(session, document, payload, stored_before, actor=actor)
+
+    return await _apply_and_write(
+        session, workspace, document, payload, stored_before, existing_content, actor=actor
+    )
+
+
+async def _apply_and_write(
+    session: AsyncSession,
+    workspace: ProjectWorkspace,
+    document: SpecDocument,
+    payload: SpecPayload,
+    stored_before: Optional[Dict[str, Any]],
+    existing_content: Optional[str],
+    *,
+    actor: spec_lifecycle.Actor,
+    extra_detail: Optional[Dict[str, Any]] = None,
+) -> SaveResult:
+    """Mint, render, write and record — the write every accepted payload goes through.
+
+    Shared by `save_document`'s `sketch`-rigor path and `accept_proposal`'s applied unit, so a
+    `contract`/`gate` document's accepted proposal gets identity minting, rendering, reindexing and
+    completeness reporting exactly as a direct `sketch` write does — not a second, looser
+    implementation of the same thing (the same reasoning `merge_document` already states for reusing
+    this function's predecessor).
+    """
     previous_map, high_water = spec_identity.read_identity(stored_before)
 
     keys = [requirement.key for requirement in payload.requirements]
@@ -147,6 +214,7 @@ async def save_document(
         content=content,
         digests=digests,
         title=payload.title,
+        extra_detail=extra_detail,
     )
 
     # Reindexed in the same transaction that recorded the write. An index that
@@ -171,6 +239,312 @@ async def save_document(
         ],
         divergence=({"recorded": divergence[0], "found": divergence[1]} if divergence else None),
     )
+
+
+# The non-requirement fields treated as one unit (design D2): everything a submission carries
+# except the per-requirement list (which gets its own, finer-grained diff) and the Hub-owned
+# identity block (which an agent's submission cannot meaningfully "change" — `_apply_and_write`
+# overwrites it unconditionally regardless of what a submission echoes back). Deliberately every
+# other top-level field, not a fixed enumeration: a payload field this module does not yet know
+# about diffing by name would otherwise be silently dropped by a `contract`/`gate` submission —
+# neither applied (the whole point of gating) nor proposed (nothing built anywhere to review it) —
+# which is a worse failure than folding it into the one bundle unit that already exists.
+_METADATA_EXCLUDED_KEYS = {"requirements", spec_identity.IDENTITY_FIELD}
+
+
+def _metadata_bundle(payload_dict: Dict[str, Any]) -> Dict[str, Any]:
+    return {k: v for k, v in payload_dict.items() if k not in _METADATA_EXCLUDED_KEYS}
+
+
+async def propose_edit(
+    session: AsyncSession,
+    document: SpecDocument,
+    payload: SpecPayload,
+    stored_before: Optional[Dict[str, Any]],
+    *,
+    actor: spec_lifecycle.Actor,
+) -> ProposeResult:
+    """Diff a `contract`/`gate` submission against what is stored; record one proposal per change.
+
+    Design D2. Requirement units are matched by **key** — never a minted identifier, which a
+    brand-new (`add`) unit does not have until its proposal is accepted and the normal
+    `_apply_and_write`/`spec_identity.mint` path finally runs. The non-requirement fields are one
+    unit (`_metadata_bundle`, above). A submission identical to what is stored creates zero
+    proposals and is not an error — resubmitting unchanged content is not a mistake.
+    """
+    submitted = payload_to_dict(payload)
+    stored_requirements: Dict[str, Dict[str, Any]] = {
+        entry["key"]: entry
+        for entry in (stored_before or {}).get("requirements") or []
+        if isinstance(entry, dict) and entry.get("key")
+    }
+    submitted_requirements = [
+        entry for entry in submitted.get("requirements") or [] if isinstance(entry, dict)
+    ]
+
+    proposals: List[Dict[str, Any]] = []
+    unchanged: List[str] = []
+    seen_keys: set = set()
+    previous_key: Optional[str] = None
+
+    for entry in submitted_requirements:
+        key = entry.get("key")
+        if not key:
+            continue
+        seen_keys.add(key)
+        existing = stored_requirements.get(key)
+        if existing is None:
+            proposals.append(
+                await _create_proposal(
+                    session,
+                    document,
+                    unit_kind="requirement",
+                    unit_key=key,
+                    change_kind="add",
+                    position_after_key=previous_key,
+                    proposed_payload=entry,
+                    previous_payload=None,
+                    actor=actor,
+                )
+            )
+        elif existing != entry:
+            proposals.append(
+                await _create_proposal(
+                    session,
+                    document,
+                    unit_kind="requirement",
+                    unit_key=key,
+                    change_kind="modify",
+                    position_after_key=None,
+                    proposed_payload=entry,
+                    previous_payload=existing,
+                    actor=actor,
+                )
+            )
+        else:
+            unchanged.append(key)
+        previous_key = key
+
+    for key, existing in stored_requirements.items():
+        if key in seen_keys:
+            continue
+        proposals.append(
+            await _create_proposal(
+                session,
+                document,
+                unit_kind="requirement",
+                unit_key=key,
+                change_kind="remove",
+                position_after_key=None,
+                proposed_payload={},
+                previous_payload=existing,
+                actor=actor,
+            )
+        )
+
+    metadata_new = _metadata_bundle(submitted)
+    metadata_old = _metadata_bundle(stored_before or {})
+    if metadata_new != metadata_old:
+        proposals.append(
+            await _create_proposal(
+                session,
+                document,
+                unit_kind="metadata",
+                unit_key="metadata",
+                change_kind="modify",
+                position_after_key=None,
+                proposed_payload=metadata_new,
+                previous_payload=metadata_old if stored_before else None,
+                actor=actor,
+            )
+        )
+    else:
+        unchanged.append("metadata")
+
+    return ProposeResult(
+        path=document.path, phase=document.phase, proposals=proposals, unchanged=unchanged
+    )
+
+
+async def _create_proposal(
+    session: AsyncSession,
+    document: SpecDocument,
+    *,
+    unit_kind: str,
+    unit_key: str,
+    change_kind: str,
+    position_after_key: Optional[str],
+    proposed_payload: Dict[str, Any],
+    previous_payload: Optional[Dict[str, Any]],
+    actor: spec_lifecycle.Actor,
+) -> Dict[str, Any]:
+    proposal = SpecEditProposal(
+        id=f"spprop-{short_id()}",
+        document_id=document.id,
+        unit_kind=unit_kind,
+        unit_key=unit_key,
+        change_kind=change_kind,
+        position_after_key=position_after_key,
+        proposed_payload=proposed_payload,
+        previous_payload=previous_payload,
+        expected_digest=document.content_digest,
+        status="pending",
+        proposer_actor_kind=actor.kind,
+        proposer_actor_name=actor.name or "",
+        proposer_run_id=actor.run_id,
+    )
+    session.add(proposal)
+    await session.flush()
+    return {
+        "id": proposal.id,
+        "unit_kind": unit_kind,
+        "unit_key": unit_key,
+        "change_kind": change_kind,
+    }
+
+
+def _apply_unit(stored_before: Dict[str, Any], proposal: SpecEditProposal) -> Dict[str, Any]:
+    """The full payload dict `proposal` would produce, applied on top of `stored_before`.
+
+    Fed into `validate_payload` and then `_apply_and_write` — accepting one unit still writes the
+    whole document, because rendering has never worked any other way; this is what reconstructs
+    "the whole document, with just this unit changed" from a proposal that only ever stored the
+    changed unit.
+    """
+    if proposal.unit_kind == "metadata":
+        merged: Dict[str, Any] = {
+            k: v for k, v in stored_before.items() if k not in _METADATA_EXCLUDED_KEYS
+        }
+        merged["requirements"] = list(stored_before.get("requirements") or [])
+        merged.update(proposal.proposed_payload)
+        return merged
+
+    merged = dict(stored_before)
+    requirements = list(merged.get("requirements") or [])
+    index = next(
+        (i for i, entry in enumerate(requirements) if entry.get("key") == proposal.unit_key), None
+    )
+    if proposal.change_kind == "remove":
+        if index is not None:
+            requirements.pop(index)
+    else:
+        if index is not None:
+            requirements[index] = proposal.proposed_payload
+        elif proposal.change_kind == "add":
+            insert_at = 0
+            if proposal.position_after_key:
+                after_index = next(
+                    (
+                        i
+                        for i, entry in enumerate(requirements)
+                        if entry.get("key") == proposal.position_after_key
+                    ),
+                    None,
+                )
+                insert_at = after_index + 1 if after_index is not None else len(requirements)
+            requirements.insert(insert_at, proposal.proposed_payload)
+        else:
+            requirements.append(proposal.proposed_payload)
+    merged["requirements"] = requirements
+    return merged
+
+
+async def accept_proposal(
+    session: AsyncSession,
+    workspace: ProjectWorkspace,
+    document: SpecDocument,
+    proposal: SpecEditProposal,
+    *,
+    actor: spec_lifecycle.Actor,
+    expected_digest: Optional[str] = None,
+) -> SaveResult:
+    """Apply one pending proposal's unit to the live document, or refuse and say why.
+
+    Design D4/D5. Operator-only, enforced here — not only at the API boundary, the same discipline
+    `spec_rigor.set_rigor` and `spec_lifecycle.transition` already apply to their own operator-only
+    acts. Two independent staleness checks: `expected_digest` (if the caller supplies one) is the
+    operator's own last-seen digest, mirroring `RigorRequest`'s use of the same name; the proposal's
+    own `expected_digest` (always checked) is D5's compare-and-swap against what the document
+    actually was when this proposal was created. Either mismatch refuses rather than applies.
+    """
+    if actor.kind != "operator":
+        raise ProposalRefusedError(
+            "only the operator can accept a proposal", code="accept_is_the_operators"
+        )
+    if proposal.status != "pending":
+        raise ProposalRefusedError(
+            f"this proposal is {proposal.status}, not pending", code="proposal_not_pending"
+        )
+    if (
+        expected_digest is not None
+        and document.content_digest is not None
+        and expected_digest != document.content_digest
+    ):
+        raise ProposalRefusedError(
+            "the document changed since you read it; re-read it and decide again",
+            code="stale_digest",
+        )
+    if document.content_digest != proposal.expected_digest:
+        proposal.status = "stale"
+        proposal.resolved_at = datetime.now(timezone.utc)
+        proposal.resolved_by_actor_name = actor.name or ""
+        raise ProposalRefusedError(
+            "the document changed since this proposal was created; it is now stale, not accepted",
+            code="proposal_stale",
+        )
+
+    existing_content = spec_documents.read_document(workspace, document.path)
+    stored_before = extract_payload(existing_content) if existing_content else {}
+    merged = _apply_unit(stored_before or {}, proposal)
+    try:
+        payload = validate_payload(merged)
+    except PayloadError as exc:
+        raise SaveRefusedError(str(exc), code="payload_invalid", field_path=exc.field) from exc
+
+    result = await _apply_and_write(
+        session,
+        workspace,
+        document,
+        payload,
+        stored_before,
+        existing_content,
+        actor=actor,
+        extra_detail={
+            "proposal_id": proposal.id,
+            "proposer_actor_kind": proposal.proposer_actor_kind,
+            "proposer_actor_name": proposal.proposer_actor_name,
+        },
+    )
+    proposal.status = "accepted"
+    proposal.resolved_at = datetime.now(timezone.utc)
+    proposal.resolved_by_actor_name = actor.name or ""
+    return result
+
+
+async def reject_proposal(
+    session: AsyncSession,
+    proposal: SpecEditProposal,
+    *,
+    actor: spec_lifecycle.Actor,
+    reason: str = "",
+) -> None:
+    """Refuse a pending proposal, leaving the live document untouched — "no residue" is automatic.
+
+    Design D4/F2: the live document was never written for this proposal, so there is nothing on
+    the document itself to clean up.
+    """
+    if actor.kind != "operator":
+        raise ProposalRefusedError(
+            "only the operator can reject a proposal", code="reject_is_the_operators"
+        )
+    if proposal.status != "pending":
+        raise ProposalRefusedError(
+            f"this proposal is {proposal.status}, not pending", code="proposal_not_pending"
+        )
+    proposal.status = "rejected"
+    proposal.resolved_at = datetime.now(timezone.utc)
+    proposal.resolved_by_actor_name = actor.name or ""
+    proposal.resolution_reason = reason
 
 
 async def merge_document(

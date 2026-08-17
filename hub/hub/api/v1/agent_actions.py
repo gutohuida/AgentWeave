@@ -1152,6 +1152,16 @@ async def submit_spec_document(
     await sse_manager.broadcast(
         actor.project_id, "spec_updated", {"path": result.path, "phase": result.phase}
     )
+    if isinstance(result, spec_service.ProposeResult):
+        # `contract`/`gate` rigor (design D1): nothing was written. `proposals`/`unchanged` tell
+        # the caller what was recorded instead — a different shape from `SaveResult` on purpose,
+        # so a client cannot mistake "your edit is now pending" for "your edit is live".
+        return {
+            "path": result.path,
+            "phase": result.phase,
+            "proposals": result.proposals,
+            "unchanged": result.unchanged,
+        }
     return {
         "path": result.path,
         "phase": result.phase,

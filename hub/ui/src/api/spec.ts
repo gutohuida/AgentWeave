@@ -144,6 +144,10 @@ export function useSpecEvents() {
       // Coverage moves on a save (a rewording makes evidence stale) and on evidence arriving,
       // and both arrive as `spec_updated`.
       queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specCoverage'] })
+      // An accepted/rejected proposal, or a fresh one from a gated submission, changes what this
+      // document's pending list looks like — the same broadcast covers all three (accept/reject
+      // routes and submit_spec_document all emit `spec_updated`).
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specProposals'] })
       if (d?.path) {
         queryClient.invalidateQueries({ queryKey: ['project', projectId, 'spec', d.path] })
       }
@@ -292,6 +296,65 @@ export function useSetSpecPhase() {
     (projectId, { path, to, reason }) =>
       postJson(
         `/api/v1/projects/${projectId}/project/documents/phase?path=${encodeURIComponent(path)}&to=${encodeURIComponent(to)}`,
+        { reason: reason ?? '' },
+      ),
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Edit proposals — `contract`/`gate` rigor gates a submission behind one of
+// these instead of writing it (openspec/changes/2026-08-17-authoring-rigor-and-scope).
+// ---------------------------------------------------------------------------
+
+export interface SpecEditProposal {
+  id: string
+  unit_kind: 'requirement' | 'metadata'
+  unit_key: string
+  change_kind: 'add' | 'modify' | 'remove'
+  /** `add` proposals only — the key of the requirement it was submitted immediately after, or
+   *  null for "first". The in-position anchor a brand-new requirement has no existing row to
+   *  carry otherwise. */
+  position_after_key: string | null
+  proposed_payload: Record<string, unknown>
+  previous_payload: Record<string, unknown> | null
+  status: 'pending' | 'accepted' | 'rejected' | 'stale'
+  proposer_actor_kind: string | null
+  proposer_actor_name: string | null
+  created_at: string
+  resolved_at: string | null
+  resolved_by_actor_name: string | null
+  resolution_reason: string
+}
+
+export function useSpecProposals(path: string | null) {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  return useQuery<{ proposals: SpecEditProposal[] }>({
+    queryKey: ['project', projectId, 'specProposals', path],
+    queryFn: () =>
+      getJson<{ proposals: SpecEditProposal[] }>(
+        `/api/v1/projects/${projectId}/project/documents/${path}/proposals`,
+      ),
+    enabled: isConfigured && !!projectId && !!path,
+  })
+}
+
+export function useAcceptSpecProposal() {
+  return useSpecMutation<
+    { path: string; proposalId: string; expectedDigest?: string | null },
+    SpecDocumentRecord
+  >((projectId, { path, proposalId, expectedDigest }) =>
+    postJson(
+      `/api/v1/projects/${projectId}/project/documents/${path}/proposals/${proposalId}/accept`,
+      { expected_digest: expectedDigest ?? null },
+    ),
+  )
+}
+
+export function useRejectSpecProposal() {
+  return useSpecMutation<{ path: string; proposalId: string; reason?: string }, unknown>(
+    (projectId, { path, proposalId, reason }) =>
+      postJson(
+        `/api/v1/projects/${projectId}/project/documents/${path}/proposals/${proposalId}/reject`,
         { reason: reason ?? '' },
       ),
   )
