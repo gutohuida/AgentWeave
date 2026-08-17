@@ -6,8 +6,8 @@
   "started_at": "2026-08-17T10:14:49+01:00",
   "stop_at": "2026-08-17T15:00:00+01:00",
   "stop_when_queue_empties": true,
-  "iteration": 13,
-  "last_heartbeat": "2026-08-17T11:05:03+01:00",
+  "iteration": 14,
+  "last_heartbeat": "2026-08-17T11:27:13+01:00",
   "session_stopped": null,
   "release_shape": {
     "version": "1.0.0",
@@ -116,7 +116,7 @@
     }
   ],
   "current": "STOPPED — awaiting operator decision",
-  "next_action": "BLOCKED ON THE OPERATOR. Do NOT merge or tag. Read openspec/explorations/2026-08-17-the-hub-suite-has-never-run-clean.md, then answer D5 below. Once answered, the release runbook in `release_runbook` is still valid from step 1.",
+  "next_action": "BLOCKED ON THE OPERATOR for D5-A (pid_alive on POSIX). 29 of 37 test failures are fixed, committed and pushed at 8f027be; CI is verifying them. Do NOT merge or tag while hub-test is red. Read openspec/explorations/2026-08-17-the-hub-suite-has-never-run-clean.md. The release runbook in `release_runbook` is still valid from step 1 once hub-test is green.",
   "limits": [
     "OUTWARD-FACING ACTIONS ARE AUTHORISED THIS RUN â€” this INVERTS the previous run's standing rule, deliberately. Pushing, opening a PR, merging to master, tagging, and creating a GitHub release are all in scope, in R11/R12 order. Everything else outward-facing is not: no force-push, no history rewriting on any shared branch, no deleting or moving existing tags or releases, no touching the four releases already published.",
     "NEVER release on a red or still-running CI. `gh pr checks` must show every job green and FINISHED before the PR merges, and the merge must be green before the tag exists. The operator chose 'Full auto, but only on green CI' with that as the hard rule.",
@@ -167,14 +167,14 @@
     },
     {
       "id": "D5-hub-suite-never-ran-clean",
-      "status": "OPEN — BLOCKS THE RELEASE",
-      "question": "hub-test ran in CI for the first time and 37 of 2130 tests fail in a clean Linux environment: 17 need a claude/codex binary on PATH, 12 walk app.routes and meet Starlette 1.6's _IncludedRouter wrappers, 4 are unguarded Windows-only behaviour, 3 are undiagnosed. Separately, hub/pyproject.toml declares fastapi>=0.110 with NO upper bound, so CI resolved starlette 1.6.0 / fastapi 0.141.1 against this machine's starlette 0.52.1 / fastapi 0.136.3 — a major version boundary crossed silently. No product breakage is demonstrated (every _IncludedRouter failure is in test code, and 2093 tests passed on starlette 1.6), but no product compatibility is demonstrated either.",
+      "status": "OPEN — NARROWED. 29 of 37 fixed and verified.",
+      "question": "hub-test ran in CI for the first time: 37 of 2130 failed. 29 are now fixed and verified in both configurations (starlette 1.6 venv; PATH stripped of claude/codex). RESOLVED ALONG THE WAY: the product IS compatible with starlette 1.6 — every failure there was two test helpers walking app.routes, nothing under hub/hub/ failed, 2114 passed. WHAT REMAINS: pid_alive() uses os.kill(pid,0) on POSIX, which succeeds for a ZOMBIE, so a killed child still reports alive (2 tests). The Docker image is Linux. Plus 2 undiagnosed NoResultFound and 1 model-catalog assertion, none reproducible from Windows.",
       "options": [
-        "A) Pin fastapi/starlette to the tested range in 1.0.0, fix the 37 tests in a follow-up, release once green. Ships what was actually verified.",
-        "B) Fix all 37 first (skipif for binary-dependent and Windows-only tests, a routing helper that understands both shapes, diagnose the remaining 3), then release. Slower, blind-iterated through CI.",
-        "C) Release 1.0.0 on the current red hub-test, accepting that the Hub suite has never passed in a clean environment. Contradicts the standing rule and is not recommended."
+        "A) Decide whether pid_alive on POSIX is a real defect by tracing its callers. If only the crash-reconciliation path calls it (a RESTARTED Hub checking a pid it did not spawn, already reaped by init), the tests are wrong and should be marked so. If any caller checks a process the same Hub just killed, it needs waitpid(WNOHANG) or a /proc zombie check. This is the one real question left.",
+        "B) Also decide the fastapi/starlette bound. No longer a blocker — the product works on 1.6 — but an unbounded range still ships versions nobody has run.",
+        "C) Add a CI guard that fails when a test is skipped for a binary CI was supposed to provide, so a green-local/red-CI split cannot hide for three weeks again."
       ],
-      "recommendation": "A, then B as its own change. Pinning ships the combination that has evidence behind it, and the 37 tests are a real coverage improvement that deserves review rather than a blind fix inside a release.",
+      "recommendation": "A first — it is the only remaining item that might be a product defect rather than a test defect, and it is a ten-minute call for anyone who can run Linux. B and C are worth doing but neither blocks 1.0.0.",
       "cost_if_wrong": "Choosing C is the only irreversible one: PyPI versions cannot be reused."
     }
   ],

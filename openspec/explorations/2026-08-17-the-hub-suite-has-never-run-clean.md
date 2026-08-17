@@ -1,83 +1,101 @@
 # The Hub test suite has never run in a clean environment
 
 **Date:** 2026-08-17 · **Found by:** the 1.0.0 release run, PR #1
-**Status:** finding, blocking the 1.0.0 release. Needs an operator decision before it becomes a change.
+**Status:** 29 of 37 fixed and verified. The remainder needs an operator decision, and one of them
+is probably not a test problem.
 
 ## What happened
 
-`hub-test` in CI has been failing since 2026-07-29 with
+`hub-test` in CI had been failing since 2026-07-29 with
 `ModuleNotFoundError: No module named 'agentweave'` — an *install-step* failure. It never reached
-`pytest`. Fixing that (this run's R1) let the Hub suite run in CI for the first time, and it
-reported:
+`pytest`. Fixing that let the Hub suite run in CI for the first time, and it reported:
 
-    37 failed, 2093 passed, 11 skipped, in 290s
+    37 failed, 2093 passed, 11 skipped
 
-The same suite is **2130 passed / 11 skipped** on the developer machine. Nothing regressed: 37 tests
-have simply never been executed anywhere except a Windows box with `claude` and `codex` installed.
+The same suite is **2130 passed / 11 skipped** on the developer machine. Nothing regressed. 37 tests
+had simply never executed anywhere except a Windows box with `claude` and `codex` installed.
 
-## The 37, by root cause
+## Resolved: the product is compatible with starlette 1.x
 
-| Count | Cause | Files |
-|---|---|---|
-| 17 | **A runner binary is not on PATH.** `FileNotFoundError: 'codex' was not found in PATH` (16), and one `claude` equivalent asserting on the wrong error string. | `test_codex_appserver_run_turn.py`, `test_agent_trigger.py` |
-| 12 | **Starlette changed how included routers appear in `app.routes`.** Tests walk the routing table looking for `APIRoute` instances and now meet `_IncludedRouter` wrappers instead. | `test_mcp_body_contract.py` (11), `test_spec_documents_api.py` (1) |
-| 4 | **Windows-only behaviour, unguarded on Linux.** `ctypes.windll`; `.cmd`/`.exe` shim resolution; two process-tree kills that report success where the assertion expects failure. | `test_fs_browse.py`, `test_pty_runner.py` (2), `test_lifespan_shutdown.py` |
-| 2 | **`NoResultFound`** — not yet diagnosed; plausibly workspace-path dependent. | `test_project_workspace_unavailable.py` |
-| 1 | **Model catalog** expects `gpt-5.4-mini` alongside `gpt-5.6-sol`; only the latter is present. | `test_agent_trigger_overrides.py` |
+This was the frightening part, and it is now answered with evidence rather than left open.
 
-## The part that is not a test problem
+CI resolved **fastapi 0.141.1 / starlette 1.6.0**; the developer machine had **0.136.3 / 0.52.1**. A
+major version boundary, crossed silently, because `hub/pyproject.toml` declares `"fastapi>=0.110"`
+with no upper bound.
 
-CI resolved **starlette 1.6.0** and **fastapi 0.141.1**. The developer machine has **starlette
-0.52.1** and **fastapi 0.136.3**. That is a *major* version boundary, and it happened silently
-because `hub/pyproject.toml` declares:
+A venv pinned to CI's exact resolution ran the whole suite: **16 failed, 2114 passed** — and 3 of
+those 16 failed only because that venv had no `agentweave` in it. Every genuine failure was the same
+message, `no <METHOD> <path> route with a body model`, from two tests that walk `app.routes`.
+**Nothing under `hub/hub/**` failed.** Route *introspection* changed; route *resolution* did not.
 
-    "fastapi>=0.110",
+Starlette 1.x keeps included routers as `_IncludedRouter` wrappers rather than flattening them into
+`app.routes`; the real `APIRoute`s nest inside, and each carries a **relative** path.
 
-with **no upper bound**. So today, `pip install agentweave-ai` gives a user a Starlette major
-version this codebase has never been tested against end to end.
+The sharp edge: `test_spec_documents_api`'s check proves an **absence** — that no route can mutate a
+spec document event. A scan finding zero routes returns "nothing found", which is what that test
+wants to see. It failed only because it went on to touch `route.path` on a wrapper. **One
+assertion-shape away, it would have passed vacuously**, and the guarantee would have quietly stopped
+being checked.
 
-**How bad is it?** Weaker than it first looks, and worth stating precisely rather than dramatically:
+`hub/tests/_routing.py` now walks either shape, verified by producing an **identical set of 140
+paths on both starlette versions**.
 
-- Every `_IncludedRouter` failure is in **test** code introspecting `app.routes`, not in
-  `hub/hub/**`. Route *introspection* changed; route *resolution* did not.
-- **2093 tests passed on starlette 1.6**, including the API tests that drive real requests through
-  httpx. That is meaningful evidence the application itself works there.
+**So the dependency bound is no longer urgent.** It remains worth deciding — see below — but not as
+a release blocker.
 
-So the honest reading is: no product breakage is demonstrated, and no product compatibility is
-demonstrated either. The suite that would tell us is the one that has never run clean.
+## Fixed: the PATH cluster (17)
 
-## Why this blocked the release rather than being fixed in place
+Reproduced locally by stripping `claude` and `codex` from PATH, which produced exactly the 17 CI
+failures. Two causes:
 
-The run was authorised to publish 1.0.0 "full auto, but only on green CI", and pre-authorised to
-stop if CI surfaced something that was not small and understood. This is understood but not small —
-37 tests, five root causes, across six files — and two properties make fixing it inside the release
-change a bad trade:
+- **16** — `run_turn` resolves the executable *before* it spawns, and the fixture patched only
+  `spawn`. Binary resolution belongs to `test_pty_runner`; this file's subject is the
+  notification-handling loop.
+- **1** — one test omitted the `hub.launchability.shutil.which` patch that its **33 siblings in the
+  same file** all carry, so it failed on a missing binary instead of asserting the error it exists
+  to pin.
 
-1. **The Linux failures cannot be reproduced on the developer machine.** Fixing them means guessing
-   and iterating through 5–25 minute CI rounds, blind, with the changes landing unreviewed in a
-   1.0.0.
-2. **Fixing all 37 would still not settle the release question.** The dependency bound is a product
-   decision: either 1.0.0 pins an upper bound — changing what every user gets — or it ships
-   unbounded and users get a combination nobody has tested. That is the operator's call, not a
-   mechanical repair.
+Both verified with the binaries hidden and present.
 
-An unreleased 1.0.0 costs a few hours. A 1.0.0 on PyPI whose test suite has never passed in a clean
-environment cannot be withdrawn.
+## Fixed: two platform skips
+
+`ctypes.windll` cannot be patched into existence on POSIX, and there are no `.cmd` shims to unwrap
+there. Those tests describe Windows behaviour and now say so.
+
+## Open, and probably not a test problem
+
+**`pid_alive()` reports a killed process as alive on POSIX.** It uses `os.kill(pid, 0)`, which
+succeeds for a **zombie** — a SIGKILLed child remains present until reaped. So after
+`terminate_process_tree()`, the process still reads as alive. That is
+`test_pty_runner::test_kills_a_long_running_process` and
+`test_lifespan_shutdown::test_hub_shutdown_kills_a_real_tracked_process`, both failing
+`assert True is False`.
+
+This matters because **the Docker image is Linux**. A Hub shutting down there would believe its
+children are still running.
+
+The counter-argument, from `pid_alive`'s own docstring, is that it exists for *crash reconciliation*
+— a **restarted** Hub checking a pid it did not spawn, where the orphan has been re-parented to init
+and reaped, so no zombie exists. If that is the only caller, the impact is nil and the tests are
+asserting something the product never does. **That is the thing to check**, and it cannot be checked
+from Windows.
+
+Two further failures — `test_project_workspace_unavailable`'s `NoResultFound` ×2 — and one
+model-catalog assertion are undiagnosed for the same reason.
 
 ## What to decide
 
-1. **Does 1.0.0 pin `fastapi`/`starlette` to the tested range?** Pinning ships what has actually
-   been verified and can be relaxed later once the suite passes on starlette 1.x. Not pinning ships
-   an untested major version to every user.
-2. **Which of the 37 are "skip when the environment lacks X" and which are real coverage gaps?** The
-   17 PATH-dependent ones are integration tests needing a runtime — `skipif` is honest for those.
-   The 4 Windows-only ones want a platform marker. The 12 introspection ones want a helper that
-   understands both routing shapes, which is a genuine improvement. The remaining 3 need diagnosis
-   before anyone can say.
-3. **Should CI gain a "clean environment" guarantee** so this cannot silently recur — e.g. failing
-   the build if a test is skipped for a missing binary that CI was supposed to provide.
+1. **Is `pid_alive` on POSIX a real defect?** Trace its callers. If anything checks liveness of a
+   process the same Hub just killed, it needs reaping (`waitpid(WNOHANG)`) or a `/proc/<pid>/stat`
+   zombie check. If only the restart path calls it, the tests are wrong, not the code.
+2. **Does 1.0.0 pin `fastapi`/`starlette`?** No longer a blocker — the product works on 1.6 — but
+   shipping an unbounded range still means users get versions nobody has run. A bound documents what
+   was tested; leaving it open documents nothing.
+3. **Should CI prove it is a clean environment?** This went unseen for three weeks because a green
+   local run and a red CI job looked like a CI problem. A build that fails when a test is skipped for
+   a missing binary CI was meant to provide would have caught it on day one.
 
-## What is already done
+## What is already done and committed
 
-`hub-test` installs correctly now, so the suite runs in CI at all. That is the change that made this
-visible and it is committed. Everything above is what the visibility revealed.
+`hub-test` installs correctly and the suite runs in CI at all; 29 of the 37 are fixed with the
+verification described above; the remaining failures are isolated and named.
