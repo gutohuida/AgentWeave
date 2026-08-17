@@ -239,7 +239,13 @@ async def test_queued_entry_survives_and_pause_is_attributed_when_workspace_beco
 
     import hub.turn_scheduler as turn_scheduler
 
-    scheduled = await turn_scheduler.schedule_agent("proj-test", "claude")
+    # The launchability patch this file's third test already carries. Without it the
+    # scheduler pauses for a missing `claude` binary *before* it ever reaches the
+    # directory-state check, so the `queue_agent_paused` event this test looks for is
+    # never written and `scalar_one()` raises NoResultFound. Green on any machine with
+    # the CLI installed, red on every other.
+    with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        scheduled = await turn_scheduler.schedule_agent("proj-test", "claude")
     assert scheduled.response is None
 
     async with async_session_factory() as session:
@@ -298,9 +304,15 @@ async def test_job_fire_pauses_without_failing_when_workspace_unavailable(
     shutil.rmtree(directory)
 
     scheduler = JobScheduler()
-    async with async_session_factory() as db:
-        fresh_job = await db.get(AIJob, job.id)
-        success = await scheduler._fire_job_internal(fresh_job, trigger="scheduled", session=db)
+    # The launchability patch this file's third test already carries. Without it the
+    # scheduler pauses for a missing `claude` binary *before* it ever reaches the
+    # directory-state check, so the `queue_agent_paused` event this test looks for is
+    # never written and `scalar_one()` raises NoResultFound. Green on any machine with
+    # the CLI installed, red on every other.
+    with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        async with async_session_factory() as db:
+            fresh_job = await db.get(AIJob, job.id)
+            success = await scheduler._fire_job_internal(fresh_job, trigger="scheduled", session=db)
 
     # The fire must succeed at queuing; the spawn is paused, not a job failure.
     assert success is True

@@ -748,3 +748,36 @@ the callers instead of trying to run the platform.
 **Still genuinely undiagnosed:** `test_project_workspace_unavailable`'s two `NoResultFound` and one
 model-catalog assertion. Those are behavioural differences with no obvious mechanism from here, and
 I am not guessing at them.
+
+---
+
+## Iteration 15 — 14:10 — 36 of 37, and CI confirms the method
+
+**CI on `cf5429c` reported 5 failures, down from 37.** That run contained only the first 29 fixes;
+the 5 it named are precisely the ones I had already fixed locally afterwards (2 `pid_alive`,
+2 workspace) plus one still open. The local reproduction was faithful.
+
+**The last two `NoResultFound` were not mysterious — they were the PATH cluster again.** Hypothesis:
+without `claude` on PATH the scheduler pauses for *launchability* before it ever reaches the
+directory-state check, so the `queue_agent_paused` event the test looks for is never written and
+`scalar_one()` raises. Tested by stripping PATH: both reproduced immediately. Both now carry the
+same `hub.launchability.shutil.which` patch **the third test in their own file already had**.
+
+That makes three separate places today where a test was missing a guard its own file-mates carry.
+The pattern is worth naming: a patch that is *usually* applied is invisible when it is missing,
+because the machine supplies what the patch would have faked.
+
+**Verified the way that counts:** the entire Hub suite now passes **with the runner binaries hidden
+from PATH** — 2130 passed / 11 skipped, identical to the normal run. That is the closest local
+approximation of a clean CI environment available on this machine.
+
+### The one I am not fixing
+
+`test_agent_trigger_overrides::test_a_conversation_whose_model_changed_attributes_usage_per_turn`
+expects two `context_warning` SSE events, one per turn, and CI sees only the first. I checked the
+obvious mechanism and it is **not** the cause: both `gpt-5.6-sol` and `gpt-5.4-mini` are in
+`model_catalog.py` with identical `context_window=272_000`, so both turns should warn identically.
+It passes here with binaries hidden, so it is not launchability either.
+
+That leaves a timing or ordering difference I cannot reproduce and therefore will not guess at.
+1 test of 2130, isolated and named, is a much better thing to hand over than a fix I cannot justify.
