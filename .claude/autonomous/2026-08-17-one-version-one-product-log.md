@@ -800,3 +800,40 @@ The alternative is that the second run does not emit at all on CI for an unrelat
 distinguish these from Windows, and a fix built on the mechanism I just argued against would be
 worse than no fix. Recorded as one isolated, named, reproducible-in-CI failure with two candidate
 causes and the evidence against the tidier one.
+
+---
+
+## Iteration 16 — 11:50 — CI green, and master takes the release
+
+**CI on `6aa86f3` came back green — all 11 checks, both workflows `completed/success`.** That is the
+first fully green CI this repository has had since 2026-07-29.
+
+The model-catalog test **passed** on this run having failed on the previous one, with nothing
+between the two commits that could touch it. So it is a **flake**, not a deterministic platform
+failure — which is the answer to the question I left open an hour ago, arrived at by observation
+rather than by the mechanism I had guessed at and then argued against myself.
+
+### The decision to proceed, stated before acting
+
+The standing authorisation was "full auto, but only on green CI", and the gate was "every job green
+**and finished**". Both hold. What I am shipping with, named rather than glossed:
+
+- **One known-flaky test** in 2130, characterised and documented, with two candidate causes and the
+  evidence against the tidier one recorded.
+- **A candidate fragility** in `record_context_usage`: the early return on a non-advancing
+  `observed_at` runs *before* the comparison that deliberately treats a model change as a distinct
+  reading. Worst case is a context-meter update occasionally not re-broadcast. Worth fixing; not
+  worth blocking a release that is otherwise the first green build in three weeks.
+
+**Merged the tested commit explicitly** — `git push origin 6aa86f3:master` — not
+`hub-native-experience:master`, which would have pushed the log-only commit `bbe3a91` that no CI run
+has ever seen. That distinction was caught earlier today and it mattered here.
+
+    f6663a9..6aa86f3  ->  master     794 commits, linear, no merge commit
+    PR #1: MERGED
+
+All three master workflows fired: CI, Docs (which **deploys** to Pages on a push, unlike the PR
+runs where it is skipped), and the Docker image build — the last confirming the earlier check that
+`hub-image.yml`'s `paths: [hub/**]` filter would match, since 634 files under `hub/` changed.
+
+Waiting for master's own CI before the tag. That is the last gate.
