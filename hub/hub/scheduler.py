@@ -71,8 +71,15 @@ async def _loop_stop_reason(session: AsyncSession, job: AIJob) -> Optional[str]:
     if loop is None:
         return None
     now = datetime.now(timezone.utc)
-    if loop.stop_at is not None and now >= loop.stop_at:
-        return f"loop stop time reached ({loop.stop_at.isoformat()})"
+    stop_at = loop.stop_at
+    if stop_at is not None:
+        # SQLite round-trips `DateTime(timezone=True)` as naive (same trap `agent_status.py`'s
+        # `heartbeat_is_stale` already guards against) — compare against an aware `now` only after
+        # restoring the UTC tzinfo SQLite dropped, not the raw column value.
+        if stop_at.tzinfo is None:
+            stop_at = stop_at.replace(tzinfo=timezone.utc)
+        if now >= stop_at:
+            return f"loop stop time reached ({stop_at.isoformat()})"
     if loop.stop_when_queue_empties:
         open_count = await session.scalar(
             select(func.count(Task.id)).where(

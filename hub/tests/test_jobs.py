@@ -412,3 +412,128 @@ async def test_delete_job_not_found(app, auth_headers):
     """Test deleting a non-existent job."""
     resp = await app.delete("/api/v1/projects/proj-test/jobs/job-nonexistent", headers=auth_headers)
     assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_plain_job_has_no_loop(app, auth_headers):
+    """A job created with no loop fields carries loop: null (design D6/D5)."""
+    resp = await app.post(
+        "/api/v1/projects/proj-test/jobs",
+        json={
+            "name": "Plain Job",
+            "agent": "kimi",
+            "message": "Just a job",
+            "cron": "0 9 * * *",
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201
+    assert resp.json()["loop"] is None
+
+    job_id = resp.json()["id"]
+    get_resp = await app.get(f"/api/v1/projects/proj-test/jobs/{job_id}", headers=auth_headers)
+    assert get_resp.json()["loop"] is None
+
+    list_resp = await app.get("/api/v1/projects/proj-test/jobs", headers=auth_headers)
+    listed = next(j for j in list_resp.json() if j["id"] == job_id)
+    assert listed["loop"] is None
+
+
+@pytest.mark.asyncio
+async def test_creating_with_purpose_alone_opts_into_a_loop(app, auth_headers):
+    """`purpose` alone is enough to opt a job in (design D6's "at least one field" rule)."""
+    resp = await app.post(
+        "/api/v1/projects/proj-test/jobs",
+        json={
+            "name": "Loop Job",
+            "agent": "kimi",
+            "message": "Keep going",
+            "cron": "0 9 * * *",
+            "purpose": "Nightly dependency audit",
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201
+    loop = resp.json()["loop"]
+    assert loop is not None
+    assert loop["purpose"] == "Nightly dependency audit"
+    assert loop["stop_when_queue_empties"] is False
+    assert loop["queue"] == {}
+    assert loop["current_task"] is None
+    assert loop["open_questions"] == 0
+
+
+@pytest.mark.asyncio
+async def test_patch_loop_field_on_plain_job_is_400(app, auth_headers):
+    """PATCHing a loop field onto a job with no `Loop` row is rejected, not a silent no-op."""
+    create_resp = await app.post(
+        "/api/v1/projects/proj-test/jobs",
+        json={
+            "name": "Plain Job For Patch",
+            "agent": "kimi",
+            "message": "Test",
+            "cron": "0 9 * * *",
+        },
+        headers=auth_headers,
+    )
+    job_id = create_resp.json()["id"]
+
+    resp = await app.patch(
+        f"/api/v1/projects/proj-test/jobs/{job_id}",
+        json={"stop_reason": "manually stopped"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_patch_opts_a_plain_job_into_a_loop_for_the_first_time(app, auth_headers):
+    """PATCH with a loop field on a plain job creates the Loop row (mirrors create_job)."""
+    create_resp = await app.post(
+        "/api/v1/projects/proj-test/jobs",
+        json={
+            "name": "Opt-in Later",
+            "agent": "kimi",
+            "message": "Test",
+            "cron": "0 9 * * *",
+        },
+        headers=auth_headers,
+    )
+    job_id = create_resp.json()["id"]
+    assert create_resp.json()["loop"] is None
+
+    resp = await app.patch(
+        f"/api/v1/projects/proj-test/jobs/{job_id}",
+        json={"stop_when_queue_empties": True},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    loop = resp.json()["loop"]
+    assert loop is not None
+    assert loop["stop_when_queue_empties"] is True
+    assert loop["purpose"] == ""
+
+
+@pytest.mark.asyncio
+async def test_patch_updates_an_existing_loop(app, auth_headers):
+    """PATCH supplying a loop field on a job with an existing loop updates it in place."""
+    create_resp = await app.post(
+        "/api/v1/projects/proj-test/jobs",
+        json={
+            "name": "Existing Loop",
+            "agent": "kimi",
+            "message": "Test",
+            "cron": "0 9 * * *",
+            "purpose": "Initial purpose",
+        },
+        headers=auth_headers,
+    )
+    job_id = create_resp.json()["id"]
+
+    resp = await app.patch(
+        f"/api/v1/projects/proj-test/jobs/{job_id}",
+        json={"purpose": "Revised purpose"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["loop"]["purpose"] == "Revised purpose"

@@ -228,6 +228,7 @@ async def list_shared_tasks(
         task_status=task_status,
         spec_document_id=None,
         exclude_archived_completed=False,
+        loop_id=None,
         offset=offset,
         limit=limit,
         project=(actor.project_id, actor.project_id),

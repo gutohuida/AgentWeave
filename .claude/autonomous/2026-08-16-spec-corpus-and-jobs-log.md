@@ -961,3 +961,106 @@ Sections 4-9 (API, UI, remaining tests, live Hub verification, human-only, user 
 `list_jobs`/`get_job`, and `list_tasks`'s `loop_id` filter including the `agent_actions.py` direct-
 call-site fix task 4.5 names). Section 4 has no UI dependency and no migration dependency beyond what
 just landed, so it is the next self-contained slice.
+
+## Entry 11 — N3 implementation slice 2: the API layer (tasks.md section 4) + a real bug found and fixed
+
+**2026-08-17T01:48:16+01:00.** Implemented tasks.md section 4 in full: `JobCreate`/`JobUpdate` gain
+the loop fields, `create_job`/`update_job` apply design D6's opt-in rule, `LoopSummary` +
+`JobResponse.loop` per D5, `list_jobs`/`get_job` compute it via a new `_batch_loop_summaries` helper
+implementing D7's four fixed queries, and `list_tasks` gains `loop_id` with the `agent_actions.py`
+direct-call-site forward (task 4.5).
+
+**Schema (`hub/hub/schemas/jobs.py`):** `JobCreate` gains `purpose: Optional[str]` (max 4000),
+`stop_at: Optional[datetime]`, `stop_when_queue_empties: bool = False`. `JobUpdate` gains the same
+three as `Optional` (including `stop_when_queue_empties: Optional[bool] = None` — deliberately not a
+bare `bool` default, since an update must be able to tell "not supplied" from "explicitly false")
+plus `stop_reason: Optional[str]`. New `LoopSummary` matches design D5 exactly; `JobResponse.loop:
+Optional[LoopSummary] = None`.
+
+**API (`hub/hub/api/v1/jobs.py`):**
+- `_loop_opts_in(purpose, stop_at, stop_when_queue_empties)` — the one-place statement of D6's "at
+  least one field, and a bare `False` doesn't count" rule, used by both `create_job` and `update_job`
+  rather than two independent copies.
+- `_batch_loop_summaries(session, job_ids)` — D7's four queries: `Loop` rows by `job_id IN (...)`;
+  grouped `(loop_id, status) -> count` for the queue; one ordered `Task` fetch across all loops with
+  `current_task` picked per loop in Python (first row per `loop_id`, since the ORDER BY already puts
+  an in-progress/blocked row before a pending one); and open-question counts via a `DISTINCT
+  (job_id, conversation_id)` subquery joined to `Question` — the DISTINCT matters: a resume-mode job
+  that fired twice on the same conversation would otherwise join the same question row once per
+  firing and overcount, which the design's own prose (`IN (SELECT DISTINCT conversation_id ...)`)
+  was written to avoid and a naive `JobRun JOIN Question GROUP BY job_id` would not have. `get_job`
+  and `list_jobs` both call this with their respective id lists — no separate single-job path.
+- `create_job`: creates a `Loop` row after the `AIJob` commits, iff `_loop_opts_in`; response carries
+  the fresh summary (`queue={}`, `current_task=None`, `open_questions=0` — correct, since the job
+  cannot have fired yet).
+- `update_job`: computes `loop_fields_supplied` first (any of the four), then — if the job has no
+  `Loop` row — either 400s (`_loop_opts_in` false, matching the exact design wording) or creates one
+  (`_loop_opts_in` true, the first-time-PATCH-opt-in case task 4.3 names). Placed *before* the
+  existing name/message/cron/session_mode/enabled mutations so a rejected loop update never leaves
+  unrelated fields half-applied in the session (nothing was committed yet either way, but ordering
+  makes the intent explicit rather than accidental).
+- `get_job`'s hand-built `job_dict` gains a `"loop"` key from the same batch helper.
+
+**Tasks (`hub/hub/api/v1/tasks.py`, `hub/hub/api/v1/agent_actions.py`):** `list_tasks` gains
+`loop_id: Optional[str] = Query(None)` as a third `elif` arm beside `spec_document_id`/
+`exclude_archived_completed` (confirmed unchanged two-arm shape before editing, per the standing
+instruction — it still was). `agent_actions.list_shared_tasks` forwards `loop_id=None` explicitly at
+its direct call site — this is precisely the shape of regression `-the-board-scoped-by-document` hit
+once already tonight (a direct function call not forwarding a new parameter), so it was not skipped.
+
+**A real bug found by writing task 6.3's tests, not assumed away:** `_loop_stop_reason` (landed in
+Entry 10) compared `datetime.now(timezone.utc)` against `loop.stop_at` read back from SQLite. SQLite
+round-trips `DateTime(timezone=True)` as **naive** — the exact trap `hub/hub/agent_status.py`'s
+`heartbeat_is_stale` already has a guard for (`observed_at.tzinfo is None: observed_at =
+observed_at.replace(tzinfo=timezone.utc)`), which `_loop_stop_reason` did not repeat. The comparison
+raised `TypeError: can't compare offset-naive and offset-aware datetimes`, caught by `_do_fire_job`'s
+outer `try/except`, which recorded the fire as a plain **failure** — never reaching the loop-stop
+branch, never disabling the job, never setting `loop.stop_reason`. A loop's `stop_at` would have
+silently never stopped anything in the real product; only exercising the path end-to-end (not just
+reading the code) surfaced it. Fixed by restoring UTC tzinfo before comparing, with a comment naming
+`agent_status.py` as the precedent so a future reader does not have to rediscover why. Test
+`test_loop_with_past_stop_at_skips_the_fire_and_disables_the_job` failed against the unfixed code and
+passes now — confirmed by actually watching it fail first, not written after the fix.
+
+**Tests added, all passing (section 6.2-6.4):**
+- `hub/tests/test_jobs.py` (+5): plain job carries `loop: null` across create/get/list; `purpose`
+  alone opts a job into a loop; PATCHing a loop field onto a plain job is 400; PATCH opts a plain job
+  into a loop for the first time; PATCH updates an existing loop's `purpose` in place.
+- `hub/tests/test_tasks.py` (+1): `GET /tasks?loop_id=X` scopes to exactly that loop's tasks
+  regardless of status, and the `agent-actions` router's own `list_tasks` call site still returns 200
+  and is unaffected by loop scoping it was never asked for (task 6.4's own regression-shape check).
+- `hub/tests/test_scheduler.py` (+3): a past `stop_at` skips the fire, disables the job, stamps
+  `loop.stop_reason`/`stopped_at`, and a second manual attempt still refuses;
+  `stop_when_queue_empties=True` with zero non-terminal tasks stops the same way; the same flag with
+  one `pending` task naming the loop does **not** stop — the fire proceeds through the full direct-
+  execution path (mocked PTY spawn, same pattern `test_fired_job_creates_a_run_via_direct_execution`
+  already uses) and `JobRun.conversation_id` is populated.
+
+**Verified, not trusted:**
+- `pytest hub/tests/test_scheduler.py hub/tests/test_jobs.py hub/tests/test_jobs_crud.py
+  hub/tests/test_tasks.py hub/tests/test_agent_actions_coordination.py
+  hub/tests/test_agent_actions_governed.py -q` → 81 passed, 3 skipped, before the full-suite run.
+- `pytest hub/tests/ -n 8 -q` → **2102 passed, 11 skipped** — exactly `20e963e`'s 2093 plus the 9
+  tests added this iteration (5+1+3), no other change anywhere in the suite.
+- `pytest tests/ -n 4 -q` → **362 passed, 3 skipped** — exact match to baseline, untouched by this
+  slice.
+- `ruff check hub/ src/` and `black --check` (whole tree, not just touched files) → clean.
+- `npx openspec validate --changes --strict` → 20/20. `--specs --strict` → 30/30.
+- Did not yet run `hub/ui` checks (`npm test`/`lint`/`tsc`) — no UI file touched this slice; task 6.7
+  explicitly deferred to section 5, recorded as such in tasks.md rather than ticked early.
+
+tasks.md: section 4 (4.1-4.5) and the 6.2/6.3/6.4/6.6/6.8/6.9 slice of section 6 checked off, with
+6.6's counts and 6.7's deferral recorded inline. Sections 5 (UI), 7 (driven-against-the-running-Hub),
+8 (human-only), 9 (user test guide) remain.
+
+`next_action` set to tasks.md section 5 (UI): `hub/ui/src/api/jobs.ts` (`Job`/`JobCreate`/
+`JobUpdate` types, task 5.1's "omit unless the loop section was touched" client-side rule — a
+controlled form must not serialise `purpose: ""` just because the field exists, or every job becomes
+a loop the instant the form renders it), `hub/ui/src/api/tasks.ts` (`useTasks({ loopId })`, task 5.2 —
+check whether that alone covers `JobCard`'s need before adding a second hook), `JobForm.tsx`'s
+collapsed "Make this a loop" section (5.3), `JobCard.tsx`'s loop block (5.4), then the mandatory
+`npm run build && python scripts/refresh_ui_bundle.py` **twice** (5.5) — once before commit, once
+after, since the bundle fingerprint folds in `git status --porcelain` (the same two-pass discipline
+N2 and N2b both already hit). Section 5 depends on section 4's response shape, which is now stable
+and committed. Section 7 (driven against the running Hub) still waits until section 5 lands, per
+tasks.md's own note — no point restarting the trial Hub before there's a UI to exercise it with.

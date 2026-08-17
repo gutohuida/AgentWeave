@@ -1,17 +1,17 @@
 """AI Jobs endpoints — CRUD + run for scheduled agent tasks."""
 
 from datetime import datetime, timezone
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...auth import get_project
 from ...db.engine import get_session
-from ...db.models import AgentJobDeletion, AIJob, JobRun, Project, Run
-from ...schemas.jobs import JobCreate, JobResponse, JobRunResponse, JobUpdate
+from ...db.models import AgentJobDeletion, AIJob, JobRun, Loop, Project, Question, Run, Task
+from ...schemas.jobs import JobCreate, JobResponse, JobRunResponse, JobUpdate, LoopSummary
 from ...sse import sse_manager
 from ...utils import persist_event, short_id
 
@@ -90,6 +90,86 @@ async def _record_job_run_failure(
     return run_id
 
 
+def _loop_opts_in(purpose: Optional[str], stop_at, stop_when_queue_empties: Optional[bool]) -> bool:
+    """Design D6's "at least one field" rule — a bare default does not opt a job in."""
+    return purpose is not None or stop_at is not None or stop_when_queue_empties is True
+
+
+async def _batch_loop_summaries(
+    session: AsyncSession, job_ids: List[str]
+) -> Dict[str, LoopSummary]:
+    """Compute every job's `loop` block in four fixed queries, never one query per job (design D7)."""
+    if not job_ids:
+        return {}
+
+    loops_result = await session.execute(select(Loop).where(Loop.job_id.in_(job_ids)))
+    loops = loops_result.scalars().all()
+    if not loops:
+        return {}
+    loop_by_job = {loop.job_id: loop for loop in loops}
+    loop_ids = [loop.id for loop in loops]
+
+    queue_counts: Dict[str, Dict[str, int]] = {}
+    counts_result = await session.execute(
+        select(Task.loop_id, Task.status, func.count())
+        .where(Task.loop_id.in_(loop_ids))
+        .group_by(Task.loop_id, Task.status)
+    )
+    for loop_id, task_status, count in counts_result.all():
+        queue_counts.setdefault(loop_id, {})[task_status] = count
+
+    current_task_by_loop: Dict[str, Dict[str, str]] = {}
+    candidates_result = await session.execute(
+        select(Task)
+        .where(Task.loop_id.in_(loop_ids), Task.status.in_(("in_progress", "blocked", "pending")))
+        .order_by(
+            Task.loop_id,
+            (Task.status != "pending").desc(),
+            Task.updated.desc(),
+            Task.created_at.asc(),
+        )
+    )
+    for task in candidates_result.scalars().all():
+        if task.loop_id not in current_task_by_loop:
+            current_task_by_loop[task.loop_id] = {
+                "id": task.id,
+                "title": task.title,
+                "status": task.status,
+            }
+
+    # Distinct (job_id, conversation_id) pairs first, so a resume-mode job that fired more than
+    # once on the same conversation does not join the same question row once per firing.
+    conv_subq = (
+        select(JobRun.job_id.label("job_id"), JobRun.conversation_id.label("conversation_id"))
+        .where(JobRun.job_id.in_(job_ids), JobRun.conversation_id.isnot(None))
+        .distinct()
+        .subquery()
+    )
+    open_questions_by_job: Dict[str, int] = {}
+    questions_result = await session.execute(
+        select(conv_subq.c.job_id, func.count(Question.id))
+        .join(Question, Question.conversation_id == conv_subq.c.conversation_id)
+        .where(Question.answered.is_(False), Question.declined.is_(False))
+        .group_by(conv_subq.c.job_id)
+    )
+    for job_id, count in questions_result.all():
+        open_questions_by_job[job_id] = count
+
+    summaries: Dict[str, LoopSummary] = {}
+    for job_id, loop in loop_by_job.items():
+        summaries[job_id] = LoopSummary(
+            purpose=loop.purpose,
+            stop_at=loop.stop_at,
+            stop_when_queue_empties=loop.stop_when_queue_empties,
+            stop_reason=loop.stop_reason,
+            stopped_at=loop.stopped_at,
+            queue=queue_counts.get(loop.id, {}),
+            current_task=current_task_by_loop.get(loop.id),
+            open_questions=open_questions_by_job.get(job_id, 0),
+        )
+    return summaries
+
+
 @router.post("", response_model=JobResponse, status_code=status.HTTP_201_CREATED)
 async def create_job(
     body: JobCreate,
@@ -153,6 +233,32 @@ async def create_job(
         ) from e
     await session.refresh(job)
 
+    # Loop opt-in (design D6): a `Loop` row is created iff at least one of the three fields was
+    # supplied non-default.
+    loop_summary: Optional[LoopSummary] = None
+    if _loop_opts_in(body.purpose, body.stop_at, body.stop_when_queue_empties):
+        loop = Loop(
+            id=f"loop-{short_id()}",
+            project_id=project_id,
+            job_id=job.id,
+            purpose=body.purpose or "",
+            stop_at=body.stop_at,
+            stop_when_queue_empties=body.stop_when_queue_empties,
+            created_by_run_id=run_identity,
+        )
+        session.add(loop)
+        await session.commit()
+        loop_summary = LoopSummary(
+            purpose=loop.purpose,
+            stop_at=loop.stop_at,
+            stop_when_queue_empties=loop.stop_when_queue_empties,
+            stop_reason=loop.stop_reason,
+            stopped_at=loop.stopped_at,
+            queue={},
+            current_task=None,
+            open_questions=0,
+        )
+
     # Add to scheduler if enabled
     try:
         from ...scheduler import get_scheduler
@@ -172,6 +278,7 @@ async def create_job(
         agent=body.agent,
     )
 
+    job.loop = loop_summary
     return job
 
 
@@ -188,7 +295,11 @@ async def list_jobs(
         q = q.where(AIJob.agent == agent)
     q = q.order_by(AIJob.created_at)
     result = await session.execute(q)
-    return result.scalars().all()
+    jobs = result.scalars().all()
+    loop_summaries = await _batch_loop_summaries(session, [job.id for job in jobs])
+    for job in jobs:
+        job.loop = loop_summaries.get(job.id)
+    return jobs
 
 
 @router.get("/{job_id}", response_model=JobResponse)
@@ -208,6 +319,10 @@ async def get_job(
     result = await session.execute(q)
     runs = result.scalars().all()
 
+    # `loop`: reuses the same batch functions as `list_jobs` with a one-element id list (design
+    # D7) — no separate single-job code path to keep in sync with the batch one.
+    loop_summaries = await _batch_loop_summaries(session, [job_id])
+
     # Convert to dict and add history
     job_dict = {
         "id": job.id,
@@ -223,6 +338,7 @@ async def get_job(
         "next_run": job.next_run,
         "run_count": job.run_count,
         "last_session_id": job.last_session_id,
+        "loop": loop_summaries.get(job_id),
         "history": [
             {
                 "id": run.id,
@@ -254,6 +370,44 @@ async def update_job(
     job = await session.get(AIJob, job_id)
     if job is None or job.project_id != project_id:
         raise HTTPException(status_code=404, detail="Job not found")
+
+    # Loop fields (design D6): supplying any of the four on a job with no `Loop` row is a 400
+    # unless this update is the one that opts the job in for the first time (mirrors create_job's
+    # "at least one field" rule).
+    loop_fields_supplied = (
+        body.purpose is not None
+        or body.stop_at is not None
+        or body.stop_when_queue_empties is not None
+        or body.stop_reason is not None
+    )
+    if loop_fields_supplied:
+        loop_result = await session.execute(select(Loop).where(Loop.job_id == job_id))
+        loop = loop_result.scalar_one_or_none()
+        if loop is None:
+            if not _loop_opts_in(body.purpose, body.stop_at, body.stop_when_queue_empties):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=(
+                        "this job is not a loop; create it with a purpose or stop condition "
+                        "to make it one"
+                    ),
+                )
+            loop = Loop(
+                id=f"loop-{short_id()}",
+                project_id=project_id,
+                job_id=job_id,
+                purpose="",
+            )
+            session.add(loop)
+        if body.purpose is not None:
+            loop.purpose = body.purpose
+        if body.stop_at is not None:
+            loop.stop_at = body.stop_at
+        if body.stop_when_queue_empties is not None:
+            loop.stop_when_queue_empties = body.stop_when_queue_empties
+        if body.stop_reason is not None:
+            loop.stop_reason = body.stop_reason
+        loop.updated_by_run_id = run_identity
 
     # Track if we need to update scheduler
     update_scheduler = False
@@ -318,6 +472,8 @@ async def update_job(
 
     await sse_manager.broadcast(project_id, "job_updated", {"id": job_id, "enabled": job.enabled})
 
+    loop_summaries = await _batch_loop_summaries(session, [job_id])
+    job.loop = loop_summaries.get(job_id)
     return job
 
 

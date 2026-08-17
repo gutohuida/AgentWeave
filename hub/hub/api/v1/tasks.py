@@ -407,6 +407,7 @@ async def list_tasks(
     task_status: Optional[str] = Query(None, alias="status"),
     spec_document_id: Optional[str] = Query(None),
     exclude_archived_completed: bool = Query(False),
+    loop_id: Optional[str] = Query(None),
     offset: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     project: Tuple[str, str] = Depends(get_project),
@@ -420,6 +421,8 @@ async def list_tasks(
         q = q.where(Task.status == task_status)
     if spec_document_id:
         q = q.where(Task.spec_document_id == spec_document_id)
+    elif loop_id:
+        q = q.where(Task.loop_id == loop_id)
     elif exclude_archived_completed:
         archived_ids = select(SpecDocument.id).where(
             SpecDocument.project_id == project_id,

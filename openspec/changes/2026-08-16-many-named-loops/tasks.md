@@ -62,27 +62,27 @@
 
 ## 4. API (`hub/hub/api/v1/jobs.py`, `hub/hub/schemas/jobs.py`, `hub/hub/api/v1/tasks.py`)
 
-- [ ] 4.1 `JobCreate` gains `purpose: Optional[str]`, `stop_at: Optional[datetime]`,
+- [x] 4.1 `JobCreate` gains `purpose: Optional[str]`, `stop_at: Optional[datetime]`,
       `stop_when_queue_empties: bool = False` (design D6). `JobUpdate` gains the same three plus
       `stop_reason: Optional[str]`.
-- [ ] 4.2 `create_job`: after the existing `AIJob` is committed, create a `Loop` row iff at least one
+- [x] 4.2 `create_job`: after the existing `AIJob` is committed, create a `Loop` row iff at least one
       of the three fields was supplied non-default (`purpose is not None or stop_at is not None or
       stop_when_queue_empties is True`) — the "at least one field" rule from design D6, stated once
       here and reused by 4.3 rather than two independent implementations of the same rule.
-- [ ] 4.3 `update_job`: if any of the four loop fields is supplied and the job has no `Loop` row,
+- [x] 4.3 `update_job`: if any of the four loop fields is supplied and the job has no `Loop` row,
       raise `400` (design D6's explicit-rejection rule) *before* creating one implicitly — except
       when the update is the one that opts the job in for the first time (mirror 4.2's rule: creating
       a `Loop` row on first `PATCH` that supplies a loop field is allowed, matching "opting in at
       creation or afterward" from the spec delta's own first requirement); apply supplied fields to
       the existing or newly-created row.
-- [ ] 4.4 `LoopSummary` schema (design D5) and `JobResponse.loop: Optional[LoopSummary] = None`.
+- [x] 4.4 `LoopSummary` schema (design D5) and `JobResponse.loop: Optional[LoopSummary] = None`.
       `list_jobs`/`get_job`: implement per design D7 (added in round 2's cold review) — four batch
       queries over the full job/loop page, never one query per job per loop-derived field. `get_job`
       calls the same batch functions with a one-element id list rather than a separate single-job
       code path. `list_jobs` today runs exactly one query (confirmed in round 2: it does not even
       fetch history the way `get_job` does), so this is the floor to hold, not merely a shape to
       "watch."
-- [ ] 4.5 `hub/hub/api/v1/tasks.py`: `list_tasks` gains `loop_id: Optional[str] = Query(None)`,
+- [x] 4.5 `hub/hub/api/v1/tasks.py`: `list_tasks` gains `loop_id: Optional[str] = Query(None)`,
       applied as a third `elif` arm per design D2. Check `hub/hub/api/v1/agent_actions.py`'s
       `list_shared_tasks` — the D7 regression from `-the-board-scoped-by-document` was exactly a
       direct-function-call site not forwarding a new parameter and binding it to FastAPI's raw
@@ -123,29 +123,30 @@
       own extra assertions), 1 in `test_project_persistence.py`. Also fixed the stale
       `f"expected alembic_version=0074..."` message text in two of those assertions, missed by a
       naive `"0074"` string replace since the message itself has no surrounding quotes.
-- [ ] 6.2 `hub/tests/test_jobs.py` (or wherever job CRUD is already tested — confirm the file before
+- [x] 6.2 `hub/tests/test_jobs.py` (or wherever job CRUD is already tested — confirm the file before
       assuming its name): creating a job with no loop field yields `loop: null`; creating one with
       `purpose` alone yields a `Loop` row and `loop.purpose` in the response; `PATCH` supplying a
       loop field on a plain job is `400`; `PATCH` supplying a loop field on a job with an existing
       loop updates it.
-- [ ] 6.3 Same file or a new one: `_loop_stop_reason` — a loop with `stop_at` in the past causes the
+- [x] 6.3 Same file or a new one: `_loop_stop_reason` — a loop with `stop_at` in the past causes the
       next fire to be skipped, `job.enabled` becomes `False`, `loop.stop_reason`/`stopped_at` are set,
       and a subsequent manual `run_job` call also refuses (still disabled) rather than firing anyway.
       A loop with `stop_when_queue_empties=True` and zero non-terminal `Task`s naming it stops the
       same way; one with a single `pending` task does not stop.
-- [ ] 6.4 `hub/tests/test_tasks.py`: `GET /tasks?loop_id=X` returns exactly the tasks naming that
+- [x] 6.4 `hub/tests/test_tasks.py`: `GET /tasks?loop_id=X` returns exactly the tasks naming that
       loop regardless of status, mirroring 3.1's own `spec_document_id` test shape from the prior
       change. Confirm `GET /api/v1/agent-actions/tasks` (the D7 regression's actual live surface)
       still returns `200` after 4.5's change, not just the direct-router test.
 - [ ] 6.5 UI: `hub/ui/src/__tests__/` — a test for `JobCard`'s loop block rendering (present when
       `job.loop` is set, absent otherwise, queue counts and current item shown correctly) and for
       `useTasks({ loopId })`/whatever hook 5.2 lands on requesting the right query string.
-- [ ] 6.6 `pytest hub/tests/ -n 8` and `pytest tests/ -n 4` — record counts against this session's
-      `20e963e` baseline (2093/11, 362/3) in the log.
+- [x] 6.6 `pytest hub/tests/ -n 8` and `pytest tests/ -n 4` — record counts against this session's
+      `20e963e` baseline (2093/11, 362/3) in the log. Recorded this iteration: hub 2102/11 (+9, exactly
+      the tests added in 6.2-6.4), CLI 362/3 (unchanged, untouched by this slice).
 - [ ] 6.7 `cd hub/ui && npm test && npm run lint && npx tsc --noEmit` — record counts against the
-      `943/943` baseline.
-- [ ] 6.8 `ruff check hub/ src/`, `black --check` on every touched file.
-- [ ] 6.9 `npx openspec validate --changes --strict` and `--specs --strict` — both clean.
+      `943/943` baseline. Deferred to section 5 (UI) — no UI code touched yet.
+- [x] 6.8 `ruff check hub/ src/`, `black --check` on every touched file. Clean.
+- [x] 6.9 `npx openspec validate --changes --strict` and `--specs --strict` — both clean (20/20, 30/30).
 
 ## 7. Driven against the running Hub
 

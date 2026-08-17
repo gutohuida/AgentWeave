@@ -2,8 +2,9 @@
 
 import pytest
 
+from hub.agent_auth import hash_run_token
 from hub.db.engine import async_session_factory
-from hub.db.models import SpecDocument, Task
+from hub.db.models import Run, SpecDocument, Task
 
 
 @pytest.mark.asyncio
@@ -218,7 +219,9 @@ async def _make_document(doc_id: str, phase: str) -> None:
         await session.commit()
 
 
-async def _make_task(task_id: str, status: str, spec_document_id: str | None) -> None:
+async def _make_task(
+    task_id: str, status: str, spec_document_id: str | None, loop_id: str | None = None
+) -> None:
     async with async_session_factory() as session:
         session.add(
             Task(
@@ -227,6 +230,7 @@ async def _make_task(task_id: str, status: str, spec_document_id: str | None) ->
                 title=task_id,
                 status=status,
                 spec_document_id=spec_document_id,
+                loop_id=loop_id,
             )
         )
         await session.commit()
@@ -299,3 +303,42 @@ async def test_neither_parameter_returns_the_unfiltered_default(app, auth_header
     assert resp.status_code == 200
     ids = {t["id"] for t in resp.json()}
     assert "task-default-1" in ids
+
+
+@pytest.mark.asyncio
+async def test_loop_id_scopes_to_exactly_that_loops_tasks_regardless_of_status(app, auth_headers):
+    await _make_task("task-loop-1", "approved", None, loop_id="loop-scale-a")
+    await _make_task("task-loop-2", "pending", None, loop_id="loop-scale-a")
+    await _make_task("task-loop-3", "pending", None, loop_id="loop-scale-b")
+    await _make_task("task-loop-4", "pending", None, loop_id=None)
+
+    resp = await app.get(
+        "/api/v1/projects/proj-test/tasks?loop_id=loop-scale-a", headers=auth_headers
+    )
+    assert resp.status_code == 200
+    ids = {t["id"] for t in resp.json()}
+    assert ids == {"task-loop-1", "task-loop-2"}
+
+    # The agent-actions router's own list_tasks call site must still return 200 and must not
+    # inherit loop scoping it was never asked for (the D7-regression shape this change's own
+    # tasks.md names: a direct-call site silently defaulting a new parameter differently from
+    # the router it wraps).
+    token = "aw_run_task-loop-actor-secret"
+    async with async_session_factory() as session:
+        session.add(
+            Run(
+                id="run-task-loop-actor",
+                project_id="proj-test",
+                agent="loop-scoper",
+                status="running",
+                turn_depth=0,
+                capability_token_hash=hash_run_token(token),
+            )
+        )
+        await session.commit()
+    shared_resp = await app.get(
+        "/api/v1/agent-actions/tasks", headers={"Authorization": f"Bearer {token}"}
+    )
+    assert shared_resp.status_code == 200
+    shared_ids = {t["id"] for t in shared_resp.json()}
+    assert "task-loop-3" in shared_ids
