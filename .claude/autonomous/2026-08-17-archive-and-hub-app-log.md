@@ -365,3 +365,81 @@ guard) and its test 2.9 — `next_action` explicitly permitted stopping after 1.
 problem (argparse can't express it with a plain `default=`) worth its own focused pass rather than a
 rushed tail-end addition. Once 1.8/2.9 land, section 1 (D1/D2/D6) is fully closed and A3 moves to
 section 3, the desktop window itself.
+
+---
+
+## 20:34 — Iteration 5: task 1.8/2.9, closing A3 section 1
+
+Verified branch first (`autonomous/2026-08-17-archive-and-hub-app`, matched `STATE.json`), and
+`git log` matched the state left by iteration 4 (`ce11e62` at HEAD, `e9f00f6` carrying the real
+work). No collision this time.
+
+Re-read `design.md` D6's "Port" bullet fresh, as instructed, rather than trusting memory of it.
+Task 1.8: when `--profile` names anything other than `"default"` and `--port` was not explicitly
+passed, the CLI must error naming both flags rather than silently resolving to `DEFAULT_HUB_PORT`
+— a named profile has no port of its own, and letting it fall back to the default profile's port
+would be a TCP-level bind collision that database/PID-file namespacing does nothing to prevent.
+
+**The passed-vs-default distinction.** `--port` on the bare parser, `status_parser` and
+`stop_parser` (all three surfaces D6 names — `reset_parser` has no `--port` at all, untouched) now
+defaults to `None` instead of `8000`. This is the whole trick: a plain `default=8000` cannot tell
+"the operator typed `--port 8000`" apart from "the operator typed nothing," and D6 needed exactly
+that distinction. A new pure helper, `_hub_require_port_for_named_profile(profile, port)`, returns
+an error message when `profile not in (None, "", "default")` and `port is None`, else `None` — the
+same `(value-or-check, message)` shape `_hub_resolve_database_source` already established for D6's
+other half. `cmd_hub_start`, `cmd_status` and `cmd_stop` each call it immediately after reading
+`args.port`/`args.profile`, `print_error` + `return 1` if it fires, then resolve
+`port = port if port is not None else DEFAULT_HUB_PORT` — so every other line in those three
+functions still sees a concrete `int`, unaware profiles or the sentinel exist.
+
+**Tests (2.9), mutation-checked, not just written.** New `TestPortRequiredForNamedProfile` class in
+`tests/test_cli.py`, seven tests: the helper directly (named-without-port errors and names both
+flags plus the port number in the message; default-profile-without-port and named-with-port are
+both silently fine), a parser-level sentinel guard (`create_parser().parse_args([])` /
+`["status"]` / `["stop"]` all give `port is None`; `--port 8010` on each still parses to `8010` —
+this guards the sentinel itself, since a regression back to `default=8000` would make the whole
+check silently unreachable with no other test catching it), and one integration test per command
+(`cmd_hub_start`/`cmd_status`/`cmd_stop`, each called directly with a bare `argparse.Namespace`,
+asserting `== 1` and `"--port"` in stdout). Mutated by hand: replaced
+`_hub_require_port_for_named_profile`'s body with `return None`, reran — 4 of the 7 new tests went
+red. The `cmd_hub_start` failure was the most informative: with the guard defeated it did not just
+fail an assertion, it actually proceeded to try starting a real Hub instance and died on
+`agentweave-hub is not installed` — solid confirmation the guard, not some other early return, was
+the only thing stopping it before. Restored the helper, reran — all 7 green again.
+
+**Verified beyond the new tests:**
+- Full CLI suite: **375 passed, 3 skipped** (up from iteration 4's 368/3 — exactly +7, matching the
+  new tests one-for-one since 2.9 added no other coverage).
+- `ruff check`, `black --check --target-version py311`, `mypy` on `src/agentweave/cli.py` and
+  `tests/test_cli.py`: all clean.
+- `openspec validate --changes --strict`: 8/8.
+- No spec delta was needed — `specs/app-lifecycle/spec.md`'s "A named profile selects a separate,
+  deliberate instance" requirement and its "A named profile without an explicit port is rejected"
+  scenario were already written during the round-2 cold review that raised tasks 1.8/2.9 in the
+  first place. Only `tasks.md` needed ticking, with a done-note on each.
+
+Committed `a2c01ae`, pushed. Section 1 (D1/D2/D6) of the change is now fully closed: all of
+1.1-1.8 and 2.1-2.9 ticked, across iterations 3-5.
+
+**Left for the next firing, deliberately: section 3, the desktop window (tasks 3.1-3.5, D3/D5).**
+Re-read D3 and D5 in full this iteration to brief the handoff accurately rather than pushing that
+reading cost onto the next firing blind. The shape of what's coming, for whoever picks this up:
+`pywebview` becomes a genuinely optional dependency (`[project.optional-dependencies] app = [...]`,
+imported only inside a guarded `try` at one call site — the CLI's stdlib-only stance survives
+because the dependency is truly optional, not just declared so); app mode is *forced on* for every
+bare `agentweave` and every `--docker`/`--local` invocation today, so once 3.1-3.4 land the default
+`agentweave` invocation blocks in `webview.start()` until the window closes, a real behavior change
+on the path every operator hits by default — `--no-detach` is the one named exception, kept on the
+old non-blocking browser-open path unconditionally, because `webview.start()` needs the main thread
+and `--no-detach`'s main thread is already committed to `uvicorn.run()`. D3's amendment A2 also
+already settled testability: Playwright cannot drive pywebview's window at all on Windows, so the
+design accepts that gap rather than solving it, on the strength of keeping the native-window shell
+(`_open_app_window_native`, task 3.2) to nothing but window lifecycle calls and one diagnostic
+print — task 3.5 checks that by diff review, not by running anything. This is a materially
+different kind of task than section 1's plumbing extensions (new dependency, new default-path
+behavior, an accepted-not-solved testability gap) and — per this iteration's own judgment, recorded
+in `next_action` for whoever runs next — deserves a full, careful iteration of its own rather than
+a rushed tail addition here. It also cannot be verified end-to-end by this driver even once
+implemented: there is no display session to open a real pywebview window in, so only the
+fallback/absent-pywebview path is checkable here, and that must be stated plainly rather than
+implied to be more than it is.
