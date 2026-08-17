@@ -7,7 +7,7 @@
   "stop_at": "2026-08-18T08:00:00+01:00",
   "stop_when_queue_empties": false,
   "iteration": 0,
-  "last_heartbeat": "2026-08-17T23:00:54+01:00",
+  "last_heartbeat": "2026-08-17T23:25:18+01:00",
   "session_stopped": false,
   "prepared_by": "/autonomous-prep, interactive session 2026-08-17T22:20-23:05+01:00. Intent was fixed with the operator BEFORE the codebase was read, per the skill. Every queue item below was located in real files during prep -- none is a guess about where the code lives.",
   "operator_intent": {
@@ -15,7 +15,6 @@
     "ranked": "Items 1-6 are the night's actual objective. 7 and 9 are explorations only. 8 and 10 are what to do if the six land early -- NOT reasons to leave a fix half-done.",
     "rejected": "Breadth across all ten items was offered and declined. Do not trade depth on 1-6 for coverage of 8/10."
   },
-
   "queue": [
     {
       "id": "Q1-restore-trial-hub-fixtures",
@@ -126,10 +125,8 @@
       "done_when": "Whatever is picked is finished and tested, or explicitly parked with a note. Do not leave a half-migration in the tree at 08:00."
     }
   ],
-
   "current": null,
   "next_action": "Start with Q1 -- it is five minutes and it unblocks both the operator's morning and this loop's own ability to verify anything against realistic data.\n\nFirst, cut the branch: `git checkout -b autonomous/2026-08-18-the-app-feels-alive master` from parent_sha 1e0d08e. Confirm with `git branch --show-current` AFTER the first commit as well -- handoff 0054 records a previous run whose first commit landed on master because HEAD moved under it mid-turn.\n\nThen Q1. The situation, established during prep and NOT to be re-derived: four SQLite databases exist and three of them are live-ish. `<repo>/hub/data/agentweave.db` (11 MB, mtime 2026-08-17 21:45) holds proj-5e960453 'AgentWeave', proj-b44fac0c 'Throwaway (taste pass)', proj-ff695d96 'aw-loop10', the capability document spec/capabilities/quiet-hours/spec.html in phase `current`, and two archived change documents -- i.e. every taste-pass fixture the last run seeded. No Hub serves it. `~/.agentweave/hub/profiles/trial/agentweave.db` IS what port 8010 serves and holds only aw-loop10. `~/.agentweave/hub/profiles/beta/agentweave.db` is the path CLAUDE.md documents and is stale (mtime 02:41). `~/.agentweave/hub/data/agentweave.db` is what port 8000 serves and holds proj-8f100b95 'AgentWeaveWebsite' with four exploring documents -- that is REAL operator work on a different project, leave it entirely alone.\n\nBack up profiles/trial/agentweave.db with a timestamped copy, then restart the 8010 process with DATABASE_URL pointing at <repo>/hub/data/agentweave.db. Prefer repointing over copying; a fourth divergent copy is how this ambiguity started. Start it detached (see environment.hub_start_detached) so it outlives the iteration, and start it from `hub/`, never the repo root -- CLAUDE.md explains why the root shadows the installed `hub` package and kills the child 60 seconds later with its output already sent to DEVNULL.\n\nVerify: GET http://127.0.0.1:8010/api/v1/projects with header `Authorization: Bearer <key from hub/.env>` returns THREE projects. Note the response is a bare JSON array, not an object with a `projects` field, and the auth header is Bearer -- not X-API-Key. Both cost prep a wasted probe.\n\nThen commit, and move to Q1b -- the CLI test suite currently HANGS and you will want it green before you start changing CLI code. Do not run `py -3.11 -m pytest tests/` bare until Q1b is fixed; it never returns.",
-
   "limits": [
     "ALWAYS invoke Python as `py -3.11` or the absolute path in environment.python. NEVER bare `python`. On this machine `python` resolves to C:/Users/huida/AppData/Local/hermes/hermes-agent/venv/Scripts/python.exe, which does NOT have agentweave installed -- `python -m pytest tests/` fails collection with 16 ModuleNotFoundError entries that look exactly like a broken tree. Prep hit this and nearly mistook it for real breakage. Do not spend an iteration 'fixing' it.",
     "Never publish to PyPI, push a tag, or cut a release. The operator asked for fixes, not a version. master is already 30 commits past v1.0.1 and unreleased; that stays a decision for an attended session.",
@@ -142,9 +139,9 @@
     "Stage paths explicitly. Never `git add -A` -- the tree carries untracked scratch that must not be committed.",
     "Commit after each completed queue item, and push. Do not batch a night's work into one commit.",
     "Do not estimate elapsed time -- stamp it from PowerShell (`Get-Date -Format \"yyyy-MM-ddTHH:mm:sszzz\"`). A previous run wrote a future-dated heartbeat and parked its own driver for 45 minutes.",
-    "A background job with a `timeout` is NOT bounded -- run_in_background detaches and the timeout does not kill it. Check long jobs explicitly; a previous run left a hung suite going for 55 minutes."
+    "A background job with a `timeout` is NOT bounded -- run_in_background detaches and the timeout does not kill it. Check long jobs explicitly; a previous run left a hung suite going for 55 minutes.",
+    "Update STATE.json with Python (json.load/json.dump, encoding=utf-8), NEVER with PowerShell Set-Content -Encoding utf8. PS 5.1 writes a UTF-8 BOM, which makes json.load() fail with \"Unexpected UTF-8 BOM\" for every Python reader, and ConvertTo-Json also escapes every apostrophe to ' and reflows the whole file so the diff becomes unreadable. Hit and fixed during prep. If you must read a file that may carry one, use encoding=utf-8-sig."
   ],
-
   "environment": {
     "python": "C:/Users/huida/AppData/Local/Programs/Python/Python311/python.exe (invoke as `py -3.11`)",
     "python_trap": "Bare `python` on PATH is the hermes-agent venv and lacks agentweave. See limits[0].",
@@ -168,7 +165,6 @@
     "ui_checks": "cd hub/ui && npm run lint && npx tsc --noEmit && npm test  (961 tests as of handoff 0054)",
     "ui_screenshot_harness": "scripts/uishot.py --url http://127.0.0.1:8010 for a plain URL; scripts/taste_shots.py --key <aw_live_...> --project <proj-id> seeds storage, drives to a document and captures both themes."
   },
-
   "decisions_for_user": [
     {
       "id": "N1-hub-terminology",
@@ -208,7 +204,6 @@
       "default": "Not tonight -- it requires a release, which is out of scope for this loop."
     }
   ],
-
   "known_debts": [
     {
       "id": "staticpool-fixture-race",
@@ -224,13 +219,11 @@
       "summary": "CI has never run on 54dd29b or 1e0d08e. The suites recorded in handoff 0054 are local only. Relevant if anything tonight is ever considered for release."
     }
   ],
-
   "driver": {
     "kind": "Windows Scheduled Task running headless `claude -p`",
     "why": "ScheduleWakeup and CronCreate both die with the interactive session -- measured 2026-08-15, nine hours asked for and forty minutes delivered. The operator is asleep; only an OS task survives.",
     "stands_down_if": "STATE.json's last_heartbeat is fresher than the grace window, meaning a live session holds the branch",
     "do_not": "Do not arm the driver while the tree is still being worked. Handoff 0054 records a driver's first iteration committing to master because HEAD moved under it mid-turn."
   },
-
   "handover_note": "Prepared by /autonomous-prep on 2026-08-17 with the operator awake; the operator went to sleep partway through prep having said 'you can handle the rest', which is the authority under which this loop was armed. Intent was fixed before the codebase was read. All six app fixes (Q2-Q7) were located in real files during prep, and three carried traps that would each have cost an iteration: the load-bearing completion event behind item 4 (deleting it silently breaks Handoff detection), the already-existing-but-unreachable document picker behind item 5, and the already-existing-but-buried Open-project flow behind item 2 -- items 2 and 5 are both far smaller than they read, because the feature exists and only the entry point is missing. The environment carried three more: bare `python` is the wrong interpreter and fails collection in a way that mimics a broken tree; no running Hub serves the taste-pass fixtures the operator is meant to judge; and the CLI suite hangs forever because last session's `pip install pywebview` turned an ImportError guard into a real native window (Q1b). All six are written down above rather than left to be rediscovered at 3am. What is NOT established: a green baseline for the CLI suite, and CI has never run on this parent commit."
 }
