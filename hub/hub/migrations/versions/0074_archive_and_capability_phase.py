@@ -58,12 +58,16 @@ def _tables(conn) -> set[str]:
     return set(sa.inspect(conn).get_table_names())
 
 
-def _replace_spec_documents_constraints() -> None:
+def _widen_the_phase_check() -> None:
     with op.batch_alter_table("spec_documents", recreate="always") as batch_op:
         batch_op.drop_constraint("ck_spec_documents_phase", type_="check")
         batch_op.create_check_constraint(
             "ck_spec_documents_phase", "phase IN ('" + "', '".join(_PHASES) + "')"
         )
+
+
+def _add_the_kind_checks() -> None:
+    with op.batch_alter_table("spec_documents", recreate="always") as batch_op:
         batch_op.create_check_constraint(
             "ck_spec_documents_kind", "kind IN ('" + "', '".join(_KINDS) + "')"
         )
@@ -79,7 +83,23 @@ def upgrade() -> None:
     present = _tables(conn)
 
     if {"spec_documents", "projects"} <= present:
-        _replace_spec_documents_constraints()
+        # Three steps, for the mirror image of the reason `downgrade()` needs three — see the
+        # comment there. The rewrite in the middle has to happen while the phase CHECK is already
+        # wide enough to allow `current` but the paired CHECK is not yet in force to forbid the
+        # `(capability, approved)` state the rows are arriving in.
+        _widen_the_phase_check()
+
+        # The inverse of the downgrade's rewrite, and the thing that makes rollback two-way rather
+        # than one-way. On a database reaching 0074 for the first time this matches nothing —
+        # `capability` was not in the kind vocabulary before this migration, so no such row can
+        # exist. It matters only for a database that has been *down* to 0073 and is coming back:
+        # the downgrade parks capability documents at `approved` because `current` no longer
+        # exists, and `ck_spec_documents_kind_phase` would then reject the rows it copies.
+        conn.execute(
+            sa.text("UPDATE spec_documents SET phase = 'current' WHERE kind = 'capability'")
+        )
+
+        _add_the_kind_checks()
 
     if _MERGE_TABLE not in present and {"spec_documents", "projects"} <= present:
         op.create_table(
@@ -127,6 +147,19 @@ def downgrade() -> None:
         op.drop_table(_MERGE_TABLE)
 
     if {"spec_documents", "projects"} <= present:
+        # Three steps, and the order is the whole difficulty: the rows have to be rewritten while
+        # neither the constraint they currently satisfy nor the constraint they will end up
+        # satisfying is in force. A capability row is `(kind='capability', phase='current')`, so
+        # `ck_spec_documents_kind_phase` rejects moving it to `approved`; but the narrowed phase
+        # CHECK rejects leaving it at `current`, and a batch recreate applies its new CHECKs to the
+        # copied rows, so a single recreate cannot straddle the rewrite either way.
+        #
+        # So: drop the paired CHECK first (recreate 1), rewrite the rows while only the wide
+        # five-value phase CHECK is in force, then narrow that CHECK (recreate 2).
+        with op.batch_alter_table("spec_documents", recreate="always") as batch_op:
+            batch_op.drop_constraint("ck_spec_documents_kind_phase", type_="check")
+            batch_op.drop_constraint("ck_spec_documents_kind", type_="check")
+
         # `archived` and `current` are recoverable states, not data to discard: the closest
         # existing phase for both is `approved` — the state an archived document was in
         # immediately beforehand, and the closest existing meaning to "settled, not being decided
@@ -138,9 +171,8 @@ def downgrade() -> None:
                 "WHERE phase IN ('archived', 'current')"
             )
         )
+
         with op.batch_alter_table("spec_documents", recreate="always") as batch_op:
-            batch_op.drop_constraint("ck_spec_documents_kind_phase", type_="check")
-            batch_op.drop_constraint("ck_spec_documents_kind", type_="check")
             batch_op.drop_constraint("ck_spec_documents_phase", type_="check")
             batch_op.create_check_constraint(
                 "ck_spec_documents_phase",

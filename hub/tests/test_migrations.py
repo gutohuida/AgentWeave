@@ -33,6 +33,11 @@ from hub.db.models import AIJob, ApiKey, Base, JobRun, OperatorCredential, Proje
 # is packaged, task 3.12, so it ships with a plain pip install too)
 ALEMBIC_INI = Path(__file__).parent.parent / "hub" / "alembic.ini"
 
+# The revision `alembic upgrade head` must land on. Named once so the assertion and its failure
+# message cannot disagree — they did, for two head bumps, telling anyone debugging a failure to go
+# read the wrong migration.
+HEAD_REVISION = "0076"
+
 
 # ---------------------------------------------------------------------------
 # DB-4: error_summary is String(500)
@@ -144,7 +149,7 @@ def test_alembic_upgrade_head_fresh_file_db(tmp_path) -> None:
             return row[0]
 
     version = _run(_check_version())
-    assert version == "0076", f"expected alembic_version=0075, got {version}"
+    assert version == HEAD_REVISION, f"expected alembic_version={HEAD_REVISION}, got {version}"
 
     columns = {column["name"]: column for column in _inspect_columns(db_url, "agent_outputs")}
     assert {"kind", "payload", "run_id", "sequence"} <= columns.keys()
@@ -192,7 +197,7 @@ def test_migration_0025_drops_legacy_project_roles_config(tmp_path) -> None:
         }
         version = conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
     assert "project_roles_config" not in tables
-    assert version == "0076"
+    assert version == HEAD_REVISION
 
 
 def test_migration_0027_adds_conversation_runtime_overrides(tmp_path) -> None:
@@ -295,7 +300,7 @@ def test_migration_0035_recreates_conversations_preserving_shape(tmp_path) -> No
 
     with sqlite3.connect(db_file) as conn:
         version = conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
-        assert version == "0076"
+        assert version == HEAD_REVISION
 
         # The existing row survives, unnamed and attributed to the operator.
         row = conn.execute(
@@ -512,7 +517,7 @@ async def test_init_db_runs_alembic_for_file_db(tmp_path, monkeypatch) -> None:
             return row[0] if row else None
 
     version = await _check()
-    assert version == "0076", f"expected alembic_version=0075, got {version}"
+    assert version == HEAD_REVISION, f"expected alembic_version={HEAD_REVISION}, got {version}"
 
 
 @pytest.mark.asyncio
@@ -1234,7 +1239,7 @@ def test_migration_0052_is_guarded_when_tasks_does_not_exist(tmp_path) -> None:
 
     with sqlite3.connect(db_file) as conn:
         version = conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
-        assert version == "0076"
+        assert version == HEAD_REVISION
         tables = {
             row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
@@ -1403,7 +1408,7 @@ def test_migration_0057_is_guarded_when_tasks_does_not_exist(tmp_path) -> None:
 
     with sqlite3.connect(db_file) as conn:
         version = conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
-        assert version == "0076"
+        assert version == HEAD_REVISION
         tables = {
             row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
@@ -1468,7 +1473,7 @@ def test_migration_0059_is_guarded_when_the_tables_do_not_exist(tmp_path) -> Non
 
     with sqlite3.connect(db_file) as conn:
         version = conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
-        assert version == "0076"
+        assert version == HEAD_REVISION
         tables = {
             row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
@@ -1526,7 +1531,7 @@ def test_migration_0060_is_guarded_when_conversations_does_not_exist(tmp_path) -
 
     with sqlite3.connect(db_file) as conn:
         version = conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
-        assert version == "0076"
+        assert version == HEAD_REVISION
         tables = {
             row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
@@ -1588,7 +1593,7 @@ def test_migration_0061_is_guarded_when_questions_does_not_exist(tmp_path) -> No
 
     with sqlite3.connect(db_file) as conn:
         version = conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
-        assert version == "0076"
+        assert version == HEAD_REVISION
         tables = {
             row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
@@ -1879,7 +1884,7 @@ def test_migration_0073_gives_conversations_a_sequence_primary_key(tmp_path) -> 
 
     with sqlite3.connect(db_file) as conn:
         version = conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
-        assert version == "0076"
+        assert version == HEAD_REVISION
 
         rows = conn.execute("SELECT id, sequence FROM conversations ORDER BY sequence").fetchall()
         assert [row[0] for row in rows] == ["conv-existing", "conv-second"]
@@ -1942,8 +1947,244 @@ def test_migration_0073_is_guarded_when_conversations_does_not_exist(tmp_path) -
 
     with sqlite3.connect(db_file) as conn:
         version = conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
-        assert version == "0076"
+        assert version == HEAD_REVISION
         tables = {
             row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
         }
         assert "conversations" not in tables
+
+
+# ---------------------------------------------------------------------------
+# 0074 — the archived phase and the capability kind
+# ---------------------------------------------------------------------------
+
+
+def _seed_spec_documents_for_downgrade(db_file: Path) -> None:
+    """A project plus the two rows only 0074 can hold: capability/current and change/archived."""
+    with sqlite3.connect(db_file) as conn:
+        conn.execute(
+            "INSERT INTO projects (id, name, created_at) "
+            "VALUES ('proj-down', 'downgrade fixture', '2026-01-01T00:00:00Z')"
+        )
+        for doc_id, path, kind, phase in (
+            ("spec-cap", "spec/capabilities/auth.md", "capability", "current"),
+            ("spec-arch", "spec/changes/2026-01-01-thing.md", "change-spec", "archived"),
+        ):
+            conn.execute(
+                "INSERT INTO spec_documents "
+                "(id, project_id, path, title, kind, phase, rigor, created_at, updated_at) "
+                "VALUES (?, 'proj-down', ?, 'fixture', ?, ?, 'sketch', "
+                "'2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+                (doc_id, path, kind, phase),
+            )
+
+
+def test_migration_0074_downgrade_survives_a_capability_document(tmp_path) -> None:
+    """Rollback must work on the databases that used the feature, not only on the ones that didn't.
+
+    The ordering trap this pins: a capability row is `(kind='capability', phase='current')`, so
+    `ck_spec_documents_kind_phase` refuses to let it become `approved` while that CHECK stands —
+    but the narrowed three-value phase CHECK refuses to let it stay `current`, and a batch recreate
+    applies its new CHECKs to the rows it copies. Rewriting the rows either before the paired CHECK
+    is dropped or after the phase CHECK is narrowed fails. Only the middle works.
+
+    Note the asymmetry that made the original defect easy to miss: the archived change-spec row
+    downgrades fine on its own, because `change-spec` + `approved` satisfies the paired CHECK. A
+    database with no capability document never sees the failure.
+    """
+    from alembic import command
+    from alembic.config import Config
+
+    db_file = tmp_path / "down_0074.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    _run_alembic_with(db_url)
+    _seed_spec_documents_for_downgrade(db_file)
+
+    cfg = Config(str(ALEMBIC_INI))
+    cfg.set_main_option("sqlalchemy.url", db_url)
+    with patch.object(settings, "database_url", db_url):
+        command.downgrade(cfg, "0073")
+
+    with sqlite3.connect(db_file) as conn:
+        assert conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "0073"
+
+        # Both recoverable states land on `approved`, and no row is lost.
+        phases = dict(conn.execute("SELECT id, phase FROM spec_documents"))
+        assert phases == {"spec-cap": "approved", "spec-arch": "approved"}
+
+        ddl = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'spec_documents'"
+        ).fetchone()[0]
+        # The narrowed phase CHECK is back, and the two 0074 added are gone.
+        assert "ck_spec_documents_phase" in ddl
+        assert "archived" not in ddl
+        assert "ck_spec_documents_kind_phase" not in ddl
+        assert "ck_spec_documents_kind" not in ddl
+        # Two table recreates must not cost the uniqueness the table had before 0074. It is an
+        # inline table constraint, so it shows up in the DDL rather than as a named index.
+        assert "uq_spec_documents_project_path" in ddl
+
+        assert "spec_document_merges" not in {
+            row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
+        }
+
+
+def test_migration_0074_downgrade_then_upgrade_round_trips(tmp_path) -> None:
+    """Down and back up again — the rollback escape hatch is only real if it is reversible."""
+    from alembic import command
+    from alembic.config import Config
+
+    db_file = tmp_path / "roundtrip_0074.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    _run_alembic_with(db_url)
+    _seed_spec_documents_for_downgrade(db_file)
+
+    cfg = Config(str(ALEMBIC_INI))
+    cfg.set_main_option("sqlalchemy.url", db_url)
+    with patch.object(settings, "database_url", db_url):
+        command.downgrade(cfg, "0073")
+        command.upgrade(cfg, "head")
+
+    with sqlite3.connect(db_file) as conn:
+        ddl = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'spec_documents'"
+        ).fetchone()[0]
+        assert "ck_spec_documents_kind_phase" in ddl
+        assert "ck_spec_documents_kind" in ddl
+        assert "archived" in ddl
+        # A capability document's phase is recoverable — `current` is the only phase it can have,
+        # so the upgrade can restore it exactly. An archived change-spec's is not: `approved` and
+        # `archived` are both legal for it after the upgrade, and nothing records which it was.
+        # That asymmetry is the documented cost of the rollback, and the rows themselves survive.
+        assert dict(conn.execute("SELECT id, phase FROM spec_documents")) == {
+            "spec-cap": "current",
+            "spec-arch": "approved",
+        }
+
+
+def test_migration_0074_kinds_do_not_drift_from_spec_payload(tmp_path) -> None:
+    """The migration restates the `kind` vocabulary; nothing else asserts the two agree.
+
+    `CLAUDE.md`: anything a standalone module needs from the Hub "is restated there, with a test
+    asserting the two agree". Migrations cannot import `hub.spec_payload` — they run under alembic
+    with no guarantee the package is importable — so 0074 restates `_KINDS`, and this is its guard.
+
+    Without it, adding a kind to `spec_payload.KINDS` is a one-line change that passes every
+    Python-layer check and is then rejected by `ck_spec_documents_kind` at INSERT time, with the
+    whole suite still green.
+    """
+    import importlib.util
+
+    from hub.db.models import SPEC_KINDS, SPEC_PHASES
+    from hub.spec_payload import KINDS as PAYLOAD_KINDS
+
+    migration_path = (
+        Path(__file__).parent.parent
+        / "hub"
+        / "migrations"
+        / "versions"
+        / "0074_archive_and_capability_phase.py"
+    )
+    spec = importlib.util.spec_from_file_location("_migration_0074", migration_path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    assert set(module._KINDS) == set(SPEC_KINDS), (
+        "migration 0074's _KINDS has drifted from the model's SPEC_KINDS — the database CHECK and "
+        "the Python vocabulary must name the same set"
+    )
+    assert set(module._PHASES) == set(
+        SPEC_PHASES
+    ), "migration 0074's _PHASES has drifted from the model's SPEC_PHASES"
+    # The third restatement: the Python-layer validator that decides what a caller may submit.
+    assert set(PAYLOAD_KINDS) == set(SPEC_KINDS), (
+        "spec_payload.KINDS has drifted from the model's SPEC_KINDS — a kind accepted by the "
+        "validator and rejected by ck_spec_documents_kind fails only at INSERT time"
+    )
+
+
+# ---------------------------------------------------------------------------
+# 0075 / 0076 — the rest of the rollback window
+# ---------------------------------------------------------------------------
+
+
+def test_migrations_0074_to_0076_roll_all_the_way_back_and_forward(tmp_path) -> None:
+    """The whole 0073..head window must be reversible with every new table populated.
+
+    0074's downgrade was the one with the ordering trap, but nothing had ever exercised 0075's or
+    0076's at all. This walks head → 0073 → head against a database holding a capability document,
+    a loop bound to a job, a task bound to that loop, and an edit proposal — i.e. rows in every
+    object the three migrations introduce.
+    """
+    from alembic import command
+    from alembic.config import Config
+
+    db_file = tmp_path / "window.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    _run_alembic_with(db_url)
+    _seed_spec_documents_for_downgrade(db_file)
+
+    stamp = "2026-01-01T00:00:00Z"
+    with sqlite3.connect(db_file) as conn:
+        # Columns whose only default is Python-side have to be spelled out here — a raw INSERT
+        # never reaches the ORM that would supply them.
+        conn.execute(
+            "INSERT INTO ai_jobs (id, project_id, name, agent, message, cron, created_at, "
+            "session_mode, enabled, source) "
+            f"VALUES ('job-1', 'proj-down', 'nightly', 'claude', 'go', '0 9 * * *', '{stamp}', "
+            "'new', 1, 'hub')"
+        )
+        conn.execute(
+            "INSERT INTO loops (id, project_id, job_id, purpose, stop_when_queue_empties, "
+            f"created_at) VALUES ('loop-1', 'proj-down', 'job-1', 'keep developing', 0, '{stamp}')"
+        )
+        conn.execute(
+            "INSERT INTO tasks (id, project_id, title, description, status, priority, loop_id, "
+            "created_at, updated) "
+            f"VALUES ('task-1', 'proj-down', 'do a thing', '', 'pending', 'medium', 'loop-1', "
+            f"'{stamp}', '{stamp}')"
+        )
+        conn.execute(
+            "INSERT INTO spec_edit_proposals (id, document_id, unit_kind, unit_key, change_kind, "
+            "proposed_payload, status, created_at, resolution_reason) "
+            f"VALUES ('prop-1', 'spec-cap', 'requirement', 'REQ-1', 'add', '{{}}', 'pending', "
+            f"'{stamp}', '')"
+        )
+
+    cfg = Config(str(ALEMBIC_INI))
+    cfg.set_main_option("sqlalchemy.url", db_url)
+    with patch.object(settings, "database_url", db_url):
+        command.downgrade(cfg, "0073")
+
+        with sqlite3.connect(db_file) as conn:
+            tables = {
+                row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            }
+            assert "loops" not in tables
+            assert "spec_edit_proposals" not in tables
+            assert "spec_document_merges" not in tables
+            task_columns = {row[1] for row in conn.execute("PRAGMA table_info(tasks)")}
+            assert "loop_id" not in task_columns
+            job_run_columns = {row[1] for row in conn.execute("PRAGMA table_info(job_runs)")}
+            assert "conversation_id" not in job_run_columns
+            # The tables the loop was made of are untouched — only the binding is dropped.
+            assert conn.execute("SELECT COUNT(*) FROM tasks").fetchone()[0] == 1
+            assert conn.execute("SELECT COUNT(*) FROM ai_jobs").fetchone()[0] == 1
+
+        command.upgrade(cfg, "head")
+
+    with sqlite3.connect(db_file) as conn:
+        assert conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == HEAD_REVISION
+        tables = {
+            row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        }
+        assert {"loops", "spec_edit_proposals", "spec_document_merges"} <= tables
+        # Rows in the dropped tables are genuinely gone — a rollback past a table's creation
+        # cannot preserve its contents, and this pins that as understood rather than surprising.
+        assert conn.execute("SELECT COUNT(*) FROM loops").fetchone()[0] == 0
+        assert conn.execute("SELECT COUNT(*) FROM tasks").fetchone()[0] == 1
+        assert conn.execute("SELECT COUNT(*) FROM spec_documents").fetchone()[0] == 2
