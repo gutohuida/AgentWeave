@@ -275,7 +275,6 @@ async def test_loop_with_stop_when_queue_empties_and_no_tasks_yet_keeps_running(
             db, job_id=job.id, purpose="about to be filled", stop_when_queue_empties=True
         )
 
-    scheduler = JobScheduler()
     async with async_session_factory() as db:
         fresh_job = await db.get(AIJob, job.id)
         reason = await _loop_stop_reason(db, fresh_job)
