@@ -228,7 +228,31 @@ async def _await_agent_idle(project_id, agent, timeout=10.0):
             if running.scalars().first() is None:
                 return
         await asyncio.sleep(0.05)
-    raise AssertionError(f"{agent} still had a running run after {timeout}s")
+    # Diagnostic-only, added after three fix attempts each addressed a plausible but wrong
+    # mechanism (see 2026-08-17-one-version-one-product-log.md, iteration 19): rather than guess
+    # a fourth time, dump exactly what state the timeout found, so the next CI run answers
+    # instead of another hypothesis. `_execute_run`'s own `finally` pops `_active_ptys[run_id]` —
+    # if the run_id below is STILL in `_active_ptys`, `_execute_run` genuinely has not reached its
+    # own end despite `_await_background_run()` having returned, which would mean the task this
+    # test awaited was not the one it thinks it was.
+    import hub.api.v1.agent_trigger as agent_trigger_module
+
+    async with async_session_factory() as db:
+        all_runs = await db.execute(
+            select(Run).where(Run.project_id == project_id, Run.agent == agent)
+        )
+        rows = [
+            f"run={r.id} status={r.status!r} error={r.error!r} exit_code={r.exit_code!r} "
+            f"ended_at={r.ended_at!r}"
+            for r in all_runs.scalars().all()
+        ]
+    raise AssertionError(
+        f"{agent} still had a running run after {timeout}s\n"
+        f"  Run rows for this project/agent: {rows}\n"
+        f"  _background_runs (should be empty if _await_background_run already ran): "
+        f"{len(agent_trigger_module._background_runs)} pending\n"
+        f"  _active_ptys keys: {list(agent_trigger_module._active_ptys.keys())}"
+    )
 
 
 @pytest.mark.asyncio

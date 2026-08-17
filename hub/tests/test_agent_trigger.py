@@ -156,7 +156,14 @@ def _fake_pty(lines, exit_code=0, pid=4242):
     def _spawn(*args, **kwargs):
         session = MagicMock()
         session.pid = pid
-        session.read.side_effect = [*lines, ""]
+        # EOF **forever** after the scripted lines, not a finite `side_effect` list. A list runs
+        # out, and the docstring above already records what running out costs: `StopIteration`
+        # raised inside the executor does not surface as a failure, it hangs the run loop — and a
+        # hung run loop is a `Run` row stuck at `running`, which then makes the *next* trigger for
+        # that agent return 200/"queued" instead of running. One extra read is enough, and how
+        # many reads happen is a timing detail that differed between this machine and CI.
+        remaining = iter([*lines, ""])
+        session.read.side_effect = lambda *a, **k: next(remaining, "")
         session.wait.return_value = exit_code
         return session
 
