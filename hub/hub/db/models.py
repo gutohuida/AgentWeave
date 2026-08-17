@@ -640,6 +640,11 @@ class Task(Base):
     # downgrade over a schema built from this model. Validated where it is written instead.
     spec_document_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     spec_task_key: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # Which loop's queue this task belongs to, if any. Same "deliberately not a ForeignKey" reasoning
+    # as `spec_document_id` above: a table-level CHECK naming a column makes that column undroppable
+    # in SQLite, and this column sits on an already-live table, so an `ADD COLUMN` migration (`0075`)
+    # is the only thing that ever touches it directly.
+    loop_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     # What happens when a run bound to this task ends without the task moving.
     #
     # Per task rather than per project because the operator's stated use — a cheap model doing the
@@ -1181,10 +1186,52 @@ class JobRun(Base):
     requested_by_run_id: Mapped[Optional[str]] = mapped_column(
         String(64), nullable=True, index=True
     )
+    # What this firing actually used, as opposed to `session_id` above, which is the *resume input*
+    # (the provider session a "resume" job asked to continue). Set once, in `scheduler.py::
+    # _do_fire_job`, from a `conversation` local the function already builds. No ForeignKey, matching
+    # `AgentOutput.run_id`'s own precedent — every `JobRun` written before `0075` honestly has NULL
+    # here, because nothing recorded it.
+    conversation_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 
     __table_args__ = (Index("ix_job_runs_job_fired", "job_id", "fired_at"),)
 
     job: Mapped["AIJob"] = relationship(back_populates="runs")
+
+
+class Loop(Base):
+    """An `AIJob` wearing a purpose and an optional stop condition — "many named loops"."""
+
+    __tablename__ = "loops"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
+    job_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("ai_jobs.id", ondelete="CASCADE"), unique=True, nullable=False
+    )
+    # Every other free-text "why" field on a row somebody is expected to have written defaults to
+    # nullable optional commentary. `purpose` is different: it is the one field the UI is meant to
+    # always have something to show next to a loop's name, so a loop created via a minimal API call
+    # that omits it reads as "purpose not yet stated" (`""`) rather than forcing every reader to
+    # null-check it — the same reasoning `Charter.content` already uses for the identical shape.
+    purpose: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    stop_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    stop_when_queue_empties: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0", nullable=False
+    )
+    # Populated only when this loop's own code (the scheduler's stop-condition check, or an operator
+    # supplying one via PATCH) is what disabled the job. NULL when an operator merely paused the job
+    # through the existing, unchanged `toggle_job` path — deliberately no `status` enum here, since
+    # "is this loop firing" is already answered by `AIJob.enabled` and a second field meaning almost
+    # the same thing would only create drift between the two.
+    stop_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    stopped_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, nullable=False
+    )
+    created_by_run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    updated_by_run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+
+    __table_args__ = (Index("ix_loops_project", "project_id"),)
 
 
 class AgentJobDeletion(Base):

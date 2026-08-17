@@ -2,7 +2,7 @@
 
 ## 1. Migration `0075`
 
-- [ ] 1.1 New file `hub/hub/migrations/versions/0075_add_loops_and_traceability.py`,
+- [x] 1.1 New file `hub/hub/migrations/versions/0075_add_loops_and_traceability.py`,
       `down_revision = "0074"`. Three additive changes, none touching an existing constraint, so
       none needs a `batch_alter_table` recreate (unlike `0074`):
       (a) `CREATE TABLE loops` — `id` PK, `project_id` FK to `projects.id`, `job_id` FK to
@@ -15,45 +15,50 @@
       (c) `ALTER TABLE job_runs ADD COLUMN conversation_id VARCHAR(64)` nullable, no FK (design D3).
       Guard every step for a missing table the way `0071`/`0073` do — an upgrade starting from an
       early revision reaches `0075` with only the tables those revisions created.
-- [ ] 1.2 `downgrade()`: drop `ix_tasks_loop_id` and `tasks.loop_id`, drop `job_runs.conversation_id`,
+- [x] 1.2 `downgrade()`: drop `ix_tasks_loop_id` and `tasks.loop_id`, drop `job_runs.conversation_id`,
       drop `loops` — same missing-table guard on each step.
-- [ ] 1.3 Run `alembic upgrade head` then `alembic downgrade -1` then `alembic upgrade head` against a
+- [x] 1.3 Run `alembic upgrade head` then `alembic downgrade -1` then `alembic upgrade head` against a
       scratch SQLite file to confirm both directions actually execute, not merely parse — the same
-      check `0071`'s and `0073`'s own history record catching real bugs this way.
+      check `0071`'s and `0073`'s own history record catching real bugs this way. Verified live this
+      iteration: all three steps ran clean against a scratch file at `%TEMP%\aw_0075_test.db`
+      (upgrade to 0075, downgrade to 0074, upgrade back to 0075), file deleted after.
 
 ## 2. Model (`hub/hub/db/models.py`)
 
-- [ ] 2.1 Add `Loop` per design D1, placed near `AIJob`/`JobRun`. Add `runs: Mapped[List["Loop"]]`-
+- [x] 2.1 Add `Loop` per design D1, placed near `AIJob`/`JobRun`. Add `runs: Mapped[List["Loop"]]`-
       style back-reference only if a call site needs `AIJob.loop` — check before adding; do not add
-      an unused relationship attribute.
-- [ ] 2.2 `Task.loop_id` per design D2, beside the existing `spec_document_id`/`spec_task_key` block,
+      an unused relationship attribute. No call site in this slice needs it (the scheduler queries
+      `Loop` directly by `job_id`, matching design D4's own code) — no back-reference added.
+- [x] 2.2 `Task.loop_id` per design D2, beside the existing `spec_document_id`/`spec_task_key` block,
       with the same "deliberately not a ForeignKey" comment reasoning stated once rather than
       silently duplicated without explanation.
-- [ ] 2.3 `JobRun.conversation_id` per design D3, beside `session_id`, with a comment distinguishing
+- [x] 2.3 `JobRun.conversation_id` per design D3, beside `session_id`, with a comment distinguishing
       the two: `session_id` is the *resume input*, `conversation_id` is *what this firing actually
       used* — the confusion this proposal's own `Why` names as the reason `JobRun` could not answer
       "what did this firing do" before.
 
 ## 3. Scheduler (`hub/hub/scheduler.py`)
 
-- [ ] 3.1 `_do_fire_job`: pass `conversation_id=conversation.id` to the existing `JobRun(...)`
+- [x] 3.1 `_do_fire_job`: pass `conversation_id=conversation.id` to the existing `JobRun(...)`
       construction (design D3) — the one-line change.
-- [ ] 3.2 New `_loop_stop_reason(session, job)` per design D4, checked in `_do_fire_job` alongside
+- [x] 3.2 New `_loop_stop_reason(session, job)` per design D4, checked in `_do_fire_job` alongside
       the existing `_job_agent_skip_reason` call, before the queue entry is created.
-- [ ] 3.3 When `_loop_stop_reason` returns non-`None`: write the `JobRun` as `status="skipped"` with
+- [x] 3.3 When `_loop_stop_reason` returns non-`None`: write the `JobRun` as `status="skipped"` with
       that reason (reusing the existing skip-write path `_job_agent_skip_reason` already uses —
-      confirm by reading whether that path is a shared helper or duplicated per skip-reason before
-      writing a second copy); additionally stamp `loop.stop_reason`/`loop.stopped_at`, set
-      `job.enabled = False`, call `self.scheduler.remove_job(job_id)` (via `get_scheduler()`, mirroring
-      how `_do_fire_job` already reaches the scheduler singleton from inside itself if it does, or via
-      the caller if it does not — read `_fire_job_by_id`/`_fire_job_internal`'s existing call chain
-      before assuming which layer has scheduler access), and broadcast a new `loop_stopped` SSE event
-      (`{"job_id", "loop_id", "reason"}`) alongside the existing `job_run_skipped` broadcast/persisted
-      event.
-- [ ] 3.4 Confirm `run_count`/`last_run`/`next_run` bookkeeping still happens even when a fire is
-      skipped for a loop's own stop reason — read the existing `_job_agent_skip_reason` skip path to
-      see whether it already updates these before returning, and follow the same choice for
-      consistency rather than deciding independently.
+      confirmed by reading: it is inline code at each call site, not a shared helper, so the loop path
+      is a second inline copy with the loop-specific additions, matching the existing pattern rather
+      than inventing a new one); additionally stamps `loop.stop_reason`/`loop.stopped_at`, sets
+      `job.enabled = False`, calls `self.remove_job(job.id)` (confirmed `_do_fire_job` is itself a
+      `JobScheduler` method with its own `remove_job` wrapper already defined on the class — `self.
+      remove_job`, not `get_scheduler()`, which is only used by the module-level `_scheduled_job_runner`
+      outside the class), and broadcasts a new `loop_stopped` SSE event (`{"job_id", "loop_id",
+      "reason"}`) alongside the existing `job_run_skipped` persisted event (confirmed: `job_run_skipped`
+      is persisted only, never broadcast via SSE, in the existing agent-skip path either — matched that
+      precedent rather than the design prose's looser "persisted and broadcast" phrasing).
+- [x] 3.4 Confirm `run_count`/`last_run`/`next_run` bookkeeping still happens even when a fire is
+      skipped for a loop's own stop reason — confirmed: `job.last_run`/`job.run_count`/`job.next_run`
+      are all updated unconditionally at lines 296-298 (fire time, unaffected by which skip path is
+      taken later), before either the agent-skip or the new loop-stop check.
 
 ## 4. API (`hub/hub/api/v1/jobs.py`, `hub/hub/schemas/jobs.py`, `hub/hub/api/v1/tasks.py`)
 
@@ -111,10 +116,13 @@
 
 ## 6. Tests — agent-verifiable
 
-- [ ] 6.1 `hub/tests/test_migrations.py`, `hub/tests/test_project_persistence.py`: bump the head
+- [x] 6.1 `hub/tests/test_migrations.py`, `hub/tests/test_project_persistence.py`: bump the head
       assertion from `"0074"` to `"0075"` (three occurrences in the first file per this session's own
       earlier grep, one in the second — recount before editing, do not assume the count held across
-      `0074`'s own landing).
+      `0074`'s own landing). Recounted: 11 occurrences in `test_migrations.py` (0074 landed with its
+      own extra assertions), 1 in `test_project_persistence.py`. Also fixed the stale
+      `f"expected alembic_version=0074..."` message text in two of those assertions, missed by a
+      naive `"0074"` string replace since the message itself has no surrounding quotes.
 - [ ] 6.2 `hub/tests/test_jobs.py` (or wherever job CRUD is already tested — confirm the file before
       assuming its name): creating a job with no loop field yields `loop: null`; creating one with
       `purpose` alone yields a `Loop` row and `loop.purpose` in the response; `PATCH` supplying a

@@ -9,7 +9,7 @@ import re
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .conversations import (
@@ -19,7 +19,8 @@ from .conversations import (
     new_conversation,
 )
 from .db.engine import async_session_factory
-from .db.models import Agent, AIJob, JobRun
+from .db.models import Agent, AIJob, JobRun, Loop, Task
+from .run_task_binding import TERMINAL_FOR_BINDING
 from .sse import sse_manager
 from .utils import persist_event, short_id
 
@@ -55,6 +56,31 @@ async def _job_agent_skip_reason(
         return None
     if agent_row.self_registered and agent_row.contact_mode == "poll":
         return f"{agent} is a self-registered poll agent and manages its own execution"
+    return None
+
+
+async def _loop_stop_reason(session: AsyncSession, job: AIJob) -> Optional[str]:
+    """Return why *job*'s loop should stop firing, or `None` if it should proceed.
+
+    Only ever prevents a fire the scheduler was already about to make on its own cron or a manual
+    trigger (design D4, `2026-08-16-many-named-loops`) — never creates a firing, never decides what
+    happens next. A job with no `Loop` row is not a loop at all and always proceeds.
+    """
+    result = await session.execute(select(Loop).where(Loop.job_id == job.id))
+    loop = result.scalars().first()
+    if loop is None:
+        return None
+    now = datetime.now(timezone.utc)
+    if loop.stop_at is not None and now >= loop.stop_at:
+        return f"loop stop time reached ({loop.stop_at.isoformat()})"
+    if loop.stop_when_queue_empties:
+        open_count = await session.scalar(
+            select(func.count(Task.id)).where(
+                Task.loop_id == loop.id, Task.status.not_in(TERMINAL_FOR_BINDING)
+            )
+        )
+        if not open_count:
+            return "loop queue is empty"
     return None
 
 
@@ -313,6 +339,7 @@ class JobScheduler:
                 status="fired",
                 trigger=trigger,
                 session_id=resume_session_id,
+                conversation_id=conversation.id,
             )
             session.add(run)
 
@@ -339,6 +366,47 @@ class JobScheduler:
                     agent=job.agent,
                 )
                 logger.info(f"Job {job.id} fire skipped: {skip_reason}")
+                return False
+
+            loop_stop_reason = await _loop_stop_reason(session, job)
+            if loop_stop_reason:
+                run.status = "skipped"
+                run.error_summary = loop_stop_reason
+                loop_result = await session.execute(select(Loop).where(Loop.job_id == job.id))
+                loop = loop_result.scalars().first()
+                if loop is not None:
+                    loop.stop_reason = loop_stop_reason
+                    loop.stopped_at = fired_at
+                job.enabled = False
+                await session.commit()
+                await persist_event(
+                    session,
+                    job.project_id,
+                    "job_run_skipped",
+                    {
+                        "job_id": job.id,
+                        "job_name": job.name,
+                        "agent": job.agent,
+                        "trigger": trigger,
+                        "run_id": run_id,
+                        "reason": loop_stop_reason,
+                    },
+                    agent=job.agent,
+                )
+                loop_stopped_payload = {
+                    "job_id": job.id,
+                    "loop_id": loop.id if loop is not None else None,
+                    "reason": loop_stop_reason,
+                }
+                await persist_event(
+                    session, job.project_id, "loop_stopped", loop_stopped_payload, agent=job.agent
+                )
+                await sse_manager.broadcast(job.project_id, "loop_stopped", loop_stopped_payload)
+                # Remove from the live scheduler so it does not fire again next cron tick only to be
+                # skipped again — the same call `remove_job` already makes for a job an operator
+                # disables by hand.
+                await self.remove_job(job.id)
+                logger.info(f"Job {job.id} loop stopped: {loop_stop_reason}")
                 return False
 
             entry = new_entry(

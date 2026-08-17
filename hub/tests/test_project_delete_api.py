@@ -31,6 +31,7 @@ from hub.db.models import (
     EvidenceReview,
     InboundQueueEntry,
     JobRun,
+    Loop,
     Message,
     PermissionRequest,
     Project,
@@ -84,6 +85,7 @@ PROJECT_SCOPED_TABLE_NAMES = [
     "run_divergences",
     "messages",
     "job_runs",
+    "loops",
     "inbound_queue_entries",
     "checkpoints",
     "agents",
@@ -181,6 +183,7 @@ async def _seed_full_project(session, project_id: str, tag: str) -> None:
         )
     )
     session.add(JobRun(id=f"jobrun-{tag}", job_id=f"job-{tag}", project_id=project_id))
+    session.add(Loop(id=f"loop-{tag}", project_id=project_id, job_id=f"job-{tag}"))
     session.add(
         AgentJobDeletion(
             id=f"jobdel-{tag}",
