@@ -1977,3 +1977,87 @@ that's already touching this territory is the natural place to close out the sup
 Only after that change exists (or a recorded decision not to build it) does phase 14 close and
 section 16's archive decision become reachable. Sections 15-16 remain untouched, both still
 downstream of 14 exactly as iteration 21 left them.
+
+---
+
+## Iteration 23 — 2026-08-17T05:28:42+01:00
+
+**N6, opening the fresh openspec change iteration 21/22 identified: `2026-08-17-authoring-rigor-and-scope`
+(round 1 of the spec-round protocol — authored, not yet reviewed or built).** Before writing, spawned a
+research-only Explore subagent to ground six questions against the real code rather than writing from
+memory of iteration 22's citations alone: the exact `SPEC_RIGORS` values and how rigor enforcement
+works today (`hub/hub/spec_rigor.py`), whether any proposal/diff/draft concept already exists anywhere
+in `hub/hub/*.py` (grepped — none), how document changes are attributed today
+(`SpecDocumentEvent`, single-actor) versus the existing proposer/accepter precedent already in the
+codebase (`TaskTransition`, built for the identical author/reviewer problem on the task board), the
+Spec Author charter's actual text and whether turn-level tool access varies by turn kind (it does not
+— `access_path_notice()` varies only MCP-vs-none), and the exact functions/signatures in
+`spec_lifecycle.py` and routes in `spec.py`/`agent_actions.py` a design should name rather than invent.
+Full report, dense with file:line citations, folded into `proposal.md`'s "Why" section and `design.md`'s
+decisions verbatim rather than re-derived.
+
+**The change bundles four of section 14's items because they share one seam** — how an agent's edit to
+a specification document reaches the live document, and what an authoring turn may do:
+- **14.11** (edits direct on sketches, proposals on contracts/gates, dual attribution) — confirmed
+  unbuilt: `spec_service.save_document()` applies every submission immediately regardless of rigor;
+  `document.rigor` is read only for rendering, never as an edit gate.
+- **14.12** (in-position, individually-acceptable proposals, no residue on rejection) — confirmed
+  unbuilt: no proposal/draft/pending-edit concept exists anywhere in the codebase (grepped).
+- **14.14** (scope authoring away from performing discovered implementation work) — confirmed unbuilt
+  as anything beyond prose: the Spec Author charter says the right thing, but tool access during a
+  spec-authoring turn is identical to any other turn; nothing mechanically withholds `Edit`/`Write`.
+- **14.15** (make the deleted `aw-spec-*` skills reachable) — confirmed a rejected design, not a gap:
+  `submit_spec_document` and siblings are MCP tools today, and CLAUDE.md already prohibits invoking
+  the `aw-*` skills at all. Recorded as retired in `design.md` D7, with a task (6.1) to update
+  `2026-07-30-hub-native-experience/tasks.md`'s 14.15 line once this change lands — not now, since the
+  change doesn't exist as built yet.
+
+**Design decisions (`design.md` D1-D7), each with a stated rejected alternative:** D1 — the gate lives
+inside `spec_service.save_document()`, branching on `document.rigor`; no second MCP tool, so an agent
+never has to remember which tool to call at which rigor. D2 — proposal grain is one requirement (using
+14.1's existing stable identifiers as the in-position anchor) or the whole non-requirement metadata
+bundle as one unit — deliberately not a general diff/merge engine, which the proposal's Non-Goals
+section rules out explicitly. D3 — new table `spec_edit_proposals`, no `CheckConstraint` naming a
+column (avoiding the SQLite undroppable-column trap `models.py:1637-1640` documents and N2's migration
+0074 already had to route around this session). D4 — accept/reject are operator-only, enforced in the
+function itself, mirroring `spec_rigor.set_rigor`'s existing actor check and the standing rule this run
+must not weaken. D5 — a proposal whose document has moved underneath it (another proposal accepted
+first, a direct edit, a rigor change) is refused as stale rather than silently applied, via the same
+`expected_digest` compare-and-swap `spec_rigor.py` already uses. D6 — F4's tool restriction is gated
+per-turn on whether `spec_document` was passed to `trigger_agent_directly` (already threaded through
+for the existing prompt-notice purpose), not per-agent and not per-rigor — explicitly rejected gating
+on rigor, because a `sketch`-rigor exploration is exactly where an agent is likeliest to "just fix it"
+instead of proposing the fix, so restricting only the strict tiers would remove the boundary where it
+matters most. D7 — 14.15's retirement rationale, cited against CLAUDE.md's own prohibited-skills table.
+
+**Validated, not assumed:** `openspec validate 2026-08-17-authoring-rigor-and-scope --strict` — one
+real failure caught and fixed, not a clean first pass: the "proposal that no longer matches... is not
+silently applied" requirement failed strict validation with "must contain SHALL or MUST" even though
+the paragraph contains SHALL twice — turned out the validator reads only the *first line* of the
+requirement's source paragraph (up to the first literal newline in the markdown, not the first
+sentence), and that line's manual wrap point happened to land before any SHALL. Confirmed by dumping
+`openspec change show ... --json --deltas-only` and comparing the `requirement.text` field (truncated
+at the same newline) against the five other requirements, whose first physical line all happened to
+contain SHALL/MUST already. Rewrote the paragraph so SHALL appears on the first line instead of relying
+on wrap luck. Passes now: change strict-valid; `--changes --strict` 9/9 (up from 8, the new change
+added, nothing else touched); `--specs --strict` unchanged 31/31 (delta not yet merged into the live
+spec, correctly — this is round 1, not an approved/archived change).
+
+**Recorded round 1 in `design.md`** per the pattern `2026-08-16-one-hub-and-a-window-of-its-own` and
+`2026-08-16-the-corpus-keeps-what-shipped` already established for multi-round changes this session,
+so a cold round-2 reviewer has a dated marker of what round 1 actually covered rather than having to
+infer it from git blame.
+
+**Not done this iteration, deliberately:** no code touched, no round 2, no implementation. `tasks.md`
+section 7 tests were not run — there is nothing yet to test; sections 1-6 are all `[ ]`. `git status`
+confirms only the new `openspec/changes/2026-08-17-authoring-rigor-and-scope/` directory is new;
+nothing else in the tree changed.
+
+**Net for N6:** the change iteration 21 anticipated and iteration 22 confirmed as real now exists,
+validated, as round 1 of 3. `next_action` hands off round 2 — a cold review (not a continuation of this
+authoring context) against D1-D7 and the six `ADDED` requirements, checking in particular D2's
+metadata-bundle grain and D6's per-turn-not-per-rigor scoping for soundness, and whether task 3.2's
+open `record_content`-vs-proposal-columns attribution question needs settling before round 2 closes
+rather than being left for whoever implements it. If round 2 approves, or round 3 is reached, execute
+per `spec_round_protocol.at_cap` in the same run. `stop_at` is 2026-08-17T08:00:00+01:00; there is
+runway for at least a round 2 and plausibly round 3 plus a partial build before then.
