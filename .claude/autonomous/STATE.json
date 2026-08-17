@@ -2,7 +2,7 @@
   "purpose": "Ship AgentWeave 1.0.0 to master and publish it. AgentWeave is ONE product with ONE version from this release on: the separate `agentweave-hub` version line and the `hub-v*` tag scheme retire, `pip install agentweave-ai` becomes a working product on its own, and the documentation and README describe the thing that actually exists rather than the multi-runtime product that was deleted. Fix everything that stands in the way of that, merge to master, tag, release.",
   "branch": "autonomous/2026-08-17-one-version-one-product",
   "parent_branch": "hub-native-experience",
-  "parent_sha": "c6aec88",
+  "parent_sha": "9343a31",
   "started_at": "2026-08-17T10:30:00+01:00",
   "stop_at": "2026-08-17T15:00:00+01:00",
   "stop_when_queue_empties": true,
