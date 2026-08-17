@@ -23,7 +23,6 @@ import asyncio
 import logging
 import os
 import sys
-import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -129,73 +128,6 @@ _background_runs: set = set()
 # the only place the PTY-or-pipe session instance exists. The legacy internal name remains
 # to avoid churning lifecycle code that does not depend on the transport type.
 _active_ptys: Dict[str, PipeSession | PtySession] = {}
-# Diagnostic-only, in the same spirit as the dump in `test_agent_trigger_overrides`
-# `_await_agent_idle`: an ordered breadcrumb of the path `_execute_run` took, per run_id.
-#
-# Why this exists rather than a seventh hypothesis. CI on `beb212b` measured a run that finished
-# — `_active_ptys` empty (the `finally` below pops it) and `_background_runs` empty — while its
-# `Run` row still read `status='running' error=None exit_code=None ended_at=None`. That triple of
-# `None`s is what makes it worth instrumenting: the `except (Exception, CancelledError)` handler
-# would have written `error`, and the normal path's status chain ends in a bare `else` and then
-# assigns `status`/`exit_code`/`ended_at` unconditionally, so *neither* ran to completion. Six
-# theories died guessing at which; this records which, so the next red CI answers instead.
-#
-# Entries are kept even for runs that ended cleanly, because the failure being chased *does* reach
-# the `finally` — dropping on the way out would erase precisely the trail worth reading. Bounded by
-# eviction of the oldest instead, so a long-lived Hub cannot accumulate these.
-_run_trace: Dict[str, List[str]] = {}
-_RUN_TRACE_LIMIT = 32
-
-
-def _trace(run_id: str, step: str) -> None:
-    """Record one breadcrumb for *run_id*. Never raises — a diagnostic must not break a run."""
-    try:
-        # Same clock and task identity the test's connection-event listener stamps, so the two
-        # sequences interleave and the rollbacks landing inside the finalize can be read off
-        # directly rather than inferred.
-        try:
-            task = asyncio.current_task()
-            who = task.get_name() if task is not None else "no-task"
-        except RuntimeError:
-            who = "no-loop"
-        step = f"{time.monotonic():.6f} {step} task={who}"
-        steps = _run_trace.setdefault(run_id, [])
-        if len(_run_trace) > _RUN_TRACE_LIMIT:
-            for stale in list(_run_trace)[: len(_run_trace) - _RUN_TRACE_LIMIT]:
-                if stale != run_id:
-                    _run_trace.pop(stale, None)
-        steps.append(step)
-    except Exception:  # pragma: no cover - diagnostics must never mask the real failure
-        pass
-
-
-async def _peek(run_id: str, label: str) -> None:
-    """Re-read *run_id* in a fresh session and record what it says.
-
-    Temporary, and paired with `_run_trace`. The trail on `71ec2d0` showed the finalize block
-    finding its row (`run_seen=True`), assigning a terminal status and returning from
-    `await db.commit()` without error — while the test's own session still read the row at its
-    creation values. So the write is not surviving, and the question is no longer *whether* the
-    finalize ran but *what happens to the row afterwards*. Each of the steps that follow the commit
-    opens its own session (`evaluate_run_end` explicitly so), and any of them could be the one that
-    puts it back; reading the row between them says which, instead of a further hypothesis.
-
-    Records the engine identity too, because "two engines" is the other shape that fits a commit
-    that succeeds and a read that does not see it.
-    """
-    try:
-        async with async_session_factory() as session:
-            run = await session.get(Run, run_id)
-            state = (
-                "row-gone"
-                if run is None
-                else f"status={run.status!r} exit_code={run.exit_code!r} ended={run.ended_at is not None}"
-            )
-            _trace(run_id, f"peek[{label}] {state} engine={id(session.get_bind()):x}")
-    except Exception as exc:  # pragma: no cover - a diagnostic must not break a run
-        _trace(run_id, f"peek[{label}] FAILED {type(exc).__name__}")
-
-
 # run_ids currently executing over the Codex app-server transport (task 2.8). This path has
 # no PtySession/PipeSession to register in `_active_ptys` — `codex_appserver.run_turn` owns
 # its own subprocess internally — so the stop endpoint and shutdown teardown need a separate
@@ -1371,7 +1303,6 @@ async def _execute_run(
         return
 
     _active_ptys[run_id] = pty
-    _trace(run_id, "spawned")
     try:
         async with async_session_factory() as db:
             run = await db.get(Run, run_id)
@@ -1484,9 +1415,7 @@ async def _execute_run(
         if buffer.strip():
             await _flush_line(buffer)
 
-        _trace(run_id, "read_loop_done")
         exit_code = await loop.run_in_executor(None, pty.wait)
-        _trace(run_id, f"wait={exit_code!r}")
 
         if runner == "codex" and session_id:
             codex_home = Path(env["CODEX_HOME"]) if env and env.get("CODEX_HOME") else None
@@ -1532,7 +1461,6 @@ async def _execute_run(
         else:
             final_status, lifecycle_event = "failed", "run_failed"
 
-        _trace(run_id, f"finalize_enter status={final_status}")
         async with async_session_factory() as db:
             run = await db.get(Run, run_id)
             if run is None:
@@ -1545,7 +1473,6 @@ async def _execute_run(
                 # the same unbounded outage the `except` handler below was widened to prevent,
                 # reached by a second route — and a run that ends but cannot record that it ended
                 # is a defect wherever it comes from, so it is reported rather than swallowed.
-                _trace(run_id, "ROW_MISSING")
                 logger.error(
                     "Run %s for %r finished (%s, exit %r) but its row was not visible to the "
                     "finalizing session, so the terminal status could not be recorded. The row "
@@ -1607,8 +1534,6 @@ async def _execute_run(
                 else []
             )
             await db.commit()
-            _trace(run_id, f"finalize_committed run_seen={run is not None}")
-            await _peek(run_id, "after-commit")
             # The run boundary. After the commit, so the check reads the run's final state, and
             # outside the `if run` block for the same reason — a missing run row is not a
             # divergence, and `evaluate_run_end` says so itself.
@@ -1620,9 +1545,7 @@ async def _execute_run(
             # abandoned on this attempt has genuinely dropped its work and must still be evaluated.
             if not returned:
                 await evaluate_run_end(run_id)
-                await _peek(run_id, "after-evaluate_run_end")
             await _report_abandoned_entries(db, project_id, agent, run_id)
-            await _peek(run_id, "after-report_abandoned")
             await _broadcast_run_lifecycle(
                 db,
                 project_id,
@@ -1633,7 +1556,6 @@ async def _execute_run(
                 session_id=session_id,
                 exit_code=exit_code,
             )
-            await _peek(run_id, "after-broadcast_lifecycle")
             for entry_id in returned:
                 payload = {"entry_id": entry_id, "agent": agent, "run_id": run_id}
                 await persist_event(db, project_id, "queue_entry_queued", payload, agent=agent)
@@ -1681,11 +1603,6 @@ async def _execute_run(
         from ...turn_scheduler import schedule_agent
 
         await schedule_agent(project_id, agent)
-        # The last point inside `_execute_run` that can see the row. If this reads `completed` and
-        # the test still reads `running`, whatever puts it back is outside this function entirely.
-        # Deliberately not repeated in the `finally`: awaiting there during a cancellation would
-        # raise `CancelledError` out of the diagnostic itself, and `finally` only pops two dicts.
-        await _peek(run_id, "end-of-try")
     except (Exception, asyncio.CancelledError) as exc:
         # Every step above this point is inside the same `try` and none of it is wrapped
         # individually — so an exception anywhere between the spawn succeeding and this turn's
@@ -1708,7 +1625,6 @@ async def _execute_run(
         # everything else. Re-raised below, once the row is marked, to preserve real cancellation
         # semantics for anything that legitimately depends on it propagating.
         logger.exception("Unhandled error in run %s for %r", run_id, agent)
-        _trace(run_id, f"except={type(exc).__name__}:{exc!s:.120}")
         already_terminal = False
         async with async_session_factory() as db:
             run = await db.get(Run, run_id)
@@ -1745,7 +1661,6 @@ async def _execute_run(
         if isinstance(exc, asyncio.CancelledError):
             raise
     finally:
-        _trace(run_id, "finally")
         _active_ptys.pop(run_id, None)
         _stop_requested.discard(run_id)
 
@@ -2101,21 +2016,8 @@ async def _execute_codex_appserver_run(
         # them for the exec path (AgentOutputPanel's handoff-detection, see below).
         exit_code = 0 if final_status == "completed" else 1
 
-        _trace(run_id, f"appserver_finalize_enter status={final_status}")
         async with async_session_factory() as db:
             run = await db.get(Run, run_id)
-            if run is None:
-                # The same silent skip as in `_execute_run`, reported the same way and for the same
-                # reason — this transport stalls an agent just as completely as the other one.
-                _trace(run_id, "ROW_MISSING")
-                logger.error(
-                    "Run %s for %r finished (%s) over the app-server transport but its row was not "
-                    "visible to the finalizing session, so the terminal status could not be "
-                    "recorded. The row stays 'running' and the agent will queue every later turn.",
-                    run_id,
-                    agent,
-                    final_status,
-                )
             if run:
                 run.status = final_status
                 run.exit_code = exit_code
