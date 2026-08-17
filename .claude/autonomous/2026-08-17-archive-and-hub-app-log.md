@@ -189,3 +189,84 @@ the screen rather than trusting the diff.
 Committed `92ea5d6`, pushed.
 
 **A3 is next** — the Hub desktop app change, 0/34 tasks, entirely unstarted.
+
+---
+
+## 20:00 — Iteration 3: A3 section 1 (D1/D2/D3), tasks 1.1-1.3 and their tests
+
+**Started by verifying the branch and log against reality**, per standing practice — matched.
+
+Read all three of `proposal.md`, `design.md`, `tasks.md` in full before touching code, per
+`next_action`'s instruction, including the two amendment rounds in `design.md` (A1-A3, and round 2's
+port-collision fix). Worked section 1 in task order.
+
+**1.1 — the actual bug fix.** `hub/hub/config.py`'s `database_url` field default was
+`"sqlite+aiosqlite:///data/agentweave.db"`, directory-relative. Changed to a `Field(default_factory=
+_default_database_url)` computing `Path.home() / ".agentweave" / "hub" / "data" / "agentweave.db"` —
+the same absolute path `_hub_native_start` already computes independently, per `design.md` D1's
+explicit instruction not to import across the CLI/Hub package boundary. `DATABASE_URL` still wins
+when set, unchanged.
+
+**1.2 — already done, not a gap.** Checked `hub/docker-compose.yml` before writing any code and
+found `name: agentweave` already present, pinned by `7cd6184` ("R3: make the documented Docker
+install work"), predating this change's proposal. Marked done as verify-only in `tasks.md`, with a
+test added so it stays true rather than being trusted silently.
+
+**1.3 — confirmed by reading, not skipped.** Read `_hub_native_start` (`cli.py:679-720`): it computes
+`HUB_DIR / "data" / "agentweave.db"` and sets `DATABASE_URL` in `os.environ` before `hub.main` is
+imported, independent of 1.1's default. Not touched, as the task says.
+
+**Tests (2.1-2.4), all mutation-checked, not just written.** New file `hub/tests/test_config.py`:
+- `TestDatabaseUrlDefault` — asserts the default is absolute, under home, and matches the exact
+  expected path; asserts an explicit `DATABASE_URL` still overrides it. Mutation-checked by hand:
+  reverted `config.py`'s default to the old relative string, reran, confirmed both this test and the
+  drift test below went red, restored, reran, confirmed green again.
+- `TestDatabaseUrlDriftAgainstCli` — the D1-named drift guard: `hub.config.Settings().database_url`
+  (unset `DATABASE_URL`) must equal `HUB_DIR / "data" / "agentweave.db"` from `agentweave.cli`.
+  Confirmed live this repo's interpreter can import both distributions directly (`agentweave.cli` and
+  `hub.config` in the same process), so the direct-import form was used rather than the fallback
+  `tasks.md` names for a split test environment.
+- `TestDockerComposeProjectNamePinned` — plain YAML parse (`pyyaml`, already available; `docker
+  compose` itself is not in this test environment) asserting the pinned `name:` key. Mutation-checked
+  by hand: removed the line, reran, confirmed red, restored, confirmed green.
+
+**A real trap found while writing the tests, not assumed away.** `monkeypatch.delenv("DATABASE_URL")`
+alone did not isolate the field default — the first test run came back green for the *wrong* reason
+until it was actually inspected: this machine's real `hub/.env` (the trial Hub's own credentials
+file, referenced in `STATE.json`'s `environment` block) sets `DATABASE_URL` explicitly to the old
+relative string, and `pydantic-settings`'s `env_file=".env"` falls back to that file whenever the OS
+environment doesn't have the variable — `delenv` empties the OS environment, not the `.env` file
+underneath it. Caught because the *drift* test's failure message showed the relative path instead of
+an absolute one even after the code fix landed, which shouldn't have been possible if the fix were
+real. Fixed by constructing `Settings(_env_file=None)` in the affected tests, which bypasses the file
+lookup and isolates exactly the field default under test. Worth remembering for any future test that
+constructs `Settings()` directly in this repo.
+
+**Verified beyond the new tests:**
+- `hub/tests/test_migrations.py` + `test_project_persistence.py` rerun together (task 2.4, explicitly
+  asks for a rerun, not a re-read): **58 passed, 1 skipped** — the skip predates this change and is
+  unrelated to D1/D2; head assertions unmoved, as `tasks.md`'s own header says this change carries no
+  migration.
+- The CLI's own `tests/` suite (not `hub/tests/`) — this change touches code both suites exercise
+  (`agentweave.cli.HUB_DIR`, referenced from the new drift test): **362 passed, 3 skipped**.
+- `ruff check` and `black --check` (with `--target-version py311` — this machine's Black otherwise
+  refuses to safety-check code it parses as 3.12-targeted) on both changed/new files: clean.
+- `npx openspec validate --changes --strict`: 8/8 passed, including this change.
+- Confirmed the trial Hub (port 8010) was unaffected by the config.py edit while it kept running
+  through this iteration — it always passes an explicit `DATABASE_URL`, which wins regardless of the
+  field default, exactly as `design.md` D1 and this iteration's own `next_action` predicted. `/health`
+  still answered `{"status":"ok", ...}` afterward (the `ui_stale` flag it also reports predates this
+  iteration — no UI files were touched here).
+
+Committed `44a1ae5`, pushed.
+
+**Scope decision, per `next_action`'s own instruction to stop after a clean, tested slice if 1.4-1.8
+doesn't fit the iteration.** Tasks 1.4-1.8 (the `--profile` flag: new argparse surface on three
+subcommands, a `_hub_pid_file` signature change touching seven call sites per `design.md`'s own
+count, `cmd_reset --profile` scoping, and the round-2 port-required-when-profile-is-named guard) are
+a materially larger surface than 1.1-1.3 — not something to rush into the tail of an iteration that
+already did real verification work. Left for the next firing, in task order, starting at 1.4.
+
+**A3 continues** — section 1 tasks 1.4-1.8, then sections 2 (D6 tests, 2.5-2.9), 3 (the desktop
+window itself, D3/D5), 4 (CLI tests for it), 5 (docs, D4), 6-7 (human-only, not this loop's to
+judge).
