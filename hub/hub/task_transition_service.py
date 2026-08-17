@@ -214,12 +214,18 @@ async def apply_transition(
     # Imported locally: `requirement_gate` reads coverage, which reads the models, and this module
     # is the one every status write already passes through.
     policy = ""
+    reported: list = []
     if to_status == "approved":
         from .requirement_gate import evaluate
 
         refusal, policy = await evaluate(session, task)
         if refusal.refuses:
             raise GateUnsatisfiedError(refusal)
+        # `contract` never refuses, so its unmet and rejected requirements have nowhere to surface
+        # unless this call carries them out. Not persisted — a transient attribute on the returned
+        # row rather than a column, because this is a report at the moment of approval, not an
+        # audit trail; the audit trail is `requirement_coverage` and evidence review, unchanged.
+        reported = list(refusal.reported)
 
     task.status = to_status
     transition = TaskTransition(
@@ -236,6 +242,9 @@ async def apply_transition(
         # than a gap in it.
         policy_digest=policy or None,
     )
+    # Not a column — see the comment where `reported` is built. `TaskResponse` reads this off the
+    # object this same call returns; nothing else looks for it, and nothing persists it.
+    transition.reported_advisories = reported
     session.add(transition)
 
     if origin == ORIGIN_ACTOR:

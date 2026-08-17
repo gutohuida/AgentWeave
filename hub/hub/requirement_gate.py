@@ -73,6 +73,12 @@ class GateRefusal:
     # different kind of claim: not "this is unproven" but "this cannot go in". An operator told the
     # requirement is unverified would go and record evidence, which would not help at all here.
     unmergeable: List[Dict[str, Any]] = field(default_factory=list)
+    # `contract`-rigor requirements that are not verified, named the same way a `blocking` entry
+    # is — identifier, state, remedy — but never inspected by `refuses`. This is `contract`'s whole
+    # behaviour: report unmet and rejected requirements at the moment of approval, without ever
+    # standing in the way of it. `sketch` never reaches here at all (task 5.5 of
+    # `2026-08-13-a-gate-that-only-evidence-opens`).
+    reported: List[Dict[str, str]] = field(default_factory=list)
 
     @property
     def refuses(self) -> bool:
@@ -117,14 +123,17 @@ class GateRefusal:
             "blocking": list(self.blocking),
             "diagnostics": list(self.diagnostics),
             "unmergeable": list(self.unmergeable),
+            "reported": list(self.reported),
             "message": self.detail(),
         }
 
 
-async def _gated_requirements(
+async def _enforced_requirements(
     session: AsyncSession, task: Task
 ) -> tuple[List[SpecRequirement], Dict[str, str]]:
-    """The task's linked requirements whose document is enforcing, and each one's document."""
+    """The task's linked requirements whose document is `gate` or `contract` — everything but
+    `sketch`, which stays silent apart from the rejected-evidence signal it already carries on the
+    task response regardless of rigor."""
     rows = (
         await session.execute(
             select(SpecRequirement, SpecDocument)
@@ -133,13 +142,13 @@ async def _gated_requirements(
             .where(TaskRequirementLink.task_id == task.id)
         )
     ).all()
-    gated = [
+    enforced = [
         requirement
         for requirement, document in rows
-        if (document.rigor or spec_rigor.SKETCH) == spec_rigor.GATE
+        if (document.rigor or spec_rigor.SKETCH) != spec_rigor.SKETCH
     ]
     rigors = {document.id: (document.rigor or spec_rigor.SKETCH) for _, document in rows}
-    return gated, rigors
+    return enforced, rigors
 
 
 async def _check_mergeable(session: AsyncSession, task: Task, refusal: GateRefusal) -> None:
@@ -195,18 +204,20 @@ async def evaluate(session: AsyncSession, task: Task) -> tuple[GateRefusal, str]
     refusal = GateRefusal()
     await _check_mergeable(session, task, refusal)
 
-    gated, rigors = await _gated_requirements(session, task)
-    if not gated:
+    enforced, rigors = await _enforced_requirements(session, task)
+    if not enforced:
         return refusal, ""
 
     by_document: Dict[str, List[SpecRequirement]] = {}
-    for requirement in gated:
+    for requirement in enforced:
         by_document.setdefault(requirement.document_id, []).append(requirement)
 
-    wanted = {requirement.id for requirement in gated}
+    wanted = {requirement.id for requirement in enforced}
     policy: List[Dict[str, Any]] = []
 
     for document_id in by_document:
+        rigor = rigors.get(document_id, spec_rigor.SKETCH)
+        gates = rigor == spec_rigor.GATE
         report = await requirement_coverage.requirement_coverage(
             session, task.project_id, document_id=document_id, include_retired=True
         )
@@ -218,36 +229,47 @@ async def evaluate(session: AsyncSession, task: Task) -> tuple[GateRefusal, str]
                     "identifier": entry.identifier,
                     "state": entry.state,
                     "integration": entry.integration,
-                    "rigor": rigors.get(document_id, spec_rigor.SKETCH),
+                    "rigor": rigor,
                 }
             )
             if entry.state != SATISFIED:
-                refusal.blocking.append(
-                    {
-                        "identifier": entry.identifier,
-                        "requirement_id": entry.requirement_id,
-                        "state": entry.state,
-                        "remedy": REMEDY.get(entry.state, "it is not verified"),
-                    }
-                )
+                unmet = {
+                    "identifier": entry.identifier,
+                    "requirement_id": entry.requirement_id,
+                    "state": entry.state,
+                    "remedy": REMEDY.get(entry.state, "it is not verified"),
+                }
+                # `gate` refuses on it; `contract` reports it and lets the transition through — the
+                # entire distinction between the two rigors lives in which list an entry lands in.
+                (refusal.blocking if gates else refusal.reported).append(unmet)
         for entry in report.diagnostics:
             if entry.requirement_id not in wanted:
                 continue
-            # Broken, not unverified. A gate refuses on it separately, because "this requirement is
-            # unverified" would send someone to record evidence for something that cannot hold any.
-            refusal.diagnostics.append(
-                {
-                    "identifier": entry.identifier,
-                    "requirement_id": entry.requirement_id,
-                    "problem": entry.problem,
-                }
-            )
+            diagnostic = {
+                "identifier": entry.identifier,
+                "requirement_id": entry.requirement_id,
+                "problem": entry.problem,
+            }
+            if gates:
+                # Broken, not unverified. A gate refuses on it separately, because "this requirement
+                # is unverified" would send someone to record evidence for something that cannot
+                # hold any.
+                refusal.diagnostics.append(diagnostic)
+            else:
+                refusal.reported.append(
+                    {
+                        "identifier": entry.identifier or "",
+                        "requirement_id": entry.requirement_id,
+                        "state": "invalid",
+                        "remedy": entry.problem,
+                    }
+                )
             policy.append(
                 {
                     "identifier": entry.identifier,
                     "state": "invalid",
                     "integration": "not_applicable",
-                    "rigor": rigors.get(document_id, spec_rigor.SKETCH),
+                    "rigor": rigor,
                 }
             )
 

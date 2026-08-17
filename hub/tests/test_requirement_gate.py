@@ -207,6 +207,95 @@ async def test_a_contract_reports_and_blocks_nothing(app, auth_headers, builder,
 
 
 @pytest.mark.asyncio
+async def test_a_contract_names_the_unmet_requirement_on_the_approval_response(
+    app, auth_headers, builder, tmp_path
+):
+    """5.5 of `2026-08-13-a-gate-that-only-evidence-opens`: `contract` reports rather than staying
+    silent like `sketch`. The report rides the response of the call that approved, the same way a
+    `gate` refusal names its blockers — not a second thing to go and look up."""
+    await _document(app, auth_headers, builder)
+    await _set_rigor(app, auth_headers, "contract")
+    task_id = await _linked_task(app, auth_headers)
+
+    response = await _task_to(
+        app,
+        auth_headers,
+        task_id,
+        "assigned",
+        "in_progress",
+        "completed",
+        "under_review",
+        "approved",
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["status"] == "approved"
+    reported = body["approval_report"]
+    assert len(reported) == 1, reported
+    assert reported[0]["identifier"] == "FR-1"
+    assert reported[0]["state"] != "verified"
+    assert reported[0]["remedy"]
+
+
+@pytest.mark.asyncio
+async def test_a_sketch_reports_nothing_on_approval(app, auth_headers, builder, tmp_path):
+    """The default rigor stays silent — `approval_report` is `contract`'s behaviour, not every
+    rigor's, or it would just be `requirement_links` under a new name."""
+    await _document(app, auth_headers, builder)
+    task_id = await _linked_task(app, auth_headers)
+
+    response = await _task_to(
+        app,
+        auth_headers,
+        task_id,
+        "assigned",
+        "in_progress",
+        "completed",
+        "under_review",
+        "approved",
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["approval_report"] == []
+
+
+@pytest.mark.asyncio
+async def test_a_contract_stops_reporting_once_the_requirement_is_verified(
+    app, auth_headers, builder, tmp_path
+):
+    """The report describes this approval, not a permanent scar — a `contract` requirement that
+    was satisfied before approval has nothing left to name."""
+    await _document(app, auth_headers, builder)
+    await _set_rigor(app, auth_headers, "contract")
+    task_id = await _linked_task(app, auth_headers)
+    recorded = await app.post(
+        AGENT_EVIDENCE, json={"identifier": "FR-1", "summary": "ran the tests"}, headers=builder
+    )
+    assert recorded.status_code == 201, recorded.text
+    accepted = await app.post(
+        f"{BASE}/spec/evidence/{recorded.json()['id']}/decision",
+        json={"decision": "accepted"},
+        headers=auth_headers,
+    )
+    assert accepted.status_code == 200, accepted.text
+
+    response = await _task_to(
+        app,
+        auth_headers,
+        task_id,
+        "assigned",
+        "in_progress",
+        "completed",
+        "under_review",
+        "approved",
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["approval_report"] == []
+
+
+@pytest.mark.asyncio
 async def test_the_refusal_names_every_blocking_requirement_and_its_reason(
     app, auth_headers, builder, tmp_path
 ):

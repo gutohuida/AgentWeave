@@ -1624,3 +1624,76 @@ tasks open, no `judgement-evidence.md` coverage at all) is the largest and least
 own triage pass before any waiving starts, likely 2+ iterations alone. Stopped here deliberately —
 a clean, fully-verified batch of 3 (10 of 13 total now archived) rather than starting the harder ones
 with less than a full iteration's budget.
+
+## Entry 19 — N6 (fallback): built the real work item (`contract` rigor reports on approval) and archived `a-gate-that-only-evidence-opens` (11 of 13 done).
+
+**2026-08-17T04:19:28+01:00.** Continued N6 per `next_action`, which flagged this change as the
+first of three "hardest last" — its item `5.5` ("give `contract` its behaviour") was named as
+**unimplemented feature work the operator actually decided on 2026-08-16**, not a judgment call, so
+it needed real building rather than a waive-or-tick pass.
+
+**What `contract` was missing, concretely.** `requirement_gate._gated_requirements` filtered linked
+requirements down to `gate`-rigor documents only — a `contract`-rigor requirement was invisible to
+the gate entirely, contributing nothing to `policy`, `blocking`, or anything else. The spec delta's
+own scenario ("A contract does not block ... their state is still reported") was asserted only as
+"the transition succeeds" in the existing test, never that anything was actually reported. Checked
+first whether `has_rejected_evidence`/`rejected_evidence_count` (commit `60f0b3f`, already
+rigor-agnostic on every task response) already covered this — it covers "was evidence ever
+rejected", but says nothing about a requirement that simply has no evidence at all, and it isn't
+scoped to "what governed this specific approval", which is what "on approval" in 5.5's own wording
+asks for.
+
+**Built:** `requirement_gate._enforced_requirements` (renamed from `_gated_requirements`) now pulls
+`gate`- and `contract`-rigor linked requirements together in one query. `evaluate()` still only adds
+to `refusal.blocking`/`refusal.diagnostics` (which `GateRefusal.refuses` inspects) for `gate`-rigor
+entries; a `contract`-rigor requirement that isn't `verified` — including a diagnostic, an
+unidentified or malformed one — lands in a new `GateRefusal.reported` list that `refuses` never
+looks at, so `contract` still blocks nothing. `apply_transition` carries that list out as a
+transient `TaskTransition.reported_advisories` attribute — deliberately **not** a column or
+migration: this reports the moment of approval, not a permanent record, the same distinction that
+already separates `spec_rigor_events` (append-only history) from a live answer. `update_task_for_actor`
+threads it onto the approval response as a new `TaskResponse.approval_report` field: identifier,
+state, remedy — the same shape a `gate` refusal already names its blockers with, so a caller that
+already knows how to read a `gate_unsatisfied` refusal already knows how to read this.
+
+**Tests, three new, in `hub/tests/test_requirement_gate.py`:** a `contract`-rigor task names its one
+unmet requirement (`FR-1`, non-`verified` state, non-empty remedy) on the response that approved it;
+a `sketch`-rigor task reports nothing on approval (proves `approval_report` is `contract`'s
+behaviour specifically, not `requirement_links` renamed under a new field); a `contract`-rigor
+requirement verified *before* approval reports nothing, because the report describes this approval,
+not a scar. **Verified live, not assumed:** `pytest hub/tests/test_requirement_gate.py -q` 32/32,
+`pytest hub/tests/ -n 8 -q` 2105 passed / 11 skipped (full suite — unchanged from the branch
+baseline plus these 3 new), `pytest hub/tests/ -n 8 -q -k "task or requirement or gate"` 407/407
+(narrower pass, run first, before the full suite, to catch a regression cheaply), `pytest tests/ -n
+4 -q` 362 passed / 3 skipped (CLI side, untouched), `ruff check hub/ src/` clean, `black --check` on
+every touched file clean. No UI change — `approval_report` is API-only; nothing in the task or the
+spec delta's scenarios asks for a rendering, and the task board is the wrong surface to extend
+unattended this late in the night with no operator awake to look at it.
+
+**5.1 and 5.2 waived, not ticked.** No `judgement-evidence.md` exists for this change (unlike the
+three archived in iterations 17-18), and both are explicitly *felt* judgements — "does the refusal
+read as actionable", "does demotion feel legitimate under time pressure" — that a session cannot
+manufacture for the operator. Their mechanical halves are already proven by test (4.7 names every
+blocking requirement and its remedy; 2.5 proves demotion is recorded and attributed), which is as
+far as an unattended run can honestly go. Waived with that reasoning recorded in `tasks.md` itself
+rather than left silently unchecked, matching the pattern from iterations 17-18.
+
+**Archived clean.** `openspec archive 2026-08-13-a-gate-that-only-evidence-opens -y` → `+5` (3 into
+`spec-document-authority`, 2 into `task-lifecycle-governance`), no `MODIFIED`-vs-`ADDED` mismatch
+this time (unlike iteration 18's find). **Verified, not trusted:** `npx openspec validate --changes
+--strict` → 9/9. `--specs --strict` → 31/31 (unchanged count — both deltas merged into existing
+capability files, no new capability). `git status --porcelain` showed exactly 13 changed paths: the
+4 source/test files this entry describes, the 5-file archive rename, and 2 modified spec.md files —
+nothing outside what this iteration touched.
+
+**N6 is not done — 2 of 13 pre-08-16 changes remain, both larger than tonight's remaining budget for
+one iteration each:** `hub-owns-the-spec-document` (task `12.3` deliberately proposes a design
+amendment rather than being done as written — needs a read of the full reasoning before deciding
+whether to act on it or archive around it; task `16.8` is a partly-covered test gap, one missing
+negative-assertion test; judgment items `17.1/17.2/17.3/17.4/17.6/17.8`, of which `17.6`'s own
+evidence says "Codex half not done, still open" — a real gap, not a waivable feel) and
+`2026-07-30-hub-native-experience` (69 of 188 tasks open, no `judgement-evidence.md` coverage at
+all — the largest and least-prepared, needs its own triage pass before any waiving starts, plausibly
+2+ iterations alone). `next_action` below picks up `hub-owns-the-spec-document` next, since it is
+the smaller of the two and closer to archivable; `hub-native-experience` stays last precisely because
+it needs a triage pass of its own before an iteration can make a dent in it.

@@ -2,7 +2,7 @@
 
 import re
 from datetime import datetime, timezone
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
@@ -59,6 +59,7 @@ def _task_response(
     *,
     has_open_divergence: bool = False,
     latest_integration: Optional[TaskIntegration] = None,
+    approval_report: Optional[List[Any]] = None,
 ) -> TaskResponse:
     response = TaskResponse.model_validate(task)
     effective_status, effective_message = effective_heartbeat_status(heartbeat)
@@ -71,6 +72,7 @@ def _task_response(
         if latest_integration is not None
         else None
     )
+    response.approval_report = list(approval_report or [])
     return response
 
 
@@ -600,6 +602,10 @@ async def update_task_for_actor(
     task = await session.get(Task, task_id)
     if task is None or task.project_id != project_id:
         raise HTTPException(status_code=404, detail="Task not found")
+    # Set only when this call performed a transition — `contract`'s report on approval reads off it
+    # below. A no-op restatement of the current status returns `None` from `apply_transition`, which
+    # carries no advisories the same way it carries no new transition row.
+    approval_report: List[Any] = []
     if body.status is not None:
         if body.status == STATUS_BLOCKED and not actor.is_operator:
             # A block is observed, never asserted (design D3). An agent that could declare itself
@@ -618,7 +624,8 @@ async def update_task_for_actor(
         # Raises TransitionRefusedError — an illegal move, or one this actor may not make — which the
         # exception handler turns into 409/403. Nothing has been mutated at that point, so the
         # refusal cannot leave a half-applied update behind.
-        await apply_transition(session, task, body.status, actor)
+        transition = await apply_transition(session, task, body.status, actor)
+        approval_report = list(getattr(transition, "reported_advisories", None) or [])
         # Every exit from the waiting status drops the text, whichever exit it was — released,
         # reassigned or abandoned. A reason outliving its block describes something that already
         # arrived.
@@ -702,6 +709,7 @@ async def update_task_for_actor(
                 heartbeats.get(task.assignee) if task.assignee else None,
                 has_open_divergence=task.id in diverged,
                 latest_integration=integrations.get(task.id),
+                approval_report=approval_report,
             )
         ],
         project_id=project_id,

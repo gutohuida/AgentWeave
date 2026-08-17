@@ -236,6 +236,12 @@ class TaskResponse(BaseModel):
     # rather than dropped, because a task that quietly lost a reference it used to have is the
     # failure the migration exists to prevent.
     unresolved_requirements: List[Any] = Field(default_factory=list)
+    # `contract`-rigor requirements this task serves that were not verified at the moment this
+    # response answers an approval — identifier, state, remedy, the same shape a `gate` refusal
+    # names its blockers with. Empty on every response but the one that just approved a task under a
+    # document that reports rather than refuses; never persisted, because it describes this moment,
+    # not a record (`2026-08-13-a-gate-that-only-evidence-opens`, task 5.5).
+    approval_report: List[Any] = Field(default_factory=list)
     acceptance_criteria: Optional[Any] = None
     deliverables: Optional[Any] = None
     notes: Optional[Any] = None
