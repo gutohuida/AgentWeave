@@ -1086,3 +1086,102 @@ since 2026-07-29.
 
 **Nothing outward-facing happened beyond the merge:** no tag, no release, no PyPI upload. `v1.0.0`
 does not exist. The four published releases are untouched.
+
+---
+
+## Iteration 20 — 13:50–14:16 — took over from a stalled driver, two more theories killed, stopping
+
+Fresh process. Read `STATE.json` and the newest log entry, then found something the brief hadn't
+prepared me for: **the scheduled driver (PID 21828, started 12:35:38) was still running, concurrently,
+in the same working directory.** `last_heartbeat` on disk was `12:01:42` when this iteration started
+— over 34 minutes old, past the driver's 25-minute grace, so it had already taken over per its own
+design. I had independently spent close to an hour investigating the *same* test failure the driver
+was working on, only noticing the collision when `git status` showed commits I hadn't made
+(`89384cd`, `cdba263`, `7f44737`) and files with content I hadn't written.
+
+**What the driver actually found, before it stalled:** the real root cause of the *original* symptom.
+`_fake_pty`'s `read.side_effect` was a finite list (`[*lines, ""]`); one more `pty.read()` call than
+scripted raises `StopIteration` inside the executor, which does not surface as a failure — it hangs
+the run loop forever. Its own docstring had predicted this exact failure mode. Fixed in `7f44737`
+(EOF forever, not a finite list), verified against 70 tests across the four files using that fixture,
+pushed to master as part of `ec25ca5`. This was a genuine, real bug and the fix is correct — credit
+where due, the driver's diagnostic-first discipline (from iteration 19, which I also independently
+reached) is what found it.
+
+**Then the driver stalled.** From `12:50:53` (its last file write) to when I checked at `14:16`, zero
+commits, zero file writes anywhere under `.claude/autonomous/`, and its own CPU time crept from 17s to
+34s across an hour and a half — essentially idle, not crunching. No CI run was in flight during that
+window either (checked `gh run list`), so it wasn't legitimately blocked on a long CI wait. I judged
+it hung rather than working and took over just before 14:00, first committing the one harmless,
+already-written-but-uncommitted edit it had left in the log (a timestamp correction), then continuing
+independently. The process was still alive and technically "Responding: True" in `Get-Process` at every
+check — that flag reflects the Windows message pump, not actual progress, and is not evidence of
+either state on a console process.
+
+**CI on `ec25ca5` (the driver's fix) still failed the model-switch test — with new information.**
+The diagnostic added in iteration 19 finally paid off:
+
+    AssertionError: model-switch still had a running run after 10.0s
+      Run rows: ["run=... status='running' error=None exit_code=None ended_at=None"]
+      _background_runs: 0 pending
+      _active_ptys keys: []
+
+Both tracking sets are **empty**. `_execute_run`'s own `finally` pops `_active_ptys[run_id]` — if
+that's empty, the task's `finally` ran, which only happens once the function is exiting for good
+(return or exception). Combined with `_background_runs: 0 pending`, this proves the task **genuinely
+finished** — not still running, not orphaned — yet the `Run` row never left `status="running"`.
+
+**Two more hypotheses, both tested with a real fix rather than argued from the armchair, both dead:**
+
+1. **An exception between the finalize block's `run.status = final_status` and its own
+   `db.commit()`.** `_execute_run` had exactly one `except` clause before this (spawn failure only)
+   — anything later propagated out uncaught. This is also a real production gap independent of this
+   test: a `Run` stuck at `running` blocks every future trigger for that agent
+   (`turn_scheduler.py:37-43` refuses a new turn while one is `running`), silently, forever, in
+   production too. Added `except Exception as exc:` wrapping the whole run body, marking the row
+   `failed` with the exception recorded — but only if the row is still `running` when caught, so an
+   unrelated failure downstream of a *successful* turn (title generation, the next-turn scheduler)
+   can't relabel it. Verified locally (2130/2130), pushed as `897ebec`. **CI failed identically —
+   `error=None` again.** No ordinary `Exception` is the cause.
+2. **`asyncio.CancelledError`**, which is a `BaseException` in Python 3.8+, not an `Exception` — the
+   first fix's `except Exception` would never have seen one. Grepped the whole codebase for `.cancel(`
+   against this task: none exists (the stop mechanism is a cooperative flag the read loop checks
+   itself, not real cancellation) — but that only rules out a *known* caller, and asyncio does not log
+   "exception was never retrieved" for a `CancelledError` the way it does for everything else, which
+   fit the earlier full-log grep finding nothing. Widened to `except (Exception, asyncio.CancelledError)`,
+   re-raising after marking the row so real cancellation semantics still propagate. Verified locally
+   (2130/2130), pushed as `66e1cbc`. **CI failed identically again — `error=None` a third time.**
+
+**Where that leaves the mystery, unsolved:** neither exception theory survived contact with CI, and
+between them they cover everything a Python `try/except` can catch. The remaining candidate a code
+read supports: the finalize block's `run = await db.get(Run, run_id)` returning `None` for *this*
+session specifically, even though the row demonstrably exists (the test's own diagnostic query finds
+it). If `run` is `None` there, the `if run:` guard silently skips setting `status`/`error` — no
+exception, task completes normally via its ordinary return path, everything observed follows. I could
+not find a mechanism for `db.get()` to miss a row that exists on the *same, single, `StaticPool`
+connection* that wrote it — every path I traced through SQLAlchemy's session/identity-map semantics
+for this configuration says it shouldn't be possible. That gap between "the code should work" and "CI
+says it doesn't, three times, in a way only a fourth un-run theory could explain" is exactly where the
+log's own recurring lesson applies once more: a mechanism that explains a symptom is not evidence that
+it happened.
+
+### Stopping here, deliberately, not because the clock ran out
+
+**Time check: 14:16, stop at 15:00.** 44 minutes remain — enough for one more round, arguably, but not
+enough for another blind cycle after five already-disproven theories (three from iteration 19's
+process, two from this one) on the same test. `D6` in `STATE.json` is updated with the full theory
+list and the `db.get()` hypothesis as the next thing to check, for whoever picks this up — human or a
+future iteration, but not this one, and not by guessing a sixth time.
+
+**What ships regardless of whether the root cause is ever found:** both hardening commits
+(`897ebec`, `66e1cbc`) are correct, verified, independent improvements — a `Run` should never be able
+to get permanently stuck at `running` in production, whatever eventually turns out to be causing this
+specific CI symptom. They stay.
+
+**What does not ship: the tag.** Master is still red on this one test. No tag, no release, no PyPI
+upload — `v1.0.0` does not exist. `last_heartbeat` is being left at its real, current value rather than
+backdated, on purpose: backdating tells the driver to pick the work back up immediately, and the right
+next step here is a decision from the operator (back at 15:00 per the prep notes), not another
+automated cycle repeating the same five-theories-deep investigation. If the operator wants the driver
+to keep trying the `db.get()` hypothesis unattended, that's a choice to make explicitly, not a default
+to fall into.
