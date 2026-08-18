@@ -7,9 +7,9 @@
   "started_at": "2026-08-18T21:25:24+01:00",
   "stop_at": "2026-08-19T08:00:00+01:00",
   "stop_when_queue_empties": false,
-  "iteration": 0,
+  "iteration": 1,
   "session_stopped": false,
-  "last_heartbeat": null,
+  "last_heartbeat": "2026-08-18T21:36:29+01:00",
   "prepared_by": "/autonomous-prep, interactive session 2026-08-18T20:55-21:30+01:00. Intent was fixed with the operator BEFORE reading the handoff or the git log. Environment was measured, not assumed: browser suite 33 passed against the live Hub, ruff clean, black clean (403 files), openspec 2 changes + 32 specs strict-valid, mypy baselined at 361 pre-existing errors, trial Hub confirmed serving this repo via an editable install.",
 
   "operator_intent": {
@@ -21,7 +21,7 @@
   },
 
   "queue": [
-    {"id": "P2a", "title": "Panel shell: component skeleton, tab strip, keyboard (tasks 2.1, 2.6, 2.7)", "status": "open"},
+    {"id": "P2a", "title": "Panel shell: component skeleton, tab strip, keyboard (tasks 2.1, 2.6, 2.7)", "status": "done"},
     {"id": "P2b", "title": "Panel shell: re-host ConversationView's panel block (tasks 2.2-2.5)", "status": "open"},
     {"id": "P3",  "title": "Panel: specs as the shell's first tenant (tasks 3.1-3.6)", "status": "open"},
     {"id": "PW1", "title": "Playwright coverage for the shell against the live Hub", "status": "open"},
@@ -54,8 +54,8 @@
     {"id": "APP2", "title": "App experience: further improvements, operator's second priority", "status": "open"},
     {"id": "FREE", "title": "Free choice: outstanding fixes, findings, whatever is most needed", "status": "open"}
   ],
-  "current": "P2a",
-  "next_action": "Implement panel change tasks 2.1, 2.6 and 2.7. Create hub/ui/src/components/spec/PanelShell.tsx (or a sibling location that fits the existing tree): a shell component owning the tab strip, the plus affordance, and the visible tab's content, rendering exactly ONE tab's content at a time. It consumes hub/ui/src/store/panelTabsStore.ts, which already exists and is fully tested — read that file first; do not re-derive the tab model. Task 2.6: ARIA `tablist` semantics, sequential focus, Enter/Space to activate, arrow keys between tabs, close control keyboard-reachable, plus menu navigable — design D11 says nothing exists to inherit here, so state it explicitly. Task 2.7: use the `Icon` component ONLY, and audit hub/ui/src/components/common/Icon.tsx's map BEFORE assuming a close or plus glyph exists (CLAUDE.md forbids a second icon system). Do NOT re-host ConversationView yet — that is P2b, deliberately a separate iteration. Add vitest coverage for the strip's keyboard behaviour. Then: cd hub/ui && npx vitest run && npm run lint && npx tsc --noEmit.",
+  "current": "P2b",
+  "next_action": "Implement panel change tasks 2.2-2.5 (P2b): re-host ConversationView.tsx's panel-hosting block (:150-291, see hub/ui/src/components/agents/ConversationView.tsx) into hub/ui/src/components/spec/PanelShell.tsx, which now exists (tasks 2.1/2.6/2.7 landed in commit 77dfd5b — read PanelShell.tsx and its test file hub/ui/src/__tests__/panelShell.test.tsx FIRST; do not re-derive the tab model or the keyboard handling, the shell already takes availableTabs/describeTab/renderTabContent). Task 2.2: mount PanelShell inside ConversationView in place of the current one-off `panel` JSX/resize block. Do NOT rewrite SpecDocumentPanel's internals -- this is a re-hosting, and the breadcrumb, archived marker, phase/coverage bars, proposals panel, SpecFrame bridge and outline rail must all still work afterwards. For this task, the shell's one tenant is the existing document-panel behaviour wrapped as a `spec:<path>`-shaped tab (the document/path-keyed model from `document`/`onOpenDocument` props) -- section 3 (specs as a first-class tab kind keyed by document id via panelTabsStore) is the NEXT task after this one, so P2b's re-hosting can keep today's single-document prop shape temporarily if wiring it through panelTabsStore's real tab model is not yet possible without section 3's work; state explicitly in tasks.md which of the two you did, do not silently guess. Task 2.3: generalize DOCUMENT_COLUMN_BREAKPOINT (ConversationView.tsx:34-38) to derive from the VISIBLE TAB's own minimum rather than SPEC_DOC_MIN_WIDTH specifically -- keep it derived, not written down twice. Task 2.4: overlay below the breakpoint using the existing Drawer component, reopen affordance kept, dismissing the overlay keeps the tabs (do not lose panelTabsStore state on dismiss). Task 2.5: width stays specPreferences.ts's single global value -- extend that store, do not invent a second one. Verify with: cd hub/ui && npx vitest run && npm run lint && npx tsc --noEmit, AND drive it live against the trial Hub (:8010) with Playwright per the operator's explicit instruction that UI testing must use Playwright, not just vitest -- this is the first task where there is a real mounted shell to test against a browser, so do not defer Playwright coverage further than this. Mark 2.2-2.5 done in tasks.md with dated notes, the same style as 2.1/2.6/2.7. Regression-check 3.6's listed spec-chat-session scenarios are not yet due (section 3), but do sanity-click through the composer's attach/open-document flow manually via Playwright before calling P2b done, since this task touches the exact code path spec-chat-session's existing UI test guide covers.",
 
   "limits": [
     "No merging to master unattended — the operator's own words, chosen explicitly tonight. Push the autonomous branch; never merge it.",
