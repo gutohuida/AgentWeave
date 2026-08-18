@@ -164,6 +164,48 @@ posture the product already applies to permissions, pointed at queue extension.
 **What this fixes and what it does not.** It removes the missing-subject problem entirely. What
 remains is ordinary identity hygiene, described in §8 item 4.
 
+### 5b. A loop is editable, and an edit lands on a boundary
+
+Control is handed over after creation, the operator adds tasks, and a loop's definition changes over
+its life. The operator's constraint:
+
+> "But we need enforcements not to break the loop. If I'm editing a loop it only goes after no run is
+> active."
+
+**Decided: an edit is always accepted, and applied at the next firing boundary.** The firing in
+flight keeps the briefing it started with; the change takes effect when the next one is briefed.
+
+```
+   firing N running          edit accepted          firing N+1
+   briefed at start   ───────────────────────────▶  briefed with the edit
+        │                    stored as pending           │
+        └── unaffected ──────────────────────────────────┘
+```
+
+Rejected: **refusing the edit while a run is active** (a 409 the operator has to retry, and a long
+firing locks them out of their own loop); and **applying it immediately** (no new machinery, but a
+firing that re-reads its queue mid-turn would observe a change it was never briefed on). Staging is
+the only option that neither blocks the operator nor lets a firing see two different worlds.
+
+The cost is a state the UI must show: **what is pending versus what is live.** A loop with a staged
+edit and no visible sign of it is worse than a refused edit.
+
+**The closing window.** Gating on "no run active" protects a firing in flight but not the end: the
+queue empties, the loop terminates, and a task added a moment later arrives at a stopped loop.
+Decided: **refuse the late task, state why, and offer to carry it into a new loop.** Termination
+stays final — consistent with §5's "the architect can create another one" — without discarding work
+the operator had already written. Rejected: reviving a terminated loop (a stopped thing becoming live
+again is a state change that is hard to render honestly), and holding termination off during an edit
+session (which reintroduces the third state §5 deliberately avoided).
+
+**What this needs that does not exist yet.**
+
+| Need | Status |
+|---|---|
+| "Is a firing active right now?" | Answerable only by a join nobody has written: `JobRun.conversation_id` → `Run.status == "running"`. **`JobRun.status` is only `"fired"` or `"failed"`** (`models.py:1178-1180`) — there is no `"running"`, so a firing in progress is indistinguishable from one that finished. This is the same question the loop panel needs for "is there an active agent right now", so it wants one helper, not two. |
+| A per-loop audit trail | `EventLog` (`models.py:907`) exists and `persist_event` already writes loop events, but it is indexed by **project and agent, not loop** — "show me this loop's history" means filtering unindexed JSON. `Loop.updated_by_run_id` records only the most recent writer. |
+| Staged edits | No mechanism. New. |
+
 **Two work sources.** Spec-declared tasks are one: `spec_tasks.materialise()` creates the tasks a
 document declares when it is approved, idempotent by `(document, key)`. That module exists because
 of a measured failure — *"an operator approved nineteen requirements and got nothing"* — and it is
