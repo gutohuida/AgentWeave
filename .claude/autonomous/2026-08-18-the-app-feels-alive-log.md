@@ -1558,3 +1558,119 @@ from them.
 `agent-inbound-queue`, `agent-conversation-timeline`), with five specs plus a re-check of
 `agent-tool-surface` still listed in the 16.2 note for whoever continues it. Runway to `stop_at`
 (2026-08-18T08:00+01:00) is roughly 2h45m.
+
+## Iteration 19 — Q11/roadmap #8: fourth 16.2 requirement-level mapping slice (`agent-identity-and-skills`)
+
+**Timestamp:** 2026-08-18T05:33+01:00. Branch and `git log` matched `STATE.json` exactly at start
+(HEAD `c702f34`, iteration 18 recorded). Runway to `stop_at` (2026-08-18T08:00+01:00) was roughly
+2h30m.
+
+Continued the `openspec/changes/2026-07-30-hub-native-experience` umbrella's 16.2 requirement-level
+mapping with the fourth of nine still-unmapped delta specs, `agent-identity-and-skills`. No current
+spec carries that name. Read the full 222-line delta spec first — ten requirements: runner reuse and
+identity separation, unique names, no-persona creation, charter-as-boundary (not persona), skills as
+invocable capability, agent templates, live roster, single-agent no-overhead, budgeted agent-request
+with template approval, and an inspectable behaviour-precedence order.
+
+Grepped `persona`, `template`, `skill`, `roster`, `budget`, `scope`, and `precedence` across all 31
+current specs to find where each requirement landed, rather than trusting the umbrella's own
+pointer — the same method as the prior three passes. This pass surfaced substantially more
+divergence than `agent-composer`, `agent-inbound-queue`, and `agent-conversation-timeline`
+combined: those three found renames, supersessions, and undocumented-but-shipped content; this one
+found three requirements that were **never built** as the delta described, one that was **reversed**
+by a later decision, and one built **more crudely** than specified — a different and sharper category
+of finding than anything the prior three passes reported.
+
+**Four of ten requirements confirmed shipped and adequately documented**, re-checked against live
+code immediately before citing: unique names refused on duplicate
+(`operator-agent-creation/spec.md:39-43`, live in `hub/hub/api/v1/agents.py:1386-1391`); no
+persona/job-title required at creation or configurable afterward
+(`operator-agent-creation/spec.md:11-12`, `agent-configuration/spec.md:295-296,303-306`); charter
+defines behaviour with an unbound agent staying fully usable (`agent-charter/spec.md:56-71`); a live
+roster supplied every turn, confirmed freshly queried per turn rather than cached at
+`hub/hub/api/v1/agents.py:1074-1077` (`agent-context-onboarding/spec.md:34,42-45`).
+
+**One requirement is shipped and verified live but has zero requirement text anywhere in the current
+31 specs** — the same undocumented-but-shipped pattern iteration 18 found twice for
+`agent-conversation-timeline`: a single-agent project renders no `### Team` section at all
+(`hub/hub/api/v1/agents.py:1238-1246`), with the code's own comment naming and rejecting the removed
+alternative (an earlier `else` branch that printed "No other agents are registered" on every
+single-agent turn). Grepped `single.agent`, `no.*roster`, `collaboration protocol` across every
+current spec first — nothing states this.
+
+**Three requirements were never built as the delta described**, confirmed by grepping the actual
+Python source, not just the specs:
+
+- *Skills.* Grepped `class Skill`, `invoke_skill`, `skill_id` across `hub/hub/` — no matches. The
+  only "skill" concept in the shipped product is the composer's `@`-mention autocomplete over a
+  project's `.claude/skills/` directory (`agent-composer/spec.md:80-94`) — a file-reference
+  convenience for whatever the runner's own CLI supports, not a Hub-modelled, charter-independent
+  invocable capability. The delta's scenarios about a skill not widening scope and default skills not
+  precluding others have nothing in the product to be true or false of.
+- *Agent templates.* Grepped `AgentTemplate`, `agent_template` across `hub/hub/` — no matches. What
+  `request_agent` (`hub/hub/api/v1/agents.py:1348-1466`, MCP tool at `hub/hub/mcp_server.py:491`)
+  reads as a "template" is `session_data.get("agents", {})` (`agents.py:1377-1379`) — a dict keyed by
+  name inside the legacy synced-session blob. `agent-context-onboarding/spec.md:30-32` states that
+  synced session state "MAY continue to be read... provided it never determines... what work it is
+  permitted to do." Whether an agent-creation request is fulfilled at all is gated on a name existing
+  in that legacy dict (`agents.py:1379-1384`, refused with 400 if absent) — a direct contradiction
+  between two *current* specs' own terms, found by reading the code behind both rather than either
+  spec's prose alone.
+- *Inspectable behaviour precedence.* Grepped `precedence`, `more specific`, `inspectable` across all
+  current specs — every hit is unrelated (`spec-document-authority`'s charter-independent authority
+  statement, `requirement-traceability`'s coverage-state ranking, `run-task-binding`'s
+  conversation-rebind rule). No current spec states an ordering among project instructions, charter,
+  and task acceptance criteria, or exposes the composition for inspection. `agents.py` does compose
+  them in one fixed sequence — re-read end to end at :1081-1326 to confirm — but nothing states this
+  is a conflict-resolving precedence rule.
+
+**One requirement is implemented more crudely than specified, not absent.** The agent-request budget
+gate is real (`agent-tool-surface/spec.md:67-78`, live at `agents.py:1396-1403`), but the delta's
+finer distinction — a within-budget, pre-approved-template request auto-fulfils, while an
+over-budget or unapproved-template request "SHALL be presented to the operator as a decision awaiting
+response" — was not built. Both refusal paths (`agents.py:1381-1384` unknown template,
+`:1396-1403` budget exhausted) raise a synchronous `HTTPException` the requesting agent simply sees
+as a failed call; there is no pending-decision record for the operator to later resolve. The
+"approved for automatic instantiation" distinction cannot exist either, since there is no template
+record to carry that flag.
+
+**One requirement was reversed, not merely left undocumented.** The delta: "A runner SHALL be
+reusable by any number of agents across any number of projects." The current spec, unambiguous:
+`runner-registry/spec.md:10-14`, "The Hub SHALL persist runner definitions as **project-scoped**
+database rows." This reads as a considered later decision — narrowing a runner to one project is a
+coherent design choice consistent with the rest of `runner-registry` (project-scoped seeding,
+project-scoped binding) — rather than drift, and is called out distinctly in the written note for
+that reason: it is the first finding across four specs and three iterations of this mapping that
+looks deliberate rather than accidental.
+
+**What was written, not implemented.** One dated note added under 16.2 in
+`openspec/changes/2026-07-30-hub-native-experience/tasks.md` (the only file touched this iteration),
+recording all ten requirements, the four shipped-and-documented, the one shipped-but-undocumented,
+the three never-built, the one built-more-crudely, and the one reversed, each with file:line
+evidence, and an updated tally — four of the nine remaining unmapped specs now done
+(`agent-composer`, `agent-inbound-queue`, `agent-conversation-timeline`, `agent-identity-and-skills`),
+four remain (`hub-interface-feel`, `hub-native-runtime`, `hub-visual-language`, plus re-confirming
+`agent-tool-surface`).
+
+No checkbox ticked, no code changed, no archiving attempted — consistent with the file's own
+reconciliation rule and `decisions_for_user` D1 in `STATE.json`.
+
+**Verified before committing:** `git status --short` showed only the one intended file modified,
+plus the carried-forward `spec/` and `hub/seed_taste_doc.py` scratch (`git diff --stat`: 86
+insertions, one file). Every cited line number was re-grepped against the live file immediately
+before writing this entry, not carried over from earlier exploration. `openspec validate` was not
+run, for the same reason as iterations 16–18: `tasks.md` is prose/checklist, outside that
+validator's schema-checked scope.
+
+**Tree state before commit:** `openspec/changes/2026-07-30-hub-native-experience/tasks.md` modified
+(1 new note, 86 lines); `.claude/autonomous/STATE.json` updated (iteration, heartbeat, Q11 done_note,
+next_action); `spec/` and `hub/seed_taste_doc.py` (prior-session scratch) untouched, staged nothing
+from them.
+
+**Queue status:** Q1–Q10 done. Q11 — roadmap #7 stays parked (three failure modes on record);
+roadmap #8 now has four of nine remaining delta-spec mappings done, four left, listed in the 16.2
+note for whoever continues it. This iteration's findings (skills and agent templates never built as
+specified, budget-request escalation built more crudely, cross-project runner reuse reversed) are
+concrete enough that the operator may want them surfaced directly rather than only left inside the
+umbrella's own tasks file — noted here for the morning report. Runway to `stop_at`
+(2026-08-18T08:00+01:00) is roughly 2h15m.

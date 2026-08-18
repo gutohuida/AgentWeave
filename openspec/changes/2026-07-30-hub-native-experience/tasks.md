@@ -2024,6 +2024,92 @@ being built twice.*
 > `agent-conversation-timeline`). Five remain: `agent-identity-and-skills`, `hub-interface-feel`,
 > `hub-native-runtime`, `hub-visual-language`, plus re-confirming `agent-tool-surface` at requirement
 > level per the 2026-08-18 note above.
+>
+> **Update (2026-08-18, iteration 19) — fourth 16.2 requirement-level mapping:
+> `agent-identity-and-skills`.** No current spec carries that name. Its ten requirements scattered
+> across `runner-registry`, `operator-agent-creation`, `agent-charter`, `agent-configuration`,
+> `agent-context-onboarding`, and `agent-tool-surface` — found by grepping `persona`, `template`,
+> `skill`, `roster`, `budget`, `scope`, and `precedence` across all 31 current specs, not by trusting
+> the umbrella pointer. This pass found more genuine divergence than the previous three combined.
+>
+> **Four of ten requirements confirmed shipped and adequately documented**, re-checked against live
+> code immediately before citing:
+> - Agent names unique within their project, a duplicate refused without losing input:
+>   `operator-agent-creation/spec.md:39-43`, live in the name-uniqueness check inside
+>   `hub/hub/api/v1/agents.py`'s `request_agent` (:1386-1391) and the ordinary creation path.
+> - No persona or job-title role required at creation or configurable afterward:
+>   `operator-agent-creation/spec.md:11-12` and `agent-configuration/spec.md:295-296,303-306` ("No
+>   persona or role is configurable").
+> - Charter defines behaviour, not persona, and an unbound agent stays fully usable:
+>   `agent-charter/spec.md:56-71`.
+> - A live roster is supplied at the start of every turn: `agent-context-onboarding/spec.md:34,42-45`
+>   ("Profile names every agent registered"); confirmed freshly queried per turn, not cached, at
+>   `hub/hub/api/v1/agents.py:1074-1077`.
+>
+> **One requirement is shipped and verified live in code but has zero requirement text anywhere in
+> the current 31 specs** — the same undocumented-but-shipped pattern iteration 18 found twice for
+> `agent-conversation-timeline`:
+> - A single-agent project carries no multi-agent overhead: grepped `single.agent`, `no.*roster`,
+>   `collaboration protocol` across every current spec — nothing states this. Live at
+>   `hub/hub/api/v1/agents.py:1238-1246`: a project with no peers renders no `### Team` section at
+>   all, and the code's own comment names and rejects the alternative the delta itself worried
+>   about — an earlier `else` branch that printed "No other agents are registered" on every
+>   single-agent turn, deliberately removed.
+>
+> **Three requirements were not renamed or superseded — they were never built as the delta
+> described, and what exists instead is architecturally different, not just smaller:**
+> - *Skills as invocable capability, available to any agent regardless of charter, defaultable per
+>   charter.* Grepped `class Skill`, `invoke_skill`, `skill_id` across `hub/hub/` — no matches; no
+>   such concept exists server-side. The only "skill" in the current product is
+>   `agent-composer/spec.md:80-94`, the composer's `@`-mention autocomplete over a project's
+>   `.claude/skills/` directory — a file-reference convenience for whatever the runner's own CLI
+>   happens to support, not a Hub-modelled capability. The delta's "invoking a skill MUST NOT change
+>   the agent's scope" and "default skills load without preventing others" have nothing to be true or
+>   false of.
+> - *Agent templates, for repeated instantiation each producing a distinct name/queue/session/colour.*
+>   Grepped `AgentTemplate`, `agent_template` across `hub/hub/` — no matches. What `request_agent`
+>   (`hub/hub/api/v1/agents.py:1348-1466`, MCP tool at `hub/hub/mcp_server.py:491`) actually reads as
+>   a "template" is `session_data.get("agents", {})` (`agents.py:1377-1379`) — a dict keyed by name
+>   inside the legacy synced-session blob, the same `agentweave.yml`-derived state
+>   `agent-context-onboarding/spec.md:30-32` says "MAY continue to be read... provided it never
+>   determines... what work it is permitted to do." Here it does exactly that: whether an
+>   agent-creation request is fulfilled at all is gated on a name existing in that legacy dict
+>   (`agents.py:1379-1384`, refused with 400 if absent). This is a contradiction between two current
+>   specs' own terms, not just a gap against the retired delta.
+> - *Behaviour resolves in a defined, inspectable precedence order (project instructions < charter <
+>   skills < acceptance criteria, more specific wins).* Grepped `precedence`, `more specific`,
+>   `inspectable` across all current specs — the hits are unrelated (`spec-document-authority`'s
+>   charter-independent authority statement, `requirement-traceability`'s coverage-state ranking,
+>   `run-task-binding`'s conversation-rebind rule). No current spec states an ordering among project
+>   instructions, charter, and task acceptance criteria, and none states the composition is
+>   inspectable. `hub/hub/api/v1/agents.py` does compose them in one fixed order — roster, quality
+>   gates, evidence grant, project instructions, charter, re-read end to end at :1081-1326 to confirm
+>   — but nothing states this is a *precedence* rule that resolves conflicts, and no surface exposes
+>   the composition for inspection.
+>
+> **One requirement is implemented more crudely than specified, not absent.** "An agent may request a
+> new agent within a budget": the budget gate is real (`agent-tool-surface/spec.md:67-78`, live at
+> `agents.py:1396-1403`), but the delta's finer distinction — a within-budget, pre-approved-template
+> request auto-fulfils, while an over-budget or unapproved-template request "SHALL be presented to
+> the operator as a decision awaiting response" rather than simply failing — was not built. Both
+> refusal paths (`agents.py:1381-1384` unknown template, `:1396-1403` budget exhausted) raise a
+> synchronous `HTTPException`, not a pending-decision record the operator later resolves; there is no
+> queued-approval surface for a request an agent made that the operator has not yet answered. The
+> "approved for automatic instantiation" distinction cannot exist either, since there is no template
+> record to carry that flag — see the templates finding above.
+>
+> **One requirement was reversed against a fact this project's own `runner-registry` spec now states
+> as settled, not merely left undocumented.** The delta: "A runner SHALL be reusable by any number of
+> agents across any number of projects." The current spec, unambiguous: `runner-registry/spec.md:10-14`,
+> "The Hub SHALL persist runner definitions as **project-scoped** database rows." Cross-project runner
+> reuse was not carried forward partially — it was reversed. Worth flagging distinctly from the rest
+> of this note: it is the first finding across this mapping pass's four specs that reads as a
+> considered later decision rather than drift.
+>
+> Four of the nine remaining unmapped specs are now done (`agent-composer`, `agent-inbound-queue`,
+> `agent-conversation-timeline`, `agent-identity-and-skills`). Four remain: `hub-interface-feel`,
+> `hub-native-runtime`, `hub-visual-language`, plus re-confirming `agent-tool-surface` at requirement
+> level per the 2026-08-18 note above.
 
 - [ ] 16.1 Confirm every scenario in the ten delta specs is exercised.
 - [ ] 16.2 Sync delta specs into `openspec/specs/`; reconcile `agent-stream-events`,
