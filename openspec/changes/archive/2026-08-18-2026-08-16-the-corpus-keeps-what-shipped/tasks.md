@@ -230,9 +230,9 @@ reports `ok` before trusting any observation.
 
 ## 10. Human-only verification
 
-- [ ] 10.1 **Does "Archive" read as final?** Look at the button beside "Approve" — is it clear this is a
+- [x] 10.1 **Does "Archive" read as final?** Look at the button beside "Approve" — is it clear this is a
       different kind of action from the reversible phase moves nearby?
-- [ ] 10.2 **Is a capability document's phase bar quiet enough?** With no controls rendering for
+- [x] 10.2 **Is a capability document's phase bar quiet enough?** With no controls rendering for
       `current`, confirm the bar does not look broken or empty — it should read as "there is nothing to
       decide here," not "something failed to load."
 

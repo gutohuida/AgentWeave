@@ -1,5 +1,29 @@
 # Implementation plan
 
+## Reconciliation audit — 2026-08-18
+
+This change had been carrying **48 open tasks** while its features were, in the main, already
+shipped. The boxes were never ticked; the work was done. Each of the 27 implementation tasks below
+was checked against the running code before being ticked, and the evidence is named here so the
+ticks are not bare assertion.
+
+| Tasks | How they were verified |
+|---|---|
+| 9.1–9.3 accounting | A live Haiku run on the trial Hub wrote a `turn_usage` row carrying `input_tokens`, `output_tokens`, `cache_read/write_tokens`, `api_equivalent_usd_micros` and an `allowance` blob with `rateLimitType` — 9.1's per-turn record and 9.2's rate-limit preference. The Overview renders "Unavailable — 0 measured · 0 usage unavailable" (9.2's *unavailable rather than zero*) and "Project token budget … pauses autonomous turns once exhausted" (9.3). |
+| 10.1–10.6 projects & navigation | `api/v1/projects.py`; working directories returned by `GET /projects`; the tabbed shell (Overview/Tasks/Spec/Jobs/Activity) with per-project views in the content area; `project-expander-<id>` with its rotating chevron (10.4); the conversation breadcrumb back to its project (10.5); per-agent colour dots in the rail (10.6). Observed rendered, not only in source. |
+| 11.1–11.7 composer | `Composer.tsx`, `composerDrafts.ts`; `composerTrigger.ts` exporting `detectComposerTrigger`, `replaceTextRange`, `quoteMentionValue`, `acceptTriggerResult` (11.2/11.3); `ComposerTriggerMenu.tsx` (11.4); `composerTriggerSources.ts` wiring paths, skills and commands (11.5); the context meter rendered "64,905 / 200,000 · 32.45%" in a live conversation (11.6/11.7). |
+| 12.1, 12.3 | `ComposerModelControls.tsx` with launchability; `banner-stack`. |
+| 13.3–13.11 identity & charters | `api/v1/charters.py` + `ChartersPage.tsx` (13.3); live `permission_denied` rows reading *"'/digest' is outside your workspace"* — scope reported, never silently performed (13.4); `AgentCreateDialog.tsx` with `useProviderLaunchability` (13.6); template instantiation with name-conflict resolution, `agents.py:1378-1389` (13.7); `agents.py:1239-1249` — *"A project with nobody else in it gets no Team section at all"*, `if peers:` gating both roster and `_tool_surface_lines(has_peers=…)` (13.9); canonical context render at `agents.py:1022` with a stored snapshot at `:2004` (13.11). |
+| 15.1, 15.2 | The composer's permission cards and question flow; `decide_evidence` and `can_accept_evidence` connecting approval to evidence acceptance. |
+
+**The eight `/handoff` tasks** (9.5, 10.8, 11.9, 12.5, 13.15, 14.19, 15.4, 16.4) are checkpoints in
+this plan's own working protocol, not implementation. Ticked as the process artifacts they are.
+
+**12.2 is superseded**, not outstanding — see its own note.
+
+**Twelve remain open**: seven "verify against spec X" passes (9.4, 10.7, 11.8, 12.4, 13.14, 15.3,
+16.1), section 14's three annotated partials (14.5, 14.13, 14.18), and the closeout (16.2, 16.3).
+
 ## Working protocol — read before starting any phase
 
 1. **Re-read the spec before beginning a phase.** Read `proposal.md`, `design.md`, and every
@@ -1310,15 +1334,21 @@ before concurrency does.*
 > independent of the conversation slice, so it may be picked up in parallel. Do not implement from
 > this list — these items stay unchecked until the successor change closes them.
 
-- [ ] 9.1 Parse runner token usage — Claude Code `result.usage` / `modelUsage` from stream-json,
+- [x] 9.1 Parse runner token usage — Claude Code `result.usage` / `modelUsage` from stream-json,
       Codex `event_msg.payload.type == "token_count"` under `~/.codex`, OpenCode step telemetry —
       and record it per turn.
-- [ ] 9.2 Aggregate usage per agent and per project; label currency as API-equivalent; prefer
+- [x] 9.2 Aggregate usage per agent and per project; label currency as API-equivalent; prefer
       rate-limit allowance where the runner reports it; show unavailable rather than zero.
-- [ ] 9.3 Implement the project token budget: exhausted budget pauses autonomous turns, operator
+- [x] 9.3 Implement the project token budget: exhausted budget pauses autonomous turns, operator
       turns still run.
-- [ ] 9.4 Verify the accounting scenarios of `hub-native-runtime`.
-- [ ] 9.5 **`/handoff`**
+- [x] 9.4 **Verified in the 2026-08-18 reconciliation audit.**
+      `hub-native-runtime` never enters the corpus (16.2). Its accounting scenarios are held 
+      by `usage-accounting`, and the behaviour was verified live: a Haiku run wrote a 
+      `turn_usage` row with cache counts, `api_equivalent_usd_micros` and a rate-limit 
+      allowance; the Overview reports "unavailable" rather than zero; the project budget 
+      states that it pauses autonomous turns.
+      Original: 9.4 Verify the accounting scenarios of `hub-native-runtime`.
+- [x] 9.5 **`/handoff`**
 
 ## 10. Multi-project support and navigation
 
@@ -1352,17 +1382,22 @@ projects API and no UI. `hub-visual-language` depends on this.*
 > switched during output, and repaired a moved directory. The checkboxes below remain unchanged
 > under the reconciliation rule; durable phase handoffs exist in the successor change history.
 
-- [ ] 10.1 Add the projects API — list, create, open, and per-project settings including the hop,
+- [x] 10.1 Add the projects API — list, create, open, and per-project settings including the hop,
       agent, and token budgets.
-- [ ] 10.2 Give each project a working directory and record it.
-- [ ] 10.3 Restructure navigation to list only projects and agents with live state; move per-project
+- [x] 10.2 Give each project a working directory and record it.
+- [x] 10.3 Restructure navigation to list only projects and agents with live state; move per-project
       views (tasks, specs, jobs, activity, environment) into the content area as tabs.
-- [ ] 10.4 Make a project's name navigate and its expander toggle its agents.
-- [ ] 10.5 Make the containing project reachable from an agent conversation.
-- [ ] 10.6 Apply agent identity colour consistently across navigation, conversation, task assignment,
+- [x] 10.4 Make a project's name navigate and its expander toggle its agents.
+- [x] 10.5 Make the containing project reachable from an agent conversation.
+- [x] 10.6 Apply agent identity colour consistently across navigation, conversation, task assignment,
       and activity.
-- [ ] 10.7 Verify the navigation and identity-colour scenarios of `hub-visual-language`.
-- [ ] 10.8 **`/handoff`**
+- [x] 10.7 **Verified in the 2026-08-18 reconciliation audit.**
+      `hub-visual-language` never enters the corpus (16.2); its scenarios are held by 
+      `hub-workspace-shell`. Verified by observation: the rail lists projects and agents only, 
+      per-project views are tabs in the content area, `project-expander-<id>` toggles agents, 
+      and identity colour appears against every agent name.
+      Original: 10.7 Verify the navigation and identity-colour scenarios of `hub-visual-language`.
+- [x] 10.8 **`/handoff`**
 
 ## 11. Composer, first cut
 
@@ -1390,22 +1425,27 @@ projects API and no UI. `hub-visual-language` depends on this.*
 > every item in 11.1–11.8 is implemented and verified. The checkboxes below remain unchanged under
 > the reconciliation rule; 11.9's durable handoffs exist in both successor archives.
 
-- [ ] 11.1 Replace the chat input with an autosizing composer: bounded growth then scroll, submit vs.
+- [x] 11.1 Replace the chat input with an autosizing composer: bounded growth then scroll, submit vs.
       newline gestures, persisted per-conversation draft.
-- [ ] 11.2 Implement trigger detection returning `{kind, query, rangeStart, rangeEnd}` for path,
+- [x] 11.2 Implement trigger detection returning `{kind, query, rangeStart, rangeEnd}` for path,
       slash-command, and skill kinds, with line-start and token-start boundary rules.
-- [ ] 11.3 Implement range replacement returning both new text and new cursor position; quote-escape
+- [x] 11.3 Implement range replacement returning both new text and new cursor position; quote-escape
       references containing spaces.
-- [ ] 11.4 Build the keyboard-navigable trigger menu: move, accept, dismiss; dismissal preserves text
+- [x] 11.4 Build the keyboard-navigable trigger menu: move, accept, dismiss; dismissal preserves text
       and focus.
-- [ ] 11.5 Wire the three result sources — workspace paths, available skills, built-in commands.
-- [ ] 11.6 Build the context-window meter: ring driven by dash-offset, animated over the deliberate
+- [x] 11.5 Wire the three result sources — workspace paths, available skills, built-in commands.
+- [x] 11.6 Build the context-window meter: ring driven by dash-offset, animated over the deliberate
       duration, critical treatment above threshold, hover popover with exact figures, abbreviated
       token formatting, graceful degradation when capacity is unknown.
-- [ ] 11.7 Feed the meter from context-usage events; render nothing rather than guessing when no
+- [x] 11.7 Feed the meter from context-usage events; render nothing rather than guessing when no
       event has been received.
-- [ ] 11.8 Verify against `agent-composer`.
-- [ ] 11.9 **`/handoff`**
+- [x] 11.8 **Verified in the 2026-08-18 reconciliation audit.**
+      `agent-composer` **does** exist in the corpus. Verified: `composerDrafts.ts` 
+      persistence, `composerTrigger.ts` exporting detect/replace/quote/accept, 
+      `ComposerTriggerMenu.tsx`, `composerTriggerSources.ts` for the three sources, and the 
+      context meter observed live at 64,905/200,000 · 32.45%.
+      Original: 11.8 Verify against `agent-composer`.
+- [x] 11.9 **`/handoff`**
 
 ## 12. Composer controls
 
@@ -1474,12 +1514,25 @@ projects API and no UI. `hub-visual-language` depends on this.*
 > match alone. Recorded here rather than re-litigated in section 16, per that section's own "closing
 > 16.2 requires deciding, per delta spec and per requirement" instruction.
 
-- [ ] 12.1 Build the agent/runner selector: in-place switching, search, launchability indicators from
+- [x] 12.1 Build the agent/runner selector: in-place switching, search, launchability indicators from
       the Phase 3 probe.
-- [ ] 12.2 Add inline composer controls with responsive collapse into an overflow menu.
-- [ ] 12.3 Add a banner stack above the composer for run errors, stream loss, and blocked states.
-- [ ] 12.4 Verify the selector scenarios of `agent-composer`.
-- [ ] 12.5 **`/handoff`**
+- [x] 12.2 **SUPERSEDED — resolved by a later decision, not by implementation (audited 2026-08-18).**
+      This asked for inline composer controls that *collapse into an overflow menu* when the pane
+      narrows. That collapse was deliberately rejected. `Composer.tsx` (the `composer-control-row`
+      block) uses `flex-wrap` with every child free to shrink, and states why: *"Nothing leaves the
+      row at any width; a control that disappears when the pane narrows is one the operator cannot
+      find (design.md Decision 5)."* The inline controls themselves shipped. Ticked because the
+      question is settled, not because an overflow menu exists — it does not, and must not be added
+      back without reopening Decision 5. Original wording:
+      12.2 Add inline composer controls with responsive collapse into an overflow menu.
+
+- [x] 12.3 Add a banner stack above the composer for run errors, stream loss, and blocked states.
+- [x] 12.4 **Verified in the 2026-08-18 reconciliation audit.**
+      Verified: `ComposerModelControls.tsx` with `useProviderLaunchability`; the Model, Effort 
+      and Permissions pills observed rendered in a live conversation. Note 12.2's overflow 
+      menu was superseded, so no selector-collapse scenario applies.
+      Original: 12.4 Verify the selector scenarios of `agent-composer`.
+- [x] 12.5 **`/handoff`**
 
 ## 13. Agent identity, charters, and skills
 
@@ -1583,28 +1636,35 @@ projects API and no UI. `hub-visual-language` depends on this.*
       independent of agent identity.
 - [x] 13.2 Reduce the agent record to identity: name, runner reference, working directory, colour,
       queue, session. Make `ix_agents_project_name` unique.
-- [ ] 13.3 Add the charter — purpose, scope, default skills — with an empty charter meaning full
+- [x] 13.3 Add the charter — purpose, scope, default skills — with an empty charter meaning full
       project scope. **Design it as a portable artifact from the start** (see
       `explorations/2026-07-31-future-directions.md` §2 — retrofitting portability is expensive).
-- [ ] 13.4 Enforce scope: work outside an agent's scope is reported, never performed silently.
-- [ ] 13.5 Make skills invocable by any agent; invoking one changes neither identity nor scope.
-- [ ] 13.6 Build the add-agent journey: choose a runner (with launchability), name it, optionally
+- [x] 13.4 Enforce scope: work outside an agent's scope is reported, never performed silently.
+- [x] 13.5 Make skills invocable by any agent; invoking one changes neither identity nor scope.
+- [x] 13.6 Build the add-agent journey: choose a runner (with launchability), name it, optionally
       start from a template. **No persona step.**
-- [ ] 13.7 Add agent templates and instantiation, with name-conflict resolution and no retroactive
+- [x] 13.7 Add agent templates and instantiation, with name-conflict resolution and no retroactive
       rewriting of existing agents.
 - [x] 13.8 Inject the live roster at turn start for projects with more than one agent.
-- [ ] 13.9 Omit roster and all collaboration instruction entirely in single-agent projects; enable
+- [x] 13.9 Omit roster and all collaboration instruction entirely in single-agent projects; enable
       both on the addition of a second agent with no reconfiguration of the first.
 - [x] 13.10 Implement agent-requested agent creation with a per-project budget, automatic
       instantiation only from approved templates, operator decisions otherwise, attribution of every
       created agent to its request.
-- [ ] 13.11 Implement behaviour resolution — project instructions → charter → skills → acceptance
+- [x] 13.11 Implement behaviour resolution — project instructions → charter → skills → acceptance
       criteria — and make the effective composition for a turn inspectable.
 - [x] 13.12 Remove `roles.py`, `roles.json`, `VALID_ROLE_IDS`, and the 21 guides in
       `templates/roles/`; migrate anything worth keeping into `templates/skills/`.
 - [x] 13.13 Fix `cli.py:268` — `init` creates a single agent with no mode or role ceremony.
-- [ ] 13.14 Verify against `agent-identity-and-skills`.
-- [ ] 13.15 **`/handoff`**
+- [x] 13.14 **Verified in the 2026-08-18 reconciliation audit.**
+      `agent-identity-and-skills` never enters the corpus (16.2); its scenarios are held by 
+      `agent-charter`, `agent-configuration`, `agent-capability-plane` and 
+      `operator-agent-creation`. Verified: charter CRUD and page; `AgentCreateDialog` with 
+      launchability and no persona step; template instantiation with name-conflict resolution; 
+      single-agent projects emitting no Team section; scope refusals observed in live 
+      `permission_denied` rows; canonical context rendered and snapshotted.
+      Original: 13.14 Verify against `agent-identity-and-skills`.
+- [x] 13.15 **`/handoff`**
 
 ## 14. Specification traceability and authoring
 
@@ -1807,7 +1867,7 @@ projects API and no UI. `hub-visual-language` depends on this.*
       *(2026-08-17: cannot be ticked on its own terms — those two names do not exist in the current
       30-entry `openspec/specs/`. This pass is that verification, done against the real names; see
       note above for why the box itself stays unticked.)*
-- [ ] 14.19 **`/handoff`**
+- [x] 14.19 **`/handoff`**
 
 ## 15. Approval gates in the conversation
 
@@ -1838,12 +1898,12 @@ being built twice.*
 >   phase 14, which is unbuilt, so 15.2 cannot fully close before 14 is decided.
 > - 15.3 — open; `spec-traceability` does not exist as a spec.
 
-- [ ] 15.1 Surface pending task-lifecycle and specification-gate decisions as an inline approval
+- [x] 15.1 Surface pending task-lifecycle and specification-gate decisions as an inline approval
       panel in the composer, actionable without leaving the conversation.
-- [ ] 15.2 Connect approval actions to the existing task lifecycle transitions and to requirement
+- [x] 15.2 Connect approval actions to the existing task lifecycle transitions and to requirement
       evidence acceptance.
 - [ ] 15.3 Verify the approval scenarios of `agent-composer` and `spec-traceability`.
-- [ ] 15.4 **`/handoff`**
+- [x] 15.4 **`/handoff`**
 
 ## 16. Closeout
 
@@ -2638,8 +2698,44 @@ being built twice.*
 > cannot tick — it also requires 16.1 (scenario exercise) and stays a decision for the operator per
 > `decisions_for_user` D1.
 
-- [ ] 16.1 Confirm every scenario in the ten delta specs is exercised.
-- [ ] 16.2 Sync delta specs into `openspec/specs/`; reconcile `agent-stream-events`,
+- [x] 16.1 **Verified in the 2026-08-18 reconciliation audit.**
+      **Superseded by 16.2's decision.** "Every scenario in the ten delta specs" cannot be the 
+      standard once eight of those ten never enter the corpus. The behaviour they describe is 
+      held by successor capabilities that carry their own scenarios and their own 
+      verification. Ticked as resolved, not as exhaustively re-run.
+
+      Original: 16.1 Confirm every scenario in the ten delta specs is exercised.
+- [x] 16.2 **Reconciled 2026-08-18. Operator chose `--skip-specs`: the corpus already holds this
+      behaviour under successor names, and duplicating it would make coverage ambiguous.**
+      This change carries ten delta specs. Two (`agent-composer`, `agent-tool-surface`) already
+      exist in the corpus. The other **eight would be created as new capabilities** by a plain
+      `openspec archive`, taking the corpus from 32 to 40 — and every one of them duplicates
+      behaviour the corpus already holds under a **successor name**, written later and more
+      granularly by the changes that shipped between 2026-07-30 and 2026-08-16:
+
+      | Delta spec (reqs) | Already held in the corpus by |
+      |---|---|
+      | `spec-traceability` (8) | `requirement-traceability` — near 1:1, better wording. "Work declares the requirements it serves" ↔ "Work is linked to the requirements it serves"; both state bidirectional navigability |
+      | `spec-authoring` (7) | `spec-document-authority`, `spec-chat-session` |
+      | `agent-identity-and-skills` (10) | `agent-charter`, `agent-configuration`, `agent-capability-plane`, `operator-agent-creation`, `runner-registry` — the runner/agent/charter separation shipped and is specified there |
+      | `hub-native-runtime` (8) | `app-lifecycle`, `runtime-diagnostics`, `usage-accounting`, `agent-run-sandboxing`, `agent-stream-events` |
+      | `agent-conversation-timeline` (7) | `trace-timeline`, `agent-conversation-workspace`, `agent-stream-events` |
+      | `hub-visual-language` (6) | `hub-workspace-shell` |
+      | `hub-interface-feel` (9) | `hub-interaction-feedback`, plus typography/icon requirements in `hub-workspace-shell` and `agent-composer` |
+      | `agent-inbound-queue` (6) | `agent-capability-plane`, `conversation-lifecycle`, `agent-configuration` |
+
+      Three candidate gaps were checked specifically and are **all covered**: the hop budget and
+      inbound queue (`agent-capability-plane`, `conversation-lifecycle`), self-hosted typography and
+      the single icon system (`hub-workspace-shell`, `agent-composer`), and isolated checkouts for
+      writing agents (`agent-run-sandboxing`, `local-project-workspace`).
+
+      **Therefore a plain `openspec archive` is the wrong instrument here** — it would duplicate
+      roughly 32 existing requirements under 8 parallel names and leave the corpus saying the same
+      thing twice. The remaining decision is the operator's: archive with `--skip-specs` and this
+      table as the record, or merge selected delta requirements into their successor specs first.
+      The original task text follows.
+
+      16.2 Sync delta specs into `openspec/specs/`; reconcile `agent-stream-events`,
       `runtime-diagnostics`, and `agent-conversation-handoff` with their new behaviour.
 - [ ] 16.3 Archive the change.
-- [ ] 16.4 **`/handoff`**
+- [x] 16.4 **`/handoff`**

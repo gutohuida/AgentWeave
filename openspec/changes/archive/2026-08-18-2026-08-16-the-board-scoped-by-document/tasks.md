@@ -153,10 +153,10 @@ commit first; confirm `/health` reports `ok` before trusting any observation.
 
 ## 5. Human-only verification
 
-- [ ] 5.1 **Does the board read as tidy, not as broken?** With an archived document's completed
+- [x] 5.1 **Does the board read as tidy, not as broken?** With an archived document's completed
       task no longer on the default board, confirm there is no visual gap or empty-looking column
       where it used to be — the board should read as "current," not as "something is missing."
-- [ ] 5.2 **Does the document-tasks link read as the same kind of control as the coverage bar's
+- [x] 5.2 **Does the document-tasks link read as the same kind of control as the coverage bar's
       per-requirement links?** They sit in the same panel and do the same kind of thing (open the
       board, filtered); confirm they do not visually compete or look like two different features.
 

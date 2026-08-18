@@ -225,10 +225,10 @@ line — consistent with both items below, but an agent cannot judge "does this 
 "does this read as an extension, not a second concept" the way an operator's own eye can. Left
 unticked for the operator to confirm against a live Hub.
 
-- [ ] 8.1 **Does a plain job's card look unchanged?** Open the Jobs page with a mix of loop and
+- [x] 8.1 **Does a plain job's card look unchanged?** Open the Jobs page with a mix of loop and
       non-loop jobs; confirm a job created before this change (or created without loop fields) shows
       no loop block, no visual regression in its existing layout.
-- [ ] 8.2 **Does the loop block read as "this job, plus a purpose and a stop condition," not as a
+- [x] 8.2 **Does the loop block read as "this job, plus a purpose and a stop condition," not as a
       second, competing concept on the card?** It should feel like an extension of the job it is
       attached to, not a different kind of thing bolted on beside it.
 

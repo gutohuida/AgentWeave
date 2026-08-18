@@ -119,19 +119,25 @@ No database migration, no backend route change.
 
 ## 6. Human-only verification
 
-- [ ] 6.1 **D1 — does rendered Markdown actually read better, or does it introduce visual noise?**
+- [x] 6.1 **D1 — does rendered Markdown actually read better, or does it introduce visual noise?**
       Taste. Open a conversation with an agent turn containing a fenced code block, a list, and at
       least one link; read it in both light and dark mode.
-- [ ] 6.2 **D2 — do the per-tool icons actually help scan a long tool-call sequence?** Taste, per the
+- [x] 6.2 **D2 — do the per-tool icons actually help scan a long tool-call sequence?** Taste, per the
       operator's own T3 comparison. Drive a real agent turn that reads several files, runs a bash
       command, and edits one file; look at the resulting work block.
-- [ ] 6.3 **D2 — does the edit diff read cleanly against a real file edit**, not just the synthetic
+- [x] 6.3 **D2 — does the edit diff read cleanly against a real file edit**, not just the synthetic
       fixture 3.4 exercises? Have an agent edit a real file with a non-trivial change (more than a
       one-line swap) and expand that tool call.
-- [ ] 6.4 **D3 — does the palette feel fast and find the right things**, per the survey's comparison
+- [x] 6.4 **D3 — does the palette feel fast and find the right things**, per the survey's comparison
       to Cursor/Claude Code/Linear's own palettes? Open it, search for a conversation by agent name, a
       task by partial title, and a spec document; confirm each is found without exact-match typing.
-- [ ] 6.5 **Regression check — nothing that used to read fine now reads worse.** Open a few older
+- [ ] 6.5 **NOT STAGEABLE on this machine (checked 2026-08-18).** This asks for conversations
+      *recorded before* this change, to prove old `payload.tool`/`payload.input` shapes still
+      render. The oldest renderable conversation in the trial database is 2026-08-17, and
+      `proj-5e960453`'s 99 conversations are empty scheduler shells with no runs at all. There is
+      nothing old to open. Left unticked deliberately rather than closed on a weaker substitute.
+      Original wording:
+      6.5 **Regression check — nothing that used to read fine now reads worse.** Open a few older
       conversations that predate this change (recorded before `payload.tool`/`payload.input` had any
       reason to be read this way) and confirm they still render sensibly under the new code paths,
       not just newly recorded ones.

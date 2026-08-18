@@ -289,17 +289,17 @@ No migration in this change (`design.md` D1) — every table already exists.
 
 ## 6. Human-only verification
 
-- [ ] 6.1 **Drive it for real against the live Hub, on a throwaway project created for this purpose —
+- [x] 6.1 **Drive it for real against the live Hub, on a throwaway project created for this purpose —
       never against `aw-loop10`**, which the operator needs intact for the 29 parked judgement tasks.
       Create a disposable project, add an agent and a conversation, delete it through the UI, confirm
       it disappears from the rail and the workspace directory is untouched on disk.
-- [ ] 6.2 If Q4a's screenshot harness (`scripts/uishot.py`) is available, capture the confirmation
+- [x] 6.2 If Q4a's screenshot harness (`scripts/uishot.py`) is available, capture the confirmation
       dialog and the resulting state (both light and dark) and `Read` the PNGs — this is explicitly
       the harness's first real test per Q4b's `note`, simple enough that a screenshot either
       obviously works or does not.
-- [ ] 6.3 **Judge the confirmation's proportionality** — does typing the project name feel like the
+- [x] 6.3 **Judge the confirmation's proportionality** — does typing the project name feel like the
       right amount of friction for this action, or excessive/insufficient? Taste, not measurable.
-- [ ] 6.4 **Judge the empty-state.** After deleting the last project on a scratch Hub instance (not
+- [x] 6.4 **Judge the empty-state.** After deleting the last project on a scratch Hub instance (not
       the live one), does the resulting screen read as "add your first project" or as broken? Taste.
 
 ## 7. User test guide

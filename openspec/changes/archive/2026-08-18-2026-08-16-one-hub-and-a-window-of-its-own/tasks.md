@@ -384,33 +384,41 @@ is green."
 
 ## 6. Human-only verification
 
-- [ ] 6.1 **Confirm the same Hub/database is reached from two different launch directories**, for
+- [ ] 6.1 **TWO OF THREE PATHS VERIFIED 2026-08-18; Docker unrun.** Native from two different
+      directories reached the same database (same 2 projects), and direct `uvicorn hub.main:app`
+      with no `DATABASE_URL` reached that same database — the mismatch this task exists to catch,
+      confirmed fixed. The `docker compose up` third was **not** run: no Docker daemon on this
+      machine. Ticking this would record a named-volume claim nobody checked. Original wording:
+      6.1 **Confirm the same Hub/database is reached from two different launch directories**, for
       each of the three launch paths in scope: bare `agentweave` (native — should already pass,
       unchanged by this proposal; run as a control), direct `uvicorn hub.main:app` (should now match
       native, where it did not before), and `docker compose up` from two different directories
       (should now produce the same named volume). This is the actual bug report; task 2's tests
       prove the mechanism, this proves the outcome.
-- [ ] 6.2 **Try bare `agentweave` with `pywebview` installed** and judge whether a CLI command that
+- [x] 6.2 **Try bare `agentweave` with `pywebview` installed** and judge whether a CLI command that
       now blocks until the window closes, where it used to return in seconds, is the experience
       wanted — `design.md` D3 names this a genuine UX judgment call, not something a test can validate
       as correct. Also try `agentweave --docker` (or `--local`) with `pywebview` installed, since
       task 3.3 wires the Docker branch through the same native-window path — confirm it opens a
       native window too, not the old browser fallback.
-- [ ] 6.3 **Try bare `agentweave` with `pywebview` NOT installed** (a clean venv, or uninstall it) and
+- [x] 6.3 **Try bare `agentweave` with `pywebview` NOT installed** (a clean venv, or uninstall it) and
       confirm the fallback browser window still opens and nothing looks broken or half-migrated.
-- [ ] 6.4 **Try app mode with no compatible webview backend present** (hardest to stage — e.g. a
+- [ ] 6.4 **NOT STAGEABLE (checked 2026-08-18).** Requires a machine with WebView2 genuinely
+      absent, which this one is not; removing it to create the condition is not a reasonable test
+      setup. The task itself calls this the hardest to stage. Original wording:
+      6.4 **Try app mode with no compatible webview backend present** (hardest to stage — e.g. a
       Windows install with WebView2 genuinely absent, or Linux with neither WebKitGTK nor Qt) and
       confirm the fallback message is legible rather than a raw traceback.
-- [ ] 6.5 If Q4a's screenshot harness (`scripts/uishot.py`) is available, it screenshots a browser
+- [x] 6.5 If Q4a's screenshot harness (`scripts/uishot.py`) is available, it screenshots a browser
       page, not a native OS window — pywebview's own window is out of its reach. Confirm this
       limitation before expecting a screenshot of the desktop window itself.
-- [ ] 6.6 **Added 2026-08-16 (D6).** Run `agentweave --profile dev --port 8010` alongside an
+- [x] 6.6 **Added 2026-08-16 (D6).** Run `agentweave --profile dev --port 8010` alongside an
       already-running default-profile instance; confirm both `agentweave status` (default) and
       `agentweave status --profile dev` report correctly and independently, then
       `agentweave stop --profile dev` and confirm the default instance is unaffected. Confirm
       `agentweave reset --profile dev` removes only that profile's data by checking the default
       profile's data is still present afterward.
-- [ ] 6.7 **Added 2026-08-17, round-2 cold review (D6, task 1.8).** Run `agentweave --profile dev`
+- [x] 6.7 **Added 2026-08-17, round-2 cold review (D6, task 1.8).** Run `agentweave --profile dev`
       with no `--port` and confirm the error message names both flags and is legible — not a raw
       argparse traceback — and that no process ends up listening on the default port under the `dev`
       profile's name.
