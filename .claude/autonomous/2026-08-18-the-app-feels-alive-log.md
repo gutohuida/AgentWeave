@@ -690,3 +690,79 @@ operator is next at the machine.
 **Queue status:** Q1 through Q7 are now all done — the six app-feel fixes plus the CLI-suite-hang
 prerequisite. Next is Q8, the first of the two decide-nothing explorations
 (`openspec/explorations/2026-08-18-what-archiving-a-spec-means.md`).
+
+---
+
+## Iteration 9 — Q8: the spec-archiving exploration (2026-08-18T02:33+01:00)
+
+Wrote `openspec/explorations/2026-08-18-what-archiving-a-spec-means.md`, answering the operator's
+three verbatim questions about archiving a spec — delta vs. direct update, structure/tree of a
+large spec, and whether a defined entry point exists — with evidence, at least two viable models
+per question with costs and rejection reasons, and no recommendation, exactly as instructed.
+
+**The headline finding: CLAUDE.md's own premise for this question is stale, and the exploration
+says so plainly.** CLAUDE.md states AgentWeave's lifecycle has "no archive phase and no concept of
+a current-behaviour specification" — the whole stated reason openspec still owns the corpus. Reading
+`hub/hub/spec_lifecycle.py` directly, rather than trusting that citation, shows five phases, not
+three: `exploring`, `proposed`, `approved`, **`archived`**, **`current`**. `git log` on that file
+shows why — commit `5e36209`, *"N2: implement the archive transition and the capability document
+kind"*, shipped to master on 2026-08-16, three days before this run, via
+`openspec/changes/2026-08-16-the-corpus-keeps-what-shipped/` (still open, unreconciled with
+CLAUDE.md's prose). Migration `0074` added the phases; the migration head is `0076`. The gap
+CLAUDE.md names as blocking the migration was already closed in code before this run started.
+
+**Verified against the live trial Hub, not reasoned about in the abstract.** Queried
+`hub/data/agentweave.db` directly (the database Q1 last iteration pointed the running Hub at):
+`proj-5e960453`'s one capability document, `spec/capabilities/quiet-hours/spec.html`, is an
+untouched empty scaffold — zero requirements, empty summary, sitting at `current`. Its matching
+change document, `quiet-hours-for-agent-notifications`, is `archived` with 7 real requirements
+ready to cite. `spec_document_merges` has **zero rows in this project**. The merge mechanism —
+`POST /project/documents/{path}/merge`, `hub/hub/api/v1/spec.py:1127`, unit-tested with 270 lines
+in `test_spec_merge.py` — has shipped and has never been exercised against real content anywhere in
+this repository. The "delta vs. direct" question has a code answer (direct, whole-document,
+operator-authored, citing sources but not diffing them) but not yet a *lived* one.
+
+**A second, sharper finding, found by reading `save_document`'s branch order rather than assuming
+the merge path is self-contained.** `SpecEditProposal` (`hub/hub/db/models.py:1764`, shipped one day
+*after* the merge machinery, for a different purpose — gated-rigor review of ordinary document
+edits) is a genuine per-requirement add/modify/remove delta, matching openspec's own
+ADDED/MODIFIED/REMOVED shape closely. `merge_document()` calls `save_document()` directly
+(`spec_service.py:578`), and `save_document()`'s branch to the per-requirement delta path is gated
+on `document.rigor`, not on `document.kind` (`spec_service.py:148`). A capability document's rigor
+is an ordinary, operator-settable field, independent of `kind`/`phase`. Today the one real
+capability document sits at `rigor='sketch'` (confirmed live), so merges apply directly — but
+raising it to `contract`/`gate` would silently switch every future merge onto it to per-requirement
+review, and `test_spec_merge.py` has zero references to `rigor` (grepped) — this interaction is
+unbuilt-for and untested, not merely undocumented. Two features, three days apart, never connected.
+
+Three models given, each with real costs and rejection reasons: (A) adopt the merge mechanism as
+built and actually run it for real, starting with the one merge sitting ready right now; (B)
+deliberately route capability merges through the already-existing-but-accidentally-reachable
+per-requirement delta instead of building anything new; (C) build real capability-level tree
+structure, enforcing the `spec/capabilities/<name>/` convention that today nothing in code checks.
+Recommends none of them, per instruction.
+
+**What Q10 needs from this, stated concretely rather than left implicit**, since Q10 `depends_on`
+Q8: the merge endpoint requires at least one `from_changes` source document in `approved`/`archived`
+phase (design D5 step 4) — a first-generation openspec-to-AgentWeave translation has no such source,
+because the capability being translated was approved inside openspec, a system the Hub's data model
+cannot see. Q10 will hit this as a live 409 the moment it tries the merge route on a first
+translation, unless it reads this finding first and decides how to handle it (fabricate a synthetic
+source, seed directly the way `hub/seed_taste_doc.py` did for the change-spec document, or something
+else) — a decision this exploration surfaces but does not make.
+
+Verified: the exploration's every specific claim (phase list, migration numbers, git commit, table
+row counts, test-file grep results, rigor gate location) was checked directly against the code or a
+live query this session, not carried from memory or a prior handoff — file paths and line numbers
+are cited throughout for a reader who wants to check any of them.
+
+Not touched: `spec/` and `hub/seed_taste_doc.py` (prior-session scratch, left alone per the queue's
+own limits), CLAUDE.md's prose (flagged as stale in the exploration and already recorded as
+`decisions_for_user.N3` from an earlier iteration; fixing it is the operator's call, not this
+iteration's).
+
+**Queue status:** Q1-Q8 done. Next is Q9, the second decide-nothing exploration (does "AgentWeave"
+and "hub" still fit), folding in `decisions_for_user.N1` per its own pre-authorisation. The night's
+stated actual objective (items 1-6, i.e. Q1-Q7) was already complete as of iteration 8; Q8 and the
+coming Q9 are the two explicitly-scoped discussion items (7 and 9), decided nothing, exactly as
+asked.
