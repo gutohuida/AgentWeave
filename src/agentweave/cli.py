@@ -332,8 +332,12 @@ def _docker_available() -> bool:
         return False
     # Check for docker compose (v2) or docker-compose (v1). CREATE_NO_WINDOW keeps this
     # silent probe from flashing a console on Windows -- see cli.py:866's DETACHED_PROCESS
-    # for the same reasoning applied to the long-lived Hub spawn.
-    creationflags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+    # for the same reasoning applied to the long-lived Hub spawn. Hardcoded rather than
+    # `subprocess.CREATE_NO_WINDOW` because that attribute doesn't exist in typeshed's
+    # non-Windows stubs -- mypy fails the attr-defined check even under the platform guard,
+    # same as DETACHED_PROCESS/CREATE_NEW_PROCESS_GROUP below.
+    CREATE_NO_WINDOW = 0x08000000  # noqa: N806
+    creationflags = CREATE_NO_WINDOW if sys.platform == "win32" else 0
     result = subprocess.run(
         ["docker", "compose", "version"],
         capture_output=True,

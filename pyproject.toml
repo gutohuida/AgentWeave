@@ -49,6 +49,9 @@ dev = [
     "mypy>=1.0,<3",
     "pyyaml>=6.0",
     "types-PyYAML>=6.0",
+    # Only for test_cli.py's icon-asset test, which opens the packaged .ico to confirm it's a
+    # real multi-size image rather than a stub. Not a runtime dependency of anything shipped.
+    "Pillow>=10.0",
 ]
 docs = ["mkdocs>=1.6", "mkdocs-material>=9.5"]
 # Genuinely optional: `_open_app_window_native` (cli.py) imports it inside a guarded try at its one
