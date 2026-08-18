@@ -556,7 +556,7 @@ async def merge_document(
     *,
     actor: spec_lifecycle.Actor,
     note: str = "",
-) -> SaveResult:
+) -> SaveResult | ProposeResult:
     """Fold a finished change's content into a capability document, by explicit authored merge.
 
     Resolving the path arguments to documents and refusing an unfinished or mistargeted merge
@@ -572,10 +572,18 @@ async def merge_document(
     `spec_document_merges` already answers "what did this change's merge do" by querying
     `change_document_id`).
 
+    At `contract`/`gate` rigor `save_document` proposes instead of writing (a `ProposeResult`, not
+    a `SaveResult`) — nothing folded yet, only recorded for the operator to accept or reject. No
+    `SpecDocumentMerge` row is written for that outcome: the table's job is to audit folds that
+    actually happened, and a pending proposal is not one. The caller distinguishes the two return
+    types the same way `agent_actions.py:1155` already does for a plain `save_document` call.
+
     Committing and broadcasting `spec_updated` is the caller's job too, the same way it is for
     every other route in `spec.py` — this function only prepares the session.
     """
     result = await save_document(session, workspace, capability_document, raw_payload, actor=actor)
+    if isinstance(result, ProposeResult):
+        return result
     for source in source_documents:
         session.add(
             SpecDocumentMerge(

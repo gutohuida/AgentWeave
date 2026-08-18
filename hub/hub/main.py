@@ -84,25 +84,24 @@ def _git_last_commit_iso(path: Path, *, exclude: Sequence[str] = ()) -> Optional
 def ui_source_fingerprint(
     ui_src: Path, *, exclude: Sequence[str] = ("__tests__",)
 ) -> Optional[str]:
-    """A stable hash of the interface source as it stands, tracked changes and uncommitted ones.
+    """A stable hash of the interface source as it actually reads on disk right now.
 
-    Built from `git ls-files -s`, so it is the index's own blob ids — one subprocess, and it
-    honours .gitignore without reimplementing it. `git status --porcelain` is folded in so that an
-    edit nobody has committed still moves the fingerprint, which a commit-date comparison cannot
-    see at all.
+    Enumerated via `git ls-files` — one subprocess, and it honours .gitignore without
+    reimplementing it — but hashed from each file's *working-tree bytes*, not the index's blob id.
+    That makes the fingerprint depend only on file content, never on whether that content has been
+    staged or committed, which is the property the previous approach lacked: it hashed `git
+    ls-files -s`'s blob ids and folded in `git status --porcelain`'s dirty diff as a separate
+    component, so a stamp recorded against a dirty tree (`scripts/refresh_ui_bundle.py` always
+    runs before `git add`/`git commit` — `CLAUDE.md`'s documented build-then-commit order) could
+    never match again once that same content was committed and porcelain went quiet. Confirmed
+    live: commit `8898155` rebuilt and committed byte-identical output to a fresh rebuild, and only
+    the stamp moved (`ab7e5fe`) — see `known_debts.ui-stale-false-positive`. An edit nobody has
+    committed still moves this fingerprint, same as before: the bytes on disk changed.
     """
     pathspec = [".", *(f":(exclude){p}" for p in exclude)]
     try:
         listing = subprocess.run(
-            ["git", "ls-files", "-s", "--", *pathspec],
-            cwd=ui_src,
-            capture_output=True,
-            text=True,
-            timeout=5,
-            **no_console_kwargs(),
-        )
-        dirty = subprocess.run(
-            ["git", "status", "--porcelain", "--", *pathspec],
+            ["git", "ls-files", "--", *pathspec],
             cwd=ui_src,
             capture_output=True,
             text=True,
@@ -114,10 +113,15 @@ def ui_source_fingerprint(
     if listing.returncode != 0 or not listing.stdout.strip():
         return None
 
-    digest = hashlib.sha256(listing.stdout.encode("utf-8"))
-    if dirty.returncode == 0 and dirty.stdout.strip():
-        digest.update(b"+dirty:")
-        digest.update(hashlib.sha256(dirty.stdout.encode("utf-8")).digest())
+    digest = hashlib.sha256()
+    for rel_path in sorted(listing.stdout.splitlines()):
+        digest.update(rel_path.encode("utf-8"))
+        try:
+            digest.update((ui_src / rel_path).read_bytes())
+        except OSError:
+            # Listed by git but unreadable right now (mid-rename, deleted since the listing) --
+            # fold in a marker rather than letting the health check crash over it.
+            digest.update(b"<unreadable>")
     return digest.hexdigest()
 
 

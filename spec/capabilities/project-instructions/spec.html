@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Project instructions</title>
+<meta name="aw-spec-kind" content="capability">
+<meta name="aw-spec-status" content="current">
+<meta name="aw-spec-rigor" content="sketch">
+<meta name="aw-spec-schema-version" content="1">
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+    --surface-2: #21262d; --surface: #161b22;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+:root[data-theme="dark"] {
+  --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+  --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+  --surface-2: #21262d; --surface: #161b22;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 2rem 2.5rem 4rem; background: var(--bg); color: var(--fg);
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+h1 { font-size: 1.75rem; margin: 0 0 .25rem; }
+h2 { font-size: 1.15rem; margin: 2.5rem 0 .75rem; padding-bottom: .3rem;
+     border-bottom: 1px solid var(--border); }
+h3 { font-size: 1rem; margin: 1.5rem 0 .4rem; }
+p { margin: .5rem 0; }
+ul, ol { margin: .5rem 0; padding-left: 1.4rem; }
+li { margin: .25rem 0; }
+a { color: var(--aw-accent); }
+.aw-meta { color: var(--muted); font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-chip { display: inline-block; padding: .1rem .5rem; border-radius: 999px;
+           background: var(--surface-2); font-size: .78rem; margin-right: .4rem; }
+.aw-requirement { border-left: 3px solid var(--border); padding: .1rem 0 .1rem .9rem;
+                  margin: 1.1rem 0; }
+.aw-requirement-must { border-left-color: var(--aw-accent); }
+.aw-requirement-should { border-left-color: var(--aw-warn); }
+.aw-requirement-may { border-left-color: var(--border); }
+.aw-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8rem;
+         color: var(--muted); }
+.aw-modal { font-weight: 600; }
+.aw-modal-must { color: var(--aw-accent); }
+.aw-modal-should { color: var(--aw-warn); }
+.aw-modal-may { color: var(--fg); font-weight: 400; }
+.aw-chip-rigor-gate { color: var(--aw-accent); border: 1px solid var(--aw-accent); }
+.aw-chip-rigor-contract { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Phase is a lifecycle, and the question it answers is "can I rely on this?". `approved` and a
+   capability's `current` are settled and take the done tone; `proposed` is waiting on an operator
+   decision and takes warn; `exploring` and `archived` are quiet for opposite reasons — one has not
+   arrived yet, the other has been superseded. Deliberately NOT the accent: this document already
+   spends accent on links and on MUST, and a third meaning would empty it of any. `kind` keeps the
+   plain chip on purpose — it is a category, not a state, and hue there ranks nothing. */
+.aw-chip-phase-done { color: var(--aw-ok); border: 1px solid var(--aw-ok); }
+.aw-chip-phase-waiting { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+.aw-chip-phase-quiet { color: var(--muted); }
+.aw-chip-phase-archived { color: var(--muted); text-decoration: line-through; }
+/* An unresolved question blocks `propose`, so it is a real state and not a label. Resolved stays
+   the plain chip — the reader needs to find what is still open, not celebrate what is closed. */
+.aw-chip-open { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Limits is where a reader is most likely to be misled, and it read identically to Checked. */
+.aw-limits { color: var(--aw-warn); }
+/* The first screenful was entirely monochrome, so the document read as texty however the
+   requirements below were coloured. This puts the same modal scheme where the eye lands first,
+   carrying counts rather than decoration. */
+.aw-summary { margin: 0 0 1.5rem; font-size: .9rem; color: var(--muted); }
+.aw-summary .aw-count { font-weight: 600; }
+.aw-summary-sep { color: var(--border); margin: 0 .45rem; }
+.aw-rationale { color: var(--muted); font-size: .9rem; }
+.aw-refs { font-size: .82rem; color: var(--muted); }
+.aw-note { color: var(--muted); font-style: italic; }
+.aw-empty { color: var(--muted); }
+table { border-collapse: collapse; margin: .75rem 0; width: 100%; }
+th, td { border: 1px solid var(--border); padding: .4rem .6rem; text-align: left;
+         vertical-align: top; font-size: .92rem; }
+code, pre { background: var(--surface); border-radius: 4px; }
+code { padding: .1rem .3rem; font-size: .88em; }
+</style>
+</head>
+<body>
+<h1>Project instructions</h1>
+<p class="aw-meta"><span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><span class="aw-chip">sketch</span></p>
+<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">3</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">3</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">7</span> criteria</p>
+<section><h2 id="summary">Summary</h2><p>Per-project instruction content stored in the Hub DB and served before every agent&#x27;s charter guidance; editable via the Hub UI. Translated from openspec/specs/project-instructions/spec.md (47 lines), chosen for Q10 because it is small, self-contained, and every requirement below was re-verified against the live code on 2026-08-18 rather than trusted from the openspec file.</p></section><section><h2 id="problem">Problem</h2><p>An operator&#x27;s standing instructions for a project (house style, constraints, things every agent should know) need to reach every agent&#x27;s context without being re-typed into every charter, and without requiring a code change to edit.</p></section><section><h2 id="scope">Scope</h2><h3>In scope</h3><ul><li>Storing one instructions blob per project</li><li>Prepending it to charter content wherever an agent reads its context</li><li>A Hub UI screen to view and edit it</li></ul><h3>Non-goals</h3><ul><li>Per-agent instruction overrides</li><li>Versioning or history of instruction edits</li><li>Any change to how charters themselves are stored</li></ul></section><section><h2 id="requirements">Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-1"><span class="aw-id">FR-1</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The Hub DB stores project-wide instruction content in a ProjectInstructions table scoped by project_id.</p></div><div class="aw-requirement aw-requirement-must" id="FR-2"><span class="aw-id">FR-2</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The Hub prepends project instructions before charter content in every direct GET /api/v1/agents/context response and before charter guidance in full agent context.</p></div><div class="aw-requirement aw-requirement-must" id="FR-3"><span class="aw-id">FR-3</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The Hub UI provides an Instructions screen with a markdown textarea, a Save button, and a session disclaimer.</p></div></section><section><h2 id="acceptance">Acceptance criteria</h2><table><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr><td><a href="#FR-1">FR-1</a></td><td>A project with no instructions saved</td><td>GET /api/v1/project/instructions is called</td><td>It returns {&quot;content&quot;: &quot;&quot;}.</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td>A project with no instructions saved</td><td>A PUT request is made to /api/v1/project/instructions with {&quot;content&quot;: &quot;...&quot;}</td><td>The content is persisted, and a subsequent GET returns the same content.</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td>Project instructions are non-empty</td><td>An agent requests direct or full charter context</td><td>Project instructions appear before the charter content.</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td>Project instructions are empty or no instruction row exists</td><td>An agent requests direct charter lookup</td><td>The charter content is returned unchanged.</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td>The Instructions screen is open with edited text in the textarea</td><td>The operator clicks Save</td><td>The content is persisted via PUT and the UI confirms success.</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td>The Instructions screen is displayed</td><td>No action is taken</td><td>A notice reads that changes take effect when agents start a new session.</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td>Instructions were previously saved for this project</td><td>The operator navigates to the Instructions screen</td><td>The textarea is pre-filled with the current saved content.</td></tr></tbody></table></section><section><h2 id="evidence">Evidence and coverage limits</h2><h3>Checked</h3><ul><li>hub/hub/api/v1/instructions.py -- GET/PUT /project/instructions, matches r1/ac1/ac2 exactly</li><li>hub/hub/api/v1/agents.py:1054-1058,1293-1296 and :1865-1871 -- both charter-context read paths prepend instructions.content when non-empty, matches r2/ac3/ac4</li><li>hub/ui/src/components/instructions/InstructionsPage.tsx -- textarea, Save button, &#x27;Saved&#x27; confirmation, pre-filled from useInstructions(), and the &#x27;Changes take effect when agents start a new session&#x27; notice, matches r3/ac5/ac6/ac7</li></ul><h3 class="aw-limits">Limits</h3><ul><li>Not exercised live in this run beyond reading the code -- the openspec source had no test-file citations either, so this is not a regression against the source&#x27;s own rigor</li><li>openspec&#x27;s four scenarios collapsed to three requirements/seven acceptance criteria because AgentWeave&#x27;s schema has no notion of grouping scenarios under a shared &#x27;system&#x27; heading the way the source markdown&#x27;s three ### Requirement blocks did -- the requirement/criterion split is preserved 1:1, only the file-level heading nesting is flattened</li><li>openspec&#x27;s scenarios state WHEN/THEN only; AgentWeave&#x27;s acceptance_criteria schema requires a GIVEN too, so one was authored for each of the seven that did not have one in the source -- these are new prose, not present in openspec, and worth an operator glance rather than assumed equivalent</li></ul></section><section><h2 id="open-questions">Open questions</h2><p class="aw-empty">None outstanding.</p></section>
+<script type="application/agentweave-spec+json" id="aw-spec-payload">
+{
+  "schema_version": 1,
+  "kind": "capability",
+  "title": "Project instructions",
+  "summary": "Per-project instruction content stored in the Hub DB and served before every agent's charter guidance; editable via the Hub UI. Translated from openspec/specs/project-instructions/spec.md (47 lines), chosen for Q10 because it is small, self-contained, and every requirement below was re-verified against the live code on 2026-08-18 rather than trusted from the openspec file.",
+  "problem": "An operator's standing instructions for a project (house style, constraints, things every agent should know) need to reach every agent's context without being re-typed into every charter, and without requiring a code change to edit.",
+  "scope": {
+    "in_scope": [
+      "Storing one instructions blob per project",
+      "Prepending it to charter content wherever an agent reads its context",
+      "A Hub UI screen to view and edit it"
+    ],
+    "non_goals": [
+      "Per-agent instruction overrides",
+      "Versioning or history of instruction edits",
+      "Any change to how charters themselves are stored"
+    ]
+  },
+  "requirements": [
+    {
+      "key": "r1",
+      "statement": "The Hub DB stores project-wide instruction content in a ProjectInstructions table scoped by project_id.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "r2",
+      "statement": "The Hub prepends project instructions before charter content in every direct GET /api/v1/agents/context response and before charter guidance in full agent context.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "r3",
+      "statement": "The Hub UI provides an Instructions screen with a markdown textarea, a Save button, and a session disclaimer.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "key": "ac1",
+      "requirement": "r1",
+      "given": "A project with no instructions saved",
+      "when": "GET /api/v1/project/instructions is called",
+      "then": "It returns {\"content\": \"\"}."
+    },
+    {
+      "key": "ac2",
+      "requirement": "r1",
+      "given": "A project with no instructions saved",
+      "when": "A PUT request is made to /api/v1/project/instructions with {\"content\": \"...\"}",
+      "then": "The content is persisted, and a subsequent GET returns the same content."
+    },
+    {
+      "key": "ac3",
+      "requirement": "r2",
+      "given": "Project instructions are non-empty",
+      "when": "An agent requests direct or full charter context",
+      "then": "Project instructions appear before the charter content."
+    },
+    {
+      "key": "ac4",
+      "requirement": "r2",
+      "given": "Project instructions are empty or no instruction row exists",
+      "when": "An agent requests direct charter lookup",
+      "then": "The charter content is returned unchanged."
+    },
+    {
+      "key": "ac5",
+      "requirement": "r3",
+      "given": "The Instructions screen is open with edited text in the textarea",
+      "when": "The operator clicks Save",
+      "then": "The content is persisted via PUT and the UI confirms success."
+    },
+    {
+      "key": "ac6",
+      "requirement": "r3",
+      "given": "The Instructions screen is displayed",
+      "when": "No action is taken",
+      "then": "A notice reads that changes take effect when agents start a new session."
+    },
+    {
+      "key": "ac7",
+      "requirement": "r3",
+      "given": "Instructions were previously saved for this project",
+      "when": "The operator navigates to the Instructions screen",
+      "then": "The textarea is pre-filled with the current saved content."
+    }
+  ],
+  "tasks": [],
+  "algorithms": [],
+  "design": "",
+  "evidence": {
+    "checked": [
+      "hub/hub/api/v1/instructions.py -- GET/PUT /project/instructions, matches r1/ac1/ac2 exactly",
+      "hub/hub/api/v1/agents.py:1054-1058,1293-1296 and :1865-1871 -- both charter-context read paths prepend instructions.content when non-empty, matches r2/ac3/ac4",
+      "hub/ui/src/components/instructions/InstructionsPage.tsx -- textarea, Save button, 'Saved' confirmation, pre-filled from useInstructions(), and the 'Changes take effect when agents start a new session' notice, matches r3/ac5/ac6/ac7"
+    ],
+    "limits": [
+      "Not exercised live in this run beyond reading the code -- the openspec source had no test-file citations either, so this is not a regression against the source's own rigor",
+      "openspec's four scenarios collapsed to three requirements/seven acceptance criteria because AgentWeave's schema has no notion of grouping scenarios under a shared 'system' heading the way the source markdown's three ### Requirement blocks did -- the requirement/criterion split is preserved 1:1, only the file-level heading nesting is flattened",
+      "openspec's scenarios state WHEN/THEN only; AgentWeave's acceptance_criteria schema requires a GIVEN too, so one was authored for each of the seven that did not have one in the source -- these are new prose, not present in openspec, and worth an operator glance rather than assumed equivalent"
+    ]
+  },
+  "lifecycle": "",
+  "open_questions": [],
+  "aw_identity": {
+    "requirements": {
+      "r1": "FR-1",
+      "r2": "FR-2",
+      "r3": "FR-3"
+    },
+    "high_water": 3,
+    "retired": {},
+    "digests": {
+      "FR-1": "38eb7cb723184362d00ad2786fd9abb6eacca18918edf82dca8b963c0137f231",
+      "FR-2": "e8e3087e7b09ab2967c04f063817a38fbd52553f401f8db5b6117eb2f0086fa7",
+      "FR-3": "3f6b651850a9b244044209e4a3ef4647e47f606443faabd3c443335816b1988d"
+    }
+  }
+}
+</script>
+</body>
+</html>
