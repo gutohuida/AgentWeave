@@ -327,3 +327,101 @@ distinguish that state from a firing that completed and from one that failed.
 - **WHEN** a firing's run has ended
 - **THEN** the firing is no longer reported as in progress
 - **AND** whether it completed or failed is reported
+
+### Requirement: A loop and a job are archivable, never deletable
+
+The Hub MUST NOT permanently remove a loop or a scheduled job, nor any record of the runs, queue
+history, purpose, or stop state belonging to one. A loop or a job SHALL instead be archivable, which
+hides it from default listings and destroys nothing.
+
+Archiving a loop SHALL be an operator action only, and MUST NOT be reachable by an agent.
+
+#### Scenario: Deleting a job is refused
+
+- **WHEN** any caller asks the Hub to delete a job
+- **THEN** the request is refused, naming archiving as the available alternative
+- **AND** the job, its loop if it has one, and every run record still exist afterwards
+
+#### Scenario: A loop's history survives archiving
+
+- **GIVEN** a loop with a queue history, firings, and a stop reason
+- **WHEN** the loop is archived
+- **THEN** its purpose, queue history, firings, and stop state are all still retrievable
+
+#### Scenario: An agent cannot archive a loop
+
+- **WHEN** an agent asks the Hub to archive a loop
+- **THEN** the request is refused, regardless of any standing allowance
+
+### Requirement: A loop that is still running cannot be archived
+
+The Hub SHALL refuse to archive a loop that has neither completed nor stopped, so that archiving can
+never conceal work that is still firing.
+
+#### Scenario: Archiving a running loop is refused
+
+- **GIVEN** a loop that is still enabled and firing
+- **WHEN** the operator attempts to archive it
+- **THEN** the request is refused, stating that it must be stopped or complete first
+
+#### Scenario: A stopped loop can be archived
+
+- **GIVEN** a loop that has stopped or completed
+- **WHEN** the operator archives it
+- **THEN** the loop is archived and no longer appears in default listings
+
+### Requirement: How a loop ended is a distinct value, not only a written reason
+
+A loop that ends SHALL record how it ended as a distinct value that can be filtered and counted,
+separately from the human-readable reason it already records. Completing — ending because its queue
+drained — SHALL be distinguishable from stopping for any other cause without interpreting prose.
+
+#### Scenario: A drained queue records completion as a value
+
+- **WHEN** a loop ends because every task naming it has reached a terminal status
+- **THEN** the loop records that it completed, as a value distinct from its written reason
+
+#### Scenario: Stopping early is distinguishable from completing
+
+- **GIVEN** one loop that ended because its queue drained and another stopped by the operator
+- **WHEN** the project's loops are listed and counted by how they ended
+- **THEN** the two are counted separately, without matching on the text of any reason
+
+### Requirement: A claimed task is still the loop's current item
+
+A task claimed by a firing SHALL be reported as the loop's current item even before any later step
+moves it to an in-progress status. The Hub MUST NOT omit the claimed task from a loop's summary
+solely because of the status a claim assigns it.
+
+#### Scenario: A freshly claimed task is reported
+
+- **GIVEN** a firing that has claimed its queue's item and not yet begun its turn
+- **WHEN** the loop's summary is retrieved
+- **THEN** the claimed task is reported as the loop's current item
+
+### Requirement: A project's loops are listable and individually inspectable
+
+The Hub SHALL let the operator list every loop in a project, whatever its state, and inspect any one
+of them individually. A loop's listing entry SHALL carry a label the operator can recognise it by,
+without the caller having to fetch its job separately.
+
+Listing SHALL be scoped to the project and MUST NOT require naming a conversation, since a loop's
+firings each occupy a conversation of their own and none of them is the loop.
+
+#### Scenario: Every loop in a project is listable
+
+- **WHEN** the operator lists a project's loops
+- **THEN** every loop is returned regardless of whether it is running, complete, stopped, or archived
+- **AND** each carries a label, its purpose, how it ended if it has, and its queue counts
+
+#### Scenario: A loop is inspectable without naming a conversation
+
+- **WHEN** the operator inspects one loop
+- **THEN** its queue, current item, firing history, and whether a firing is in progress are returned
+- **AND** no conversation identifier is required to make the request
+
+#### Scenario: Archived loops are excluded from the default listing
+
+- **GIVEN** a project with archived and unarchived loops
+- **WHEN** the operator lists the project's loops without asking for archived ones
+- **THEN** only the unarchived loops are returned

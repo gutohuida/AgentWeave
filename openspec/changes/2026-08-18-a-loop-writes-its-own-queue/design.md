@@ -396,3 +396,168 @@ Not resolved here, and deliberately not silently widened into D8's conclusion. I
 consequence of making a name load-bearing for permissions, and it should be closed before control
 delegation (D10) is relied on for anything the operator would not do by hand. Note it is not a live
 vulnerability: the Hub is local and single-operator, and the API key is the real boundary.
+
+---
+
+# Addendum 2 — decisions taken with the operator on the side panel, 2026-08-18 afternoon
+
+D1–D9 were authored by unattended firings at 12:32–12:38. D10–D15 were added after an operator
+conversation that afternoon. **D16–D21 below come from a third conversation**, recorded in
+`openspec/explorations/2026-08-18-the-side-panel-with-the-operator.md`, which was nominally about the
+side panel and turned out to settle four things about loops themselves. Appended rather than edited
+in, for the same reason the first addendum was: the order decisions were taken in stays legible.
+
+Two of these (D16, D17) close a hole **this change already argues against without noticing** — see
+D16's opening.
+
+## D16. Nothing is deletable. A loop, and a plain job, are archivable instead
+
+**D14 already states this change's principle**, in the course of forbidding `Task.loop_id`
+reassignment: *"Reassigning a task between loops would make a loop's queue history unable to answer
+what work it was ever given."* D14 protects a task's attribution to a loop and never notices that the
+loop row itself can be destroyed outright:
+
+- `Loop.job_id` is `ForeignKey("ai_jobs.id", ondelete="CASCADE")` (`models.py:1208-1210`).
+- `DELETE /api/v1/jobs/{job_id}` exists (`jobs.py:482`).
+- `delete_job` is agent-callable (`mcp_server.py:533`).
+
+One call, available to an agent, cascades away a loop's purpose, stop reason, stopped-at and every
+`JobRun` it ever had. D14 bolts the window; the door stands open.
+
+The operator, stating it as philosophy rather than as a bug report: *"Loops should never be deleted.
+We need the information is tracking. Don't forget about the philosophy. Governance and traceability.
+We shouldn't lose information."*
+
+**Decided: nothing is deletable — a loop or a plain job.** Both archive. `Loop` and `AIJob` each gain
+a nullable `archived_at`; the delete route and its MCP tool become archive (D18).
+
+Specs already settled this exact question and are the model copied here: `ARCHIVED = "archived"`,
+*"There is no transition out of `archived`"*, *"only the operator can archive a document"*
+(`spec_lifecycle.py:31, 49, 241`).
+
+**Rejected: keep delete for a plain job with no loop, archive only loops.** Considered because a bare
+cron job accumulates with no governance value, and because it is the smaller change. Rejected by the
+operator directly — *"The job with no loop is not deletable. It's archivable"* — and it has an
+independent defect: `delete_job`'s success would then depend on a property its signature does not
+expose, so an agent cannot know before calling whether the call is legal. A uniform rule is
+checkable; a conditional one is a trap.
+
+## D17. Complete and archived are different axes, and `complete` is a value, not a sentence
+
+The operator: *"The loop can be marked as complete. The archivability is just to clean the UI."*
+
+```
+   LIFECYCLE — what happened                 VISIBILITY — housekeeping
+   running ──┬──▶ complete  (queue drained)  ──▶  archived
+             └──▶ stopped   (stop_at, operator,   operator only, hides
+                             queue exhausted)     from default lists,
+                                                  destroys nothing
+```
+
+**`complete` becomes a real state value on `Loop`.** Today `stop_reason` is `Text, nullable`
+(`models.py:1226`) and `scheduler.py:102` writes the English string `"loop queue is empty"`. A
+governance surface that wants to show or filter *"4 complete · 1 stopped early · 2 running"* cannot
+string-match prose. `stop_reason` is kept beside the value as the human explanation — the value says
+what class of ending it was, the prose says why.
+
+**A loop that is running SHALL NOT be archivable.** Archiving one would hide unattended work that is
+still firing, which is the exact governance failure loops exist to make impossible. This also
+*replaces* a clumsier rule considered earlier in the session — "archiving must force
+`enabled = False`" — because requiring stopped-or-complete first makes it unnecessary: `enabled` is
+already false by then. Note `AIJob.enabled` is the **only** gate on firing (`scheduler.py:153, 227,
+275`), so an archive path that skipped this would leave an archived loop firing invisibly.
+
+**Rejected: derive "complete" by string-matching `stop_reason == "loop queue is empty"`.** It works
+today and breaks the first time anyone rewords the message, which is a thing prose invites and a
+value forbids.
+
+**Rejected: one lifecycle with `archived` as its terminal state.** This is what the session assumed
+before the operator corrected it. It conflates "this loop finished its work" with "I am tidying my
+list," and it makes archiving destructive of meaning — an archived loop would no longer be able to
+say whether it *succeeded*.
+
+## D18. `delete_job` becomes `archive_job`, and always asks
+
+With D16, the agent-callable `delete_job` has no valid target left. The operator: *"Agent can archive
+only with the explicit direction from the user. So the mcp endpoint becomes archive."*
+
+**The existing gate does not supply "explicit direction."** `_require_agent_job_allowance`
+(`jobs.py:21-40`) checks `project.allow_agent_jobs` — a standing, project-level boolean. Once the
+operator enables it, an agent may mutate recurring work unattended indefinitely. The route's own error
+text treats them as alternatives: *"requires operator approval **or** an enabled allowance."*
+
+**Decided: `archive_job` SHALL always produce an operator approval decision, independent of the run's
+permission posture.** The standing allowance grants the capability; the approval supplies the
+direction. This makes `archive_job` the first MCP tool with an always-confirm rule — recorded as a
+deliberate precedent rather than inherited from `create_job`'s gate by copy-paste.
+
+**Archiving a loop remains operator-only** and is not reachable by an agent at all, mirroring
+`spec_lifecycle.py:241`. `archive_job`'s agent path therefore only ever targets a job with no loop.
+
+**Rejected: gate `archive_job` on the standing allowance alone, like every other job tool.** It is the
+consistent choice and it is not what was asked for: under an `auto` posture an agent would archive
+without asking, which is the opposite of "only with the explicit direction from the user."
+
+*Open, and deliberately not decided here:* whether an agent should be able to archive a bare job **at
+all**, even with a card. D18 settles that the path always asks; it does not settle that the path
+should exist.
+
+## D19. The live-ness helper is D13's, and the panel change's own version is withdrawn
+
+`2026-08-18-one-shell-three-panels` D6, written by a different firing about twenty minutes after D13,
+decided on *"a new, job-scoped live-ness lookup... keyed by the loop's `AIJob.id` via its most recent
+`JobRun.conversation_id`"* — **precisely the shape D13 rejected by name**: *"Rejected: deriving 'is a
+firing running' by joining `JobRun.conversation_id` to `Run.status == "running"` and leaving the
+column alone... it keeps a lie in the table and obliges every future reader to know to join."*
+
+**Decided: D13 stands unchanged and the panel change's D6 is withdrawn.** This change owns the data
+layer; a `JobRun.status` that cannot state its own value is a defect regardless of who reads it. D13's
+own words already anticipated both callers: *"It should be one helper both callers use, not two
+joins."* The loop tab is now specced in this change (D20) and is one of those two callers.
+
+## D20. The loop surface is project-wide, and lives in this change
+
+The panel change specced a loop tab showing *"the loop bound to the conversation's job."* **No such
+binding exists.** `Conversation` (`models.py:369-405`) has no `job_id`; the only link is
+`JobRun.conversation_id` (`models.py:1194`), and `scheduler.py:337-343` creates a **fresh
+conversation per firing** whenever `session_mode` is `"new"` — which D4 guarantees is always, for a
+loop, since `resume` is refused outright.
+
+So a conversation-scoped loop view is empty in every conversation the operator actually sits in, and
+duplicated across every firing conversation they do not.
+
+**Decided: a project-wide loops index, plus a drill-down per loop**, and it is specced here rather
+than in the panel change, because everything it displays is this change's data — the queue, the
+claimed item, the briefing chain, D6's telemetry, D13's history and live-ness, D17's complete state.
+The panel change owns the container it renders in; this change owns the tenant.
+
+This supersedes this change's own D9 bullet — *"The side panel's loop view... `2026-08-18-the-side-
+panel-family` is where that surface is specced"* — and the Non-Goal "Not building the side panel."
+Both are edited in `proposal.md` rather than left to contradict this addendum.
+
+**A gap it exposes:** `LoopSummary` (`schemas/jobs.py:70-81`) carries no name — the Jobs page labels a
+loop with its *job's* name (`JobCard.tsx:197`). A picker needs a label, so `LoopSummary` gains one.
+
+**Rejected: spec the loops index in the panel change with the rest of the panels.** It would put the
+requirements for this change's data in a change that cannot test them — the panel change has no loop
+to render.
+
+## D21. `_batch_loop_summaries` cannot see a claimed task, and the fix belongs here
+
+`_batch_loop_summaries`'s `current_task` candidates query (`jobs.py:122-124`) filters
+`Task.status.in_(("in_progress", "blocked", "pending"))`. **`"assigned"` is absent**, while
+`checkpoints.py`'s `_LIVE_TASK_STATUSES` (`:43-49`) and `task_transitions.py`'s `ENTRY_STATUSES`
+(`:94`) both already treat it as live.
+
+**D3 is what produces that status** — a firing claims its queue item by setting it. So the moment this
+change ships, a freshly claimed task vanishes from `current_task` on the Jobs page's existing
+`LoopBlock` *and* on D20's loops index, until something else moves it along.
+
+**Decided: add `"assigned"` to the `IN` clause, in this change.** The panel change claimed this fix on
+the grounds that it was the first surface to make the gap visible; that reasoning is now moot, and a
+fix belongs beside its cause. One clause.
+
+*Still open, carried from the panel change's D6 and not resolved here:* whether
+`run_task_binding.py:250-254`'s automatic entry-status transition applies to a loop firing's binding
+path, which would make `"assigned"` momentary rather than persistent. The fix lands either way — a
+query that cannot represent a reachable status is wrong independent of how long that status lasts.

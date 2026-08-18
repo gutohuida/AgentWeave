@@ -91,6 +91,31 @@ design D4.
   only, `loop_id` on `create_task` is accepted from the creator up to the loop's first fire, and
   requires an answered `ask_user` afterward — there is no second agent to `send_message`.
 
+The following were added by **addendum D16–D21** after a later operator conversation, recorded in
+`openspec/explorations/2026-08-18-the-side-panel-with-the-operator.md`:
+
+- **Nothing is deletable; a loop and a job are archivable instead.** `Loop.job_id`'s
+  `ondelete="CASCADE"` plus the agent-callable `delete_job` currently let one call destroy a loop's
+  entire history — which this change's own D14 already argues must never happen, while protecting only
+  the task side of it. `Loop` and `AIJob` each gain a nullable `archived_at`; the delete route and its
+  tool become archive. Archiving a loop is operator-only; a running loop cannot be archived at all,
+  since hiding work that is still firing is the governance failure loops exist to prevent.
+- **How a loop ended becomes a value, not only prose.** `stop_reason` is free text and
+  `scheduler.py:102` writes an English sentence, so "completed because its queue drained" cannot be
+  counted or filtered apart from "stopped early." A distinct value records the class of ending;
+  `stop_reason` stays beside it as the explanation.
+- **`delete_job` becomes `archive_job`, and always asks.** The existing `project.allow_agent_jobs`
+  allowance is a standing switch, not per-action direction, so `archive_job` produces an operator
+  decision on every call regardless of the run's permission posture — the first MCP tool with an
+  always-confirm rule, set deliberately.
+- **A project-wide loops index and a per-loop drill-down.** A conversation has no loop —
+  `Conversation` carries no `job_id`, and `scheduler.py:337-343` creates a fresh conversation per
+  firing — so the loop surface is scoped to the project and picks its loop. `LoopSummary` gains the
+  label it currently lacks.
+- **`_batch_loop_summaries` learns about `"assigned"`.** D3's claim step is what produces that status;
+  the summary query cannot currently see it, so a freshly claimed task would vanish from every current-
+  item display the moment this change ships.
+
 ## Capabilities
 
 ### Modified Capabilities
@@ -119,12 +144,18 @@ already uses — no new allowance concept — which calls the same `POST /jobs` 
 (before ever making the call) to create a loop with no stop condition. That stricter contract is
 `create_loop`'s own, not a change to what `POST /jobs` accepts from anyone else.
 
-**Migration** — one additive nullable column each on `loops` (`spec_document_id`, no FK, unique) and
-`checkpoints` (`loop_id`, no FK, indexed). No existing column, index, or constraint changes.
+**Migration** — additive nullable columns only, no existing column, index, or constraint changed:
+`loops.spec_document_id` (no FK, unique) and `checkpoints.loop_id` (no FK, indexed) from the original
+design; plus `loops.archived_at`, `ai_jobs.archived_at`, and the value recording how a loop ended
+(D16, D17). The `ondelete="CASCADE"` on `loops.job_id` is left in place — it is now unreachable, since
+no delete path survives, and dropping a constraint on SQLite would force a table recreate for no
+behavioural gain.
 
-**UI** — none in this change. The side-panel loop view (governance and visibility for exactly this
-mechanism) is `2026-08-18-the-side-panel-family`'s loop panel, explored and specced separately per
-the operator's own sequencing (`STATE.json` Q7/Q8).
+**UI** — a project-wide loops index and a per-loop drill-down, specced here per addendum D20. This
+reverses what this proposal originally said ("UI — none in this change"), which assumed the loop view
+belonged to the side-panel change. It does not: everything it displays is this change's data. The
+side-panel change owns the *container* those views render in; this change owns their content and the
+requirements that make them checkable.
 
 ## Non-Goals
 
@@ -147,6 +178,9 @@ the operator's own sequencing (`STATE.json` Q7/Q8).
 - **Not spend bounds on unattended work, and not deciding whether a loop's executor may create loops
   of its own.** Both raised by the exploration (§8 item 7) and left to the operator; this change adds
   no enforcement either way.
-- **Not building the side panel.** Visibility for everything this change adds — a loop's queue,
-  claimed item, briefing history, telemetry — is `2026-08-18-the-side-panel-family`'s loop panel.
-  This change's own surface is API and MCP only.
+- **Not building the panel shell.** This change specs the loops index and the per-loop drill-down
+  (D20) — what they show and what must be true of them. The tab shell they live in, its keyed tabs,
+  its per-project persistence and its resize behaviour are `2026-08-18-one-shell-three-panels`.
+- **Not deciding whether an agent may archive a bare job at all.** D18 settles that the path always
+  requires an operator decision and that a loop is never agent-archivable; whether an agent should
+  have the bare-job path in the first place is left to the operator.

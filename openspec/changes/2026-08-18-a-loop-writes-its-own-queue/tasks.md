@@ -316,3 +316,128 @@ Run after the guide already in this file:
 **Where it would go wrong.** If step 10 lets the creator decide *before* you delegated, A1.3 is not
 reading the controller. If step 11's edit disturbs the running firing, A2.2 is applying immediately
 rather than staging. If step 12 revives the loop, A3.1 is restarting it, which D12 rejected.
+
+---
+
+# Addendum 2 tasks — archival, ending state, and the loops surface (D16–D21)
+
+Added after the operator conversation recorded in
+`openspec/explorations/2026-08-18-the-side-panel-with-the-operator.md`. **B5 and B6 depend on
+`2026-08-18-one-shell-three-panels` having landed its shell** — they are the shell's first non-spec
+tenant. Everything in B1–B4 is independent of it and can land first.
+
+## B1. Migration and model
+
+- [ ] B1.1 Extend the migration from 1.1 (or add a follow-on, whichever is the current head at
+      implementation time) with three more additive nullable columns, same missing-table guard as the
+      rest: `loops.archived_at` (DateTime, timezone-aware), `ai_jobs.archived_at` (same), and the
+      column recording **how a loop ended** as a value (D17) — a short string, nullable, NULL while
+      running.
+- [ ] B1.2 Leave `loops.job_id`'s `ondelete="CASCADE"` in place and add a comment saying why: no
+      delete path survives D16, so it is unreachable, and dropping it on SQLite forces a table recreate
+      for no behavioural change.
+- [ ] B1.3 Bump the head assertions in **both** `hub/tests/test_migrations.py` and
+      `hub/tests/test_project_persistence.py` (CLAUDE.md requires both).
+- [ ] B1.4 Decide and document the permitted values for B1.1's ending column in `models.py`, in a
+      comment next to it, the way `Loop.purpose` and `Loop.stop_reason` already carry their reasoning.
+      At minimum: completed (queue drained) and stopped (everything else), with `stop_reason` still
+      carrying the prose.
+
+## B2. Archival replaces deletion
+
+- [ ] B2.1 `DELETE /api/v1/jobs/{job_id}` refuses with a stated reason naming archiving as the
+      alternative. Do not silently reinterpret a delete as an archive — a caller that asked to destroy
+      data should be told it did not happen.
+- [ ] B2.2 Archive route for a job, and for a loop. A loop's is **operator-only** — refuse any request
+      carrying agent attribution, mirroring `spec_lifecycle.py:241`'s own rule for documents.
+- [ ] B2.3 Refuse to archive a loop that is neither complete nor stopped (D17), stating that it must
+      end first. Test that an enabled, firing loop cannot be archived.
+- [ ] B2.4 Archived loops and jobs are excluded from default listings and included when explicitly
+      asked for. Nothing is removed from the database.
+- [ ] B2.5 Set the ending value from B1.1 where the loop actually ends: `scheduler.py`'s stop-condition
+      path sets *completed* when the queue drained, *stopped* for `stop_at` and for an operator stop.
+      `stop_reason`'s existing prose is unchanged and keeps its current wording.
+- [ ] B2.6 Regression test: a loop archived after stopping still returns its purpose, queue history,
+      firings, and stop reason. This is the D16 guarantee and the one most likely to rot.
+
+## B3. `archive_job` on the MCP surface
+
+- [ ] B3.1 Replace `delete_job` with `archive_job` in `hub/hub/mcp_server.py`. Remember the file is
+      spawned standalone and may import only stdlib + fastmcp; anything it needs from the Hub is
+      restated there, with the existing test asserting the two agree.
+- [ ] B3.2 `archive_job` produces an operator approval decision on **every** call, independent of the
+      run's permission posture (D18) — the standing `project.allow_agent_jobs` allowance grants the
+      capability, not the direction. Test both postures.
+- [ ] B3.3 `archive_job` refuses when the job has a loop, since a loop is operator-only (B2.2).
+- [ ] B3.4 Update the tool-surface count and description in `CLAUDE.md` if the totals move, and update
+      whatever test asserts the tool list matches the tools.
+
+## B4. The loop summary tells the truth
+
+- [ ] B4.1 Add `"assigned"` to `_batch_loop_summaries`'s `current_task` candidates query
+      (`jobs.py:122-124`) — D21. One clause. Test with a task in `assigned` and nothing else.
+- [ ] B4.2 `LoopSummary` gains the label the operator recognises a loop by (D20), sourced from the
+      loop's job rather than requiring a second fetch, plus the ending value from B1.1 and whether it
+      is archived.
+- [ ] B4.3 Project-scoped list and detail endpoints for loops that require **no conversation id** —
+      the reason D20 exists. Detail returns queue, current item, firing history (D13) and whether a
+      firing is in progress (D13's helper, not a second join — D19).
+
+## B5. The loops index tab
+
+- [ ] B5.1 A `loops` index panel listing the project's loops: label, purpose, running/complete/stopped,
+      queue counts, open questions. Registered in the shell as a singleton index tab.
+- [ ] B5.2 Clicking a loop opens a `loop:<loop_id>` drill-down tab. The index **stays open** — unlike
+      the files tree, which the shell's own design has a file replace (see the panel change). The
+      distinction is deliberate: the index is a governance glance, not a launcher.
+- [ ] B5.3 Counts by ending state (*"4 complete · 1 stopped early · 2 running"*) computed from B1.1's
+      value, never by matching `stop_reason` text.
+- [ ] B5.4 Archived loops are out of the index by default, reachable behind an explicit filter.
+
+## B6. The loop drill-down tab
+
+- [ ] B6.1 A `loop:<loop_id>` panel: purpose, stop condition, ending state and reason, queue counts by
+      status, the claimed item, open questions, and the firing history.
+- [ ] B6.2 The active-now indicator consumes **D13's helper** — the same one the loop's own machinery
+      uses. Do not add a second join over `JobRun.conversation_id`/`Run.status` (D19).
+- [ ] B6.3 Motion only on the active-now indicator; queue counts and ending state update without a
+      transition. A CSS-driven animation inherits `index.css`'s existing blanket reduced-motion rule; a
+      JS-driven one needs its own `matchMedia` check.
+- [ ] B6.4 Live updates via `useSSE` plus React Query invalidation on the relevant events, including
+      `loop_queue_exhausted` from D6 — this is that event's first consumer.
+- [ ] B6.5 A loop that has ended still renders completely. The tab is the governance record; it is most
+      valuable *after* the loop finished.
+- [ ] B6.6 Audit the `Icon` map before assuming a loop/queue/claimed-item icon exists. `Icon` only —
+      CLAUDE.md forbids a second icon system.
+
+## B7. Human-only — the operator's judgement
+
+- [ ] B7.1 **Does the loops index answer "what is running right now" at a glance**, without opening a
+      drill-down? That is the whole reason it stays open when a drill-down is opened.
+- [ ] B7.2 **Does a refused delete read as the product protecting history, or as it being obstinate?**
+      B2.1's message is the entire experience of D16 for anyone who meets it.
+- [ ] B7.3 **Is "complete" visibly different from "stopped early"** at a glance, or do they read as the
+      same grey badge? If they read the same, B1.1's value bought nothing a sentence did not.
+- [ ] B7.4 **Does `archive_job`'s always-ask feel like protection or like nagging** after the fifth
+      time? D18 set a precedent; this is where it gets tested against real use.
+
+## B8. Additions to the user test guide
+
+Run after the guides already in this file:
+
+13. **Try to delete a loop's job.** Use the UI, then the API directly.
+    - *Expect:* refused both ways, naming archiving. The loop still exists with its full history.
+14. **Archive a running loop.**
+    - *Expect:* refused, stating it must stop or complete first.
+15. **Let a loop drain its queue, then archive it.**
+    - *Expect:* it records *completed* (not merely "stopped"), disappears from the default index, and
+      is still fully readable when archived loops are shown.
+16. **Ask an agent to archive a bare job**, with the allowance enabled and permissions on auto.
+    - *Expect:* you are still asked to approve it. If it happens silently, B3.2 is reading the
+      allowance as direction.
+17. **Open the loops index, drill into a loop, then look at the index again.**
+    - *Expect:* both tabs open; the index did not close when the drill-down opened.
+
+**Where it would go wrong.** If step 13 succeeds anywhere, D16 is not enforced at the route and only
+in the UI. If step 15 shows "stopped" rather than "completed", B2.5 is not setting the value at the
+drain path. If step 16 archives silently, B3.2 fell back to `create_job`'s allowance-only gate.
