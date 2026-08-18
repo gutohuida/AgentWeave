@@ -1230,6 +1230,14 @@ class Loop(Base):
     )
     created_by_run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     updated_by_run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # Which document this loop draws its queue from, if any. `unique=True, index=True` — same shape
+    # as `Run.capability_token_hash` above — one loop per document, matching `job_id`'s own
+    # uniqueness reasoning above, so two loops cannot silently race to claim the same decomposition.
+    # Deliberately not a ForeignKey, the identical SQLite-irreversibility reasoning
+    # `Task.spec_document_id`/`Task.loop_id` already state (`models.py:636-647`).
+    spec_document_id: Mapped[Optional[str]] = mapped_column(
+        String(64), unique=True, index=True, nullable=True
+    )
 
     __table_args__ = (Index("ix_loops_project", "project_id"),)
 
@@ -1367,6 +1375,12 @@ class Checkpoint(Base):
     conversation_id: Mapped[str] = mapped_column(
         String(64), ForeignKey("conversations.id"), nullable=False, index=True
     )
+    # Which loop this checkpoint belongs to, if the conversation it summarises was a loop firing.
+    # Same "deliberately not a ForeignKey" reasoning as every other loop-adjacent column
+    # (`models.py:636-647`). Stamped by `create_checkpoint`, not derived at read time (design D4) —
+    # every firing creates a new conversation, so deriving this via a join would be a four-table
+    # walk on every read instead of one indexed column.
+    loop_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     agent: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     trigger: Mapped[str] = mapped_column(String(32), nullable=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False)

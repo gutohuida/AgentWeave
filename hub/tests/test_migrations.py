@@ -36,7 +36,7 @@ ALEMBIC_INI = Path(__file__).parent.parent / "hub" / "alembic.ini"
 # The revision `alembic upgrade head` must land on. Named once so the assertion and its failure
 # message cannot disagree — they did, for two head bumps, telling anyone debugging a failure to go
 # read the wrong migration.
-HEAD_REVISION = "0076"
+HEAD_REVISION = "0077"
 
 
 # ---------------------------------------------------------------------------
@@ -2190,3 +2190,147 @@ def test_migrations_0074_to_0076_roll_all_the_way_back_and_forward(tmp_path) -> 
         assert conn.execute("SELECT COUNT(*) FROM loops").fetchone()[0] == 0
         assert conn.execute("SELECT COUNT(*) FROM tasks").fetchone()[0] == 1
         assert conn.execute("SELECT COUNT(*) FROM spec_documents").fetchone()[0] == 2
+
+
+# ---------------------------------------------------------------------------
+# 0077 — a loop declares its source document; a checkpoint carries its loop
+# ---------------------------------------------------------------------------
+
+
+def test_migration_0077_adds_the_loop_source_document_and_checkpoint_loop_binding(
+    tmp_path,
+) -> None:
+    """`2026-08-18-a-loop-writes-its-own-queue` design D1/D4: both columns nullable, both indexed,
+    `loops.spec_document_id` additionally unique so two loops cannot claim the same document."""
+    db_file = tmp_path / "loop_source.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    _run_alembic_with(db_url)
+
+    with sqlite3.connect(db_file) as conn:
+        loop_columns = {row[1]: row for row in conn.execute("PRAGMA table_info(loops)")}
+        assert "spec_document_id" in loop_columns
+        assert loop_columns["spec_document_id"][3] == 0  # notnull
+        assert loop_columns["spec_document_id"][4] is None  # dflt_value — no backfill guess
+
+        checkpoint_columns = {row[1]: row for row in conn.execute("PRAGMA table_info(checkpoints)")}
+        assert "loop_id" in checkpoint_columns
+        assert checkpoint_columns["loop_id"][3] == 0
+        assert checkpoint_columns["loop_id"][4] is None
+
+        loop_indexes = {row[1] for row in conn.execute("PRAGMA index_list(loops)")}
+        assert "ix_loops_spec_document_id" in loop_indexes
+        checkpoint_indexes = {row[1] for row in conn.execute("PRAGMA index_list(checkpoints)")}
+        assert "ix_checkpoints_loop_id" in checkpoint_indexes
+
+
+def test_migration_0077_spec_document_id_is_unique_per_loop(tmp_path) -> None:
+    """A second loop declaring the same document a live loop already declared is rejected at the
+    database layer, not just by the API's own check (design D1's "at most one loop per document").
+    """
+    db_file = tmp_path / "loop_source_unique.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    _run_alembic_with(db_url)
+
+    stamp = "2026-01-01T00:00:00Z"
+    with sqlite3.connect(db_file) as conn:
+        conn.execute(
+            "INSERT INTO projects (id, name, created_at) " f"VALUES ('proj-1', 'p', '{stamp}')"
+        )
+        for job_id in ("job-1", "job-2"):
+            conn.execute(
+                "INSERT INTO ai_jobs (id, project_id, name, agent, message, cron, created_at, "
+                "session_mode, enabled, source) "
+                f"VALUES ('{job_id}', 'proj-1', 'n', 'claude', 'go', '0 9 * * *', '{stamp}', "
+                "'new', 1, 'hub')"
+            )
+        conn.execute(
+            "INSERT INTO loops (id, project_id, job_id, purpose, stop_when_queue_empties, "
+            f"created_at, spec_document_id) VALUES ('loop-1', 'proj-1', 'job-1', 'p', 0, "
+            f"'{stamp}', 'doc-1')"
+        )
+        conn.commit()
+
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(
+                "INSERT INTO loops (id, project_id, job_id, purpose, stop_when_queue_empties, "
+                f"created_at, spec_document_id) VALUES ('loop-2', 'proj-1', 'job-2', 'p', 0, "
+                f"'{stamp}', 'doc-1')"
+            )
+
+
+def test_migration_0077_downgrade_then_upgrade_round_trips(tmp_path) -> None:
+    """Down and back up again, with rows populated in both new columns beforehand — the rollback
+    escape hatch is only real if the columns it drops actually come back on the way up."""
+    from alembic import command
+    from alembic.config import Config
+
+    db_file = tmp_path / "roundtrip_0077.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    _run_alembic_with(db_url)
+
+    stamp = "2026-01-01T00:00:00Z"
+    with sqlite3.connect(db_file) as conn:
+        conn.execute(
+            "INSERT INTO projects (id, name, created_at) " f"VALUES ('proj-1', 'p', '{stamp}')"
+        )
+        conn.execute(
+            "INSERT INTO ai_jobs (id, project_id, name, agent, message, cron, created_at, "
+            "session_mode, enabled, source) "
+            f"VALUES ('job-1', 'proj-1', 'n', 'claude', 'go', '0 9 * * *', '{stamp}', 'new', 1, "
+            "'hub')"
+        )
+        conn.execute(
+            "INSERT INTO loops (id, project_id, job_id, purpose, stop_when_queue_empties, "
+            f"created_at, spec_document_id) VALUES ('loop-1', 'proj-1', 'job-1', 'p', 0, "
+            f"'{stamp}', 'doc-1')"
+        )
+        conn.execute(
+            "INSERT INTO conversations "
+            "(id, project_id, agent, lifecycle, origin, title_set_by_operator, sequence, "
+            "created_at, updated_at) "
+            f"VALUES ('conv-1', 'proj-1', 'claude', 'open', 'operator', 0, 1, "
+            f"'{stamp}', '{stamp}')"
+        )
+        conn.execute(
+            "INSERT INTO checkpoints (id, project_id, conversation_id, loop_id, agent, trigger, "
+            "status, visibility, lineage_id, created_at) VALUES ('cp-1', 'proj-1', 'conv-1', "
+            f"'loop-1', 'claude', 'operator', 'unwritten', 'private', 'cp-1', '{stamp}')"
+        )
+        conn.commit()
+
+    cfg = Config(str(ALEMBIC_INI))
+    cfg.set_main_option("sqlalchemy.url", db_url)
+    with patch.object(settings, "database_url", db_url):
+        command.downgrade(cfg, "-1")
+
+        with sqlite3.connect(db_file) as conn:
+            loop_columns = {row[1] for row in conn.execute("PRAGMA table_info(loops)")}
+            assert "spec_document_id" not in loop_columns
+            checkpoint_columns = {row[1] for row in conn.execute("PRAGMA table_info(checkpoints)")}
+            assert "loop_id" not in checkpoint_columns
+            # The rows themselves survive — only the binding column is dropped.
+            assert conn.execute("SELECT COUNT(*) FROM loops").fetchone()[0] == 1
+            assert conn.execute("SELECT COUNT(*) FROM checkpoints").fetchone()[0] == 1
+
+        command.upgrade(cfg, "head")
+
+    with sqlite3.connect(db_file) as conn:
+        assert (
+            conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == HEAD_REVISION
+        )
+        loop_columns = {row[1] for row in conn.execute("PRAGMA table_info(loops)")}
+        assert "spec_document_id" in loop_columns
+        checkpoint_columns = {row[1] for row in conn.execute("PRAGMA table_info(checkpoints)")}
+        assert "loop_id" in checkpoint_columns
+        # The upgrade cannot recover what the downgrade discarded — a checkpoint or loop that
+        # existed through the round trip has its binding back as NULL, not restored.
+        assert (
+            conn.execute("SELECT spec_document_id FROM loops WHERE id = 'loop-1'").fetchone()[0]
+            is None
+        )
+        assert (
+            conn.execute("SELECT loop_id FROM checkpoints WHERE id = 'cp-1'").fetchone()[0] is None
+        )

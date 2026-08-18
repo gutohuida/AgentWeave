@@ -358,3 +358,84 @@ queue's PW1 entry can simply be marked done pointing at this iteration's tests, 
 needs) — but per the queue's stated interleaving, the *next* firing should prefer **L1** (loop:
 migration + model) so the run does not spend the whole night on one change, per the operator's
 explicit "work on both specs" instruction.
+
+## Entry 4 — iteration 4: L1, loop migration + model (2026-08-18 22:44-22:57)
+
+Fresh process. `git log` matched `0cde7c1` exactly, tree clean. Read `next_action`, design D1/D4, and
+the `0075`/`0020` migration precedents before writing anything, per `read_first` and the queue's
+interleaving instruction (P3 done last iteration; this one deliberately picks up **L1**, the loop
+change, so neither change is starved).
+
+**Work done: L1 — tasks 1.1-1.3 and 2.1-2.2 of `2026-08-18-a-loop-writes-its-own-queue`.**
+
+New migration `hub/hub/migrations/versions/0077_loop_declares_source_and_checkpoint_loop.py`,
+`down_revision = "0076"` (reconfirmed via `alembic heads` — single head, nothing else had claimed it).
+Two additive nullable columns, guarded for a missing table exactly like `0075`: `loops.
+spec_document_id` (design D1) and `checkpoints.loop_id` (design D4). `hub/hub/db/models.py` gained
+`Loop.spec_document_id` and `Checkpoint.loop_id` matching.
+
+**A real bug caught by actually running the up/down/up cycle, not by inspection.** Task 1.3 asked for
+exactly this, and it earned its keep. The task's own text planned the unique index on
+`loops.spec_document_id` as `uq_loops_spec_document_id`. First scratch run (`Base.metadata.create_all`
+— what `init_db` does for a fresh install — then `alembic upgrade head`, then `downgrade -1`) failed
+`downgrade -1` with `sqlite3.OperationalError: error in table loops after drop column: no such column:
+spec_document_id`. Root cause: the model declared `spec_document_id` with `unique=True` alone (no
+`index=True`), so `create_all` built the uniqueness as an inline table-level constraint — a SQLite
+autoindex (`sqlite_autoindex_loops_N`), not a named index. The migration's downgrade looked for
+`uq_loops_spec_document_id` by name, didn't find it (wrong name entirely), skipped dropping it, then
+`DROP COLUMN` failed because SQLite refuses to drop a column still part of *any* index, named or not.
+Checked whether this codebase already has a working precedent for a nullable, unique, indexed column
+added via `ALTER TABLE`: `Run.capability_token_hash` (`models.py:1024-1026`, migration `0020`) declares
+`unique=True, index=True` together, which makes SQLAlchemy name the index `ix_<table>_<column>` by its
+own default convention — exactly matching `0020`'s explicit `ix_runs_capability_token_hash`. Renamed
+this migration's index to `ix_loops_spec_document_id` and added `index=True` to the model to match.
+Reran the same scratch cycle (create_all → upgrade → downgrade -1 → upgrade head): clean, columns and
+indexes present after re-upgrade, confirmed by directly reading `PRAGMA table_info`/`PRAGMA
+index_list` rather than trusting alembic's own "no error" as sufficient. Also ran a second scratch
+cycle — pure sequential `alembic upgrade head` against a *truly empty* database, no `create_all` —
+which passed cleanly end-to-end (0001→0077→-1→0077 again) for a different reason: `loops`/`checkpoints`
+never get far enough to need the new columns until every earlier migration's own table-creation guard
+is satisfied in sequence, so this path never exercised the bug at all. Recording both runs rather than
+only the one that caught the bug, since a future reader asking "why does 1.3 ask for a *scratch* file
+specifically, twice" should be able to see that the two runs test genuinely different things — the
+`create_all` path is what real fresh installs hit, and the pure-sequential path is what a database
+upgrading from an old, real revision hits.
+
+**Verification, measured:**
+- `hub/tests/test_migrations.py`: `HEAD_REVISION` bumped `0076` → `0077`. Added three new tests
+  (`test_migration_0077_adds_the_loop_source_document_and_checkpoint_loop_binding`,
+  `test_migration_0077_spec_document_id_is_unique_per_loop` — inserts a second loop declaring the same
+  document and asserts `sqlite3.IntegrityError`, not `sqlalchemy.exc.IntegrityError` (raw `sqlite3`
+  connections raise the driver's own exception type, not the ORM's — caught by the first version of
+  this test failing to catch anything at all), `test_migration_0077_downgrade_then_upgrade_round_trips`
+  — seeds a real loop with a real `spec_document_id` and a real checkpoint with a real `loop_id`, not
+  just empty tables, then downgrades and confirms the rows survive with the binding column genuinely
+  gone, then upgrades and confirms the column returns as `NULL` — the upgrade cannot resurrect what
+  the downgrade discarded, and the test says so rather than assuming). `hub/tests/
+  test_project_persistence.py`'s `version == "0076"` assertion bumped to `"0077"`.
+- `py -3.11 -m pytest hub/tests/test_migrations.py hub/tests/test_project_persistence.py -q` — **61
+  passed, 1 skipped** (the skip predates this change, unrelated).
+- `ruff check` and `black --check` clean on every touched file (`models.py`, the new migration, both
+  test files) — black did reformat the migration and the test file once (a line-length wrap and a
+  parenthesization), applied and reverified clean.
+- `mypy` on the new migration: 3 "missing parameter annotation" errors, identical in shape and count to
+  running mypy on `0075_add_loops_and_traceability.py` directly — confirmed by running both, not
+  assumed. This is `0075`'s own established style for these migration helper functions (`_tables`,
+  `_columns`, `_indexes` all take an untyped `conn`), not a new regression against the session's mypy
+  baseline.
+- `npx openspec validate --changes --strict`: 2/2 still pass.
+
+**Not done, correctly deferred:** section 3 (`spec_tasks.materialise()` stamping `loop_id`) is
+next-in-queue for the loop change — `next_action` explicitly said not to start it this iteration, so
+the interleaving with the panel change (currently at PW1) stays honest and this iteration stays one
+reviewable unit.
+
+Marked 1.1-1.3 and 2.1-2.2 done in `tasks.md`, including the naming-bug discovery and both scratch
+verification runs, in the dated-note style P3's entries in the panel change already established.
+
+Committed, pushed. `current`/`next_action` now point at **L3** (loop: spec materialisation stamps
+`loop_id`, tasks 3.1-3.2) — the queue's own written order, not an alternating-per-iteration guess:
+the queue groups L1 through L12 together before returning to the panel change at P4, and
+`pre_authorised` is explicit — "Follow the queue order as written... Do not reorder to finish one
+change first." An earlier draft of this entry incorrectly said P4 was next; caught before commit by
+rereading the queue array in `STATE.json` rather than assuming alternation from memory.

@@ -1,11 +1,12 @@
 # Tasks — A loop writes its own queue
 
-Nothing in this file has been started. Every box below is unchecked because this change is a spec
-only — CLAUDE.md: "Never mark a task complete on the strength of a plan existing."
+Sections 1-2 are implemented and verified (dated notes below). Everything from section 3 onward is
+still a spec only, unchecked — CLAUDE.md: "Never mark a task complete on the strength of a plan
+existing."
 
 ## 1. Migration
 
-- [ ] 1.1 New migration, `down_revision` = the current head. Two additive, nullable, unindexed-except-
+- [x] 1.1 New migration, `down_revision` = the current head. Two additive, nullable, unindexed-except-
       as-noted columns, no existing constraint touched — same "no `batch_alter_table` recreate needed"
       shape as `0075`:
       (a) `ALTER TABLE loops ADD COLUMN spec_document_id VARCHAR(64)` nullable, no FK (design D1),
@@ -15,20 +16,79 @@ only — CLAUDE.md: "Never mark a task complete on the strength of a plan existi
       `CREATE INDEX ix_checkpoints_loop_id`.
       Guard each step for a missing table, matching `0071`/`0073`/`0075`'s own precedent for an
       upgrade starting from an early revision.
-- [ ] 1.2 `downgrade()`: drop `ix_checkpoints_loop_id` and `checkpoints.loop_id`, drop
-      `uq_loops_spec_document_id` and `loops.spec_document_id` — same missing-table guard on each
-      step.
-- [ ] 1.3 Run `alembic upgrade head` then `alembic downgrade -1` then `alembic upgrade head` against a
+
+      **Done 2026-08-18** in `hub/hub/migrations/versions/0077_loop_declares_source_and_checkpoint_
+      loop.py`, `down_revision = "0076"` (reconfirmed head via `alembic heads` before writing — single
+      head, no sibling change had already taken it). Both columns guarded for a missing table, copied
+      from `0075`'s exact pattern. **Naming departure from this task's own text, discovered while
+      testing, not guessed:** the unique index on `loops.spec_document_id` is named
+      `ix_loops_spec_document_id`, not `uq_loops_spec_document_id` as originally planned here. Reason:
+      the model declares the column `unique=True, index=True` (matching `Run.capability_token_hash`'s
+      existing shape in `models.py`), and SQLAlchemy's own naming convention for that shape produces
+      `ix_<table>_<column>` when `Base.metadata.create_all` builds a brand-new database — which is
+      exactly what `init_db` does for a fresh install before running `alembic upgrade head` (H5,
+      `test_migrations.py`'s own docstring). A migration-created index under the originally-planned
+      `uq_` name would not match what `create_all` produces, so a downgrade against a freshly-bootstrapped
+      database would silently fail to find its own index and then fail to drop the column (SQLite
+      refuses `ALTER TABLE ... DROP COLUMN` on a column still part of any index). Caught by task 1.3's
+      own verification below, not assumed — the first version of this migration, named `uq_`, failed
+      exactly that way.
+- [x] 1.2 `downgrade()`: drop `ix_checkpoints_loop_id` and `checkpoints.loop_id`, drop
+      `ix_loops_spec_document_id` (see 1.1's naming note) and `loops.spec_document_id` — same
+      missing-table guard on each step. **Done 2026-08-18**, same file.
+- [x] 1.3 Run `alembic upgrade head` then `alembic downgrade -1` then `alembic upgrade head` against a
       scratch SQLite file, confirming both directions actually execute — `0075`'s own precedent for
       catching a migration that parses but does not run.
 
+      **Verified 2026-08-18, twice, against two different scratch files** (both under
+      `%TEMP%\aw_scratch_*.db`, deleted after use, never this repo's `hub/data/agentweave.db`):
+      (a) a pure sequential upgrade from a truly empty database (no `create_all`) — all three commands
+      ran clean, but because `loops`/`checkpoints` are guarded on `projects`/`ai_jobs` existing and
+      those in turn come from other guarded migrations, a database built by alembic alone never
+      reaches the point of creating those tables at all until every earlier migration's own guard
+      condition is satisfied in sequence, which this scratch run exercised end-to-end (0001→0077,
+      then -1, then back to head) with no errors; (b) the realistic path — `Base.metadata.create_all`
+      (what `init_db` does for a fresh install) then `alembic upgrade head`, then `downgrade -1`, then
+      `upgrade head` again — which is what actually exercises the `ADD COLUMN`/`DROP COLUMN` branches
+      non-trivially, since `create_all` alone already produces every column at HEAD shape. This run is
+      what caught the naming bug in 1.1: the first version failed `downgrade -1` with `sqlite3.
+      OperationalError: error in table loops after drop column: no such column: spec_document_id`
+      because the named index the downgrade tried to drop first didn't match the autoindex `create_
+      all` had actually built. Fixed per 1.1, then reran clean. Formalised as three pytest tests in
+      `hub/tests/test_migrations.py` (`test_migration_0077_adds_the_loop_source_document_and_
+      checkpoint_loop_binding`, `test_migration_0077_spec_document_id_is_unique_per_loop`,
+      `test_migration_0077_downgrade_then_upgrade_round_trips` — the last seeds a real loop and a real
+      checkpoint in both new columns before the round trip, not just empty tables) rather than left as
+      a one-off manual run — see 2.2's verification for the full suite result.
+
 ## 2. Model (`hub/hub/db/models.py`)
 
-- [ ] 2.1 `Loop.spec_document_id` (design D1): nullable, `String(64)`, no ForeignKey, `unique=True`,
+- [x] 2.1 `Loop.spec_document_id` (design D1): nullable, `String(64)`, no ForeignKey, `unique=True`,
       placed beside `job_id`, with the same "deliberately not a ForeignKey" comment reasoning `Task.
       spec_document_id`/`loop_id` already state, referenced rather than re-derived.
-- [ ] 2.2 `Checkpoint.loop_id` (design D4): nullable, `String(64)`, no ForeignKey, indexed, placed
+
+      **Done 2026-08-18.** Also `index=True` (not stated in this task's original text — added per
+      1.1's naming note, so the column's index matches what the migration creates by the same name on
+      a database built via `create_all`).
+- [x] 2.2 `Checkpoint.loop_id` (design D4): nullable, `String(64)`, no ForeignKey, indexed, placed
       beside `conversation_id`.
+
+      **Done 2026-08-18.** Comment states it is stamped by `create_checkpoint` at write time, not
+      derived at read time via a join — design D4's own reasoning, restated briefly rather than in
+      full a third time.
+
+      **Verification, measured (2.1 and 2.2 together):** `hub/tests/test_migrations.py` and
+      `hub/tests/test_project_persistence.py` head assertions bumped `0076` → `0077` per CLAUDE.md's
+      "Adding a database column" checklist. `py -3.11 -m pytest hub/tests/test_migrations.py hub/tests/
+      test_project_persistence.py -q` → **61 passed, 1 skipped** (the skip predates this change).
+      `ruff check` and `black --check` clean on every touched Python file (`models.py`, the new
+      migration, both test files). `mypy` on the new migration reports the same 3 "missing parameter
+      annotation" errors `0075`'s own identical helper-function shape already has — confirmed by
+      running mypy on `0075_add_loops_and_traceability.py` directly and comparing — so this is the
+      established style for these migration helpers, not a new regression against the session's mypy
+      baseline. Deliberately **not** run this iteration: the full `hub/pytest` suite (unchanged
+      reasoning from prior iterations — this touches only migrations/models/tests, and the targeted
+      run above already exercises every assertion those two files make about the schema).
 
 ## 3. Queue-write path 1 — specification materialisation (`hub/hub/spec_tasks.py`)
 
