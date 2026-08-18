@@ -182,3 +182,51 @@ vs human-only, ending in a user test guide.
    and Q4 fixes a false alarm with no user-facing behaviour change); at 15:30 do not *start* the
    panel exploration, because a rushed exploration reads authoritative and is not; at 16:30 stop and
    write the handoff.
+
+## Entry 3 — Q5 done interactively: loops fire but cannot remember
+
+Written in the interactive session at the operator's request, not by a firing. The branch was held
+via `last_heartbeat` throughout so no driver firing could commit over it.
+
+**Output:** `openspec/explorations/2026-08-18-loops-as-an-agent-tool.md`.
+
+**The queued finding held, and a second one turned up beside it.** `Task.loop_id` is read in five
+places and written in zero — confirmed independently. But so is **`AIJob.last_session_id`**: read at
+`scheduler.py:328`, `jobs.py:69`, `jobs.py:342` and rendered at `JobCard.tsx:323`, written nowhere,
+with **zero test references anywhere in `hub/tests/`**. So `session_mode="resume"` resolves to `None`
+every firing and behaves exactly like `"new"`, and the UI renders a session-id block that can never
+appear.
+
+Two continuity mechanisms, both read-only. That makes it a pattern rather than an incident, and it
+gives the exploration its thesis: **the scheduling half of a loop is complete and correct; the memory
+half is uniformly unwired.** A loop can fire on a schedule and stop at a deadline. It cannot
+accumulate anything.
+
+**How it got past a careful design, which is the part worth keeping.** `many-named-loops/design.md`
+D2 specifies `Task.loop_id` in a page of detail — column type, why no FK, the exact `elif` position,
+the React Query cache key — and never says what writes it. The spec delta has the same shape: the
+requirement *"A loop's queue is the tasks that name it"* consists of *"A task MAY be linked to a
+loop"* plus two read scenarios. **Passive voice, no actor.** The precise mechanism: D2 modelled
+`loop_id` on `Task.spec_document_id` and copied the read half of that pattern without the write half
+— `spec_document_id` is genuinely written at `tasks.py:324,341`, and `loop_id` got everything except
+that line's equivalent.
+
+That generalises into a candidate rule for AgentWeave's own validator: **a requirement about state
+must name who writes it.** Recorded in the exploration as a finding about the spec flow, not just
+about loops.
+
+**The design fork the spec has to resolve** is framed in §5: resume the conversation (one line, but
+state hides in a transcript and dies on compaction) versus re-derive from durable state (more to
+build, but visible, auditable and restart-proof). The repository has already run this experiment —
+`.claude/autonomous/` deliberately chose the second, which is why a run that died at 07:41 was picked
+up at 07:56 having lost nothing. §4 maps that driver field-by-field against `Loop` and finds four
+load-bearing gaps: `next_action`, `last_heartbeat`, `decisions_for_user` (non-blocking escalation,
+where AgentWeave's `ask_user` blocks), and `known_debts`.
+
+**What a reviewer should distrust.** Nothing was driven live — no loop was created, fired or watched.
+Overlapping firings are explicitly flagged as unverified. `openspec/specs/` was not read for a
+shipped requirement that might contradict §2. And the last time a shipped spec mechanism was tried
+live it produced three defects in an hour, so a live loop trial should be assumed to find more.
+
+Q5 marked done; `current` is now Q6 (author the openspec change), with `next_action` pointing at the
+exploration as its input and warning it not to re-derive it.

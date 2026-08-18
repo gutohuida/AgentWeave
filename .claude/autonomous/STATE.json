@@ -85,7 +85,8 @@
         "The dangling-agent defect: AIJob.agent is a bare String(64), not an FK. scheduler.py:51-56 _job_agent_skip_reason returns None when NO agent row matches -- and None means PROCEED. Rename or archive an agent and its loops keep firing at a name nobody owns.",
         "MINE THE REPO'S OWN DRIVER. .claude/autonomous/ is a WORKING implementation of exactly this feature, battle-tested across several multi-hour runs including one that died and recovered: STATE.json has a queue, a next_action written for a stranger, stop_at, stop_when_queue_empties, a heartbeat with a takeover grace, decisions_for_user, and a prose log. Map what that driver NEEDS against what Loop HAS, and let the gaps drive the design. This is the strongest evidence available and it is free. It is also the concrete path to Proposal C (the autonomous session as a Loop) -- note that, do not build it."
       ],
-      "status": "pending"
+      "status": "done",
+      "done_note": "Written interactively 2026-08-18 ~11:20 by the operator's request, not by a firing. Output: openspec/explorations/2026-08-18-loops-as-an-agent-tool.md. It found a SECOND read-with-no-write field beyond the queued one: AIJob.last_session_id is read at scheduler.py:328, jobs.py:69, jobs.py:342 and JobCard.tsx:323 and written nowhere, with zero test references, so session_mode='resume' is a silent no-op. Thesis: loops fire but cannot remember -- the scheduling half is complete, the memory half is uniformly unwired."
     },
     {
       "id": "Q6-spec-loops",
@@ -152,8 +153,8 @@
       "status": "pending"
     }
   ],
-  "current": "Q1-ci-fixes",
-  "next_action": "FIRST: standing_checks.merge_pr_2 -- run `gh pr checks 2`, and merge if all 8 are green. Do not idle waiting on it. THEN: iteration 2 reported both CI fixes pushed to both branches at 11:10; verify that (git log on this branch and on autonomous/2026-08-18-the-app-feels-alive), mark Q1 done, and start Q2 -- the merge 500 at hub/hub/api/v1/spec.py:1190, where save_document() returns a ProposeResult with no .blocking whenever rigor is contract/gate, and session.commit() on line 1186 runs first so the proposal is durably written before the request fails. Branch on the result type, move the commit, and add rigor cases to hub/tests/test_spec_merge.py, which has none.",
+  "current": "Q6-spec-loops",
+  "next_action": "Q6: author the openspec change for loops, per the operator's choice of openspec at FULL depth. READ openspec/explorations/2026-08-18-loops-as-an-agent-tool.md FIRST -- it was written interactively and is the input; do not re-derive it. Its section 6 lists the eight things the spec must settle, and section 5 frames the load-bearing fork (resume the conversation vs re-derive from durable state) with the repository's own autonomous driver as evidence for the latter. Requirements use '### Requirement:' with '#### Scenario:' and MUST/SHALL, modal on the FIRST PHYSICAL LINE. design.md must record rejected alternatives WITH REASONS. tasks.md splits agent-verifiable from human-only and ends with a user test guide. `npx openspec validate --changes --strict` must pass. SPEC ONLY -- do not implement, do not start the tasks. NOTE section 3's lesson: the previous change's requirement 'A task MAY be linked to a loop' was passive with no actor, which is exactly how the write path went missing -- every requirement this spec writes about state MUST name who writes it.",
   "limits": [
     "'Full auto, but only on green CI' -- operator, standing. NEVER merge or release on red or unfinished CI.",
     "Authorised this session: open a PR to master and MERGE IT if all six CI jobs are green. No release, no tag -- those stay operator-only.",
@@ -291,5 +292,5 @@
     "at_1530": "If Q7 (explore side panel) has not started by 15:30, do NOT start it. A rushed exploration is worse than none -- it reads authoritative and is not. Spend the remaining time finishing Q6 properly and writing the handoff.",
     "at_1630": "Stop new work. Write the handoff (/handoff) and the final log entry. The operator returns to this, so the morning-easy rules apply: what changed, what was proven with evidence, what is open, decisions waiting, and what to distrust."
   },
-  "last_heartbeat": "2026-08-18T11:12:55+01:00"
+  "last_heartbeat": "2026-08-18T11:20:50+01:00"
 }
