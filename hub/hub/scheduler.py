@@ -21,7 +21,7 @@ from .conversations import (
     new_conversation,
 )
 from .db.engine import async_session_factory
-from .db.models import Agent, AIJob, Checkpoint, JobRun, Loop, Task
+from .db.models import Agent, AIJob, Checkpoint, JobRun, Loop, Message, Question, Run, Task
 from .run_task_binding import TERMINAL_FOR_BINDING
 from .sse import sse_manager
 from .task_transition_service import apply_transition
@@ -104,6 +104,98 @@ async def _loop_stop_reason(session: AsyncSession, job: AIJob) -> Optional[str]:
             )
             if ever_count:
                 return "loop queue is empty"
+    return None
+
+
+_LOOP_PENDING_REQUEST_REASON_CHARS = 300
+
+
+async def _pending_loop_request(
+    session: AsyncSession, job: AIJob, loop: Loop, exclude_run_id: str
+) -> Optional[dict]:
+    """What the loop's executor was waiting on when its queue drained (design D6).
+
+    A loop job never resumes a conversation — task 8.1 refuses `session_mode="resume"` for one,
+    for the entire lifetime of the job, not just at creation — so every firing, including the one
+    that just discovered the empty queue, gets a brand-new, still-empty `Conversation`
+    (`_do_fire_job` creates it before `_loop_stop_reason` runs, unconditionally). An unanswered
+    `Question` this firing's OWN conversation could hold is therefore always none; "the firing's
+    conversation" D6 names has to mean the most recent EARLIER firing's conversation — the one an
+    `ask_user` call would actually have been asked in, if one was ever asked and never answered.
+    Found via the most recent prior `JobRun` for this job that recorded one, excluding this firing
+    itself (`exclude_run_id`).
+
+    Checked before the `Message` case: an unanswered `ask_user` is a hard block on the run that
+    asked it, closer to "the thing this loop was actually waiting on" than mail sitting unread in
+    an inbox nobody has to check. D6 does not state a tiebreak when both exist.
+    """
+    prior_run_result = await session.execute(
+        select(JobRun.conversation_id)
+        .where(
+            JobRun.job_id == job.id,
+            JobRun.id != exclude_run_id,
+            JobRun.conversation_id.is_not(None),
+        )
+        .order_by(JobRun.fired_at.desc())
+        .limit(1)
+    )
+    prior_conversation_id = prior_run_result.scalar_one_or_none()
+    if prior_conversation_id is not None:
+        question_result = await session.execute(
+            select(Question)
+            .where(
+                Question.conversation_id == prior_conversation_id,
+                Question.answered == False,  # noqa: E712
+            )
+            .order_by(Question.created_at.desc())
+        )
+        question = question_result.scalars().first()
+        if question is not None:
+            reason = question.question
+            if len(reason) > _LOOP_PENDING_REQUEST_REASON_CHARS:
+                reason = reason[:_LOOP_PENDING_REQUEST_REASON_CHARS]
+            return {
+                "kind": "question",
+                # A `Question` has no recipient field of its own — it is addressed to whichever
+                # human is watching the operator UI, not to a named agent, so `to` stays null.
+                "to": None,
+                "reason": reason,
+                "created_at": question.created_at.isoformat(),
+            }
+
+    # "addressed to the creator" is the Message model's own `recipient` field — the thing that
+    # actually decides whose inbox it lands in — not a conversation match; only the Question half
+    # of D6's sentence carries the "in the firing's conversation" qualifier grammatically.
+    creator_agent: Optional[str] = None
+    if loop.created_by_run_id:
+        # Same `created_by_run_id` -> `Run.agent` resolution `questions.py`'s
+        # `_asking_run_has_ended` already uses for a different row's creator — cited as precedent
+        # rather than a second pattern.
+        creator_run = await session.get(Run, loop.created_by_run_id)
+        if creator_run is not None:
+            creator_agent = creator_run.agent
+    if creator_agent is not None:
+        message_result = await session.execute(
+            select(Message)
+            .where(
+                Message.sender == job.agent,
+                Message.recipient == creator_agent,
+                Message.read == False,  # noqa: E712
+            )
+            .order_by(Message.timestamp.desc())
+        )
+        message = message_result.scalars().first()
+        if message is not None:
+            reason = message.subject or message.content
+            if len(reason) > _LOOP_PENDING_REQUEST_REASON_CHARS:
+                reason = reason[:_LOOP_PENDING_REQUEST_REASON_CHARS]
+            return {
+                "kind": "message",
+                "to": message.recipient,
+                "reason": reason,
+                "created_at": message.timestamp.isoformat(),
+            }
+
     return None
 
 
@@ -522,6 +614,28 @@ class JobScheduler:
                     session, job.project_id, "loop_stopped", loop_stopped_payload, agent=job.agent
                 )
                 await sse_manager.broadcast(job.project_id, "loop_stopped", loop_stopped_payload)
+                if loop is not None and loop_stop_reason == "loop queue is empty":
+                    # A second, independent event (design D6) — "the queue is empty" and "was a
+                    # request in flight when it emptied" are two facts a reader should not have to
+                    # parse out of one payload. `loop_stopped` above is unchanged by this branch.
+                    pending_request = await _pending_loop_request(
+                        session, job, loop, exclude_run_id=run_id
+                    )
+                    loop_queue_exhausted_payload = {
+                        "job_id": job.id,
+                        "loop_id": loop.id,
+                        "pending_request": pending_request,
+                    }
+                    await persist_event(
+                        session,
+                        job.project_id,
+                        "loop_queue_exhausted",
+                        loop_queue_exhausted_payload,
+                        agent=job.agent,
+                    )
+                    await sse_manager.broadcast(
+                        job.project_id, "loop_queue_exhausted", loop_queue_exhausted_payload
+                    )
                 # Remove from the live scheduler so it does not fire again next cron tick only to be
                 # skipped again — the same call `remove_job` already makes for a job an operator
                 # disables by hand.

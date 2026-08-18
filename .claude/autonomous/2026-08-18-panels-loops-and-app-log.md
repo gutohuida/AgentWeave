@@ -964,3 +964,80 @@ precedent rather than inventing a second pattern. `Message.read`/`Message.conver
 
 Committed, pushed. `current`/`next_action` now point at **L10** (empty-queue telemetry,
 `hub/hub/scheduler.py`, tasks 10.1-10.2) — the queue's next item.
+
+## Entry 12 — iteration 12: L10, empty-queue telemetry event (2026-08-19T00:44-00:55+01:00)
+
+Fresh process. Branch and `git log` matched STATE.json exactly on read (HEAD at the release-heartbeat
+commit following entry 11). Read design D6 (`2026-08-18-a-loop-writes-its-own-queue/design.md:190-210`)
+and the operator's original quote it implements (`2026-08-18-loops-as-an-agent-tool.md:214-224`) before
+touching code.
+
+**Work done: L10 — tasks 10.1-10.2, `hub/hub/scheduler.py` + `hub/tests/test_scheduler.py`.**
+
+New `_pending_loop_request(session, job, loop, exclude_run_id)`, called from `_do_fire_job`'s existing
+`if loop_stop_reason:` branch right after the existing `loop_stopped` persist+broadcast, gated on
+`loop_stop_reason == "loop queue is empty"` — re-confirmed as the only one of `_loop_stop_reason`'s two
+return strings meaning "drained" rather than "deadline reached."
+
+**A deliberate deviation from entry 11's own scouting note, recorded because it changes correctness, not
+just style.** The note proposed checking `Question.conversation_id` against the `conversation` local
+`_do_fire_job` builds for the CURRENT firing. Re-reading the function fresh: that conversation is always
+created before `_loop_stop_reason` even runs, and — because L8 refuses `session_mode="resume"` for a
+loop job's entire lifetime — a loop's `resume_session_id` is always `None`, so every single firing gets a
+brand-new, still-empty `Conversation`. Checking the current firing's own conversation for a `Question`
+would therefore always find nothing: dead code that could never observe the state D6 exists to surface.
+"The firing's conversation" has to mean the most recent EARLIER firing's conversation instead — resolved
+via the most recent prior `JobRun.conversation_id` for the same job, excluding the current firing's own
+`JobRun` by id.
+
+Also decided (D6 states neither): `Question` beats `Message` when both are outstanding — an unanswered
+`ask_user` is a hard block on the run that asked it, closer to "what this loop was actually waiting on"
+than mail sitting unread. Locked in by a dedicated test. "Addressed to the creator" (the `Message` case)
+is the model's own `recipient` field, not a conversation match — only the `Question` half of D6's
+sentence carries a conversation qualifier grammatically; the `Message` query additionally filters
+`sender == job.agent` so an unrelated unread message to the same creator isn't mistaken for this loop's
+pending request. The creator's agent name resolves via `Loop.created_by_run_id` → `session.get(Run, ...)`
+→ `Run.agent`, the identical shape `questions.py:44`'s `_asking_run_has_ended` already uses for a
+different row's `created_by_run_id` — cited as precedent. `reason` truncates to a new
+`_LOOP_PENDING_REQUEST_REASON_CHARS = 300`, a small sibling to section 9's 4,000-char checkpoint cap, for
+a one-line summary field rather than a full body.
+
+**Tests, `hub/tests/test_scheduler.py`**: four new tests — no-pending-request (with a regression-guard
+assertion that `loop_stopped` still fires unchanged alongside the new event), an unread message to the
+creator, an unanswered question from a manually-fixtured prior `JobRun`'s conversation, and a
+both-outstanding case locking in the question-wins tiebreak. All four also assert `job.enabled is False`
+and `Loop.stopped_at is not None`, per `next_action`'s explicit instruction — this section introduces no
+paused state.
+
+**Verification, measured:**
+- `py -3.11 -m pytest hub/tests/test_scheduler.py -q` — **18 passed** (14 pre-existing + 4 new).
+- `py -3.11 -m pytest hub/tests/test_jobs.py hub/tests/test_scheduler.py -q` — **50 passed, 1 skipped**.
+- `ruff check hub/hub/scheduler.py hub/tests/test_scheduler.py` — clean.
+- `black --fast` — the test file needed reformatting (line-wrap only, no logic change); reformatted and
+  re-verified green; the scheduler module was already formatted.
+- `mypy hub/hub/scheduler.py`, filtered to lines attributed to the file — exactly the same 6 error lines
+  as `.claude/autonomous/mypy-baseline.txt` (2 `Result[Any].rowcount` + 4 pre-existing import-untyped) —
+  **zero new errors**. `_pending_loop_request`'s parameters are explicitly typed per the L7/L9
+  convention.
+- `npx openspec validate --changes --strict` (repo root) — 2/2.
+
+No Hub restart this iteration: like sections 3-9, this section is verified entirely through pytest
+against scheduler logic, with no UI or live-Hub surface to exercise.
+
+Marked 10.1-10.2 done in `tasks.md` with a dated note recording the deviation above and the design
+decisions made, and updated the file's summary line to "Sections 1-10 are implemented and verified."
+
+**Scouted ahead for L11 (`create_loop` MCP tool) while the file was open**, to make the next
+`next_action` concrete: design D2 (`design.md:48-85`) resolves the shape question outright —
+`create_loop` is MCP-only, calling the same `POST /jobs` route (`/agent-actions/jobs` →
+`create_governed_job` → `jobs.py`'s `create_job`) the existing `create_job` tool already calls, no new
+REST route. `JobCreate` already has `purpose`/`stop_at`/`stop_when_queue_empties`/`spec_document_id`
+(sections 1-5); the only schema widening D2 names is `initial_tasks`, needed on both `JobCreate` and
+`AgentJobCreate` (`agent_actions.py:161`) since `create_governed_job` does
+`JobCreate(**body.model_dump(), source="hub")`. The "no stop condition" refusal is explicitly MCP-tool-
+side per D2, not a REST route check — `POST /jobs` must keep accepting a `purpose`-only, no-stop-
+condition job unmodified, because that is how the operator's own `JobForm.tsx` "Make this a loop"
+section already works.
+
+Committed, pushed. `current`/`next_action` now point at **L11** (`create_loop` MCP tool,
+`hub/hub/mcp_server.py` + schema widening, tasks 11.1-11.4) — the queue's next item.

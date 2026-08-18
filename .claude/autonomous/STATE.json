@@ -7,11 +7,10 @@
   "started_at": "2026-08-18T21:25:24+01:00",
   "stop_at": "2026-08-19T08:00:00+01:00",
   "stop_when_queue_empties": false,
-  "iteration": 11,
+  "iteration": 12,
   "session_stopped": false,
-  "last_heartbeat": "2026-08-18T23:55:32+01:00",
+  "last_heartbeat": "2026-08-19T00:52:00+01:00",
   "prepared_by": "/autonomous-prep, interactive session 2026-08-18T20:55-21:30+01:00. Intent was fixed with the operator BEFORE reading the handoff or the git log. Environment was measured, not assumed: browser suite 33 passed against the live Hub, ruff clean, black clean (403 files), openspec 2 changes + 32 specs strict-valid, mypy baselined at 361 pre-existing errors, trial Hub confirmed serving this repo via an editable install.",
-
   "operator_intent": {
     "both_specs": "Work BOTH openspec changes. Do not spend the whole night on one. The queue interleaves them deliberately.",
     "ui_testing": "Playwright, against the live Hub. Not just vitest.",
@@ -19,44 +18,170 @@
     "then_free_choice": "After all of that, the run picks its own work — outstanding fixes or whatever is needed.",
     "stop": "08:00 on 2026-08-19."
   },
-
   "queue": [
-    {"id": "P2a", "title": "Panel shell: component skeleton, tab strip, keyboard (tasks 2.1, 2.6, 2.7)", "status": "done"},
-    {"id": "P2b", "title": "Panel shell: re-host ConversationView's panel block (tasks 2.2-2.5)", "status": "done"},
-    {"id": "P3",  "title": "Panel: specs as the shell's first tenant (tasks 3.1-3.6)", "status": "done"},
-    {"id": "PW1", "title": "Playwright coverage for the shell against the live Hub", "status": "done"},
-    {"id": "L1",  "title": "Loop: migration + model (tasks 1.1-1.3, 2.1-2.2)", "status": "done"},
-    {"id": "L3",  "title": "Loop: spec materialisation stamps loop_id (tasks 3.1-3.2)", "status": "done"},
-    {"id": "L4",  "title": "Loop: declaring a source document, 409 on conflict (tasks 4.1-4.2)", "status": "done"},
-    {"id": "L5",  "title": "Loop: creator authorship gate (tasks 5.1-5.4)", "status": "done"},
-    {"id": "L6",  "title": "Loop: claiming the current item (tasks 6.1-6.3)", "status": "done"},
-    {"id": "L7",  "title": "Loop: loop-scoped checkpoints + envelope (tasks 7.1-7.4)", "status": "done"},
-    {"id": "L9",  "title": "Loop: the briefing (tasks 9.1-9.3)", "status": "done"},
-    {"id": "L8",  "title": "Loop: refuse resume for a loop's job (tasks 8.1-8.2)", "status": "done"},
-    {"id": "L10", "title": "Loop: empty-queue telemetry event (tasks 10.1-10.2)", "status": "open"},
-    {"id": "L11", "title": "Loop: create_loop MCP tool (tasks 11.1-11.4)", "status": "open"},
-    {"id": "L12", "title": "Loop: full-suite verification + mutation checks (tasks 12.1-12.5)", "status": "open"},
-    {"id": "P4",  "title": "Panel: GET /api/v1/workspace/file endpoint (tasks 4.1-4.5)", "status": "open"},
-    {"id": "P5",  "title": "Panel: the files tab (tasks 5.1-5.5, incl. MEASURING the min width)", "status": "open"},
-    {"id": "P6",  "title": "Panel: strip overflow decision, measured not guessed (task 6.1)", "status": "open"},
-    {"id": "LB1", "title": "Loop B1: archival migration + model columns", "status": "open"},
-    {"id": "LB2", "title": "Loop B2: archival replaces deletion", "status": "open"},
-    {"id": "LB3", "title": "Loop B3: archive_job on the MCP surface", "status": "open"},
-    {"id": "LB4", "title": "Loop B4: the loop summary tells the truth", "status": "open"},
-    {"id": "LB5", "title": "Loop B5: the loops index tab (REQUIRES the shell from P2b/P3)", "status": "open"},
-    {"id": "LB6", "title": "Loop B6: the loop drill-down tab (REQUIRES the shell)", "status": "open"},
-    {"id": "LA1", "title": "Loop A1: control as a per-loop setting (D10)", "status": "open"},
-    {"id": "LA2", "title": "Loop A2: editing, staged and visible (D11)", "status": "open"},
-    {"id": "LA3", "title": "Loop A3: late tasks refused, offered to a new loop (D12)", "status": "open"},
-    {"id": "LA4", "title": "Loop A4: per-loop history + in-progress firing helper (D13)", "status": "open"},
-    {"id": "LA5", "title": "Loop A5: write-once loop_id, and RECORD (do not fix) the D15 name gap", "status": "open"},
-    {"id": "APP1", "title": "App experience: a desktop icon/shortcut for AgentWeave", "status": "open"},
-    {"id": "APP2", "title": "App experience: further improvements, operator's second priority", "status": "open"},
-    {"id": "FREE", "title": "Free choice: outstanding fixes, findings, whatever is most needed", "status": "open"}
+    {
+      "id": "P2a",
+      "title": "Panel shell: component skeleton, tab strip, keyboard (tasks 2.1, 2.6, 2.7)",
+      "status": "done"
+    },
+    {
+      "id": "P2b",
+      "title": "Panel shell: re-host ConversationView's panel block (tasks 2.2-2.5)",
+      "status": "done"
+    },
+    {
+      "id": "P3",
+      "title": "Panel: specs as the shell's first tenant (tasks 3.1-3.6)",
+      "status": "done"
+    },
+    {
+      "id": "PW1",
+      "title": "Playwright coverage for the shell against the live Hub",
+      "status": "done"
+    },
+    {
+      "id": "L1",
+      "title": "Loop: migration + model (tasks 1.1-1.3, 2.1-2.2)",
+      "status": "done"
+    },
+    {
+      "id": "L3",
+      "title": "Loop: spec materialisation stamps loop_id (tasks 3.1-3.2)",
+      "status": "done"
+    },
+    {
+      "id": "L4",
+      "title": "Loop: declaring a source document, 409 on conflict (tasks 4.1-4.2)",
+      "status": "done"
+    },
+    {
+      "id": "L5",
+      "title": "Loop: creator authorship gate (tasks 5.1-5.4)",
+      "status": "done"
+    },
+    {
+      "id": "L6",
+      "title": "Loop: claiming the current item (tasks 6.1-6.3)",
+      "status": "done"
+    },
+    {
+      "id": "L7",
+      "title": "Loop: loop-scoped checkpoints + envelope (tasks 7.1-7.4)",
+      "status": "done"
+    },
+    {
+      "id": "L9",
+      "title": "Loop: the briefing (tasks 9.1-9.3)",
+      "status": "done"
+    },
+    {
+      "id": "L8",
+      "title": "Loop: refuse resume for a loop's job (tasks 8.1-8.2)",
+      "status": "done"
+    },
+    {
+      "id": "L10",
+      "title": "Loop: empty-queue telemetry event (tasks 10.1-10.2)",
+      "status": "done"
+    },
+    {
+      "id": "L11",
+      "title": "Loop: create_loop MCP tool (tasks 11.1-11.4)",
+      "status": "open"
+    },
+    {
+      "id": "L12",
+      "title": "Loop: full-suite verification + mutation checks (tasks 12.1-12.5)",
+      "status": "open"
+    },
+    {
+      "id": "P4",
+      "title": "Panel: GET /api/v1/workspace/file endpoint (tasks 4.1-4.5)",
+      "status": "open"
+    },
+    {
+      "id": "P5",
+      "title": "Panel: the files tab (tasks 5.1-5.5, incl. MEASURING the min width)",
+      "status": "open"
+    },
+    {
+      "id": "P6",
+      "title": "Panel: strip overflow decision, measured not guessed (task 6.1)",
+      "status": "open"
+    },
+    {
+      "id": "LB1",
+      "title": "Loop B1: archival migration + model columns",
+      "status": "open"
+    },
+    {
+      "id": "LB2",
+      "title": "Loop B2: archival replaces deletion",
+      "status": "open"
+    },
+    {
+      "id": "LB3",
+      "title": "Loop B3: archive_job on the MCP surface",
+      "status": "open"
+    },
+    {
+      "id": "LB4",
+      "title": "Loop B4: the loop summary tells the truth",
+      "status": "open"
+    },
+    {
+      "id": "LB5",
+      "title": "Loop B5: the loops index tab (REQUIRES the shell from P2b/P3)",
+      "status": "open"
+    },
+    {
+      "id": "LB6",
+      "title": "Loop B6: the loop drill-down tab (REQUIRES the shell)",
+      "status": "open"
+    },
+    {
+      "id": "LA1",
+      "title": "Loop A1: control as a per-loop setting (D10)",
+      "status": "open"
+    },
+    {
+      "id": "LA2",
+      "title": "Loop A2: editing, staged and visible (D11)",
+      "status": "open"
+    },
+    {
+      "id": "LA3",
+      "title": "Loop A3: late tasks refused, offered to a new loop (D12)",
+      "status": "open"
+    },
+    {
+      "id": "LA4",
+      "title": "Loop A4: per-loop history + in-progress firing helper (D13)",
+      "status": "open"
+    },
+    {
+      "id": "LA5",
+      "title": "Loop A5: write-once loop_id, and RECORD (do not fix) the D15 name gap",
+      "status": "open"
+    },
+    {
+      "id": "APP1",
+      "title": "App experience: a desktop icon/shortcut for AgentWeave",
+      "status": "open"
+    },
+    {
+      "id": "APP2",
+      "title": "App experience: further improvements, operator's second priority",
+      "status": "open"
+    },
+    {
+      "id": "FREE",
+      "title": "Free choice: outstanding fixes, findings, whatever is most needed",
+      "status": "open"
+    }
   ],
-  "current": "L10",
-  "next_action": "Implement loop change section 10 (empty-queue telemetry), tasks 10.1-10.2, in openspec/changes/2026-08-18-a-loop-writes-its-own-queue/tasks.md and hub/hub/scheduler.py. Read design D6 in openspec/changes/2026-08-18-a-loop-writes-its-own-queue/design.md before writing anything (already read this iteration, quoted in full there): a new persisted+broadcast event `loop_queue_exhausted`, ALONGSIDE the existing `loop_stopped` event, not folded into it. Payload: `{job_id, loop_id, pending_request: {kind: 'message'|'question', to, reason, created_at} | null}`. Insertion point, already located this iteration: hub/hub/scheduler.py:491-530, inside `_do_fire_job`'s `if loop_stop_reason:` branch, which already builds and broadcasts `loop_stopped` at lines 516-524 (`loop_stopped_payload = {...}`, `await persist_event(...)`, `await sse_manager.broadcast(...)`) -- add the new event's persist+broadcast calls in the same branch, right after (or interleaved with) the existing ones. Gate `pending_request` population on `loop_stop_reason == 'loop queue is empty'` specifically (the exact string `_loop_stop_reason` returns at scheduler.py:106 -- its OTHER return value, 'loop stop time reached (...)' at line 86, means a stop_at deadline was hit, not that the queue emptied, so a `loop_queue_exhausted` event on THAT path would misreport telemetry the operator will read to answer 'how often did a loop discover work late' -- confirm this distinction still holds by re-reading _loop_stop_reason, scheduler.py:66-107, fresh). To populate `pending_request`, query for (a) an unread Message addressed to the loop's creator: `Message.read == False` (models.py:490), `Message.conversation_id` == the firing's conversation (models.py:494) OR `Message.recipient` == the creator's agent name -- resolve the creator's agent name via `Loop.created_by_run_id` (models.py:1231, a Run id, NOT an agent name) -> `await session.get(Run, loop.created_by_run_id)` -> `run.agent`, the exact resolution hub/hub/api/v1/questions.py:44 already does for a different row's created_by_run_id -- cite it as precedent, do not invent a second pattern; decide (from D6's own text and the Message/Question models, re-read fresh) whether 'addressed to the creator' means recipient-match or conversation-match, and record the reasoning in the dated tasks.md note either way. (b) an unanswered Question in the firing's conversation: `Question.answered == False` (models.py:847), `Question.conversation_id` == the firing's conversation (models.py:879) -- the firing's conversation is the `conversation` local already in scope in `_do_fire_job` (created earlier in the same function, used to build `run` at scheduler.py:461-464 -- confirm the exact variable name by reading the function fresh, next_action's line numbers are this iteration's read and may drift once L10 starts editing the file). If a Message is found, `kind='message'`, `to`=its recipient, `reason`=a short field from it (subject or truncated content -- decide and record which, matching the terseness the briefing's own _LOOP_BRIEFING_CHECKPOINT_CHARS precedent (scheduler.py, section 9's new constant) already established for 'terse over verbose'), `created_at`=its timestamp. If a Question is found instead (or as well -- D6 does not say which wins if both exist; decide and record), `kind='question'`, `to`=null or the creator's agent name (decide from D6's phrasing), `reason`=the question text (truncated if very long, same terseness reasoning), `created_at`=its created_at. `pending_request` is null when neither exists. Task 10.2 tests, in hub/tests/test_scheduler.py (same file L9 already extended, same `_make_job`/`_make_loop` fixtures): queue empties with no outstanding request -> event's `pending_request` is null, event still fires; queue empties with an unread Message to the creator outstanding -> event names it (assert kind/to/reason/created_at all populated correctly); queue empties with an unanswered Question outstanding -> event names it; in every case assert `job.enabled is False` and `Loop.stopped_at` is set, exactly as many-named-loops's existing stop path already does (this requirement does NOT introduce a paused state -- do not build one). Also assert the existing `loop_stopped` event STILL fires unchanged (a regression guard -- L10 adds a second event, it must not replace or alter the first). ruff/black on every touched Python file. mypy on hub/hub/scheduler.py only, filtered against .claude/autonomous/mypy-baseline.txt's per-file count for that file (L9's entry recorded it as 6 error lines -- 2 `Result[Any].rowcount` + 4 pre-existing import-untyped -- confirm that count is still exactly 6 after this section, zero new; if you add a new small helper function, type its session/db param explicitly per L7/L9's established convention so it does not add a fresh no-untyped-def hit). npx openspec validate --changes --strict (from the REPO ROOT only) still 2/2. Mark 10.1-10.2 done in tasks.md with a dated note in the style sections 1-9 already established, and update the top-of-file summary line from 'Sections 1-9 are implemented...' to 'Sections 1-10 are implemented...' (contiguous, safe to state as a range). After L10, the queue's next item is L11 (create_loop MCP tool, hub/hub/mcp_server.py, tasks 11.1-11.4).",
-
+  "current": "L11",
+  "next_action": "Implement loop change section 11 (create_loop MCP tool), tasks 11.1-11.4, in openspec/changes/2026-08-18-a-loop-writes-its-own-queue/tasks.md, hub/hub/mcp_server.py, and (for initial_tasks) hub/hub/schemas/jobs.py + hub/hub/api/v1/jobs.py. Read design D2 fresh (openspec/changes/2026-08-18-a-loop-writes-its-own-queue/design.md:48-85) before writing anything -- already read this iteration, and it resolves the one question that would otherwise stall this section: create_loop is MCP-only. It calls the SAME POST /jobs route (via /agent-actions/jobs -> hub/hub/api/v1/agent_actions.py:491-503's create_governed_job -> hub/hub/api/v1/jobs.py's create_job) that the existing create_job MCP tool already calls -- no new REST route. JobCreate (hub/hub/schemas/jobs.py:9-29) ALREADY has purpose, stop_at, stop_when_queue_empties, spec_document_id (sections 1-5 added these) -- confirmed present this iteration, do not re-add them. The ONLY schema widening D2 names is initial_tasks (D1, D2) -- add initial_tasks: Optional[List[...]] = None (decide the exact per-task field shape from what create_task's MCP signature already exposes, mcp_server.py:212-240, so the two stay consistent) to JobCreate AND to AgentJobCreate (hub/hub/api/v1/agent_actions.py:161, confirm exact line fresh) since create_governed_job does JobCreate(**body.model_dump(), source='hub') -- a field on one schema but not the other silently drops on the agent path. In create_job (hub/hub/api/v1/jobs.py), inside the same transaction that creates the Loop row when _loop_opts_in(...) is true (jobs.py:274-290 as read this iteration, confirm fresh), after that Loop is added (and before or after its own commit -- decide and record which, D1's wording 'in the same call' does not mandate one transaction boundary over the other, but prefer a single commit if achievable so a crash mid-way cannot leave a loop with half its initial queue), create a Task per initial_tasks entry with loop_id=loop.id -- reuse whatever helper POST /tasks's own creation path already uses for building a Task row (grep hub/hub/api/v1/tasks.py's create_task handler fresh -- do not hand-roll a second construction of the same row shape). The refusal belongs in the MCP tool function itself, NOT in the REST route (D2 is explicit and gives the reason: POST /jobs must keep accepting a purpose-only job with no stop condition unmodified, because that is how the operator's own JobForm.tsx 'Make this a loop' section already behaves, many-named-loops task 5 -- do not add a route-level check that would also constrain that path). So create_loop(name, agent, message, cron, purpose='', stop_at=None, stop_when_queue_empties=False, spec_document_id=None, initial_tasks=None) in mcp_server.py: if stop_at is None and not stop_when_queue_empties, refuse client-side before the HTTP call (check how other mcp_server.py tools already signal a client-side refusal, e.g. grep for an existing raise-before-_hub_request guard in this file, and match its shape) with a message naming that a loop needs a stop condition; otherwise call _job_effect('POST', '/jobs', {...}) (mcp_server.py:502-533's existing create_job is the direct template) with all fields including initial_tasks. Gating: _require_agent_job_allowance is already enforced inside create_job/the REST route (jobs.py:21-35, called at jobs.py:208) -- create_loop inherits it for free by routing through the same endpoint; do not add a second gate. Task 11.3: hub/tests/test_mcp_tool_schemas.py already has a pattern asserting each MCP tool's generated schema agrees with the REST schema it calls (grep the file fresh for the existing per-tool assertions, e.g. how create_job/create_task are checked, and add create_loop to the same table/loop rather than a bespoke one-off test). Task 11.4 tests (hub/tests, likely a new file or alongside test_jobs.py's agent-actions tests -- decide by finding where create_governed_job/'/agent-actions/jobs' is already tested, grep hub/tests fresh): create_loop with no stop condition -> refused, and refused BEFORE any HTTP call is made (assert no job with that name was created, the same double-check pattern L8's tests already use); with a stop condition and no initial_tasks -> creates a loop whose queue is empty (Task count 0 for that loop_id); with initial_tasks -> creates a loop whose queue already holds them (assert each created Task.loop_id equals the new loop's id, title/description/acceptance_criteria round-trip); with spec_document_id -> creates a loop that later materialises tasks into its queue when that document is approved -- an integration test spanning section 3's spec_tasks.materialise() loop_id-stamping (already implemented) and this section's loop creation; grep hub/tests/test_spec_declared_tasks.py fresh for the existing materialise-with-loop test to reuse its fixture shape. ruff/black on every touched Python file (mcp_server.py, jobs.py, agent_actions.py, schemas/jobs.py, and whichever test file(s) you add to or create). mypy on hub/hub/mcp_server.py AND hub/hub/api/v1/jobs.py, each filtered against .claude/autonomous/mypy-baseline.txt's per-file counts (confirm both counts fresh before editing -- this iteration only checked scheduler.py's, do not assume mcp_server.py's is zero). CLAUDE.md's standing rule for hub/hub/mcp_server.py: it is spawned standalone and may import ONLY stdlib + fastmcp -- create_loop must not import anything from the rest of the hub package; it composes its request body from plain dict literals exactly as every other tool in the file already does. npx openspec validate --changes --strict (from the REPO ROOT only) still 2/2. Mark 11.1-11.4 done in tasks.md with a dated note in the style sections 1-10 already established (section 10's note, just written, is the template for detail level and for recording deviations from this next_action with reasoning), and update the top-of-file summary line to 'Sections 1-11 are implemented...' if 11 is fully done, or state the actual set honestly (section 9's own precedent) if only some of 11.1-11.4 land this iteration. After L11, the queue's next item is L12 (full-suite verification + mutation checks, tasks 12.1-12.5) -- not yet scouted, read it fresh from tasks.md section 12 when you get there.",
   "limits": [
     "No merging to master unattended — the operator's own words, chosen explicitly tonight. Push the autonomous branch; never merge it.",
     "Stay on branch autonomous/2026-08-18-panels-loops-and-app. No commits to master or to the parent branch.",
@@ -74,7 +199,6 @@
     "No force-push, no history rewriting, no release, no publish.",
     "Every claim is measured or labelled unverified."
   ],
-
   "pre_authorised": [
     {
       "situation": "Loop task 12.2 asks for `mypy hub/hub/` CLEAN. It is not, and cannot be tonight.",
@@ -112,14 +236,12 @@
       "cost_if_wrong": "Low."
     }
   ],
-
   "decisions_for_user": [
     "'Clear all projects from the test hub' — I did NOT delete proj-ff695d96 (aw-loop10) or proj-5e960453 (this repo's registration, the browser suite's fixture). CLAUDE.md, three handoffs and an executable code guard all protect aw-loop10, and deletion is irreversible. I deleted only the stray `Agentweave` registration pointing at <repo>/hub, which CLAUDE.md says to delete. If you genuinely meant all four, say so and it takes one command.",
     "I pre-authorised ONE DRAFT PR to master purely to get CI to run (CI ignores branch pushes). It will never be marked ready or merged. If you did not want any PR created unattended, close it — nothing depends on it.",
     "Loop task 12.2 ('mypy clean') is not achievable: 361 pre-existing errors in 86 files. I rescoped it to 'no new errors vs the baseline'. Whether you want a separate change to actually clean mypy is your call.",
     "Still open from handoff 0058, untouched by this run: the D15 name-reuse hole (a new agent taking an archived agent's name inherits its creator privilege); whether an agent should be able to archive a bare job at all; and the two naming explorations (2026-08-18-candidate-names.md, 2026-08-18-does-the-name-still-fit.md) which may be a live question about renaming the product before more UI is built on the current name."
   ],
-
   "environment": {
     "verified_at": "2026-08-18T21:25+01:00",
     "trial_hub": "http://127.0.0.1:8010, PID 22720 as of 2026-08-18T22:30+01:00 (restarted this iteration via Invoke-CimMethod, see hub_restart below, to pick up P3's Python change to hub/hub/api/v1/spec.py — the original PID 12496 was serving stale code, caught by curling /project/specs directly and seeing document_id come back missing before trusting a Playwright result). Serving hub/data/agentweave.db. /health returns {\"status\":\"ok\"}. Detached the same way the original was — will NOT restart itself if killed, and any further Python change needs another restart via the command below.",
@@ -131,7 +253,6 @@
     "projects_on_hub": "proj-5e960453 (AgentWeave, this repo — KEEP), proj-b44fac0c (Throwaway taste pass — disposable), proj-ff695d96 (aw-loop10 — PROTECTED).",
     "icon_asset_exists": "src/agentweave/assets/icon.ico already exists — APP1 should reuse it rather than generating a new one."
   },
-
   "verified_green_at_prep": {
     "browser_suite": "33 passed (live Hub, 17.26s)",
     "ui_vitest": "1014 passed across 101 files",
@@ -142,7 +263,6 @@
     "hub_pytest": "NOT VERIFIED — CONFIRM THIS IN ITERATION 1 BEFORE TRUSTING IT. A full background run reached 61% with no failures (4 skips) and was then KILLED deliberately at 21:29, because the driver's first firing was seconds away and two concurrent pytest runs are a documented false-green trap here. It did not pass; it was interrupted. Note the branch changes NO Python at all (a new UI store file plus a stamp JSON), so the hub suite result is inherited from master, which CI last measured at 2335 passed, 17 skipped, 1 xfailed. hub/tests/test_migrations.py alone: 51 passed, 1 skipped. hub/tests/test_ui_build_stamp.py + test_ui_staleness.py: 15 passed, 1 skipped. Run it in the BACKGROUND — it exceeded 30 minutes on this machine, far longer than the 7 minutes the skill documents.",
     "mypy": "361 errors, 86 files — PRE-EXISTING, baselined, not a regression"
   },
-
   "traps": [
     "Do NOT run two pytest invocations concurrently in this repo. Doing so during prep produced a spurious 'no tests ran' AND a spurious '2385 skipped' — either of which reads as a green or as inherited breakage. Run one at a time.",
     "The Bash tool's cwd PERSISTS between calls. A bare `cd hub && ...` after a previous `cd hub` silently resolves wrong. Use absolute paths.",
@@ -158,7 +278,6 @@
     "Keep any .ps1 ASCII-only. PowerShell 5.1 reads a BOM-less UTF-8 file as ANSI and an em dash breaks quoting.",
     "A writing agent gets an isolated git worktree, so UNTRACKED files in the project directory are invisible to it."
   ],
-
   "read_first": [
     "openspec/changes/2026-08-18-one-shell-three-panels/tasks.md — section 1 is done and annotated; the 1->2->3 ordering is load-bearing.",
     "openspec/changes/2026-08-18-one-shell-three-panels/design.md — D1-D12. D6 is a WITHDRAWAL notice, not a decision.",

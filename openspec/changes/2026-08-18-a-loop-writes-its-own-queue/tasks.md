@@ -1,6 +1,6 @@
 # Tasks — A loop writes its own queue
 
-Sections 1-9 are implemented and verified (dated notes below); everything from section 10 onward is
+Sections 1-10 are implemented and verified (dated notes below); everything from section 11 onward is
 still a spec only, unchecked — CLAUDE.md: "Never mark a task complete on the strength of a plan
 existing."
 
@@ -651,16 +651,96 @@ existing."
 
 ## 10. Empty-queue telemetry (`hub/hub/scheduler.py`)
 
-- [ ] 10.1 At the point `_loop_stop_reason` reports "loop queue is empty" (design D6), check for an
+- [x] 10.1 At the point `_loop_stop_reason` reports "loop queue is empty" (design D6), check for an
       unread `Message` from the executor addressed to the loop's creator, or an unanswered `Question`
       in the firing's conversation. Persist and broadcast a new `loop_queue_exhausted` event
       (`{job_id, loop_id, pending_request}`) alongside the existing `loop_stopped` event — a second
       event, not a folded field, per design D6's stated reasoning.
-- [ ] 10.2 Tests: queue empties with no outstanding request → event's `pending_request` is null; queue
+- [x] 10.2 Tests: queue empties with no outstanding request → event's `pending_request` is null; queue
       empties with an unread message to the creator outstanding → event names it; queue empties with
       an unanswered question outstanding → event names it; the loop stops in every case (this
       requirement does not introduce a paused state — assert `job.enabled` is `False` and `Loop.
       stopped_at` is set exactly as `many-named-loops`'s existing stop path already does).
+
+      **2026-08-19, iteration 12.** New `_pending_loop_request(session, job, loop, exclude_run_id)`
+      in `hub/hub/scheduler.py`, called from `_do_fire_job`'s existing `if loop_stop_reason:` branch
+      (right after the existing `loop_stopped` persist+broadcast), gated on
+      `loop_stop_reason == "loop queue is empty"` specifically — the only one of
+      `_loop_stop_reason`'s two return strings (the other is "loop stop time reached (...)") that
+      means the queue drained rather than a deadline landing, re-confirmed by reading
+      `_loop_stop_reason` fresh this iteration.
+
+      **A deliberate deviation from the prior iteration's scouting note, recorded because it changes
+      what "the firing's conversation" resolves to.** The note (entry 11's log) proposed using the
+      `conversation` local `_do_fire_job` already builds for THIS firing. Re-reading `_do_fire_job`
+      fresh: that `conversation` is created unconditionally, before `_loop_stop_reason` even runs,
+      and — because task 8.1 refuses `session_mode="resume"` for a loop job's entire lifetime, not
+      just at creation — a loop job's `resume_session_id` is always `None`, so `new_conversation()`
+      always runs and every single firing gets a brand-new, still-empty `Conversation`. Checking
+      `Question.conversation_id == conversation.id` against THIS firing's own conversation would
+      therefore always find nothing — dead code that could never observe the state D6 exists to
+      surface. "The firing's conversation" has to mean the most recent EARLIER firing's conversation
+      instead: the one an `ask_user` call would actually have been asked in, if the loop's last real
+      execution asked one and nobody answered it. Implemented as a query for the most recent prior
+      `JobRun` for this job with a recorded `conversation_id`, excluding the current firing's own
+      `JobRun` by id, then an unanswered `Question` against that conversation.
+
+      Checked before the `Message` case, on the reasoning that an unanswered `ask_user` is a hard
+      block on the run that asked it — closer to "what this loop was actually waiting on" than mail
+      sitting unread — and D6 states no tiebreak for when both are outstanding; recorded as a design
+      decision, not inferred, and locked in by
+      `test_loop_queue_exhausted_event_prefers_the_question_when_both_are_outstanding`.
+
+      "Addressed to the creator" (the `Message` case) is the model's own `recipient` field — the
+      thing that actually decides whose inbox a message lands in — not a conversation match; only
+      the `Question` half of D6's sentence carries the "in the firing's conversation" qualifier
+      grammatically. The creator's agent name is resolved `Loop.created_by_run_id` →
+      `session.get(Run, ...)` → `Run.agent`, the identical shape `questions.py`'s
+      `_asking_run_has_ended` (line 44) already uses for a different row's `created_by_run_id` —
+      cited as precedent rather than a second pattern, per `next_action`'s instruction. The `Message`
+      query additionally filters `sender == job.agent` (the loop's own executor) so an unrelated
+      unread message to the same creator, from anyone else, is not mistaken for this loop's pending
+      request. `to` is `null` for the `Question` case (the model has no recipient/addressee field of
+      its own — a question is directed at whichever human is watching, not a named agent) and the
+      message's own `recipient` for the `Message` case. `reason` is `question.question` or
+      `message.subject or message.content`, truncated to a new `_LOOP_PENDING_REQUEST_REASON_CHARS =
+      300` — a small, separate constant from section 9's `_LOOP_BRIEFING_CHECKPOINT_CHARS = 4_000`,
+      since this is a one-line summary field on an event payload, not a full checkpoint body; same
+      "terse over verbose" reasoning, a different number for a different shape of content.
+
+      Tests, `hub/tests/test_scheduler.py`, extending the same `_make_job`/`_make_loop` fixtures:
+      `test_loop_queue_exhausted_event_fires_with_no_pending_request` (a drained queue with nothing
+      else outstanding — `pending_request` is `null`, and a regression-guard assertion that
+      `loop_stopped` still fires unchanged, for the same firing, alongside the new event);
+      `test_loop_queue_exhausted_event_names_an_unread_message_to_the_creator` (a `Run` row standing
+      in for the creator, a `Loop.created_by_run_id` pointing at it, and an unread `Message` from the
+      executor to the creator — asserts `kind`/`to`/`reason`/`created_at` all populated correctly);
+      `test_loop_queue_exhausted_event_names_an_unanswered_question_from_a_prior_firing` (a manually
+      inserted prior `JobRun` carrying a `conversation_id`, and an unanswered `Question` against that
+      same conversation — asserts the event names it, `to` is `null`); and
+      `test_loop_queue_exhausted_event_prefers_the_question_when_both_are_outstanding` (both an
+      unanswered question and an unread message present at once — asserts `kind == "question"` wins,
+      locking in the tiebreak decision above). All four also assert `job.enabled is False` and
+      `Loop.stopped_at is not None`, exactly as `many-named-loops`'s existing stop path already does
+      — this requirement does not introduce a paused state.
+
+      **Verification, measured:**
+      - `py -3.11 -m pytest hub/tests/test_scheduler.py -q` — **18 passed** (14 pre-existing + 4 new).
+      - `py -3.11 -m pytest hub/tests/test_jobs.py hub/tests/test_scheduler.py -q` — **50 passed, 1
+        skipped** — the other suite reading `AIJob`/`Loop` state this section also touches,
+        confirming section 8's refusal path is unaffected.
+      - `py -3.11 -m ruff check hub/hub/scheduler.py hub/tests/test_scheduler.py` — clean.
+      - `black --fast hub/hub/scheduler.py hub/tests/test_scheduler.py` — the test file needed
+        reformatting (line-wrap only, no logic change), reformatted and re-verified green; the
+        scheduler module was already formatted.
+      - `py -3.11 -m mypy hub/hub/scheduler.py`, filtered to lines attributed to the file — exactly
+        the same 6 error lines as `.claude/autonomous/mypy-baseline.txt` (2 `Result[Any].rowcount` +
+        4 pre-existing `import-untyped`) — **zero new errors**. `_pending_loop_request`'s `session`,
+        `job`, and `loop` parameters are explicitly typed, per the L7/L9 convention for a new helper.
+      - `npx openspec validate --changes --strict` (from the repo root) — 2/2.
+
+      No Hub restart this iteration: like sections 3-9, this section is verified entirely through
+      pytest against scheduler logic directly, with no UI or live-Hub surface to exercise.
 
 ## 11. `create_loop` MCP tool (`hub/hub/mcp_server.py`)
 

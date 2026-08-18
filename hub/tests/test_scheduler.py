@@ -22,10 +22,12 @@ from hub.db.models import (
     AIJob,
     Checkpoint,
     Conversation,
+    EventLog,
     InboundQueueEntry,
     JobRun,
     Loop,
     Message,
+    Question,
     Run,
     Task,
 )
@@ -852,3 +854,323 @@ async def test_non_loop_job_fired_content_is_byte_identical_to_job_message(
         ).scalar_one()
 
     assert entry.content == job.message == "hello from a scheduled job"
+
+
+@pytest.mark.asyncio
+async def test_loop_queue_exhausted_event_fires_with_no_pending_request():
+    """Task 10.1/10.2: the queue draining with nothing else outstanding still fires the new
+    `loop_queue_exhausted` event, with `pending_request` null — and the existing `loop_stopped`
+    event keeps firing exactly as before (a regression guard: this section adds a second event, it
+    does not replace or alter the first)."""
+    async with async_session_factory() as db:
+        job = await _make_job(db, suffix="exhausted-clean", agent="loop-agent-exhausted-clean")
+        loop = await _make_loop(
+            db, job_id=job.id, purpose="drain cleanly", stop_when_queue_empties=True
+        )
+        db.add(
+            Task(
+                id="task-loop-exhausted-clean-1",
+                project_id="proj-test",
+                title="finished",
+                status="approved",
+                loop_id=loop.id,
+            )
+        )
+        await db.commit()
+
+    scheduler = JobScheduler()
+    async with async_session_factory() as db:
+        fresh_job = await db.get(AIJob, job.id)
+        success = await scheduler._fire_job_internal(fresh_job, trigger="scheduled", session=db)
+
+    assert success is False
+
+    async with async_session_factory() as db:
+        refreshed_job = await db.get(AIJob, job.id)
+        assert refreshed_job.enabled is False
+        refreshed_loop = (await db.execute(select(Loop).where(Loop.job_id == job.id))).scalar_one()
+        assert refreshed_loop.stopped_at is not None
+
+        stopped_events = (
+            (
+                await db.execute(
+                    select(EventLog).where(
+                        EventLog.project_id == "proj-test", EventLog.event_type == "loop_stopped"
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert any(e.data.get("loop_id") == loop.id for e in stopped_events)
+
+        exhausted_events = (
+            (
+                await db.execute(
+                    select(EventLog).where(
+                        EventLog.project_id == "proj-test",
+                        EventLog.event_type == "loop_queue_exhausted",
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        matching = [e for e in exhausted_events if e.data.get("loop_id") == loop.id]
+
+    assert len(matching) == 1
+    assert matching[0].data["job_id"] == job.id
+    assert matching[0].data["pending_request"] is None
+
+
+@pytest.mark.asyncio
+async def test_loop_queue_exhausted_event_names_an_unread_message_to_the_creator():
+    """The `Message` case: mail from the loop's executor to its creator, still unread when the
+    queue drains, is named on the event. `to` is the `Message` model's own `recipient` field, not a
+    conversation match — only the `Question` half of D6's sentence carries a conversation
+    qualifier, grammatically."""
+    async with async_session_factory() as db:
+        creator_run = Run(
+            id="run-loop-exhausted-creator",
+            project_id="proj-test",
+            agent="loop-creator-agent",
+            status="completed",
+        )
+        db.add(creator_run)
+        await db.commit()
+
+        job = await _make_job(db, suffix="exhausted-message", agent="loop-agent-exhausted-message")
+        loop = await _make_loop(
+            db,
+            job_id=job.id,
+            purpose="wait on the creator",
+            stop_when_queue_empties=True,
+            created_by_run_id=creator_run.id,
+        )
+        db.add(
+            Task(
+                id="task-loop-exhausted-message-1",
+                project_id="proj-test",
+                title="finished",
+                status="approved",
+                loop_id=loop.id,
+            )
+        )
+        db.add(
+            Message(
+                id="msg-loop-exhausted-1",
+                project_id="proj-test",
+                sender="loop-agent-exhausted-message",
+                recipient="loop-creator-agent",
+                subject="need a decision",
+                content="need a decision on the next batch",
+                read=False,
+            )
+        )
+        await db.commit()
+
+    scheduler = JobScheduler()
+    async with async_session_factory() as db:
+        fresh_job = await db.get(AIJob, job.id)
+        success = await scheduler._fire_job_internal(fresh_job, trigger="scheduled", session=db)
+
+    assert success is False
+
+    async with async_session_factory() as db:
+        refreshed_job = await db.get(AIJob, job.id)
+        assert refreshed_job.enabled is False
+        refreshed_loop = (await db.execute(select(Loop).where(Loop.job_id == job.id))).scalar_one()
+        assert refreshed_loop.stopped_at is not None
+
+        exhausted_events = (
+            (
+                await db.execute(
+                    select(EventLog).where(
+                        EventLog.project_id == "proj-test",
+                        EventLog.event_type == "loop_queue_exhausted",
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        matching = [e for e in exhausted_events if e.data.get("loop_id") == loop.id]
+
+    assert len(matching) == 1
+    pending = matching[0].data["pending_request"]
+    assert pending["kind"] == "message"
+    assert pending["to"] == "loop-creator-agent"
+    assert pending["reason"] == "need a decision"
+    assert pending["created_at"] is not None
+
+
+@pytest.mark.asyncio
+async def test_loop_queue_exhausted_event_names_an_unanswered_question_from_a_prior_firing():
+    """The `Question` case. Loop jobs never resume a conversation — task 8.1 refuses
+    `session_mode="resume"` for the whole lifetime of a loop job, not just at creation — so THIS
+    firing's own conversation is always brand new and empty at the point the queue is found empty.
+    A pending `ask_user` has to be found in the most recent EARLIER firing's conversation instead,
+    via that firing's `JobRun.conversation_id`."""
+    async with async_session_factory() as db:
+        job = await _make_job(
+            db, suffix="exhausted-question", agent="loop-agent-exhausted-question"
+        )
+        loop = await _make_loop(
+            db, job_id=job.id, purpose="wait on an answer", stop_when_queue_empties=True
+        )
+        db.add(
+            Task(
+                id="task-loop-exhausted-question-1",
+                project_id="proj-test",
+                title="finished",
+                status="approved",
+                loop_id=loop.id,
+            )
+        )
+        db.add(
+            JobRun(
+                id="jobrun-loop-exhausted-question-prior",
+                job_id=job.id,
+                project_id="proj-test",
+                status="fired",
+                trigger="scheduled",
+                conversation_id="conv-loop-exhausted-question-prior",
+            )
+        )
+        db.add(
+            Question(
+                id="question-loop-exhausted-1",
+                project_id="proj-test",
+                from_agent="loop-agent-exhausted-question",
+                question="should the loop keep going past batch 3?",
+                answered=False,
+                conversation_id="conv-loop-exhausted-question-prior",
+            )
+        )
+        await db.commit()
+
+    scheduler = JobScheduler()
+    async with async_session_factory() as db:
+        fresh_job = await db.get(AIJob, job.id)
+        success = await scheduler._fire_job_internal(fresh_job, trigger="scheduled", session=db)
+
+    assert success is False
+
+    async with async_session_factory() as db:
+        refreshed_job = await db.get(AIJob, job.id)
+        assert refreshed_job.enabled is False
+        refreshed_loop = (await db.execute(select(Loop).where(Loop.job_id == job.id))).scalar_one()
+        assert refreshed_loop.stopped_at is not None
+
+        exhausted_events = (
+            (
+                await db.execute(
+                    select(EventLog).where(
+                        EventLog.project_id == "proj-test",
+                        EventLog.event_type == "loop_queue_exhausted",
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        matching = [e for e in exhausted_events if e.data.get("loop_id") == loop.id]
+
+    assert len(matching) == 1
+    pending = matching[0].data["pending_request"]
+    assert pending["kind"] == "question"
+    assert pending["to"] is None
+    assert pending["reason"] == "should the loop keep going past batch 3?"
+    assert pending["created_at"] is not None
+
+
+@pytest.mark.asyncio
+async def test_loop_queue_exhausted_event_prefers_the_question_when_both_are_outstanding():
+    """When an unanswered `Question` from a prior firing AND an unread `Message` to the creator
+    are both outstanding, the event names the `Question` — design decision recorded in
+    `tasks.md`'s 10.1/10.2 note: a `Question` is a hard block on the run that asked it, closer to
+    "what this loop was actually waiting on" than mail sitting unread, and D6 states no tiebreak."""
+    async with async_session_factory() as db:
+        creator_run = Run(
+            id="run-loop-exhausted-both-creator",
+            project_id="proj-test",
+            agent="loop-creator-agent-both",
+            status="completed",
+        )
+        db.add(creator_run)
+        await db.commit()
+
+        job = await _make_job(db, suffix="exhausted-both", agent="loop-agent-exhausted-both")
+        loop = await _make_loop(
+            db,
+            job_id=job.id,
+            purpose="wait on either",
+            stop_when_queue_empties=True,
+            created_by_run_id=creator_run.id,
+        )
+        db.add(
+            Task(
+                id="task-loop-exhausted-both-1",
+                project_id="proj-test",
+                title="finished",
+                status="approved",
+                loop_id=loop.id,
+            )
+        )
+        db.add(
+            JobRun(
+                id="jobrun-loop-exhausted-both-prior",
+                job_id=job.id,
+                project_id="proj-test",
+                status="fired",
+                trigger="scheduled",
+                conversation_id="conv-loop-exhausted-both-prior",
+            )
+        )
+        db.add(
+            Question(
+                id="question-loop-exhausted-both-1",
+                project_id="proj-test",
+                from_agent="loop-agent-exhausted-both",
+                question="which of the two should win?",
+                answered=False,
+                conversation_id="conv-loop-exhausted-both-prior",
+            )
+        )
+        db.add(
+            Message(
+                id="msg-loop-exhausted-both-1",
+                project_id="proj-test",
+                sender="loop-agent-exhausted-both",
+                recipient="loop-creator-agent-both",
+                subject="also waiting on this",
+                content="also waiting on this",
+                read=False,
+            )
+        )
+        await db.commit()
+
+    scheduler = JobScheduler()
+    async with async_session_factory() as db:
+        fresh_job = await db.get(AIJob, job.id)
+        success = await scheduler._fire_job_internal(fresh_job, trigger="scheduled", session=db)
+
+    assert success is False
+
+    async with async_session_factory() as db:
+        exhausted_events = (
+            (
+                await db.execute(
+                    select(EventLog).where(
+                        EventLog.project_id == "proj-test",
+                        EventLog.event_type == "loop_queue_exhausted",
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        matching = [e for e in exhausted_events if e.data.get("loop_id") == loop.id]
+
+    assert len(matching) == 1
+    assert matching[0].data["pending_request"]["kind"] == "question"
