@@ -1674,3 +1674,141 @@ specified, budget-request escalation built more crudely, cross-project runner re
 concrete enough that the operator may want them surfaced directly rather than only left inside the
 umbrella's own tasks file — noted here for the morning report. Runway to `stop_at`
 (2026-08-18T08:00+01:00) is roughly 2h15m.
+
+---
+
+## Iteration 20 — fifth 16.2 requirement-level mapping: `hub-interface-feel`
+
+Continued Q11/roadmap #8, the same pattern iterations 16–19 established: read a delta spec from
+`openspec/changes/2026-07-30-hub-native-experience/specs/`, work out where its concepts live in the
+current 31 `openspec/specs/`, verify any code-level claim against the live tree, write a dated note,
+tick nothing. This pass picked `hub-interface-feel` — nine requirements, none renamed content from a
+current spec of a similar name (no current spec is called that).
+
+**Why this one needed a different method than iterations 16–19.** The prior four passes each found
+their delta's requirements scattered across current specs by *content* — grep the delta's nouns
+(`skill`, `precedence`, `hop budget`) across `openspec/specs/` and something usually turned up, even
+if renamed or superseded. Grepping `hub-interface-feel`'s vocabulary the same way (`corner radius`,
+`elevation`, `touch target`, `tabular`, `variable font`, `subordinate`) returned **nothing** for six
+of nine requirements. That is not the same finding as iterations 18–19's "shipped but undocumented"
+— those still involved reading a spec's neighbourhood and recognising the shipped behaviour under
+different words. Here there was no neighbourhood to read; the delta describes design-token mechanics
+(CSS custom properties, a `cva()` button variant map, font imports) that a prose requirements
+document doesn't naturally host at all. So this pass changed method mid-mapping: for every
+requirement that grepped to nothing in `openspec/specs/`, it went straight to
+`hub/ui/src/index.css`, `hub/ui/src/components/ui/buttonVariants.ts`, and `hub/ui/src/api/*.ts` and
+checked the requirement against the code directly, the same standard iterations 18–19 already held
+themselves to before citing a line number — just applied first instead of last, because the spec-side
+search wasn't going to get there.
+
+**Findings, by requirement (nine total):**
+
+1. **Interactive state feedback** (hover/pressed/focus/reduced-motion/shared tokens) — already
+   well-documented. `hub-interaction-feedback/spec.md` (split from `hub-workspace-shell` by
+   `2026-08-04-hub-contextual-navigation`) covers this near-verbatim, including its own "gaining
+   emphasis never moves anything" and reduced-motion scenarios. No gap.
+
+2. **Single icon system, no blocking font/stylesheet** — documented, but narrower than the delta.
+   `hub-workspace-shell/spec.md:83-106` states the Lucide-only rule for seven named project-rail
+   actions specifically, not the interface globally. The global claim is true in code —
+   `Icon.tsx:67-77`'s own comment names exactly what the requirement worries about and says it was
+   fixed: "This previously wrapped the Material Symbols Rounded variable font, loaded from a
+   third-party stylesheet with `display=block` — which held every icon invisible until that network
+   request completed. Icons are now SVG components bundled with the app" — but no current spec states
+   this for the interface as a whole, only for the rail.
+
+3. **Typography self-hosted and variable, tabular figures** — shipped, zero spec text. `index.css:1-5`
+   states the intent as a comment ("Self-hosted variable fonts... Replaces the former
+   fonts.googleapis.com stylesheets") and `@fontsource-variable/dm-sans` is a genuine variable font
+   for UI text; `@fontsource/jetbrains-mono` is static-weight, which the requirement's own wording
+   permits — only "the UI typeface" is required to be variable, not the monospace one. `tabular-nums`
+   is applied at `:233-235` with a matching comment and used at two live-number call sites (`:605,
+   :613`).
+
+4. **Controls change appearance without changing layout** — shipped, zero spec text beyond the
+   general principle in finding 1. `buttonVariants.ts:6-19`'s own docstring names the mechanism as
+   deliberate: `border border-transparent` always present in the base class (no variant can opt out),
+   padding subtracts the border thickness so label insets read identical regardless of visibility.
+
+5. **Controls express press physically** — shipped, zero spec text, one scenario a partial match not
+   a clean one. `buttonVariants.ts:44-52`'s `primary` variant: `inset_0_1px_0_var(--lift-hi)` at rest,
+   `active:shadow-[inset_0_1px_0_var(--press-lo)]` on press — the top-edge highlight is replaced by an
+   inset shadow while pressed, exactly as specified; `disabled:opacity-[0.64] disabled:shadow-none
+   disabled:pointer-events-none` in the shared base class removes elevation and reactivity together
+   for disabled controls. The "tinted, not neutral" elevation scenario only partially holds:
+   `--lift-hi`/`--press-lo` (`index.css:53-54,129-130`) are fixed neutral white/black alpha values,
+   identical across `primary`, `ghost`, `outline`, and `destructive` — not a per-colour token.
+   Composited over each variant's own background colour they read as a tint of that background rather
+   than plain grey, so the visible effect happens, but by alpha-blending accident rather than a
+   mechanism built to be "tinted by that colour."
+
+6. **Corner radius distinguishes chrome from content** — shipped, zero spec text. `index.css:168-176`:
+   "Radius and motion are mode-independent. One base, derived steps" — `--radius: 10px` with every
+   other step a `calc()` off it, and a separately-declared `--radius-content: 24px` ("Self-contained
+   results are markedly softer than chrome") applied to result cards while control radii stay in an
+   8-14px band. Not spot-checked this pass: the nested-concentric-corner scenario (an inset
+   decoration's radius reduced by the separating thickness) — flagged rather than assumed true.
+
+7. **Iconography subordinate to its label** — shipped, zero spec text.
+   `buttonVariants.ts:34`, `"[&_svg:not([class*='opacity-'])]:opacity-80"` — every icon inside a
+   button defaults to 80% opacity, and the selector explicitly spares any icon that already carries
+   its own `opacity-*` class, matching the requirement's "deliberate emphasis is preserved" scenario
+   precisely.
+
+8. **Pointer targets adequate on coarse pointers** — shipped, zero spec text.
+   `buttonVariants.ts:36-40`: a `pointer-coarse:after` pseudo-element sized `min-h-11 min-w-11` (44px,
+   the platform minimum) centered on the control, gated on `pointer-coarse` media state so the
+   control's own box — and its fine-pointer visual size — is untouched. Both scenarios match exactly.
+
+9. **Live state from the event stream, not polling** — the one requirement this pass found narrowed
+   by a considered, written-down decision rather than left undocumented or dropped. The delta is
+   absolute: "The interface MUST NOT poll REST endpoints on a fixed interval to discover state that
+   the event stream already reports." Grepped `refetchInterval` across every file in
+   `hub/ui/src/api/` and `hooks/`: exactly three hits, no others —
+   `usePendingPermissionRequests` (`api/permissions.ts:21-51`, 3s), `useQuestions`
+   (`api/questions.ts:39-49`, 3s), `usePendingUnaskedQuestions` (`api/unaskedQuestions.ts:16-40`, 5s).
+   All three already invalidate on SSE and layer a fixed-interval refetch *on top*, and each carries
+   its own comment explaining why: a permission request blocks a running agent
+   ("arriving late is the same as not arriving, and a dropped event would leave an agent waiting for a
+   card that never appeared"), a blocking question the same way, and an unasked-question notice
+   because "a dropped event would leave the operator looking at a finished conversation with no sign
+   that the agent is waiting on them." Every other query hook checked (`agents.ts`, `tasks.ts`,
+   `messages.ts`, `agentChat.ts`) carries no `refetchInterval` at all — the delta's rule holds
+   everywhere except these three, and all three read the same way iteration 19's runner
+   cross-project-reuse reversal did: a later, considered decision with its rationale left in the code,
+   not drift.
+
+**What was written, not implemented.** One dated note added under 16.2 in
+`openspec/changes/2026-07-30-hub-native-experience/tasks.md` (the only file touched this iteration,
+96 lines), recording all nine requirements — one already documented, one documented-but-narrower,
+five shipped-with-zero-spec-text, one deliberately narrowed with its own rationale — with file:line
+evidence and an updated tally. Five of the nine remaining unmapped specs are now done
+(`agent-composer`, `agent-inbound-queue`, `agent-conversation-timeline`, `agent-identity-and-skills`,
+`hub-interface-feel`); three remain (`hub-native-runtime`, `hub-visual-language`, plus re-confirming
+`agent-tool-surface`).
+
+No checkbox ticked, no code changed, no archiving attempted — consistent with the file's own
+reconciliation rule and `decisions_for_user` D1 in `STATE.json`.
+
+**Verified before committing:** `git diff --stat` on the touched file: 96 insertions, one file.
+`git status --short` showed only that plus the carried-forward `spec/` and `hub/seed_taste_doc.py`
+scratch, staged nothing from them. Every cited line number (`index.css`, `buttonVariants.ts`,
+`Icon.tsx`, the three API hook files) was grepped and read live immediately before writing this
+entry — none carried over from memory of an earlier session. `refetchInterval` grep was run against
+the whole `api/` and `hooks/` directories, not just the three files cited, specifically to be able to
+state "no others" with evidence rather than by omission. `openspec validate` was not run, for the
+same reason as iterations 16–19: `tasks.md` is prose/checklist, outside that validator's
+schema-checked scope.
+
+**Tree state before commit:** `openspec/changes/2026-07-30-hub-native-experience/tasks.md` modified
+(1 new note, 96 lines); `.claude/autonomous/STATE.json` updated (iteration, heartbeat, Q11 done_note,
+next_action); `spec/` and `hub/seed_taste_doc.py` (prior-session scratch) untouched.
+
+**Queue status:** Q1–Q10 done. Q11 — roadmap #7 stays parked (three failure modes on record);
+roadmap #8 now has five of nine remaining delta-spec mappings done, three left
+(`hub-native-runtime`, `hub-visual-language`, `agent-tool-surface` re-check), listed in the 16.2 note
+for whoever continues it. This iteration's polling-vs-event-stream finding (three query hooks keep a
+fixed refetch interval on purpose alongside SSE) is a second instance of the same "considered later
+decision, not drift" pattern iteration 19 found once — worth surfacing next to that one in the
+morning report rather than treating either as an isolated curiosity. Runway to `stop_at`
+(2026-08-18T08:00+01:00) is roughly 2h15m.

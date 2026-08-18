@@ -2111,6 +2111,102 @@ being built twice.*
 > `hub-native-runtime`, `hub-visual-language`, plus re-confirming `agent-tool-surface` at requirement
 > level per the 2026-08-18 note above.
 
+> **Update (2026-08-18, iteration 20) — fifth 16.2 requirement-level mapping:
+> `hub-interface-feel`.** No current spec carries that name. Its nine requirements are visual-system
+> rules (typography, icons, motion, layout stability, elevation, radius, icon prominence, touch
+> targets, event-driven state) rather than a single feature, so this pass checked each one against
+> `hub/ui/src/index.css`, `hub/ui/src/components/ui/buttonVariants.ts`, and `hub/ui/src/api/` directly
+> — the delta describes design-system mechanics that live in CSS/token files, not just component
+> markup, and grepping `openspec/specs/` alone (as prior passes did first) turned up almost nothing
+> because most of this is undocumented rather than renamed.
+>
+> **One requirement is well-documented already**, confirmed to still match:
+> - Interactive state feedback (hover/pressed/focus, eased transitions, reduced-motion, shared
+>   semantic tokens): `hub-interaction-feedback/spec.md` (split out of `hub-workspace-shell` by
+>   `2026-08-04-hub-contextual-navigation`) covers this requirement almost verbatim, including its own
+>   "gaining emphasis never moves anything" and reduced-motion scenarios.
+>
+> **One requirement is partially documented**, scoped narrower than the delta:
+> - "Icons render from a single system without blocking": `hub-workspace-shell/spec.md:83-106` states
+>   the Lucide-only rule but only for the project rail's seven named actions, not the interface as a
+>   whole. The broader claim is true in code — `hub/ui/src/components/common/Icon.tsx:67-77`'s own
+>   comment: "This previously wrapped the Material Symbols Rounded variable font, loaded from a
+>   third-party stylesheet with `display=block` — which held every icon invisible until that network
+>   request completed. Icons are now SVG components bundled with the app" — but no current spec states
+>   it globally.
+>
+> **Five requirements are shipped and verified live in code but have zero requirement text anywhere
+> in the current 31 specs** — the same undocumented-but-shipped pattern iterations 18 and 19 each
+> found, now the majority outcome for this spec rather than the exception:
+> - *Typography self-hosted and variable, tabular figures for live numbers.*
+>   `hub/ui/src/index.css:1-5`, comment: "Self-hosted variable fonts. Bundled by Vite — no third-party
+>   request on the render path... Replaces the former fonts.googleapis.com stylesheets" —
+>   `@fontsource-variable/dm-sans` (a true variable font) for UI text,
+>   `@fontsource/jetbrains-mono` for monospace (static weights, which the requirement's wording
+>   permits — only the UI typeface is required to be variable). `tabular-nums` applied at
+>   `index.css:233-235` with its own comment, "Live numeric readouts must not shift horizontally as
+>   digits change," plus two call sites (:605, :613).
+> - *Controls change appearance without changing layout.* `buttonVariants.ts:6-19`'s own docstring
+>   states the mechanism as a design rule, not an incidental detail: `border border-transparent` is
+>   always present in the base class so no variant can opt out, and horizontal padding subtracts the
+>   border thickness so label insets look identical with or without a visible border — this is the
+>   same principle `hub-interaction-feedback/spec.md`'s "gaining emphasis never moves anything"
+>   states, but for controls specifically (not just navigation rows) and with the concrete mechanism,
+>   which no current spec names.
+> - *Controls express press physically.* `buttonVariants.ts:44-52` (`primary` variant): lit from above
+>   at rest via `shadow-[inset_0_1px_0_var(--lift-hi),...]`, and `active:shadow-[inset_0_1px_0_var(--press-lo)]`
+>   on press — the resting top-edge highlight is replaced by an inset shadow while pressed, matching
+>   the requirement exactly; `disabled:opacity-[0.64] disabled:shadow-none disabled:pointer-events-none`
+>   in the shared base class removes elevation and reactivity together. One scenario is a partial
+>   match, not a clean one: "elevation is tinted, not neutral" — `--lift-hi`/`--press-lo`
+>   (`index.css:53-54,129-130`) are fixed white/black alpha values, identical across `primary`,
+>   `ghost`, `outline`, and `destructive` variants, not a per-colour token. Composited over each
+>   variant's own background they read as a tint of that background rather than neutral grey, so the
+>   visible effect the scenario asks for happens — but through alpha-blending over whatever colour is
+>   underneath, not through a mechanism that is "tinted by that colour" by design intent.
+> - *Corner radius distinguishes chrome from content.* `index.css:168-176`, comment: "Radius and
+>   motion are mode-independent. One base, derived steps" — `--radius: 10px` with `--radius-sm/md/lg/xl`
+>   all `calc()` off it, and `--radius-content: 24px` (comment: "Self-contained results are markedly
+>   softer than chrome") applied to result cards while control radii stay in the 8-14px band. The
+>   nested-concentric-corner scenario (decoration inset within a rounded element reduced by the
+>   separating thickness) was not spot-checked this pass — flagged rather than assumed.
+> - *Iconography is subordinate to its label.* `buttonVariants.ts:34`,
+>   `"[&_svg:not([class*='opacity-'])]:opacity-80"` — every icon inside a button renders at 80%
+>   opacity by default, and the selector explicitly excludes any icon that already carries an
+>   `opacity-*` class, which is exactly the requirement's "deliberate emphasis is preserved" scenario.
+> - *Pointer targets are adequate on coarse pointers.* `buttonVariants.ts:36-40`: a
+>   `pointer-coarse:after` pseudo-element sized `min-h-11 min-w-11` (44px, the platform minimum)
+>   centered on the control, present only under `pointer-coarse` media state — the control's own box
+>   (and therefore its fine-pointer visual size) is untouched, matching both scenarios precisely.
+>
+> **One requirement was not carried forward as an absolute rule — it was deliberately narrowed to a
+> "prefer events, but poll as a backstop" rule for exactly the cases where a dropped event is costly,
+> confirmed by comments the implementers themselves left:**
+> - "Live state is driven by the event stream, not by polling. The interface MUST NOT poll REST
+>   endpoints on a fixed interval to discover state that the event stream already reports." Grepped
+>   `refetchInterval`/`setInterval` across `hub/ui/src/api/` and `hooks/`: three query hooks combine
+>   SSE invalidation with a fixed-interval `refetchInterval` on top of it, not instead of it —
+>   `usePendingPermissionRequests` (`api/permissions.ts:21-51`, 3s, comment: "A run blocks while one
+>   of these is pending and gives up after its own timeout, so this refetches on a short interval as
+>   well as on SSE: arriving late is the same as not arriving, and a dropped event would leave an
+>   agent waiting for a card that never appeared"), `useQuestions` (`api/questions.ts:39-49`, 3s,
+>   comment: "An agent blocks on a question it asked, so arriving late is close to not arriving. SSE
+>   already invalidates this key; the interval is the backstop for a dropped event"), and
+>   `usePendingUnaskedQuestions` (`api/unaskedQuestions.ts:16-40`, 5s, comment: "nothing is blocked on
+>   these... they still refetch on an interval as well as on SSE, because a dropped event would leave
+>   the operator looking at a finished conversation with no sign that the agent is waiting on them").
+>   All three are operator-in-the-loop surfaces where a silently-dropped SSE event has an outsized
+>   cost (a blocked agent, or a finished run nobody knows is waiting) — this reads the same way
+>   iteration 19's runner cross-project reversal did: a considered, written-down later decision, not
+>   drift. Every other query hook checked (`agents.ts`, `tasks.ts`, `messages.ts`,
+>   `agentChat.ts`) carries no `refetchInterval`, so the delta's rule holds everywhere except these
+>   three explicitly-justified exceptions.
+>
+> Five of the nine remaining unmapped specs are now done (`agent-composer`, `agent-inbound-queue`,
+> `agent-conversation-timeline`, `agent-identity-and-skills`, `hub-interface-feel`). Three remain:
+> `hub-native-runtime`, `hub-visual-language`, plus re-confirming `agent-tool-surface` at requirement
+> level per the 2026-08-18 note above.
+
 - [ ] 16.1 Confirm every scenario in the ten delta specs is exercised.
 - [ ] 16.2 Sync delta specs into `openspec/specs/`; reconcile `agent-stream-events`,
       `runtime-diagnostics`, and `agent-conversation-handoff` with their new behaviour.
