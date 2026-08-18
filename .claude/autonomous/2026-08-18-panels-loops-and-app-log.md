@@ -500,3 +500,75 @@ checked off.
 Committed, pushed. `current`/`next_action` now point at **L4** (declaring a source document on loop
 creation, tasks 4.1-4.2) — the queue's own written order, continuing straight through the L-series
 before returning to the panel change at P4 per `pre_authorised`.
+
+## Entry 6 — iteration 6: L4, declaring a source document on loop creation (2026-08-18 23:05-23:19)
+
+Fresh process. `git log` matched `226518f` exactly, tree clean. Reread design D1 (per the instruction
+not to skip it) and D2 (the `create_loop`-vs-widened-`create_job` decision), since D2 turned out to be
+load-bearing for a scope question 4.1's own text does not answer: whether `spec_document_id` alone
+should opt a plain job into being a loop via `POST /jobs`. D2 settles it — no. Only the agent-facing
+`create_loop` tool (still open, L11) states the stricter contract; `POST /jobs` "keeps accepting a job
+with `purpose` set and no stop condition exactly as it does today."
+
+**Work done: L4 — tasks 4.1-4.2 of `2026-08-18-a-loop-writes-its-own-queue`.**
+
+`JobCreate` and `JobUpdate` (`hub/hub/schemas/jobs.py`) both gained `spec_document_id: Optional[str]`.
+A new `_check_spec_document_conflict()` helper in `hub/hub/api/v1/jobs.py`, placed beside the existing
+`_loop_opts_in()`, queries `Loop` scoped to `project_id` and raises `409` naming the conflicting loop's
+id — grepped the file for its existing "Job with ID '{id}' already exists" 409 first and matched that
+tone rather than inventing a new shape, per the instruction. Wired into `create_job` (checked before
+the `Loop` insert, and only inside the existing loop-opt-in branch — a plain `spec_document_id` with no
+`purpose`/`stop_at`/`stop_when_queue_empties` still does not create a loop, per D2 above) and into
+`update_job` (checked with `exclude_loop_id=loop.id`, so a no-op re-declare of a loop's own document
+does not 409 against itself — read literally from 4.1's "not just DB layer" framing, which only makes
+sense if a legitimate re-PATCH of your own document is expected to succeed). `update_job`'s existing
+`loop_fields_supplied` gate (four fields) widened to five; `spec_document_id` alone still does not opt
+a *plain* job into a loop via PATCH either, gated the same way `stop_reason` already is, for the same
+D2 reason. `create_job`'s `Loop` insert also gained an `IntegrityError` catch as a race-condition
+backstop behind the pre-check, mirroring the existing pattern immediately above it in the same
+function for the job-id conflict — not asked for explicitly, but cheap and consistent with the file's
+own established style rather than leaving the DB-layer unique constraint as the only guard under a
+race.
+
+**Tests, `hub/tests/test_jobs.py`** (grepped for `purpose=` and the `POST /jobs` route first, per the
+instruction, rather than guessing a file — confirmed this is where every existing loop test already
+lives). Six new tests: the three named in 4.2 exactly —
+`test_declaring_a_source_document_on_loop_creation_round_trips` (round-trips via a direct `Loop` row
+read through `async_session_factory`, matching `test_spec_declared_tasks.py`'s established direct-DB
+pattern, since `LoopSummary` does not expose `spec_document_id` in JSON — checked `schemas/jobs.py`
+first rather than assuming it would), `test_a_second_loop_declaring_the_same_document_is_refused`
+(409, first loop's id asserted as a substring of `detail`), and
+`test_a_loop_can_still_be_created_with_no_source_document` (field omitted, `Loop.spec_document_id is
+None` on the row) — plus three more covering the PATCH side of 4.1's own code, which the task list
+does not name but which would otherwise have shipped unverified since `JobUpdate` gained the field
+too: `test_patch_declares_a_source_document_on_an_existing_loop`,
+`test_patch_declaring_a_claimed_document_is_refused`, and
+`test_patch_re_declaring_your_own_document_is_not_a_conflict` (the `exclude_loop_id` no-op case).
+
+**Verification, measured:**
+- `py -3.11 -m pytest hub/tests/test_jobs.py -q` — **28 passed, 1 skipped** (the skip is the
+  pre-existing `CRONITER_AVAILABLE` guard, unrelated to this change).
+- `py -3.11 -m pytest hub/tests/test_scheduler.py hub/tests/test_spec_declared_tasks.py -q` — **18
+  passed** — the other files reading `Loop`/loop-job creation, confirming nothing there assumed
+  `spec_document_id` never exists on a row.
+- `ruff check` on all three touched files — clean. `black --check` — reformatted `jobs.py` once (a
+  long `select(...)` line wrapped, and a stray two-fragment f-string in the new helper collapsed into
+  one), reverified clean after.
+- `mypy hub/hub/api/v1/jobs.py hub/hub/schemas/jobs.py` — ran, then filtered output to lines starting
+  with the two touched file paths (mypy's own transitive-import chasing otherwise surfaces ~289
+  pre-existing errors in unrelated files it pulls in, which would read as a regression if not
+  filtered) — **zero lines attributed to either touched file**.
+- `npx openspec validate --changes --strict` — 2/2 still pass, both before and after the `tasks.md`
+  edit.
+
+**Not done, correctly deferred:** section 5 (creator authorship gate on `create_task`,
+`hub/hub/api/v1/tasks.py` + `mcp_server.py`) is next-in-queue — `next_action` explicitly said not to
+start it this iteration, and it is a materially different surface (task creation, not loop creation)
+from what this iteration touched.
+
+Marked 4.1-4.2 done in `tasks.md`, including the D2-scope reasoning and the PATCH-side tests the task
+text didn't name but the code required, in the dated-note style sections 1-3 already established.
+Corrected the file's own top-of-file summary line ("Sections 1-3" → "Sections 1-4").
+
+Committed, pushed. `current`/`next_action` now point at **L5** (creator authorship gate on
+`create_task`, tasks 5.1-5.4) — the queue's own written order, continuing through the L-series.

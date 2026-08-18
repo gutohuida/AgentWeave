@@ -21,6 +21,10 @@ class JobCreate(BaseModel):
     purpose: Optional[str] = Field(default=None, max_length=4000)
     stop_at: Optional[datetime] = None
     stop_when_queue_empties: bool = False
+    # The loop's source document (design D1). Nullable — a loop need not declare one. Enforced
+    # unique across loops at the route layer (409) and the DB layer (`Loop.spec_document_id`'s own
+    # `unique=True`), not just one or the other.
+    spec_document_id: Optional[str] = Field(default=None, max_length=64)
 
     model_config = {"extra": "forbid"}
 
@@ -44,6 +48,7 @@ class JobUpdate(BaseModel):
     stop_at: Optional[datetime] = None
     stop_when_queue_empties: Optional[bool] = None
     stop_reason: Optional[str] = Field(default=None, max_length=4000)
+    spec_document_id: Optional[str] = Field(default=None, max_length=64)
 
     model_config = {"extra": "forbid"}
 

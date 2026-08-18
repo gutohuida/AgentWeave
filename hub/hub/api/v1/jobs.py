@@ -95,6 +95,30 @@ def _loop_opts_in(purpose: Optional[str], stop_at, stop_when_queue_empties: Opti
     return purpose is not None or stop_at is not None or stop_when_queue_empties is True
 
 
+async def _check_spec_document_conflict(
+    session: AsyncSession,
+    project_id: str,
+    spec_document_id: Optional[str],
+    *,
+    exclude_loop_id: Optional[str] = None,
+) -> None:
+    """Design D1: a document already claimed by one loop cannot be claimed by a second.
+
+    A no-op re-declare of a loop's own existing document must not 409 against itself, hence
+    `exclude_loop_id` on the update path.
+    """
+    if spec_document_id is None:
+        return
+    q = select(Loop).where(Loop.project_id == project_id, Loop.spec_document_id == spec_document_id)
+    result = await session.execute(q)
+    conflicting = result.scalars().first()
+    if conflicting is not None and conflicting.id != exclude_loop_id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"document '{spec_document_id}' is already claimed by loop '{conflicting.id}'",
+        )
+
+
 async def _batch_loop_summaries(
     session: AsyncSession, job_ids: List[str]
 ) -> Dict[str, LoopSummary]:
@@ -238,6 +262,7 @@ async def create_job(
     # supplied non-default.
     loop_summary: Optional[LoopSummary] = None
     if _loop_opts_in(body.purpose, body.stop_at, body.stop_when_queue_empties):
+        await _check_spec_document_conflict(session, project_id, body.spec_document_id)
         loop = Loop(
             id=f"loop-{short_id()}",
             project_id=project_id,
@@ -245,10 +270,18 @@ async def create_job(
             purpose=body.purpose or "",
             stop_at=body.stop_at,
             stop_when_queue_empties=body.stop_when_queue_empties,
+            spec_document_id=body.spec_document_id,
             created_by_run_id=run_identity,
         )
         session.add(loop)
-        await session.commit()
+        try:
+            await session.commit()
+        except IntegrityError as e:
+            await session.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(f"document '{body.spec_document_id}' is already claimed by another loop"),
+            ) from e
         loop_summary = LoopSummary(
             id=loop.id,
             purpose=loop.purpose,
@@ -373,14 +406,17 @@ async def update_job(
     if job is None or job.project_id != project_id:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    # Loop fields (design D6): supplying any of the four on a job with no `Loop` row is a 400
+    # Loop fields (design D6): supplying any of the five on a job with no `Loop` row is a 400
     # unless this update is the one that opts the job in for the first time (mirrors create_job's
-    # "at least one field" rule).
+    # "at least one field" rule). `spec_document_id` alone does NOT opt a job in (design D2 keeps
+    # that stricter contract on the agent-facing `create_loop` tool only) — it is still gated on an
+    # existing loop or one of the other three fields alongside it, same as `stop_reason`.
     loop_fields_supplied = (
         body.purpose is not None
         or body.stop_at is not None
         or body.stop_when_queue_empties is not None
         or body.stop_reason is not None
+        or body.spec_document_id is not None
     )
     if loop_fields_supplied:
         loop_result = await session.execute(select(Loop).where(Loop.job_id == job_id))
@@ -401,6 +437,11 @@ async def update_job(
                 purpose="",
             )
             session.add(loop)
+        if body.spec_document_id is not None:
+            await _check_spec_document_conflict(
+                session, project_id, body.spec_document_id, exclude_loop_id=loop.id
+            )
+            loop.spec_document_id = body.spec_document_id
         if body.purpose is not None:
             loop.purpose = body.purpose
         if body.stop_at is not None:
