@@ -1142,3 +1142,114 @@ instead of surfacing as one more red result buried inside the pytest step's outp
 closed or addressed; only #7 (StaticPool race / fixture overhead) remains, still deliberately not
 attempted a third time this iteration for the reasons `known_debts.fixture-overhead-hits-the-staticpool-race`
 already records. Runway to `stop_at` (2026-08-18T08:00+01:00) is still roughly 3.5 hours.
+
+---
+
+## Iteration 15 — Q11: third attempt at the StaticPool race, reverted; a new failure mode found, not a fix
+
+Started fresh, verified branch (`autonomous/2026-08-18-the-app-feels-alive`) and `git log` matched
+`STATE.json`'s `iteration: 14` claim exactly (`835c3ce` heartbeat back-date on top of `e182307`, the
+CI environment-sanity commit). Clock at start: `2026-08-18T04:27:03+01:00`, ~3h33m of runway to
+`stop_at`. Tree clean apart from the carried-forward `spec/` and `hub/seed_taste_doc.py` scratch.
+
+`next_action` pointed at the one remaining Q11 item, roadmap #7 (the StaticPool race / fixture
+overhead), explicitly framed as the deepest item with two prior failed attempts on record and
+permission to park it if runway got short. Runway was not short, so attempted it — this entry
+records a third failure, of a new kind, and the decision to revert rather than push a partially
+understood fix onto the branch.
+
+**What was built.** Read `known_debts.staticpool-fixture-race` and
+`known_debts.fixture-overhead-hits-the-staticpool-race` in full before writing anything, per their own
+instruction not to re-derive a diagnosis seven-plus prior theories already died on. Both debts agree
+the real fix needs two halves together: (a) a file-backed test `DATABASE_URL` instead of `:memory:`,
+so each session gets its own real connection from `AsyncAdaptedQueuePool` instead of one shared
+`StaticPool` connection racing itself, plus WAL + `busy_timeout` pragmas so concurrent file access
+doesn't immediately fail; and (b) session-scoped schema creation, so `_run_alembic_upgrade()`'s 70+
+migrations run once per test *session* rather than once per *test* — iteration 12's attempt did only
+half of (b) (create_all-only, no alembic, still on `:memory:`) and produced 399 errors; the plain
+"file-backed alone" shape is on record as having hung the suite for 55 minutes, almost certainly
+because *every one of ~2350 tests* would otherwise re-run the full alembic chain against a real file.
+
+Implemented both halves together this time:
+- `hub/hub/db/engine.py`: a `sqlalchemy.event.listens_for(engine.sync_engine, "connect")` hook setting
+  `PRAGMA journal_mode=WAL` and `PRAGMA busy_timeout=5000` on every new connection, gated on
+  `"sqlite" in database_url and ":memory:" not in database_url` so production (already file-backed,
+  already on `AsyncAdaptedQueuePool`) picks it up too and nothing changes for `:memory:` callers.
+  `init_db()` split into `_create_schema()` (the `create_all` + `_run_alembic_upgrade()` half) and
+  `_bootstrap_data()` (the project/key/operator-credential/runner/charter seeding half) — same split
+  iteration 12 already tried, but this time paired with the file-backed switch below rather than used
+  alone against `:memory:`.
+- `hub/tests/conftest.py`: `DATABASE_URL` now a pid-suffixed temp file
+  (`%TEMP%/agentweave_hub_test_<pid>.db`) instead of `:memory:`. A new session-scoped autouse fixture
+  calls `_create_schema()` exactly once. The per-test `app` fixture no longer does
+  `drop_all`/`create_all`/`init_db()`; it deletes every table's rows (`reversed(Base.metadata.sorted_tables)`,
+  respecting FK order) and calls `_bootstrap_data()` to re-seed, keeping the schema itself untouched
+  for the whole session. A session-scoped `_cleanup_test_db` fixture removes the db file plus its
+  `-wal`/`-shm`/`-journal` sidecars at teardown.
+
+**It does not cleanly work, and the failure is not the one that was expected.** Ran
+`tests/test_agent_trigger_overrides.py` (the file holding the `xfail(strict=False)` test this whole
+debt is named after) in isolation, three times in a row: every run reported `1 xfailed, 1 xpassed` for
+that *single* test, i.e. pytest emitted TWO separate outcome lines
+(`tests/test_agent_trigger_overrides.py::test_a_conversation_whose_model_changed_attributes_usage_per_turn XPASS`
+then the identical nodeid again as `XFAIL`) for one collected item — confirmed via `--collect-only`
+that only one test is actually collected. This is not the documented failure (a silently lost commit);
+it is a NEW symptom. Isolated the cause by disabling just the WAL/`busy_timeout` listener
+(`if False and ...`) and re-running: the double-report persisted identically, so it is not
+WAL-specific — merely switching off `:memory:`/`StaticPool` onto a real per-session connection pool
+is enough to trigger it, on its own, regardless of the pragmas. Most likely mechanism (not fully
+confirmed): pytest 9's built-in `unraisableexception`/`threadexception` plugins turning a background
+asyncio task's now-genuinely-concurrent exception (something that could not surface under the single
+shared `StaticPool` connection's accidental serialization) into a second, xfail-marked-so-non-fatal
+report for the same node. Ran the same file alongside three others (`test_agent_trigger.py`,
+`test_jobs.py`, `test_worker.py`, 91 tests collected) and the double-report did NOT reproduce that
+time (`89 passed, 1 skipped, 1 xpassed`, no `xfailed`) — genuinely non-deterministic across runs, the
+signature of a timing race rather than a deterministic bug, which is consistent with switching pools
+having changed the race's shape rather than removed it.
+
+**A second, independent, fully deterministic bug surfaced in the same run:** the session-scoped
+cleanup fixture failed with `PermissionError: [WinError 32] The process cannot access the file because
+it is being used by another process` trying to `unlink()` the temp db — the engine's connection pool
+was never disposed (`await engine.dispose()`) before teardown, so Windows still held the file open.
+Fixable (dispose the engine first), but left unfixed since the whole approach was reverted.
+
+**Reverted, not repaired.** `git checkout -- hub/hub/db/engine.py hub/tests/conftest.py`. Re-ran
+`tests/test_agent_trigger_overrides.py` alone afterward to confirm the tree is back to documented
+baseline behaviour: `5 passed, 1 xpassed` (no `xfailed` this run — consistent with the xfail reason's
+own text, "this machine won it every time"). Sixteen leftover
+`%TEMP%/agentweave_hub_test_*.db(-wal/-shm)` files from the experiment's various runs were deleted
+(outside the repo, in the OS temp directory, not tracked by git — cleanup for hygiene, not required
+for tree cleanliness).
+
+**Why this was not pushed further this iteration.** The double-report artifact breaks the exact
+invariant every prior iteration's verification relied on (`passed + skipped + xfailed + ... ==
+--collect-only`'s count) in a way that is non-deterministic and not understood — landing it and
+declaring the suite "green" would risk silently making future verification unreliable across all 2349
+tests, not just the one test that happened to surface it here. That is a worse outcome than a third
+recorded failure. `known_debts` already establishes the norm of stopping at understanding-plus-revert
+rather than pushing a partially-diagnosed change through the full suite; followed that norm rather than
+spending the remaining runway chasing the exact plugin mechanism live.
+
+**What the next attempt needs, concretely, that this one didn't have:**
+1. Diagnose the double-report mechanism directly rather than guessing — run the isolated failing test
+   under `python -X dev` or with `-p no:unraisableexception -p no:threadexception` to see if either
+   flag makes the second report disappear, which would confirm the mechanism above; if confirmed, find
+   *which* background task raises and why the new pool makes that possible.
+2. Call `await engine.dispose()` in the cleanup fixture before unlinking the file (the deterministic
+   Windows bug above).
+3. Only after (1) is understood, re-run enough of the suite (chunked, given the ~600s command cap) to
+   confirm the collected-count invariant holds everywhere, not just in the one file this iteration
+   touched — the non-reproduction in the 91-test combined run means a single-file check is not enough
+   evidence either way.
+
+**Tree state:** clean. `hub/hub/db/engine.py` and `hub/tests/conftest.py` match `origin`. `spec/` and
+`hub/seed_taste_doc.py` (prior-session scratch) untouched.
+
+**Queue status:** Q1–Q10 done. Q11 (Tier 2/3 runway) — roadmap #7 now has three recorded failed
+attempts (55-minute hang; 399 errors; this iteration's non-deterministic double-report). Runway to
+`stop_at` (2026-08-18T08:00+01:00) is still roughly 3h15m. Given three independent failure modes now
+on record for the same debt and no code changes safe to land, the next iteration should treat Q11 as
+parked pending a human decision on whether it is worth a fourth attempt, and pick from what remains of
+the roadmap document or another self-directed task instead, per the queue's own "do not leave a
+half-migration in the tree at 08:00" instruction — there is no half-migration here, the tree is clean,
+but roadmap #7 itself should not be attempted a fourth time blind.
