@@ -230,3 +230,153 @@ live it produced three defects in an hour, so a live loop trial should be assume
 
 Q5 marked done; `current` is now Q6 (author the openspec change), with `next_action` pointing at the
 exploration as its input and warning it not to re-derive it.
+
+## Entry 4 — Q1 merged, Q2/Q3/Q4 fixed and tested, and a concurrency lesson
+
+**A live example of the exact hazard this run's own driver exists to survive.** This firing started
+by reading `STATE.json` — `next_action` said finish verifying Q1 and start Q2. Partway through, a
+tool result's `<system-reminder>` reported the log file had been modified "by the user or a linter"
+(it was neither): the interactive session had written Entry 3 concurrently, marking Q5 done and
+moving `current` to Q6. Re-reading `STATE.json` confirmed it: Q5 was now done, `current` was Q6, and
+Q1-Q4 were untouched in the queue array despite `note_added_1100` claiming iteration 2 had pushed
+fixes. Nothing was corrupted — both writers were appending/patching, never truncating — but it is
+worth naming: two processes held this file open across the same ten minutes, and only file-level
+granularity (no locking) kept that survivable. Proceeded on the belief that finishing the
+already-started Q1/Q2 work was correct regardless of who else was doing what elsewhere, since
+`next_action` at the START of this turn asked for exactly that, and it was real, verified work
+either way.
+
+**Q1 — PR #2 merged, and master went green for the first time ever.** `gh pr checks 2` showed all 6
+matrix jobs already green (iteration 2's fixes held) with `hub-test` still running; waited on it in
+the background rather than block the turn, then confirmed all 8 green and merged with a merge commit
+(`10c5ee6`, matching this repo's existing merge-commit convention — checked `git log --merges` first
+rather than guessing squash). **Master's CI then ran for the first time in this repository's
+history**, on the merge commit — six matrix jobs, `hub-test`, `ui-test`, `build`, all green
+(`known_debts.ci-never-ran`, closed for master).
+
+**Q2/Q3 — the merge-500 and its false provenance, fixed together, because they were one bug.**
+`spec_service.merge_document()` added `SpecDocumentMerge` rows and `"merged"` events unconditionally
+after calling `save_document()`, then the route (`spec.py`) unconditionally read `result.blocking` —
+which `ProposeResult` (the shape returned at `contract`/`gate` rigor) does not have. Fix: the service
+function now short-circuits and returns immediately when `save_document()` proposed instead of
+writing, *before* adding any provenance row — a propose is not a fold, and the row's whole job is to
+audit folds that happened. The route now branches with `isinstance(result, ProposeResult)` and
+builds the response dict *before* `session.commit()`, mirroring the pattern already established (and
+correct) at `agent_actions.py:1155` for the same `save_document()` split — which is where the fix
+shape came from, not invented fresh. Two new tests in `test_spec_merge.py` reproduce the exact
+sequence from `2026-08-18-the-first-real-capability-merge.md` (merge once at `sketch` to give the
+document enforceable content, raise rigor to `gate`, merge again) and assert a 200 carrying
+`proposals`/`unchanged` with a real `spec_edit_proposals` row, plus that the provenance table's row
+and event counts stay at their pre-existing count of one — the gated attempt adds neither.
+**Mutation-checked**: reverting the `isinstance` branch reproduced the original
+`AttributeError: 'ProposeResult' object has no attribute 'blocking'` and failed both new tests by
+name. One process note: the mutation check used `git checkout -- spec.py` to discard the mutation,
+which — because the real fix was not yet committed — discarded the real fix too. Caught immediately
+by re-checking the file (`grep isinstance` came back empty) and reapplied the same edit from memory;
+flagging it here because it is exactly the kind of thing that reads as a conflict for reasons nobody
+remembers, three weeks from now, if it were not written down. Lesson for any firing that mutation-
+checks uncommitted work: `git stash` the mutation instead of hand-reverting it, or commit the real
+fix before mutating.
+
+**Q4 — the `ui_stale` false positive, reproduced before being fixed.** Wrote
+`test_a_stamp_recorded_against_a_dirty_tree_survives_the_commit` first — stamp against a dirty tree
+(the actual order `refresh_ui_bundle.py` runs in), then commit exactly what was stamped — and
+confirmed it failed against the unmodified code, independent of trusting the `8898155`/`ab7e5fe`
+anecdote in `known_debts`. Fix: `ui_source_fingerprint()` now hashes each `git ls-files`-enumerated
+file's *working-tree bytes* directly, dropping the old `git ls-files -s` (blob id) plus
+`git status --porcelain` (separate dirty-diff) split entirely. Content hashing is inherently
+stage-invariant — the same bytes hash the same whether staged, committed, or merely present on disk
+— so "stamp before commit" can no longer desync from "the commit that follows it." The
+"an uncommitted edit still reports stale" property this check exists for survives, now for the right
+reason (the bytes actually changed) instead of via a bolted-on second hash component.
+
+**A consequence this fix could not skip.** Changing the fingerprint algorithm invalidates every
+previously-recorded stamp, including the one currently committed at
+`hub/hub/static/ui/ui-build-stamp.json` — so landing the fix alone would have made `/health` report a
+brand-new false `ui_stale`, on an unrelated, correctly-built bundle, the moment it shipped. Rebuilt
+(`npm run build`) and re-ran `scripts/refresh_ui_bundle.py` to re-stamp with the new algorithm;
+`git status` on `hub/hub/static/ui` shows only `ui-build-stamp.json` changed — the loop-7 pattern
+`test_ui_build_stamp.py` already names, confirmed live a second time. `_compute_ui_staleness_warning`
+against the real repo now returns `None`.
+
+**State reconciled**: Q1-Q4 all marked `done` in `STATE.json` with verification notes, each written
+independently of the interactive session's Q5 work rather than assumed compatible with it.
+`standing_checks.merge_pr_2` retired (no PR is open). `current`/`next_action` left pointing at Q6 —
+the interactive session's own instruction — deliberately not started here: a full-depth openspec
+change deserves a turn of its own, not the tail end of one that already merged a PR and landed three
+fixes. Full `hub/tests` suite run before committing; see next entry (or this one, once it lands) for
+the final count.
+
+## Entry 4 — the loop exploration was run properly, and rewritten
+
+The operator caught that entry 3's exploration was produced by a research pass, not by explore mode:
+I invoked the skill and then went and wrote a document without asking them anything, which is the one
+thing the skill explicitly forbids ("don't auto-capture — offer"). Re-run as an actual design
+conversation. The document is **rewritten**, at the operator's choice, around what came out of it.
+
+**The correction that mattered most.** The first pass mined `.claude/autonomous/` as "a working
+implementation of the same feature". The operator rejected the premise:
+
+> "The problem is that autonomous-prep is a local skill used to develop agentweave. What we're
+> looking at is an autonomous loop within agentweave. That is usable by agentweave. I think you are
+> veering off the true objective."
+
+Correct, and expensive if it had gone unchallenged. That scaffolding exists because *Claude Code* has
+no durable state and because the agent is me. Designing from it imports constraints AgentWeave's
+users do not have. Re-anchoring on AgentWeave's own primitives immediately produced better answers —
+and in one case showed the first pass was about to propose a *worse duplicate* of something that
+already ships: a `next_action` field, when `checkpoint_generation.py` already implements exactly this
+("the control-plane literature's **blind resume** … reading the artefact exactly as a **successor**
+receives it") **with a quality gate on it** that an invented field would not have had.
+
+**What the operator settled:**
+
+| | |
+|---|---|
+| Queue sources | `spec_tasks.materialise()` on approval, **and** creator-authored tasks |
+| Governance | the **creator** authors the queue; the attributed **executor** cannot add to it |
+| Asking for more | executor `send_message`s the creator — and a message already starts the recipient's turn (`messages.py:257-259`) |
+| Agent-created loops | extending after definition needs **user** approval |
+| Empty queue, unanswered request | **terminate** — and record it as telemetry rather than adding a third state |
+| Continuity | **checkpoints**, chained by loop — **not** `session_mode="resume"` |
+| "Stage" | task-lifecycle position, derived from statuses. No new concept |
+
+**Why `resume` is rejected is worth keeping**, because it inverts the first pass's conclusion. The
+operator gave context management as a first-class purpose — *"not a single unstopped session with
+more and more polluted context"*. Fixing `last_session_id` would rebuild precisely that. The purpose
+settled a fork that the code alone could not.
+
+**Two things confirmed rather than assumed**, both from operator questions: a message *does* start
+the recipient's turn (`schedule_agent`, `messages.py:259`), and a loop *can* address the session that
+created it today with no schema change, via `Loop.created_by_run_id` → `Run.conversation_id`
+(`models.py:973,988`).
+
+**Still open and sharpest:** creator identity is now load-bearing for permissions, but `AIJob.agent`
+is a bare `String(64)` with no FK and `scheduler.py:51-56` returns *proceed* when no agent row
+matches. Archive the creator and the permission model loses its author.
+
+## Entry 5 — a collision, and iteration 3's uncommitted work
+
+**The branch-claim mechanism failed once, then worked.** I set `last_heartbeat` at 11:17 to hold the
+branch for interactive work. Iteration 3 had already started at 11:11:59, and **a running firing
+never re-checks the heartbeat** — so we worked the same tree for twenty minutes. Firings at 11:42 and
+11:57 stood down correctly once the heartbeat was fresh at start-time.
+
+Nothing was lost, but by luck and by one rule: staging paths explicitly rather than `git add -A`.
+That is the second time this week that rule has prevented real damage.
+
+The irony is exact — the gap that bit us is **mutual exclusion that only guards the start of a run**,
+which is one of the things a loop will need to answer for itself (§8 item 6, overlapping firings).
+
+**Iteration 3 also ended with a dirty tree**, saying it would wait for a background suite and then
+commit — but the iteration ended first. It left Q1–Q4 complete and **uncommitted**: the merge-500
+fix, the false-provenance fix that falls out of it, and the `ui_stale` fix. Its own notes are
+detailed and it claims mutation-checking.
+
+I did not trust the notes. Ran `test_spec_merge.py`, `test_ui_build_stamp.py` and
+`test_ui_staleness.py` — **25 passed, 1 skipped** — then committed the work as its own commit
+(`b4144e9`), attributed to the firing that wrote it. Standing checks now tell a firing to verify
+before committing work it did not write.
+
+**Landed while this was happening:** PR #2 merged, and **master's own CI ran green for the first time
+ever**. That closes `known_debts.ci-never-ran` for master.

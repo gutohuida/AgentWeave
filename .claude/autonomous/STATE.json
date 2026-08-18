@@ -30,8 +30,8 @@
         "Watch all 8 checks. Merge PR #2 only when every one is green.",
         "After merging, note in the log whether master's own CI run also goes green -- CI has never run on master either (known_debts.ci-never-ran)."
       ],
-      "status": "in_progress",
-      "note_added_1100": "Iteration 2 reports both fixes pushed to both branches at 11:10. If that holds, mark this done and move on -- do NOT sit watching CI, that is now standing_checks.merge_pr_2."
+      "status": "done",
+      "done_note": "Verified 2026-08-18 ~11:14 by this firing: all 8 PR #2 checks green (hub-test 5m37s), merged with a merge commit (10c5ee6). Master's OWN CI then ran for the first time ever, on the merge commit, and went green too (run 32125796514) -- closes known_debts.ci-never-ran for master specifically; the parent branch's own CI history is still whatever PR #2 already showed."
     },
     {
       "id": "Q2-fix-merge-500",
@@ -44,7 +44,8 @@
         "Mutation-check: revert the type branch and watch a named test fail."
       ],
       "constraint": "Fix the IMPLEMENTATION only. Whether a gate SHOULD divert merges into per-requirement proposals is decisions_for_user D6 and stays the operator's call -- the behaviour is defensible, only the crash is unambiguously a bug.",
-      "status": "pending"
+      "status": "done",
+      "done_note": "Fixed 2026-08-18 ~11:25. spec_service.merge_document() now returns SaveResult | ProposeResult and short-circuits BEFORE adding SpecDocumentMerge/'merged'-event rows when save_document() proposed instead of writing (nothing folded, so nothing to record -- this is also Q3). The route (spec.py merge_document) builds the response dict by isinstance BEFORE session.commit(), matching the established pattern at agent_actions.py:1155. Two new tests in test_spec_merge.py reproduce the exact repro from the-first-real-capability-merge.md (merge at sketch, raise to gate, merge again) and assert a 200 with proposals/unchanged plus a coherent spec_edit_proposals row. Mutation-checked: reverting the isinstance branch reproduces the original AttributeError('ProposeResult' object has no attribute 'blocking') 500 and fails both new tests by name."
     },
     {
       "id": "Q3-fix-false-provenance",
@@ -54,7 +55,8 @@
         "Likely falls out of Q2's commit-ordering fix -- verify rather than assume, and if so say so in the log instead of claiming a separate fix.",
         "Add a test that a failed merge leaves spec_document_merges unchanged."
       ],
-      "status": "pending"
+      "status": "done",
+      "done_note": "Confirmed to fall out of Q2's fix, as predicted -- no separate implementation needed. The isinstance(result, ProposeResult) short-circuit in spec_service.merge_document() added for Q2 is exactly what stops the false-provenance write: a propose-only attempt never reaches the SpecDocumentMerge/event-adding loop at all. test_a_merge_into_a_gated_capability_document_writes_no_merge_row in test_spec_merge.py asserts the row/event count stays at 1 (from one real sketch-rigor merge) after a second, gated attempt that only proposed."
     },
     {
       "id": "Q4-fix-false-ui-stale",
@@ -65,7 +67,8 @@
         "Fix shape: stamp from the committed tree, or record the clean-tree fingerprint while keeping the dirty component for the LIVE check only. Keep the property that an uncommitted source edit still reports stale -- that is the whole point of the check.",
         "hub/tests/test_ui_build_stamp.py exists; extend it. Note the stricter bundle-matches-source assertion is gated behind AW_CHECK_UI_BUNDLE=1."
       ],
-      "status": "pending"
+      "status": "done",
+      "done_note": "Reproduced first (new test test_a_stamp_recorded_against_a_dirty_tree_survives_the_commit: stamp against a dirty tree, then commit exactly what was stamped, and the old algorithm still warned -- failed before the fix, confirming the bug independent of the ab7e5fe anecdote). Fix: ui_source_fingerprint() (main.py) now hashes each git-ls-files-enumerated file's WORKING-TREE BYTES directly, dropping the git-ls-files-s-blob-id + status-porcelain-dirty-diff split entirely. Content-hashing is inherently stage-invariant -- the same bytes hash the same whether staged, committed, or merely present on disk -- so 'stamp before commit' can no longer desync from 'the commit that follows'. The 'uncommitted edit still reports stale' property survives for the right reason now (the bytes really did change) rather than via a separate dirty-diff component. IMPORTANT CONSEQUENCE, handled: changing the hash algorithm invalidated the CURRENTLY COMMITTED stamp (old blob-id-based fingerprint != new content-based one), so /health would have started reporting a false ui_stale on an unrelated bundle the moment this landed. Rebuilt (npm run build) and re-ran scripts/refresh_ui_bundle.py to re-stamp with the new algorithm -- confirmed byte-identical bundle output (git status shows only ui-build-stamp.json changed), the loop-7 pattern the test suite already names. hub/tests/test_ui_build_stamp.py (16 cases, was 15) and test_ui_staleness.py (5 cases) both green; _compute_ui_staleness_warning(UI_DIST, UI_SRC) against the real repo now returns None."
     },
     {
       "id": "Q5-explore-loops",
@@ -154,7 +157,7 @@
     }
   ],
   "current": "Q6-spec-loops",
-  "next_action": "Q6: author the openspec change for loops, per the operator's choice of openspec at FULL depth. READ openspec/explorations/2026-08-18-loops-as-an-agent-tool.md FIRST -- it was written interactively and is the input; do not re-derive it. Its section 6 lists the eight things the spec must settle, and section 5 frames the load-bearing fork (resume the conversation vs re-derive from durable state) with the repository's own autonomous driver as evidence for the latter. Requirements use '### Requirement:' with '#### Scenario:' and MUST/SHALL, modal on the FIRST PHYSICAL LINE. design.md must record rejected alternatives WITH REASONS. tasks.md splits agent-verifiable from human-only and ends with a user test guide. `npx openspec validate --changes --strict` must pass. SPEC ONLY -- do not implement, do not start the tasks. NOTE section 3's lesson: the previous change's requirement 'A task MAY be linked to a loop' was passive with no actor, which is exactly how the write path went missing -- every requirement this spec writes about state MUST name who writes it.",
+  "next_action": "Q6: author the openspec change for loops. READ openspec/explorations/2026-08-18-loops-as-an-agent-tool.md FIRST -- it was REWRITTEN at ~12:05 around a design conversation with the operator and now records real decisions, not options. Do not re-derive it and do not reopen what it settles. Settled: (1) a loop's queue has TWO sources, spec_tasks.materialise() on approval and creator-authored tasks; (2) the CREATOR authors the queue and the attributed EXECUTOR cannot add to it -- it may only send_message the creator with a reason, and messages already start the recipient's turn (messages.py:257-259); (3) an agent-created loop needs USER approval to extend after definition; (4) an empty queue TERMINATES the loop even with an unanswered request, and the exception becomes telemetry instead of a third state; (5) continuity is CHECKPOINTS chained by loop, NOT session_mode='resume' -- resume is rejected because it rebuilds the polluted-context problem loops exist to solve; (6) a 'stage' IS task-lifecycle position, derived from statuses -- no new concept. Section 8 lists the seven things still open, of which item 4 (creator identity is load-bearing but AIJob.agent is a bare string with no FK) is the sharpest. Requirements use '### Requirement:' with '#### Scenario:' and MUST/SHALL, modal on the FIRST PHYSICAL LINE. Section 3 is a standing instruction for this spec: EVERY requirement about state MUST NAME WHO WRITES IT -- the previous change's 'A task MAY be linked to a loop' was passive with no actor, which is exactly how the write path went missing. design.md records rejected alternatives WITH REASONS (resume, and Proposal A, are both already rejected with evidence -- carry them across). tasks.md splits agent-verifiable from human-only and ends with a user test guide. `npx openspec validate --changes --strict` must pass. SPEC ONLY -- do not implement.",
   "limits": [
     "'Full auto, but only on green CI' -- operator, standing. NEVER merge or release on red or unfinished CI.",
     "Authorised this session: open a PR to master and MERGE IT if all six CI jobs are green. No release, no tag -- those stay operator-only.",
@@ -283,8 +286,8 @@
   ],
   "handover_note": "Prepared 2026-08-18 morning with the operator awake and answering. The spine changed twice during prep: the roadmap's Proposal A was put to the operator, who rejected it on the merits (a loop's agent already has a charter), and the operator then reframed a loop as something an agent creates for itself -- 'a loop has an overall goal that once completed it finishes... it could be one of the tools an agent can use.' That reframing IS the spine. The side panel is not a separate feature bolted on: the operator was explicit that agent-created loops are only acceptable if the operator can see what they are doing, which is the governance-and-visibility philosophy applied. Design them as one thing. Design FIRST and deeply -- the operator asked for a deep dive twice and chose 'design now, the loop implements it'. Do not skip to code.",
   "standing_checks": {
-    "merge_pr_2": "EVERY iteration, before picking up queue work: `gh pr checks 2`. If all 8 checks are green, merge PR #2 (the operator authorised 'open PR, merge if green'); if any are red, fix them as the iteration's work. NEVER spend a whole firing watching CI -- check, act, then continue with the queue. PR #2 head is autonomous/2026-08-18-the-app-feels-alive, base master.",
-    "heartbeat": "Refresh last_heartbeat to now while working; back-date it ~40 minutes at the very end, after pushing, so the next firing takes over instead of standing down."
+    "heartbeat": "Refresh last_heartbeat to now while working; back-date it ~40 minutes at the very end, after pushing, so the next firing takes over instead of standing down.",
+    "branch_claim": "Before ANY work, check whether an interactive session holds the branch: a fresh last_heartbeat means stand down. Note the known hole -- the grace check happens only at firing START, so a firing already running will not notice an interactive session that claims the branch mid-run. That happened at 11:12-11:32 today. If you find uncommitted work you did not write, VERIFY it (run its tests) before committing it, and never `git add -A`."
   },
   "time_guard": {
     "why": "Four fixes plus two explorations plus two specs will not all fit in the runway remaining at 11:00 (~6h). The operator's priority is explicit, so this says what to DROP rather than leaving a firing to invent an answer at 16:00.",
@@ -292,5 +295,5 @@
     "at_1530": "If Q7 (explore side panel) has not started by 15:30, do NOT start it. A rushed exploration is worse than none -- it reads authoritative and is not. Spend the remaining time finishing Q6 properly and writing the handoff.",
     "at_1630": "Stop new work. Write the handoff (/handoff) and the final log entry. The operator returns to this, so the morning-easy rules apply: what changed, what was proven with evidence, what is open, decisions waiting, and what to distrust."
   },
-  "last_heartbeat": "2026-08-18T11:20:50+01:00"
+  "last_heartbeat": "2026-08-18T12:00:36+01:00"
 }
