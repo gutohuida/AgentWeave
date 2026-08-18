@@ -150,3 +150,35 @@ which can never become non-zero. Q5 must verify this independently rather than i
 That makes the per-firing briefing a *symptom*. The upstream questions are what writes `Task.loop_id`
 and what connects a firing to the queue — and the best evidence available is `.claude/autonomous/`
 itself, a working, battle-tested implementation of exactly this feature. Q5 says to mine it.
+
+## Entry 2 — specs added, and iterations stop idling on CI
+
+**Operator, ~11:00:** *"let's run a explore on the loop then and prepare the spec then we run a
+explore and spec on the side panel."*
+
+So specs are back in scope — but implementation still is not. Queue is now nine items: four fixes,
+then **explore loops → spec loops → explore panel → spec panel**, then runway.
+
+**Spec system: openspec, both.** `CLAUDE.md` forbids silently picking, so it was put to the
+operator. The trial Hub's own flow was the rejected alternative, and the reason is worth keeping:
+it is the migration's actual goal and would have produced dogfooding findings, but it depends on
+the Hub staying healthy unattended and the flow has two known live defects — one of which is
+literally Q2 on this queue. Worth revisiting when the operator is awake to watch it.
+
+**Depth: full, ready to execute.** Requirements with scenarios; a `design.md` that records the
+alternatives *and why each was rejected* — a design without rejections is a description, and the
+next session re-proposes what this one already ruled out; and a `tasks.md` split agent-verifiable
+vs human-only, ending in a user test guide.
+
+**Two structural changes, both to stop the run wasting itself:**
+
+1. **Merging PR #2 is now a standing check, not a queue item.** Iteration 2 pushed both CI fixes and
+   then reported it was "watching PR #2's checks via a background monitor" — which is a whole
+   15-minute firing spent waiting. Every iteration now checks `gh pr checks 2` in its first thirty
+   seconds, merges if green, and otherwise gets on with the queue.
+2. **A time guard**, because four fixes plus two explorations plus two specs do not fit in the ~6
+   hours left. It names what to **drop**, rather than leaving a firing to invent an answer at 16:00:
+   at 13:30 stop taking new fix work (Q3 and Q4 are the droppable ones — Q3 likely falls out of Q2,
+   and Q4 fixes a false alarm with no user-facing behaviour change); at 15:30 do not *start* the
+   panel exploration, because a rushed exploration reads authoritative and is not; at 16:30 stop and
+   write the handoff.

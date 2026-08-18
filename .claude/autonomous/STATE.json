@@ -10,15 +10,15 @@
   "session_stopped": false,
   "prepared_by": "/autonomous-prep, interactive session 2026-08-18T09:45-10:40+01:00. Intent was fixed with the operator across four rounds of questions BEFORE the queue was written. The spine changed twice during prep because the operator rejected the roadmap's Proposal A on its merits -- see decisions[0]. Every queue item below names real files, verified this session.",
   "operator_intent": {
-    "asked_for": "REVISED mid-run at ~10:52: 'Let's change it a little bit. Let's ship the fixes and what is ready and deterministic and let's run a explore on the loop and the side panel.' The original brief (loops as an agent tool + the side-panel framework, design then implement) still describes WHAT is being designed -- it is preserved in operator_intent.original_brief -- but implementation is now out of scope for this run.",
+    "asked_for": "REVISED AGAIN ~11:00: 'let's run a explore on the loop then and prepare the spec then we run a explore and spec on the side panel.' So specs ARE in scope -- as openspec changes, at full depth -- but IMPLEMENTATION still is not. Sequence: explore loop, spec loop, explore panel, spec panel. Deterministic fixes still come first (previous instruction, not withdrawn), bounded by time_guard.",
     "ranked": "Deterministic fixes FIRST and actually landed (Q1-Q4). Explorations second (Q5-Q6), deep rather than broad. Nothing about loops or the panel gets implemented this run.",
     "philosophy": "The operator framed this explicitly: 'We need to follow the agentweave philosophy of governance and visibility.' A loop that an agent can create is only acceptable if the operator can SEE what it is doing. The panel is not decoration -- it is the governance half of the feature. Design them as one thing.",
     "original_brief": "'We should have a button that opens the side panel (just like t3 does and other harnesses as well). On top we can click a plus sign and open something else (I strongly recommend you to look at T3 code for this). We could start with a file viewer/navigation of the repo of the project. A loop tab with loop information (with some loop animations and icons we have to explore ui/ux practices and build a screen for this) and the spec that we already have. This could solve also our explore button problem that we have. The explore button is just explore mode and the side panel can opens the spec.' Plus, on loops: 'a loop has a overall goal that once completed it finishes. Either queue exhaustion or time limit. So I guess it could be one of the tools an agent can use. Create it's own loops and a loop has it's own flow of information and execution.'"
   },
   "queue": [
     {
-      "id": "Q1-ci-green-and-merge",
-      "title": "Fix the two CI failures, get PR #2 green, merge it",
+      "id": "Q1-ci-fixes",
+      "title": "Fix the two CI failures and push to both branches",
       "why": "PR #2 (head autonomous/2026-08-18-the-app-feels-alive, base master) is the FIRST CI run this work has ever had, and it is red: all six matrix `test` jobs fail while hub-test (6m36s) and ui-test (1m49s) pass. Both causes are measured, deterministic, and come from the overnight console-window/icon work. Fix them, then merge -- the operator authorised 'open PR, merge if green'.",
       "failures": [
         "ubuntu+macos (4 jobs) fail at the MYPY step: src/agentweave/cli.py:336 'Module has no attribute CREATE_NO_WINDOW'. The line IS guarded -- `subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0` -- but mypy's sys.platform narrowing applies to `if` STATEMENTS, not to a ternary expression, so it still resolves the Windows-only attribute against the Linux stubs. Fix with an if/else block or getattr(subprocess, 'CREATE_NO_WINDOW', 0). Check cli.py:866's DETACHED_PROCESS for the same pattern before assuming 336 is the only site.",
@@ -30,7 +30,8 @@
         "Watch all 8 checks. Merge PR #2 only when every one is green.",
         "After merging, note in the log whether master's own CI run also goes green -- CI has never run on master either (known_debts.ci-never-ran)."
       ],
-      "status": "in_progress"
+      "status": "in_progress",
+      "note_added_1100": "Iteration 2 reports both fixes pushed to both branches at 11:10. If that holds, mark this done and move on -- do NOT sit watching CI, that is now standing_checks.merge_pr_2."
     },
     {
       "id": "Q2-fix-merge-500",
@@ -87,7 +88,25 @@
       "status": "pending"
     },
     {
-      "id": "Q6-explore-side-panel",
+      "id": "Q6-spec-loops",
+      "title": "Author the openspec change for loops as an agent-usable tool",
+      "depends_on": "Q5-explore-loops",
+      "why": "The operator asked for explore-then-spec on the loop, then explore-then-spec on the panel, in that order. This is the spec half of the first pair.",
+      "system": "openspec, per the operator's explicit choice (CLAUDE.md forbids silently picking a spec system). Use the openspec-propose skill. Requirements use '### Requirement:' with '#### Scenario:' blocks and MUST/SHALL language -- the validator reads ONLY THE FIRST PHYSICAL LINE for the modal, so do not wrap the modal onto a second line. `npx openspec validate --changes --strict` must pass before the item is called done.",
+      "depth": "FULL DEPTH -- the operator chose 'ready to execute'. That means: requirements with scenarios; a design.md that records the alternatives considered AND WHY EACH WAS REJECTED (a design without rejections is a description, and the next session will re-propose what this one already ruled out); and a tasks.md split into agent-verifiable vs human-only tasks, ending with a user test guide. The split and the test guide are a standing operator directive, not optional. A later run must be able to pick this up and build without re-deciding anything.",
+      "must_settle": [
+        "What writes Task.loop_id. This is the load-bearing decision -- see known_debts.loop-queue-is-unwritable. Whatever Q5 concluded, the spec must state it as a requirement with scenarios, not leave it implied.",
+        "What a firing does with the queue: claim the next task, or brief the agent and let it choose. Both are defensible; pick one and record the other as rejected with its reason.",
+        "The create_loop vs widened create_job decision from Q5, with the rejected option named.",
+        "The briefing's content and its CAP, so a long-running loop cannot drown its own turn.",
+        "What happens when a loop's agent is archived or renamed -- AIJob.agent is a bare String(64) and scheduler.py:51-56 currently returns None (meaning PROCEED) when no agent row matches. Either fix it here or record explicitly that it is out of scope.",
+        "The governance bounds: can a loop's agent create another loop? What caps unattended spend? If these are deferred, say so in the design rather than omitting them."
+      ],
+      "constraint": "SPEC ONLY. Do not implement, and do not start tasks.md's own tasks. CLAUDE.md: never mark a task complete on the strength of a plan existing.",
+      "status": "pending"
+    },
+    {
+      "id": "Q7-explore-side-panel",
       "title": "Exploration: the side-panel family",
       "output": "openspec/explorations/2026-08-18-the-side-panel-family.md",
       "why": "EXPLORATION ONLY. The operator's brief: 'We should have a button that opens the side panel (just like t3 does and other harnesses as well). On top we can click a plus sign and open something else. We could start with a file viewer/navigation of the repo of the project. A loop tab with loop information (with some loop animations and icons we have to explore ui/ux practices and build a screen for this) and the spec that we already have. This could solve also our explore button problem that we have. The explore button is just explore mode and the side panel can opens the spec.'",
@@ -104,7 +123,25 @@
       "status": "pending"
     },
     {
-      "id": "Q7-runway",
+      "id": "Q8-spec-side-panel",
+      "title": "Author the openspec change for the side-panel family",
+      "depends_on": "Q7-explore-side-panel",
+      "why": "The spec half of the second explore-then-spec pair.",
+      "system": "openspec, per the operator's explicit choice (CLAUDE.md forbids silently picking a spec system). Use the openspec-propose skill. Requirements use '### Requirement:' with '#### Scenario:' blocks and MUST/SHALL language -- the validator reads ONLY THE FIRST PHYSICAL LINE for the modal, so do not wrap the modal onto a second line. `npx openspec validate --changes --strict` must pass before the item is called done.",
+      "depth": "FULL DEPTH -- the operator chose 'ready to execute'. That means: requirements with scenarios; a design.md that records the alternatives considered AND WHY EACH WAS REJECTED (a design without rejections is a description, and the next session will re-propose what this one already ruled out); and a tasks.md split into agent-verifiable vs human-only tasks, ending with a user test guide. The split and the test guide are a standing operator directive, not optional. A later run must be able to pick this up and build without re-deciding anything.",
+      "must_settle": [
+        "The panel registry contract: what a panel declares to register (id, title, icon, singleton vs multi-instance), and what happens when one is opened twice.",
+        "Whether the existing spec panel (hub/ui/src/components/spec/) becomes a registered panel or stays separate, with the migration cost of the choice stated.",
+        "Where the open-panel set is persisted -- per-project, per-conversation, or global -- citing specPreferences.ts's existing choice and either following or rejecting it.",
+        "The loop panel's own requirements: what it shows, and the data source for each field. Per DEC-explore-button, the spec may say the panel CAN subsume the explore button but must not require removing it.",
+        "Responsive behaviour at the narrowest supported window.",
+        "Accessibility: prefers-reduced-motion for the loop animations, and keyboard reachability of the tab strip and the plus affordance."
+      ],
+      "constraint": "SPEC ONLY, and this one is UI-heavy -- resist writing component code into the design. The operator has not seen any of this yet and will have opinions.",
+      "status": "pending"
+    },
+    {
+      "id": "Q9-runway",
       "title": "Runway, only once Q1-Q6 are done or blocked",
       "items": [
         "openspec/explorations/2026-08-18-candidate-names.md. Operator: 'Explore names, decide nothing yet.' RECOMMEND NOTHING. Ground it in 2026-08-18-does-the-name-still-fit.md (S1 architectural evidence, S3 the six-surface cost table) and 2026-08-15-where-agentweave-fits.md.",
@@ -115,8 +152,8 @@
       "status": "pending"
     }
   ],
-  "current": "Q1-ci-green-and-merge",
-  "next_action": "Q1. PR #2 is open (head autonomous/2026-08-18-the-app-feels-alive, base master) and RED: all six matrix `test` jobs fail, hub-test and ui-test pass. Two causes, both measured. (a) ubuntu+macos fail at MYPY -- src/agentweave/cli.py:336 'Module has no attribute CREATE_NO_WINDOW'; the guard is a TERNARY and mypy's sys.platform narrowing only applies to `if` statements, so use an if/else block or getattr(subprocess, 'CREATE_NO_WINDOW', 0), and check cli.py:866's DETACHED_PROCESS for the same pattern. (b) windows passes mypy then fails pytest with ModuleNotFoundError: No module named 'PIL' in tests/test_cli.py::TestAppModeNativeWindow::test_app_icon_path_resolves_to_a_real_multi_size_ico -- prefer adding Pillow to the dev extra over importorskip, and verify the test actually RUNS rather than silently skipping. Fix on this branch, cherry-pick onto the PARENT branch (that is the PR head), push, watch all 8 checks, merge only on all green. Note that local mypy on Windows will NOT reproduce (a).",
+  "current": "Q1-ci-fixes",
+  "next_action": "FIRST: standing_checks.merge_pr_2 -- run `gh pr checks 2`, and merge if all 8 are green. Do not idle waiting on it. THEN: iteration 2 reported both CI fixes pushed to both branches at 11:10; verify that (git log on this branch and on autonomous/2026-08-18-the-app-feels-alive), mark Q1 done, and start Q2 -- the merge 500 at hub/hub/api/v1/spec.py:1190, where save_document() returns a ProposeResult with no .blocking whenever rigor is contract/gate, and session.commit() on line 1186 runs first so the proposal is durably written before the request fails. Branch on the result type, move the commit, and add rigor cases to hub/tests/test_spec_merge.py, which has none.",
   "limits": [
     "'Full auto, but only on green CI' -- operator, standing. NEVER merge or release on red or unfinished CI.",
     "Authorised this session: open a PR to master and MERGE IT if all six CI jobs are green. No release, no tag -- those stay operator-only.",
@@ -147,8 +184,15 @@
       "id": "DEC-run-narrowed",
       "status": "DECIDED-BY-OPERATOR",
       "question": "Should this run implement the loop tool and the side panel?",
-      "answer": "NO. Operator narrowed the run at ~10:52 to shipping deterministic fixes plus two explorations. Do not implement loops or the panel, and do not open an openspec change for them unless an exploration concludes one is the obvious next step -- and even then, propose it, do not start it.",
+      "answer": "NO implementation of loops or the panel. Specs ARE in scope as of ~11:00: two openspec changes at full depth, each preceded by its exploration. Author them; do not start executing their tasks.md.",
       "rejected_alternative": "The original design-then-implement queue, which would have reached create_loop and possibly the per-firing briefing. Dropped because the operator wants to read the designs before code exists, and wants the measured defects actually landed."
+    },
+    {
+      "id": "DEC-spec-system",
+      "status": "DECIDED-BY-OPERATOR",
+      "question": "openspec or the trial Hub's own spec flow for these two changes? CLAUDE.md requires asking rather than picking.",
+      "answer": "openspec, for BOTH. Deterministic unattended, no Hub dependency or restart hazard, and the run can validate its own output with `npx openspec validate --changes --strict`.",
+      "rejected_alternative": "Authoring in the trial Hub, which is the migration's actual goal and would have produced dogfooding findings -- rejected for THIS run because it depends on the Hub staying healthy unattended and the flow has known live defects (the merge 500 in Q2, permanent capability blocking in D5). Worth revisiting when the operator is awake to watch it."
     },
     {
       "id": "DEC-A-rejected",
@@ -232,5 +276,16 @@
       "summary": "proj-5e960453 on the trial Hub holds 1 orphan spec_edit_proposals row and 2 bogus spec_document_merges rows from the crashed gated merges. Deliberately NOT cleaned -- it is a regression fixture. Do not tidy it away."
     }
   ],
-  "handover_note": "Prepared 2026-08-18 morning with the operator awake and answering. The spine changed twice during prep: the roadmap's Proposal A was put to the operator, who rejected it on the merits (a loop's agent already has a charter), and the operator then reframed a loop as something an agent creates for itself -- 'a loop has an overall goal that once completed it finishes... it could be one of the tools an agent can use.' That reframing IS the spine. The side panel is not a separate feature bolted on: the operator was explicit that agent-created loops are only acceptable if the operator can see what they are doing, which is the governance-and-visibility philosophy applied. Design them as one thing. Design FIRST and deeply -- the operator asked for a deep dive twice and chose 'design now, the loop implements it'. Do not skip to code."
+  "handover_note": "Prepared 2026-08-18 morning with the operator awake and answering. The spine changed twice during prep: the roadmap's Proposal A was put to the operator, who rejected it on the merits (a loop's agent already has a charter), and the operator then reframed a loop as something an agent creates for itself -- 'a loop has an overall goal that once completed it finishes... it could be one of the tools an agent can use.' That reframing IS the spine. The side panel is not a separate feature bolted on: the operator was explicit that agent-created loops are only acceptable if the operator can see what they are doing, which is the governance-and-visibility philosophy applied. Design them as one thing. Design FIRST and deeply -- the operator asked for a deep dive twice and chose 'design now, the loop implements it'. Do not skip to code.",
+  "standing_checks": {
+    "merge_pr_2": "EVERY iteration, before picking up queue work: `gh pr checks 2`. If all 8 checks are green, merge PR #2 (the operator authorised 'open PR, merge if green'); if any are red, fix them as the iteration's work. NEVER spend a whole firing watching CI -- check, act, then continue with the queue. PR #2 head is autonomous/2026-08-18-the-app-feels-alive, base master.",
+    "heartbeat": "Refresh last_heartbeat to now while working; back-date it ~40 minutes at the very end, after pushing, so the next firing takes over instead of standing down."
+  },
+  "time_guard": {
+    "why": "Four fixes plus two explorations plus two specs will not all fit in the runway remaining at 11:00 (~6h). The operator's priority is explicit, so this says what to DROP rather than leaving a firing to invent an answer at 16:00.",
+    "at_1330": "If Q5 (explore loops) has not STARTED by 13:30, stop taking new fix work: finish the fix in hand, then go straight to Q5. Q3 and Q4 are the droppable ones -- Q3 likely falls out of Q2 anyway, and Q4 is a false-alarm fix with no user-facing behaviour change. Record in the log what was dropped and why.",
+    "at_1530": "If Q7 (explore side panel) has not started by 15:30, do NOT start it. A rushed exploration is worse than none -- it reads authoritative and is not. Spend the remaining time finishing Q6 properly and writing the handoff.",
+    "at_1630": "Stop new work. Write the handoff (/handoff) and the final log entry. The operator returns to this, so the morning-easy rules apply: what changed, what was proven with evidence, what is open, decisions waiting, and what to distrust."
+  },
+  "last_heartbeat": "2026-08-18T11:12:55+01:00"
 }
