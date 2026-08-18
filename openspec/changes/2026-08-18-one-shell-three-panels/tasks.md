@@ -144,17 +144,147 @@ section 2's job, and the bundle is byte-identical because of it.
 
 Proves the whole shell without a loop or a file endpoint existing.
 
-- [ ] 3.1 A `specs` index tab listing the project's documents — the content today's modal picker
+- [x] 3.1 A `specs` index tab listing the project's documents — the content today's modal picker
       shows, re-hosted as a tab.
-- [ ] 3.2 Selecting a document opens a `spec:<document_id>` tab hosting `SpecDocumentPanel`.
-- [ ] 3.3 **Unfuse attach from display** (design D9): closing a `spec:` tab does not detach the
+
+      Done 2026-08-18. Extracted the picker dialog's search-and-browse content (search input, the
+      browsing tree, the ranked results, the "start an exploration" row) out of
+      `SpecDocumentPicker.tsx` into a new `SpecDocumentBrowser.tsx` — chrome-free, so both the
+      Ctrl/Cmd+K dialog and the new tab can host it without duplicating the search/rank logic
+      `SpecDocumentPicker` used to own alone. Radix does not render `Dialog.Content` while closed,
+      so the browser unmounts and remounts across an open/close cycle, which is what resets its
+      search box now — the explicit "reset query on open" effect the dialog used to need is gone,
+      not replaced. `SpecIndexTab.tsx` wraps the browser for the shell: selecting a node calls the
+      tab store's `openTab` directly (never `onOpenDocument`), which is what keeps 3.3's unfuse
+      honest — the index tab has no way to attach anything even if it wanted to. Added to
+      `ConversationView`'s `availableTabs` as a fixed `{id: 'specs', label: 'Specs', icon:
+      'folder_open'}` entry (`folder_open` rather than `article`, so the index reads differently
+      from the documents it lists).
+- [x] 3.2 Selecting a document opens a `spec:<document_id>` tab hosting `SpecDocumentPanel`.
+
+      Done 2026-08-18. **The id did not exist on the wire before this task** — checked before
+      assuming either way, per the queue's instruction: `GET /project/specs` (`hub/hub/api/v1/
+      spec.py`) enriches each filesystem-discovered entry with `phase` from the Hub's
+      `spec_lifecycle.list_documents`, but never carried the row's own `id`, even though
+      `GET /project/documents` (a different, Hub-records-only endpoint) already returned one. Added
+      `document_id` to the same enrichment `phase` already goes through — one `tracked` map built
+      once, both fields read off it — covered by a new backend test,
+      `test_the_specs_tree_carries_the_document_id_the_panel_shell_keys_tabs_by`
+      (`hub/tests/test_spec_archive.py`).
+
+      **Not every document has one, and this task does not pretend otherwise.** A filesystem
+      discovery with no `spec_documents` row (a document never created through the Hub — the
+      openspec corpus, or any file placed by hand) has `document_id: null`. `specNavigation.ts`
+      carries this as `SpecNode.documentId: string | null`, and two functions — `tabKeyForNode`
+      (id if present, else the path) and `resolveTabPath` (its inverse, via a new
+      `SpecInventory.byDocumentId` map) — are the *only* places that key is made or unmade, so the
+      open side and the render side can never disagree about what a tab's key means. A document
+      with no id is still fully openable; its tab is keyed by path exactly as P2b's tabs already
+      were, which is the only identity such a document has ever had. `ConversationView`'s
+      `describePanelTab`/`renderPanelTabContent` both resolve through `resolveTabPath` before
+      touching `SpecDocumentPanel`, which still only ever receives a path.
+- [x] 3.3 **Unfuse attach from display** (design D9): closing a `spec:` tab does not detach the
       conversation's attached document. The composer control is unchanged in this change.
-- [ ] 3.4 The attached document stays in the addressed destination and survives a reload, exactly as
+
+      Done 2026-08-18. Two fused paths existed, not one, and both had to go — leaving either would
+      have been exactly "two close semantics coexisting silently," which the queue named as the
+      risk to avoid:
+
+      1. P2b's store-watching effect (`ConversationView`, the one that read
+         `usePanelTabsStore.getState()` after a render and called `onOpenDocument(null)` when the
+         tab it had opened was no longer present) — deleted outright, not merely made conditional.
+         There is now only a one-directional destination-to-store sync: attaching opens/refocuses a
+         tab; nothing watches the store to detach.
+      2. `SpecDocumentPanel`'s own in-panel close button (`spec-document-close`, in its breadcrumb
+         row) — this is a *second* close control the strip's own close button (`panel-tab-close-*`)
+         doesn't share code with, and it was still wired straight to `onOpenDocument(null)` before
+         this task. Now wired to `closeTab(projectId, tab.id)` — the same store action the strip's
+         button calls, so both close controls now have identical, non-detaching meaning. This is a
+         real behavior change from before section 3, recorded and regression-tested (see 3.6)
+         rather than left implicit.
+
+      The composer control (`ComposerSpecControl`'s `onStopExploring`, wired to
+      `onOpenDocument(null)`) is untouched — still the only path that detaches, exactly as D9
+      requires. `onSelectPath` (in-document link navigation, `SpecFrame`'s bridge) is **also
+      untouched** and still calls `onOpenDocument` — deliberately, not an oversight; see 3.6 for
+      why, and the one real gap that decision leaves open.
+- [x] 3.4 The attached document stays in the addressed destination and survives a reload, exactly as
       today. Two documents open for reading at once, with only one attached, must work.
-- [ ] 3.5 An archived document's tab still opens and shows the archived marker `SpecDocumentPanel`
+
+      Done 2026-08-18. The destination-to-store sync now opens the attached document's tab keyed by
+      `tabKeyForNode` (id-or-path) rather than closing whatever tab preceded it — the old
+      close-previous/open-next pairing was P2b's single-tab-only shape; multi-tab means attaching a
+      new document no longer implies anything about tabs already open for other documents. Keyed
+      off the *computed key* (a ref holding the previous `attachedTabKey`, not the previous
+      `document` path), for two reasons at once: a rename that keeps the same Hub id produces the
+      same key, so the effect correctly does nothing on rename (the tab that already exists for
+      that id is still valid, per D4); and the one-time upgrade from a path-keyed fallback to a
+      real id, once the specs list finishes loading after mount, is handled by the same effect
+      rather than needing a second one, since the key itself changes even though `document` did
+      not. Reload survives because the effect runs once on mount from an empty ref and opens
+      whatever the destination already names — unchanged in substance from P2b, just re-derived
+      through the id-aware key. Two-tabs-with-one-attached is a direct consequence of "never closes
+      an unrelated tab" above; tested explicitly (see 3.6's new cases) rather than assumed from the
+      absence of a counter-effect.
+- [x] 3.5 An archived document's tab still opens and shows the archived marker `SpecDocumentPanel`
       already renders.
-- [ ] 3.6 Regression pass over `spec-chat-session`'s existing scenarios — this change modifies that
+
+      Done 2026-08-18, confirmed rather than assumed unbroken: `SpecDocumentPanel`'s archived-marker
+      rendering (`spec-archived-marker`, driven by `inventory.byPath.get(path)?.archived`) was
+      never touched by this task, and `resolveTabPath` always resolves to a real path before
+      `SpecDocumentPanel` sees it — an archived document opened from the new `specs` index tab
+      reaches the same component the same way a P2b-era attach did. New test: "opening an archived
+      document from the index tab still shows the archived marker"
+      (`hub/ui/src/__tests__/specNavigationUi.test.tsx`).
+- [x] 3.6 Regression pass over `spec-chat-session`'s existing scenarios — this change modifies that
       capability and every guarantee it already made has to survive.
+
+      Done 2026-08-18. Ran the full existing suite first (`npx vitest run`) before writing anything
+      new, to find what section 3 actually broke rather than guessing: exactly one failure,
+      `specNavigationUi.test.tsx`'s `'closing the panel asks the destination to drop the document'`
+      — which asserted the *old, fused* behavior 3.3 deliberately ends. Rewritten (not deleted) to
+      assert the new contract: the tab closes, `onOpenDocument` is never called, and the shell shows
+      its empty state. Nothing else in the 1028-test suite broke, including
+      `'routes a valid relative cross-document link through the destination'`
+      (`specNavigationUi.test.tsx`) — the test that pins `onSelectPath`'s current behavior for
+      in-document links and is exactly why `onSelectPath` was deliberately left wired to
+      `onOpenDocument` in 3.3 rather than redirected to a read-only tab open: redirecting it would
+      have broken this pinned, pre-existing guarantee.
+
+      **The gap that decision leaves, stated rather than silently accepted:** a document opened for
+      reading but *not* attached (via the new `specs` index tab, or a second document opened
+      alongside the attached one) can still silently reattach the conversation if the operator
+      clicks an internal link inside it — because `onSelectPath` doesn't distinguish which tab it
+      was called from. This is a real, easily-triggered edge of 3.4's "two documents open for
+      reading, only one attached" guarantee for any document that happens to contain links, and it
+      existed in weaker form even before section 3 (there was only ever one tab to click links in).
+      Not fixed here because fixing it means changing `onSelectPath`'s wiring, which is exactly what
+      the pinned regression test above forbids without also deciding what that test *should* assert
+      instead — a design call, not a mechanical one, and out of this task's scope.
+
+      **New coverage**, beyond the rewritten test above (all in
+      `hub/ui/src/__tests__/specNavigationUi.test.tsx` unless noted):
+      - the specs index tab is offered from the plus affordance;
+      - selecting a document from the index tab opens it as a reading tab without calling
+        `onOpenDocument` (D9's core guarantee, from the reading side);
+      - a document whose entry carries `document_id` opens a tab keyed by that id, not by path;
+      - two documents can be open for reading at once with only one attached, and opening the
+        second does not close or detach the first;
+      - opening an archived document from the index tab still shows the archived marker (3.5);
+      - `hub/ui/src/__tests__/specChatSurface.test.tsx` — with the real `ComposerSpecControl`
+        mounted (the previous file stubs `AgentOutputPanel` out entirely, so it cannot see the
+        composer pill): closing the reading tab leaves `composer-spec-control` still naming the
+        attached document, exactly user test guide step 3's wording ("If the pill clears, 3.3 is
+        wrong").
+
+      **Verification, measured:** `npx vitest run` — 1034 passed across 102 files (was 1028 before
+      this task; 6 new, zero regressions beyond the one intentional rewrite above).
+      `eslint --max-warnings 0` and `npx tsc --noEmit`: both clean. Backend: `pytest hub/tests/
+      test_spec.py hub/tests/test_spec_archive.py hub/tests/test_spec_rename.py` — 47 passed
+      (covers every existing test that reads `GET /project/specs`, to catch anything relying on the
+      response's exact shape now that `document_id` rides along). `ruff check` and `black --check`
+      clean on the two touched Python files. `npx openspec validate --changes --strict`: 2/2 still
+      pass.
 
 ## 4. The file content endpoint
 

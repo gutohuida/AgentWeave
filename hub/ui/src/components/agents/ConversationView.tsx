@@ -15,7 +15,8 @@ import { useWorkspaceWidth } from '@/components/layout/useWorkspaceWidth'
 import { PanelShell, type PanelTabDescriptor } from '@/components/spec/PanelShell'
 import { SpecDocumentPanel } from '@/components/spec/SpecDocumentPanel'
 import { SpecDocumentPicker } from '@/components/spec/SpecDocumentPicker'
-import { buildInventory } from '@/components/spec/specNavigation'
+import { SpecIndexTab } from '@/components/spec/SpecIndexTab'
+import { buildInventory, resolveTabPath, tabKeyForNode } from '@/components/spec/specNavigation'
 import {
   CONVERSATION_DEFAULT_WIDTH,
   CONVERSATION_MIN_WIDTH,
@@ -138,41 +139,55 @@ export function ConversationView({
     })
   }, [])
 
-  /* Task 2.2/3's shell has exactly one tenant so far: the document panel this component already
-   * hosted, wrapped as a `spec:<path>`-shaped tab. It is keyed by *path*, not the document id
-   * section 3 will key real spec tabs by (`specTabId` accepts either — the type is a plain
-   * string) — a deliberate, temporary shape, since this component only ever knew a path. Section
-   * 3 (specs as the shell's first tenant, id-keyed, multi-document) replaces this sync, not just
-   * extends it. */
   const openTab = usePanelTabsStore((state) => state.openTab)
   const closeTab = usePanelTabsStore((state) => state.closeTab)
-  const panelTabs = usePanelTabsStore((state) => selectProjectPanel(state, projectId).tabs)
   const panelActiveTabId = usePanelTabsStore(
     (state) => selectProjectPanel(state, projectId).activeTabId,
   )
 
-  // Destination -> store: the document the operator navigated to becomes the shell's one tab.
-  // Keyed off the previous *document*, not the store, so this never races the effect below.
-  const previousDocumentRef = useRef<string | null>(null)
-  useEffect(() => {
-    const previous = previousDocumentRef.current
-    previousDocumentRef.current = document
-    if (previous === document) return
-    if (previous) closeTab(projectId, specTabId(previous))
-    if (document) openTab(projectId, specTabId(document))
-  }, [projectId, document, openTab, closeTab])
+  /* Section 3's tenant, id-keyed (design D4): the attached document's reading tab is keyed by its
+   * Hub document id where one exists, else its path — `tabKeyForNode` and `resolveTabPath` are the
+   * one pair of functions that make that key and undo it, so the open side and the render side can
+   * never derive it differently. Falls back to the raw `document` path before the inventory has
+   * loaded; the effect below re-keys once it has (see its own note). */
+  const attachedNode = document ? (inventory.byPath.get(document) ?? null) : null
+  const attachedTabKey = document ? (attachedNode ? tabKeyForNode(attachedNode) : document) : null
 
-  // Store -> destination: closing the tab from the strip closes the document. Reads the store's
-  // live state rather than `panelTabs` at the time this effect was scheduled, so it is correct
-  // even when both effects fire in the same commit (the effect above closing/opening a tab does
-  // not make `panelTabs` here stale-but-trusted).
+  /* Destination -> store, one direction only (design D9's unfuse): attaching a document opens (or
+   * refocuses) its reading tab, so the thing the composer just attached is on screen. It does
+   * *not* close whatever tab the previously-attached document had — that tab is now an ordinary
+   * reading tab like any other the operator opened, and D9 is explicit that closing (or, by the
+   * same reasoning, merely no-longer-being-attached) is not an edit an attach action gets to make
+   * to what is on screen. There is no reverse effect any more: closing a tab from the strip used to
+   * call `onOpenDocument(null)` (task 2.2's fused sync) — that effect is deleted, not merely
+   * unused, because D9 says a closed reader must never detach the agent's document.
+   *
+   * Keyed off the previous *computed key*, not the previous `document` path, so a rename (which
+   * keeps the id, so `attachedTabKey` does not change) never re-opens the tab.
+   *
+   * One case does still close the previous key's tab: the one-time upgrade from a path-keyed
+   * fallback to the real id once the inventory loads. That is not a change of *document* — the key
+   * changed under the same attachment, because `attachedNode` above went from "not found yet" to
+   * "found" — and leaving the stale, path-keyed tab open would silently duplicate the id-keyed one
+   * this same effect just opened (caught live: `hub/tests/browser/test_panel_shell.py`, against a
+   * fixture document that already carries a Hub id on load, where the duplicate was two tabs for
+   * the same document, one of them a dangling fallback identity nothing ever closed). Told apart
+   * from a genuine attach change — where the previous tab must survive — by resolving both keys
+   * back to a path: the same path means the same document, only re-keyed. */
+  const previousAttachedTabKeyRef = useRef<string | null>(null)
   useEffect(() => {
-    if (!document) return
-    const stillOpen = selectProjectPanel(usePanelTabsStore.getState(), projectId).tabs.some(
-      (tab) => tab.id === specTabId(document),
-    )
-    if (!stillOpen) onOpenDocument(null)
-  }, [document, projectId, onOpenDocument, panelTabs])
+    const previous = previousAttachedTabKeyRef.current
+    previousAttachedTabKeyRef.current = attachedTabKey
+    if (previous === attachedTabKey) return
+    if (
+      previous &&
+      attachedTabKey &&
+      resolveTabPath(inventory, previous) === resolveTabPath(inventory, attachedTabKey)
+    ) {
+      closeTab(projectId, specTabId(previous))
+    }
+    if (attachedTabKey) openTab(projectId, specTabId(attachedTabKey))
+  }, [projectId, attachedTabKey, inventory, openTab, closeTab])
 
   const documentOpen = document !== null
   // Derived from whichever tab kind is actually visible — today that can only be a `spec` tab
@@ -210,12 +225,16 @@ export function ConversationView({
     void refetchList()
   }, [refetchList])
 
-  // The shell's one tenant for now (task 2.2): the document panel this component already hosted,
-  // wrapped as the tab section 1's store expects. `availableTabs` is empty — there is nothing else
-  // to add via the plus affordance until section 3 gives the shell a `specs` index tab.
+  // Section 3's first index tenant: the plus affordance can always offer the specs browser,
+  // whether or not anything is attached yet.
+  const availablePanelTabs: PanelTabDescriptor[] = useMemo(
+    () => [{ id: 'specs', label: 'Specs', icon: 'folder_open' }],
+    [],
+  )
   const describePanelTab = useCallback(
     (id: TabId): PanelTabDescriptor => {
-      const path = isSpecTabId(id) ? specDocumentId(id) : id
+      if (id === 'specs') return { id, label: 'Specs', icon: 'folder_open' }
+      const path = isSpecTabId(id) ? resolveTabPath(inventory, specDocumentId(id)) : id
       const node = inventory.byPath.get(path)
       return { id, label: node?.title ?? path, icon: 'article' }
     },
@@ -223,26 +242,37 @@ export function ConversationView({
   )
   const renderPanelTabContent = useCallback(
     (tab: PanelTab) => {
+      if (tab.id === 'specs') {
+        return <SpecIndexTab projectId={projectId} inventory={inventory} attachedPath={document} />
+      }
       if (!isSpecTabId(tab.id)) return null
+      // `tab.id`'s key is a document id where the node has one, else the path itself
+      // (`tabKeyForNode`/`resolveTabPath`, design D4) — resolved back to a path here because
+      // `SpecDocumentPanel` only ever knew a path.
+      const path = resolveTabPath(inventory, specDocumentId(tab.id))
       return (
         <SpecDocumentPanel
-          path={specDocumentId(tab.id)}
+          path={path}
           inventory={inventory}
           specList={specList}
           listLoading={listLoading}
-          onSelectPath={(path) => onOpenDocument(path)}
+          onSelectPath={(nextPath) => onOpenDocument(nextPath)}
           onOpenPicker={openPicker}
-          onClose={() => onOpenDocument(null)}
+          /* Closing this tab is reading-pane tidying, not an edit to what the agent is attached
+           * to (design D9) — it closes *this* tab, and only this tab, the same as the tab strip's
+           * own close button (`PanelShell`'s `panel-tab-close-*`) a few pixels to its left. Only
+           * `ComposerSpecControl`'s `onStopExploring`, wired below, still calls `onOpenDocument(null)`. */
+          onClose={() => closeTab(projectId, tab.id)}
           onRefresh={handleRefresh}
         />
       )
     },
-    [inventory, specList, listLoading, onOpenDocument, openPicker, handleRefresh],
+    [projectId, inventory, specList, listLoading, onOpenDocument, openPicker, closeTab, handleRefresh, document],
   )
   const panel = document ? (
     <PanelShell
       projectId={projectId}
-      availableTabs={[]}
+      availableTabs={availablePanelTabs}
       describeTab={describePanelTab}
       renderTabContent={renderPanelTabContent}
     />

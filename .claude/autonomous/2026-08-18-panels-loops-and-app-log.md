@@ -265,3 +265,96 @@ Committed, pushed. `current`/`next_action` now point at **P3** (tasks 3.1-3.6: s
 first tenant — a `specs` index tab, id-keyed `spec:` tabs replacing this iteration's path-keyed
 sync, unfusing attach from display per D9, and the 3.6 regression pass this iteration's Playwright
 tests partially anticipated but did not substitute for).
+
+## Entry 3 — iteration 3: P3, specs as the shell's first tenant (2026-08-18 22:05-22:40)
+
+Fresh process. `git log` matched `cfc0a3e` exactly, tree clean. Read `tasks.md` section 3, `design.md`
+D9/D4/D12, `panelTabsStore.ts`, `PanelShell.tsx`, `ConversationView.tsx`, `SpecDocumentPicker.tsx`,
+and `specNavigation.ts` per `next_action` and `read_first` before writing anything.
+
+**Work done: P3 — tasks 3.1-3.6 of `2026-08-18-one-shell-three-panels`.**
+
+**The path<->id question, resolved by checking rather than guessing.** `next_action` explicitly said
+not to assume either way. `SpecEntry`/`SpecNode` carried no document id at all — `GET /project/specs`
+enriched entries with `phase` from `spec_lifecycle.list_documents` but never with `id`, even though a
+different endpoint (`GET /project/documents`) already returned one for Hub-tracked documents. Added
+`document_id` to the same enrichment `phase` already goes through (`hub/hub/api/v1/spec.py`), one
+`tracked` map read twice. Not every document has one — a filesystem discovery with no `spec_documents`
+row (never created through the Hub) reports `document_id: null` — so `specNavigation.ts` gained
+`SpecNode.documentId: string | null` plus exactly two functions, `tabKeyForNode`/`resolveTabPath`,
+that are the only places a tab's key is made or unmade (id if present, else the path). New backend
+test: `test_the_specs_tree_carries_the_document_id_the_panel_shell_keys_tabs_by`.
+
+**3.1 (specs index tab):** extracted the picker dialog's search/browse content into a new,
+chrome-free `SpecDocumentBrowser.tsx` (shared by `SpecDocumentPicker`'s dialog and a new
+`SpecIndexTab.tsx`), rather than duplicating the search-and-rank logic a second time. Selecting a
+node in the index tab calls the tab store's `openTab` directly — never `onOpenDocument` — which is
+what makes the unfuse structural rather than a rule to remember. Added to `ConversationView`'s
+`availableTabs` as a fixed `specs` entry.
+
+**3.3 (the actual unfuse, D9):** two fused paths existed, not one. Deleted P2b's store-watching
+effect outright (the one that called `onOpenDocument(null)` when a tab it opened disappeared) — not
+made conditional, removed, because D9 says a closed reader must never detach the agent's document.
+Also rewired `SpecDocumentPanel`'s own in-panel close button (`spec-document-close`), which was a
+*second*, undocumented fused path straight to `onOpenDocument(null)`, to call `closeTab` instead —
+now identical in meaning to the tab strip's own close button. `onSelectPath` (in-document link
+navigation) was deliberately left wired to `onOpenDocument`: a pinned regression test
+(`'routes a valid relative cross-document link through the destination'`) locks that behavior in, and
+D9 states only the composer control is in scope this change. Recorded as an honest, known gap in
+`tasks.md` rather than silently accepted — reading a second, unattached tab's internal link can still
+reattach the conversation, and fixing it is a design call this task did not make.
+
+**A real bug found by Playwright, not vitest — exactly why the operator asked for it.** The
+destination-to-store sync opens the attached document's tab keyed by `tabKeyForNode` (id-or-path).
+The first live run against the trial Hub's `proj-b44fac0c` fixture (a document that already carries a
+real Hub id) failed `test_closing_the_tab_closes_the_reading_pane_but_not_the_document`: closing the
+one visible tab left the document panel showing anyway. Root cause: on first paint, before the specs
+list has loaded over the network, `attachedTabKey` falls back to the raw path; once the list loads and
+the real id resolves, the key changes and the effect opened a *second*, id-keyed tab without closing
+the stale path-keyed one — two tabs for the same document, the close button only closing one. Every
+vitest fixture in this codebase provides `document_id` synchronously from the first render, so nothing
+in the 1028-test suite could have caught this timing race. Fixed by resolving both the previous and
+current keys back to a path before deciding whether to close the previous tab: same resolved path
+means the same document merely re-keyed (close it, no duplicate); different paths mean a genuine
+attach change (leave the old tab as an ordinary reading tab, per D9). Confirmed non-vacuous by
+reverting the fix and re-running a new synchronous vitest regression
+(`'closes the fallback path-keyed tab when the inventory upgrades it to a real id...'`) — it failed
+exactly as expected, then passed once the fix was restored.
+
+**Verification, measured:**
+- UI vitest: **1035 passed across 102 files** (was 1028 at P2b — 7 new: the upgrade-transition
+  regression above, plus 6 covering the specs index tab, id-keyed opening/refocus, two-documents-one-
+  attached, archived-document-from-the-index, and the rewritten close-button test). `eslint
+  --max-warnings 0` and `npx tsc --noEmit`: both clean.
+- Backend: `pytest hub/tests/test_spec.py hub/tests/test_spec_archive.py hub/tests/test_spec_rename.py`
+  — 47 passed (every existing test reading `GET /project/specs`, to catch anything assuming the
+  response's exact shape). `ruff check` and `black --check` clean on every touched Python file.
+- **Playwright, against the live trial Hub, restarted to pick up the Python change** (the running
+  process was still serving the pre-P3 code; `document_id` read back `None` until restarted — caught
+  by directly curling `/project/specs` before trusting any test result). Rebuilt the UI bundle twice
+  (once before the duplicate-tab fix, once after) and confirmed `refresh_ui_bundle.py --check` and
+  `/health`'s `ui_stale` cleared each time. **41 passed** (33 pre-P2b + 6 P2b + 2 new P3 tests, with
+  one P2b-era test rewritten for the new close semantics rather than counted as new). The fixture
+  project's only document (`teal-roc/spec.html`) already carries a real Hub id, so the suite's
+  `spec_tab_id` fixture now resolves it from the live API rather than hardcoding the old path-keyed
+  form — every hardcoded `SPEC_TAB_ID` in the P2b tests would otherwise have silently tested a tab
+  the app no longer opens.
+- `npx openspec validate --changes --strict`: 2/2 still pass.
+
+**Not done, correctly deferred:** the shell still only mounts when a document is attached
+(`documentOpen = document !== null`, unchanged) — there is still no way to open the `specs` index tab
+from a bare conversation with nothing attached yet. This matches design D12's own explicit deferral
+("whether the shell should subsume the explore button's actions... the operator decides while looking
+at the working shell") rather than an oversight; task 3's user-guide step 1 ("press the panel button")
+describes a future entry point this task did not build.
+
+Marked 3.1-3.6 done in `tasks.md` with dated notes following section 2's style, including the
+path<->id resolution, the D9 unfuse's two fused paths (not one), the deliberate `onSelectPath` gap,
+and the live-only duplicate-tab bug and its fix.
+
+Committed, pushed. `current`/`next_action` now point at **PW1** (dedicated Playwright coverage item —
+today's section 3 tests satisfy most of what PW1 asked for; whoever picks it up should confirm the
+queue's PW1 entry can simply be marked done pointing at this iteration's tests, or state what it still
+needs) — but per the queue's stated interleaving, the *next* firing should prefer **L1** (loop:
+migration + model) so the run does not spend the whole night on one change, per the operator's
+explicit "work on both specs" instruction.

@@ -25,6 +25,11 @@ export interface SpecNode {
   changeName: string | null
   /** Declared by the manifest but no file was found: visible, never selectable. */
   missing: boolean
+  /** The Hub's durable document id, when a record exists for this path — `null` for a document
+   *  discovery found on disk that was never created through the Hub. The panel shell's `spec:`
+   *  tabs key by this where it exists, and fall back to the path where it does not (design D4,
+   *  `2026-08-18-one-shell-three-panels`, task 3.2). */
+  documentId: string | null
 }
 
 export interface LibraryTreeNode {
@@ -42,11 +47,29 @@ export interface HistoryGroup {
 export interface SpecInventory {
   nodes: SpecNode[]
   byPath: Map<string, SpecNode>
+  /** Only documents with a Hub-tracked id — most nodes are absent from this map, which is
+   *  expected (see `SpecNode.documentId`), not a bug to fix by adding one. */
+  byDocumentId: Map<string, SpecNode>
   /** Current, filed, parent-aware. Never contains archived or missing nodes. */
   library: LibraryTreeNode[]
   /** Current drift: unindexed, unfiled, stale, missing, or parent-orphaned. */
   needsAttention: SpecNode[]
   history: HistoryGroup[]
+}
+
+/** The key a `spec:` panel tab opens this node under — its Hub document id where one exists,
+ *  else its path (design D4). Kept as one function so the tab-strip's open side and the
+ *  content-resolution side (`resolveTabPath`) can never derive the key differently. */
+export function tabKeyForNode(node: SpecNode): string {
+  return node.documentId ?? node.path
+}
+
+/** The inverse of `tabKeyForNode`: given a tab's key, the path to read. A key that is not any
+ *  node's document id is assumed to already be a path — the only shape `tabKeyForNode` ever
+ *  produces for a document with no Hub record — rather than treated as "not found", since the
+ *  inventory may simply not have loaded yet. */
+export function resolveTabPath(inv: Pick<SpecInventory, 'byDocumentId'>, key: string): string {
+  return inv.byDocumentId.get(key)?.path ?? key
 }
 
 /** One row of the folder tree: a directory heading, or a document under it.
@@ -119,6 +142,7 @@ function toNode(entry: SpecEntry): SpecNode {
     archiveDate: date,
     changeName: name,
     missing: false,
+    documentId: entry.document_id ?? null,
   }
 }
 
@@ -161,11 +185,16 @@ export function buildInventory(list: SpecListResponse | undefined): SpecInventor
       archiveDate: date,
       changeName: name,
       missing: true,
+      // Never selectable (see below), so nothing ever needs to key a tab by it.
+      documentId: null,
     })
   }
 
   const byPath = new Map<string, SpecNode>()
   for (const node of nodes) byPath.set(node.path, node)
+
+  const byDocumentId = new Map<string, SpecNode>()
+  for (const node of nodes) if (node.documentId) byDocumentId.set(node.documentId, node)
 
   const readableCurrent = nodes.filter((n) => !n.archived && !n.missing)
   const filed = readableCurrent.filter((n) => n.state === 'filed')
@@ -229,7 +258,7 @@ export function buildInventory(list: SpecListResponse | undefined): SpecInventor
       return a.label.localeCompare(b.label)
     })
 
-  return { nodes, byPath, library, needsAttention, history }
+  return { nodes, byPath, byDocumentId, library, needsAttention, history }
 }
 
 function isReadable(inv: SpecInventory, path: string | null | undefined): boolean {

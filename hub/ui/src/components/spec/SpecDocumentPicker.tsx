@@ -1,8 +1,6 @@
 import * as Dialog from '@radix-ui/react-dialog'
-import { useEffect, useMemo, useState } from 'react'
-import { Icon } from '@/components/common/Icon'
-import { searchDocuments, type SpecInventory, type SpecNode } from './specNavigation'
-import { SpecTree } from './SpecTree'
+import { SpecDocumentBrowser } from './SpecDocumentBrowser'
+import type { SpecInventory, SpecNode } from './specNavigation'
 
 interface SpecDocumentPickerProps {
   open: boolean
@@ -25,41 +23,15 @@ interface SpecDocumentPickerProps {
   onCreate?: (title: string) => void
 }
 
-const rowStyle: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 8,
-  width: '100%',
-  padding: '6px 10px',
-  border: 'none',
-  background: 'none',
-  color: 'var(--text-2)',
-  fontSize: 12,
-  textAlign: 'left',
-  cursor: 'pointer',
-  borderRadius: 'var(--radius-sm)',
-}
-
-function GroupLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <div
-      style={{
-        padding: '8px 10px 4px',
-        fontSize: 10,
-        fontWeight: 600,
-        letterSpacing: '.06em',
-        textTransform: 'uppercase',
-        color: 'var(--text-3)',
-      }}
-    >
-      {children}
-    </div>
-  )
-}
-
 /**
  * Ctrl/Cmd+K document search. Radix Dialog supplies the focus trap, Escape
  * handling, and focus restoration required by FR-9 without a new dependency.
+ *
+ * The search-and-browse content is `SpecDocumentBrowser` — shared with the panel shell's `specs`
+ * index tab (task 3.1, `2026-08-18-one-shell-three-panels`) — so this component owns only the
+ * dialog chrome. Radix does not render `Dialog.Content` while `open` is false, so the browser
+ * unmounts and remounts across an open/close cycle, which is what resets its search box without
+ * this component having to do it itself.
  */
 export function SpecDocumentPicker({
   open,
@@ -70,39 +42,17 @@ export function SpecDocumentPicker({
   currentPath = null,
   onCreate,
 }: SpecDocumentPickerProps) {
-  const [query, setQuery] = useState('')
-
-  // Each opening starts a fresh search rather than resuming a stale one.
-  useEffect(() => {
-    if (open) setQuery('')
-  }, [open])
-
-  const results = useMemo(() => searchDocuments(inventory, query), [inventory, query])
-  const empty =
-    results.current.length === 0 && results.archived.length === 0 && results.missing.length === 0
-
-  /* With nothing typed, the picker shows the specification as it is actually organised rather
-   * than an empty box waiting to be told what to look for. Typing replaces it with matches: a
-   * tree is for finding your way around something you cannot yet name, a ranked flat list is for
-   * when you can. */
-  const browsing = query.trim().length === 0
-
   const choose = (node: SpecNode) => {
     onSelect(node)
     onOpenChange(false)
   }
 
-  /* Explore is the one phase that would otherwise precede its own document, which is why
-   * starting one creates the document rather than setting a mode: without it, "propose" and
-   * "approve" have no subject. It lives here because this is where an operator arrives having
-   * discovered there is no document to open. */
-  const typed = query.trim()
   const startExploration = onCreate
-    ? () => {
-        onCreate(typed)
+    ? (title: string) => {
+        onCreate(title)
         onOpenChange(false)
       }
-    : null
+    : undefined
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -143,93 +93,13 @@ export function SpecDocumentPicker({
           <Dialog.Description className="sr-only">
             Search current and archived specification documents by title, path, or change name.
           </Dialog.Description>
-          <input
+          <SpecDocumentBrowser
+            inventory={inventory}
+            currentPath={currentPath}
+            onSelect={choose}
+            onCreate={startExploration}
             autoFocus
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search by title, path, or change name — or browse below"
-            aria-label="Search documents"
-            style={{
-              padding: '12px 14px',
-              border: 'none',
-              borderBottom: '1px solid var(--border)',
-              background: 'transparent',
-              color: 'var(--text)',
-              fontSize: 13,
-              outline: 'none',
-            }}
           />
-          <div className="overflow-y-auto p-1.5" data-testid="spec-picker-results">
-            {startExploration && (browsing || empty) && (
-              <button
-                type="button"
-                style={{ ...rowStyle, color: 'var(--text)' }}
-                data-testid="spec-picker-start-exploration"
-                onClick={startExploration}
-                disabled={!browsing && !typed}
-              >
-                <Icon name="add" size={13} />
-                <span className="truncate">
-                  {typed ? `Start an exploration: ${typed}` : 'Start an exploration…'}
-                </span>
-              </button>
-            )}
-            {browsing ? (
-              <SpecTree inventory={inventory} currentPath={currentPath} onSelect={choose} />
-            ) : (
-              <>
-            {empty && (
-              <p style={{ padding: 10, fontSize: 12, color: 'var(--text-3)' }}>No matching documents.</p>
-            )}
-
-            {results.current.map((node) => (
-              <button key={node.path} type="button" style={rowStyle} onClick={() => choose(node)}>
-                <span className="truncate">{node.title}</span>
-                <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--text-3)' }}>
-                  {node.path}
-                </span>
-              </button>
-            ))}
-
-            {results.archived.length > 0 && (
-              <>
-                <GroupLabel>Archived</GroupLabel>
-                {results.archived.map((node) => (
-                  <button
-                    key={node.path}
-                    type="button"
-                    style={{ ...rowStyle, opacity: 0.65 }}
-                    onClick={() => choose(node)}
-                  >
-                    <span className="truncate">{node.title}</span>
-                    <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--text-3)' }}>
-                      {node.archiveDate ?? node.path}
-                    </span>
-                  </button>
-                ))}
-              </>
-            )}
-
-            {results.missing.length > 0 && (
-              <>
-                <GroupLabel>Missing</GroupLabel>
-                {results.missing.map((node) => (
-                  // Discoverable so drift is visible, but never selectable.
-                  <button
-                    key={node.path}
-                    type="button"
-                    disabled
-                    style={{ ...rowStyle, cursor: 'not-allowed', opacity: 0.55 }}
-                  >
-                    <span className="truncate">{node.title}</span>
-                    <span style={{ marginLeft: 'auto', fontSize: 10 }}>missing</span>
-                  </button>
-                ))}
-              </>
-            )}
-              </>
-            )}
-          </div>
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>

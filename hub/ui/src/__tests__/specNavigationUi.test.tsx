@@ -21,7 +21,15 @@ const ARCHIVED = 'spec/changes/archive/2026-07-29-add-agent-stream-kinds/spec.ht
 
 let specListResult: {
   data: {
-    specs: { path: string; state?: string; title?: string; kind?: string; parent?: string | null; order?: number }[]
+    specs: {
+      path: string
+      state?: string
+      title?: string
+      kind?: string
+      parent?: string | null
+      order?: number
+      document_id?: string | null
+    }[]
     home: string | null
     diagnostics: unknown[]
     missing: { path: string; title?: string }[]
@@ -151,10 +159,16 @@ describe('the document panel opens beside the conversation', () => {
     expect(screen.getByTestId('spec-document-breadcrumb')).toHaveTextContent('Reconstruction')
   })
 
-  it('closing the panel asks the destination to drop the document', () => {
+  it('closing the panel closes its reading tab, but does not detach the document', () => {
+    // Design D9 (`2026-08-18-one-shell-three-panels`, task 3.3): reading and attaching are
+    // unfused. This in-panel close button used to be a second way to call `onOpenDocument(null)` —
+    // exactly the fusion D9 ends. It now behaves like the tab strip's own close button: the tab
+    // goes away, the destination's attached document does not change.
     renderView()
     fireEvent.click(screen.getByTestId('spec-document-close'))
-    expect(openedDocuments).toEqual([null])
+    expect(openedDocuments).toEqual([])
+    expect(screen.queryByTestId('spec-document-panel')).not.toBeInTheDocument()
+    expect(screen.getByTestId('panel-empty-state')).toBeInTheDocument()
   })
 
   it('marks an opened archived document as archived', () => {
@@ -165,6 +179,118 @@ describe('the document panel opens beside the conversation', () => {
     renderView(ARCHIVED)
     expect(screen.getByTestId('spec-archived-marker')).toHaveTextContent('Archived')
     expect(screen.getByTestId('spec-archived-marker')).toHaveTextContent('2026-07-29')
+  })
+})
+
+describe('specs as the shell\'s first tenant (2026-08-18-one-shell-three-panels, section 3)', () => {
+  it('offers a specs index tab from the plus affordance', async () => {
+    const user = userEvent.setup()
+    renderView()
+
+    await user.click(screen.getByTestId('panel-tab-add'))
+    expect(await screen.findByRole('menuitem', { name: 'Specs' })).toBeInTheDocument()
+  })
+
+  it('opens a document from the index tab as a reading tab, without attaching it (design D9)', async () => {
+    const user = userEvent.setup()
+    renderView(ROADMAP)
+
+    await user.click(screen.getByTestId('panel-tab-add'))
+    await user.click(await screen.findByRole('menuitem', { name: 'Specs' }))
+    expect(await screen.findByTestId('spec-document-browser')).toBeInTheDocument()
+
+    await user.click(screen.getByTestId(`spec-tree-document-${CHANGE}`))
+
+    // A new reading tab opened and is now showing the selected document...
+    await waitFor(() =>
+      expect(screen.getByTestId('spec-document-breadcrumb')).toHaveTextContent('Add Spec Navigation'),
+    )
+    // ...but nothing asked the destination to attach it. Only the composer's own control does that
+    // (asserted end-to-end, with the real composer mounted, in specChatSurface.test.tsx).
+    expect(openedDocuments).toEqual([])
+  })
+
+  it('closes the fallback path-keyed tab when the inventory upgrades it to a real id, rather than duplicating it', () => {
+    // Caught live, not here first: `hub/tests/browser/test_panel_shell.py` against a fixture
+    // document whose id is only known after the specs list actually loads over the network — the
+    // attached document's tab opens path-keyed on the first render (before the inventory has
+    // loaded) and has to be re-keyed, not duplicated, once it has. This test pins the same
+    // transition synchronously via `rerender`.
+    const { rerender } = renderView(CHANGE)
+    expect(screen.getByTestId(`panel-tab-spec:${CHANGE}`)).toBeInTheDocument()
+
+    specListResult = {
+      ...specListResult,
+      data: {
+        ...specListResult.data,
+        specs: specListResult.data.specs.map((entry) =>
+          entry.path === CHANGE ? { ...entry, document_id: 'doc-99' } : entry,
+        ),
+      },
+    }
+    rerender(
+      withQueryClient(
+        <ConversationView
+          agent={agent}
+          conversationId="conv-1"
+          projectId={PROJECT_ID}
+          document={CHANGE}
+          onSelectConversation={() => {}}
+          onOpenDocument={(path) => openedDocuments.push(path)}
+          onBackToProject={() => {}}
+          onOpenAgentSettings={() => {}}
+        />,
+      ),
+    )
+
+    expect(screen.getByTestId('panel-tab-spec:doc-99')).toBeInTheDocument()
+    expect(screen.queryByTestId(`panel-tab-spec:${CHANGE}`)).not.toBeInTheDocument()
+    expect(
+      screen.getAllByRole('tab').filter((tab) => tab.id.startsWith('panel-tab-spec:')),
+    ).toHaveLength(1)
+  })
+
+  it('keys the opened tab by the document\'s Hub id when the entry carries one, not by path', async () => {
+    specListResult.data.specs = specListResult.data.specs.map((entry) =>
+      entry.path === CHANGE ? { ...entry, document_id: 'doc-77' } : entry,
+    )
+    const user = userEvent.setup()
+    renderView(ROADMAP)
+
+    await user.click(screen.getByTestId('panel-tab-add'))
+    await user.click(await screen.findByRole('menuitem', { name: 'Specs' }))
+    await user.click(await screen.findByTestId(`spec-tree-document-${CHANGE}`))
+
+    expect(await screen.findByTestId('panel-tab-spec:doc-77')).toBeInTheDocument()
+    expect(screen.queryByTestId(`panel-tab-spec:${CHANGE}`)).not.toBeInTheDocument()
+  })
+
+  it('keeps two documents open for reading at once, only one of them attached', async () => {
+    const user = userEvent.setup()
+    renderView(ROADMAP)
+
+    // The attached document already has its own tab (task 2.2's sync, still true under section 3).
+    expect(screen.getByTestId(`panel-tab-spec:${ROADMAP}`)).toBeInTheDocument()
+
+    await user.click(screen.getByTestId('panel-tab-add'))
+    await user.click(await screen.findByRole('menuitem', { name: 'Specs' }))
+    await user.click(await screen.findByTestId(`spec-tree-document-${CHANGE}`))
+
+    await waitFor(() => expect(screen.getByTestId(`panel-tab-spec:${CHANGE}`)).toBeInTheDocument())
+    // Both survive — opening the second did not close or detach the first.
+    expect(screen.getByTestId(`panel-tab-spec:${ROADMAP}`)).toBeInTheDocument()
+    expect(openedDocuments).toEqual([])
+  })
+
+  it('opening an archived document from the index tab still shows the archived marker', async () => {
+    const user = userEvent.setup()
+    renderView(ROADMAP)
+
+    await user.click(screen.getByTestId('panel-tab-add'))
+    await user.click(await screen.findByRole('menuitem', { name: 'Specs' }))
+    await user.click(await screen.findByTestId(`spec-tree-document-${ARCHIVED}`))
+
+    expect(await screen.findByTestId('spec-archived-marker')).toHaveTextContent('Archived')
   })
 })
 

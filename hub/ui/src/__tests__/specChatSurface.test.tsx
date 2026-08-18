@@ -436,4 +436,19 @@ describe('the specification is reached from the composer', () => {
     )
     expect(screen.getByTestId('spec-document-close')).toBeInTheDocument()
   })
+
+  it('closing the reading tab leaves the composer still naming the document as attached (design D9, task 3.3/3.4)', () => {
+    // User test guide step 3 (`2026-08-18-one-shell-three-panels`, task 8): "the composer still
+    // names it as attached. If the pill clears, 3.3 is wrong." Only `composer-stop-exploring` — a
+    // distinct control, asserted above — may clear it.
+    renderChat('spec/a1-probe.html')
+    expect(screen.getByTestId('composer-spec-control')).toHaveAccessibleName('Spec: A1 probe')
+
+    fireEvent.click(screen.getByTestId('spec-document-close'))
+
+    expect(screen.getByTestId('composer-spec-control')).toHaveAccessibleName('Spec: A1 probe')
+    expect(screen.getByTestId('composer-spec-control')).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByTestId('panel-empty-state')).toBeInTheDocument()
+    expect(screen.queryByTestId('spec-document-panel')).not.toBeInTheDocument()
+  })
 })
