@@ -12,6 +12,8 @@ from typing import Any, Optional
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from .checkpoint_generation import render_checkpoint
+from .checkpoints import latest_checkpoint_for_loop
 from .conversations import (
     conversation_for_provider_session,
     inherit_runtime_overrides,
@@ -19,7 +21,7 @@ from .conversations import (
     new_conversation,
 )
 from .db.engine import async_session_factory
-from .db.models import Agent, AIJob, JobRun, Loop, Task
+from .db.models import Agent, AIJob, Checkpoint, JobRun, Loop, Task
 from .run_task_binding import TERMINAL_FOR_BINDING
 from .sse import sse_manager
 from .task_transition_service import apply_transition
@@ -127,6 +129,79 @@ async def _claim_loop_task(session: AsyncSession, loop: Loop) -> Optional[Task]:
         .limit(1)
     )
     return result.scalars().first()
+
+
+# Consumer-side cap on a rendered checkpoint's contribution to a briefing (design D5). A
+# checkpoint body is already a bounded generator-side summary
+# (`checkpoint_generation._TRANSCRIPT_CHAR_LIMIT`), so this budget is far smaller: 4,000
+# characters comfortably fits one well-formed checkpoint in full, with room left for the claimed
+# task and queue summary around it, and only ever truncates the pathological case (a checkpoint
+# that failed to stay terse), never the common one.
+_LOOP_BRIEFING_CHECKPOINT_CHARS = 4_000
+
+
+async def _compose_loop_briefing(
+    session: AsyncSession,
+    loop: Loop,
+    claimed_task: Optional[Task],
+    prior_checkpoint: Optional[Checkpoint],
+) -> str:
+    """The context a loop firing gets ahead of the operator's own message (design D5): purpose,
+    the claimed queue item, the prior firing's checkpoint if one exists, and a one-line queue
+    summary — in that order. A prefix, never a replacement: `_do_fire_job` puts `job.message`
+    after this unchanged, so the operator's own message template still reads exactly as authored.
+    """
+    lines: list[str] = ["# Loop briefing", ""]
+
+    if loop.purpose:
+        lines.append(f"Purpose: {loop.purpose}")
+        lines.append("")
+
+    if claimed_task is not None:
+        lines.append(f"## Current task: {claimed_task.title}")
+        lines.append("")
+        if claimed_task.description:
+            lines.append(claimed_task.description)
+            lines.append("")
+        criteria = claimed_task.acceptance_criteria or []
+        if criteria:
+            lines.append("Acceptance criteria:")
+            lines.extend(f"- {criterion}" for criterion in criteria)
+            lines.append("")
+
+    if prior_checkpoint is not None:
+        # Reuses the same rendering a human reader gets (`render_checkpoint`) rather than
+        # inventing a second serialisation of the same data (design D5). Truncated from the end
+        # on overflow — re-ordering `render_checkpoint`'s own section order to drop the oldest
+        # content first would only matter for the rare pathological case this cap exists to
+        # bound, not worth the complexity for it.
+        rendered = render_checkpoint(prior_checkpoint)
+        if len(rendered) > _LOOP_BRIEFING_CHECKPOINT_CHARS:
+            rendered = rendered[:_LOOP_BRIEFING_CHECKPOINT_CHARS]
+        lines.append("## Prior checkpoint")
+        lines.append("")
+        lines.append(rendered)
+        lines.append("")
+
+    # Same per-status group-by `_batch_loop_summaries` already computes (`api/v1/jobs.py:136-143`)
+    # recomputed directly here rather than imported — L6's own precedent already rejected an
+    # api-layer-to-scheduler cross-import for a similarly small query. Bucketed into open/done
+    # using the same `TERMINAL_FOR_BINDING` split `_loop_stop_reason` above already uses to decide
+    # whether this loop's queue is empty, rather than a second, differently-drawn line.
+    counts_result = await session.execute(
+        select(Task.status, func.count()).where(Task.loop_id == loop.id).group_by(Task.status)
+    )
+    open_count = 0
+    done_count = 0
+    for task_status, count in counts_result.all():
+        if task_status in TERMINAL_FOR_BINDING:
+            done_count += count
+        else:
+            open_count += count
+    lines.append(f"Queue: {open_count} open, {done_count} done")
+    lines.append("")
+
+    return "\n".join(lines)
 
 
 # Singleton scheduler instance
@@ -456,6 +531,7 @@ class JobScheduler:
 
             loop_result = await session.execute(select(Loop).where(Loop.job_id == job.id))
             loop = loop_result.scalars().first()
+            content = job.message
             if loop is not None:
                 claimed_task = await _claim_loop_task(session, loop)
                 if claimed_task is not None:
@@ -466,12 +542,17 @@ class JobScheduler:
                     if claimed_task.status == "pending":
                         await apply_transition(session, claimed_task, "assigned", operator())
                     claimed_task.assignee = job.agent
+                prior_checkpoint = await latest_checkpoint_for_loop(session, loop.id)
+                briefing = await _compose_loop_briefing(
+                    session, loop, claimed_task, prior_checkpoint
+                )
+                content = f"{briefing}\n{job.message}"
 
             entry = new_entry(
                 project_id=job.project_id,
                 agent=job.agent,
                 origin_type="job",
-                content=job.message,
+                content=content,
                 hop_depth=0,
                 session_mode=job.session_mode,
                 session_id=resume_session_id,

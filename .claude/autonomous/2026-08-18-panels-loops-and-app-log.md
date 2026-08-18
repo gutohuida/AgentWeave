@@ -800,3 +800,82 @@ Committed, pushed. `current`/`next_action` now point at **L9** (the briefing, `h
 tasks 9.1-9.3) — the queue deliberately orders L9 before L8, since the briefing leans on
 `latest_checkpoint_for_loop` this iteration just built; L8 (refusing `resume` for a loop's job) follows
 after L9, not before.
+
+## Entry 10 — iteration 10: L9, the briefing (2026-08-19T00:11-00:22+01:00)
+
+Fresh process. Branch and `git log` matched STATE.json exactly on read (HEAD at the release-heartbeat
+commit following entry 9). Read design D5 (`2026-08-18-a-loop-writes-its-own-queue/design.md`) before
+touching code.
+
+**Work done: L9 — tasks 9.1-9.3, `hub/hub/scheduler.py`.**
+
+New `_compose_loop_briefing(session: AsyncSession, loop, claimed_task, prior_checkpoint) -> str`.
+`next_action`'s named signature omitted `session`, but every other session-touching helper already in
+this file leads with it (`_loop_stop_reason(session, job)`, `_claim_loop_task(session, loop)`), and the
+queue's open/done summary needs a query the other three params cannot supply — adding it as the first
+positional parameter matches the file's own convention rather than deviating from it.
+
+Content order matches D5 exactly: `loop.purpose` (skipped entirely, not rendered as an empty heading,
+when blank), the claimed task's title/description/acceptance criteria, `## Prior checkpoint` rendered
+via `checkpoint_generation.render_checkpoint` — the same function a human reader gets, no second
+serialisation — truncated from the end at a new `_LOOP_BRIEFING_CHECKPOINT_CHARS = 4_000` when
+`latest_checkpoint_for_loop` (L7) finds one, then `Queue: {open} open, {done} done`. The open/done
+split reuses `TERMINAL_FOR_BINDING` (`("approved", "rejected")`) — the exact split `_loop_stop_reason`,
+already in this file, uses to decide whether a loop's queue is drained — rather than inventing a second,
+differently-drawn line for the same concept. The per-status count query is recomputed directly in
+`scheduler.py`, not imported from `api/v1/jobs.py`'s `_batch_loop_summaries`: L6's own precedent (task
+6.1's note) already rejected an api-layer-to-scheduler cross-import for a similarly small query, for the
+same layering reason.
+
+**The caller side (task 9.2).** `_do_fire_job`: `content = job.message` by default. When
+`loop is not None` (the existing branch that already claims the queue item), fetch
+`prior_checkpoint = await latest_checkpoint_for_loop(session, loop.id)` — not `loop_for_conversation`,
+which resolves a loop *from* a conversation the caller does not have yet; the `loop` local is already
+the right object — compose the briefing, and set `content = f"{briefing}\n{job.message}"`. `new_entry`
+now receives `content=content` instead of `content=job.message` directly. A non-loop job never enters
+the `if loop is not None:` branch, so `content` stays byte-identical to `job.message`.
+
+**Tests, `hub/tests/test_scheduler.py`**, extending the same `_make_job`/`_make_loop` fixtures section
+6's tests already use, plus a new `_make_checkpoint` helper that deliberately attributes the checkpoint
+to a conversation OTHER than the one about to fire — mirroring L7's own
+`test_latest_checkpoint_for_loop_crosses_conversations`, since a loop's next firing is by construction a
+conversation that does not exist yet. Four new tests:
+`test_loop_briefing_omits_prior_checkpoint_section_on_a_first_firing` (no checkpoint exists — asserts
+`"## Prior checkpoint" not in entry.content`, and separately that purpose/claimed-task/queue-summary
+lines are present and `entry.content` ends with `job.message`);
+`test_loop_briefing_includes_a_prior_checkpoint_in_full_under_the_cap` (a short body — asserts
+`render_checkpoint(checkpoint)` appears in `entry.content` byte-for-byte);
+`test_loop_briefing_truncates_an_oversized_prior_checkpoint_to_exactly_the_cap` (a 10,000-character
+body — asserts the extracted `## Prior checkpoint` section equals
+`rendered[:_LOOP_BRIEFING_CHECKPOINT_CHARS]` exactly, `len(section) == _LOOP_BRIEFING_CHECKPOINT_CHARS`,
+and the untruncated `rendered` string does NOT appear anywhere in `entry.content` — a length assertion,
+not just presence, per `next_action`'s explicit instruction);
+`test_non_loop_job_fired_content_is_byte_identical_to_job_message` (no `Loop` row at all — asserts
+`entry.content == job.message == "hello from a scheduled job"`), the regression guard for every
+non-loop job in the suite.
+
+**Verification, measured:**
+- `py -3.11 -m pytest hub/tests/test_scheduler.py -q` — **14 passed** (10 pre-existing + 4 new).
+- `py -3.11 -m pytest hub/tests/test_checkpoint_record.py hub/tests/test_checkpoint_generation.py -q`
+  — **42 passed** — both suites reading `render_checkpoint`/`latest_checkpoint_for_loop`, confirming
+  this section's new call sites did not change either function's behaviour.
+- `ruff check hub/hub/scheduler.py hub/tests/test_scheduler.py` — clean.
+- `black --fast hub/hub/scheduler.py hub/tests/test_scheduler.py` — both already formatted, unchanged.
+- `mypy hub/hub/scheduler.py`, filtered to lines attributed to the file — exactly the same 6 error
+  lines as `.claude/autonomous/mypy-baseline.txt` (2 `Result[Any].rowcount` + 4 pre-existing
+  `import-untyped`) — **zero new errors**. `_compose_loop_briefing`'s `session: AsyncSession` parameter
+  is explicitly typed for the same reason L7's three new functions were.
+- `npx openspec validate --changes --strict` (from the repo root) — 2/2.
+
+No Hub restart this iteration: like L3-L7, this section is verified entirely through pytest against
+scheduler logic, with no UI or live-Hub surface to exercise.
+
+Marked 9.1-9.3 done in `tasks.md` with the dated note above (fuller version there), corrected the
+file's own summary line: "Sections 1-7" (which had already gone stale the moment 9 finished ahead of 8)
+→ "Sections 1-7 and 9 ... section 8 and everything from section 10 onward is still a spec only" — stating
+the actual set rather than a contiguous range that would imply 8 is done, per `next_action`'s explicit
+instruction not to mechanically bump it.
+
+Committed, pushed. `current`/`next_action` now point at **L8** (refusing `resume` for a loop's job,
+`hub/hub/api/v1/jobs.py`, tasks 8.1-8.2) — the queue's next item, now that L9 (which depended on L7) is
+done.

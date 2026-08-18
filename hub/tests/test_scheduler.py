@@ -15,9 +15,21 @@ import pytest
 from sqlalchemy import select
 
 import hub.api.v1.agent_trigger as agent_trigger
+from hub.checkpoint_generation import render_checkpoint
 from hub.db.engine import async_session_factory
-from hub.db.models import Agent, AIJob, InboundQueueEntry, JobRun, Loop, Message, Run, Task
-from hub.scheduler import JobScheduler, _loop_stop_reason
+from hub.db.models import (
+    Agent,
+    AIJob,
+    Checkpoint,
+    Conversation,
+    InboundQueueEntry,
+    JobRun,
+    Loop,
+    Message,
+    Run,
+    Task,
+)
+from hub.scheduler import _LOOP_BRIEFING_CHECKPOINT_CHARS, JobScheduler, _loop_stop_reason
 
 
 async def _make_job(db, *, suffix, agent, session_mode="new"):
@@ -546,3 +558,297 @@ async def test_loop_fire_with_empty_queue_claims_nothing_and_does_not_error(
             (await db.execute(select(Task).where(Task.loop_id == f"loop-{job.id}"))).scalars().all()
         )
         assert tasks == []
+
+
+async def _make_checkpoint(db, *, checkpoint_id, loop_id, conversation_id, body):
+    """A checkpoint attributed to `loop_id`, in a conversation OTHER than the one about to fire
+    — mirrors L7's own `test_latest_checkpoint_for_loop_crosses_conversations`, since a loop's
+    next firing is, by construction, a conversation that does not exist yet (task 7.2's own
+    docstring)."""
+    conversation = Conversation(id=conversation_id, project_id="proj-test", agent="irrelevant")
+    db.add(conversation)
+    checkpoint = Checkpoint(
+        id=checkpoint_id,
+        project_id="proj-test",
+        conversation_id=conversation_id,
+        loop_id=loop_id,
+        agent="irrelevant",
+        trigger="operator",
+        status="ready",
+        lineage_id=checkpoint_id,
+        body=body,
+    )
+    db.add(checkpoint)
+    await db.commit()
+    return checkpoint
+
+
+@pytest.mark.asyncio
+async def test_loop_briefing_omits_prior_checkpoint_section_on_a_first_firing(
+    app, auth_headers, bind_runner
+):
+    """Task 9.3: a loop's first firing has no prior checkpoint at all — the briefing must not
+    claim one exists."""
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {"loop-agent-briefing-first": {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    await bind_runner("loop-agent-briefing-first", cli="claude")
+
+    fake_session = MagicMock()
+    fake_session.pid = 4747
+    fake_session.read.side_effect = [
+        '{"type":"result","subtype":"success","is_error":false,"session_id":"sess-briefing-1"}\n',
+        "",
+    ]
+    fake_session.wait.return_value = 0
+
+    async with async_session_factory() as db:
+        job = await _make_job(db, suffix="briefing-first", agent="loop-agent-briefing-first")
+        loop = await _make_loop(db, job_id=job.id, purpose="brief the first firing")
+        db.add(
+            Task(
+                id="task-loop-briefing-first",
+                project_id="proj-test",
+                title="the only task",
+                description="do the thing",
+                acceptance_criteria=["it works"],
+                status="pending",
+                loop_id=loop.id,
+            )
+        )
+        await db.commit()
+
+    with patch(  # noqa: SIM117
+        "hub.api.v1.agent_trigger.PtySession.spawn", MagicMock(return_value=fake_session)
+    ):
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            scheduler = JobScheduler()
+            async with async_session_factory() as db:
+                fresh_job = await db.get(AIJob, job.id)
+                success = await scheduler._fire_job_internal(
+                    fresh_job, trigger="scheduled", session=db
+                )
+
+            for task in list(agent_trigger._background_runs):
+                await task
+
+    assert success is True
+
+    async with async_session_factory() as db:
+        entry = (
+            await db.execute(
+                select(InboundQueueEntry).where(
+                    InboundQueueEntry.agent == "loop-agent-briefing-first"
+                )
+            )
+        ).scalar_one()
+
+    assert "# Loop briefing" in entry.content
+    assert "Purpose: brief the first firing" in entry.content
+    assert "## Current task: the only task" in entry.content
+    assert "do the thing" in entry.content
+    assert "it works" in entry.content
+    assert "## Prior checkpoint" not in entry.content
+    assert "Queue: 1 open, 0 done" in entry.content
+    assert entry.content.endswith("hello from a scheduled job")
+
+
+@pytest.mark.asyncio
+async def test_loop_briefing_includes_a_prior_checkpoint_in_full_under_the_cap(
+    app, auth_headers, bind_runner
+):
+    """Task 9.3: a later firing's briefing carries the prior firing's checkpoint body in full,
+    reused from a DIFFERENT conversation than the one about to fire (a loop's checkpoint is
+    scoped by `loop_id`, never by `conversation_id` — see `_make_checkpoint`)."""
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {"loop-agent-briefing-prior": {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    await bind_runner("loop-agent-briefing-prior", cli="claude")
+
+    fake_session = MagicMock()
+    fake_session.pid = 4848
+    fake_session.read.side_effect = [
+        '{"type":"result","subtype":"success","is_error":false,"session_id":"sess-briefing-2"}\n',
+        "",
+    ]
+    fake_session.wait.return_value = 0
+
+    async with async_session_factory() as db:
+        job = await _make_job(db, suffix="briefing-prior", agent="loop-agent-briefing-prior")
+        loop = await _make_loop(db, job_id=job.id, purpose="brief a later firing")
+        checkpoint = await _make_checkpoint(
+            db,
+            checkpoint_id="cp-briefing-prior",
+            loop_id=loop.id,
+            conversation_id="conv-briefing-prior-earlier",
+            body="Made progress on the queue. Nothing blocking.",
+        )
+        db.add(
+            Task(
+                id="task-loop-briefing-prior",
+                project_id="proj-test",
+                title="continue the work",
+                status="pending",
+                loop_id=loop.id,
+            )
+        )
+        await db.commit()
+        rendered = render_checkpoint(checkpoint)
+
+    assert len(rendered) <= _LOOP_BRIEFING_CHECKPOINT_CHARS, "fixture must stay under the cap"
+
+    with patch(  # noqa: SIM117
+        "hub.api.v1.agent_trigger.PtySession.spawn", MagicMock(return_value=fake_session)
+    ):
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            scheduler = JobScheduler()
+            async with async_session_factory() as db:
+                fresh_job = await db.get(AIJob, job.id)
+                success = await scheduler._fire_job_internal(
+                    fresh_job, trigger="scheduled", session=db
+                )
+
+            for task in list(agent_trigger._background_runs):
+                await task
+
+    assert success is True
+
+    async with async_session_factory() as db:
+        entry = (
+            await db.execute(
+                select(InboundQueueEntry).where(
+                    InboundQueueEntry.agent == "loop-agent-briefing-prior"
+                )
+            )
+        ).scalar_one()
+
+    assert "## Prior checkpoint" in entry.content
+    assert rendered in entry.content
+
+
+@pytest.mark.asyncio
+async def test_loop_briefing_truncates_an_oversized_prior_checkpoint_to_exactly_the_cap(
+    app, auth_headers, bind_runner
+):
+    """Task 9.3: an over-cap checkpoint is truncated to EXACTLY `_LOOP_BRIEFING_CHECKPOINT_CHARS`
+    — not omitted, not truncated to some other length."""
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {"loop-agent-briefing-overcap": {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    await bind_runner("loop-agent-briefing-overcap", cli="claude")
+
+    fake_session = MagicMock()
+    fake_session.pid = 4949
+    fake_session.read.side_effect = [
+        '{"type":"result","subtype":"success","is_error":false,"session_id":"sess-briefing-3"}\n',
+        "",
+    ]
+    fake_session.wait.return_value = 0
+
+    async with async_session_factory() as db:
+        job = await _make_job(db, suffix="briefing-overcap", agent="loop-agent-briefing-overcap")
+        loop = await _make_loop(db, job_id=job.id, purpose="brief an over-cap firing")
+        checkpoint = await _make_checkpoint(
+            db,
+            checkpoint_id="cp-briefing-overcap",
+            loop_id=loop.id,
+            conversation_id="conv-briefing-overcap-earlier",
+            body="x" * 10_000,
+        )
+        await db.commit()
+        rendered = render_checkpoint(checkpoint)
+
+    assert len(rendered) > _LOOP_BRIEFING_CHECKPOINT_CHARS, "fixture must exceed the cap"
+    expected_truncated = rendered[:_LOOP_BRIEFING_CHECKPOINT_CHARS]
+
+    with patch(  # noqa: SIM117
+        "hub.api.v1.agent_trigger.PtySession.spawn", MagicMock(return_value=fake_session)
+    ):
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            scheduler = JobScheduler()
+            async with async_session_factory() as db:
+                fresh_job = await db.get(AIJob, job.id)
+                success = await scheduler._fire_job_internal(
+                    fresh_job, trigger="scheduled", session=db
+                )
+
+            for task in list(agent_trigger._background_runs):
+                await task
+
+    assert success is True
+
+    async with async_session_factory() as db:
+        entry = (
+            await db.execute(
+                select(InboundQueueEntry).where(
+                    InboundQueueEntry.agent == "loop-agent-briefing-overcap"
+                )
+            )
+        ).scalar_one()
+
+    section_start = entry.content.index("## Prior checkpoint\n\n")
+    section = entry.content[section_start + len("## Prior checkpoint\n\n") :]
+    section = section[: len(expected_truncated)]
+    assert section == expected_truncated
+    assert len(section) == _LOOP_BRIEFING_CHECKPOINT_CHARS
+    assert rendered not in entry.content
+
+
+@pytest.mark.asyncio
+async def test_non_loop_job_fired_content_is_byte_identical_to_job_message(
+    app, auth_headers, bind_runner
+):
+    """Task 9.3: the regression guard for every non-loop job in the whole suite — no `Loop` row
+    means no briefing is composed at all, and `job.message` reaches the queue untouched."""
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {"job-agent-no-loop": {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    await bind_runner("job-agent-no-loop", cli="claude")
+
+    fake_session = MagicMock()
+    fake_session.pid = 5050
+    fake_session.read.side_effect = [
+        '{"type":"result","subtype":"success","is_error":false,"session_id":"sess-no-loop"}\n',
+        "",
+    ]
+    fake_session.wait.return_value = 0
+
+    async with async_session_factory() as db:
+        job = await _make_job(db, suffix="no-loop", agent="job-agent-no-loop")
+
+    with patch(  # noqa: SIM117
+        "hub.api.v1.agent_trigger.PtySession.spawn", MagicMock(return_value=fake_session)
+    ):
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            scheduler = JobScheduler()
+            async with async_session_factory() as db:
+                fresh_job = await db.get(AIJob, job.id)
+                success = await scheduler._fire_job_internal(
+                    fresh_job, trigger="scheduled", session=db
+                )
+
+            for task in list(agent_trigger._background_runs):
+                await task
+
+    assert success is True
+
+    async with async_session_factory() as db:
+        entry = (
+            await db.execute(
+                select(InboundQueueEntry).where(InboundQueueEntry.agent == "job-agent-no-loop")
+            )
+        ).scalar_one()
+
+    assert entry.content == job.message == "hello from a scheduled job"

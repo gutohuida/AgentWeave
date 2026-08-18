@@ -1,8 +1,8 @@
 # Tasks — A loop writes its own queue
 
-Sections 1-7 are implemented and verified (dated notes below). Everything from section 8 onward is
-still a spec only, unchecked — CLAUDE.md: "Never mark a task complete on the strength of a plan
-existing."
+Sections 1-7 and 9 are implemented and verified (dated notes below); section 8 and everything from
+section 10 onward is still a spec only, unchecked — CLAUDE.md: "Never mark a task complete on the
+strength of a plan existing."
 
 ## 1. Migration
 
@@ -504,19 +504,93 @@ existing."
 
 ## 9. The briefing (`hub/hub/scheduler.py`)
 
-- [ ] 9.1 New `_compose_loop_briefing(loop, claimed_task, prior_checkpoint) -> str` (design D5):
+- [x] 9.1 New `_compose_loop_briefing(loop, claimed_task, prior_checkpoint) -> str` (design D5):
       purpose, claimed task (title/description/acceptance criteria), prior checkpoint content
       (rendered via the existing `render_checkpoint`-equivalent rendering, truncated to
       `_LOOP_BRIEFING_CHECKPOINT_CHARS = 4_000`), and a one-line open/done queue summary reusing
       `_batch_loop_summaries`'s existing aggregation.
-- [ ] 9.2 `_do_fire_job`: when the job has a loop, prepend the composed briefing to `job.message`
+- [x] 9.2 `_do_fire_job`: when the job has a loop, prepend the composed briefing to `job.message`
       before calling `new_entry` (design D5 — the operator's own message text is unchanged, the
       briefing is a prefix).
-- [ ] 9.3 Tests: a first firing's briefing has no prior-checkpoint section; a later firing's briefing
+- [x] 9.3 Tests: a first firing's briefing has no prior-checkpoint section; a later firing's briefing
       includes a prior checkpoint's content in full when under the cap; a prior checkpoint over the
       cap is truncated to exactly the cap, not omitted; a non-loop job's fired message is byte-
       identical to `job.message` (no briefing prepended) — this last one is the regression guard for
       every non-loop job in the suite.
+
+      **2026-08-19.** `_compose_loop_briefing` took `session: AsyncSession` as an explicit first
+      parameter, ahead of `loop`/`claimed_task`/`prior_checkpoint` — the queue's open/done summary
+      needs a query the other three params cannot supply, and every other session-touching helper
+      in this file already leads with `session` (`_loop_stop_reason(session, job)`,
+      `_claim_loop_task(session, loop)`); adding a fourth positional-only session-shaped parameter
+      convention here would have been the odd one out, not a deviation from it.
+
+      Content order matches design D5 exactly: `loop.purpose` (skipped entirely when empty, not
+      rendered as an empty heading), the claimed task's title/description/acceptance criteria,
+      `## Prior checkpoint` rendered via `checkpoint_generation.render_checkpoint` (the same
+      function a human reader gets — no second serialisation) truncated from the end at
+      `_LOOP_BRIEFING_CHECKPOINT_CHARS = 4_000` when `latest_checkpoint_for_loop` finds one, then
+      `Queue: {open} open, {done} done`. The open/done split reuses `TERMINAL_FOR_BINDING`
+      (`("approved", "rejected")`) — the exact same split `_loop_stop_reason`, in this same file,
+      already uses to decide whether a loop's queue is drained — rather than inventing a second,
+      differently-drawn line for the same concept. The per-status count query is recomputed
+      directly in `scheduler.py` rather than imported from `api/v1/jobs.py`'s
+      `_batch_loop_summaries` — L6's own precedent (task 6.1's note) already rejected an
+      api-layer-to-scheduler cross-import for a similarly small query, for the same layering
+      reason.
+
+      `_do_fire_job` (task 9.2): `content = job.message` by default; when `loop is not None`, fetch
+      `prior_checkpoint = await latest_checkpoint_for_loop(session, loop.id)` (built in L7, may be
+      `None` on a loop's first firing — not `loop_for_conversation`, which resolves a loop *from* a
+      conversation the caller does not have yet; the `loop` local is already the right object),
+      compose the briefing, and set `content = f"{briefing}\n{job.message}"` — a prefix, `job.
+      message` reaches `new_entry` unchanged either way, so the operator's own template still reads
+      exactly as authored (design D5). A non-loop job never enters the `if loop is not None:`
+      branch at all, so `content` stays exactly `job.message`.
+
+      **Tests, `hub/tests/test_scheduler.py`**, extending the same `_make_job`/`_make_loop`
+      fixtures `_claim_loop_task`'s own tests (section 6) already use, plus a new `_make_checkpoint`
+      helper that (deliberately, mirroring L7's own
+      `test_latest_checkpoint_for_loop_crosses_conversations`) attributes the checkpoint to a
+      *different* conversation than the one about to fire, since a loop's next firing is by
+      construction a conversation that does not exist yet:
+      `test_loop_briefing_omits_prior_checkpoint_section_on_a_first_firing` (no checkpoint exists —
+      asserts `"## Prior checkpoint" not in entry.content`, and separately asserts the purpose,
+      claimed-task, and queue-summary lines are all present and `entry.content` ends with
+      `job.message`); `test_loop_briefing_includes_a_prior_checkpoint_in_full_under_the_cap` (a
+      short checkpoint body — asserts `render_checkpoint(checkpoint)` appears in `entry.content`
+      byte-for-byte); `test_loop_briefing_truncates_an_oversized_prior_checkpoint_to_exactly_the_cap`
+      (a 10,000-character body — asserts the extracted `## Prior checkpoint` section equals
+      `rendered[:_LOOP_BRIEFING_CHECKPOINT_CHARS]` exactly, `len(section) ==
+      _LOOP_BRIEFING_CHECKPOINT_CHARS`, and the untruncated `rendered` string does NOT appear
+      anywhere in `entry.content` — a length assertion, not just presence, per `next_action`'s
+      explicit instruction); `test_non_loop_job_fired_content_is_byte_identical_to_job_message` (no
+      `Loop` row at all — asserts `entry.content == job.message == "hello from a scheduled job"`),
+      the regression guard for every non-loop job in the suite.
+
+      **Verification, measured:**
+      - `py -3.11 -m pytest hub/tests/test_scheduler.py -q` — **14 passed** (10 pre-existing + 4
+        new).
+      - `py -3.11 -m pytest hub/tests/test_checkpoint_record.py hub/tests/test_checkpoint_generation.py
+        -q` — **42 passed** — both suites reading `render_checkpoint`/`latest_checkpoint_for_loop`,
+        confirming this section's new call sites did not change either function's behaviour.
+      - `ruff check hub/hub/scheduler.py hub/tests/test_scheduler.py` — clean.
+      - `black --fast hub/hub/scheduler.py hub/tests/test_scheduler.py` — both already formatted,
+        unchanged.
+      - `mypy hub/hub/scheduler.py`, filtered to lines attributed to the file — exactly the same 6
+        error lines as `.claude/autonomous/mypy-baseline.txt` (2 `Result[Any].rowcount` +
+        4 pre-existing `import-untyped`) — **zero new errors**. `_compose_loop_briefing`'s
+        `session: AsyncSession` parameter is explicitly typed for the same reason L7's three new
+        functions were: an untyped `session` on a brand-new function would have added a fresh
+        baseline miss, not matched an existing-file convention worth extending.
+      - `npx openspec validate --changes --strict` (from the repo root) — 2/2.
+
+      No Hub restart: like L3-L7, this section is verified entirely through pytest against
+      scheduler logic, with no UI or live-Hub surface to exercise.
+
+      **Not done, correctly deferred:** section 8 (refusing `resume` for a loop's job,
+      `hub/hub/api/v1/jobs.py`) remains open — the queue deliberately ordered L9 ahead of L8 this
+      run because L9 leans on L7's `latest_checkpoint_for_loop`; L8 is next.
 
 ## 10. Empty-queue telemetry (`hub/hub/scheduler.py`)
 
