@@ -1361,3 +1361,97 @@ from them.
 #8 has one of nine remaining delta-spec mappings done (`agent-composer`), with the other eight and a
 re-check of `agent-tool-surface` explicitly listed in the new 16.2 note for whoever continues it.
 Runway to `stop_at` (2026-08-18T08:00+01:00) is still roughly 3h.
+
+---
+
+## Iteration 17 — Q11/roadmap #8: second 16.2 requirement-level mapping slice (`agent-inbound-queue`)
+
+Started fresh, verified branch (`autonomous/2026-08-18-the-app-feels-alive`) and `git log` matched
+`STATE.json`'s `iteration: 16` claim exactly (`77b7ba2` heartbeat back-date on top of `d96fcf8`,
+iteration 16's `agent-composer` mapping). Clock at start: `2026-08-18T04:57:10+01:00`, ~3h of runway
+to `stop_at`. Tree clean apart from the carried-forward `spec/` and `hub/seed_taste_doc.py` scratch.
+
+`next_action` pointed straight at continuing the 16.2 requirement-level mapping, one delta spec at a
+time, and specifically suggested `agent-inbound-queue` next (16's own REDEFINED note already flags it
+as one of two deltas that "overstate the system"). Followed that.
+
+Read `openspec/changes/2026-07-30-hub-native-experience/specs/agent-inbound-queue/spec.md` in full
+(173 lines, six requirements: one ordered queue per agent, turns start on arrival, inline delivery up
+to a cap, a hop budget, stop-without-losing-queued-work, configurable limits). No file named
+`agent-inbound-queue` exists under `openspec/specs/` — confirmed by listing the directory rather than
+trusting the umbrella's own "absent under that name" list at face value, since 16.2's 2026-08-12 note
+already warned absence-by-name is not evidence of being unsynced.
+
+Grepped `hop budget`, `hop depth`, `inbound queue`, `per-turn delivery`, and `queue` across all 31
+current specs to find where the content actually landed, rather than guessing. It surfaced in at
+least six: `agent-capability-plane`, `agent-configuration`, `agent-conversation-workspace`,
+`agent-tool-surface`, `conversation-lifecycle`, `local-project-workspace`, `run-task-binding`, and
+`spec-document-authority` — the delta's content did not move to one successor, it scattered.
+
+**Five of six requirements confirmed shipped as described**, checked against both current spec prose
+and live code rather than prose alone:
+
+- Turn-starts-on-arrival and inline delivery: `agent-tool-surface/spec.md:20-39` ("the agent has its
+  queued entries... not instructed to call a retrieval tool").
+- Hop budget: `agent-tool-surface/spec.md:61-65` ("Messages sent through the tool surface obey the
+  queue... subject to the hop budget"), and the numeric default checked directly in code —
+  `hub/hub/inbound_queue.py:15-16` (`DEFAULT_HOP_BUDGET = 6`, `DEFAULT_TURN_DELIVERY_CAP = 10`) and
+  `hub/hub/db/models.py:48-49` (`Project.hop_budget` default 6, `turn_delivery_cap` default per the
+  same file) — both numbers match the delta's stated defaults exactly, five weeks after it was
+  written.
+- Configurable limits: `local-project-workspace/spec.md:127-138` ("Each project SHALL expose its
+  name, hop budget, per-turn delivery cap...").
+- Delivered-entries-not-redelivered-after-stop: intact but reworded — the delta says "MUST NOT be
+  redelivered," the current spec says "its input is not returned to the queue"
+  (`agent-conversation-workspace/spec.md:1210`, scenario at `:1268-1271`, "A stopped run keeps its
+  input").
+
+**One requirement was not a rename, it was superseded by a materially different architecture** — the
+kind of finding that only shows up by reading the current spec's own scenarios and the live code, not
+by pattern-matching prose, and the reason this pass is worth doing per-requirement rather than
+per-file. The delta's first requirement is "each agent has one ordered inbound queue... both operator
+input and peer messages SHALL enter that same queue" — singular and agent-scoped, with no notion of
+which conversation an entry belongs to. Checked whether the delta ever mentions conversations at all:
+`grep -ni conversation` on the delta file returned nothing — confirmed, not assumed, before writing
+the finding. The shipped model is conversation-scoped: `InboundQueueEntry` carries a `conversation_id`
+column (`hub/hub/db/models.py:546`), `queued_entries()` filters by it when one is supplied
+(`hub/hub/inbound_queue.py:72-89`), and `agent-conversation-workspace/spec.md`'s own scenario
+"Different conversations never share one provider turn" (line 71) states plainly that "one agent has
+eligible queued entries for multiple conversations" — the literal opposite of one ordered queue.
+Conversations did not exist as a first-class entity when this delta was written (`2026-07-30`, before
+the `agent-conversation-workspace` successor that introduced `conversation_id`), so this is not
+oversight or drift, it is the model genuinely widening under a later change. A requirement-level sync
+must record this as a redefinition, not tick it as a match on the strength of the surviving numbers
+and hop-budget mechanics being otherwise faithful.
+
+**What was written, not implemented.** One dated note added under 16.2 in
+`openspec/changes/2026-07-30-hub-native-experience/tasks.md` (the only file touched this iteration),
+recording: the six requirements and where each landed; the two verified-live numeric defaults with
+file:line; the stop-semantics rewording with file:line; the conversation-scoping supersession with the
+grep-confirmed absence of the word "conversation" in the delta and the three code/spec citations that
+establish the current shape; and an updated tally — two of the eight remaining unmapped specs now done
+(`agent-composer` from iteration 16, `agent-inbound-queue` this iteration), six left
+(`agent-conversation-timeline`, `agent-identity-and-skills`, `hub-interface-feel`, `hub-native-runtime`,
+`hub-visual-language`, plus re-confirming `agent-tool-surface` at requirement level).
+
+No checkbox ticked, no code changed, no archiving attempted — consistent with the file's own
+reconciliation rule and with `decisions_for_user` D1 in `STATE.json`, both re-confirmed rather than
+overridden.
+
+**Verified before committing:** `git status --short` showed only the one intended file modified, plus
+the carried-forward `spec/` and `hub/seed_taste_doc.py` scratch. Re-read the added note in full after
+writing it, including re-checking the "31 current specs" count against a live `ls` (not carried over
+from memory) and re-grepping the `hub/hub/db/models.py`/`hub/hub/inbound_queue.py` line numbers cited
+against the actual file contents rather than trusting the first grep's line numbers to still be
+accurate after re-reading surrounding context. Did not run `openspec validate` — same reasoning as
+iteration 16: `tasks.md` is prose/checklist, outside that validator's schema-checked scope.
+
+**Tree state before commit:** `openspec/changes/2026-07-30-hub-native-experience/tasks.md` modified
+(1 new note, 33 lines); `.claude/autonomous/STATE.json` updated (iteration, heartbeat, Q11 done_note,
+next_action); `spec/` and `hub/seed_taste_doc.py` (prior-session scratch) untouched, staged nothing
+from them.
+
+**Queue status:** Q1–Q10 done. Q11 — roadmap #7 stays parked (three failure modes on record); roadmap
+#8 now has two of nine remaining delta-spec mappings done (`agent-composer`, `agent-inbound-queue`),
+with six specs plus a re-check of `agent-tool-surface` still listed in the 16.2 note for whoever
+continues it. Runway to `stop_at` (2026-08-18T08:00+01:00) is roughly 2h50m.

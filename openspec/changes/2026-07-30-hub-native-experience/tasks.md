@@ -1926,6 +1926,39 @@ being built twice.*
 > ones before 16.2 can tick. `agent-tool-surface` was not re-checked this pass and should not be
 > assumed clean merely because it wasn't flagged.
 
+> **Update (2026-08-18) — `agent-inbound-queue` requirement-level pass, second of the eight
+> renamed/absent specs.** No current spec is named `agent-inbound-queue`; its six requirements are
+> not concentrated in one successor but scattered across at least `agent-conversation-workspace`,
+> `agent-tool-surface`, `agent-configuration`, `conversation-lifecycle`, and
+> `local-project-workspace` (grepped for `hop budget`/`hop depth`/`queue` across all 31 current
+> specs to find them, rather than guessing from the one file this umbrella's phase 6 pointed at).
+>
+> Five of the six requirements are confirmed shipped as described, including two numeric defaults
+> that still match five weeks later: `hop_budget` defaults to 6 and `turn_delivery_cap` to 10,
+> exactly as the delta specified, live in `hub/hub/inbound_queue.py:15-16`
+> (`DEFAULT_HOP_BUDGET`/`DEFAULT_TURN_DELIVERY_CAP`) and column defaults in
+> `hub/hub/db/models.py:48-49`. Delivered-entries-not-redelivered-after-stop is intact too, just
+> phrased as "its input is not returned to the queue" rather than the delta's "MUST NOT be
+> redelivered" (`agent-conversation-workspace/spec.md:1210,1268-1271`).
+>
+> One requirement did not merely move, it was superseded by a materially different architecture,
+> and this could only be found by reading the current spec's own scenarios and the live code, not
+> by matching prose. The delta's first requirement is "each agent has one ordered inbound queue" —
+> singular, agent-scoped, with no notion of which conversation an entry belongs to (the word
+> `conversation` does not appear in the delta file at all). The shipped model is conversation-scoped:
+> `InboundQueueEntry` carries a `conversation_id` (`hub/hub/db/models.py`), `queued_entries()`
+> filters by it (`hub/hub/inbound_queue.py:72-89`), and `agent-conversation-workspace/spec.md`'s own
+> "Different conversations never share one provider turn" scenario (line 71) states plainly that
+> "one agent has eligible queued entries for multiple conversations" — the opposite of one ordered
+> queue. This is not a naming drift like `agent-composer`'s; it is a real widening of the model
+> (conversations didn't exist as a first-class entity when this delta was written) that a
+> requirement-level sync must record as a redefinition, not tick as a match.
+>
+> Two of the eight remaining unmapped specs are now done (`agent-composer`, `agent-inbound-queue`).
+> Six remain: `agent-conversation-timeline`, `agent-identity-and-skills`, `hub-interface-feel`,
+> `hub-native-runtime`, `hub-visual-language`, plus re-confirming `agent-tool-surface` at
+> requirement level per the note above.
+
 - [ ] 16.1 Confirm every scenario in the ten delta specs is exercised.
 - [ ] 16.2 Sync delta specs into `openspec/specs/`; reconcile `agent-stream-events`,
       `runtime-diagnostics`, and `agent-conversation-handoff` with their new behaviour.
