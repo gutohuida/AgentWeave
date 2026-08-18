@@ -2319,6 +2319,76 @@ being built twice.*
 > `agent-conversation-timeline`, `agent-identity-and-skills`, `hub-interface-feel`,
 > `hub-native-runtime`). Two remain: `hub-visual-language`, plus re-confirming `agent-tool-surface` at
 > requirement level per the 2026-08-18 note above.
+>
+> **Update (2026-08-18, iteration 22) — seventh 16.2 requirement-level mapping:
+> `hub-visual-language`.** No current spec carries that name. Its six requirements were checked
+> against `openspec/specs/` by concept (grepping indigo/ink plane/dividing line/resiz/scrollbar/
+> navigation region/agent colour across all 31), then against live code — `PaneResizer.tsx`,
+> `App.tsx`, `ConversationView.tsx`, `hub/ui/src/index.css` — wherever spec prose came up empty,
+> following the method the last two passes established.
+>
+> **One requirement was already reconciled, in the delta file itself rather than in this note.**
+> *Navigation lists live entities; project views are reached in the content area.* Carries its own
+> "Superseded in part by `2026-08-04-hub-contextual-navigation`" note, added the same day as that
+> change (`git log`: commit `8526bea`), pointing at `hub-workspace-shell/spec.md:387`'s "The
+> navigation region carries the navigation of whatever the operator has entered." Confirmed current,
+> not stale — nothing since has moved configuration back into a content-area tab. No action needed;
+> flagged so the next pass does not re-derive it.
+>
+> **One requirement is a considered, documented supersession, not drift** — same register as
+> iteration 19's runner cross-project reversal and iteration 20's SSE-polling exceptions:
+> - *The interface presents related navigation and content planes* (the delta's indigo rail / ink
+>   content plane). `hub-workspace-shell/spec.md:15-18` states outright that "the mock's *palette* is
+>   explicitly superseded... the running application SHALL instead use the neutral graphite ramp,"
+>   and `:49-57`'s "Navigation and content use distinct but related planes" requirement says in its
+>   own text that it "supersedes... the subsequent direction that required the mock's indigo and ink
+>   fills." Not a gap — a later, written-down palette decision.
+>
+> **One requirement is documented, but folded into the same requirement as the one above rather than
+> standing alone, and scoped narrower than the delta asked:**
+> - *Two adjacent regions are separated by one signal, not two.* The delta states this as a general
+>   rule for any two adjacent regions. `hub-workspace-shell/spec.md:49-63` states it only for the
+>   nav/content boundary specifically ("their boundary SHALL remain subtle and MUST NOT combine a
+>   strong fill contrast with a strong dividing line," "the boundary remains less prominent than an
+>   interactive control outline" — a near-verbatim match to the delta's two scenarios, but scoped to
+>   one boundary). The general principle is applied in code beyond that one boundary —
+>   `PaneResizer.tsx:30-32`'s own comment states "the panes then share one ground plane with a single
+>   separation signal," and the component is used for both the nav/content boundary (`App.tsx:482`)
+>   and the conversation/spec-panel boundary (`ConversationView.tsx:263`) — but no requirement text
+>   states the general rule; only the one instance is specified. Documented-but-narrower, the same
+>   pattern iteration 20 found for the single-icon-system requirement.
+>
+> **One requirement is shipped and cleanly documented:**
+> - *An agent's identity colour is applied consistently wherever it appears.* Matches
+>   `local-project-workspace/spec.md:223-232`'s "Agent identity color remains project-consistent"
+>   almost word for word, including the "colour never stands alone" half ("Color MUST always be
+>   accompanied by the agent name"). No narrowing this time, unlike iteration 18's finding for the
+>   same underlying mechanism in `agent-conversation-timeline` (which asked for three more specifics
+>   this delta's simpler wording does not).
+>
+> **Two requirements are shipped and verified live in code but have zero requirement text anywhere in
+> the current 31 specs** — continuing the dominant pattern since iteration 18:
+> - *Primary panes are resizable and the choice is remembered.* Only a passing mention survives
+>   anywhere in the current corpus — "rail resizing" in `hub-workspace-shell/spec.md:33`'s scenario
+>   list for an unrelated requirement (visual alignment to the mock) — with no dedicated requirement
+>   for drag affordance, clamping, persistence, or reset. All four are shipped:
+>   `PaneResizer.tsx:38-113` implements a wider-than-visible hit target (11px strip around a 1px
+>   line, `:125`), hover/focus strengthening (`:140`), pointer-capture dragging with `min`/`max`
+>   clamping (`:50-53`), keyboard resizing (arrow keys, `:101-113`), and a reset-to-default on
+>   double-click or `Home` (`:112,132`). Persistence: `App.tsx:72-96` reads/writes
+>   `SIDEBAR_WIDTH_KEY` in `localStorage`, clamped against `SIDEBAR_MIN_WIDTH`/`SIDEBAR_MAX_WIDTH` on
+>   read with a graceful fallback to the default if the stored value is invalid.
+> - *Scrollbars are unobtrusive.* Grepped `scrollbar` across all 31 specs: zero hits. Shipped exactly
+>   as the delta describes: `hub/ui/src/index.css:238-259` sets `scrollbar-width: thin` with a
+>   transparent track (Firefox), and for WebKit hides the track, corner, and stepper buttons
+>   (`display: none`) while rendering only an inset, rounded thumb (`border: 3px solid transparent`
+>   plus `background-clip: content-box`) that strengthens on hover (`:256-259`).
+>
+> Seven of the nine remaining unmapped specs are now done (`agent-composer`, `agent-inbound-queue`,
+> `agent-conversation-timeline`, `agent-identity-and-skills`, `hub-interface-feel`,
+> `hub-native-runtime`, `hub-visual-language`). One remains: re-confirming `agent-tool-surface` at
+> requirement level per the 2026-08-18 note above (the 2026-08-03 partial note only confirmed it by
+> name).
 
 - [ ] 16.1 Confirm every scenario in the ten delta specs is exercised.
 - [ ] 16.2 Sync delta specs into `openspec/specs/`; reconcile `agent-stream-events`,

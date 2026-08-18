@@ -1921,3 +1921,104 @@ done_note, next_action); `spec/` and `hub/seed_taste_doc.py` (prior-session scra
 roadmap #8 now has six of nine remaining delta-spec mappings done, two left (`hub-visual-language`,
 `agent-tool-surface` re-check), listed in the 16.2 note for whoever continues it. Runway to `stop_at`
 (2026-08-18T08:00+01:00) is roughly 1h55m.
+
+## Iteration 22 — seventh 16.2 requirement-level mapping: `hub-visual-language`
+
+Continued Q11/roadmap #8, same pattern as iterations 16-21. Picked `hub-visual-language` — six
+requirements, no current spec carries that name. Did the research inline this time rather than
+delegating: six requirements over one subsystem (the visual shell) is small enough not to need a
+background agent, unlike iteration 21's five-subsystem `hub-native-runtime`. Grepped all 31 current
+specs by concept (indigo/ink plane, dividing line, resiz, scrollbar, navigation region, agent
+colour), then read live code wherever spec prose came up empty: `PaneResizer.tsx`, `App.tsx`,
+`ConversationView.tsx`, `hub/ui/src/index.css`.
+
+**Six requirements, five findings plus one already-closed:**
+
+1. **Navigation lists live entities; project views reached in content area** — already reconciled,
+   and not by this pass. The delta file itself carries a "Superseded in part by
+   `2026-08-04-hub-contextual-navigation`" note, written directly into the requirement text rather
+   than left for a `tasks.md` note to catch. `git log` on the file confirmed the note is dated the
+   same day as that change (commit `8526bea`), and it points at
+   `hub-workspace-shell/spec.md:387`'s navigation-region-carries-whatever-is-entered requirement.
+   Checked it is still current, not stale: nothing since has moved configuration back into a
+   content-area tab or column. No action taken; flagged in the `tasks.md` note so the next pass does
+   not spend time re-deriving what a previous change already settled.
+
+2. **The interface presents related navigation and content planes** (the delta's indigo rail / ink
+   content plane) — a considered, documented supersession, not drift. `hub-workspace-shell/
+   spec.md:15-18` states outright that the mock's palette is explicitly superseded and the running
+   application uses the neutral graphite ramp instead. The requirement at `:49-57` says in its own
+   text that it supersedes the subsequent direction that required the mock's indigo and ink fills.
+   Same register as iteration 19's runner cross-project reversal and iteration 20's SSE-polling
+   exceptions — a later decision recorded in the spec's own words, not an omission.
+
+3. **Two adjacent regions are separated by one signal, not two** — documented, but folded into the
+   same requirement as #2 above rather than standing alone, and scoped narrower than the delta asked.
+   The delta states this as a general rule for any two adjacent regions; `hub-workspace-shell/
+   spec.md:49-63` states it only for the nav/content boundary (boundary stays subtle, MUST NOT
+   combine strong fill contrast with a strong dividing line, remains less prominent than an
+   interactive control outline — a near-verbatim match to the delta's two scenarios, but scoped to
+   one boundary). Checked whether the general principle actually holds elsewhere in code before
+   calling this a gap: `PaneResizer.tsx:30-32`'s own comment states the panes share one ground plane
+   with a single separation signal, and the component is used for both the nav/content boundary
+   (`App.tsx:482`) and the conversation/spec-panel boundary (`ConversationView.tsx:263`). The
+   practice is general; only the one instance is specified as a requirement. Documented-but-narrower,
+   the same pattern iteration 20 found for the single-icon-system requirement.
+
+4. **An agent's identity colour is applied consistently wherever it appears** — cleanly documented,
+   no narrowing. `local-project-workspace/spec.md:223-232`'s agent-identity-colour requirement
+   matches almost word for word, including the colour-never-stands-alone half (colour must always be
+   accompanied by the agent name). Unlike iteration 18's finding for the same underlying mechanism
+   inside `agent-conversation-timeline` (which asked for three more specifics — stability across
+   restart/rename, non-derivation from name, distinct-until-exhausted — that this delta's simpler
+   wording never asked for), there is nothing left over to narrow here.
+
+5. **Primary panes are resizable and the choice is remembered** — shipped, zero requirement text
+   anywhere in the current 31. Only a passing mention survives at all: "rail resizing" in
+   `hub-workspace-shell/spec.md:33`'s scenario list for an unrelated requirement (visual alignment to
+   the mock), with no dedicated requirement for drag affordance, clamping, persistence, or reset. All
+   four are shipped and read directly rather than assumed from the component's docstring:
+   `PaneResizer.tsx:38-113` — an 11px hit target around a 1px line (`:125`) that only changes colour
+   on hover/focus so nothing reflows while aiming (`:136-142`), pointer-capture dragging clamped to
+   min/max (`:50-53,79-81`), keyboard resizing with arrow keys (`:101-113`), and reset-to-default on
+   double-click or Home (`:112,132`). Persistence: `App.tsx:72-96` reads/writes `SIDEBAR_WIDTH_KEY`
+   in localStorage, clamping the stored value against `SIDEBAR_MIN_WIDTH`/`SIDEBAR_MAX_WIDTH` on read
+   and falling back to the default gracefully if it is missing or invalid.
+
+6. **Scrollbars are unobtrusive** — shipped exactly as specified, zero requirement text anywhere.
+   Grepped `scrollbar` across all 31 specs: zero hits. `hub/ui/src/index.css:238-259` sets
+   `scrollbar-width: thin` with a transparent track for Firefox, and for WebKit hides the track,
+   corner, and stepper buttons outright while rendering only an inset, rounded thumb (transparent
+   border plus content-box background-clip, so the border reads as inset padding rather than a
+   visible ring) that strengthens on hover.
+
+**What was written, not implemented.** One dated note added under 16.2 in
+`openspec/changes/2026-07-30-hub-native-experience/tasks.md` (70 lines, the only file touched this
+iteration) — seven of the nine remaining unmapped specs now done (`agent-composer`,
+`agent-inbound-queue`, `agent-conversation-timeline`, `agent-identity-and-skills`,
+`hub-interface-feel`, `hub-native-runtime`, `hub-visual-language`). One remains: re-confirming
+`agent-tool-surface` at requirement level — the 2026-08-03 partial note only confirmed it survives by
+name, the way iteration 18's note found `agent-composer` needed a real requirement-level look despite
+also surviving by name (and found a genuine drift there). No checkbox ticked, no code changed, no
+archiving attempted, per the file's own reconciliation rule and `decisions_for_user` D1.
+
+**Verified before committing:** re-read every cited line directly rather than trusting the earlier
+grep pass alone — `hub-workspace-shell/spec.md` lines 1-90 in full (not just the matched lines, to
+catch the supersession language in context), `local-project-workspace/spec.md:223-232`,
+`PaneResizer.tsx` in full (145 lines), the `App.tsx` sidebar-width block (lines 60-104), and
+`index.css` lines 235-259. `git log -1` on the delta spec file confirmed the inline supersession
+note's date (commit `8526bea`, 2026-08-04) rather than assuming it was current. `git diff --stat`
+showed exactly the one file, 70 insertions. `git status --short` showed only that plus the
+carried-forward `spec/` and `hub/seed_taste_doc.py` scratch, staged nothing from them.
+
+**Tree state before commit:** `openspec/changes/2026-07-30-hub-native-experience/tasks.md` modified
+(1 new note, 70 lines); `.claude/autonomous/STATE.json` updated (iteration, heartbeat, Q11 done_note,
+next_action); `spec/` and `hub/seed_taste_doc.py` (prior-session scratch) untouched.
+
+**Queue status:** Q1–Q10 done. Q11 — roadmap #7 stays parked (three failure modes on record);
+roadmap #8 now has seven of nine originally-unmapped delta specs mapped at requirement level, one
+left (`agent-tool-surface` re-check). Once that lands, 16.2's requirement-level mapping is complete
+for every delta spec under this umbrella — worth flagging to the operator that 16.2 itself may then
+be close to done, though 16.1 (scenario exercise) and 16.3 (archive) are separate, larger asks that
+stay the operator's call per the umbrella's own notes. Runway to `stop_at` (2026-08-18T08:00+01:00)
+is roughly 1h45m.
