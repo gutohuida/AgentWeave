@@ -22,6 +22,8 @@ from .db.engine import async_session_factory
 from .db.models import Agent, AIJob, JobRun, Loop, Task
 from .run_task_binding import TERMINAL_FOR_BINDING
 from .sse import sse_manager
+from .task_transition_service import apply_transition
+from .task_transitions import operator
 from .utils import persist_event, short_id
 
 logger = logging.getLogger(__name__)
@@ -101,6 +103,30 @@ async def _loop_stop_reason(session: AsyncSession, job: AIJob) -> Optional[str]:
             if ever_count:
                 return "loop queue is empty"
     return None
+
+
+async def _claim_loop_task(session: AsyncSession, loop: Loop) -> Optional[Task]:
+    """The queue item this firing works on (design D3): resume the loop's existing
+    `in_progress`/`blocked` task if one exists, else claim the oldest `pending` one.
+
+    Deliberately mirrors `_batch_loop_summaries`'s "current item" derivation
+    (`api/v1/jobs.py`, design D7 of `many-named-loops`) rather than re-deriving the ordering:
+    same candidate statuses, same priority (an active task, most recently touched, beats an
+    untouched pending one; pending ties break oldest-first). Not factored into a shared
+    function — the two call sites differ in shape (one loop here vs. a batch of loops there),
+    and importing across the api/scheduler layering for three lines was not worth it.
+    """
+    result = await session.execute(
+        select(Task)
+        .where(Task.loop_id == loop.id, Task.status.in_(("in_progress", "blocked", "pending")))
+        .order_by(
+            (Task.status != "pending").desc(),
+            Task.updated.desc(),
+            Task.created_at.asc(),
+        )
+        .limit(1)
+    )
+    return result.scalars().first()
 
 
 # Singleton scheduler instance
@@ -427,6 +453,19 @@ class JobScheduler:
                 await self.remove_job(job.id)
                 logger.info(f"Job {job.id} loop stopped: {loop_stop_reason}")
                 return False
+
+            loop_result = await session.execute(select(Loop).where(Loop.job_id == job.id))
+            loop = loop_result.scalars().first()
+            if loop is not None:
+                claimed_task = await _claim_loop_task(session, loop)
+                if claimed_task is not None:
+                    # `pending` is the only entry status `_claim_loop_task` can return (its
+                    # candidate set mirrors `_batch_loop_summaries`, which never includes
+                    # `assigned`) — an already-active task is being resumed, not entered, so its
+                    # status stays untouched (design D3).
+                    if claimed_task.status == "pending":
+                        await apply_transition(session, claimed_task, "assigned", operator())
+                    claimed_task.assignee = job.agent
 
             entry = new_entry(
                 project_id=job.project_id,

@@ -1,6 +1,6 @@
 # Tasks — A loop writes its own queue
 
-Sections 1-5 are implemented and verified (dated notes below). Everything from section 6 onward is
+Sections 1-6 are implemented and verified (dated notes below). Everything from section 7 onward is
 still a spec only, unchecked — CLAUDE.md: "Never mark a task complete on the strength of a plan
 existing."
 
@@ -283,22 +283,131 @@ existing."
 
 ## 6. Claiming the current item (`hub/hub/scheduler.py`)
 
-- [ ] 6.1 New `_claim_loop_task(session, loop) -> Optional[Task]` (design D3): select the queue's
+- [x] 6.1 New `_claim_loop_task(session, loop) -> Optional[Task]` (design D3): select the queue's
       existing active/non-terminal task if one exists, else the oldest entry-status task by
       `created_at`. Mirrors `_batch_loop_summaries`'s existing "current item" derivation
       (`jobs.py:98`) — read that function first rather than re-deriving the ordering independently,
       and factor the shared logic if it can be reused without changing `_batch_loop_summaries`'s own
       batch-query shape (design D7 of `many-named-loops`, which this task must not regress).
-- [ ] 6.2 `_do_fire_job`: after `_loop_stop_reason` passes (fire proceeds), call `_claim_loop_task`
+- [x] 6.2 `_do_fire_job`: after `_loop_stop_reason` passes (fire proceeds), call `_claim_loop_task`
       when the job has a loop. If a task is returned and its status is an entry status, transition it
       to `assigned`/`in_progress` (whichever the existing task-transition machinery treats as the
       correct entry point — check `run_task_binding.py`'s declared transitions before picking one) and
       set `assignee=job.agent`. If it is already active, leave its status untouched.
-- [ ] 6.3 Tests: a fire with only entry-status tasks claims the oldest; a fire with an existing
+- [x] 6.3 Tests: a fire with only entry-status tasks claims the oldest; a fire with an existing
       active task resumes it rather than claiming another; a fire with an empty queue claims nothing
       and does not error (the stop-condition check already prevents this case when `stop_when_queue_
       empties` is set — assert the claim step itself is a no-op independent of that check, for a loop
       that has no `stop_when_queue_empties` and is allowed to fire on an empty queue).
+
+      **Done 2026-08-19** in `hub/hub/scheduler.py` (`_claim_loop_task`, wired into `_do_fire_job`)
+      and `hub/tests/test_scheduler.py` (three new tests).
+
+      **D3 read as authoritative over this section's own paraphrase.** D3's text is narrower than
+      "entry status" (`pending`/`assigned` per `task_transitions.ENTRY_STATUSES`): it says the
+      fallback tier is the oldest **`pending`** one, and names only `in_progress`/`blocked` as the
+      active tier — the exact candidate set `_batch_loop_summaries` already queries (`jobs.py:98`,
+      `Task.status.in_(("in_progress", "blocked", "pending"))`, no `assigned`). Built
+      `_claim_loop_task` to that literal set rather than the wider `ENTRY_STATUSES` reading, so it
+      mirrors the existing "current item" derivation exactly rather than approximately — an
+      `assigned` task (there is no code path that creates one on a loop's queue today; materialised
+      tasks are always `pending`) is simply never a candidate, matching what the UI already shows as
+      a loop's "current item" today.
+
+      **6.1's factoring question resolved as: not factored, and said so rather than silently
+      skipped.** `_batch_loop_summaries` lives in `hub/hub/api/v1/jobs.py` (the API layer);
+      `_claim_loop_task` has to live in `hub/hub/scheduler.py` per 6.1's own text. Neither module
+      imports the other today, and the two queries differ in shape beyond the shared ordering trick
+      — one is a `Task.loop_id.in_(loop_ids)` batch grouped in Python by first-row-per-loop_id,
+      the other a single-loop `.limit(1)`. Introducing a cross-import between the API and scheduler
+      layers to share three lines of `order_by` was judged not worth the new coupling; `scheduler.py`
+      re-derives the same `(Task.status != "pending").desc(), Task.updated.desc(),
+      Task.created_at.asc()` ordering with a comment pointing at `jobs.py:98` and design D7, so a
+      future change to one is at least discoverable from the other, even though the code is not
+      shared.
+
+      **6.2's transition target: `assigned`, not `in_progress`.** D3's own text is explicit — "the
+      scheduler sets that task's status='assigned' (or leaves `in_progress` if resuming one)". This
+      is deliberately a *different* status than `run_task_binding.bind_run_to_task`'s
+      `in_progress` — that module moves a task to `in_progress` when an actual `Run` row binds to
+      it, which does not exist yet at claim time (claiming happens before the `InboundQueueEntry` is
+      even created). The two mechanisms are independent: `_claim_loop_task` marks "this is what the
+      firing is about" on the task board immediately (D3's own stated purpose — "so 'what is this
+      firing working on' is answered by the task board itself, not by parsing a transcript"); the
+      entry this change creates does not carry a `task_id`, so `resolve_bound_task` (`agent_trigger.py`
+      / `run_task_binding.py`) never sees this task and `Run.task_id` binding stays exactly as it
+      was before this change. Wiring the two together — so the eventual run's own `in_progress`
+      transition and divergence-boundary check apply to a loop's claimed task too — is not named by
+      6.1-6.3's own text and is left for a later section to pick up explicitly rather than assumed
+      here.
+
+      **The transition's actor.** `apply_transition(session, claimed_task, "assigned", operator())`
+      — plain `operator()`, default origin (`ORIGIN_ACTOR`), *not* `origin=ORIGIN_RUNTIME`. Tried
+      `ORIGIN_RUNTIME` first (it reads as the more honest label — the Hub is doing this, not a
+      person), then found `hub/tests/test_task_transitions.py::
+      test_only_the_binding_module_may_record_a_runtime_transition`, a source scan that hard-fails
+      if `origin="runtime"`/`origin='runtime'` appears in any `.py` file under `hub/hub/` other than
+      `run_task_binding.py`/`task_transition_service.py` themselves. `scheduler.py` is not on that
+      list, so the honest label is not available to this call site without either widening the
+      allow-list (out of scope, not asked for) or the scan silently going stale. Fell back to the
+      precedent `release_block_for_question` (`run_task_binding.py`) already sets for an
+      automatic-but-not-run-bound Hub action: `operator()`, default origin. `is_allowed("pending",
+      "assigned", "operator")` is `True` (the `_BOTH` edge), so the call is legal; the
+      `resolve_divergences_for_task` side effect `ORIGIN_ACTOR` triggers is a no-op here (a freshly
+      materialised task has no open divergences to resolve).
+
+      **assignee is stamped on both branches**, per D3's text describing it as happening regardless
+      of whether the task was newly transitioned or resumed — `claimed_task.assignee = job.agent`
+      runs unconditionally once a task is claimed, only the `apply_transition` call is conditioned
+      on `status == "pending"`.
+
+      **Tests, `hub/tests/test_scheduler.py`**, extending the existing `_make_job`/`_make_loop`
+      fixtures rather than inventing new ones, matching the file's established
+      `bind_runner`+`PtySession.spawn`-patched full-fire pattern used by the other successful-fire
+      loop tests in this file:
+      - `test_loop_fire_claims_the_oldest_pending_task` — two `pending` tasks with distinct
+        `created_at`; the older is claimed (`status="assigned"`, `assignee=job.agent`), the newer is
+        untouched.
+      - `test_loop_fire_resumes_an_active_task_instead_of_claiming_another` — an `in_progress` task
+        and a `pending` task both in the queue; the `in_progress` one wins (status left untouched,
+        only `assignee` stamped), the `pending` one is untouched entirely — proves the active tier
+        beats the fallback tier regardless of which was created first.
+      - `test_loop_fire_with_empty_queue_claims_nothing_and_does_not_error` — a loop with **no**
+        `stop_when_queue_empties` and zero tasks. Deliberately *not* reusing
+        `test_loop_with_stop_when_queue_empties_and_no_tasks_yet_keeps_running`'s setup: that loop's
+        stop condition, even though it does not fire this time, is armed and would pre-empt
+        `_claim_loop_task` on a later drained-queue fire — this test needed a loop where the empty
+        queue is never a stop condition at all, so the fire genuinely reaches (and no-ops through)
+        `_claim_loop_task`'s own empty-candidate path rather than the scenario being explained by
+        `_loop_stop_reason` never running the claim code in the first place.
+
+      **Verification, measured:**
+      - `py -3.11 -m pytest hub/tests/test_scheduler.py -q` — **10 passed** (7 pre-existing + 3 new).
+      - `py -3.11 -m pytest hub/tests/test_task_transitions.py hub/tests/test_jobs.py
+        hub/tests/test_spec_declared_tasks.py -q` — **105 passed, 1 skipped** (pre-existing
+        `CRONITER_AVAILABLE` skip) — including
+        `test_only_the_binding_module_may_record_a_runtime_transition`, confirming the `operator()`
+        choice above did not trip the source-scan gate.
+      - `py -3.11 -m pytest hub/tests/test_run_task_binding.py hub/tests/test_task_transition_service.py
+        hub/tests/test_run_divergence.py -q` — **67 passed** — the other suites reading
+        `apply_transition`/the binding module, confirming nothing there assumed a `pending`→`assigned`
+        transition never happens outside the operator's own task routes.
+      - `ruff check hub/hub/scheduler.py hub/tests/test_scheduler.py` — clean.
+      - `black --fast` reformatted `test_scheduler.py` once (one method-chain line-wrap in the new
+        empty-queue test); `scheduler.py` was already clean. Reverified clean on both after.
+      - `mypy hub/hub/scheduler.py`, filtered to lines attributed to that file — six error lines
+        (two `Result[Any].rowcount`, four `import-untyped` for `apscheduler`/`croniter`), matching
+        `.claude/autonomous/mypy-baseline.txt`'s six `scheduler.py` lines exactly — **zero new
+        errors**. (`scheduler.py`'s new code adds no annotations mypy flags; the test file is not
+        part of the mypy target per `pyproject.toml`'s `testpaths`, consistent with every prior
+        section's own verification scope.)
+      - `npx openspec validate --changes --strict` (run from the repo root — `hub/ui` reports "No
+        items found to validate", a directory trap worth remembering) — 2/2 still pass.
+
+      **Not done, correctly deferred:** section 7 (loop-scoped checkpoints + envelope,
+      `hub/hub/checkpoints.py`/`hub/hub/checkpoint_generation.py`) is next-in-queue — `next_action`
+      explicitly said not to start it this iteration, and it is a materially different surface
+      (checkpoint continuity, not the firing/claim path this section built).
 
 ## 7. Continuity — loop-scoped checkpoints (`hub/hub/checkpoints.py`, `hub/hub/checkpoint_generation.py`)
 

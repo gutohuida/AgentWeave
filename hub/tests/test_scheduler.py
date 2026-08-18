@@ -351,3 +351,198 @@ async def test_loop_with_stop_when_queue_empties_and_a_pending_task_does_not_sto
         run = (await db.execute(select(JobRun).where(JobRun.job_id == job.id))).scalar_one()
         assert run.status == "fired"
         assert run.conversation_id is not None
+
+
+@pytest.mark.asyncio
+async def test_loop_fire_claims_the_oldest_pending_task(app, auth_headers, bind_runner):
+    """Task 6.1/6.2: with only entry-status (`pending`) candidates, the firing claims the
+    oldest by `created_at` — not the most recently created — and stamps it `assigned` with
+    `assignee=job.agent`. The newer pending task is left untouched."""
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {"loop-agent-claim-oldest": {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    await bind_runner("loop-agent-claim-oldest", cli="claude")
+
+    fake_session = MagicMock()
+    fake_session.pid = 4444
+    fake_session.read.side_effect = [
+        '{"type":"result","subtype":"success","is_error":false,"session_id":"sess-claim-1"}\n',
+        "",
+    ]
+    fake_session.wait.return_value = 0
+
+    now = datetime.now(timezone.utc)
+    async with async_session_factory() as db:
+        job = await _make_job(db, suffix="claim-oldest", agent="loop-agent-claim-oldest")
+        loop = await _make_loop(db, job_id=job.id, purpose="claim the oldest")
+        db.add(
+            Task(
+                id="task-loop-claim-newer",
+                project_id="proj-test",
+                title="newer",
+                status="pending",
+                loop_id=loop.id,
+                created_at=now,
+            )
+        )
+        db.add(
+            Task(
+                id="task-loop-claim-older",
+                project_id="proj-test",
+                title="older",
+                status="pending",
+                loop_id=loop.id,
+                created_at=now - timedelta(minutes=5),
+            )
+        )
+        await db.commit()
+
+    with patch(  # noqa: SIM117
+        "hub.api.v1.agent_trigger.PtySession.spawn", MagicMock(return_value=fake_session)
+    ):
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            scheduler = JobScheduler()
+            async with async_session_factory() as db:
+                fresh_job = await db.get(AIJob, job.id)
+                success = await scheduler._fire_job_internal(
+                    fresh_job, trigger="scheduled", session=db
+                )
+
+            for task in list(agent_trigger._background_runs):
+                await task
+
+    assert success is True
+
+    async with async_session_factory() as db:
+        older = await db.get(Task, "task-loop-claim-older")
+        newer = await db.get(Task, "task-loop-claim-newer")
+        assert older.status == "assigned"
+        assert older.assignee == "loop-agent-claim-oldest"
+        assert newer.status == "pending"
+        assert newer.assignee is None
+
+
+@pytest.mark.asyncio
+async def test_loop_fire_resumes_an_active_task_instead_of_claiming_another(
+    app, auth_headers, bind_runner
+):
+    """Task 6.1/6.2: an existing `in_progress` task in the queue wins over a `pending` one —
+    resumed (status left untouched) rather than re-entered — and only that task's `assignee`
+    is stamped. The pending task is not touched at all."""
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {"loop-agent-resume": {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    await bind_runner("loop-agent-resume", cli="claude")
+
+    fake_session = MagicMock()
+    fake_session.pid = 4545
+    fake_session.read.side_effect = [
+        '{"type":"result","subtype":"success","is_error":false,"session_id":"sess-resume-1"}\n',
+        "",
+    ]
+    fake_session.wait.return_value = 0
+
+    async with async_session_factory() as db:
+        job = await _make_job(db, suffix="resume", agent="loop-agent-resume")
+        loop = await _make_loop(db, job_id=job.id, purpose="resume in-progress work")
+        db.add(
+            Task(
+                id="task-loop-resume-active",
+                project_id="proj-test",
+                title="already underway",
+                status="in_progress",
+                loop_id=loop.id,
+            )
+        )
+        db.add(
+            Task(
+                id="task-loop-resume-pending",
+                project_id="proj-test",
+                title="not yet started",
+                status="pending",
+                loop_id=loop.id,
+            )
+        )
+        await db.commit()
+
+    with patch(  # noqa: SIM117
+        "hub.api.v1.agent_trigger.PtySession.spawn", MagicMock(return_value=fake_session)
+    ):
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            scheduler = JobScheduler()
+            async with async_session_factory() as db:
+                fresh_job = await db.get(AIJob, job.id)
+                success = await scheduler._fire_job_internal(
+                    fresh_job, trigger="scheduled", session=db
+                )
+
+            for task in list(agent_trigger._background_runs):
+                await task
+
+    assert success is True
+
+    async with async_session_factory() as db:
+        active = await db.get(Task, "task-loop-resume-active")
+        pending = await db.get(Task, "task-loop-resume-pending")
+        assert active.status == "in_progress"
+        assert active.assignee == "loop-agent-resume"
+        assert pending.status == "pending"
+        assert pending.assignee is None
+
+
+@pytest.mark.asyncio
+async def test_loop_fire_with_empty_queue_claims_nothing_and_does_not_error(
+    app, auth_headers, bind_runner
+):
+    """Task 6.3: a loop with no `stop_when_queue_empties` and no tasks at all still fires —
+    the empty-queue stop condition does not apply, so this exercises `_claim_loop_task`'s own
+    empty-candidate path (`None`) rather than being pre-empted by `_loop_stop_reason`."""
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {"loop-agent-empty-no-stop": {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    await bind_runner("loop-agent-empty-no-stop", cli="claude")
+
+    fake_session = MagicMock()
+    fake_session.pid = 4646
+    fake_session.read.side_effect = [
+        '{"type":"result","subtype":"success","is_error":false,"session_id":"sess-empty-1"}\n',
+        "",
+    ]
+    fake_session.wait.return_value = 0
+
+    async with async_session_factory() as db:
+        job = await _make_job(db, suffix="empty-no-stop", agent="loop-agent-empty-no-stop")
+        await _make_loop(db, job_id=job.id, purpose="no tasks yet, no stop condition")
+
+    with patch(  # noqa: SIM117
+        "hub.api.v1.agent_trigger.PtySession.spawn", MagicMock(return_value=fake_session)
+    ):
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            scheduler = JobScheduler()
+            async with async_session_factory() as db:
+                fresh_job = await db.get(AIJob, job.id)
+                success = await scheduler._fire_job_internal(
+                    fresh_job, trigger="scheduled", session=db
+                )
+
+            for task in list(agent_trigger._background_runs):
+                await task
+
+    assert success is True
+
+    async with async_session_factory() as db:
+        run = (await db.execute(select(JobRun).where(JobRun.job_id == job.id))).scalar_one()
+        assert run.status == "fired"
+        tasks = (
+            (await db.execute(select(Task).where(Task.loop_id == f"loop-{job.id}"))).scalars().all()
+        )
+        assert tasks == []

@@ -622,3 +622,86 @@ file's own summary line ("Sections 1-4" → "Sections 1-5").
 Committed, pushed. `current`/`next_action` now point at **L6** (claiming the current item,
 `hub/hub/scheduler.py`, tasks 6.1-6.3) — a materially different surface (scheduler firing logic) from
 everything L1-L5 touched (API routes and schemas).
+
+## Entry 8 — iteration 8: L6, claiming the current item (2026-08-18T23:39-23:54+01:00)
+
+Fresh process. Branch and `git log` matched STATE.json exactly on read (HEAD at the release-heartbeat
+commit following entry 7). Read design D3 (`2026-08-18-a-loop-writes-its-own-queue/design.md`) before
+touching code, per the instruction not to trust `next_action`'s own paraphrase.
+
+**Work done: L6 — tasks 6.1-6.3, `hub/hub/scheduler.py`.**
+
+New `_claim_loop_task(session, loop) -> Optional[Task]`, placed beside `_loop_stop_reason`. Built it to
+mirror `_batch_loop_summaries`'s existing "current item" query (`api/v1/jobs.py:98`, design D7 of
+`many-named-loops`) *literally* rather than to the wider `ENTRY_STATUSES` (`pending`/`assigned`)
+reading `next_action`'s own paraphrase implied: D3's actual text names only `in_progress`/`blocked`
+as the active tier and the oldest **`pending`** task as the fallback — the exact set
+`_batch_loop_summaries` already queries, no `assigned`. Deliberately not factored into a shared
+function with `jobs.py` — that module is the API layer, `scheduler.py` is not, and introducing a
+cross-import for three lines of `order_by` was judged not worth the new coupling; a comment instead
+points at `jobs.py:98`/D7 so the duplication is at least discoverable.
+
+Wired into `_do_fire_job`: right after the `_loop_stop_reason` check passes (fire proceeding), a
+second `select(Loop).where(Loop.job_id == job.id)` (mirroring the exact same lookup the stop-reason
+branch above it already makes) finds the job's loop, and `_claim_loop_task` runs against it. A
+`pending` result transitions to `assigned` via `apply_transition(session, claimed_task, "assigned",
+operator())` — **not** `run_task_binding`'s `in_progress`: D3's own text is explicit that the scheduler
+sets `assigned` at claim time, a deliberately different, earlier mechanism than the run-binding
+`in_progress` move, which needs an actual `Run` row that does not exist yet here (the `InboundQueueEntry`
+this change creates does not carry a `task_id`, so `resolve_bound_task` never sees this task — wiring
+the two mechanisms together is explicitly left to a later section, not assumed here). An already-active
+(`in_progress`/`blocked`) claimed task is left untouched; `assignee=job.agent` is stamped in both
+branches, per D3's own text describing that as unconditional.
+
+**The transition's actor took two tries.** `origin=ORIGIN_RUNTIME` (the more honest label — this is
+the Hub acting, not a person) fails
+`test_only_the_binding_module_may_record_a_runtime_transition`, a source scan in
+`hub/tests/test_task_transitions.py` that hard-refuses `origin="runtime"` outside
+`run_task_binding.py`/`task_transition_service.py`. Caught this by running that suite before
+committing, not by reading the scan first — worth recording since it is exactly the kind of guard a
+plausible-looking choice trips silently otherwise. Fell back to `operator()` with the default origin
+(`ORIGIN_ACTOR`), the same precedent `release_block_for_question` already sets for an automatic,
+not-run-bound Hub action; legal (`pending`→`assigned` is a `_BOTH` edge) and its
+`resolve_divergences_for_task` side effect is a no-op on a freshly materialised task.
+
+**Tests, `hub/tests/test_scheduler.py`**, extending `_make_job`/`_make_loop` rather than inventing new
+fixtures, matching the file's established `bind_runner`+`PtySession.spawn`-patched full-fire pattern:
+`test_loop_fire_claims_the_oldest_pending_task` (two `pending` tasks with distinct `created_at`; the
+older is claimed and stamped, the newer untouched), `test_loop_fire_resumes_an_active_task_instead_of_
+claiming_another` (an `in_progress` task beats a `pending` one regardless of creation order; only the
+active task's `assignee` moves), and `test_loop_fire_with_empty_queue_claims_nothing_and_does_not_error`
+— deliberately built with a loop carrying **no** `stop_when_queue_empties`, since the existing
+queue-empty fixture's stop condition would pre-empt `_claim_loop_task` before it ever ran, which would
+have proven the stop check works rather than that the claim step itself no-ops safely on an empty
+queue.
+
+**Verification, measured:**
+- `py -3.11 -m pytest hub/tests/test_scheduler.py -q` — **10 passed** (7 pre-existing + 3 new).
+- `py -3.11 -m pytest hub/tests/test_task_transitions.py hub/tests/test_jobs.py
+  hub/tests/test_spec_declared_tasks.py -q` — **105 passed, 1 skipped** (pre-existing cronite skip),
+  including the runtime-origin source scan.
+- `py -3.11 -m pytest hub/tests/test_run_task_binding.py hub/tests/test_task_transition_service.py
+  hub/tests/test_run_divergence.py -q` — **67 passed** — the other suites reading `apply_transition`
+  or the binding module.
+- `ruff check` clean on both touched files. `black --fast` (the safety-check version-mismatch warning
+  is cosmetic — 3.11 running code black itself formatted for 3.12 syntax detection — `--fast` skips
+  the redundant AST re-parse) reformatted `test_scheduler.py` once, clean after; `scheduler.py` was
+  already clean.
+- `mypy hub/hub/scheduler.py`, filtered to its own lines — six error lines, matching
+  `.claude/autonomous/mypy-baseline.txt`'s six `scheduler.py` lines exactly (two `Result[Any].rowcount`,
+  four pre-existing `import-untyped`) — zero new.
+- `npx openspec validate --changes --strict` — 2/2. Run from the repo root only after the first attempt,
+  from `hub/ui`, silently reported "No items found to validate" rather than erroring — a directory trap
+  worth remembering, now recorded in `next_action` for the next iteration.
+
+No Hub restart this iteration: unlike the panel-shell sections, L6 is verified entirely through pytest
+against the scheduler's own logic, with no UI or live-Hub surface to exercise — consistent with L4/L5's
+own verification scope, which also skipped a restart.
+
+Marked 6.1-6.3 done in `tasks.md` with the dated note above (fuller version there, including the D3-vs-
+paraphrase and actor-choice reasoning), corrected the file's own summary line ("Sections 1-5" →
+"Sections 1-6").
+
+Committed, pushed. `current`/`next_action` now point at **L7** (loop-scoped checkpoints, `hub/hub/
+checkpoints.py` — confirmed this iteration that `checkpoint_generation.py`, also named in the section
+header, does not actually hold the touched functions; only `checkpoints.py` does), tasks 7.1-7.4.
