@@ -274,6 +274,10 @@
     {
       "id": "merge-fixture-damage",
       "summary": "proj-5e960453 on the trial Hub holds 1 orphan spec_edit_proposals row and 2 bogus spec_document_merges rows from the crashed gated merges. Deliberately NOT cleaned -- it is a regression fixture. Do not tidy it away."
+    },
+    {
+      "id": "duplicate-commits-across-branches",
+      "summary": "The packaging fix and both CI fixes exist on BOTH branches under different SHAs (e.g. 05b460c here vs 35c9a62 on the parent), because PR #2's head is the parent while the run works on autonomous/2026-08-18-loops-and-side-panels. That was the right call -- the PR had to carry the fixes -- but it means that once PR #2 merges to master, this branch is ahead of master with duplicated changes. git rebase matches patch-ids and will usually drop them cleanly; a merge will not. When this branch is eventually landed, REBASE onto master rather than merging, and check the resulting diff contains no duplicated hunks. Flag this in the handoff -- it is the kind of thing that reads as a conflict for reasons nobody remembers."
     }
   ],
   "handover_note": "Prepared 2026-08-18 morning with the operator awake and answering. The spine changed twice during prep: the roadmap's Proposal A was put to the operator, who rejected it on the merits (a loop's agent already has a charter), and the operator then reframed a loop as something an agent creates for itself -- 'a loop has an overall goal that once completed it finishes... it could be one of the tools an agent can use.' That reframing IS the spine. The side panel is not a separate feature bolted on: the operator was explicit that agent-created loops are only acceptable if the operator can see what they are doing, which is the governance-and-visibility philosophy applied. Design them as one thing. Design FIRST and deeply -- the operator asked for a deep dive twice and chose 'design now, the loop implements it'. Do not skip to code.",
