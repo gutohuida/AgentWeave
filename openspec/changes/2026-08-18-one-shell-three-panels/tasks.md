@@ -12,26 +12,38 @@ and re-plumbed later — the cost the exploration named and this ordering exists
 
 ## 1. The tab store
 
-- [ ] 1.1 A per-project tab store: which tabs are open, their order, which is visible, whether the
+Implemented 2026-08-18 in `hub/ui/src/store/panelTabsStore.ts`, tested in
+`hub/ui/src/__tests__/panelTabsStore.test.ts` (27 tests). Nothing imports the store yet — that is
+section 2's job, and the bundle is byte-identical because of it.
+
+- [x] 1.1 A per-project tab store: which tabs are open, their order, which is visible, whether the
       shell is open. Keyed by project id. Persisted to `localStorage` under a **versioned** key.
-- [ ] 1.2 Tab kinds as a fixed literal union with template-literal ids: index kinds take a fixed id
+      Width deliberately excluded — it stays `specPreferences.ts`'s global value per D5, asserted by
+      a test that no width key is ever written.
+- [x] 1.2 Tab kinds as a fixed literal union with template-literal ids: index kinds take a fixed id
       (`specs`, `files`), detail kinds a keyed one (`spec:${documentId}`, `file:${relativePath}`).
-      Design D3/D4 — key by durable id where one exists; only files key by path.
-- [ ] 1.3 Open/close/activate/reorder actions. Opening an already-open keyed tab **refocuses and
+      Design D3/D4 — key by durable id where one exists; only files key by path. `kind` is *derived*
+      from the id rather than stored beside it, so the two cannot disagree.
+- [x] 1.3 Open/close/activate/reorder actions. Opening an already-open keyed tab **refocuses and
       re-reveals** rather than duplicating (a reveal counter, T3's `revealRequestId` shape).
-- [ ] 1.4 `closeOthers` / `closeToRight` / `closeAll`, since a strip that accumulates tabs needs them
+- [x] 1.4 `closeOthers` / `closeToRight` / `closeAll`, since a strip that accumulates tabs needs them
       and they are cheap once the store exists.
-- [ ] 1.5 A migration function invoked on load when the stored version is older than current. Write it
+- [x] 1.5 A migration function invoked on load when the stored version is older than current. Write it
       now even though there is only version 1 — retrofitting versioning after shipping is what forces
-      a silent data loss.
-- [ ] 1.6 Reconciliation on load: drop a `file:` tab whose path is not in the workspace listing.
+      a silent data loss. A version with no step forward is discarded, not guessed at; state from a
+      *newer* version than this build understands is discarded too.
+- [x] 1.6 Reconciliation on load: drop a `file:` tab whose path is not in the workspace listing.
       `spec:` tabs are keyed by document id and survive rename, so they need reconciling only against
-      a document that no longer exists at all.
-- [ ] 1.7 The two restore rules from design D5, each with its own test: every tab dropped ⇒ the shell
+      a document that no longer exists at all. An **absent** listing means "not loaded yet" and
+      leaves that kind alone — reading it as empty would drop every tab on a slow load.
+- [x] 1.7 The two restore rules from design D5, each with its own test: every tab dropped ⇒ the shell
       restores **closed**, not open and empty; the visible tab dropped but others surviving ⇒ promote a
-      survivor.
-- [ ] 1.8 Unit tests for the store: persistence round-trip, migration from a stale shape,
-      reconciliation, refocus-not-duplicate, and both restore rules.
+      survivor. Applied on load and after reconciliation, *not* on every mutation — a shell
+      deliberately opened with no tabs is a live state 2.1 may choose to render; a restored one is not.
+- [x] 1.8 Unit tests for the store: persistence round-trip, migration from a stale shape,
+      reconciliation, refocus-not-duplicate, and both restore rules. Verified non-vacuous by mutation
+      probe: disabling `normalize` fails exactly the 4 restore-rule tests, and making the migration
+      chain accept an unknown version fails exactly the stale-shape test.
 
 ## 2. The shell
 
