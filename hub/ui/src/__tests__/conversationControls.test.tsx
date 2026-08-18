@@ -369,6 +369,59 @@ describe('conversation controls — autoscroll follows scroll position', () => {
     expect(output.scrollTop).toBe(1000)
   })
 
+  /**
+   * Operator, 2026-08-18: "When we send a message the screen to scroll up and leave a big space
+   * for the response... the message that I just sent to look like the first message."
+   *
+   * The tail spacer is what makes that possible: enough room below the newest turn for it to sit
+   * at the top of the viewport, and no more, so it shrinks to nothing as the answer grows and
+   * ordinary bottom-following takes over without a jump.
+   */
+  it('reserves room below the newest turn so it can sit at the top of the viewport', () => {
+    recordedEntries = [timelineEntry('1')]
+    const { rerender } = render(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)
+    const output = screen.getByTestId('conversation-output')
+
+    expect(output.querySelector('[data-turn-boundary]')).not.toBeNull()
+
+    // Patched on the prototype rather than on the node: React replaces the turn element on
+    // rerender, so a property defined on the instance is gone by the time the effect measures.
+    const original = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetHeight')
+    Object.defineProperty(HTMLElement.prototype, 'offsetHeight', {
+      configurable: true,
+      get(this: HTMLElement) {
+        return this.hasAttribute?.('data-turn-boundary') ? 120 : 0
+      },
+    })
+    try {
+      setScrollGeometry(output, { scrollTop: 0, scrollHeight: 1000, clientHeight: 600 })
+      recordedEntries = [timelineEntry('1'), timelineEntry('2')]
+      rerender(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)
+
+      // 600 viewport - 120 turn - 24 gap.
+      expect(screen.getByTestId('conversation-tail-spacer')).toHaveStyle({ height: '456px' })
+    } finally {
+      if (original) Object.defineProperty(HTMLElement.prototype, 'offsetHeight', original)
+      else Reflect.deleteProperty(HTMLElement.prototype, 'offsetHeight')
+    }
+  })
+
+  it('reserves nothing when the newest turn has not been laid out yet', () => {
+    // offsetHeight 0 means "not measured", not "zero tall". Treating it as a real height would
+    // reserve a viewport-sized void and pin a turn nobody can see, so this falls back to plain
+    // bottom-following — which is also what keeps every other test in this file honest.
+    recordedEntries = [timelineEntry('1')]
+    const { rerender } = render(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)
+    const output = screen.getByTestId('conversation-output')
+    setScrollGeometry(output, { scrollTop: 0, scrollHeight: 1000, clientHeight: 600 })
+
+    recordedEntries = [timelineEntry('1'), timelineEntry('2')]
+    rerender(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)
+
+    expect(screen.getByTestId('conversation-tail-spacer')).toHaveStyle({ height: '0px' })
+    expect(output.scrollTop).toBe(1000)
+  })
+
   it('lands at the newest entry when the conversation opens, and resumes following', () => {
     recordedEntries = [timelineEntry('1'), timelineEntry('2'), timelineEntry('3')]
     const { rerender } = render(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)

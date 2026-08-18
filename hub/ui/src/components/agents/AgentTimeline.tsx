@@ -83,11 +83,24 @@ export function AgentTimeline({
   // reads — which makes the handoff atomic: the instant the terminal event lands, the live
   // counter goes and the settled line appears. `isRunning` is still required, so the indicator
   // cannot appear for an idle agent whose last run simply has no terminal event recorded.
-  const lastRunId = turns.length > 0 ? turns[turns.length - 1].runId : null
+  // Two terminal signals, deliberately, because they arrive at very different speeds:
+  //
+  //   1. The run's own status line, which STREAMS in with the entries (`kind="status"`,
+  //      `payload.phase="completed"` — the row `isSuccessCompletionEntry` hides from view). It
+  //      lands the instant the run ends.
+  //   2. The run-lifecycle timeline event, which is authoritative but arrives late: the SSE event
+  //      only INVALIDATES the timeline query (`useAgentTimeline`), so the value costs a further
+  //      HTTP round trip.
+  //
+  // Gating on (2) alone still left a visible tail — the counter kept running under a finished
+  // answer for as long as the refetch took (operator, 2026-08-18: "It still linger a little
+  // bit"). (1) closes that gap; (2) stays as the backstop for a run whose status line never
+  // arrived, and for history loaded fresh where the entry is long since persisted.
+  const lastTurn = turns.length > 0 ? turns[turns.length - 1] : undefined
+  const lastRunId = lastTurn?.runId ?? null
   const lastRunSettled =
-    lastRunId !== null && lastRunId !== undefined
-      ? TERMINAL_STATUSES.has(statusByRun[lastRunId])
-      : false
+    (lastTurn?.entries.some(isSuccessCompletionEntry) ?? false) ||
+    (lastRunId !== null && TERMINAL_STATUSES.has(statusByRun[lastRunId]))
   const runVisiblyActive = isRunning && !lastRunSettled
 
   // Timed from the moment this pane saw the run begin. Only ever shown live; once the run ends,
@@ -168,7 +181,11 @@ export function AgentTimeline({
         const terminalLabel = runStatus ? TERMINAL_LABEL[runStatus] : undefined
 
         return (
-          <div key={key} className="flex flex-col gap-[21px]">
+          // `data-turn-boundary` is how AgentOutputPanel measures the newest turn, so it can size
+          // the tail spacer and pin a just-sent message to the top of the viewport. A marker
+          // rather than a ref because the panel owns the scroll container and this component owns
+          // the turns; passing refs up for every turn would couple them far more tightly.
+          <div key={key} data-turn-boundary="" className="flex flex-col gap-[21px]">
             {/* Every turn is foldable, including the last. Nothing folds on its own any more,
                 so gating this on `!isLastTurn` would leave a single-turn conversation with no
                 way to fold at all. */}

@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Icon } from '@/components/common/Icon'
 import { Button } from '@/components/ui/button'
 import { useSSEConnectionState } from '@/hooks/useSSE'
@@ -99,6 +99,13 @@ function emptyToUndefined(overrides: Record<string, string>): Record<string, str
  *  not re-render on every parent render for want of one. */
 const EMPTY_CONTROLS: Record<string, string> = {}
 
+/** Breathing room above a turn pinned to the top of the viewport — enough that it does not look
+ *  clipped against the edge, small enough that it still reads as "the top". */
+const TAIL_TOP_PADDING_PX = 8
+
+/** Kept back from the tail spacer so the newest turn never sits flush against the composer. */
+const TAIL_BOTTOM_GAP_PX = 24
+
 /** Titles are capped at 120 characters; the continuity line is one row of 11px text under the
  *  composer. Shortened here rather than at the source, because the rail wants the whole thing. */
 const CONTINUITY_LABEL_MAX = 44
@@ -128,6 +135,8 @@ export function AgentOutputPanel({
   const { isLoading } = useAgentOutput(agent.name)
   const bottomRef    = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  /** Height of the blank tail below the newest turn. See the layout effect below. */
+  const [tailSpacer, setTailSpacer] = useState(0)
   const [autoscroll, setAutoscroll] = useState(true)
 
   const { apiKey, selectedProjectId: projectId } = useConfigStore()
@@ -241,11 +250,26 @@ export function AgentOutputPanel({
    * live, `rAF` never fired and a smooth scroll left `scrollTop` at 0, while a direct assignment
    * landed immediately. Following a conversation must not depend on whether the window happens to
    * be painting.
+   *
+   * "Newest" means the top of the newest turn while the tail spacer has room for it there, and the
+   * very bottom once it does not. Operator, 2026-08-18: "the message that I just sent to look like
+   * the first message" — a sent message rises to the top of the viewport with the response
+   * streaming into the space below it, instead of the whole conversation lurching upward line by
+   * line. Once the turn grows taller than the viewport the spacer is 0, this returns to plain
+   * bottom-following, and the two behaviours never fight because both read the same spacer.
    */
-  function scrollToNewest() {
+  const scrollToNewest = useCallback(() => {
     const el = containerRef.current
-    if (el) el.scrollTop = el.scrollHeight
-  }
+    if (!el) return
+    const turns = el.querySelectorAll<HTMLElement>('[data-turn-boundary]')
+    const newest = turns[turns.length - 1]
+    if (tailSpacer > 0 && newest) {
+      const delta = newest.getBoundingClientRect().top - el.getBoundingClientRect().top
+      el.scrollTop += delta - TAIL_TOP_PADDING_PX
+      return
+    }
+    el.scrollTop = el.scrollHeight
+  }, [tailSpacer])
 
   const isRunning = agent.status === 'running'
   const handoffUnavailable = agent.runner === 'manual'
@@ -290,9 +314,40 @@ export function AgentOutputPanel({
   // legacy raw output log from `useAgentOutput`, which is not what this view shows — so new
   // conversation content grew the DOM without ever scrolling, and unrelated log lines scrolled
   // for content nobody was looking at (2026-08-06-agent-permissions-tool-schemas-and-base-knowledge).
+  /* Room below the newest turn so it can sit at the top of the viewport — and no more than that.
+   * Sized from the newest turn's own height, so it shrinks as the response streams in and reaches
+   * 0 exactly when the turn fills the viewport, at which point following becomes ordinary
+   * bottom-following. A fixed spacer (say 60vh) would instead leave a permanent void under short
+   * conversations and have to be torn out later, which is visible as a jump. */
+  useLayoutEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const turns = el.querySelectorAll<HTMLElement>('[data-turn-boundary]')
+    const newest = turns[turns.length - 1]
+    // An unmeasured turn must not drive layout. `offsetHeight === 0` means it has not been laid
+    // out yet (or is display:none), and treating that as "zero height" would reserve a spacer the
+    // size of the whole viewport and pin a turn nobody can see. Falling back to plain
+    // bottom-following is the safe reading in every such case.
+    if (!newest || newest.offsetHeight === 0) {
+      setTailSpacer(0)
+      return
+    }
+    const next = Math.max(0, el.clientHeight - newest.offsetHeight - TAIL_BOTTOM_GAP_PX)
+    // Only commit a real change: this effect runs on every entry, and writing an equal value
+    // would re-render forever.
+    setTailSpacer((prev) => (Math.abs(prev - next) > 1 ? next : prev))
+  }, [timelineEntries.length, isRunning])
+
+  // `isRunning` is a dependency because the working indicator renders at the foot of the timeline
+  // and appears on that transition, not on a new entry. Following only `timelineEntries.length`
+  // meant sending a message grew the view by the indicator's height without scrolling to it, so
+  // the thing telling the operator the agent had started was below the fold at exactly the moment
+  // they were looking for it (operator, 2026-08-18: "when I send a message it doesn't scroll down
+  // to the working"). It matters on the way out too: the indicator is replaced by a shorter
+  // "Worked for Xs" line, and the view should settle on the newest content either way.
   useLayoutEffect(() => {
     if (autoscroll) scrollToNewest()
-  }, [timelineEntries.length, autoscroll])
+  }, [timelineEntries.length, isRunning, autoscroll, tailSpacer, scrollToNewest])
 
   // Opening or switching a conversation lands on its newest entry, and resumes following. Nothing
   // did this before, so a conversation with history opened at its oldest message. A layout effect
@@ -302,7 +357,7 @@ export function AgentOutputPanel({
   useLayoutEffect(() => {
     scrollToNewest()
     setAutoscroll(true)
-  }, [agent.name, currentConversationId])
+  }, [agent.name, currentConversationId, scrollToNewest])
 
   const [foldAllSignal, setFoldAllSignal] = useState(0)
 
@@ -812,6 +867,7 @@ export function AgentOutputPanel({
             foldAllSignal={foldAllSignal}
           />
         )}
+        <div aria-hidden="true" data-testid="conversation-tail-spacer" style={{ height: tailSpacer }} />
         <div ref={bottomRef} />
       </div>
 
