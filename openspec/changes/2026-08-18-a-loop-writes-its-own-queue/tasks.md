@@ -233,3 +233,86 @@ If step 4's second firing shows no trace of the first firing's checkpoint, check
 `latest_checkpoint_for_loop` is actually being called with the *loop's* id and not the new
 conversation's id — the bug this whole change exists to prevent is exactly a checkpoint lookup that
 silently falls back to "nothing found" because it is scoped to the wrong conversation.
+
+---
+
+# Addendum — tasks for the post-design decisions (D10–D15)
+
+Added after the operator continued the design conversation. Sections A1–A5 are agent-verifiable;
+A6 is human-only.
+
+## A1. Control as a per-loop setting (design D10)
+
+- [ ] A1.1 `loops.control` VARCHAR(32) nullable in the migration — **NULL means the current default**,
+      never a stored copy of it, carrying `Agent.default_permission_mode`'s reasoning
+      (`models.py:196`). Guard the migration step for a missing table.
+- [ ] A1.2 Default the controller to the operator; delegation to the creator agent and back, after
+      creation.
+- [ ] A1.3 Route an extension request by controller: operator-controlled relays and changes nothing
+      until the operator decides; delegated lets the creator decide.
+- [ ] A1.4 **Reconcile with D7.** D7's first-fire boundary for self-created loops must now fall out
+      of the default (control is the operator's, so nothing was delegated), not out of a separate
+      role-identity check. Assert both routes reach the same outcome for a self-created loop, so the
+      generalisation is proven rather than asserted.
+- [ ] A1.5 Record each change of control against the loop with actor and time.
+
+## A2. Editing, staged and visible (design D11)
+
+- [ ] A2.1 Accept an edit at any time, including during a firing; store it as pending.
+- [ ] A2.2 Apply pending edits at the next firing, before briefing.
+- [ ] A2.3 Test that a firing in flight continues under the definition it was briefed with, with an
+      edit landing mid-firing.
+- [ ] A2.4 Report pending and in-force definitions **separately** — a requirement, not polish.
+- [ ] A2.5 Record each edit against the loop with actor and time.
+
+## A3. Late tasks (design D12)
+
+- [ ] A3.1 Refuse a task added to a stopped loop, stating the stop reason and time. Refusal does not
+      restart the loop.
+- [ ] A3.2 Offer the refused task as the initial work of a new loop.
+
+## A4. Per-loop history and a running firing (design D13)
+
+- [ ] A4.1 A per-loop history home — `EventLog` is indexed by project and agent, not loop, so
+      retrieving one loop's history must not mean scanning unindexed JSON.
+- [ ] A4.2 Retrieve one loop's history; assert no event from another loop is returned.
+- [ ] A4.3 `JobRun` records a firing as in progress while its run executes, distinct from completed
+      and failed.
+- [ ] A4.4 **One helper** answers "is a firing active for this loop", used by both the edit path and
+      the loop panel in `2026-08-18-one-shell-three-panels`. Do not write it twice.
+- [ ] A4.5 A crashed run must not leave a firing permanently in progress — reconcile on Hub restart
+      as `Run.pid`/`last_heartbeat_at` already does.
+
+## A5. Immutability and the identity gap (designs D14, D15)
+
+- [ ] A5.1 `Task.loop_id` is write-once, enforced at the service layer, not by a DB constraint.
+- [ ] A5.2 Test that reassigning a task between loops is refused and the task is unchanged.
+- [ ] A5.3 **Record, do not fix, the name-reuse gap** (D15): a new agent taking an archived agent's
+      name satisfies every creator check the original did. Add a test that *documents* the current
+      behaviour so a future change closing it has something to flip, and reference D15 in its name.
+
+## A6. Human-only — the operator's judgement
+
+- [ ] A6.1 **Does "pending versus live" read clearly enough to trust?** Stage an edit during a firing.
+      Not whether both are shown, but whether it is obvious which is in force right now.
+- [ ] A6.2 **Is the refusal of a late task helpful or merely correct?** Does it read as the product
+      helping, or as it saying no?
+- [ ] A6.3 **Is delegating control discoverable without being easy to do by accident?**
+- [ ] A6.4 **Does a loop's history read as a story or as a log?** It is the governance surface; if it
+      cannot be skimmed it will not be read.
+
+## A7. Additions to the user test guide
+
+Run after the guide already in this file:
+
+10. **Delegate control.** Delegate to the creator agent, then have the executor request work again.
+    - *Expect:* the creator decides without involving you, and the change appears in the loop's
+      history.
+11. **Edit during a firing.** While a firing runs, change the loop's purpose.
+    - *Expect:* accepted, marked pending, the running firing unaffected; live at the next firing.
+12. **Add a task after it stops.**
+    - *Expect:* refused, stating when and why it stopped, and offering the task to a new loop.
+
+**Where it would go wrong.** If step 10 lets the creator decide *before* you delegated, A1.3 is not
+reading the controller. If step 11's edit disturbs the running firing, A2.2 is applying immediately
+rather than staging. If step 12 revives the loop, A3.1 is restarting it, which D12 rejected.

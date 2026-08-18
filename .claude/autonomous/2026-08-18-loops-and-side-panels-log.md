@@ -565,3 +565,46 @@ was rewritten to recommend Q9's items in a practical order (the CLAUDE.md factua
 as the lowest-risk and already-drafted item; the two read-only explorations next; the live cheap-model
 turn last and only if the trial Hub is confirmed healthy) rather than leaving the next firing to
 re-derive an order from the queue item's own unordered list.
+
+## Entry 6 — the spec was written twice, and merged
+
+**I duplicated work that already existed.** Firings authored Q6 (`2026-08-18-a-loop-writes-its-own-queue`,
+12:32–12:38) and Q8 (`2026-08-18-one-shell-three-panels`, 13:00–13:04) and pushed them. The
+interactive session then wrote a second loop change at ~13:20 without checking. Cause: I let
+`last_heartbeat` go stale for roughly **67 minutes** between 12:00 and 13:07 while in conversation
+with the operator, so firings correctly concluded no live session held the branch and took over.
+
+**The branch claim is only as good as its refresh rate.** Two failures now, from the same mechanism:
+a firing already running never re-checks the heartbeat (entry 5), and an interactive session that
+stops writing stops holding the branch even while it is very much alive. Both are worth carrying into
+the loop design, where the same question appears as "overlapping firings" (design D14, still
+unverified).
+
+**They were not redundant, which is the only reason this was cheap.** The firing's change is deeper
+on mechanics and decided two things the exploration had left open — a firing **claims** its queue's
+current item deterministically (D3), and the briefing has a **cap** (D5) — plus a genuinely better
+answer on creator identity (D8): rather than adding a foreign key, accept the trust boundary, because
+an archived or renamed creator produces a **starved queue** — visible, and eventually ended by the
+stop condition — not a silent security hole.
+
+The interactive change carried everything the operator decided *after* 12:38, which the firing could
+not have known: the creator/controller split with delegation, editable loops with staged edits,
+late-task-seeds-successor, per-loop history, and `JobRun`'s missing running state.
+
+**Merged into the firing's change**, which is canonical — it was first and more thorough. The later
+decisions went in as a clearly marked **addendum** (design `D10–D15`, tasks `A1–A7`, five appended
+requirements, plus the `task-lifecycle-governance` delta) rather than being edited into place, so the
+sequence stays legible. The duplicate was deleted. `npx openspec validate --changes --strict` passes,
+10 items.
+
+**One real reconciliation, not just a paste.** The firing's D7 gave an architect-created loop
+*unconditional* creator privilege and drew a first-fire boundary for self-created ones. The operator
+later said control defaults to the operator and is delegable. D10 records that the later rule
+**generalises** D7 — a self-created loop needs operator approval because nothing was delegated, not
+because of a role-identity check — and task A1.4 requires proving both routes reach the same outcome
+rather than asserting it.
+
+**Added what D8 does not cover** (D15): D8's reasoning holds for archive and rename, but not for
+**name reuse** — a new agent taking an archived agent's name satisfies every creator check the
+original did. Recorded, deliberately not folded into D8's conclusion, with task A5.3 asking for a
+test that documents current behaviour so a future fix has something to flip.

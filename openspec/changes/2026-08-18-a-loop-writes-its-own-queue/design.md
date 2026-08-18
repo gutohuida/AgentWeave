@@ -276,3 +276,123 @@ reach:
 - **The side panel's loop view** is where an operator actually sees any of this — the queue, the
   claimed item, the briefing history, D6's telemetry. This change produces the data; it produces no
   UI. `2026-08-18-the-side-panel-family` is where that surface is specced.
+
+---
+
+# Addendum — decisions taken with the operator after this design was written
+
+Decisions D1–D9 above were authored at 12:32–12:38 on 2026-08-18. The operator continued the design
+conversation afterwards and settled five further things, two of which **generalise** decisions above
+rather than contradicting them. Recorded here rather than edited into place, so the sequence stays
+legible: an earlier decision that was later widened is more useful than one silently rewritten.
+
+## D10. Control is an explicit per-loop setting, and it generalises D7
+
+**Creator and controller are two subjects, not one.** The creator is the agent whose run created the
+loop. The **controller** decides whether the queue may be extended, defaults to the **operator**, and
+may be delegated to the creator agent and taken back — after creation. The operator:
+
+> "The operator will never create loops by himself. He will do it with an agent. So we have two
+> subjects there. The one who created and the one who controls it… any new task or decision should
+> reach the operator via the agent he used and only the operator can decide on it. But the operator
+> can leave the control to the agent that can decide for himself."
+
+**How this relates to D7.** D7 decided the boundary for a *self-created* loop is its first fire,
+after which the creator needs operator approval. That conclusion survives — but as a *consequence*
+of the default rather than as a special case: control defaults to the operator for every loop, so a
+self-created loop's post-definition additions need the operator because nothing was delegated. D7's
+distinction between "creator is executor" and "creator is distinct" is replaced by a single question:
+**who holds control.** Delegating control to a creator agent is what makes D7's unconditional-creator
+path available, and it is now an explicit act rather than an inference from role identity.
+
+The field follows `Agent.default_permission_mode` (`models.py:196`) exactly: nullable, where **NULL
+means the current default rather than a stored copy of it** — *"a row storing today's default would
+keep saying it after the default moved."* It is the same operator-in-the-loop posture the composer's
+Permissions pill already sets, pointed at queue extension instead of tool calls.
+
+*Rejected: a boolean `autonomous`.* It cannot later name a third controller — a reviewing agent, say
+— without a migration and a vocabulary change.
+
+*Rejected: keeping D7's role-identity inference as the only rule.* It cannot express the operator's
+actual requirement, which is that an agent creates the loop while the operator keeps the decision.
+
+## D11. A loop is editable, and an edit lands on a firing boundary
+
+Control is handed over after creation, the operator adds tasks, and a loop's definition changes over
+its life. The constraint: *"we need enforcements not to break the loop. If I'm editing a loop it only
+goes after no run is active."*
+
+**Decided: an edit is always accepted and applied at the next firing.** The firing in flight keeps
+the definition it was briefed with. Pending edits are visibly distinct from applied ones.
+
+*Rejected: refusing an edit while a run is active.* The literal reading, and the simplest — but a
+long firing locks the operator out of their own loop, and the refusal is racy against a firing that
+starts a moment later.
+
+*Rejected: applying immediately.* A firing briefed at start mostly would not observe it, but "mostly"
+is load-bearing: a firing that re-reads its queue mid-turn would see a world it was never briefed on.
+
+The cost is a requirement, not polish: **a staged edit with no visible sign of it is worse than a
+refused edit.**
+
+## D12. A late task is refused with its reason and offered to a successor
+
+D6 terminates a loop whose queue empties even with a request outstanding. That leaves a closing
+window: the queue empties, the loop stops, and a task added a moment later arrives at a stopped loop.
+
+**Decided: refuse it, state when and why the loop stopped, and offer it as the initial work of a new
+loop.** Termination stays final — consistent with the operator's *"the architect can create another
+one"* — without discarding work already written.
+
+*Rejected: reviving a loop stopped for an empty queue.* A stopped thing becoming live again is a
+transition that is hard to render honestly and harder to reason about in history.
+
+*Rejected: discarding the task with a plain error.* It throws away something the operator wrote at
+the moment they were trying to help.
+
+*Rejected: suspending termination while an edit is open.* Closes the race, and reintroduces the third
+state D6 exists to avoid.
+
+## D13. A per-loop history, and a firing that can say it is running
+
+Two facts the decisions above need, which the database cannot currently state.
+
+**`EventLog` is not a per-loop history.** It exists (`models.py:907`) and `persist_event` already
+writes loop events such as `loop_stopped`, but it is indexed by **project and agent, not by loop** —
+retrieving one loop's history would mean filtering unindexed JSON. `Loop.updated_by_run_id` records
+only the most recent writer, which is provenance, not history. D10's control changes and D11's edits
+both need to be answerable per loop.
+
+**`JobRun.status` is `"fired"` or `"failed"`** (`models.py:1178-1180`) — there is no value for a
+firing *in progress*, so a running firing is indistinguishable from a finished one. D11's rule needs
+this fact, and so does the loop panel's "is an agent working right now"
+(`2026-08-18-one-shell-three-panels`). It should be **one helper both callers use**, not two joins.
+
+*Rejected: deriving "is a firing running" by joining `JobRun.conversation_id` to
+`Run.status == "running"` and leaving the column alone.* The join is correct and should exist — but
+leaving `JobRun.status` unable to state its own value keeps a lie in the table and obliges every
+future reader to know to join.
+
+## D14. `Task.loop_id` is immutable after creation
+
+Reassigning a task between loops would make a loop's queue history unable to answer what work it was
+ever given — and `stop_when_queue_empties` is derived from exactly that history
+(`scheduler.py:98-101` counts every task that ever named the loop, precisely so a terminal task still
+counts). Enforce at the service layer, not with a database constraint: SQLite cannot drop one later,
+the same undroppable-column reasoning `many-named-loops` D2 already established.
+
+## D15. What D8 does not cover: name reuse
+
+D8 decided to accept the existing trust boundary rather than add a foreign key, on the grounds that
+an archived or renamed creator produces a **starved queue** — visible, and eventually ended by D6 —
+rather than a silent security hole. That reasoning holds for archive and rename.
+
+It does not cover **name reuse.** Identity here is a *name*, not a row: archive agent `arch`, create
+a new agent also called `arch`, and the new one satisfies every creator check the old one did,
+inheriting control over every loop the old one created. Attribution is genuinely verified at creation
+(`jobs.py:31-33`) but only **once**; afterwards only the string survives.
+
+Not resolved here, and deliberately not silently widened into D8's conclusion. It is a real
+consequence of making a name load-bearing for permissions, and it should be closed before control
+delegation (D10) is relied on for anything the operator would not do by hand. Note it is not a live
+vulnerability: the Hub is local and single-operator, and the API key is the real boundary.

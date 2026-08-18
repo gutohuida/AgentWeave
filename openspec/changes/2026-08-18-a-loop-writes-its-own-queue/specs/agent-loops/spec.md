@@ -211,3 +211,119 @@ different agents.
 - **WHEN** an agent that created a loop for itself asks the operator for an addition after the
   loop's first fire, and the operator approves it
 - **THEN** the task is added with that loop's id
+
+### Requirement: A loop has a controller, defaulting to the operator, which may be delegated
+
+The Hub SHALL record for each loop a controller, which decides whether that loop's queue may be
+extended, and which SHALL default to the operator.
+
+The operator SHALL be able to delegate control to the loop's creator agent, and to take it back,
+after the loop has been created. Where the operator holds control, a request to extend the queue
+SHALL be relayed to the operator and SHALL change nothing until the operator decides. Where control
+has been delegated, the creator agent SHALL be able to decide the request itself. Each change of
+control SHALL be recorded against the loop with the actor responsible and the time it occurred.
+
+#### Scenario: A loop's control defaults to the operator
+
+- **WHEN** a loop is created
+- **THEN** its controller is the operator
+- **AND** an extension of its queue changes nothing until the operator decides
+
+#### Scenario: Control is delegated after creation
+
+- **WHEN** the operator delegates control of an existing loop to its creator agent
+- **THEN** subsequent extension requests are decided by that agent
+- **AND** the change of control is recorded against the loop with its actor and time
+
+#### Scenario: Control is taken back
+
+- **WHEN** the operator takes back control of a loop it had delegated
+- **THEN** subsequent extension requests are presented to the operator again
+
+### Requirement: An edit to a loop takes effect at its next firing and never during one
+
+The Hub SHALL accept an edit to a loop at any time, including while one of its firings is running,
+and SHALL apply that edit at the loop's next firing.
+
+A firing already running SHALL continue under the definition it was briefed with. The Hub SHALL
+report an edit that is pending separately from the definition currently in force, so that an operator
+can tell what is staged from what is live. Each edit SHALL be recorded against the loop with the
+actor responsible and the time it occurred.
+
+#### Scenario: An edit during a firing does not disturb that firing
+
+- **GIVEN** a loop with a firing in progress
+- **WHEN** its purpose or stop condition is edited
+- **THEN** the edit is accepted
+- **AND** the running firing continues under the definition it was briefed with
+
+#### Scenario: The next firing sees the edit
+
+- **WHEN** the loop fires after an edit was accepted
+- **THEN** that firing is briefed with the edited definition
+- **AND** the edit is no longer reported as pending
+
+#### Scenario: A pending edit is distinguishable from the definition in force
+
+- **GIVEN** a loop with an accepted edit that has not yet been applied
+- **WHEN** the loop is inspected
+- **THEN** the pending edit is reported as pending
+- **AND** the definition currently in force is reported separately
+
+### Requirement: A task offered to a stopped loop is refused and offered to a successor
+
+The Hub SHALL refuse a task added to a loop that has stopped, stating the reason that loop stopped
+and when it stopped. Refusing SHALL NOT restart a stopped loop.
+
+The refused task SHALL be offered as the initial work of a new loop, so that a task written moments
+after its intended loop terminated is not discarded.
+
+#### Scenario: A late task is refused with the reason the loop stopped
+
+- **GIVEN** a loop that stopped because its queue emptied
+- **WHEN** a task is added to it
+- **THEN** the addition is refused
+- **AND** the refusal states that the loop stopped because its queue emptied, and when
+
+#### Scenario: The refused task is offered to a new loop
+
+- **WHEN** a task is refused because its loop has stopped
+- **THEN** it is offered as the initial work of a new loop
+- **AND** the stopped loop remains stopped
+
+### Requirement: A loop's history is answerable for that loop alone
+
+The Hub SHALL record against the loop each event in its life: its creation, each edit, each change of
+control, each addition to its queue, each firing, and its stop with the reason. Each SHALL carry the
+actor responsible and the time it occurred.
+
+The Hub SHALL let a caller retrieve that history scoped to one loop, without filtering a
+project-wide record by hand.
+
+#### Scenario: A loop's history is retrievable on its own
+
+- **WHEN** a caller requests one loop's history
+- **THEN** the events of that loop's life are returned in order
+- **AND** no event belonging to a different loop is returned
+
+#### Scenario: Every recorded event names its actor
+
+- **WHEN** a loop's history is retrieved
+- **THEN** each event states the actor responsible and the time it occurred
+
+### Requirement: A firing in progress is distinguishable from one that has finished
+
+The Hub SHALL record a loop firing as in progress for as long as its run is executing, and SHALL
+distinguish that state from a firing that completed and from one that failed.
+
+#### Scenario: A running firing reports as running
+
+- **GIVEN** a loop firing whose run is executing
+- **WHEN** the loop is inspected
+- **THEN** the firing is reported as in progress
+
+#### Scenario: A finished firing is not reported as running
+
+- **WHEN** a firing's run has ended
+- **THEN** the firing is no longer reported as in progress
+- **AND** whether it completed or failed is reported
