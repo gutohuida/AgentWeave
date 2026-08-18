@@ -1959,6 +1959,72 @@ being built twice.*
 > `hub-native-runtime`, `hub-visual-language`, plus re-confirming `agent-tool-surface` at
 > requirement level per the note above.
 
+> **Update (2026-08-18) — `agent-conversation-timeline` requirement-level pass, third of the eight
+> renamed/absent specs.** No current spec carries this name. Its seven requirements (one timeline
+> with no separate inbox; typed entries instead of uniform bubbles; stable per-agent identity color;
+> peer messages tinted with the other agent's color; queued entries visible pre-delivery with a
+> hop-budget explanation; undelivered entries withdrawable; timeline built from recorded association
+> rather than timestamp proximity) land mostly in `agent-conversation-workspace`, with the typed-entry
+> and structured-result requirements in `agent-stream-events`, and the color requirement in
+> `local-project-workspace` and `operator-agent-creation`.
+>
+> Five of the seven are confirmed shipped and adequately documented in current spec prose:
+> - No separate inbox / peer traffic inline: `agent-conversation-workspace/spec.md:170-180` ("no
+>   *Agents* destination and no *Messages* destination").
+> - Typed entries, intermediate work collapsible: `agent-stream-events/spec.md:238-273` (consecutive
+>   tool activity grouped into one collapsible block); confirmed live in
+>   `hub/ui/src/components/agents/AgentTimeline.tsx`, which renders `operator_input`, `inbound_peer`,
+>   `outbound_peer`, tool-activity, and `ResultCard` entries through entirely distinct branches, not
+>   one bubble type.
+> - Queued-visible-before-delivery / hop-budget explanation: `agent-conversation-workspace/spec.md:
+>   181-204` (undelivered state on submit) and `:440-443` (hop-budget-blocked chain deliverable),
+>   which defer to `agent-tool-surface`'s hop-budget requirement per this umbrella's own
+>   `agent-inbound-queue` note above; confirmed live in
+>   `AgentTimeline.tsx:193,197` ("Autonomous continuation paused ... reached the hop budget. They'll
+>   be delivered with your next message" — near-verbatim match to the delta's own scenario language).
+> - Undelivered entries withdrawable, delivered ones not: `agent-conversation-workspace/spec.md:
+>   426-443` ("withdraw" named four times across the requirement and its scenarios).
+> - Attribution recorded, not inferred: `agent-conversation-workspace/spec.md:79`, verbatim match —
+>   "neither provider session matching nor timestamp proximity determines membership."
+>
+> **Two requirements are shipped and verified live in code, but have no requirement text anywhere in
+> the current 31 specs — a real documentation gap, not a functionality gap, and the first of this
+> kind found in this mapping pass (the two prior passes found renamed or superseded content, not
+> undocumented content).**
+> - *Peer messages tinted with the sending/receiving agent's color.* Grepped `tint`, `sending agent's
+>   color`, `recipient.*color` across all current specs — nothing describes this. It is live:
+>   `AgentTimeline.tsx:678-698` looks up `colorByName.get(entry.participant)` and applies it as a
+>   background tint on inbound peer entries and a left-border accent on outbound ones, exactly as the
+>   delta specifies (sender's color inbound, recipient's color outbound while staying on the subject
+>   agent's side).
+> - *Clipped content is signalled.* Grepped `clipped`, `truncat`, `exceeds.*height` — no current spec
+>   describes a long-result affordance (the truncation hits that exist are for conversation titles and
+>   composer option labels, an unrelated requirement). It is live: `AgentTimeline.tsx:534-563`'s
+>   `ResultCard` caps height at 96px past a 240-character threshold and renders a gradient "Show more"
+>   button that lifts the cap on click — the delta's "structured results are presented as a distinct
+>   surface" and "clipped content is signalled" scenarios both realized in the same component, neither
+>   written up anywhere in `openspec/specs/`.
+>
+> **The identity-color requirement's detail was narrowed when it was carried forward, not lost.**
+> `local-project-workspace/spec.md:223-232` ("Agent identity color remains project-consistent") and
+> `operator-agent-creation/spec.md:20` ("stable project color") carry the requirement's outcome
+> (consistent across surfaces, always paired with the name) but drop three specifics the delta stated
+> explicitly: stability across restart and rename, non-derivation from the agent's name, and distinct
+> colors until the palette is exhausted. All three are still true, verified directly in
+> `hub/hub/agent_colors.py`, not assumed from the docstring: `color_index` is a persisted column on
+> the `Agent` row (survives restart and rename because it is database state, not derived), assignment
+> is `func.max(...) + 1` per project — monotonically increasing, so no gap-reuse and no two
+> concurrently-registered agents ever share a color — and the module's own docstring names the
+> rejected alternative ("a name hash would collide... and change on rename") as the reason. No UI test
+> exercises restart/rename stability or non-derivation directly (`agentColorSurfaces.test.tsx` and
+> `agentColors.test.ts` were grepped for `restart`/`rename`/`derive`/`hash` — no matches), so this is a
+> spec-prose-thinning plus a light test gap, not a behavior gap.
+>
+> Three of the eight remaining unmapped specs are now done (`agent-composer`, `agent-inbound-queue`,
+> `agent-conversation-timeline`). Five remain: `agent-identity-and-skills`, `hub-interface-feel`,
+> `hub-native-runtime`, `hub-visual-language`, plus re-confirming `agent-tool-surface` at requirement
+> level per the 2026-08-18 note above.
+
 - [ ] 16.1 Confirm every scenario in the ten delta specs is exercised.
 - [ ] 16.2 Sync delta specs into `openspec/specs/`; reconcile `agent-stream-events`,
       `runtime-diagnostics`, and `agent-conversation-handoff` with their new behaviour.

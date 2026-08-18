@@ -1455,3 +1455,106 @@ from them.
 #8 now has two of nine remaining delta-spec mappings done (`agent-composer`, `agent-inbound-queue`),
 with six specs plus a re-check of `agent-tool-surface` still listed in the 16.2 note for whoever
 continues it. Runway to `stop_at` (2026-08-18T08:00+01:00) is roughly 2h50m.
+
+---
+
+## Iteration 18 — Q11/roadmap #8: third 16.2 requirement-level mapping slice (`agent-conversation-timeline`)
+
+Started fresh, verified branch (`autonomous/2026-08-18-the-app-feels-alive`) and `git log` matched
+`STATE.json`'s `iteration: 17` claim exactly (`41fa190` heartbeat back-date on top of `6cf37dc`,
+iteration 17's `agent-inbound-queue` mapping). Clock at start: `2026-08-18T05:12:08+01:00`, tree clean
+apart from the carried-forward `spec/` and `hub/seed_taste_doc.py` scratch.
+
+`next_action` pointed at continuing the 16.2 mapping one delta spec at a time; picked
+`agent-conversation-timeline`, next on the six-item list iteration 17 left behind.
+
+Read `openspec/changes/2026-07-30-hub-native-experience/specs/agent-conversation-timeline/spec.md` in
+full (158 lines, seven requirements: one timeline with no separate inbox; typed entries instead of
+uniform bubbles; stable per-agent identity color; peer messages tinted with the other agent's color;
+queued entries visible before delivery with a hop-budget explanation; undelivered entries
+withdrawable; timeline built from recorded association, not timestamp proximity). No current spec
+carries this name — confirmed by listing `openspec/specs/`, not by trusting the umbrella's own
+"absent under that name" list.
+
+Grepped `timeline`, `agent color`, `identity color`, `undelivered`, `withdraw`, `fold`, `collapse`,
+`typed entr`, `conversation bubble`, `color`, `tint`, `clipped`, `truncat` across all current specs to
+find where the content landed, rather than guessing from one file. It scattered across
+`agent-conversation-workspace` (most of it), `agent-stream-events` (typed entries, tool-activity
+grouping), `local-project-workspace` and `operator-agent-creation` (identity color).
+
+**Five of seven requirements confirmed shipped and adequately documented**, checked against both
+current spec prose and live code:
+- No separate inbox / peer traffic inline: `agent-conversation-workspace/spec.md:174` ("no *Agents*
+  destination and no *Messages* destination") — re-grepped and confirmed the line still reads that
+  way before citing it.
+- Typed entries, intermediate work collapsible: `agent-stream-events/spec.md:238-273` (tool activity
+  grouped into a collapsible block); confirmed live in `AgentTimeline.tsx`, which renders
+  `operator_input`, `inbound_peer`, `outbound_peer`, tool-activity, and `ResultCard` entries through
+  entirely distinct branches.
+- Queued-visible / hop-budget explanation: `agent-conversation-workspace/spec.md:181-204,440-443`,
+  deferring to `agent-tool-surface`'s hop-budget requirement per iteration 17's own note; confirmed
+  live at `AgentTimeline.tsx:193,197` — "Autonomous continuation paused ... reached the hop budget.
+  They'll be delivered with your next message," near-verbatim to the delta's own scenario language.
+  Re-grepped the exact line numbers against the live file before citing them.
+- Undelivered entries withdrawable: `agent-conversation-workspace/spec.md:426-443` ("withdraw" named
+  four times across the requirement and its scenarios).
+- Attribution recorded, not inferred: `agent-conversation-workspace/spec.md:79`, a verbatim match —
+  "neither provider session matching nor timestamp proximity determines membership."
+
+**Two requirements are shipped and verified live in code, but have zero requirement text anywhere in
+the current 31 specs — a documentation gap distinct from the previous two passes' findings (renamed
+content, superseded content); this is the first *undocumented* content found in this mapping.**
+- Peer messages tinted with the sending/receiving agent's color: grepped `tint`,
+  `sending agent's color`, `recipient.*color` across every current spec — nothing. Live at
+  `AgentTimeline.tsx:678-698`: `colorByName.get(entry.participant)` applied as a background tint on
+  inbound peer entries and a left-border accent on outbound ones, matching the delta's sender/receiver
+  split exactly.
+- Clipped content is signalled: grepped `clipped`, `truncat`, `exceeds.*height` — the only truncation
+  requirements found are for conversation titles and composer option labels, an unrelated concern.
+  Live at `AgentTimeline.tsx:534-563`: `ResultCard` caps height at 96px past a 240-character threshold
+  and renders a gradient "Show more" button that lifts the cap — realizing both the delta's
+  "structured results as a distinct surface" and "clipped content is signalled" scenarios in one
+  component, neither ever written into `openspec/specs/`.
+
+**The identity-color requirement was narrowed when carried forward, not lost.**
+`local-project-workspace/spec.md:223-232` and `operator-agent-creation/spec.md:20` carry the
+requirement's outcome (consistent across surfaces, always paired with the name) but drop three
+specifics the delta stated explicitly: stability across restart/rename, non-derivation from the
+agent's name, and distinct colors until the palette is exhausted. Verified all three are still true
+directly in `hub/hub/agent_colors.py` rather than trusting its own docstring: `color_index` is a
+persisted column on the `Agent` row (survives restart/rename because it's database state), assignment
+is `func.max(Agent.color_index) + 1` per project (monotonic, no gap-reuse, no two concurrently
+registered agents share a color). No UI test exercises restart/rename stability or non-derivation
+directly — grepped `restart`/`rename`/`derive`/`hash` in `agentColorSurfaces.test.tsx` and
+`agentColors.test.ts`, no matches — so this is spec-prose thinning plus a light test gap, not a
+behavior gap.
+
+**What was written, not implemented.** One dated note added under 16.2 in
+`openspec/changes/2026-07-30-hub-native-experience/tasks.md` (the only file touched this iteration),
+recording all seven requirements and where each landed, the two live-but-undocumented findings with
+file:line evidence, the color requirement's narrowed prose versus its still-true implementation, and
+an updated tally — three of the eight remaining unmapped specs now done (`agent-composer`,
+`agent-inbound-queue`, `agent-conversation-timeline`), five left (`agent-identity-and-skills`,
+`hub-interface-feel`, `hub-native-runtime`, `hub-visual-language`, plus re-confirming
+`agent-tool-surface`).
+
+No checkbox ticked, no code changed, no archiving attempted — consistent with the file's own
+reconciliation rule and `decisions_for_user` D1 in `STATE.json`.
+
+**Verified before committing:** `git status --short` showed only the one intended file modified, plus
+the carried-forward `spec/` and `hub/seed_taste_doc.py` scratch (`git diff --stat`: 66 insertions, one
+file). Re-checked every cited line number against the live files with a fresh grep immediately before
+writing this log entry, not carried over from the earlier exploration grep. Did not run
+`openspec validate` — same reasoning as iterations 16 and 17: `tasks.md` is prose/checklist, outside
+that validator's schema-checked scope.
+
+**Tree state before commit:** `openspec/changes/2026-07-30-hub-native-experience/tasks.md` modified (1
+new note, 66 lines); `.claude/autonomous/STATE.json` updated (iteration, heartbeat, Q11 done_note,
+next_action); `spec/` and `hub/seed_taste_doc.py` (prior-session scratch) untouched, staged nothing
+from them.
+
+**Queue status:** Q1–Q10 done. Q11 — roadmap #7 stays parked (three failure modes on record); roadmap
+#8 now has three of eight remaining delta-spec mappings done (`agent-composer`,
+`agent-inbound-queue`, `agent-conversation-timeline`), with five specs plus a re-check of
+`agent-tool-surface` still listed in the 16.2 note for whoever continues it. Runway to `stop_at`
+(2026-08-18T08:00+01:00) is roughly 2h45m.
