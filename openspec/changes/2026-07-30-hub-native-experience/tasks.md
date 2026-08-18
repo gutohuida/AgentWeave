@@ -1431,6 +1431,49 @@ projects API and no UI. `hub-visual-language` depends on this.*
 > implemented and verified. The checkboxes remain unchanged under the reconciliation rule; 12.5's
 > durable handoffs exist in the successor archives.
 
+> **Correction (2026-08-18) — 12.1's closure above is stale; it was reversed three days later, and
+> nothing in this file said so until now.** Found while doing the roadmap's Tier-3 item 8
+> (`openspec/explorations/2026-08-17-what-to-work-on-next.md` §8) audit pass, prompted by
+> `openspec/changes/2026-07-30-hub-native-experience/specs/agent-composer/spec.md`'s "The active
+> agent can be changed from the conversation" requirement reading as the *opposite* of
+> `openspec/specs/agent-composer/spec.md`'s current "The composer addresses the conversation it
+> belongs to" requirement ("the composer MUST NOT offer a control that redirects a submission to a
+> different agent") — the two cannot both be true of the same shipped product, so one had to be
+> checked against the tree rather than trusted from either document's prose.
+>
+> The archived change `2026-08-06-hub-collaboration-and-conversation-fixes`, in its own
+> `specs/agent-composer/spec.md`, **REMOVED** the in-place selector three days after this phase's
+> 2026-08-03 closure note, with the reason recorded verbatim: "the composer's target-agent selector
+> let a message typed in one agent's conversation be delivered to a different agent... the send path
+> is not scoped to the visible conversation, [so] a retargeted message left no trace in the
+> conversation the operator was looking at... the operator reported the affordance as counterintuitive
+> and asked for its removal." Confirmed
+> still live today, not just recorded as a past decision: `hub/ui/src/components/agents/Composer.tsx`
+> (:277-283) has no recipient-selector control, with an inline comment stating the same rationale —
+> "No recipient selector: a message goes to the agent whose conversation this is. The selector that
+> used to sit here could redirect a submission to a different agent with no trace in the visible
+> timeline."
+>
+> **What this means for 12.1 specifically:** "in-place switching" (redirecting an existing
+> conversation to a different agent mid-stream) is not merely unbuilt, it is a *rejected design* —
+> reopening it would contradict a recorded operator decision. "Search" and "launchability indicators"
+> did ship, but as part of the agent-creation and pre-conversation agent-choice surfaces
+> (`AgentCreateDialog.tsx`'s `useProviderLaunchability`, cited in this file's own phase 13 N6 note),
+> not as an in-conversation redirect control — there is no single shipped feature "12.1" names as a
+> whole. The 2026-08-03 note's claim that "every item in 12.1-12.4 is now implemented and verified"
+> should be read as **12.2-12.4 verified; 12.1 built-then-reversed, and now not wanted at all** — a
+> materially different claim than "closed." The checkboxes stay unchanged either way, per this file's
+> own reconciliation rule (a box does not retroactively tick for a decision, only for verified
+> behaviour), but a future reader relying on the 2026-08-03 note alone would believe a redirect
+> control exists. It does not, deliberately.
+>
+> **Consequence for 16.2:** the "present under the same name (2): `agent-composer`, `agent-tool-surface`"
+> line in that phase's 2026-08-12 note is true of the filename only. `agent-composer`'s current content
+> is not a superset of this umbrella's delta — it contains a requirement that directly contradicts one
+> of the delta's — so 16.2 cannot tick `agent-composer` as "mapped, no gap" on the strength of the name
+> match alone. Recorded here rather than re-litigated in section 16, per that section's own "closing
+> 16.2 requires deciding, per delta spec and per requirement" instruction.
+
 - [ ] 12.1 Build the agent/runner selector: in-place switching, search, launchability indicators from
       the Phase 3 probe.
 - [ ] 12.2 Add inline composer controls with responsive collapse into an overflow menu.
@@ -1860,6 +1903,28 @@ being built twice.*
 > (one home for requirement identifiers, evidence, and proposals — the note on phase 14 states it),
 > then do the 16.2 requirement-level mapping, then 16.1. Phase 13's four verified gaps and phase 15
 > are independent of that and can be picked up separately.
+
+> **Update (2026-08-18) — this note's own recommended prerequisite is now satisfied; the
+> requirement-level mapping itself is started, not finished.** Phase 14's design question this note
+> named as the blocker was settled the same week: section 14's 2026-08-17 update records
+> `spec-document-authority`/`spec-chat-session`/`requirement-traceability`/`task-lifecycle-governance`
+> as the one shipped home for identifiers, evidence, and proposals (15 of 19 items ticked against
+> cited scenarios). That clears this note's stated precondition for starting the requirement-level
+> mapping; it does not itself do that mapping for the other seven un-ticked delta specs
+> (`agent-conversation-timeline`, `agent-identity-and-skills`, `agent-inbound-queue`,
+> `hub-interface-feel`, `hub-native-runtime`, `hub-visual-language`, plus re-confirming
+> `agent-tool-surface` at requirement level rather than trusting the 2026-08-03 partial note above).
+>
+> One requirement-level check was done this pass, on the two specs already marked "present under the
+> same name": see phase 12's 2026-08-18 correction note above. `agent-composer`'s current spec
+> contains a requirement ("the composer MUST NOT offer a control that redirects a submission to a
+> different agent") that directly contradicts this umbrella's delta ("the active agent can be changed
+> from the conversation... without leaving the conversation") — a later, operator-requested reversal
+> (`archive/2026-08-06-hub-collaboration-and-conversation-fixes`), not an oversight. So even the two
+> specs this note's 2026-08-12 pass called "present under the same name" are not a clean match at
+> requirement level; `agent-composer` needs its own per-requirement pass alongside the seven renamed
+> ones before 16.2 can tick. `agent-tool-surface` was not re-checked this pass and should not be
+> assumed clean merely because it wasn't flagged.
 
 - [ ] 16.1 Confirm every scenario in the ten delta specs is exercised.
 - [ ] 16.2 Sync delta specs into `openspec/specs/`; reconcile `agent-stream-events`,

@@ -1253,3 +1253,111 @@ parked pending a human decision on whether it is worth a fourth attempt, and pic
 the roadmap document or another self-directed task instead, per the queue's own "do not leave a
 half-migration in the tree at 08:00" instruction — there is no half-migration here, the tree is clean,
 but roadmap #7 itself should not be attempted a fourth time blind.
+
+---
+
+## Iteration 16 — Q11/roadmap #8: one requirement-level mapping slice of the `2026-07-30-hub-native-experience` audit
+
+Started fresh, verified branch (`autonomous/2026-08-18-the-app-feels-alive`) and `git log` matched
+`STATE.json`'s `iteration: 15` claim exactly (`7b59df7` heartbeat back-date on top of `680539a`,
+iteration 15's StaticPool revert). Clock at start: `2026-08-18T04:42:16+01:00`, ~3h18m of runway to
+`stop_at`. Tree clean apart from the carried-forward `spec/` and `hub/seed_taste_doc.py` scratch.
+
+`next_action` explicitly parked roadmap #7 (the StaticPool race — three independent failure modes on
+record) and pointed at re-reading `openspec/explorations/2026-08-17-what-to-work-on-next.md` for
+anything else in scope. Re-read it. Tier 1 (judge taste-pass, archive six changes, decide the branch)
+is explicitly the operator's own eye per the roadmap document's own closing line — not something an
+autonomous pass should self-certify. Tier 2 #4–#6 are already closed (iterations 13–14); #7 is parked.
+Tier 3 #9 and #10 are `decisions_for_user` items the operator already answered "None yet" to. That
+left Tier 3 #8 — "Reconcile or retire `2026-07-30-hub-native-experience`" — as the one item genuinely
+open and self-directed.
+
+**The roadmap's own framing turned out to be stale.** It describes phase 13/14 of that 1911-line
+`tasks.md` as needing "an audit pass... read each unchecked task, check it against `openspec/specs/`
+and `CLAUDE.md`." Reading the file first (before writing anything) found this had already happened,
+repeatedly, with dated notes as recent as 2026-08-17 — phase 13's N6 triage pass ticked six items on
+re-confirmed code citations and left seven genuinely open with file:line evidence each; phase 14 went
+through a full scenario-level pass the same day and closed to "15 of 19 ticked, 2 partial, 2
+structural." Phases 9–12 all carry "closed by real successor implementation" notes citing specific
+archived changes. The roadmap document was written *before* several of these updates landed the same
+day, so its "needs an audit" framing was accurate when written and stale by the time this iteration
+read it. Redoing that audit from scratch would have been pure duplicate work — reading first, rather
+than assuming the task was as raw as its own description, avoided that.
+
+**What was actually still open: phase 16.2**, the umbrella-archival blocker, whose own 2026-08-12 note
+says "closing 16.2 requires deciding, per delta spec and per requirement, whether its content lives
+somewhere in the current 31 [`openspec/specs/`]" — and that note's own recommended order was "settle
+phase 14's design question, then do the mapping." Phase 14 was settled five days later (2026-08-17),
+so the mapping itself had never actually been started. Picked one delta spec to map rather than
+attempting all nine remaining in one pass, given runway and the size of each (137–221 lines per delta,
+compared against either a same-named current spec or, for the eight renamed/absent ones, a search for
+where the content actually landed).
+
+**Picked `agent-composer`**, one of the two 16.2 called "present under the same name" — the smallest,
+most direct comparison (no renaming to trace first). Read both files in full:
+`openspec/changes/2026-07-30-hub-native-experience/specs/agent-composer/spec.md` (138 lines) against
+`openspec/specs/agent-composer/spec.md` (306 lines, substantially grown since). The current spec's
+final requirement, "The composer addresses the conversation it belongs to" ("the composer MUST NOT
+offer a control that redirects a submission to a different agent"), reads as the literal opposite of
+the delta's "The active agent can be changed from the conversation... without leaving the
+conversation." Both cannot be true of the same shipped product, so this could not be resolved by
+reading prose alone — traced it against history and the live tree instead of guessing which document
+was current.
+
+Found the archived change `2026-08-06-hub-collaboration-and-conversation-fixes` **REMOVED** the
+in-place agent selector three days after phase 12's own 2026-08-03 note claimed it "shipped... every
+item in 12.1–12.4 is now implemented and verified" — its delta spec quotes the operator's own reason
+verbatim: the redirect "left no trace in the conversation the operator was looking at... the operator
+reported the affordance as counterintuitive and asked for its removal." Did not trust the archived
+spec's word alone that this reversal is still what's live today: grepped
+`hub/ui/src/components/agents/Composer.tsx` and confirmed lines 277–283 have no recipient-selector
+control at all, with the component's own inline comment stating the identical removal rationale —
+independent confirmation in the running product, not just in spec history.
+
+**What was written, not implemented.** Two dated notes added to
+`openspec/changes/2026-07-30-hub-native-experience/tasks.md` (the only file touched this iteration):
+
+1. Under phase 12, a `**Correction (2026-08-18)**` block laying out the contradiction, the evidence
+   trail (delta spec → archived removal spec, quoted → live `Composer.tsx` lines), and what it means
+   for task 12.1 specifically: "in-place switching" is not merely unbuilt, it is a *rejected design* —
+   reopening it would contradict a recorded operator decision — while "search" and "launchability
+   indicators" did ship, just on a different surface (agent creation, not in-conversation redirect)
+   than 12.1 names as a whole. The 2026-08-03 note's "every item in 12.1–12.4... implemented and
+   verified" is corrected to "12.2–12.4 verified; 12.1 built-then-reversed, and now not wanted at
+   all" — a materially different claim a future reader relying on the old note alone would not get.
+2. Under 16.2, an update note recording that its own stated prerequisite (phase 14's design question)
+   is now satisfied, so the requirement-level mapping can start in earnest; that this iteration did
+   exactly one of the nine remaining specs; and that even `agent-composer` — one of the two 16.2 had
+   called "present under the same name," implying a clean match — is not actually clean at requirement
+   level, so a name match alone cannot be trusted for the other name-match case (`agent-tool-surface`)
+   either without its own check. Named the eight specs still needing this pass explicitly
+   (`agent-conversation-timeline`, `agent-identity-and-skills`, `agent-inbound-queue`,
+   `hub-interface-feel`, `hub-native-runtime`, `hub-visual-language`, `spec-authoring`,
+   `spec-traceability`, plus re-confirming `agent-tool-surface`) so the next pass has the list rather
+   than having to rediscover it.
+
+No checkbox was ticked — this file's own reconciliation rule (established by every phase's prior
+notes) is that a box ticks for verified behaviour, not for a decision or a correction, and nothing new
+was *built* this iteration. No archiving was attempted; that stays the operator's call per the
+umbrella's own 16.3 task and per `decisions_for_user` D1 in this branch's `STATE.json`, both of which
+this iteration re-confirmed rather than overrode.
+
+**Verified before committing:** `git status --short` showed only the one intended file modified, plus
+the carried-forward `spec/` and `hub/seed_taste_doc.py` scratch — nothing else touched. Re-read the
+edited region in full after a line-wrap fix (an inline code span had split a file path across two
+blockquote lines, which would have rendered with a literal space injected into the path — caught by
+re-reading, not assumed correct from the Edit tool's success alone, and fixed to keep the path
+intact). Confirmed `openspec` CLI 1.4.1 is on PATH but did not run `openspec validate` against this
+file — `tasks.md` is prose/checklist, not a `proposal.md`/`design.md`/`specs/*.md` the validator
+schema-checks; the two other in-flight edits this session (STATE.json, this log) are outside its
+scope entirely.
+
+**Tree state before commit:** `openspec/changes/2026-07-30-hub-native-experience/tasks.md` modified
+(2 new notes, 64 lines); `.claude/autonomous/STATE.json` updated (iteration, heartbeat, Q11 done_note,
+next_action); `spec/` and `hub/seed_taste_doc.py` (prior-session scratch) untouched, staged nothing
+from them.
+
+**Queue status:** Q1–Q10 done. Q11 — roadmap #7 stays parked (three failure modes on record); roadmap
+#8 has one of nine remaining delta-spec mappings done (`agent-composer`), with the other eight and a
+re-check of `agent-tool-surface` explicitly listed in the new 16.2 note for whoever continues it.
+Runway to `stop_at` (2026-08-18T08:00+01:00) is still roughly 3h.
