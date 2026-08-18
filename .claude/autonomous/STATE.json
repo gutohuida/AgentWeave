@@ -139,7 +139,7 @@
     "ruff": "All checks passed (src/ hub/ tests/)",
     "black": "403 files unchanged",
     "openspec": "2 changes strict-valid, 32 specs strict-valid",
-    "hub_pytest": "SEE FIRST ITERATION — a full run was still in flight when prep ended. hub/tests/test_migrations.py alone: 51 passed, 1 skipped. CI's last full run on master reported 2335 passed, 17 skipped, 1 xfailed.",
+    "hub_pytest": "NOT VERIFIED — CONFIRM THIS IN ITERATION 1 BEFORE TRUSTING IT. A full background run reached 61% with no failures (4 skips) and was then KILLED deliberately at 21:29, because the driver's first firing was seconds away and two concurrent pytest runs are a documented false-green trap here. It did not pass; it was interrupted. Note the branch changes NO Python at all (a new UI store file plus a stamp JSON), so the hub suite result is inherited from master, which CI last measured at 2335 passed, 17 skipped, 1 xfailed. hub/tests/test_migrations.py alone: 51 passed, 1 skipped. hub/tests/test_ui_build_stamp.py + test_ui_staleness.py: 15 passed, 1 skipped. Run it in the BACKGROUND — it exceeded 30 minutes on this machine, far longer than the 7 minutes the skill documents.",
     "mypy": "361 errors, 86 files — PRE-EXISTING, baselined, not a regression"
   },
 
