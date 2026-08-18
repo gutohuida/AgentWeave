@@ -981,3 +981,71 @@ establishing that the easy path is not actually easy, rather than landing a fix.
 (2026-08-18T08:00+01:00) is still several hours; a future iteration should read
 `known_debts.fixture-overhead-hits-the-staticpool-race` below before trying again, and should budget
 for the ~11-minute full-suite cost of verifying any attempt twice (broken + reverted, as this one did).
+
+---
+
+## Iteration 13 — Q11: picked a different Tier 2/3 item, closed the fastapi/starlette version bound
+
+Started fresh, verified the branch (`autonomous/2026-08-18-the-app-feels-alive`) and `git log` match
+`STATE.json`'s `iteration: 12` claim, and re-read the newest log entry (iteration 12: reverted a
+broken fixture-overhead attempt, restored `2337 passed, 11 skipped, 1 xpassed`). Clock check against
+`stop_at` (2026-08-18T08:00+01:00): about 4 hours of runway remained.
+
+`STATE.json`'s own `next_action` offered two paths for Q11 — retry the fixture fix at session scope
+preserving full `init_db()` semantics, or accept the ~11-minute suite cost and pick a different Tier
+2/3 item. Given iteration 12's finding that the "easy" fixture-overhead fix collides with the deep,
+seven-theories-dead StaticPool race (`known_debts.fixture-overhead-hits-the-staticpool-race`), and
+that this is explicitly the *lowest*-priority queue item (runway filler, not the night's objective),
+retrying it a third time did not look like the right use of the budget. Read
+`openspec/explorations/2026-08-17-what-to-work-on-next.md`'s Tier 2/3 list for an alternative.
+
+**Checked #4 (trace `pid_alive`'s POSIX callers) first, since it looked cheap** — and found it
+already done. `git log --all --grep pid_alive` turned up `b602d9a` ("pid_alive is not a defect: reap
+in the two tests that occupy the window") on `autonomous/2026-08-17-one-version-one-product`, and
+`git merge-base --is-ancestor b602d9a 1e0d08e` confirmed it is already an ancestor of `master` (hence
+of this branch's parent). The roadmap document predates that commit landing, so it lists an item
+that's already closed. Did not re-do it.
+
+**Picked #5 instead: decide the `fastapi`/`starlette` version bound.** `hub/pyproject.toml` still
+declared `fastapi>=0.110` with no upper bound — confirmed by reading the file directly, not
+assuming the roadmap's age meant this one was stale too. Re-read
+`openspec/explorations/2026-08-17-the-hub-suite-has-never-run-clean.md` for the actual finding before
+picking a number: CI once resolved fastapi 0.141.1 / starlette 1.6.0 while the dev machine ran
+0.136.3 / 0.52.1 — a major starlette version boundary crossed silently — and both are now *verified*
+compatible (`hub/tests/_routing.py` walks either route shape, confirmed to produce the identical
+140-path set on both). So the fix is not "the product is broken above some version," it's "the range
+was unbounded and nobody had signed off on what's above what's tested."
+
+**What I did.** Added `starlette<2.0` as an explicit direct dependency in `hub/pyproject.toml`
+(starlette is otherwise only transitive via `fastapi`), with an inline comment naming the incident,
+citing the exploration, and stating both verified-good versions. Deliberately did NOT add a floor —
+the only two data points are 0.52.1 and 1.6.0, and inventing a lower bound neither was tested against
+would assert something not established. Left `fastapi>=0.110` itself untouched: the actual incident
+crossed a *starlette* major while fastapi stayed on 0.x on both sides (0.136 -> 0.141), so bounding
+fastapi's own range would not have caught the real problem and isn't where the evidence points. Also
+checked PyPI's index for starlette (`pip index versions starlette`) — latest is still 1.6.0, no 2.x
+exists yet, so this bound costs nothing today and only forces a conscious bump whenever 2.0 ships.
+
+**Verified, not just edited.** `tomllib.load()` on the changed file parses cleanly and the
+`dependencies` list contains the new entry in the right place. `pip install -e . --no-deps` (no
+package versions changed, purely a metadata refresh) succeeded. Ran the two tests most directly
+implicated by the original finding, `test_spec_documents_api.py` (the one whose route-introspection
+assertion was the sharp edge in the original incident) plus `_routing.py`'s own tests: 23 passed.
+`pytest tests/ --collect-only -q` reports 2349 tests collected — the exact count iteration 12's clean
+baseline verified, so the change did not break collection anywhere else in the suite. Did not re-run
+the full ~11-minute suite: nothing here touches product code, only a dependency declaration, and the
+installed environment (starlette 0.52.1) already satisfies the new bound unchanged, so there is
+nothing else in the suite that this edit could plausibly affect beyond what was directly tested.
+
+**Not done, deliberately:** roadmap item #6 (make CI prove it's testing a clean environment) — a
+separate, larger item, not part of this one. Item #9 (retro-cover 1.0.1) is explicitly parked per
+`decisions_for_user` D3 ("Not tonight"). Item #10 needs an actual release and is out of scope for
+this driver per `limits`.
+
+**Tree state before commit:** `hub/pyproject.toml` modified; `spec/` and `hub/seed_taste_doc.py`
+(prior-session scratch) untouched, staged nothing from them.
+
+**Queue status:** Q1–Q10 done. Q11 (Tier 2/3 runway) — roadmap item #5 closed this iteration; #4 found
+already closed on a merged branch; #7 (StaticPool race/fixture overhead) remains open and is the
+deepest remaining item, not attempted again this iteration per the reasoning above. Runway to
+`stop_at` (2026-08-18T08:00+01:00) is still roughly 3.5 hours.
