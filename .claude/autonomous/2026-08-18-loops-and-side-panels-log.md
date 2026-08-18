@@ -380,3 +380,66 @@ before committing work it did not write.
 
 **Landed while this was happening:** PR #2 merged, and **master's own CI ran green for the first time
 ever**. That closes `known_debts.ci-never-ran` for master.
+
+## Entry 6 — Q6: the loop spec is written and validated
+
+`openspec/changes/2026-08-18-a-loop-writes-its-own-queue/` — proposal.md, design.md, `specs/agent-
+loops/spec.md`, tasks.md. `npx openspec validate --changes --strict` passes for all 9 changes in the
+repo, this one included. Full depth, per the operator's own standard: 9 requirements (1 MODIFIED, 7
+ADDED — the MODIFIED one rewrites `many-named-loops`' passive "A task MAY be linked to a loop" into
+two requirements that each name their actor, closing the exact gap the exploration's §3 called out
+as a candidate rule for AgentWeave's own validator), 9 design decisions each with a rejected
+alternative, 14 task sections split agent-verifiable/human-only, a user test guide. Nothing
+implemented — every box in tasks.md is unchecked, and stays that way until a future run actually
+builds this.
+
+**This change modifies a capability that has shipped but never been archived.** `many-named-loops`
+is fully implemented (33/35 tasks checked, the two open ones both human-only taste checks) but still
+sits in `openspec/changes/`, not `openspec/specs/`. `npx openspec validate` turned out not to
+cross-check a change's deltas against the archived corpus — it validates each change's own delta
+syntax in isolation — so writing a MODIFIED requirement against a capability that technically isn't
+in `specs/` yet validates cleanly. Flagged here rather than silently relied on: archiving
+`many-named-loops` is real, separate, mechanical work this firing did not do, and the corpus will
+read oddly (two changes both touching `agent-loops`, only one of them archived) until someone does.
+
+**Grounded in code, not only in the exploration.** Read `spec_tasks.materialise()` (approval is an
+operator-only route — `spec.py:1113`'s `_operator()` actor — with no loop in its request, which is
+why a loop *declares* its source document rather than the approval call *naming* one), `scheduler.
+py`'s `_do_fire_job`/`_loop_stop_reason`/`_job_agent_skip_reason` (confirmed `content=job.message` is
+passed verbatim today, at exactly the line the briefing now prepends to; confirmed the no-FK
+agent-string-equality trust boundary `_job_agent_skip_reason` already accepts, which D8 now also
+leans on rather than fixing), `checkpoints.py` (confirmed `latest_checkpoint`/`_tasks_for`/
+`compute_envelope` are all conversation-scoped — exactly the gap D4 closes with `Checkpoint.loop_id`
+and a loop-scoped envelope branch), and `agent_auth.py` (`AgentActor.agent` is the correct,
+already-trusted identity source for every creator-privilege check this change adds).
+
+**Where this went further than the exploration left off**, each argued with a rejected alternative
+rather than picked by default:
+- **D3 — a firing claims its item, does not choose from a briefed queue.** Argued from
+  `checkpoints.py`'s own stated principle, "what the Hub can check, it must not delegate" — task
+  selection from an ordered queue is exactly that kind of thing.
+- **D5 — the briefing's cap is 4,000 characters**, reasoned from `_TRANSCRIPT_CHAR_LIMIT`'s existing
+  precedent and the checkpoint body's own targeted terseness, not an arbitrary round number.
+- **D7 — "once the loop is defined" means "until its first fire.**" Before that, a self-created
+  loop's creator is still authoring it; after, the operator-approval gate applies. Argued from the
+  operator's own quote rather than left ambiguous.
+- **D8 — accept the no-FK trust boundary rather than add one.** `AIJob.agent` stays a bare string;
+  an archived creator makes that loop's creator-privilege path unreachable, not unsafe. Named as
+  still open in D9, not silently dropped.
+
+**One internal inconsistency caught and fixed before this landed**, worth naming because it is the
+kind of thing full-depth review exists to catch: the first draft implied `create_loop`'s "refuse a
+loop with no stop condition" rule might tighten `POST /jobs` itself. Corrected across
+proposal.md/design.md D2/tasks.md — the refusal lives only inside the new MCP tool function, checked
+before it calls the unchanged `POST /jobs` route. A human operator's existing "Make this a loop" form
+is untouched; only the agent-facing tool states the stricter contract.
+
+**Two requirements initially failed `openspec validate`** for exactly the reason `STATE.json`'s own
+`next_action` warned about: the validator reads only the first physical line of a requirement's body
+for its SHALL/MUST modal, and two of mine had it wrapped onto a later line. Fixed by moving the
+modal verb into the opening sentence. Left as a sharper restatement of that warning for whoever reads
+this next: it is not enough to know the rule exists — `npx openspec validate --changes --strict`
+still has to actually be run, because "the sentence contains SHALL somewhere" is not what it checks.
+
+`current`/`next_action` now point at Q7 (explore the side panel), per the operator's own
+explore-then-spec sequencing. Time remaining comfortably clears `time_guard.at_1530`.
