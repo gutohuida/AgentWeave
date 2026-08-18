@@ -588,3 +588,105 @@ not expose it at all on Windows, where the taskbar often follows the host proces
 window) — a committed `.ico` plus a working favicon plus a precise written explanation of what
 blocks the taskbar is an acceptable stopping point; do not spend the whole remaining budget
 chasing the mechanism.
+
+---
+
+## Entry 8 — 2026-08-18T02:09+01:00 · Q7 done: a real taskbar icon, not just a written blocker
+
+**What shipped.** `scripts/generate_icon.py` renders a provisional mark with Pillow — a rounded
+dark badge (`#0a0a0b`, matching `index.css`'s `--bg`) with two diagonal ribbons crossing in a woven
+over/under: the blue ribbon (`#7c8cff`, `--blue`/`--ring`, the only real accent hue in the theme's
+mostly-grayscale palette) passes through unbroken, the purple one (`#a855f7`, `--purple`) breaks at
+the crossing to read as passing under it. Saved as a real multi-size `.ico` (16/32/48/64/128/256)
+to `src/agentweave/assets/icon.ico` and `hub/ui/public/favicon.ico` — not a stub, verified by
+reopening both with Pillow and asserting the `ICO` format and the size set. `pyproject.toml`'s
+`package-data` gained `assets/*` so the CLI's own asset ships in the wheel — confirmed by building
+one and inspecting its contents, not assumed (see the trap below). `hub/ui/index.html`'s favicon
+link changed from `/vite.svg` — which never actually resolved to anything; `hub/ui/public/` did not
+exist before this entry, confirmed by git status reporting it untracked-new, so that reference had
+been a silent 404 the whole time — to `/favicon.ico`.
+
+**The window and taskbar are two different fixes, and the risk note was right to flag it.**
+`_open_app_window_native` now calls `webview.start(icon=_app_icon_path())`. Read pywebview's actual
+Windows backend (`webview/platforms/winforms.py:242-251`) rather than trusting its docstring, which
+claims icon support is "Supported only on GTK/QT" — false for the installed 12.1.1: without an
+icon, the code falls back to `ExtractIconW(handle, sys.executable, 0)`, i.e. it explicitly pulls the
+icon out of `python.exe` itself. That line is the defect the operator saw. Passing `icon=` makes
+it `Icon(_state['icon'])` instead — this sets the WinForms `Form.Icon`, which Windows uses for the
+title bar and Alt-Tab. It does NOT reach the taskbar button, confirmed empirically (below), which
+is exactly the risk the queue item named: on Windows the taskbar icon often follows the host
+process. The actual second mechanism is `ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID`,
+called once before `create_window` in a new `_set_windows_app_user_model_id()` — this tells Explorer
+the process is its own app rather than a fungible `python.exe`, which is what the taskbar keys its
+icon and grouping off. Both are needed; each alone was insufficient in testing.
+
+**Verified live, not assumed — screenshots, not guesses.** A throwaway probe
+(`.claude/autonomous/scratch/probe_taskbar_icon.py`, deleted after use) opened a real pywebview
+window via `webview.start(func, icon=...)`, slept 2.5s for the taskbar to settle, grabbed the full
+virtual screen with `PIL.ImageGrab`, then destroyed the window. First pass (icon set, no AUMID):
+title bar showed the new mark, taskbar button still showed the stock Python two-snake icon —
+confirmed by diffing against a baseline screenshot taken with no AgentWeave window open at all, so
+the icon in that taskbar slot could be attributed to this window specifically rather than an
+unrelated pinned app. Added the AUMID call, reran: taskbar button now shows the new mark too, same
+diff-against-baseline method. Both screenshots were read back through the image tool and visually
+confirmed, not inferred from process behaviour. The screenshots are deleted; they were throwaway
+verification artifacts, not release material.
+
+**Test coverage added to `tests/test_cli.py`, `TestAppModeNativeWindow`.** Three new tests:
+`test_open_app_window_native_sets_windows_app_user_model_id_first` (asserts the AUMID call fires,
+and fires before `create_window`, not after — order matters, confirmed empirically it must
+precede window creation to take effect), `test_set_windows_app_user_model_id_noop_off_windows`,
+`test_set_windows_app_user_model_id_swallows_shell_errors` (mirrors the existing swallow-and-continue
+posture right next to this call site). Plus two for the icon path itself:
+`test_app_icon_path_resolves_to_a_real_multi_size_ico` (opens the actual packaged file with Pillow
+and checks its format and size set — the wheel-content check's unit-test-level twin) and
+`test_app_icon_path_missing_asset_returns_none` (a stripped install must not crash window-opening,
+just fall back to pywebview's own icon). Two existing tests needed updating for the new
+`webview.start(icon=...)` call signature — `test_pywebview_installed_opens_window_with_resolved_url`
+now asserts the icon path is passed and resolves to a real file;
+`test_webview_start_exception_falls_back`'s fake `start` took a zero-arg lambda before, now accepts
+`**kwargs`. 8 → 11 tests in the class.
+
+**What a reviewer should distrust — and one real, unrelated defect this session did NOT fix.**
+Verifying the wheel actually ships `assets/icon.ico` required building one, which surfaced something
+that has nothing to do with Q7: a stale local `build/lib/` directory (gitignored, untracked, never
+cleaned by anyone) still contained `agentweave/transport/git.py` and `transport/local.py` —
+files CLAUDE.md records as deleted, and not to be recreated. setuptools' incremental `build_py`
+only adds/updates files, never removes ones absent from a later source tree, so this local cache had
+silently been resurrecting deleted modules into every wheel built on this machine, indefinitely,
+until this entry's `rm -rf build`. That in turn unmasked a second, independent, pre-existing bug:
+`tests/test_packaging.py::test_wheel_ships_skill_reference_docs` asserts a specific path,
+`agentweave/templates/skills/references/html-spec-conventions.md` — a file commit `a44c8a8` (six
+days ago, 2026-08-12, "Ship the authoring flow") deliberately deleted along with the rest of the
+aw-spec-* skill references, and the test was never updated to match. It only ever passed locally
+because the same stale `build/lib` cache kept resurrecting this file too. `known_debts` in
+`STATE.json` records `ci-never-ran-on-master` — this is very likely why nobody caught it: a clean
+checkout (what CI would build from) would fail this test today, independent of anything from
+tonight's queue. Confirmed reproducible from a clean `build/`: 385 passed, 3 skipped, 1 failed
+before this entry's own new tests, same one failure after — Q7's own additions are not its cause.
+Deliberately left unfixed: it is a different subsystem (packaging/skills, not app-feel), it
+predates this session by six days, and the operator's own scope instruction for tonight (breadth
+across all ten items was offered and declined) argues against picking up an eleventh, unplanned
+repair mid-session. Recorded in `STATE.json`'s `known_debts` instead. The local `build/` and
+`.wheelcheck/` directories used for verification were deleted afterward — gitignored, nothing to
+commit, nothing left dirty.
+
+**Full verification, this entry's own change only:** CLI suite 385 passed, 3 skipped plus the one
+pre-existing unrelated failure named above (`py -3.11 -m pytest tests/ -q`, from a clean `build/`);
+`ruff check` and `black --check --target-version py311` both clean on every touched Python file;
+hub UI `npm run lint` and `npx tsc --noEmit` both clean; hub UI `npm test -- --run`: 976 passed
+(unchanged from Q5's count — Q7 touched `index.html` and added a `public/` asset, no UI logic, so no
+UI test count change was expected and none occurred). `npm run build` succeeded and
+`scripts/refresh_ui_bundle.py` recorded a fresh stamp; `hub/hub/static/ui/index.html` now serves
+`/favicon.ico` and `hub/hub/static/ui/favicon.ico` exists in the committed bundle.
+
+**Not verified, stated plainly:** this session cannot watch a human open the real packaged app (the
+Hub start to app-mode window flow end to end) and see the taskbar with their own eyes — the
+screenshot-diff method above is the closest an unattended session can get, and it is a real
+screenshot of a real running window, not a mocked assertion, but it is still a different standard of
+proof than the operator glancing at their own taskbar tomorrow. Worth a 10-second glance when the
+operator is next at the machine.
+
+**Queue status:** Q1 through Q7 are now all done — the six app-feel fixes plus the CLI-suite-hang
+prerequisite. Next is Q8, the first of the two decide-nothing explorations
+(`openspec/explorations/2026-08-18-what-archiving-a-spec-means.md`).

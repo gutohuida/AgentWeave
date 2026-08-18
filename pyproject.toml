@@ -71,7 +71,7 @@ aw = "agentweave.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-agentweave = ["templates/*", "templates/skills/*"]
+agentweave = ["templates/*", "templates/skills/*", "assets/*"]
 
 [tool.black]
 line-length = 100

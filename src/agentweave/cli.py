@@ -745,6 +745,40 @@ def _open_app_window(url: str) -> None:
     webbrowser.open(url)
 
 
+def _app_icon_path() -> Optional[str]:
+    """Absolute path to the packaged provisional AgentWeave mark, if the asset is
+    present on disk. Both an editable install and a built wheel put it at
+    agentweave/assets/icon.ico; returns None rather than raising if it is missing,
+    so a stripped-down install still opens a window, just with pywebview's own
+    fallback icon."""
+    try:
+        from importlib import resources
+
+        icon = resources.files("agentweave").joinpath("assets", "icon.ico")
+        if icon.is_file():
+            return str(icon)
+    except Exception:
+        pass
+    return None
+
+
+def _set_windows_app_user_model_id() -> None:
+    """On Windows, tell the shell this process is its own app rather than a
+    fungible `python.exe`. Without this, `webview.start(icon=...)` still sets
+    the *window's* icon (title bar, Alt-Tab), but the taskbar button keeps
+    showing python.exe's own icon regardless -- confirmed empirically: the
+    taskbar button only picks up the packaged mark once this is set before
+    the window is created. No-op, and never raises, off Windows."""
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("AgentWeave.Hub")
+    except Exception:
+        pass
+
+
 def _open_app_window_native(url: str) -> bool:
     """Open `url` in a native OS window via pywebview.
 
@@ -756,9 +790,11 @@ def _open_app_window_native(url: str) -> bool:
     except ImportError:
         return False
 
+    _set_windows_app_user_model_id()
+
     try:
         webview.create_window("AgentWeave", url)
-        webview.start()
+        webview.start(icon=_app_icon_path())
         return True
     except Exception as exc:
         print_error(f"Native app window unavailable ({exc}); falling back to browser.")
