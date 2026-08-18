@@ -140,6 +140,39 @@ describe('the live working indicator', () => {
     renderTimeline({ isRunning: true })
     expect(screen.queryByTestId('composer-working-indicator')).not.toBeInTheDocument()
   })
+
+  /**
+   * The regression the operator caught: `isRunning` is `agent.status === 'running'`, a POLLED
+   * field, while the answer and the run's terminal event both arrive over SSE. That left the
+   * counter running underneath a finished message for a second or two before flipping.
+   *
+   * Both assertions below matter and they pull in opposite directions — a fix that only hid the
+   * indicator whenever an answer appeared would pass the first and fail the second, and would be
+   * wrong, because an agent legitimately keeps working after emitting text.
+   */
+  it('stops the moment the run reports terminal, even while the polled status still says running', () => {
+    renderTimeline({
+      isRunning: true,
+      entries: [entry({ id: 'a1', run_id: 'run-1', content: 'the answer' })],
+      timelineEvents: [
+        lifecycle('run_started', 'run-1', '2026-08-02T00:00:00Z'),
+        lifecycle('run_completed', 'run-1', '2026-08-02T00:00:09Z'),
+      ],
+    })
+    expect(screen.queryByTestId('timeline-working-indicator')).not.toBeInTheDocument()
+    // ...and the settled line has taken over in the same render, not seconds later.
+    expect(screen.getByTestId('turn-worked-for')).toHaveTextContent('Worked for 9s')
+  })
+
+  it('keeps running while the agent is still working, even though it has already said something', () => {
+    renderTimeline({
+      isRunning: true,
+      entries: [entry({ id: 'a1', run_id: 'run-1', content: 'thinking out loud' })],
+      timelineEvents: [lifecycle('run_started', 'run-1', '2026-08-02T00:00:00Z')],
+    })
+    expect(screen.getByTestId('timeline-working-indicator')).toBeInTheDocument()
+    expect(screen.queryByTestId('turn-worked-for')).not.toBeInTheDocument()
+  })
 })
 
 describe('the settled "Worked for Xs" line', () => {

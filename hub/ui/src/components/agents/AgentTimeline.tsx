@@ -34,6 +34,15 @@ interface AgentTimelineProps {
   foldAllSignal?: number
 }
 
+/** Every lifecycle status that means "this run is over", whatever the outcome. `started` is
+ *  the only one that is not terminal. */
+const TERMINAL_STATUSES = new Set<RunLifecycleStatus | undefined>([
+  'completed',
+  'failed',
+  'stopped',
+  'interrupted',
+])
+
 const TERMINAL_LABEL: Partial<Record<RunLifecycleStatus, string>> = {
   failed: 'Turn failed',
   stopped: 'Turn stopped',
@@ -62,10 +71,29 @@ export function AgentTimeline({
   const { turns, pending } = useMemo(() => groupIntoTurns(entries), [entries])
   const statusByRun = useMemo(() => runStatusByRunId(timelineEvents), [timelineEvents])
   const durationByRun = useMemo(() => runDurationsByRunId(timelineEvents), [timelineEvents])
+
+  // `isRunning` is `agent.status === 'running'` — a POLLED roster field, so it stays true for a
+  // beat after the run has actually ended. The response text and the run's terminal lifecycle
+  // event both arrive over SSE well before that poll lands, which left the live indicator sitting
+  // underneath a finished answer, still counting, before flipping to "Worked for Xs" seconds
+  // later (operator, 2026-08-18: "the working indicator then moves to under the message stays
+  // active for a couple more seconds then disappears and collapse at the worked for one").
+  //
+  // So the indicator is gated on the lifecycle events instead — the same source `durationByRun`
+  // reads — which makes the handoff atomic: the instant the terminal event lands, the live
+  // counter goes and the settled line appears. `isRunning` is still required, so the indicator
+  // cannot appear for an idle agent whose last run simply has no terminal event recorded.
+  const lastRunId = turns.length > 0 ? turns[turns.length - 1].runId : null
+  const lastRunSettled =
+    lastRunId !== null && lastRunId !== undefined
+      ? TERMINAL_STATUSES.has(statusByRun[lastRunId])
+      : false
+  const runVisiblyActive = isRunning && !lastRunSettled
+
   // Timed from the moment this pane saw the run begin. Only ever shown live; once the run ends,
   // `durationByRun` (from persisted event timestamps) takes over, so a refresh does not change
   // what a finished turn says it took.
-  const liveElapsed = useElapsedSeconds(isRunning)
+  const liveElapsed = useElapsedSeconds(runVisiblyActive)
   const [foldOverride, setFoldOverride] = useState<Record<string, boolean>>({})
 
   // The caller always passes a defined counter (never undefined) that starts
@@ -180,7 +208,7 @@ export function AgentTimeline({
           "I think the working should be on the composer screen not the chat box. Right where the
           agent is supposed to answer." Sitting here also means the response arrives *under* it
           rather than shoving it aside, so nothing jumps as the text streams in. */}
-      {isRunning && (
+      {runVisiblyActive && (
         <div
           className="flex items-center gap-2 text-[11px]"
           style={{ color: 'var(--text-3)' }}
