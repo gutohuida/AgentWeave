@@ -110,9 +110,14 @@ export function ProjectManagerModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'var(--scrim)' }} role="dialog" aria-modal="true" aria-labelledby="project-manager-title">
       <div ref={panelRef} className="lifted-surface w-[min(520px,calc(100vw-32px))] p-5" style={{ background: 'var(--surface)' }}>
-        <h2 id="project-manager-title" className="text-sm font-semibold">{mode === 'create' ? 'Create new project' : 'Open existing project'}</h2>
+        <h2 id="project-manager-title" className="text-sm font-semibold">{mode === 'create' ? 'Create new project' : 'Add project'}</h2>
         <p className="mt-1 text-xs" style={{ color: 'var(--text-3)' }}>
-          {isCreate ? 'A new folder is created for the project, so the name must not already be taken.' : 'The directory must already exist.'}
+          {isCreate
+            ? 'A new folder is created for the project, so the name must not already be taken.'
+            : /* The rail's single action lands here. Saying "the directory must already exist"
+                 was true but unhelpful: it read as a restriction when the real behaviour is that
+                 any folder works, and one that is not a project yet simply becomes one. */
+              'Pick any folder. If it is already an AgentWeave project it opens; if not, it is initialised as one. To start somewhere new, use your file browser’s “New folder”.'}
           {' '}The path must be visible to the Hub process — when the Hub runs in Docker, it must lie beneath the configured mounted workspace root.
         </p>
         <label className="mt-4 block text-xs">
@@ -202,7 +207,7 @@ export function ProjectManagerModal({
         <div className="mt-5 flex justify-end gap-2">
           <button type="button" onClick={onClose}>Cancel</button>
           <button type="button" onClick={submit} disabled={!canSubmit || mutation.isPending} data-testid="confirm-project-action">
-            {mutation.isPending ? 'Workingâ€¦' : mode === 'create' ? 'Create project' : 'Open project'}
+            {mutation.isPending ? 'Workingâ€¦' : mode === 'create' ? 'Create project' : 'Add project'}
           </button>
         </div>
       </div>

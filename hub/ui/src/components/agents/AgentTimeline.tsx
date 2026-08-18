@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { format } from 'date-fns'
 import { Icon } from '@/components/common/Icon'
 import { MarkdownMessage } from '@/components/agents/MarkdownMessage'
 import { ToolEditDiff } from '@/components/agents/ToolEditDiff'
 import { editDiffStat } from '@/lib/editDiff'
+import { formatElapsedSeconds, useElapsedSeconds } from '@/hooks/useElapsedSeconds'
 import type { AgentSummary, AgentTimelineEvent } from '@/api/agents'
 import type { TimelineEntry } from '@/api/agentChat'
 import type { QueueStatus } from '@/api/queue'
@@ -14,6 +15,7 @@ import {
   groupIntoTurns,
   isSuccessCompletionEntry,
   reduceTurnBlocks,
+  runDurationsByRunId,
   runStatusByRunId,
   type RunLifecycleStatus,
   type TimelineTurn,
@@ -59,6 +61,11 @@ export function AgentTimeline({
 
   const { turns, pending } = useMemo(() => groupIntoTurns(entries), [entries])
   const statusByRun = useMemo(() => runStatusByRunId(timelineEvents), [timelineEvents])
+  const durationByRun = useMemo(() => runDurationsByRunId(timelineEvents), [timelineEvents])
+  // Timed from the moment this pane saw the run begin. Only ever shown live; once the run ends,
+  // `durationByRun` (from persisted event timestamps) takes over, so a refresh does not change
+  // what a finished turn says it took.
+  const liveElapsed = useElapsedSeconds(isRunning)
   const [foldOverride, setFoldOverride] = useState<Record<string, boolean>>({})
 
   // The caller always passes a defined counter (never undefined) that starts
@@ -151,6 +158,7 @@ export function AgentTimeline({
               turnKey={key}
               agentName={agent.name}
               colorByName={colorByName}
+              durationSeconds={turn.runId ? durationByRun[turn.runId] : undefined}
             />
             {terminalLabel && (
               <div
@@ -167,6 +175,33 @@ export function AgentTimeline({
           </div>
         )
       })}
+
+      {/* Where the answer is about to appear, not down in the composer. Operator, 2026-08-18:
+          "I think the working should be on the composer screen not the chat box. Right where the
+          agent is supposed to answer." Sitting here also means the response arrives *under* it
+          rather than shoving it aside, so nothing jumps as the text streams in. */}
+      {isRunning && (
+        <div
+          className="flex items-center gap-2 text-[11px]"
+          style={{ color: 'var(--text-3)' }}
+          data-testid="timeline-working-indicator"
+          role="status"
+          aria-live="polite"
+        >
+          <span className="inline-flex items-center gap-[3px]" aria-hidden="true">
+            {[0, 200, 400].map((delay) => (
+              <span
+                key={delay}
+                className="h-1 w-1 rounded-full animate-pulse"
+                style={{ background: 'var(--green)', animationDelay: `${delay}ms` }}
+              />
+            ))}
+          </span>
+          <span>
+            Working{liveElapsed !== null ? ` · ${formatElapsedSeconds(liveElapsed)}` : ''}
+          </span>
+        </div>
+      )}
 
       {pending.map((entry) => (
         <MessageEntry
@@ -235,30 +270,73 @@ function TurnBody({
   turnKey,
   agentName,
   colorByName,
+  durationSeconds,
 }: {
   turn: TimelineTurn
   turnKey: string
   agentName: string
   colorByName: ColorLookup
+  /** Whole-run duration for a finished turn; undefined while running or if unknown. */
+  durationSeconds?: number
 }) {
   // Walked in execution order — a block is never hoisted ahead of the text that
   // preceded it (2026-08-04-hub-charcoal-visual-refresh).
   const blocks = useMemo(() => reduceTurnBlocks(turn.entries), [turn.entries])
 
+  // Where the agent's half of the turn starts — the operator's own message is not something
+  // the agent "worked for", so the duration belongs after it, immediately above the response.
+  const firstAgentBlockId = useMemo(() => {
+    const first = blocks.find(
+      (block) => block.kind === 'work' || block.entry.kind === 'agent_output',
+    )
+    return first?.kind === 'work' ? first.id : first?.entry.id
+  }, [blocks])
+
   return (
     <>
       {blocks.map((block) => {
+        const blockId = block.kind === 'work' ? block.id : block.entry.id
+        // Operator, 2026-08-18: "After answering it could just look like worked for Xs and then
+        // the response underneath." Unlike the "Completed" message this replaces, it says
+        // something — and it sits where the eye already is rather than down in the composer.
+        const durationLine =
+          durationSeconds !== undefined && blockId === firstAgentBlockId ? (
+            <div
+              key={`worked-${blockId}`}
+              className="text-[11px]"
+              style={{ color: 'var(--text-3)' }}
+              data-testid="turn-worked-for"
+            >
+              Worked for {formatElapsedSeconds(durationSeconds)}
+            </div>
+          ) : null
+
         if (block.kind === 'work') {
-          return <WorkBlockDisclosure key={block.id} entries={block.entries} />
+          return (
+            <Fragment key={block.id}>
+              {durationLine}
+              <WorkBlockDisclosure entries={block.entries} />
+            </Fragment>
+          )
         }
         const entry = block.entry
         // No end-of-turn text for a normal successful run (operator: "We don't want any
         // end-of-conversation message"). The event itself is untouched — only its card here.
         if (isSuccessCompletionEntry(entry)) return null
         if (entryCategory(entry) === 'result') {
-          return <ResultCard key={entry.id} entry={entry} turnKey={turnKey} />
+          return (
+            <Fragment key={entry.id}>
+              {durationLine}
+              <ResultCard entry={entry} turnKey={turnKey} />
+            </Fragment>
+          )
         }
-        return <MessageEntry key={entry.id} entry={entry} agentName={agentName} colorByName={colorByName} />
+        return (
+          <Fragment key={entry.id}>
+            {durationLine}
+            <MessageEntry entry={entry} agentName={agentName} colorByName={colorByName} />
+          </Fragment>
+        )
       })}
     </>
   )

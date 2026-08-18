@@ -82,8 +82,7 @@ function renderRail(overrides: Partial<React.ComponentProps<typeof Sidebar>> = {
     onNewConversation: vi.fn(),
     onOpenEnvironment: vi.fn(),
     onAddAgent: vi.fn(),
-    onOpenExisting: vi.fn(),
-    onCreateProject: vi.fn(),
+    onAddProject: vi.fn(),
     ...overrides,
   }
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
