@@ -905,3 +905,79 @@ same way every other fixture this run created or restored already did.
 **Queue status:** Q1–Q10 done. Q11 (Tier 2/3 runway, lowest priority) is next if time remains before
 `stop_at` (2026-08-18T08:00+01:00) — prefer Tier 2 item 7 (the StaticPool fixture race) per its own
 note in `known_debts`, do not re-derive the diagnosis already recorded there.
+
+---
+
+## Iteration 12 — Q11: found and reverted a broken fixture-overhead attempt, restored a verified baseline
+
+Started this iteration fresh (no memory of prior iterations) per the process. `git status` showed
+uncommitted, unlogged changes to `hub/hub/db/engine.py` and `hub/tests/conftest.py` — nothing in
+`STATE.json` or the log said any prior iteration had started this, so treated it as work-in-progress
+left by a run that never reached its commit step, and investigated rather than assumed either "safe
+to keep" or "safe to discard."
+
+**What the WIP did.** Split `init_db()` into `_bootstrap_data()` (the seeding half) plus the existing
+`create_all`/alembic half, then changed `hub/tests/conftest.py`'s `app` fixture to depend on a new
+session-scoped `_schema_ready` fixture that runs `Base.metadata.create_all` exactly once, with each
+test's `app` fixture only deleting every table's rows and re-running `_bootstrap_data()` — exactly
+the shape `known_debts.fixture-overhead` describes as the fix (`create_app()` + `drop_all`/`create_all`
+across 43 tables per test is the suite's near-100% overhead).
+
+**It doesn't work.** Ran the full `hub/tests/` suite against it from a verified `hub/` cwd (see the
+cwd-drift note below) and got `7 failed, 1934 passed, 8 skipped, 1 xfailed, 399 errors in 587s` — worse
+than broken, since 399 errors is not a marginal regression. The errors cluster in bursts early in the
+run (`OperationalError: no such table: agent_job_deletions` repeated across `test_jobs_crud.py` and
+`test_launchability.py`, among others) then the suite runs clean for the remaining ~60%. Root cause,
+read directly rather than guessed: `_schema_ready` calls `Base.metadata.create_all` alone and never
+calls `_run_alembic_upgrade()`, so anything the migration chain does beyond what the current models
+declare is silently missing for the whole session — the original `init_db()` (which every test used to
+call in full) always ran both. `agent_job_deletions` genuinely is in `models.py`, so the missing-table
+error is more likely a downstream symptom of the shared `engine`'s single StaticPool connection
+landing in a bad state once schema creation and per-test bootstrapping stopped being one atomic
+`init_db()` call per test — consistent with, though not a full reproduction of, the exact
+`known_debts.staticpool-fixture-race` mechanism (one shared DBAPI connection, a concurrent session's
+close rolling back another's pending write). Did not chase the mechanism further than that — the
+`do_not_redo` list attached to that debt exists precisely so a single iteration doesn't sink its whole
+budget re-deriving a diagnosis seven prior theories already died on.
+
+**Reverted, not repaired.** `git checkout -- hub/hub/db/engine.py hub/tests/conftest.py`. Verified the
+revert is actually a fix, not an assumption: full `hub/tests/` suite on the clean tree —
+`2337 passed, 11 skipped, 1 xpassed, exit 0, 646.44s (0:10:46)`. `2337 + 11 + 1 = 2349`, exactly
+matching `pytest --collect-only`'s count both before and after, so nothing silently dropped out this
+time (unlike the broken run, which only ran 2077 of 2349 once errors started cascading). The one
+`xpassed` is the known flaky StaticPool-race test itself (`xfail(strict=False)`), passing this run —
+expected flakiness, not a new signal.
+
+**Runtime note, worth recording since it revises a number in `known_debts`:** the clean baseline took
+10:46, not the ~8 minutes `known_debts.fixture-overhead` cites. Did not re-time a second run to see if
+that's noise or a real drift (machine load, more tests added since that estimate was written — the
+suite is 2349 tests now) — flagging the discrepancy rather than either trusting or silently correcting
+the old number.
+
+**Process note, also worth recording:** hit real cwd drift in this session's own Bash tool — a `cd
+hub && <command that errored on bad args>` still executed the `cd` half before the argument error,
+and that directory change persisted to the next command despite the command's overall failure,
+which combined with the tool's stated "cwd doesn't persist out of `run_in_background`" behavior to
+send one full-suite run off into the repo-root CLI suite instead of `hub/tests/` without any error
+message announcing the switch (it just silently ran a different, smaller, real suite and reported a
+real, pre-existing, unrelated failure — `test_wheel_ships_skill_reference_docs`, already named in
+`known_debts.test-packaging-stale-skill-doc-assertion` — which read as a plausible result long enough
+to cost real time chasing a phantom "the fixture change broke something" theory before the mismatched
+test count (2077 vs 2349 collected) gave it away). Every pytest invocation after that point in this
+iteration used an explicit `cd /c/Users/.../hub && pwd` check before trusting the run.
+
+**Not attempted this iteration, deliberately:** the StaticPool race itself. `known_debts` is explicit
+that it's a deep, previously-dead-ended problem (seven theories dead, a file-backed DB attempt hung
+the suite for 55 minutes) and this iteration's actual finding — that the *shallow* fixture-overhead
+fix also runs into it — is now evidence the two debts are more entangled than the queue's phrasing
+("if the StaticPool race proves too deep, fixture-overhead is the easier win sitting right next to
+it") assumed. Recorded as a new `known_debts` entry below rather than left to be rediscovered blind.
+
+**Tree state:** clean. `hub/hub/db/engine.py` and `hub/tests/conftest.py` match `origin`. `spec/` and
+`hub/seed_taste_doc.py` (prior-session scratch) untouched, per the queue's own limits.
+
+**Queue status:** Q1–Q10 done. Q11 (Tier 2/3 runway) remains open — this iteration spent its budget
+establishing that the easy path is not actually easy, rather than landing a fix. Runway to `stop_at`
+(2026-08-18T08:00+01:00) is still several hours; a future iteration should read
+`known_debts.fixture-overhead-hits-the-staticpool-race` below before trying again, and should budget
+for the ~11-minute full-suite cost of verifying any attempt twice (broken + reverted, as this one did).
