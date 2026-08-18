@@ -608,3 +608,70 @@ rather than asserting it.
 **name reuse** — a new agent taking an archived agent's name satisfies every creator check the
 original did. Recorded, deliberately not folded into D8's conclusion, with task A5.3 asking for a
 test that documents current behaviour so a future fix has something to flip.
+
+## Entry 9 — Q9 runway, item 1: applying the drafted CLAUDE.md corrections
+
+Fresh process, verified branch (`autonomous/2026-08-18-loops-and-side-panels`) and `git log`
+against `STATE.json` before starting — matched exactly (HEAD `168ddf7`, handoff 0056). Tree was
+clean except the STATE.json CRLF/LF churn from a prior PowerShell touch (content-identical, no
+real diff — confirmed with `git diff` before assuming it meant anything) and the same two
+pre-existing untracked leftovers (`spec/`, `hub/seed_taste_doc.py`), neither this queue item's
+concern. Heartbeat was ~40 minutes stale at firing start (13:33 vs 14:12 actual) — the release
+pattern working as intended, no interactive session held the branch.
+
+`next_action` named three items in order for Q9; did the first only, sized to finish this turn:
+applying the already-drafted, low-risk CLAUDE.md factual corrections from
+`decisions_for_user.N3` and `openspec/explorations/2026-08-18-claude-md-trial-hub-section-is-stale.md`.
+
+**Applied the trial-Hub table correction essentially as drafted**, re-verified live rather than
+trusted from the exploration's morning snapshot: `curl :8010/health` returned `{"status":"ok",...}`,
+`hub/data/agentweave.db` was 11,038,720 bytes and had an `mtime` of 14:00 today (actively written,
+not a stale backup), and `~/.agentweave/hub/hub-trial-8010.pid` existed alongside two other,
+presumably-stale PID files exactly as the exploration described. CLAUDE.md's table now names the
+real database and PID file and adds a standing caveat to check `GET /api/v1/projects` before
+trusting any doc's claimed database, rather than re-encoding one more snapshot that will drift
+again.
+
+**Found and fixed one thing the drafted proposal didn't cover.** The exploration file only
+targeted the trial-Hub *table*; a few paragraphs below it, CLAUDE.md separately described
+`hub/data/agentweave.db` as "the pre-migration original... nothing runs against it now" —
+directly contradicting the table once the table was corrected to name that same path as the live
+database. Left as-is, the correction would have replaced one false claim with an internal
+self-contradiction a few lines down. Rewrote that paragraph to point at the table as the single
+source of truth instead of restating the path with its own (now wrong) story.
+
+**Corrected the Specifications section's lifecycle claim independently**, not from a pre-drafted
+proposal — N3's text in `STATE.json` named this as part of the same correction but only the
+trial-Hub half had a file. Read `hub/hub/spec_lifecycle.py` directly rather than trusting N3's
+one-line description: confirmed `ARCHIVED` exists with a real `(APPROVED, ARCHIVED)` transition
+and an explicit "no transition out of `archived`" comment, and confirmed a `CURRENT` phase exists,
+reached only through `create_document` (never through `transition()`) — a `capability`-kind
+document is created directly in `current`. That second fact is the one that actually falsifies
+CLAUDE.md's "no concept of a current-behaviour specification" line; the archive phase alone would
+not have. Rewrote the paragraph to state both, and to reframe the openspec/AgentWeave split as a
+corpus-*migration* decision rather than a capability gap — then found the "Still prohibited" row
+banning `openspec/specs/` → `spec/` also asserted the now-false "nowhere to put it" reason, and
+fixed that row too rather than leaving three inconsistent statements of the same fact in one file.
+
+Deliberately did NOT decide whether to actually migrate the 30-document openspec corpus — that
+stays the operator's call per N3's own default ("leave anything judgement-shaped to the
+operator"), and per CLAUDE.md's own "Still prohibited" row, unchanged in substance, only in its
+stated reason.
+
+Updated `decisions_for_user.N3` to `APPLIED` with a note of what changed and why. Rewrote
+`STATE.json` with Python (`json.load`/`json.dump`), not PowerShell — confirmed no BOM was
+introduced (`open(..., 'rb').read(3) != b'\xef\xbb\xbf'`) and that the file still parses with a
+plain `utf-8` decode, both checked live rather than assumed, per the standing warning in `limits`.
+
+**Aside, not acted on:** the trial Hub's `/health` currently reports `ui_stale: true`. Recomputed
+`ui_source_fingerprint()` live against the working tree and it matched the recorded build stamp's
+`src_fingerprint` exactly (`bb90f72f...`) — the code is correct, which reconfirms Q4's fix from
+earlier today holds. The live discrepancy is just the running process predating that fix (started
+before today's later commits); it would clear on restart. Not worth restarting the trial Hub
+mid-run for a cosmetic field, and restarting it is not this queue item's concern — noted in
+`next_action` for whoever touches the trial Hub next instead of chased down now.
+
+`current`/`next_action` now point at Q9's remaining two items (candidate-names exploration,
+recommend nothing; capability-validation-rule exploration for D5, decide nothing), then the
+cheap-model live turn only if runway remains. `time_guard.at_1630` still has real room (14:20 at
+time of writing).

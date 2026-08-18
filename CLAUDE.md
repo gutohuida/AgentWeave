@@ -34,22 +34,27 @@ expect them to move.
 | Point the Hub **you are editing** at this repo | Every Hub code change restarts the process orchestrating the work and kills runs in flight. The trial Hub is a separate instance on its own port with its own database, never the development one. |
 | Invoke the legacy `aw-*` collab skills (`aw-delegate`, `aw-status`, `aw-relay`, `aw-setup-*`, …) | These are product source in `src/agentweave/templates/skills/`, predating the Hub-owned flow. They are a feature you implement, not a workflow you run. |
 | Delegate this repo's work through AgentWeave messaging | Do the work directly, or use Claude Code subagents. Roster delegation is not part of this stage. |
-| Move `openspec/specs/` into `spec/` | See "Specifications" below — AgentWeave has nowhere to put a current-behaviour corpus yet. |
+| Move `openspec/specs/` into `spec/` | See "Specifications" below — AgentWeave can now hold a current-behaviour document, but migrating the accumulated 30-document corpus is the operator's call, not yet made. |
 
-### The trial Hub — fixed 2026-08-16
+### The trial Hub — fixed 2026-08-16, database corrected 2026-08-18
 
 | | |
 |---|---|
 | **Port** | `8010` |
-| **Database** | `~/.agentweave/hub/profiles/beta/agentweave.db` |
-| **PID file** | `~/.agentweave/hub/hub-8010.pid` (per-port; the default instance keeps `hub.pid`) |
+| **Database** | `<repo>/hub/data/agentweave.db` (holds this repo's live trial fixtures) |
+| **PID file** | `~/.agentweave/hub/hub-trial-8010.pid` (per-launch-script; `hub-8010.pid` and `hub.pid` are from other launches and may be stale — check `Get-Process -Id <pid>` before trusting any of them) |
 | **This repo registered as** | `proj-5e960453`, working directory the repo root |
+
+Other databases under `~/.agentweave/hub/profiles/` (`beta`, `trial`, `dev`) are earlier or
+divergent copies, not the live one. Confirm which database a running instance actually serves
+with `GET /api/v1/projects` before trusting any doc, this one included — these paths have moved
+before and will again.
 
 Start it — **from `hub/`, not the repo root** (see the trap below):
 
 ```bash
 cd hub
-DATABASE_URL="sqlite+aiosqlite:///$HOME/.agentweave/hub/profiles/beta/agentweave.db" agentweave --port 8010
+DATABASE_URL="sqlite+aiosqlite:///$(pwd)/data/agentweave.db" agentweave --port 8010
 ```
 
 Point the Vite dev server at it with `AW_DEV_HUB=http://127.0.0.1:8010 npm run dev`, and
@@ -65,18 +70,23 @@ spawned server fails, 60 seconds later, with its output already sent to `DEVNULL
 that one if it appears. This only bites a repository that contains a top-level `hub/` directory,
 which is to say: this one, the one being dogfooded.
 
-An 11 MB database also sits at `hub/data/agentweave.db`, gitignored and untracked. It is the
-**pre-migration original**, left as a backup — a Hub started by bare `uvicorn` from `hub/` landed
-there via `config.py`'s relative default. Nothing runs against it now. Do not delete it without
-checking the beta profile copy is healthy first.
+`hub/data/agentweave.db`, gitignored and untracked, is **the database above** — the table's row
+already names it. It started life as the pre-migration original, created by a bare `uvicorn`
+launch from `hub/` landing on `config.py`'s relative default, but is not a stale leftover: it is
+what port 8010 actually serves today. Do not delete it.
 
 ## Specifications — openspec owns the corpus, AgentWeave takes new work
 
-Two systems run side by side during the migration. The split is not arbitrary: AgentWeave's
-lifecycle is `exploring → proposed → approved` (`hub/hub/spec_lifecycle.py`) with **no archive phase
-and no concept of a current-behaviour specification.** A document reaches `approved` and stops.
-Until that gap closes, the accumulated truth about shipped behaviour has no home in AgentWeave and
-must stay in openspec.
+Two systems run side by side during the migration, and the split is now a corpus-migration
+decision, not a capability gap. AgentWeave's lifecycle is `exploring → proposed → approved →
+archived` (`hub/hub/spec_lifecycle.py`), plus a `current` phase reached only through document
+creation (`create_document`) rather than through `transition()` — a `capability`-kind document is
+created directly in `current`, which **is** AgentWeave's concept of a current-behaviour
+specification. Both the archive phase and the `current` phase shipped 2026-08-16.
+
+What has not happened is moving the accumulated openspec corpus (30 `openspec/specs/<capability>/`
+documents) into AgentWeave — that stays in openspec until the operator decides to migrate it (see
+"Still prohibited" above); nothing about the lifecycle itself blocks that decision anymore.
 
 **openspec keeps:**
 
