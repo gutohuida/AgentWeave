@@ -1,204 +1,144 @@
-# Tasks — one shell, three panels
+# Tasks — One shell, many tabs
 
-Nothing in this file has been started. Every box below is unchecked because this change is a spec
-only — CLAUDE.md: "Never mark a task complete on the strength of a plan existing."
+Nothing in this file has been started. Every box is unchecked because this change is a spec only —
+CLAUDE.md: "Never mark a task complete on the strength of a plan existing."
 
-## 1. The `"assigned"` query fix (`hub/hub/api/v1/jobs.py`)
+**Rewritten 2026-08-18** alongside the proposal, design and specs. The loop panel's tasks are gone —
+they live in `2026-08-18-a-loop-writes-its-own-queue` (B5, B6), which owns the data they display.
 
-Sequenced first because it is independent of everything else here, already fully specified (design
-D6), and is the one piece of this change with zero UI dependency.
+Sequence matters here: **1 → 2 → 3 before 4 or 5.** The shell's contract has to exist before anything
+is built against it, or the file tab gets built against `SpecDocumentPanel`'s current one-off shape
+and re-plumbed later — the cost the exploration named and this ordering exists to avoid.
 
-- [ ] 1.1 `_batch_loop_summaries`'s `current_task` candidates query: add `"assigned"` to the
-      `Task.status.in_(...)` clause.
-- [ ] 1.2 Test: a task claimed via `status="assigned"` (constructed directly, since
-      `2026-08-18-a-loop-writes-its-own-queue` may not yet be implemented when this task runs) appears
-      as `current_task` in `_batch_loop_summaries`'s output. Existing tests for `in_progress`/
-      `blocked`/`pending` candidates continue to pass unchanged.
-- [ ] 1.3 Mutation-check: revert the clause, confirm the new test in 1.2 fails by name.
+## 1. The tab store
 
-## 2. Panel shell — layout and registry (`hub/ui/src/components/agents/ConversationView.tsx`)
+- [ ] 1.1 A per-project tab store: which tabs are open, their order, which is visible, whether the
+      shell is open. Keyed by project id. Persisted to `localStorage` under a **versioned** key.
+- [ ] 1.2 Tab kinds as a fixed literal union with template-literal ids: index kinds take a fixed id
+      (`specs`, `files`), detail kinds a keyed one (`spec:${documentId}`, `file:${relativePath}`).
+      Design D3/D4 — key by durable id where one exists; only files key by path.
+- [ ] 1.3 Open/close/activate/reorder actions. Opening an already-open keyed tab **refocuses and
+      re-reveals** rather than duplicating (a reveal counter, T3's `revealRequestId` shape).
+- [ ] 1.4 `closeOthers` / `closeToRight` / `closeAll`, since a strip that accumulates tabs needs them
+      and they are cheap once the store exists.
+- [ ] 1.5 A migration function invoked on load when the stored version is older than current. Write it
+      now even though there is only version 1 — retrofitting versioning after shipping is what forces
+      a silent data loss.
+- [ ] 1.6 Reconciliation on load: drop a `file:` tab whose path is not in the workspace listing.
+      `spec:` tabs are keyed by document id and survive rename, so they need reconciling only against
+      a document that no longer exists at all.
+- [ ] 1.7 The two restore rules from design D5, each with its own test: every tab dropped ⇒ the shell
+      restores **closed**, not open and empty; the visible tab dropped but others surviving ⇒ promote a
+      survivor.
+- [ ] 1.8 Unit tests for the store: persistence round-trip, migration from a stale shape,
+      reconciliation, refocus-not-duplicate, and both restore rules.
 
-- [ ] 2.1 New `PanelShell` component (or equivalent) replacing the spec-specific hosting block
-      (`:150-291`): owns the tab strip, the plus affordance, and the resize/`Drawer`-overlay logic,
-      parameterized by whichever panel is active rather than hardcoded to the spec panel (design D1).
-- [ ] 2.2 New descriptor array — `spec`, `loop`, `files` — each with `id`, `title`, `icon`,
-      `singleton: true` (design D2). A separate, code-level lookup maps each `id` to its content
-      component; the descriptor array itself holds no component references.
-- [ ] 2.3 `ConversationView`'s destination props gain `activePanel: 'spec' | 'loop' | 'files' | null`
-      and `panelOpen: boolean`, owned by the same caller that owns `document`/`onOpenDocument` today
-      (design D5). `document` keeps its existing meaning, now scoped to "which document the `spec`
-      panel shows" rather than "whether any panel is open."
-- [ ] 2.4 `shellMinWidth` is computed from whichever panel is active, generalizing
-      `DOCUMENT_COLUMN_BREAKPOINT`'s existing derived-not-written pattern; `files` and `loop` need
-      their own measured minimum widths (design's proposal notes none exist yet — measure against the
-      loop and file panel's actual built content before hardcoding a number, do not guess).
-- [ ] 2.5 Reopening an already-active singleton panel refocuses it rather than reconstructing it —
-      assert no remount occurs (e.g. via a render-count probe in the test) when the same panel is
-      reopened.
-- [ ] 2.6 Tests: opening each of the three panels from an empty state; switching between them without
-      closing; reopening the active panel is a no-op; closing the shell and reopening restores the
-      previously active panel, not a default.
+## 2. The shell
 
-## 3. Migrating `SpecDocumentPanel` into the `spec` panel slot
+- [ ] 2.1 Shell component owning the strip, the plus affordance, and the visible tab's content. One
+      tab's content rendered at a time.
+- [ ] 2.2 Move `ConversationView.tsx`'s panel-hosting block (`:150-291`) into the shell. Do **not**
+      rewrite `SpecDocumentPanel`'s internals — this is a re-hosting, and the breadcrumb, archived
+      marker, phase and coverage bars, proposals panel, `SpecFrame` bridge and outline rail must all
+      still work afterwards.
+- [ ] 2.3 Generalize the breakpoint: compute the combined minimum from the **visible tab's** own
+      minimum rather than `SPEC_DOC_MIN_WIDTH` specifically, keeping it *derived* so threshold and
+      layout cannot disagree (`ConversationView.tsx:34-38`).
+- [ ] 2.4 Overlay below the breakpoint using the existing `Drawer`, with the reopen affordance kept.
+      Dismissing the overlay keeps the tabs.
+- [ ] 2.5 Width stays `specPreferences.ts`'s single global value. Extend that store; do not invent a
+      second one.
+- [ ] 2.6 Keyboard: ARIA `tablist`, sequential focus, `Enter`/`Space` to activate, arrow keys between
+      tabs, close control reachable, plus menu navigable. Design D11 — nothing here to inherit.
+- [ ] 2.7 `Icon` only for every control in the strip. CLAUDE.md forbids a second icon system; audit
+      the map before assuming a close or plus glyph exists.
 
-- [ ] 3.1 `SpecDocumentPanel`'s existing props (`path`, `inventory`, `onSelectPath`, `onClose`, …) are
-      threaded from the shell's `spec` slot rather than from `ConversationView` directly (design D3).
-      No change to `SpecDocumentPanel.tsx`'s own internals — breadcrumb, archived marker, `SpecPhaseBar`,
-      `SpecCoverageBar`, `SpecProposalsPanel`, `SpecDocumentTasksLink`, the `SpecFrame` bridge, and the
-      outline rail all keep working exactly as before.
-- [ ] 3.2 Tests: every existing `SpecDocumentPanel`/`ConversationView` interaction test (document open,
-      document closed, picker reopened, phase/coverage bars rendering) passes unchanged after the
-      re-hosting — a regression here means the migration touched behavior it was not supposed to.
+## 3. Specs as the shell's first tenant
 
-## 4. Loop tab (`hub/ui/src/components/agents/LoopPanel.tsx`, new)
+Proves the whole shell without a loop or a file endpoint existing.
 
-- [ ] 4.1 New `LoopPanel` component consuming `LoopSummary` (already returned by
-      `_batch_loop_summaries` via the jobs API, per task 1's fix) for purpose, stop condition/reason,
-      per-status queue counts, claimed item, and open-questions count — the same data `JobCard.tsx`'s
-      existing `LoopBlock` (`:88-172`) already renders, adapted to this surface rather than
-      re-derived.
-- [ ] 4.2 New job-scoped live-ness lookup (design D6): reuse the lifecycle-event/streamed-status-line
-      signal `AgentTimeline.tsx`'s `runVisiblyActive` (`:104`) already derives, scoped to the loop's
-      job's most recent `JobRun.conversation_id` rather than to the currently open conversation's
-      agent. Read `AgentTimeline.tsx`'s gate logic in full before deciding whether to extract a shared
-      hook or duplicate the derivation at the new scope — the design leaves this open.
-- [ ] 4.3 Empty state: a conversation whose job has no loop states so plainly, rather than an empty
-      table.
-- [ ] 4.4 Live updates via the existing `useSSE` hook, invalidating the loop summary query on
-      `job_run_failed`, `loop_stopped`, `loop_queue_exhausted` (produced by
-      `2026-08-18-a-loop-writes-its-own-queue`, consumed here for the first time), and task-status
-      events — no polling.
-- [ ] 4.5 Motion: only the active-now indicator animates (design D8), CSS-driven where possible to
-      inherit `index.css:708-715`'s reduced-motion rule for free; a `matchMedia` check if any part of
-      it is implemented outside CSS. Queue progress and stop-state badges render with no transition on
-      value change.
-- [ ] 4.6 Icons: audit `Icon.tsx`'s existing name map before assuming one exists for "loop" or
-      "claimed task" — none was confirmed present during the exploration. Add missing names to the
-      existing `lucide-react` wrapper map (CLAUDE.md's standing rule against a second icon system);
-      do not introduce a second icon source.
-- [ ] 4.7 Tests: summary fields render from a fixture `LoopSummary`; a claimed task in `assigned`
-      status renders (regression guard for task 1's fix actually being consumed here); the active-now
-      indicator reflects the live-ness lookup's true/false states; `loop_queue_exhausted`'s
-      `pending_request` payload, when present, is shown; reduced-motion preference suppresses the
-      indicator's animation (a jsdom `matchMedia` mock, matching this codebase's existing pattern for
-      testing reduced-motion behavior elsewhere, if one exists — otherwise establish it here).
+- [ ] 3.1 A `specs` index tab listing the project's documents — the content today's modal picker
+      shows, re-hosted as a tab.
+- [ ] 3.2 Selecting a document opens a `spec:<document_id>` tab hosting `SpecDocumentPanel`.
+- [ ] 3.3 **Unfuse attach from display** (design D9): closing a `spec:` tab does not detach the
+      conversation's attached document. The composer control is unchanged in this change.
+- [ ] 3.4 The attached document stays in the addressed destination and survives a reload, exactly as
+      today. Two documents open for reading at once, with only one attached, must work.
+- [ ] 3.5 An archived document's tab still opens and shows the archived marker `SpecDocumentPanel`
+      already renders.
+- [ ] 3.6 Regression pass over `spec-chat-session`'s existing scenarios — this change modifies that
+      capability and every guarantee it already made has to survive.
 
-## 5. File content endpoint (`hub/hub/api/v1/workspace.py`, `hub/hub/workspace_paths.py`)
+## 4. The file content endpoint
 
-- [ ] 5.1 New `GET /api/v1/workspace/file?path=...`, project-scoped via the same
-      `project_workspace.resolve_project_workspace` dependency `get_workspace_paths` already uses.
-- [ ] 5.2 Allowlist (design D7): call `list_workspace_paths(workspace.root)` and refuse (404) unless
-      the requested `path` is an exact member of the returned list — no separate resolve-and-
-      contains-check.
-- [ ] 5.3 Size bound (design D7): refuse (413 or an equivalent explicit response) a file exceeding
-      `1_048_576` bytes (reusing `hub/hub/config.py`'s `aw_max_body_size` constant rather than a new
-      literal), naming the file's actual size and the bound in the response body.
-- [ ] 5.4 Binary detection (design D7): read the first 8,000 bytes, check for a NUL byte; if found,
-      respond with a shape the client can distinguish from text content (e.g. a `binary: true` field)
-      rather than attempting to serve raw bytes as a text response.
-- [ ] 5.5 Tests: a listed path returns its content; a path not in the listing (traversal attempt,
-      symlink outside the workspace root, or a gitignored path) is refused; a file over the size bound
-      is refused with size and bound named, and confirmed to return no partial content; a binary
-      fixture file is identified as binary and not returned as text; a text file at exactly the bound
-      is served in full (boundary case).
-- [ ] 5.6 Mutation-check: temporarily widen the allowlist check to a prefix/contains check instead of
-      exact membership, confirm the traversal-refusal test in 5.5 fails by name.
+- [ ] 4.1 `GET /api/v1/workspace/file?path=...`, project-scoped, resolving through
+      `project_workspace.resolve_project_workspace` like every other project-scoped route.
+- [ ] 4.2 Allowlist by **membership of `list_workspace_paths`'s own output** (design D7) — not a second
+      containment check. Test traversal, a symlink pointing outside the workspace, and a `.gitignore`d
+      path; all refused because the listing does not contain them, not because a separate sanitizer
+      caught them.
+- [ ] 4.3 Size bound at `aw_max_body_size`'s existing default. Over the bound: refuse, naming size and
+      bound. Test that no partial body is returned.
+- [ ] 4.4 Binary detection: NUL byte in the first 8,000 bytes. Test an extensionless text file (a
+      `Makefile`) is treated as text and a small binary is not.
+- [ ] 4.5 Docker-mode path handling matches every other project-scoped route — container-visible paths
+      beneath `AW_WORKSPACE_ROOT` only, no host-path guessing.
 
-## 6. File tab (`hub/ui/src/components/agents/FilePanel.tsx`, new)
+## 5. The files tab
 
-- [ ] 6.1 New `FilePanel` component: fetches the project's workspace paths (the existing `GET
-      /api/v1/workspace/paths`) and builds a tree using `hub/ui/src/components/spec/
-      specNavigation.ts`'s existing `buildPathTree` (`:320-364`) rather than a second tree-building
-      implementation, per the exploration's §7 recommendation.
-- [ ] 6.2 Selecting a file fetches its content from the new endpoint (task 5) and renders it inline;
-      a binary response renders the "this file is binary" state instead.
-- [ ] 6.3 "Insert into composer" reuses the existing `@path` mention format the composer's trigger
-      already produces (design, "insert into composer" — check `composerTrigger.ts`'s exact mention
-      string shape before implementing a second one that merely looks similar).
-- [ ] 6.4 Tests: the tree renders from a fixture path list; selecting a file shows its content;
-      selecting a binary-flagged file shows the binary state, not garbled text; the inserted mention
-      string is byte-identical to what the composer's own `@path` trigger would produce for the same
-      path.
+- [ ] 5.1 A `files` tree tab built from `GET /api/v1/workspace/paths`. Reuse or adapt
+      `specNavigation.ts`'s `buildPathTree` (`:320-364`) rather than re-deriving tree building.
+- [ ] 5.2 Selecting a file opens a `file:<path>` tab **and closes the tree tab** (design D8).
+- [ ] 5.3 The file tab renders text content, states binary, and states a refusal for an oversized file
+      with its size and the bound.
+- [ ] 5.4 "Insert into composer" produces the **same** mention format `composerTrigger.ts`'s `@path`
+      trigger already produces. Test the two are byte-identical for the same file.
+- [ ] 5.5 Measure and state the `files` tab's minimum width against the real shell. Design D12 leaves
+      this deliberately unstated; do not guess it, measure it, then write it down beside
+      `SPEC_DOC_MIN_WIDTH` with the same kind of comment.
 
-## 7. Keyboard reachability (`hub/ui/src/components/agents/ConversationView.tsx` or the new
-   `PanelShell`)
+## 6. Strip overflow
 
-- [ ] 7.1 Tab strip implements the ARIA `tablist` pattern: `Tab`/`Shift+Tab` reaches the strip,
-      `Enter`/`Space` activates the focused tab, arrow keys move focus between tabs while the strip
-      has focus.
-- [ ] 7.2 The plus affordance and its menu are keyboard reachable and operable using whatever pattern
-      this codebase's other menus already use (do not invent a second menu-interaction pattern).
-- [ ] 7.3 Tests: keyboard-only activation of a tab produces the same `activePanel` state change as a
-      pointer click; arrow-key navigation moves focus without activating; the plus affordance's menu
-      opens and its items activate via keyboard.
+- [ ] 6.1 Decide overflow behaviour once real tabs exist and more are open than fit. T3 does one native
+      `scrollIntoView` for the newly active tab and nothing else; start there and only add if it
+      measurably fails. Record what was chosen and why.
 
-## 8. Full-suite verification — agent-verifiable
+## 7. Human-only — the operator's judgement
 
-- [ ] 8.1 `py -3.11 -m pytest hub/tests -q` — full backend suite green, including every new test in
-      tasks 1 and 5.
-- [ ] 8.2 `py -3.11 -m mypy hub/hub/` clean.
-- [ ] 8.3 `cd hub/ui && npm run lint` and the UI test suite (`npm test` or the project's equivalent)
-      green, including every new test in tasks 2, 3, 4, 6, 7.
-- [ ] 8.4 `npx openspec validate --changes --strict` passes with this change included (already
-      confirmed for the spec text itself; re-run after implementation in case a later edit to this
-      file drifted from the delta).
-- [ ] 8.5 `npm run build` in `hub/ui`, then `py -3.11 scripts/refresh_ui_bundle.py` — confirm the
-      rebuild is not accidentally reported `ui_stale` afterward (the false-positive this session's Q4
-      fixed; do not reintroduce a reason for it to fire).
+- [ ] 7.1 **Does the plus affordance read as "add a tab" rather than "settings"?** It is the only entry
+      point to everything the shell can do.
+- [ ] 7.2 **Does closing a spec tab feel safe** — is it obvious the document is still attached and
+      nothing was lost? D9's whole value rests on this reading correctly.
+- [ ] 7.3 **Does opening a file eating the tree tab feel right or feel like a bug?** T3 does it; that
+      is evidence, not proof, and this is the one borrowed behaviour most likely to surprise.
+- [ ] 7.4 **At the narrowest window you actually use, is the shell usable or merely present?**
+      Especially the file tree plus a preview.
+- [ ] 7.5 **After a week, does per-project tab memory help or does it restore stale clutter?**
 
-## 9. Human-only verification
+## 8. User test guide
 
-- [ ] 9.1 **Does the shell actually read like "just like T3 does," or like AgentWeave's own thing
-      wearing T3's layout?** The operator's own comparison — drive the shell in a browser, open all
-      three tabs, and judge whether the tab strip, plus affordance, and resize behavior feel coherent
-      with the rest of the Hub UI, not merely functionally equivalent to the reference.
-- [ ] 9.2 **Is the loop tab's active-now indicator legible without being distracting?** The one place
-      this change deliberately adds motion (design D8) — watch it during a real firing and judge
-      whether it communicates "something is happening" without drawing attention away from the
-      conversation itself.
-- [ ] 9.3 **Does the file panel's binary-file state read as informative or as a dead end?** Open a
-      binary fixture (an image or compiled artifact already in the repo) through the file tab and
-      judge whether the response tells the operator what to do next, or just that something failed.
-- [ ] 9.4 **Does switching to the loop or files tab ever feel like it lost the document?** Open a
-      document, switch to the loop tab, switch back — confirm by eye (not only by test) that the
-      document reappears exactly as left, with no flash of an empty picker state in between.
-- [ ] 9.5 **Keyboard-only pass.** Navigate the entire tab strip and plus affordance using only the
-      keyboard, on a real keyboard, not simulated events — confirm focus is visibly indicated at every
-      step, since a test asserting the correct element receives focus does not prove the operator can
-      *see* where focus is.
+1. **Open the shell with nothing open.** Press the panel button.
+   - *Expect:* the shell opens with the plus affordance and no tabs, or does not open at all until a
+     tab is chosen — whichever 2.1 implements, it should not open showing an empty grey box.
+2. **Add the specs index, open a document, then open a second document.**
+   - *Expect:* three tabs; one visible at a time; both documents readable.
+3. **Attach a document via the composer's explore control, then close its tab.**
+   - *Expect:* the composer still names it as attached. If the pill clears, 3.3 is wrong.
+4. **Reload.**
+   - *Expect:* the same tabs, the same visible tab, the same attached document.
+5. **Switch to another project, open different tabs, switch back.**
+   - *Expect:* each project keeps its own configuration.
+6. **Open the file tree, open a file.**
+   - *Expect:* the tree tab is replaced by the file tab.
+7. **Open a file, then delete it on disk, then reload.**
+   - *Expect:* the tab is gone and the rest survive. If the shell opens empty, 1.7's first rule is
+     not implemented.
+8. **Request a 5 MB file and a binary file.**
+   - *Expect:* refused with size and bound; identified as binary. Neither renders as garbled text.
+9. **Narrow the window until the shell overlays. Dismiss it.**
+   - *Expect:* a control remains to bring it back, with the same tabs.
+10. **Do all of the above using only the keyboard.**
 
-## 10. User test guide
-
-**Setup.** A project registered in the Hub with at least one conversation, one specification document
-already created, and — if `2026-08-18-a-loop-writes-its-own-queue` has shipped by the time this is
-tested — a loop with at least one queued task. A project workspace containing at least one small text
-file, one file over the 1 MiB bound, and one binary file (e.g. a `.png`), for the file tab.
-
-1. **Open a conversation with a document already attached.** — *Expect:* the document opens in the
-   shell's `spec` tab, exactly as it does today.
-2. **Open the plus affordance and select the `loop` tab.** — *Expect:* the shell switches to the loop
-   tab; the document is not closed. If the conversation's job has no loop, the tab states this
-   plainly rather than showing an empty table.
-3. **Switch back to the `spec` tab.** — *Expect:* the same document reappears, not a picker.
-4. **Open the `files` tab and navigate to a small text file.** — *Expect:* the tree shows the
-   project's files; selecting the text file shows its content inline.
-5. **Select the oversized file.** — *Expect:* a refusal naming the file's size and the bound, not a
-   truncated partial render.
-6. **Select the binary file.** — *Expect:* the panel states it is binary, not garbled text.
-7. **Insert the text file into the composer from the files tab, then type `@` and the same filename
-   in the composer directly.** — *Expect:* the two mentions are the same text.
-8. **Resize the shell, then reload the page.** — *Expect:* the same width, the same active panel, and
-   (if a document was open) the same document all survive the reload.
-9. **Narrow the browser window below the shell's combined minimum width.** — *Expect:* the panel
-   becomes an overlay; dismissing it leaves a control to reopen the same panel, not a lost state.
-10. **If a loop with an active firing is available, open its loop tab while the firing runs.** —
-    *Expect:* the active-now indicator animates while the firing is in progress, and stops animating
-    once it settles.
-
-**Where it would go wrong:** if step 3 shows a document picker instead of the same document, the
-`activePanel`/`document` state split (design D5) likely collapsed into a single field somewhere and
-lost the document's identity on tab switch. If step 5 returns a truncated file instead of a refusal,
-the size-bound check (design D7, task 5.3) is truncating rather than refusing. If step 10's indicator
-never animates, check that the live-ness lookup (task 4.2) is scoped to the loop's job's current run
-and not accidentally reading the roster-wide polled `agent.status` field the design explicitly
-rejected.
+**Where it would go wrong.** If step 3 clears the pill, attach and display are still fused. If step 5
+shows the first project's tabs, the store is global rather than per project. If step 7 opens an empty
+shell, 1.7 is missing. If step 9 loses the tabs, 2.4 is discarding state on dismiss.
