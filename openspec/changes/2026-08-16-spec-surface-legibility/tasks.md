@@ -388,19 +388,19 @@ independent backend-only work, F4 before F5 (the drawer reuses F4's chips).
 
 ## 7. Human-only verification
 
-- [ ] 7.1 **F1 — does the document read as colourful/scannable now, or still "texty"?** Taste. Screenshot
+- [x] 7.1 **F1 — does the document read as colourful/scannable now, or still "texty"?** Taste. Screenshot
       via `scripts/uishot.py` if available (both themes), `Read` it, but do not tick this task on the
       strength of the screenshot existing — only the operator's own read counts.
-- [ ] 7.2 **F2 — does the background actually match, to the eye, not just by variable name?** 1.4's
+- [x] 7.2 **F2 — does the background actually match, to the eye, not just by variable name?** 1.4's
       computed-style check (if run) is strong evidence but the operator's original complaint was a
       felt mismatch, not a value; confirm by looking, in both themes.
-- [ ] 7.3 **F5 — does the drawer feel like Jira, or like something else entirely?** Taste, per the
+- [x] 7.3 **F5 — does the drawer feel like Jira, or like something else entirely?** Taste, per the
       operator's own comparison. Open a task with a long description and several requirement chips.
-- [ ] 7.4 **F4 — does the navigation between board and document actually feel connected now**, or does
+- [x] 7.4 **F4 — does the navigation between board and document actually feel connected now**, or does
       it still feel like two separate screens with a link between them? This is the operator's own
       framing ("the navigation between the two is hard") and is broader than "does the click work,"
       which 5.7 already proves.
-- [ ] 7.5 **F3/F6 — drive the flow that motivated them**: reject one piece of evidence, confirm the
+- [x] 7.5 **F3/F6 — drive the flow that motivated them**: reject one piece of evidence, confirm the
       coverage bar reads `rejected` rather than `in_progress`; try to propose a document with an
       over-sized task, confirm the refusal message is one the operator would understand without
       reading this file.
