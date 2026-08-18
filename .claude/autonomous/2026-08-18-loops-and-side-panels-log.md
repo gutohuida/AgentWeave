@@ -675,3 +675,58 @@ mid-run for a cosmetic field, and restarting it is not this queue item's concern
 recommend nothing; capability-validation-rule exploration for D5, decide nothing), then the
 cheap-model live turn only if runway remains. `time_guard.at_1630` still has real room (14:20 at
 time of writing).
+
+## Entry 10 — Q9 runway, item 2: the candidate-names exploration
+
+Fresh process. Verified branch (`autonomous/2026-08-18-loops-and-side-panels`) and `git log` against
+`STATE.json` before starting — matched exactly (HEAD `bcb00b1`, "Release the branch heartbeat now
+that the CLAUDE.md fix is pushed"). Read `git show --stat` on the three loop-titled commits between
+Handoff 0056 and HEAD that read as implementation from their subject lines alone (`9c31059`
+"Separate a loop's creator from its controller", `a1c1eb1` "Make a loop editable", `c453d6f` "Merge
+the duplicate loop change") before trusting `STATE.json`'s claim that nothing was implemented this
+run — confirmed all three touch only `STATE.json`, the loop exploration file, and the openspec
+change's own design/spec/tasks files. No runtime code changed. `DEC-run-narrowed` still holds. Tree
+was clean except the two known pre-existing untracked leftovers (`spec/`, `hub/seed_taste_doc.py`).
+Heartbeat was ~55 minutes stale at firing start (13:36 vs 14:27 actual) — no interactive session
+held the branch.
+
+Did `next_action`'s item (a) only, sized to finish this turn: wrote
+`openspec/explorations/2026-08-18-candidate-names.md`. Read both source documents in full first
+rather than skimming for the cited sections — `does-the-name-still-fit.md` in its entirety (its §1
+is the architectural evidence, §3 the six-surface cost table, §4 the parallel Hub-term question) and
+`where-agentweave-fits.md` in its entirety (§4-5 name the three infrastructure properties that
+survived competitive absorption: durability across sessions, addressable bound identity, an
+operator-facing UI).
+
+**The one substantive judgment call**: the two source documents measure different things —
+`does-the-name-still-fit.md` describes what the shipped *architecture* is shaped like (factory:
+Runner/Agent/Charter as stations, an archive+current corpus, `Loop` as a production line), while
+`where-agentweave-fits.md` describes what the *market positioning* should lead with (durability,
+addressability, an operator-facing UI). A single list of candidates generated without naming this
+split would silently pick one direction by which document's vocabulary happened to come to mind
+first. Structured the whole document around keeping that split visible instead: two candidate
+tables (factory-shaped, durability-shaped) plus a third (hybrid, including the no-rename option),
+same structure repeated for the narrower "Hub" question per `does-the-name-still-fit.md` §4's own
+three-option frame.
+
+Eight product candidates (Foreman, Muster, Lineworks, Depot / Ledger, Anchor, Waypoint, Continuum /
+keep-AgentWeave-reposition-only, Loomworks, Weft) and four Hub candidates (Control Room, Floor,
+Station, Console), each with one line on what it signals and one on its most obvious cost or
+collision risk — named without verification (e.g. Waypoint is a known HashiCorp product; Foreman's
+possible collision is flagged as unverified, not confirmed, an intentional distinction kept visible
+in the prose rather than smoothed over).
+
+**Deliberately did not check name availability** (PyPI, npm, domain, trademark) for any candidate —
+argued in the document's own §4 as real, billable verification work that is wasted fanned out across
+eight-plus candidates before the operator narrows the field, not appropriate for this turn's
+runway. **Deliberately did not score or rank** — the operator's own framing was "explore names,
+decide nothing yet," and a weighted table is a decision wearing a table's clothing. No file in this
+repository references any candidate as an actual replacement; no rename executed, drafted, or
+implied anywhere outside the new exploration file itself.
+
+Updated `STATE.json`'s `next_action` to point at Q9's last remaining item (the capability-validation-
+rule exploration for `decisions_for_user.D5`) and, only after that, the cheap-model live turn if
+`time_guard.at_1630` still leaves room — re-checked the clock rather than trusted the prior entry's
+snapshot (now 14:31, `at_1630` still has real room). Rewrote `STATE.json` with Python
+(`json.load`/`json.dump`), then re-parsed it with a plain `utf-8` decode to confirm no BOM, per the
+standing warning in `limits`.
