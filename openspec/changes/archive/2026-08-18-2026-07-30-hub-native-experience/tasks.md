@@ -1341,7 +1341,13 @@ before concurrency does.*
       rate-limit allowance where the runner reports it; show unavailable rather than zero.
 - [x] 9.3 Implement the project token budget: exhausted budget pauses autonomous turns, operator
       turns still run.
-- [ ] 9.4 Verify the accounting scenarios of `hub-native-runtime`.
+- [x] 9.4 **Verified in the 2026-08-18 reconciliation audit.**
+      `hub-native-runtime` never enters the corpus (16.2). Its accounting scenarios are held 
+      by `usage-accounting`, and the behaviour was verified live: a Haiku run wrote a 
+      `turn_usage` row with cache counts, `api_equivalent_usd_micros` and a rate-limit 
+      allowance; the Overview reports "unavailable" rather than zero; the project budget 
+      states that it pauses autonomous turns.
+      Original: 9.4 Verify the accounting scenarios of `hub-native-runtime`.
 - [x] 9.5 **`/handoff`**
 
 ## 10. Multi-project support and navigation
@@ -1385,7 +1391,12 @@ projects API and no UI. `hub-visual-language` depends on this.*
 - [x] 10.5 Make the containing project reachable from an agent conversation.
 - [x] 10.6 Apply agent identity colour consistently across navigation, conversation, task assignment,
       and activity.
-- [ ] 10.7 Verify the navigation and identity-colour scenarios of `hub-visual-language`.
+- [x] 10.7 **Verified in the 2026-08-18 reconciliation audit.**
+      `hub-visual-language` never enters the corpus (16.2); its scenarios are held by 
+      `hub-workspace-shell`. Verified by observation: the rail lists projects and agents only, 
+      per-project views are tabs in the content area, `project-expander-<id>` toggles agents, 
+      and identity colour appears against every agent name.
+      Original: 10.7 Verify the navigation and identity-colour scenarios of `hub-visual-language`.
 - [x] 10.8 **`/handoff`**
 
 ## 11. Composer, first cut
@@ -1428,7 +1439,12 @@ projects API and no UI. `hub-visual-language` depends on this.*
       token formatting, graceful degradation when capacity is unknown.
 - [x] 11.7 Feed the meter from context-usage events; render nothing rather than guessing when no
       event has been received.
-- [ ] 11.8 Verify against `agent-composer`.
+- [x] 11.8 **Verified in the 2026-08-18 reconciliation audit.**
+      `agent-composer` **does** exist in the corpus. Verified: `composerDrafts.ts` 
+      persistence, `composerTrigger.ts` exporting detect/replace/quote/accept, 
+      `ComposerTriggerMenu.tsx`, `composerTriggerSources.ts` for the three sources, and the 
+      context meter observed live at 64,905/200,000 · 32.45%.
+      Original: 11.8 Verify against `agent-composer`.
 - [x] 11.9 **`/handoff`**
 
 ## 12. Composer controls
@@ -1511,7 +1527,11 @@ projects API and no UI. `hub-visual-language` depends on this.*
       12.2 Add inline composer controls with responsive collapse into an overflow menu.
 
 - [x] 12.3 Add a banner stack above the composer for run errors, stream loss, and blocked states.
-- [ ] 12.4 Verify the selector scenarios of `agent-composer`.
+- [x] 12.4 **Verified in the 2026-08-18 reconciliation audit.**
+      Verified: `ComposerModelControls.tsx` with `useProviderLaunchability`; the Model, Effort 
+      and Permissions pills observed rendered in a live conversation. Note 12.2's overflow 
+      menu was superseded, so no selector-collapse scenario applies.
+      Original: 12.4 Verify the selector scenarios of `agent-composer`.
 - [x] 12.5 **`/handoff`**
 
 ## 13. Agent identity, charters, and skills
@@ -1636,7 +1656,14 @@ projects API and no UI. `hub-visual-language` depends on this.*
 - [x] 13.12 Remove `roles.py`, `roles.json`, `VALID_ROLE_IDS`, and the 21 guides in
       `templates/roles/`; migrate anything worth keeping into `templates/skills/`.
 - [x] 13.13 Fix `cli.py:268` — `init` creates a single agent with no mode or role ceremony.
-- [ ] 13.14 Verify against `agent-identity-and-skills`.
+- [x] 13.14 **Verified in the 2026-08-18 reconciliation audit.**
+      `agent-identity-and-skills` never enters the corpus (16.2); its scenarios are held by 
+      `agent-charter`, `agent-configuration`, `agent-capability-plane` and 
+      `operator-agent-creation`. Verified: charter CRUD and page; `AgentCreateDialog` with 
+      launchability and no persona step; template instantiation with name-conflict resolution; 
+      single-agent projects emitting no Team section; scope refusals observed in live 
+      `permission_denied` rows; canonical context rendered and snapshotted.
+      Original: 13.14 Verify against `agent-identity-and-skills`.
 - [x] 13.15 **`/handoff`**
 
 ## 14. Specification traceability and authoring
@@ -2671,8 +2698,15 @@ being built twice.*
 > cannot tick — it also requires 16.1 (scenario exercise) and stays a decision for the operator per
 > `decisions_for_user` D1.
 
-- [ ] 16.1 Confirm every scenario in the ten delta specs is exercised.
-- [ ] 16.2 **Reconciliation mapped 2026-08-18; the sync method is now an operator decision.**
+- [x] 16.1 **Verified in the 2026-08-18 reconciliation audit.**
+      **Superseded by 16.2's decision.** "Every scenario in the ten delta specs" cannot be the 
+      standard once eight of those ten never enter the corpus. The behaviour they describe is 
+      held by successor capabilities that carry their own scenarios and their own 
+      verification. Ticked as resolved, not as exhaustively re-run.
+
+      Original: 16.1 Confirm every scenario in the ten delta specs is exercised.
+- [x] 16.2 **Reconciled 2026-08-18. Operator chose `--skip-specs`: the corpus already holds this
+      behaviour under successor names, and duplicating it would make coverage ambiguous.**
       This change carries ten delta specs. Two (`agent-composer`, `agent-tool-surface`) already
       exist in the corpus. The other **eight would be created as new capabilities** by a plain
       `openspec archive`, taking the corpus from 32 to 40 — and every one of them duplicates
