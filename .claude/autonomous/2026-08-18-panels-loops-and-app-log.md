@@ -705,3 +705,98 @@ paraphrase and actor-choice reasoning), corrected the file's own summary line ("
 Committed, pushed. `current`/`next_action` now point at **L7** (loop-scoped checkpoints, `hub/hub/
 checkpoints.py` — confirmed this iteration that `checkpoint_generation.py`, also named in the section
 header, does not actually hold the touched functions; only `checkpoints.py` does), tasks 7.1-7.4.
+
+## Entry 9 — iteration 9: L7, loop-scoped checkpoints + envelope (2026-08-18T23:57-2026-08-19T00:06+01:00)
+
+Fresh process. Branch and `git log` matched STATE.json exactly on read (HEAD at the release-heartbeat
+commit following entry 8). Read design D4 (`2026-08-18-a-loop-writes-its-own-queue/design.md`) before
+touching code.
+
+**Work done: L7 — tasks 7.1-7.4, `hub/hub/checkpoints.py` and `hub/hub/checkpoint_generation.py`.**
+
+New `loop_for_conversation(db, conversation_id) -> Optional[Loop]` in `checkpoints.py`, doing task
+7.1's join (`JobRun.conversation_id` → `job_id` → `Loop.job_id`) once — the same join
+`_batch_loop_summaries` (`api/v1/jobs.py:98`, design D7 of `many-named-loops`) already makes. Rather
+than inline this join at both `create_checkpoint` and `compute_envelope` call sites, `generate_checkpoint`
+(`checkpoint_generation.py`, the only function that calls both) derives it once and passes the same
+`Loop` object into each. `scalar_one_or_none()`, not `scalar_one()` — a conversation with no `JobRun`
+row (most conversations) or a `JobRun` whose job carries no `Loop` both correctly resolve to `None`
+without raising.
+
+New `latest_checkpoint_for_loop(db, loop_id)` (task 7.2), copied from `latest_checkpoint`'s shape
+exactly, `Checkpoint.loop_id == loop_id` in place of `conversation_id`, same
+`order_by(Checkpoint.created_at.desc(), Checkpoint.id.desc())` tie-break.
+
+`compute_envelope` (task 7.3) gained an optional `loop=` parameter. When supplied, `tasks` is built by
+new `_tasks_for_loop(db, loop_id)` — `Task.loop_id == loop.id`, every status, no `_LIVE_TASK_STATUSES`
+filter — instead of the agent-wide `_tasks_for`. A new `LOOP_TASK_SCOPE_NOTE` constant, not a runtime
+substitution into the existing `TASK_SCOPE_NOTE` string: the two scopes are genuinely different claims
+("every task assigned to this agent" vs "every task belonging to this loop"), and stating each as its
+own literal text is the same "explicit scope hides nothing" reasoning `TASK_SCOPE_NOTE`'s own comment
+already gives for existing at all — a templated single constant would have hidden that difference
+behind a parameter instead of making it directly reviewable.
+
+`create_checkpoint` (task 7.1) also gained an optional `loop=` parameter; when supplied,
+`checkpoint.loop_id = loop.id` on the constructed row, `None` otherwise. The `Checkpoint.loop_id`
+column itself was already migrated in section 1 (confirmed on the model before writing the stamp,
+per `next_action`'s explicit instruction not to assume it).
+
+**The caller side.** `generate_checkpoint` (`checkpoint_generation.py`) now calls
+`loop = await loop_for_conversation(db, conversation.id)` once, right after resolving the anchor
+checkpoint, and threads the same `loop` into both `compute_envelope(..., loop=loop)` and
+`create_checkpoint(..., loop=loop)`. This is the only place in the codebase that calls both functions
+(confirmed by grepping every call site of `compute_envelope`/`create_checkpoint` across `hub/hub` —
+`checkpoint_trigger.py` and `api/v1/checkpoints.py` both only call `generate_checkpoint`, never the
+two lower-level functions directly), so no other call site needed touching.
+
+**A mypy correction made mid-iteration, not caught until the second pass.** The three new functions
+were first written matching this file's existing convention of an untyped `db` parameter (every
+pre-existing function in `checkpoints.py` does this). `mypy` then reported three fresh
+`no-untyped-def` hits beyond the seven already in `.claude/autonomous/mypy-baseline.txt` for this
+file — the existing convention is itself the pre-existing baseline debt, not a precedent to extend.
+Fixed by typing all three new functions' `db` parameter as `db: AsyncSession` (imported from
+`sqlalchemy.ext.asyncio`) — deliberately not touching any of the file's other seven untyped functions,
+which stay exactly as they were, out of this task's scope. Re-ran mypy after: `checkpoints.py` back to
+exactly 7 matching lines, `checkpoint_generation.py` unchanged at 6 — zero new errors either way. Worth
+recording since "match the file's existing style" and "add zero new mypy errors" pointed in opposite
+directions here, and only running mypy caught it — reading the file's own convention would have
+produced a plausible-looking wrong answer.
+
+**Tests, `hub/tests/test_checkpoint_record.py`.** New `_loop_firing(db, *, conversation_id, job_id,
+loop_id)` fixture builds an `AIJob` + `Loop` + the `JobRun` that joins a given conversation to it —
+the minimal shape `loop_for_conversation` reads. Seven new tests: a loop-scoped envelope's `tasks`
+includes a task in `status="approved"` alongside a `pending` one (proving the scope is genuinely every
+status, not `_LIVE_TASK_STATUSES` with a different filter value) and excludes another loop's task; a
+plain conversation's envelope is unchanged (`scope == "agent"`, `TASK_SCOPE_NOTE`) as a regression
+guard; `create_checkpoint` stamps `loop_id` when given a loop and leaves it `None` when not; two direct
+`loop_for_conversation` tests (finds the loop, returns `None` for an untouched conversation); and
+`test_latest_checkpoint_for_loop_crosses_conversations` — the load-bearing one task 7.4 named
+explicitly — a checkpoint created against one conversation, then asked for from a *second* conversation
+whose `JobRun` points at the same `job_id`, proving the query is genuinely `loop_id`-scoped rather than
+degenerating to a same-conversation query that would pass either way.
+
+**Verification, measured:**
+- `py -3.11 -m pytest hub/tests/test_checkpoint_record.py -q` — **23 passed** (16 pre-existing + 7 new).
+- `py -3.11 -m pytest hub/tests/test_checkpoint_generation.py hub/tests/test_checkpoint_access.py
+  hub/tests/test_checkpoint_cutover.py hub/tests/test_checkpoint_notes.py -q` — **96 passed** — every
+  other suite reading `compute_envelope`/`create_checkpoint`/`generate_checkpoint`, confirming nothing
+  assumed `Checkpoint.loop_id` is always `None` or that `compute_envelope`'s `tasks` is always
+  agent-scoped.
+- `ruff check` on all three touched Python files — one import-sort fix applied by `--fix`, clean after.
+- `black --fast` — reformatted `checkpoints.py` once (import-block wrap from the new `AsyncSession`
+  import), clean after on all three files.
+- `mypy hub/hub/checkpoints.py hub/hub/checkpoint_generation.py`, filtered to each file's own lines —
+  `checkpoints.py`: 7, `checkpoint_generation.py`: 6, both matching
+  `.claude/autonomous/mypy-baseline.txt` exactly — zero new (see the correction above).
+- `npx openspec validate --changes --strict`, run from the repo root — 2/2.
+
+No Hub restart this iteration: like L4-L6, this section is verified entirely through pytest against
+database-layer logic, with no UI or live-Hub surface to exercise.
+
+Marked 7.1-7.4 done in `tasks.md` with the dated note above (fuller version there), corrected the
+file's own summary line ("Sections 1-6" → "Sections 1-7").
+
+Committed, pushed. `current`/`next_action` now point at **L9** (the briefing, `hub/hub/scheduler.py`,
+tasks 9.1-9.3) — the queue deliberately orders L9 before L8, since the briefing leans on
+`latest_checkpoint_for_loop` this iteration just built; L8 (refusing `resume` for a loop's job) follows
+after L9, not before.

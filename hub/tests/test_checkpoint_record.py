@@ -15,16 +15,22 @@ import pytest
 from sqlalchemy import select
 
 from hub.checkpoints import (
+    LOOP_TASK_SCOPE_NOTE,
     TASK_SCOPE_NOTE,
     compute_envelope,
     create_checkpoint,
     latest_checkpoint,
+    latest_checkpoint_for_loop,
+    loop_for_conversation,
     runs_to_cover,
 )
 from hub.db.engine import async_session_factory
 from hub.db.models import (
+    AIJob,
     Checkpoint,
     Conversation,
+    JobRun,
+    Loop,
     PermissionRequest,
     Question,
     Run,
@@ -68,6 +74,33 @@ async def _run(db, run_id, conversation_id="conv-1", sha=None, started=None):
     db.add(run)
     await db.commit()
     return run
+
+
+async def _loop_firing(db, *, conversation_id, job_id="job-loop-1", loop_id="loop-1"):
+    """A conversation that is a loop's firing: an `AIJob` with a `Loop`, and the `JobRun` that
+    joins this conversation to it — the same join `loop_for_conversation` reads."""
+    job = AIJob(
+        id=job_id,
+        project_id=PROJECT,
+        name="Loop job",
+        agent=AGENT,
+        message="do the queue",
+        cron="0 9 * * *",
+    )
+    db.add(job)
+    loop = Loop(id=loop_id, project_id=PROJECT, job_id=job_id)
+    db.add(loop)
+    conversation = await _conversation(db, conversation_id)
+    db.add(
+        JobRun(
+            id=f"run-{conversation_id}",
+            job_id=job_id,
+            project_id=PROJECT,
+            conversation_id=conversation_id,
+        )
+    )
+    await db.commit()
+    return conversation, loop
 
 
 # --------------------------------------------------------------------------- the computed half
@@ -452,6 +485,145 @@ async def test_a_body_less_checkpoint_cannot_be_stored_as_ready(app):
         )
         with pytest.raises(IntegrityError):
             await db.commit()
+
+
+# ------------------------------------------------------------------------- loop-scoped continuity
+
+
+@pytest.mark.asyncio
+async def test_a_loop_scoped_envelope_carries_the_whole_queue_regardless_of_status(app):
+    """Task 7.3/7.4. `loop=` makes `tasks` the loop's whole queue — including a status
+    `_LIVE_TASK_STATUSES` would have excluded, proving this is not just `_tasks_for` with a wider
+    filter grafted on."""
+    async with async_session_factory() as db:
+        conversation, loop = await _loop_firing(db, conversation_id="conv-loop-1")
+        db.add(Task(id="tl-1", project_id=PROJECT, title="Open item", loop_id=loop.id))
+        db.add(
+            Task(
+                id="tl-2",
+                project_id=PROJECT,
+                title="Already approved",
+                loop_id=loop.id,
+                status="approved",
+            )
+        )
+        db.add(Task(id="tl-3", project_id=PROJECT, title="Someone else's loop", loop_id="loop-x"))
+        await db.commit()
+
+        envelope = await compute_envelope(db, conversation, loop=loop)
+
+    assert envelope.tasks["scope"] == "loop"
+    assert envelope.tasks["note"] == LOOP_TASK_SCOPE_NOTE
+    titles = {item["title"] for item in envelope.tasks["items"]}
+    assert titles == {"Open item", "Already approved"}  # both statuses, not another loop's
+
+
+@pytest.mark.asyncio
+async def test_a_non_loop_conversations_envelope_is_unchanged(app):
+    """Regression guard: a plain conversation (no `loop=` argument, matching every call site
+    before this task) still gets the agent-wide task list, not an empty loop-scoped one."""
+    async with async_session_factory() as db:
+        conversation = await _conversation(db, "conv-plain")
+        db.add(Task(id="t-plain", project_id=PROJECT, title="Ordinary task", assignee=AGENT))
+        await db.commit()
+
+        envelope = await compute_envelope(db, conversation)
+
+    assert envelope.tasks["scope"] == "agent"
+    assert envelope.tasks["note"] == TASK_SCOPE_NOTE
+    assert [item["title"] for item in envelope.tasks["items"]] == ["Ordinary task"]
+
+
+@pytest.mark.asyncio
+async def test_create_checkpoint_stamps_loop_id_when_the_conversation_is_a_loop_firing(app):
+    """Task 7.1."""
+    async with async_session_factory() as db:
+        conversation, loop = await _loop_firing(db, conversation_id="conv-loop-2")
+        checkpoint = await create_checkpoint(
+            db,
+            conversation,
+            trigger="task_completion",
+            envelope=await compute_envelope(db, conversation, loop=loop),
+            body="body",
+            loop=loop,
+        )
+
+    assert checkpoint.loop_id == loop.id
+
+
+@pytest.mark.asyncio
+async def test_create_checkpoint_leaves_loop_id_null_for_a_plain_conversation(app):
+    async with async_session_factory() as db:
+        conversation = await _conversation(db, "conv-plain-2")
+        checkpoint = await create_checkpoint(
+            db,
+            conversation,
+            trigger="task_completion",
+            envelope=await compute_envelope(db, conversation),
+            body="body",
+        )
+
+    assert checkpoint.loop_id is None
+
+
+@pytest.mark.asyncio
+async def test_loop_for_conversation_finds_the_job_that_fired_it(app):
+    async with async_session_factory() as db:
+        conversation, loop = await _loop_firing(db, conversation_id="conv-loop-3")
+        found = await loop_for_conversation(db, conversation.id)
+
+    assert found is not None
+    assert found.id == loop.id
+
+
+@pytest.mark.asyncio
+async def test_loop_for_conversation_is_none_for_a_conversation_no_job_ever_fired(app):
+    async with async_session_factory() as db:
+        conversation = await _conversation(db, "conv-plain-3")
+        found = await loop_for_conversation(db, conversation.id)
+
+    assert found is None
+
+
+@pytest.mark.asyncio
+async def test_latest_checkpoint_for_loop_crosses_conversations(app):
+    """Task 7.2/7.4's load-bearing case: the loop's latest checkpoint is found from a DIFFERENT
+    conversation than the one being asked about, because every firing makes a new conversation
+    (design D4 item 1). A same-conversation-only test would not catch a regression to the old,
+    narrower `conversation_id` join."""
+    async with async_session_factory() as db:
+        first_conversation, loop = await _loop_firing(
+            db, conversation_id="conv-loop-4a", job_id="job-loop-4", loop_id="loop-4"
+        )
+        first = await create_checkpoint(
+            db,
+            first_conversation,
+            trigger="task_completion",
+            envelope=await compute_envelope(db, first_conversation, loop=loop),
+            body="first firing's checkpoint",
+            loop=loop,
+        )
+
+        second_conversation = await _conversation(db, "conv-loop-4b")
+        db.add(
+            JobRun(
+                id="run-conv-loop-4b",
+                job_id="job-loop-4",
+                project_id=PROJECT,
+                conversation_id="conv-loop-4b",
+            )
+        )
+        await db.commit()
+
+        found_loop = await loop_for_conversation(db, second_conversation.id)
+        assert found_loop is not None and found_loop.id == loop.id
+
+        latest = await latest_checkpoint_for_loop(db, loop.id)
+
+    assert latest is not None
+    assert latest.id == first.id
+    assert latest.conversation_id == first_conversation.id
+    assert latest.conversation_id != second_conversation.id
 
 
 @pytest.mark.asyncio
