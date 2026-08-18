@@ -833,3 +833,75 @@ is Q10 (item 8, translating one openspec capability into an AgentWeave-native do
 depends on Q8 and inherits the concrete 409 blocker Q8's done_note already named — read it before
 starting rather than rediscovering it live against the merge endpoint. Q11 (Tier 2/3 runway) remains
 lowest priority and gated behind Q10 finishing or being explicitly parked.
+
+---
+
+## Iteration 11 — Q10: translate one openspec capability into an AgentWeave-native document
+
+Picked `openspec/specs/project-instructions/spec.md` (47 lines, 3 requirements, 4 scenarios) —
+small, self-contained, and unlike `opencode-config` (the other short candidate, describing a runner
+type carried in dead-looking config surface) every claim in it re-verified against code still
+running today: `hub/hub/api/v1/instructions.py` (GET/PUT `/project/instructions`, matches
+requirement 1 exactly), `hub/hub/api/v1/agents.py:1054-1058,1293-1296` and `:1865-1871` (both
+charter-context read paths prepend instructions when non-empty, matches requirement 2), and
+`hub/ui/src/components/instructions/InstructionsPage.tsx` (textarea, Save button, "Saved"
+confirmation, pre-fill, and the exact "Changes take effect when agents start a new session" notice,
+matches requirement 3). Read Q8's exploration in full before touching the merge route, per its own
+last section — Q8 named the blocker precisely: `POST /documents/{path}/merge` requires a
+`from_changes` source in `approved`/`archived` phase, and a first-generation openspec translation
+has none to cite, because the capability was approved inside openspec, not AgentWeave.
+
+Confirmed the blocker is real, not just documented, by reading the code myself before writing
+anything: `spec_service.save_document()` refuses a capability write from any actor whose `kind` is
+not `"operator"` (`spec_service.py:129-133`), and the **only** two HTTP routes that call
+`save_document`/`merge_document` with an operator actor are `POST /documents` (creates an empty
+scaffold — title only, no way to hand it content) and the merge route (blocked, per above). There is
+no plain "PUT content onto an existing document" route reachable as operator over HTTP at all —
+Q8's "seed directly" recommendation isn't a preference, it's the only path that exists. Took Q8's
+first option: a throwaway script (`testbed/scratch/seed_capability_project_instructions.py`, deleted
+after use, same disposability as the Playwright probes Q2-Q7 used) that calls
+`spec_lifecycle.create_document(..., kind="capability")` then `spec_service.save_document(...)`
+in-process with `actor.kind="operator"`, the same shape `hub/seed_taste_doc.py` used for the one
+existing change-spec document, run from `hub/` against the live `hub/data/agentweave.db` (confirmed
+`cwd` was actually the repo root's `hub/` and not the nested `hub/hub/` before running — an earlier
+`cd hub` left the shell there from a prior check and the first attempt silently opened a stray
+0-byte `hub/hub/data/agentweave.db`, gitignored and pre-existing, not created by this iteration;
+caught before the real write by reading the traceback, `no such table: projects`, rather than
+retrying blindly).
+
+Per Q8's finding 2 and 3: left `rigor` at its default (`sketch`) rather than raising it — the one
+existing capability document in this project already sits at `sketch`, and Q8 flagged raising rigor
+on a capability document as an untested interaction (`test_spec_merge.py` has zero references to
+`rigor`) not worth introducing on a first translation with nobody watching. Used the
+`spec/capabilities/<name>/spec.html` path convention Q8 identified as unenforced-but-real —
+`spec/capabilities/project-instructions/spec.html`.
+
+**The translation itself, and what it lost** — written into the document's own `evidence.limits`
+field, not just this log, so an operator reading the document in the app sees the caveat where the
+content is: (1) openspec's four scenarios collapsed into three requirements / seven acceptance
+criteria because AgentWeave's schema has no heading-level grouping the way openspec's three
+`### Requirement:` blocks did — a flattening, not a content loss; (2) openspec's scenarios state
+WHEN/THEN only, AgentWeave's `AcceptanceCriterion` schema requires a GIVEN too, so one was authored
+for each of the seven that lacked one in the source — new prose, not present in openspec, flagged
+rather than presented as an equivalent transcription.
+
+**Verified live against the trial Hub (127.0.0.1:8010), not just by running the script cleanly:**
+`GET /api/v1/projects/proj-5e960453/project/documents` lists the new document —
+`kind: capability`, `phase: current`, `rigor: sketch`, a real `content_digest`; `GET
+/api/v1/projects/proj-5e960453/project/spec?path=spec/capabilities/project-instructions/spec.html`
+returns real rendered HTML (not a scaffold) whose stripped text contains the minted requirement
+identifiers `FR-1`/`FR-2`/`FR-3` and the literal requirement statements ("ProjectInstructions
+table", "prepends project instructions", "markdown textarea") — the same API surface the Hub UI's
+document viewer reads from, so "readable in the app" is confirmed at the layer the app actually
+uses, not asserted from the write path alone. `GET /api/v1/projects` re-checked afterward: still
+exactly the same three projects, no duplicate created. Port 8000 not touched.
+
+**Not done, deliberately, per Q10's own `done_when`:** this is a start, one capability, not a batch
+translation of the remaining 29. `spec/` and `hub/seed_taste_doc.py` (prior-session scratch)
+untouched. Nothing committed to git for this iteration beyond this log and `STATE.json` — the new
+document lives in `hub/data/agentweave.db`, which is gitignored by design (`.gitignore:88`), the
+same way every other fixture this run created or restored already did.
+
+**Queue status:** Q1–Q10 done. Q11 (Tier 2/3 runway, lowest priority) is next if time remains before
+`stop_at` (2026-08-18T08:00+01:00) — prefer Tier 2 item 7 (the StaticPool fixture race) per its own
+note in `known_debts`, do not re-derive the diagnosis already recorded there.
