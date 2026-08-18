@@ -47,8 +47,16 @@ section 2's job, and the bundle is byte-identical because of it.
 
 ## 2. The shell
 
-- [ ] 2.1 Shell component owning the strip, the plus affordance, and the visible tab's content. One
+- [x] 2.1 Shell component owning the strip, the plus affordance, and the visible tab's content. One
       tab's content rendered at a time.
+
+      Implemented 2026-08-18 in `hub/ui/src/components/spec/PanelShell.tsx`. Deliberately generic:
+      it takes `availableTabs`/`describeTab`/`renderTabContent` and knows nothing about specs or
+      files, so section 3's tenant work and the file endpoint (4/5) plug in without re-plumbing.
+      Not yet mounted anywhere — that is 2.2, a separate task on purpose. An explicit empty state
+      (`panel-empty-state`) renders when no tabs are open, satisfying the task-8 user-guide's "not an
+      empty grey box" requirement; which of 2.1's two allowed readings (shell renders empty vs. shell
+      does not open) was chosen is recorded there, not guessed at.
 - [ ] 2.2 Move `ConversationView.tsx`'s panel-hosting block (`:150-291`) into the shell. Do **not**
       rewrite `SpecDocumentPanel`'s internals — this is a re-hosting, and the breadcrumb, archived
       marker, phase and coverage bars, proposals panel, `SpecFrame` bridge and outline rail must all
@@ -60,10 +68,27 @@ section 2's job, and the bundle is byte-identical because of it.
       Dismissing the overlay keeps the tabs.
 - [ ] 2.5 Width stays `specPreferences.ts`'s single global value. Extend that store; do not invent a
       second one.
-- [ ] 2.6 Keyboard: ARIA `tablist`, sequential focus, `Enter`/`Space` to activate, arrow keys between
+- [x] 2.6 Keyboard: ARIA `tablist`, sequential focus, `Enter`/`Space` to activate, arrow keys between
       tabs, close control reachable, plus menu navigable. Design D11 — nothing here to inherit.
-- [ ] 2.7 `Icon` only for every control in the strip. CLAUDE.md forbids a second icon system; audit
+
+      Chose **automatic activation** (WAI-ARIA APG's other supported tablist variant, not the
+      manual-activation reading task 2.6's bullet order might suggest): arrow keys move focus *and*
+      activate, roving `tabIndex` keeps only the active tab in the page's Tab sequence, and
+      `Enter`/`Space` activate for free via native `<button>` semantics — no bespoke handler needed
+      for them. The close control is a plain second button inside the same tab, reached by `Tab`
+      right after it, deliberately outside the arrow-key roving set. The plus menu reuses `RowMenu`
+      (`hub/ui/src/components/layout/RowMenu.tsx`), whose Radix `DropdownMenu` already owns full
+      keyboard support. Covered by 8 keyboard-specific tests in
+      `hub/ui/src/__tests__/panelShell.test.tsx` (roving tabIndex, wrap-around both directions,
+      Home/End, Enter/Space activation, close-by-keyboard, plus-trigger-by-keyboard).
+- [x] 2.7 `Icon` only for every control in the strip. CLAUDE.md forbids a second icon system; audit
       the map before assuming a close or plus glyph exists.
+
+      Audited `hub/ui/src/components/common/Icon.tsx`'s `ICONS` map first, per the task's own
+      instruction: `close` → `X` and `add` → `Plus` both already exist, so no new mapping was
+      needed. Every glyph in the strip (tab icons via the caller's `describeTab`, the close button,
+      the plus trigger inside `RowMenu`) goes through `Icon`; nothing in `PanelShell.tsx` imports
+      from `lucide-react` directly.
 
 ## 3. Specs as the shell's first tenant
 
