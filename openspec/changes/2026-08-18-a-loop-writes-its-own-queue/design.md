@@ -205,6 +205,9 @@ event shape:
 - This event is what the side-panel's loop telemetry (`2026-08-18-the-side-panel-family`, not this
   change) will read to answer "how often did a loop discover work late, and how much" — the exact
   question the operator asked for.
+  **[Corrected by addendum D20: the loop view is specced in *this* change, not in the panel change.
+  The name cited here was also an exploration's, never a change's — the panel change is
+  `2026-08-18-one-shell-three-panels`.]**
 
 ## D7. Extending after the first fire — operator approval only when creator is executor
 
@@ -276,6 +279,10 @@ reach:
 - **The side panel's loop view** is where an operator actually sees any of this — the queue, the
   claimed item, the briefing history, D6's telemetry. This change produces the data; it produces no
   UI. `2026-08-18-the-side-panel-family` is where that surface is specced.
+  **[Superseded by addendum D20. The loop view is specced in this change — a conversation has no
+  loop, so the surface is project-wide and made of this change's own data. The panel change
+  (`2026-08-18-one-shell-three-panels`) owns only the shell it renders in. This bullet is left in
+  place because it records what was believed at the time; it is no longer true.]**
 
 ---
 

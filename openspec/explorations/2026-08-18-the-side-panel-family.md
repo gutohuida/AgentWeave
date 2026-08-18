@@ -1,5 +1,15 @@
 # The right side of the screen has one tenant. It needs a landlord.
 
+> **⚠ Its recommendations are superseded.** Read
+> `openspec/explorations/2026-08-18-the-side-panel-with-the-operator.md` first. That session put this
+> document's recommendations to the operator and **six were overturned**: all-singleton panels,
+> per-conversation persistence, a fixed strip of three, a conversation-scoped loop tab, spec as a
+> permanent special case, and the panel-side live-ness lookup. §11's numbered recommendations in
+> particular should not be acted on.
+>
+> **The research below is still good** — the T3 study (§3), the survey of what exists today (§1), and
+> the code findings (§6.2, §7) were all confirmed and reused. Only the conclusions moved.
+
 **Status:** exploration. Decides nothing that is the operator's, and records what already exists so
 the spec (Q8) does not re-derive it. Written 2026-08-18 by an unattended firing — no operator was
 present to converse with, so this is written as analysis with recommendations named explicitly as
