@@ -2022,3 +2022,113 @@ for every delta spec under this umbrella — worth flagging to the operator that
 be close to done, though 16.1 (scenario exercise) and 16.3 (archive) are separate, larger asks that
 stay the operator's call per the umbrella's own notes. Runway to `stop_at` (2026-08-18T08:00+01:00)
 is roughly 1h45m.
+
+---
+
+## Iteration 23 (2026-08-18T06:31+01:00) — eighth and final 16.2 requirement-level mapping: `agent-tool-surface`
+
+Closed the last item in the loop iterations 16–22 built: `agent-tool-surface` was one of the two
+delta specs the 2026-08-12 note found "present under the same name" (the other, `agent-composer`,
+turned out to hide a real contradiction when iteration 18 finally checked it at requirement level).
+`agent-tool-surface` had never gotten that same check — only confirmed by filename, plus two prose
+revisions the current spec's own preamble already names. This pass did the real check: all seven
+delta requirements against the current 335-line spec (grown to 11 requirements since the delta),
+and wherever spec prose was silent or the preamble made a claim, against `hub/hub/launchability.py`
+and `hub/hub/api/v1/agent_trigger.py` directly, plus `git log -p` to date the code changes.
+
+**Four requirements are a clean or self-documented match.** *Outbound intent remains available* and
+*Creating agents and scheduling recurring work are governed, not free* carry over verbatim, text and
+scenarios both. *The Hub supplies state; the tool surface carries intent* is revised — an
+effect-only boundary replaced by a least-privilege read boundary — but the current spec's own
+preamble names the reconciliation, dates it (2026-08-07), and cites its source
+(`openspec/explorations/2026-08-02-product-direction.md`); scenarios unchanged. *An agent's identity
+is bound by the Hub, never asserted by the agent* is revised to run-credential authentication in
+place of environment-variable binding, plus a new "credential from another instance is refused"
+scenario — the 2026-08-03 partial note already named and correctly cited this one
+(`archive/2026-08-03-agent-capability-plane`, confirmed archived and real by directory listing).
+
+**One requirement's stated removal held up exactly as documented.** *The tool surface is available
+without a tool-protocol server* — the delta's full-capability command-based fallback. The current
+spec's preamble says `2026-08-03-single-runtime` removed it because it deletes the CLI collaboration
+commands it depended on. Confirmed live: `launchability.py:275-291`'s `access_path_notice`, on its
+non-`mcp` branch, carries its own code comment — "No CLI equivalents are offered any more... Saying
+so plainly is better than sending an agent after commands that do not exist" — and tells the agent
+it has **no** tool surface at all this turn, not an equal-capability command alternative. No
+qualification needed here.
+
+**One requirement's stated removal was overclaimed, and this is the real finding of the pass.** *The
+access path is chosen per runner from probed capability.* The preamble bundles this into the same
+"removed... since it deletes the CLI collaboration commands they depended on" sentence as the
+command fallback above. That is not what the code shows. `resolve_access_path(runner, cli,
+override)` (`launchability.py:215-222`) still executes on every triggered turn —
+`agent_trigger.py:474`, `access_path = resolve_access_path(runner, probe["cli"] or agent,
+config.get("hub_client"))` — still resolves per runner via a capability table
+(`MCP_INJECTABLE_RUNNERS`), and still honours an explicit operator override
+(`config.get("hub_client")`, a direct match for the delta's own "operator MAY override" scenario).
+`git log -p` on `launchability.py` pinned exactly what changed and when: at the `single-runtime`
+commit itself (`c31b3df`, 2026-08-03), the function body was rewritten from
+`return "mcp" if probe_mcp_registered(cli) else "cli"` to a static `MCP_INJECTABLE_RUNNERS`
+membership check with the `cli` parameter explicitly discarded (`del cli`). `probe_mcp_registered`
+(`launchability.py:185-212`) still exists and is still unit-tested (`test_launchability.py`), but a
+repo-wide grep for its name found no caller left in `hub/hub/` outside its own tests — it is dead in
+production. So the delta's "the Hub SHALL record what is actually available, not what is
+theoretically supported" and its "prohibited is distinguished from unsupported" scenario are no
+longer true of the code: there is no live probe left to draw that distinction, only a fixed table.
+The requirement was narrowed to a static lookup, not removed, and the spec's own preamble
+overstates what happened by filing it under the same "removed" sentence as the command fallback,
+which really was deleted outright. Worth a correction in the current spec itself at some point, not
+attempted here — this pass records findings, per the umbrella's own reconciliation rule, it does not
+edit `openspec/specs/`.
+
+**One requirement kept its title but had its scenarios swapped out from under it, not merely
+narrowed.** *One tool surface, configured automatically.* The delta's two original scenarios ("tools
+available without operator configuration," "only one surface exists") are absent from the current
+text entirely — replaced by three newer scenarios about verifying the served surface against a
+spawned subprocess rather than trusting an import, added 2026-08-13 alongside the entry-point-guard
+fix. Checked whether the delta's original guarantee still holds even though its scenario text is
+gone: it does. `runner_commands.py:224-236` (Claude) and `:273-292` (Codex) build `--mcp-config` /
+`-c mcp_servers...` dynamically on the spawn command line per run — no config file for the operator
+to edit — and a repo-wide grep for `FastMCP(` finds exactly one server, `hub/hub/mcp_server.py`.
+Shipped, verified live, zero requirement text stating it — the same pattern iterations 18, 19, and
+21 found repeatedly for other deltas under this umbrella, here landing inside a requirement whose
+*name* survived while its *content* moved on to a different, newer concern (spawn verification
+rather than configuration-free startup).
+
+**What this closes.** All eight originally-in-scope delta specs under
+`2026-07-30-hub-native-experience/specs/` are now checked at requirement level: `agent-composer`,
+`agent-inbound-queue`, `agent-conversation-timeline`, `agent-identity-and-skills`,
+`hub-interface-feel`, `hub-native-runtime`, `hub-visual-language`, and now `agent-tool-surface`. The
+other two originally-listed delta specs, `spec-authoring` and `spec-traceability`, were never part
+of this tally — they are already established elsewhere in `tasks.md` (14.18, 15.3, the 2026-08-12
+note) as genuinely never built, because phase 14 was never implemented. That is a different category
+from "renamed or superseded" and there is no successor content to map them into.
+
+**16.2's per-delta-spec requirement-level mapping is complete. 16.2 itself is not ticked.** Its own
+task text also requires reconciling `agent-stream-events`, `runtime-diagnostics`, and
+`agent-conversation-handoff` with new behaviour, and no iteration in this run has attempted that —
+per this file's own reconciliation rule a box ticks for verified behaviour, not for a decision, and
+this pass did not touch those three. One dated note added under 16.2 in
+`openspec/changes/2026-07-30-hub-native-experience/tasks.md` (77 lines, the only file touched this
+iteration) records everything above with file:line evidence.
+
+**Verified before committing:** re-read `openspec/specs/agent-tool-surface/spec.md` in full (335
+lines) rather than trusting the earlier grep-and-skim, read the delta spec in full (173 lines),
+read `launchability.py` in full (319 lines) rather than the matched lines alone, confirmed
+`archive/2026-08-03-agent-capability-plane` and `archive/2026-08-03-single-runtime` both exist as
+directories, and ran `git log -p --follow -- hub/hub/launchability.py` to date the `resolve_access_path`
+rewrite to the `single-runtime` commit itself rather than assuming which change made it. `git diff
+--stat` showed exactly the one file, 77 insertions. `git status --short` showed only that plus the
+carried-forward `spec/` and `hub/seed_taste_doc.py` scratch, staged nothing from them.
+
+**Tree state before commit:** `openspec/changes/2026-07-30-hub-native-experience/tasks.md` modified
+(1 new note, 77 lines); `.claude/autonomous/STATE.json` updated (iteration, heartbeat, Q11 done_note,
+next_action); `spec/` and `hub/seed_taste_doc.py` (prior-session scratch) untouched.
+
+**Queue status:** Q1–Q10 done. Q11 — roadmap #7 stays parked (three failure modes on record);
+roadmap #8's requirement-level mapping loop (iterations 16–23) is now finished for all eight
+originally-in-scope delta specs. Worth flagging to the operator directly: 16.2 is not done — it
+still needs the three named reconciliations — but the much larger mapping exercise that occupied
+this run's last eight iterations is complete. If a next iteration continues Q11/roadmap #8, the
+right next unit is one of those three reconciliations, `agent-stream-events` first (the most
+load-bearing of the three, referenced by several findings across this pass and earlier ones). Runway
+to `stop_at` (2026-08-18T08:00+01:00) is roughly 1h30m.
