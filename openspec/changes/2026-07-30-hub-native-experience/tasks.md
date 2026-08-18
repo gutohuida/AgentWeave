@@ -2511,6 +2511,72 @@ being built twice.*
 > **`agent-stream-events` needs no changes to reconcile with current behaviour.** Two of the three
 > 16.2-named specs remain: `runtime-diagnostics`, `agent-conversation-handoff`.
 
+> **Update (2026-08-18, iteration 25) — `runtime-diagnostics` reconciliation, second of the three
+> named directly by 16.2's own task text.** 12 requirements, checked one by one against live code
+> via a research agent whose file:line citations were then spot-checked directly (the
+> `turn_scheduler.py` no-event branch and the `agents.py`/`agent_trigger.py` address-presence-only
+> check below were both re-read personally before writing this note).
+>
+> **Two requirements are recent, precise, and need no change.** "The built interface artefact can be
+> asserted current" matches all seven of its own scenarios exactly against
+> `hub/hub/main.py:133-220`'s fingerprint-over-timestamp staleness check, TTL cache, and
+> `refresh_ui_bundle.py` rebuild instruction — do not flag this one as a gap, it describes
+> already-implemented, already-tested code. "A runtime that dies reports what it was doing" holds
+> fully for the Codex app-server transport (`codex_appserver.py`'s bounded 200-line stderr
+> `deque`, `readable_exit_code`'s large-unsigned-value normalization, the synthetic-vs-real exit
+> code split at `agent_trigger.py:2017/1055`) but the spec text makes no transport carve-out, and
+> the PTY transport (Claude, Codex `exec`) does not do any of it — the post-run failure broadcast at
+> `agent_trigger.py:1461-1462,1549-1558` carries only `exit_code`/`conversation_id`, no stderr tail,
+> and never calls `readable_exit_code`, so a Windows Ctrl+C on a Claude run is exactly the unrendered
+> case the requirement describes fixing. Scope the requirement to the app-server transport
+> explicitly, or record PTY-path parity as real unfinished work — this pass does not decide which.
+>
+> **"Watchdog launch preflight" has stale terminology but a live successor.** `watchdog.py` is
+> deleted per CLAUDE.md; the behaviour survives in `hub/hub/launchability.py`'s `probe_agent` plus
+> the `agent_trigger.py:319-337` pre-spawn gate. But "records a structured diagnostic event" is false
+> for both named refusal scenarios — confirmed personally: `turn_scheduler.py:94-116` only calls
+> `persist_event` on the `workspace_unavailable` branch (:94-106); a missing-CLI or missing-key
+> refusal returns `ScheduleResult(waiting_reason=exc.detail)` at :116 with nothing persisted.
+>
+> **"Collaboration readiness is checkable before it is needed" only detects an *unknown* address,
+> never a *mismatched* one** — confirmed personally, not just from the agent's report:
+> `agents.py:186` is `bool(os.environ.get("HUB_URL")) or bound_address.get() is not None`, presence
+> only; `agent_trigger.py:549-566` unconditionally trusts an explicit `HUB_URL` when set with no
+> comparison against `bound_address.get()`. The tool-surface-refusal half of this requirement (Codex
+> without yolo, `agents.py:214-228`) does match. This is a real, citable gap in a requirement added
+> after the spec's original 2026-08-03 sync, not drift from an old one.
+>
+> **Four more requirements are narrower than their text, not wrong:** `agentweave status`
+> (`cli.py:70-112`) never calls `collect_diagnostics`/renders a `DiagnosticResult` — only `doctor`
+> does, so the "same semantics across doctor and status" scenario is stale. Structured
+> agent-process-failure events omit `duration` and `runner type` entirely and never redact
+> `stderr_tail` (`agent_trigger.py:1011-1058`, `redact_secrets` never called on that path) — a
+> concrete secret-handling gap, not just a documentation gap. Job failures are recorded correctly
+> (`scheduler.py:487-499`, `jobs.py:53-90`) but only surface once a `JobCard` is expanded into Run
+> History — the collapsed list has no failure indicator (`JobCard.tsx:21-27` only distinguishes
+> Active/Paused). Agent readiness (`launchability.py:38-112` via `GET /launchability`) has no
+> `context status` field at all and persists no diagnostic event on a warn/fail result — the route's
+> own docstring calls itself side-effect-free.
+>
+> **Three requirements are clean matches, one with a naming nuance:** runtime readiness checks
+> (`diagnostics.py:971-987`, all six checks, non-mutating, no state created before first launch).
+> proxy credential diagnostics (`launchability.py:73-85` + `agent_trigger.py:334-337`, pre-spawn 409
+> naming the missing var). Hub logs usability (`GET /logs/agents` unions live agent sources, not a
+> fixed list; `LogsView.tsx`'s category filters cover every named category plus two extras). Hub
+> trigger confidence reporting works exactly as scenario'd for a manual runner, but "confidence" is
+> really one reused `waiting_reason` string shared with unrelated causes (hop budget, stale
+> conversation) rather than a distinct typed value — a framing overstatement, not a behavior gap.
+>
+> **`runtime-diagnostics` needs real reconciliation, not just a note** — six requirements (Watchdog
+> preflight's missing events, structured events' missing fields/redaction, job-failure UI depth,
+> agent readiness's missing fields, the address-mismatch gap, and the PTY-transport carve-out) name
+> genuine, citable gaps between spec text and shipped behaviour, distinct from every prior 16.2 pass
+> in this file, which mostly found renamed/superseded/undocumented content rather than unmet
+> requirements. Fixing any of them is product work, out of scope for a reconciliation pass and not
+> attempted here per this file's own rule (a box ticks for verified behaviour, not a decision) and
+> per `decisions_for_user` D1 in this run's STATE.json. One 16.2-named spec remains:
+> `agent-conversation-handoff`.
+
 - [ ] 16.1 Confirm every scenario in the ten delta specs is exercised.
 - [ ] 16.2 Sync delta specs into `openspec/specs/`; reconcile `agent-stream-events`,
       `runtime-diagnostics`, and `agent-conversation-handoff` with their new behaviour.
