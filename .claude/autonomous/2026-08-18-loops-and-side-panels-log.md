@@ -443,3 +443,56 @@ still has to actually be run, because "the sentence contains SHALL somewhere" is
 
 `current`/`next_action` now point at Q7 (explore the side panel), per the operator's own
 explore-then-spec sequencing. Time remaining comfortably clears `time_guard.at_1530`.
+
+## Entry 7 — Q7: the side-panel exploration, written unattended
+
+Fresh process, verified branch/log/`git status` against `STATE.json` before starting — matched, tree
+clean except `spec/` (deliberately untracked) and `hub/seed_taste_doc.py` (a leftover script from an
+earlier D2 taste-pass task, untouched, not this queue item's concern). Heartbeat was 42 minutes stale
+at firing start — the release pattern working as intended, not a live session to stand down against.
+Started at 12:42, comfortably inside `time_guard.at_1530`.
+
+Output: `openspec/explorations/2026-08-18-the-side-panel-family.md`. Split the research: launched a
+background `general-purpose` agent to study `testbed/scratch/t3ref/` in the prescribed file order and
+report patterns only (no code quoted, cited by file/function/line), while reading AgentWeave's own
+panel subsystem directly in parallel — `ConversationView.tsx`, `specPreferences.ts`, `specBridge.ts`,
+`specNavigation.ts`, `ComposerSpecControl.tsx`, `jobs.py`'s `_batch_loop_summaries`, `workspace_paths.
+py`/`api/v1/workspace.py`, `PaneResizer.tsx`, and the loop change's own `design.md`. Synthesized once
+both were done.
+
+**Headline conclusion:** there is no panel registry today because there has only ever been one
+panel — `SpecDocumentPanel` was never asked to coexist with anything. Recommended generalizing the
+right side into one shell + a small descriptor array (three singleton panels: spec/files/loop),
+`SpecDocumentPanel` becoming the spec panel's content untouched internally, and costed the bolt-on
+alternative (a second, independent tab mechanism beside the existing spec column) explicitly rather
+than picking by default — rejected for duplicating breakpoint logic and contradicting the operator's
+own "just like T3 does" framing (T3 has one right panel, not two competing ones).
+
+**A genuinely new finding, not carried from Q5/Q6's own text:** `_batch_loop_summaries`'s
+`current_task` query (`jobs.py:122-124`) filters `Task.status IN ('in_progress', 'blocked',
+'pending')` — `'assigned'` is missing from that list, while `checkpoints.py`'s `_LIVE_TASK_STATUSES`
+and `task_transitions.py`'s `ENTRY_STATUSES` both already treat `'assigned'` as live. Once Q6's D3
+ships (a firing claims its task by setting `status="assigned"`), that task will silently vanish from
+every `current_task` field — the Jobs page card today, and the future loop panel — until something
+moves it to `in_progress`, which nothing in D3's design does automatically. Flagged in the
+exploration's §6.2 and recommendation 4, and carried into Q8's `next_action` as something that must be
+either fixed or explicitly deferred with a reason — not silently dropped, since it was found
+independently of the change that will trigger it and that change's own `design.md` is already closed.
+
+**Also grounded, not assumed:** `GET /api/v1/workspace/paths` already exists and already feeds the
+composer's `@path` trigger — a file panel's *navigation* half is half-built; its *content-read* half
+does not exist at all and is new, security-relevant surface (§7 states the allowlist must be defined
+as "exactly what `list_workspace_paths` would return," not a second, independently-reasoned
+path-safety check). The loop panel's data is not a green field either — `_batch_loop_summaries` and
+`JobCard.tsx`'s `LoopBlock` already render a working version of it on the Jobs page today; the side
+panel brings that same data to a conversation-scoped surface the Jobs page isn't, per handoff 0055's
+already-settled live-ness gate (lifecycle events + streamed status line, not polled `agent.status`).
+
+Written as analysis with a closing "recommendations, named as recommendations" section (§11) rather
+than as settled decisions, per `next_action`'s own instruction for firing unattended with no operator
+to converse with — this mirrors how Q5's rewritten pass handled the same constraint.
+
+Nothing implemented; nothing driven live (§10 states this explicitly). `current`/`next_action` now
+point at Q8 (spec the side panel, full depth, mirroring Q6's format), carrying forward every section
+of this exploration by reference rather than restating it. `time_guard.at_1630` still has real runway
+left at time of writing (~12:48).
