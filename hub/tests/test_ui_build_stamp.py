@@ -155,13 +155,15 @@ def test_a_stamp_recorded_against_a_dirty_tree_survives_the_commit(checkout):
     (src / "App.tsx").write_text("export const App = () => 'built'\n", encoding="utf-8")
     # Stamp BEFORE committing -- this is the order `refresh_ui_bundle.py` actually runs in.
     stamp(dist, ui_source_fingerprint(src))
-    assert _compute_ui_staleness_warning(dist, src) is None, "the freshly-stamped, dirty tree must read current"
+    assert (
+        _compute_ui_staleness_warning(dist, src) is None
+    ), "the freshly-stamped, dirty tree must read current"
 
     commit_at(root, "2026-02-01T00:00:00+00:00")
 
-    assert _compute_ui_staleness_warning(dist, src) is None, (
-        "committing exactly what was stamped must not itself produce staleness"
-    )
+    assert (
+        _compute_ui_staleness_warning(dist, src) is None
+    ), "committing exactly what was stamped must not itself produce staleness"
 
 
 def test_absent_stamp_falls_back_to_the_commit_date_comparison(checkout):
