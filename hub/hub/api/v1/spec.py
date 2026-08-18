@@ -1183,8 +1183,21 @@ async def merge_document(
             detail={"message": str(exc), "code": exc.code, "field": exc.field_path},
         ) from exc
 
+    # `document.rigor` decides which shape `save_document` returned (spec_service.py:148); build
+    # the response for whichever it was BEFORE committing, so a shape this handler forgets to
+    # support fails loudly here instead of 500ing after the write is already durable.
+    if isinstance(result, spec_service.ProposeResult):
+        response = {
+            **_document_view(document),
+            "proposals": result.proposals,
+            "unchanged": result.unchanged,
+            "merged": 0,
+        }
+    else:
+        response = {**_document_view(document), "blocking": result.blocking, "merged": len(sources)}
+
     await session.commit()
     await sse_manager.broadcast(
         project_id, "spec_updated", {"path": document.path, "phase": document.phase}
     )
-    return {**_document_view(document), "blocking": result.blocking, "merged": len(sources)}
+    return response

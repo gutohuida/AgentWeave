@@ -140,6 +140,30 @@ def test_an_uncommitted_source_edit_is_reported(checkout):
     assert "uncommitted" in warning
 
 
+def test_a_stamp_recorded_against_a_dirty_tree_survives_the_commit(checkout):
+    """The actual `CLAUDE.md` workflow: build, stamp, THEN commit -- and it must clear.
+
+    `scripts/refresh_ui_bundle.py` stamps a fingerprint before `git add`/`git commit` land the
+    source and dist together (`CLAUDE.md`'s documented order). A fingerprint that folded in
+    `git status --porcelain`'s dirty diff was always recorded against a *dirty* tree, and the
+    moment the commit landed that same tree went clean -- the dirty component vanished and the
+    fingerprint could never match again. That is `known_debts.ui-stale-false-positive`, confirmed
+    live: commit `8898155` rebuilt and committed byte-identical output to a fresh rebuild, and only
+    the stamp moved (`ab7e5fe`).
+    """
+    root, src, dist = checkout
+    (src / "App.tsx").write_text("export const App = () => 'built'\n", encoding="utf-8")
+    # Stamp BEFORE committing -- this is the order `refresh_ui_bundle.py` actually runs in.
+    stamp(dist, ui_source_fingerprint(src))
+    assert _compute_ui_staleness_warning(dist, src) is None, "the freshly-stamped, dirty tree must read current"
+
+    commit_at(root, "2026-02-01T00:00:00+00:00")
+
+    assert _compute_ui_staleness_warning(dist, src) is None, (
+        "committing exactly what was stamped must not itself produce staleness"
+    )
+
+
 def test_absent_stamp_falls_back_to_the_commit_date_comparison(checkout):
     """The compatibility property that keeps the existing suite standing unedited."""
     root, src, dist = checkout

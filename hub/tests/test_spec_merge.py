@@ -10,7 +10,7 @@ from sqlalchemy import select
 
 from hub.agent_auth import hash_run_token
 from hub.db.engine import async_session_factory
-from hub.db.models import Run, SpecDocumentEvent, SpecDocumentMerge
+from hub.db.models import Run, SpecDocumentEvent, SpecDocumentMerge, SpecEditProposal
 from hub.spec_payload import SCHEMA_VERSION
 
 BASE = "/api/v1/projects/proj-test/project"
@@ -220,6 +220,106 @@ async def test_two_merges_from_different_changes_accumulate_two_rows(
         rows = (await session.execute(select(SpecDocumentMerge))).scalars().all()
         assert len(rows) == 2
         assert len({row.change_document_id for row in rows}) == 2
+
+
+@pytest.mark.asyncio
+async def test_a_merge_into_a_gated_capability_document_proposes_instead_of_500ing(
+    app, auth_headers, run_headers, tmp_path
+):
+    """The regression from `2026-08-18-the-first-real-capability-merge.md` Finding 2.
+
+    `save_document` returns a `ProposeResult` (no `.blocking`) once the capability document's rigor
+    is `contract`/`gate`. The route used to assume `SaveResult` unconditionally and 500 on the
+    attribute access — after already committing the proposal. This asserts the fixed shape: a 200
+    carrying `proposals`/`unchanged`, not a crash.
+    """
+    await _capability(app, auth_headers)
+    await _approve(app, auth_headers, run_headers, CHANGE_PATH)
+    await _approve(app, auth_headers, run_headers, CHANGE2_PATH)
+    # A document must hold enforceable content before rigor can be raised
+    # (spec_rigor.py's promotion_blockers) — merge once at the default `sketch`
+    # rigor first, matching the reproduction in the exploration this test guards.
+    first = await app.post(
+        f"{BASE}/documents/{CAP_PATH}/merge",
+        json={"payload": _capability_payload(), "from_changes": [CHANGE_PATH]},
+        headers=auth_headers,
+    )
+    assert first.status_code == 200, first.text
+    raised = await app.post(
+        f"{BASE}/documents/{CAP_PATH}/rigor", json={"rigor": "gate"}, headers=auth_headers
+    )
+    assert raised.status_code == 200, raised.text
+
+    response = await app.post(
+        f"{BASE}/documents/{CAP_PATH}/merge",
+        json={
+            "payload": _capability_payload(title="Demo capability, revised"),
+            "from_changes": [CHANGE2_PATH],
+        },
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert "proposals" in body and "unchanged" in body
+    assert "blocking" not in body
+    assert body["merged"] == 0
+
+    async with async_session_factory() as session:
+        proposals = (await session.execute(select(SpecEditProposal))).scalars().all()
+        assert len(proposals) == 1
+        assert proposals[0].status == "pending"
+
+
+@pytest.mark.asyncio
+async def test_a_merge_into_a_gated_capability_document_writes_no_merge_row(
+    app, auth_headers, run_headers, tmp_path
+):
+    """Finding 3's mutation-check: `spec_document_merges` audits folds that happened.
+
+    A gate/contract merge attempt proposes, it does not fold — nothing was written to the
+    document. Recording a `SpecDocumentMerge` row for it would claim a merge that has not
+    happened, which is exactly the false-provenance defect the failed 500s exposed.
+    """
+    await _capability(app, auth_headers)
+    await _approve(app, auth_headers, run_headers, CHANGE_PATH)
+    await _approve(app, auth_headers, run_headers, CHANGE2_PATH)
+    first = await app.post(
+        f"{BASE}/documents/{CAP_PATH}/merge",
+        json={"payload": _capability_payload(), "from_changes": [CHANGE_PATH]},
+        headers=auth_headers,
+    )
+    assert first.status_code == 200, first.text
+    raised = await app.post(
+        f"{BASE}/documents/{CAP_PATH}/rigor", json={"rigor": "gate"}, headers=auth_headers
+    )
+    assert raised.status_code == 200, raised.text
+
+    response = await app.post(
+        f"{BASE}/documents/{CAP_PATH}/merge",
+        json={"payload": _capability_payload(), "from_changes": [CHANGE2_PATH]},
+        headers=auth_headers,
+    )
+    assert response.status_code == 200, response.text
+
+    async with async_session_factory() as session:
+        rows = (await session.execute(select(SpecDocumentMerge))).scalars().all()
+        # One row survives from the first, real (sketch-rigor) merge — the second,
+        # gated attempt must not add a second row for a fold that never happened.
+        assert len(rows) == 1
+
+        events = (
+            (
+                await session.execute(
+                    select(SpecDocumentEvent).where(SpecDocumentEvent.kind == "merged")
+                )
+            )
+            .scalars()
+            .all()
+        )
+        # Same story as the row count: one real "merged" event, from the sketch-rigor
+        # merge, and none from the gated attempt that only proposed.
+        assert len(events) == 1
 
 
 @pytest.mark.asyncio
