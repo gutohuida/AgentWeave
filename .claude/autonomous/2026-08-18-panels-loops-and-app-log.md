@@ -439,3 +439,64 @@ the queue groups L1 through L12 together before returning to the panel change at
 `pre_authorised` is explicit — "Follow the queue order as written... Do not reorder to finish one
 change first." An earlier draft of this entry incorrectly said P4 was next; caught before commit by
 rereading the queue array in `STATE.json` rather than assuming alternation from memory.
+
+## Entry 5 — iteration 5: L3, spec materialisation stamps loop_id (2026-08-18 22:57-23:03)
+
+Fresh process. `git log` matched `3a51a17` exactly, tree clean. Read `next_action`, re-read design D1
+(per the instruction not to skip it even though iteration 4 already summarised it), and read
+`spec_tasks.py` in full before touching anything.
+
+**Work done: L3 — tasks 3.1-3.2 of `2026-08-18-a-loop-writes-its-own-queue`.**
+
+`hub/hub/spec_tasks.py`'s `materialise()` gained one query right after the empty-declaration
+early-return: `select(Loop).where(Loop.spec_document_id == document.id)`, `.scalars().first()`
+(unique column, at most one row). Every `Task(...)` the function constructs now sets
+`loop_id=owning_loop.id if owning_loop is not None else None`. Reread `materialise_quietly()` before
+touching anything else, per the instruction not to assume its relationship to `materialise()` — it is
+a thin try/except wrapper that returns `[]` on any exception; confirmed unchanged by reading the body,
+not by trusting its docstring.
+
+**Tests, `hub/tests/test_spec_declared_tasks.py`, matching its existing `app`/`auth_headers`/`author`
+fixture style** rather than a new one. A `Loop` needs a `job_id`, and there is no `create_loop`
+endpoint yet (that's L11, still open), so a new `_declaring_loop()` helper constructs a real `AIJob` +
+`Loop` pair directly via the ORM, mirroring `test_scheduler.py`'s `_make_job`/`_make_loop` shape rather
+than inventing a third pattern. Three new tests:
+- **A document with a declaring loop stamps its tasks** — approves a document with a loop already
+  naming it, then confirms both created tasks come back from the real `GET /tasks?loop_id=<id>` filter
+  (exercising L1's own query-param path through the actual route, not a raw DB read).
+- **No declaring loop stamps nothing** — the default case, asserted directly against `Task.loop_id`
+  since `TaskResponse` does not expose the field in JSON (checked `hub/hub/schemas/tasks.py` first
+  rather than assuming the board endpoint would show it).
+- **Re-approving stamps the loop only on newly-created tasks** — approves once with *no* loop
+  declared, *then* a loop declares the document, *then* a revision adds one new declared task and the
+  document is re-approved. Confirms the two original tasks still read `loop_id IS NULL` — never
+  retroactively touched — while only the new task carries the loop's id. This is the sharpest of the
+  three: it proves the binding is evaluated at materialisation time, not backfilled onto a document's
+  whole task history the moment a loop claims it.
+
+**Verification, measured:**
+- `py -3.11 -m pytest hub/tests/test_spec_declared_tasks.py -q` — **11 passed** (8 pre-existing + 3
+  new).
+- `py -3.11 -m pytest hub/tests/test_spec_archive.py hub/tests/test_spec_board_task_convergence.py
+  hub/tests/test_task_spec_document_context.py -q` — **24 passed**, the other files that already read
+  `materialise()`'s output shape.
+- Broader sweep, `py -3.11 -m pytest hub/tests/test_spec*.py -q` — **301 passed, 11 warnings**
+  (pre-existing FastAPI deprecation warnings, unrelated). Confirms nothing across the whole spec
+  surface assumed `loop_id` is always `None`.
+- `ruff check` and `black` on both touched files (`spec_tasks.py`, `test_spec_declared_tasks.py`) —
+  ruff caught one real issue (`C416`, an unnecessary dict comprehension in the third test, rewritten as
+  `dict(rows)`), black reformatted both once after that fix, reverified clean on both tools after.
+- `npx openspec validate --changes --strict`: 2/2 still pass.
+
+**Not done, correctly deferred:** section 4 (declaring a source document on loop creation,
+`hub/hub/api/v1/jobs.py` — the creation-side half that lets a loop actually claim a document, with the
+409-on-conflict behaviour) is next-in-queue; `next_action` explicitly said not to start it this
+iteration so this stays one reviewable unit.
+
+Marked 3.1-3.2 done in `tasks.md`, plus corrected the file's own top-of-file summary line ("Sections
+1-2 are implemented" → "Sections 1-3") which would otherwise have gone stale the moment 3.1-3.2 were
+checked off.
+
+Committed, pushed. `current`/`next_action` now point at **L4** (declaring a source document on loop
+creation, tasks 4.1-4.2) — the queue's own written order, continuing straight through the L-series
+before returning to the panel change at P4 per `pre_authorised`.

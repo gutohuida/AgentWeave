@@ -30,7 +30,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import requirement_links, spec_identity
-from .db.models import SpecDocument, SpecRequirement, Task
+from .db.models import Loop, SpecDocument, SpecRequirement, Task
 from .spec_lifecycle import Actor
 from .utils import short_id
 
@@ -102,6 +102,16 @@ async def materialise(
     declared = (payload or {}).get("tasks")
     if not isinstance(declared, list) or not declared:
         return []
+
+    # A loop that declared this document as its source (design D1, `Loop.spec_document_id`) owns
+    # every task this call creates from it. `materialise()` already runs with the document in
+    # scope, so this needs no new parameter — the binding was fixed at loop-creation time, not
+    # threaded through the approval call that reaches here.
+    owning_loop = (
+        (await session.execute(select(Loop).where(Loop.spec_document_id == document.id)))
+        .scalars()
+        .first()
+    )
 
     existing_keys = set(
         (
@@ -183,6 +193,7 @@ async def materialise(
             assigner=None,
             spec_document_id=document.id,
             spec_task_key=key,
+            loop_id=owning_loop.id if owning_loop is not None else None,
         )
         session.add(task)
         await session.flush()

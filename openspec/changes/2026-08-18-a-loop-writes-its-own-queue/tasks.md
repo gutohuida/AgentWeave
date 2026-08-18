@@ -1,6 +1,6 @@
 # Tasks — A loop writes its own queue
 
-Sections 1-2 are implemented and verified (dated notes below). Everything from section 3 onward is
+Sections 1-3 are implemented and verified (dated notes below). Everything from section 4 onward is
 still a spec only, unchecked — CLAUDE.md: "Never mark a task complete on the strength of a plan
 existing."
 
@@ -92,13 +92,44 @@ existing."
 
 ## 3. Queue-write path 1 — specification materialisation (`hub/hub/spec_tasks.py`)
 
-- [ ] 3.1 `materialise()`: at the top, query `Loop` where `spec_document_id == document.id`. If found,
+- [x] 3.1 `materialise()`: at the top, query `Loop` where `spec_document_id == document.id`. If found,
       every `Task` constructed in the function body gets `loop_id=loop.id` (design D1). No change to
       `materialise_quietly()`'s signature or error-swallowing behaviour.
-- [ ] 3.2 Tests: a document with a declaring loop materialises tasks carrying that loop's id; a
+
+      **Done 2026-08-18.** One query added at the top of `materialise()`, right after the early-return
+      for an empty declaration — `select(Loop).where(Loop.spec_document_id == document.id)`, `.first()`
+      since the column is unique. Every `Task(...)` constructed further down now sets
+      `loop_id=owning_loop.id if owning_loop is not None else None`. `materialise_quietly()` reread
+      before touching anything else — it only wraps `materialise()` in a try/except and returns `[]` on
+      failure; confirmed unchanged, not assumed, by rereading the function body rather than trusting the
+      docstring's own description of it.
+- [x] 3.2 Tests: a document with a declaring loop materialises tasks carrying that loop's id; a
       document with no declaring loop materialises tasks with `loop_id=None`, unchanged from today;
       re-approving a revised document (the existing idempotency path, `existing_keys`) still stamps
       `loop_id` on newly-created tasks only, matching the existing "only what's new" guarantee.
+
+      **Done 2026-08-18** in `hub/tests/test_spec_declared_tasks.py`, following that file's existing
+      `app`/`auth_headers`/`author` fixture style rather than inventing a new one, and `test_scheduler.
+      py`'s `_make_job`/`_make_loop` shape for constructing a real `AIJob` + `Loop` pair (a `Loop`
+      requires a `job_id`; there is no `create_loop` endpoint yet — that is L11, still open — so the
+      test constructs both rows directly via the ORM). Three new tests: (a)
+      `test_a_document_with_a_declaring_loop_stamps_its_tasks_with_the_loop` — approves a document with
+      a loop already declaring it, then confirms both created tasks are returned by the real
+      `GET /tasks?loop_id=` filter (exercising the existing query-param path from L1's own model work,
+      not a raw DB read); (b) `test_a_document_with_no_declaring_loop_stamps_nothing` — the default case,
+      asserted directly against `Task.loop_id` since `TaskResponse` does not expose the field in JSON;
+      (c) `test_re_approving_stamps_the_loop_only_on_newly_created_tasks` — approves once with **no**
+      loop declared, *then* a loop declares the document, *then* a revision adds one new declared task
+      and the document is re-approved — confirms the two original tasks still read `loop_id IS NULL`
+      (never retroactively touched) while only the new one carries the loop's id.
+
+      **Verification, measured:** `py -3.11 -m pytest hub/tests/test_spec_declared_tasks.py -q` — **11
+      passed** (8 pre-existing + 3 new). Broader sweep `py -3.11 -m pytest hub/tests/test_spec*.py -q`
+      — **301 passed**, confirming nothing else reading `materialise()`'s task output assumed the old
+      always-`None` shape. `ruff check` and `black` clean on both touched files (`spec_tasks.py`,
+      `test_spec_declared_tasks.py`) — black reformatted both once (wrapping the new `select(Loop)...`
+      call and a dict comprehension ruff flagged as unnecessary, rewritten as `dict(rows)`), reverified
+      clean after. `npx openspec validate --changes --strict`: 2/2 still pass.
 
 ## 4. Queue-write path 1, creation side — declaring a source document (`hub/hub/api/v1/jobs.py`,
    `hub/hub/schemas/jobs.py`)
