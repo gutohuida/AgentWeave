@@ -540,6 +540,123 @@ async def test_patch_updates_an_existing_loop(app, auth_headers):
 
 
 @pytest.mark.asyncio
+async def test_resume_on_a_plain_job_is_unchanged_by_patch(app, auth_headers):
+    """PATCHing `session_mode=resume` onto a job with no `Loop` row still succeeds, unchanged
+    (and still broken per `known_debts` — `AIJob.last_session_id`'s write path is out of scope
+    for design D4, which only refuses `resume` for a loop's job)."""
+    create_resp = await app.post(
+        "/api/v1/projects/proj-test/jobs",
+        json={
+            "name": "Plain Job For Resume Patch",
+            "agent": "kimi",
+            "message": "Test",
+            "cron": "0 9 * * *",
+        },
+        headers=auth_headers,
+    )
+    job_id = create_resp.json()["id"]
+
+    resp = await app.patch(
+        f"/api/v1/projects/proj-test/jobs/{job_id}",
+        json={"session_mode": "resume"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["session_mode"] == "resume"
+    assert resp.json()["loop"] is None
+
+
+@pytest.mark.asyncio
+async def test_create_job_with_resume_and_loop_opt_in_is_refused(app, auth_headers):
+    """Design D4: `session_mode=resume` combined with a loop-opting field in the same POST is
+    refused, naming why, rather than silently creating a resumable loop."""
+    resp = await app.post(
+        "/api/v1/projects/proj-test/jobs",
+        json={
+            "name": "Resume Loop At Creation",
+            "agent": "kimi",
+            "message": "Keep going",
+            "cron": "0 9 * * *",
+            "session_mode": "resume",
+            "purpose": "Nightly dependency audit",
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 400
+    detail = resp.json()["detail"].lower()
+    assert "loop" in detail
+    assert "checkpoint" in detail
+
+    list_resp = await app.get("/api/v1/projects/proj-test/jobs", headers=auth_headers)
+    assert all(j["name"] != "Resume Loop At Creation" for j in list_resp.json())
+
+
+@pytest.mark.asyncio
+async def test_patch_resume_onto_an_existing_loop_job_is_refused(app, auth_headers):
+    """Design D4: PATCHing `session_mode=resume` onto a job that already has a `Loop` row is
+    refused — the loop was created in an earlier request, so no loop fields need to accompany
+    this one for the refusal to fire."""
+    create_resp = await app.post(
+        "/api/v1/projects/proj-test/jobs",
+        json={
+            "name": "Already A Loop",
+            "agent": "kimi",
+            "message": "Keep going",
+            "cron": "0 9 * * *",
+            "purpose": "Nightly dependency audit",
+        },
+        headers=auth_headers,
+    )
+    job_id = create_resp.json()["id"]
+
+    resp = await app.patch(
+        f"/api/v1/projects/proj-test/jobs/{job_id}",
+        json={"session_mode": "resume"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 400
+    detail = resp.json()["detail"].lower()
+    assert "loop" in detail
+    assert "checkpoint" in detail
+
+    get_resp = await app.get(f"/api/v1/projects/proj-test/jobs/{job_id}", headers=auth_headers)
+    assert get_resp.json()["session_mode"] == "new"
+
+
+@pytest.mark.asyncio
+async def test_patch_resume_and_loop_opt_in_together_is_refused(app, auth_headers):
+    """Design D4's "given, in the same request" case: a plain job PATCHed with `session_mode`
+    resume AND a loop-opting field together is refused — the request would opt it into a loop
+    and set resume in one step, and neither must land."""
+    create_resp = await app.post(
+        "/api/v1/projects/proj-test/jobs",
+        json={
+            "name": "Opts Into A Loop And Resume",
+            "agent": "kimi",
+            "message": "Test",
+            "cron": "0 9 * * *",
+        },
+        headers=auth_headers,
+    )
+    job_id = create_resp.json()["id"]
+    assert create_resp.json()["loop"] is None
+
+    resp = await app.patch(
+        f"/api/v1/projects/proj-test/jobs/{job_id}",
+        json={"session_mode": "resume", "purpose": "Nightly dependency audit"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 400
+    detail = resp.json()["detail"].lower()
+    assert "loop" in detail
+    assert "checkpoint" in detail
+
+    get_resp = await app.get(f"/api/v1/projects/proj-test/jobs/{job_id}", headers=auth_headers)
+    assert get_resp.json()["loop"] is None
+    assert get_resp.json()["session_mode"] == "new"
+
+
+@pytest.mark.asyncio
 async def test_declaring_a_source_document_on_loop_creation_round_trips(app, auth_headers):
     """Task 4.2(a): a loop created with `spec_document_id` persists it on the `Loop` row."""
     from sqlalchemy import select

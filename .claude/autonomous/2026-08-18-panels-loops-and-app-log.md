@@ -879,3 +879,88 @@ instruction not to mechanically bump it.
 Committed, pushed. `current`/`next_action` now point at **L8** (refusing `resume` for a loop's job,
 `hub/hub/api/v1/jobs.py`, tasks 8.1-8.2) — the queue's next item, now that L9 (which depended on L7) is
 done.
+
+## Entry 11 — iteration 11: L8, refusing resume for a loop's job (2026-08-19T00:29-00:52+01:00)
+
+Fresh process. Branch and `git log` matched STATE.json exactly on read (HEAD at the release-heartbeat
+commit following entry 10). Read design D4 (`2026-08-18-a-loop-writes-its-own-queue/design.md`) before
+touching code, and re-verified the two call sites' line numbers fresh per `next_action`'s instruction,
+since L8 had not touched `jobs.py` yet — they matched what `next_action` recorded.
+
+**Work done: L8 — tasks 8.1-8.2, `hub/hub/api/v1/jobs.py`.**
+
+`create_job`: the check (`body.session_mode == "resume" and _loop_opts_in(body.purpose, body.stop_at,
+body.stop_when_queue_empties)`) now runs immediately after `_require_agent_job_allowance`, before
+`job_id` is even computed — an error response leaves no job row behind at all, not merely an
+uncommitted one.
+
+`update_job`: the check runs right after the existing `loop_fields_supplied` block resolves (or
+creates) the request's `Loop` row, before any field — including `job.session_mode` — is mutated. "Is
+this job a loop after this request" is `loop_fields_supplied and loop is not None` (the row the block
+just resolved/created) OR, when no loop fields were supplied in this request at all, a direct query for
+an existing `Loop` row on the job (`select(Loop).where(Loop.job_id == job_id)`) — covering the case D4
+names explicitly: PATCHing `resume` alone onto a job that already opted into a loop in an earlier
+request. Both paths raise before `session.commit()`, so a refused request — including one that
+constructed a fresh `Loop` object via `session.add` earlier in the same handler — persists nothing:
+`get_session`'s `async with async_session_factory() as session` closes the session without a commit on
+an unhandled exception, which is an implicit rollback at the DB level, the same guarantee `create_job`'s
+pre-existing `IntegrityError` handler already relies on. Both raise the identical message: "this job is
+a loop; continuity is by checkpoint, not by resumed session" — D4's own wording, not a paraphrase.
+
+**Tests, `hub/tests/test_jobs.py`**, added beside the existing loop-field-on-plain-job tests (established
+fixture pattern: `app`/`auth_headers`, httpx against the FastAPI app fixture, `proj-test`). Four new
+tests: `test_resume_on_a_plain_job_is_unchanged_by_patch` (PATCH `session_mode=resume` on a job with no
+`Loop` row still 200s, `loop` stays `None` — `test_job_session_modes` already covered the POST side of
+"unchanged"; this is the PATCH side, since no prior test exercised it); `test_create_job_with_resume_and
+_loop_opt_in_is_refused` (POST with `session_mode=resume` and `purpose` together — 400 naming "loop" and
+"checkpoint", and a follow-up list confirms no job with that name exists at all);
+`test_patch_resume_onto_an_existing_loop_job_is_refused` (a job already opted into a loop from an
+earlier POST, then PATCHed with `session_mode=resume` alone — 400, follow-up GET confirms `session_mode`
+is still `"new"` — the "already-a-loop" case D4 names first); `test_patch_resume_and_loop_opt_in_together
+_is_refused` (a plain job PATCHed with `session_mode=resume` and `purpose` in the same request — 400,
+follow-up GET confirms the job stayed non-loop with `session_mode` still `"new"` — the "given, in the
+same request" case D4 names second, deliberately tested separately from the already-a-loop case per
+`next_action`'s explicit instruction not to only test the one).
+
+**Verification, measured:**
+- `py -3.11 -m pytest hub/tests/test_jobs.py -q` — **32 passed, 1 skipped** (28 pre-existing + 4 new;
+  the skip is the pre-existing `croniter`-not-installed guard on `test_create_job_invalid_cron`,
+  unrelated to this change).
+- `py -3.11 -m pytest hub/tests/test_jobs.py hub/tests/test_spec_declared_tasks.py -q` — **43 passed, 1
+  skipped** — the other suite reading `create_job`/`update_job`'s loop-opt-in path, confirming
+  sections 4/5's declared-document and creator-authorship behaviour is unchanged by this section.
+- `py -3.11 -m ruff check hub/hub/api/v1/jobs.py hub/tests/test_jobs.py` — clean.
+- `black hub/hub/api/v1/jobs.py hub/tests/test_jobs.py` (via `black --check`, this machine's Python
+  3.11 needs `--fast` or it only *warns*, does not error, about its own AST safety-check version
+  mismatch) — both already formatted, unchanged.
+- `py -3.11 -m mypy hub/hub/api/v1/jobs.py`, filtered to lines attributed to the file — 16 error/note
+  lines, matching `.claude/autonomous/mypy-baseline.txt`'s 16 for this file exactly by category (7
+  missing-return-type, 1 missing-parameter-type, 3 `AIJob` has no attribute `loop`, 1 `croniter` stub,
+  1 index-type, 3 notes) — **zero new errors**. No new helper function was added this section, so there
+  was no new call site needing the explicit-typing treatment L7/L9 established.
+- `npx openspec validate --changes --strict` (from the repo root) — 2/2.
+
+No Hub restart this iteration: like sections 3-7 and 9, this section is verified entirely through
+pytest against the API layer directly, with no UI or live-Hub surface to exercise.
+
+Marked 8.1-8.2 done in `tasks.md` with a dated note in the established style, and corrected the file's
+own summary line from the honest-but-partial "Sections 1-7 and 9 ... section 8 ... still a spec only"
+to the now-genuinely-contiguous "Sections 1-9 are implemented and verified ... everything from section
+10 onward is still a spec only" — safe to state as a range since nothing between 1 and 9 inclusive is
+skipped, per `next_action`'s explicit instruction.
+
+**Scouted ahead for L10 (empty-queue telemetry) while the file was open**, to make the next
+`next_action` concrete rather than a re-read from scratch: the insertion point is
+`hub/hub/scheduler.py:491-530` inside `_do_fire_job`, specifically the `if loop_stop_reason:` branch
+that already builds and broadcasts `loop_stopped` (`scheduler.py:516-524`) — `loop_queue_exhausted`
+needs to persist+broadcast *alongside* it, gated on `loop_stop_reason == "loop queue is empty"` (the
+exact string `_loop_stop_reason` returns at `scheduler.py:106`, the only one of its two return values
+that means "drained" rather than "time reached"). Resolving "the loop's creator" as a `Message`
+recipient needs `Loop.created_by_run_id` → `session.get(Run, ...)` → `Run.agent`, the same resolution
+`hub/hub/api/v1/questions.py:44` already does for a different row's `created_by_run_id` — cite it as
+precedent rather than inventing a second pattern. `Message.read`/`Message.conversation_id` and
+`Question.answered`/`Question.conversation_id` are both already the right shape (`models.py:490,494` and
+`models.py:847,879`) — no new storage, matching D6's own claim.
+
+Committed, pushed. `current`/`next_action` now point at **L10** (empty-queue telemetry,
+`hub/hub/scheduler.py`, tasks 10.1-10.2) — the queue's next item.

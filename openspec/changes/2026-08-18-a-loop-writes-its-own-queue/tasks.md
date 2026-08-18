@@ -1,8 +1,8 @@
 # Tasks — A loop writes its own queue
 
-Sections 1-7 and 9 are implemented and verified (dated notes below); section 8 and everything from
-section 10 onward is still a spec only, unchecked — CLAUDE.md: "Never mark a task complete on the
-strength of a plan existing."
+Sections 1-9 are implemented and verified (dated notes below); everything from section 10 onward is
+still a spec only, unchecked — CLAUDE.md: "Never mark a task complete on the strength of a plan
+existing."
 
 ## 1. Migration
 
@@ -494,13 +494,70 @@ strength of a plan existing."
 
 ## 8. Refusing resume for a loop's job (`hub/hub/api/v1/jobs.py`)
 
-- [ ] 8.1 `create_job`/`update_job`: reject (400) a `session_mode="resume"` when the job has (or is
+- [x] 8.1 `create_job`/`update_job`: reject (400) a `session_mode="resume"` when the job has (or is
       being given, in the same request) a `Loop` row, naming checkpoint-based continuity as the
       reason (design D4, spec requirement "Setting resume mode on a loop's job is refused").
-- [ ] 8.2 Tests: setting `resume` on a plain job still behaves exactly as before (unchanged, and
+- [x] 8.2 Tests: setting `resume` on a plain job still behaves exactly as before (unchanged, and
       still broken per `known_debts` — do not fix `AIJob.last_session_id`'s write path here, out of
       scope per Non-Goals); setting `resume` on a job that has, or is simultaneously given, loop
       fields is refused with the stated reason.
+
+      **2026-08-19, iteration 11.** `create_job` (`hub/hub/api/v1/jobs.py`): the check
+      (`body.session_mode == "resume" and _loop_opts_in(body.purpose, body.stop_at,
+      body.stop_when_queue_empties)`) now runs immediately after `_require_agent_job_allowance`,
+      before `job_id` is even computed — an error response leaves no job row behind at all, not
+      merely an uncommitted one. `update_job`: the check runs right after the existing
+      `loop_fields_supplied` block resolves (or creates) the request's `Loop` row, before any field
+      — including `job.session_mode` — is mutated. "Is this job a loop after this request" is
+      `loop_fields_supplied and loop is not None` (the row the block just resolved/created) OR, when
+      no loop fields were supplied in this request at all, a direct query for an existing `Loop` row
+      on the job — covering the case D4 names explicitly: PATCHing `resume` alone onto a job that
+      already opted into a loop in an earlier request. Both paths raise before `session.commit()`,
+      so a refused request (including one that constructed a fresh `Loop` object via `session.add`
+      earlier in the same handler) persists nothing — `get_session`'s `async with` closes the
+      session without a commit, which is an implicit rollback at the DB level, the same guarantee
+      `create_job`'s pre-existing `IntegrityError` rollback already relies on.
+
+      Both raise the same message: "this job is a loop; continuity is by checkpoint, not by resumed
+      session" — matching D4's wording exactly rather than paraphrasing it.
+
+      Tests, `hub/tests/test_jobs.py`, added beside the existing loop-field-on-plain-job tests:
+      `test_resume_on_a_plain_job_is_unchanged_by_patch` (PATCH `session_mode=resume` on a job with
+      no `Loop` row still 200s, `loop` stays `None` — the existing `test_job_session_modes` already
+      covered the POST side of "unchanged"; this is the PATCH side, added because `next_action`
+      named it explicitly and no prior test exercised PATCH `resume` on a plain job specifically);
+      `test_create_job_with_resume_and_loop_opt_in_is_refused` (POST with `session_mode=resume` and
+      `purpose` together — 400, message names "loop" and "checkpoint", and a follow-up list confirms
+      no job with that name exists); `test_patch_resume_onto_an_existing_loop_job_is_refused` (a job
+      already opted into a loop from an earlier POST, then PATCHed with `session_mode=resume` alone
+      — 400, and a follow-up GET confirms `session_mode` is still `"new"`, the "already-a-loop" case
+      D4 names first); `test_patch_resume_and_loop_opt_in_together_is_refused` (a plain job PATCHed
+      with `session_mode=resume` and `purpose` in the same request — 400, and a follow-up GET
+      confirms the job stayed non-loop with `session_mode` still `"new"` — the "given, in the same
+      request" case D4 names second, not just the already-a-loop case).
+
+      **Verification, measured:**
+      - `py -3.11 -m pytest hub/tests/test_jobs.py -q` — **32 passed, 1 skipped** (28 pre-existing +
+        4 new; the 1 skip is `test_create_job_invalid_cron`'s existing `croniter`-not-installed
+        guard, unrelated to this change).
+      - `py -3.11 -m pytest hub/tests/test_jobs.py hub/tests/test_spec_declared_tasks.py -q` — **43
+        passed, 1 skipped** — the other suite reading `create_job`/`update_job`'s loop-opt-in path,
+        confirming section 4/5's declared-document and creator-authorship behaviour is unchanged.
+      - `py -3.11 -m ruff check hub/hub/api/v1/jobs.py hub/tests/test_jobs.py` — clean.
+      - `black hub/hub/api/v1/jobs.py hub/tests/test_jobs.py` — both already formatted, unchanged
+        (`--fast` needed on this machine's Python 3.11 to skip Black's own AST safety check, which
+        otherwise warns — not errors — about a formatting environment mismatch unrelated to this
+        change).
+      - `py -3.11 -m mypy hub/hub/api/v1/jobs.py`, filtered to lines attributed to the file — 16
+        error/note lines, matching `.claude/autonomous/mypy-baseline.txt`'s 16 for this file exactly
+        by category (7 missing-return-type, 1 missing-parameter-type, 3 `AIJob` has no attribute
+        `loop`, 1 `croniter` stub, 1 index-type, 3 notes) — **zero new errors**. No new helper
+        function was added, so there was no new call site to type explicitly this iteration.
+      - `npx openspec validate --changes --strict` (from the repo root) — 2/2.
+
+      No Hub restart this iteration: like sections 3-7 and 9, this section is verified entirely
+      through pytest against the API layer directly (httpx against the FastAPI app fixture), with no
+      UI or live-Hub surface to exercise.
 
 ## 9. The briefing (`hub/hub/scheduler.py`)
 

@@ -207,6 +207,16 @@ async def create_job(
     project_id, _ = project
     await _require_agent_job_allowance(session, project_id, agent_identity, run_identity)
 
+    # Design D4: a loop's continuity is by checkpoint, not by resumed session. Checked before the
+    # job row is created — an error response must not leave a half-created job behind.
+    if body.session_mode == "resume" and _loop_opts_in(
+        body.purpose, body.stop_at, body.stop_when_queue_empties
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="this job is a loop; continuity is by checkpoint, not by resumed session",
+        )
+
     # Validate cron using croniter
     try:
         from croniter import croniter
@@ -451,6 +461,21 @@ async def update_job(
         if body.stop_reason is not None:
             loop.stop_reason = body.stop_reason
         loop.updated_by_run_id = run_identity
+
+    # Design D4: a loop's continuity is by checkpoint, not by resumed session. Checked before
+    # job.session_mode is mutated below, against the job's loop status AFTER this request is
+    # applied — either the loop just resolved/created above, or (when no loop fields were
+    # supplied in this request) whatever Loop row the job already had.
+    if body.session_mode == "resume":
+        job_is_loop = loop_fields_supplied and loop is not None
+        if not job_is_loop:
+            existing_loop_result = await session.execute(select(Loop).where(Loop.job_id == job_id))
+            job_is_loop = existing_loop_result.scalar_one_or_none() is not None
+        if job_is_loop:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="this job is a loop; continuity is by checkpoint, not by resumed session",
+            )
 
     # Track if we need to update scheduler
     update_scheduler = False
