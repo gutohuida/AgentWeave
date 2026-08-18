@@ -2204,3 +2204,99 @@ from iterations 16–23 is finished; this iteration started the three-current-sp
 also names, closing `agent-stream-events` with no gap found. Two remain — `runtime-diagnostics`,
 `agent-conversation-handoff` — `runtime-diagnostics` next if a future iteration continues this. Runway
 to `stop_at` (2026-08-18T08:00+01:00) is roughly 1h.
+
+## Iteration 25 (2026-08-18T07:03+01:00) — Q11/roadmap #8, second of the three named-current specs: `runtime-diagnostics` reconciliation
+
+Continued where iteration 24 left off: `runtime-diagnostics` (303 lines, 12 requirements), the
+second of the three specs 16.2's own text names directly. Same shape as iteration 24 — no delta to
+diff, checking whether a spec last synced 2026-08-03 still describes what ships today.
+
+**Method change from iteration 24.** The requirement count and code surface (CLI diagnostics, Hub
+launchability, job scheduling, UI staleness, runtime-death reporting) was wide enough that reading
+every citation personally inside the runway would have crowded out writing the note. Delegated the
+full 12-requirement pass to a foreground research agent with explicit per-requirement pointers
+(watchdog.py's deletion and its live successor, the app-server-vs-PTY transport split, the two
+requirements that read as recently-added rather than part of the 2026-08-03 sync), then personally
+re-read the two most load-bearing citations before writing anything: `turn_scheduler.py:94-116`
+(confirmed `persist_event` fires only on the `workspace_unavailable` branch, not on a missing-CLI or
+missing-key refusal) and `agents.py:186` / `agent_trigger.py:549-566` (confirmed both are
+presence-only checks — `bool(HUB_URL) or bound_address.get() is not None` — with no comparison
+between an explicit `HUB_URL` and the Hub's own observed bound address anywhere in the codebase).
+Both held exactly as reported.
+
+**Two requirements are precise matches to already-shipped, already-tested code — flagged explicitly
+as needing no change, not left ambiguous.** "The built interface artefact can be asserted current"
+matches all seven of its own scenarios against `hub/hub/main.py:133-220`'s fingerprint-over-timestamp
+staleness check (git blob IDs plus working-tree dirt folded into the fingerprint, a 30-second TTL
+cache standing in for "without restarting," `refresh_ui_bundle.py` named as the actionable rebuild
+command). The Codex app-server half of "a runtime that dies reports what it was doing" matches too —
+`codex_appserver.py`'s bounded 200-line stderr `deque`, `readable_exit_code`'s large-unsigned-value
+normalization for a forced termination, and the synthetic-turn-exit-code-vs-real-process-exit-code
+split at `agent_trigger.py:2017`/`:1055`, the last one traceable to a cited prior incident in the
+code itself.
+
+**That same runtime-death requirement is unmet for the PTY transport — Claude and Codex `exec` — and
+the spec text draws no such carve-out.** The post-run failure broadcast on that path
+(`agent_trigger.py:1461-1462,1549-1558`) carries only `exit_code` and `conversation_id`: no stderr
+tail retained, no operation-in-flight field, `readable_exit_code` never called on `pty.wait()`'s raw
+result. A Windows Ctrl+C on a Claude run is exactly the unrendered large-unsigned-value case the
+requirement exists to fix, on the one transport most agents actually use.
+
+**Five more requirements are real, citable gaps, not documentation drift.** Watchdog-preflight
+refusals for a missing CLI or missing proxy key never persist a diagnostic event (verified above).
+Structured agent-process-failure events omit `duration` and `runner type` entirely and never call
+`redact_secrets` on `stderr_tail` (`agent_trigger.py:1011-1058`) — a secret-handling gap, not merely
+an incomplete field list. Job failures are recorded correctly (`scheduler.py:487-499`,
+`jobs.py:53-90`, with secret-safe truncation) but only surface once a `JobCard` is expanded into Run
+History — the collapsed list only distinguishes Active/Paused (`JobCard.tsx:21-27`). Agent readiness
+(`launchability.py:38-112` via `GET /launchability`) has no `context status` field and persists no
+event on a warn/fail result — the route's own docstring calls itself side-effect-free. Collaboration
+readiness detects only an *unknown* callback address, never a *mismatched* one (confirmed above) —
+the tool-surface-refusal half of the same requirement (Codex without yolo, `agents.py:214-228`) does
+match.
+
+**Two more are narrower than their text without being wrong.** `agentweave status` (`cli.py:70-112`)
+never calls `collect_diagnostics` or renders a `DiagnosticResult` — only `doctor` does, so "rendered
+consistently by both doctor and status" is stale; `status` now only hits `/health`. Hub trigger
+confidence reporting works exactly as scenario'd for a manual runner, but "confidence" turned out to
+be one reused `waiting_reason` string shared with unrelated causes (hop budget exhausted, stale
+conversation delivery) rather than a distinct typed value.
+
+**Three clean matches close the twelve.** Runtime readiness checks (`diagnostics.py:971-987`, all
+six checks, non-mutating, no state created before first launch — the one requirement that matches
+`agentweave doctor` precisely). Proxy credential diagnostics (`launchability.py:73-85` plus
+`agent_trigger.py:334-337`, a pre-spawn 409 naming the missing variable). Hub logs usability
+(`GET /logs/agents` unions live agent sources rather than a fixed list; `LogsView.tsx`'s category
+filters cover every named category plus two extras) — though its own secret-safety scenario is only
+as strong as the unredacted `stderr_tail` upstream, the same gap noted above surfacing a second time
+in a different requirement.
+
+**Conclusion: `runtime-diagnostics` needs real reconciliation, not just a note.** Unlike iteration
+24's `agent-stream-events` pass, and unlike most of iterations 16–23's delta-spec mappings, this one
+surfaced genuine unmet requirements — missing diagnostic events, missing fields, unredacted secrets,
+a UI depth mismatch, an unbuilt address-mismatch check, an untreated transport gap — rather than
+renamed, superseded, or merely undocumented content. Fixing any of it is product work, explicitly out
+of scope for a reconciliation pass; none of it was touched. One dated note added under 16.2 in
+`openspec/changes/2026-07-30-hub-native-experience/tasks.md` (66 lines, the only file touched this
+iteration). No checkbox ticked, no code changed, no archiving attempted, per the file's own
+reconciliation rule and `decisions_for_user` D1.
+
+**Verified before committing:** re-read `runtime-diagnostics/spec.md` in full (303 lines) before
+delegating, not just the umbrella's own summary of it; the research agent's report was not taken on
+faith — its two most load-bearing citations were re-opened and re-read personally, both held exactly;
+`git diff --stat` showed exactly the one file, 66 insertions. `git status --short` showed only that
+plus the carried-forward `spec/` and `hub/seed_taste_doc.py` scratch, staged nothing from them. One
+copy-paste artifact in `STATE.json`'s Q11 `done_note` (a garbled self-referential "correction"
+sentence written while drafting) was caught and fixed with a second Python pass before this commit,
+rather than left in place.
+
+**Tree state before commit:** `openspec/changes/2026-07-30-hub-native-experience/tasks.md` modified
+(1 new note, 66 lines); `.claude/autonomous/STATE.json` updated (iteration, heartbeat, Q11 done_note,
+next_action); `spec/` and `hub/seed_taste_doc.py` (prior-session scratch) untouched.
+
+**Queue status:** Q1–Q10 done. Q11 — roadmap #7 stays parked. Roadmap #8: the eight-delta mapping
+from iterations 16–23 is finished; two of the three named-current specs are now done
+(`agent-stream-events`, `runtime-diagnostics`), one remains — `agent-conversation-handoff` — next if
+a future iteration continues this. Even once all three land, 16.2 itself still cannot tick: 16.1
+(scenario exercise) and 16.3 (archive) are separate, larger asks reserved for the operator. Runway to
+`stop_at` (2026-08-18T08:00+01:00) is roughly 50 minutes as of this write.
