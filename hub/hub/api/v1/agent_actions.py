@@ -87,6 +87,9 @@ class AgentTaskCreate(BaseModel):
     acceptance_criteria: Optional[List[Any]] = None
     deliverables: Optional[List[Any]] = None
     notes: Optional[Any] = None
+    # Adds this task directly to a loop's queue — gated in `create_task_for_actor` against the
+    # loop's own `AIJob.agent`, or the operator (design D1/D7).
+    loop_id: Optional[str] = Field(default=None, max_length=64)
 
     model_config = {"extra": "forbid"}
 
@@ -210,6 +213,7 @@ async def create_shared_task(
         project_id=actor.project_id,
         assigner=actor.agent,
         created_by_run_id=actor.run_id,
+        actor=run_actor(actor.run_id, actor.agent),
         session=session,
     )
 

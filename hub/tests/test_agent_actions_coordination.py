@@ -5,7 +5,7 @@ from sqlalchemy import select
 
 from hub.agent_auth import hash_run_token
 from hub.db.engine import async_session_factory
-from hub.db.models import Message, Question, Run, Task
+from hub.db.models import AIJob, Loop, Message, Question, Run, Task
 
 
 async def _active_run(run_id: str, agent: str) -> tuple[dict[str, str], str]:
@@ -145,6 +145,152 @@ async def test_agent_task_crud_retains_create_and_latest_update_runs(app):
         assert task.created_by_run_id == "run-task-create"
         assert task.updated_by_run_id == "run-task-update"
         assert task.assigner == "creator"
+
+
+async def _loop_with_agent(session, *, suffix, agent, run_count=0):
+    """A loop whose queue-write authorization (design D1/D7,
+    `2026-08-18-a-loop-writes-its-own-queue`) turns on `AIJob.agent` and `run_count`. Mirrors
+    `_declaring_loop` (test_spec_declared_tasks.py) and `_make_job`/`_make_loop`
+    (test_scheduler.py) rather than inventing a fourth fixture shape."""
+    job = AIJob(
+        id=f"job-loop-{suffix}",
+        project_id="proj-test",
+        name=f"Loop job {suffix}",
+        agent=agent,
+        message="go",
+        cron="0 9 * * *",
+        session_mode="new",
+        enabled=True,
+        run_count=run_count,
+    )
+    session.add(job)
+    await session.flush()
+    loop = Loop(
+        id=f"loop-{suffix}",
+        project_id="proj-test",
+        job_id=job.id,
+        purpose="authorship gate fixture",
+    )
+    session.add(loop)
+    await session.flush()
+    return loop
+
+
+async def _set_run_count(loop_id: str, run_count: int) -> None:
+    async with async_session_factory() as session:
+        loop = await session.get(Loop, loop_id)
+        job = await session.get(AIJob, loop.job_id)
+        job.run_count = run_count
+        await session.commit()
+
+
+@pytest.mark.asyncio
+async def test_loop_operator_adds_regardless_of_a_distinct_executors_fire_count(app, auth_headers):
+    """Design D7: 'a loop with a distinct creator keeps D1's unconditional creator-privilege
+    rule' -- and D8 collapses 'creator' into `AIJob.agent`, leaving no field this data model can
+    use to express a creator distinct from both the executor and the operator. The only caller
+    that can ever be 'distinct' from a loop's own agent and still succeed is the operator, so
+    that is what this exercises: the operator adding to a loop whose agent is someone else,
+    before AND after that loop has fired -- neither call is gated by run_count.
+    """
+    async with async_session_factory() as session:
+        loop = await _loop_with_agent(session, suffix="distinct", agent="executor-a")
+        await session.commit()
+        loop_id = loop.id
+
+    before_fire = await app.post(
+        "/api/v1/projects/proj-test/tasks",
+        headers=auth_headers,
+        json={"title": "distinct-before-fire", "loop_id": loop_id},
+    )
+    assert before_fire.status_code == 201, before_fire.text
+
+    await _set_run_count(loop_id, 1)
+
+    after_fire = await app.post(
+        "/api/v1/projects/proj-test/tasks",
+        headers=auth_headers,
+        json={"title": "distinct-after-fire", "loop_id": loop_id},
+    )
+    assert after_fire.status_code == 201, after_fire.text
+
+
+@pytest.mark.asyncio
+async def test_loop_operator_is_exempt_from_the_self_created_fire_gate(app, auth_headers):
+    """The operator bypasses D7's extra gate too -- even on a loop whose own agent would be
+    refused for the same call (test_loop_self_created_agent_gated_after_first_fire, below)."""
+    async with async_session_factory() as session:
+        loop = await _loop_with_agent(session, suffix="operator-bypass", agent="self-agent")
+        await session.commit()
+        loop_id = loop.id
+
+    await _set_run_count(loop_id, 1)
+
+    response = await app.post(
+        "/api/v1/projects/proj-test/tasks",
+        headers=auth_headers,
+        json={"title": "operator-bypasses-self-gate", "loop_id": loop_id},
+    )
+    assert response.status_code == 201, response.text
+
+
+@pytest.mark.asyncio
+async def test_loop_non_creator_non_operator_is_refused_and_told_to_send_message(app):
+    async with async_session_factory() as session:
+        loop = await _loop_with_agent(session, suffix="bystander", agent="executor-a")
+        await session.commit()
+        loop_id = loop.id
+
+    bystander_headers, _ = await _active_run("run-loop-bystander", "bystander")
+    response = await app.post(
+        "/api/v1/agent-actions/tasks",
+        headers=bystander_headers,
+        json={"title": "not yours to add", "loop_id": loop_id},
+    )
+    assert response.status_code == 403
+    assert "send_message" in response.json()["detail"]
+
+    async with async_session_factory() as session:
+        remaining = (
+            (await session.execute(select(Task).where(Task.loop_id == loop_id))).scalars().all()
+        )
+        assert remaining == []
+
+
+@pytest.mark.asyncio
+async def test_loop_self_created_agent_gated_after_first_fire(app):
+    """Design D7's boundary: before the loop's first fire, its own agent may still extend its
+    queue (indistinguishable from `create_loop`'s own initial queue); after, it needs the
+    operator."""
+    async with async_session_factory() as session:
+        loop = await _loop_with_agent(session, suffix="self-fire-gate", agent="self-agent")
+        await session.commit()
+        loop_id = loop.id
+
+    self_headers, _ = await _active_run("run-loop-self", "self-agent")
+
+    before_fire = await app.post(
+        "/api/v1/agent-actions/tasks",
+        headers=self_headers,
+        json={"title": "self-before-fire", "loop_id": loop_id},
+    )
+    assert before_fire.status_code == 201, before_fire.text
+
+    await _set_run_count(loop_id, 1)
+
+    after_fire = await app.post(
+        "/api/v1/agent-actions/tasks",
+        headers=self_headers,
+        json={"title": "self-after-fire", "loop_id": loop_id},
+    )
+    assert after_fire.status_code == 403
+    assert "operator" in after_fire.json()["detail"].lower()
+
+    async with async_session_factory() as session:
+        created = (
+            (await session.execute(select(Task).where(Task.loop_id == loop_id))).scalars().all()
+        )
+        assert [task.title for task in created] == ["self-before-fire"]
 
 
 @pytest.mark.asyncio

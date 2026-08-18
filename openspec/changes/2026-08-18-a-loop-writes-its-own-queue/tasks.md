@@ -1,6 +1,6 @@
 # Tasks — A loop writes its own queue
 
-Sections 1-4 are implemented and verified (dated notes below). Everything from section 5 onward is
+Sections 1-5 are implemented and verified (dated notes below). Everything from section 6 onward is
 still a spec only, unchecked — CLAUDE.md: "Never mark a task complete on the strength of a plan
 existing."
 
@@ -197,22 +197,89 @@ existing."
 ## 5. Queue-write path 2 — creator authorship (`hub/hub/api/v1/tasks.py`, `hub/hub/mcp_server.py`,
    `hub/hub/schemas/tasks.py`)
 
-- [ ] 5.1 `TaskCreate` schema and MCP `create_task` gain `loop_id: Optional[str]`.
-- [ ] 5.2 `create_task` (both REST and the MCP tool, which calls the same REST route per the existing
+- [x] 5.1 `TaskCreate` schema and MCP `create_task` gain `loop_id: Optional[str]`.
+- [x] 5.2 `create_task` (both REST and the MCP tool, which calls the same REST route per the existing
       pattern): when `loop_id` is supplied, resolve the calling identity — `AgentActor.agent` for an
       agent-authenticated call, or the operator sentinel for an operator-authenticated one (design
       D1). Compare against the target loop's `AIJob.agent`. Equal, or operator → accept. Otherwise →
       403, message naming `send_message` to the creator (spec requirement "Only a loop's creator, or
       the operator, may add to its queue directly").
-- [ ] 5.3 Apply design D7's extra gate on top of 5.2: when the calling agent equals both the target
+- [x] 5.3 Apply design D7's extra gate on top of 5.2: when the calling agent equals both the target
       loop's creator *and* its `AIJob.agent` (self-created), and the loop has `run_count > 0` (has
       fired at least once), refuse the direct addition (403, naming that operator approval is
       required) regardless of 5.2's outcome. An operator-authenticated call is exempt from this gate,
       matching 5.2.
-- [ ] 5.4 Tests: creator adds successfully (before and after first fire, for a loop with a distinct
+- [x] 5.4 Tests: creator adds successfully (before and after first fire, for a loop with a distinct
       executor); operator adds successfully regardless of fire count; non-creator executor is
       refused, message names `send_message`; self-created loop accepts a creator addition before its
       first fire and refuses one after, message names operator approval.
+
+      **2026-08-18, iteration 7.** `TaskCreate` (`hub/hub/schemas/tasks.py`) and the agent-facing
+      `AgentTaskCreate` (`hub/hub/api/v1/agent_actions.py`) both gained `loop_id: Optional[str]`; the
+      MCP `create_task` tool (`hub/hub/mcp_server.py:212`) gained the same parameter and forwards it
+      in the POST body.
+
+      **The identity/D7 gate re-derived literally, not from the `next_action` paraphrase, per its own
+      instruction.** Design D8 (`Creator-identity enforcement without a foreign key`) collapses
+      "creator" into `Loop`'s own `AIJob.agent` — there is no separate creator field anywhere in the
+      schema, so `_authorize_loop_task_creation` (new, `hub/hub/api/v1/tasks.py`, called from
+      `create_task_for_actor` before the `Task(` construction) implements 5.2 and 5.3 as: the operator
+      is always exempt (5.2's bypass, and separately 5.3's — "An operator-authenticated call is exempt
+      from this gate too"); any other caller must equal `Loop`→`AIJob.agent` string-for-string or is
+      refused 403 naming `send_message` (5.2); and that same caller, having passed 5.2, is refused
+      403 naming operator approval when the job's `run_count > 0` (5.3) — no `run_count` gate applies
+      to the operator.
+
+      Read this way, D7's own "general case (creator ≠ executor): only the creator adds tasks, always"
+      is inescapably an operator-only scenario under this data model: `_authorize_loop_task_creation`
+      never accepts a non-operator caller unless it equals `AIJob.agent`, so the *only* identity that
+      can ever be "distinct" from a loop's own agent and still succeed is the operator — D8's collapse
+      makes every non-operator-privileged loop self-created by construction, which is exactly why D10
+      (the later addendum, queued separately as `LA1`) exists: to give the operator a real, explicit
+      "who controls this loop's queue" field instead of inferring it from role identity. This change
+      deliberately ships D7's narrower, role-identity version — D10 generalises it later, not now.
+
+      **Tests, `hub/tests/test_agent_actions_coordination.py`** (this file, not `test_jobs.py`,
+      already carries the `_active_run` fixture that mints a bound-run bearer token per agent identity
+      — exactly what `create_task_for_actor`'s new `actor` parameter needs to be exercised for real,
+      rather than only at the ORM layer). Added `_loop_with_agent` (mirrors `_declaring_loop` in
+      `test_spec_declared_tasks.py` and `_make_job`/`_make_loop` in `test_scheduler.py`) and four
+      tests: `test_loop_operator_adds_regardless_of_a_distinct_executors_fire_count` (operator, via
+      the plain `POST /api/v1/projects/proj-test/tasks` route, succeeds both before and after the
+      loop's first fire), `test_loop_operator_is_exempt_from_the_self_created_fire_gate` (operator
+      succeeds on a loop whose own agent would be refused for the identical call — see the next test),
+      `test_loop_non_creator_non_operator_is_refused_and_told_to_send_message` (a bystander agent gets
+      403 naming `send_message`, and no task row is left behind), and
+      `test_loop_self_created_agent_gated_after_first_fire` (the loop's own agent succeeds before
+      `run_count` moves off zero, is refused after, message names the operator, and only the one task
+      created before the gate closed exists in the DB).
+
+      **Verification, measured:**
+      - `py -3.11 -m pytest hub/tests/test_agent_actions_coordination.py -q` — **23 passed** (19
+        pre-existing + 4 new). First run of the two operator-route tests failed 405 — `POST
+        /api/v1/tasks` does not exist; the operator's own task route is project-scoped
+        (`/api/v1/projects/{project_id}/tasks`, confirmed against `TASKS` in
+        `test_evidence_latest_review_signal.py`) — fixed and reverified passing.
+      - `py -3.11 -m pytest hub/tests/test_jobs.py hub/tests/test_scheduler.py
+        hub/tests/test_spec_declared_tasks.py -q` — **46 passed, 1 skipped** (the pre-existing
+        `CRONITER_AVAILABLE` skip) — confirms nothing there assumed `create_task` never carries
+        `loop_id` or that `Task.loop_id` is only ever written by `spec_tasks.materialise`.
+      - `py -3.11 -m pytest hub/tests/test_mcp_body_contract.py hub/tests/test_mcp_tool_schemas.py
+        hub/tests/test_mcp_server.py -q` — **53 passed** — the MCP `create_task` signature widening
+        breaks nothing that pins its parameter list or body contract.
+      - `ruff check` on all four touched Python files, plus the test file — clean.
+      - `black` — reformatted the new test file once (line-wrapping only); clean on reverification.
+      - `mypy hub/hub/api/v1/tasks.py hub/hub/api/v1/agent_actions.py hub/hub/schemas/tasks.py
+        hub/hub/mcp_server.py`, filtered to lines attributed to those four files (mypy's transitive
+        import chasing otherwise surfaces unrelated pre-existing errors as noise) — every error line
+        and its count matches `.claude/autonomous/mypy-baseline.txt` exactly for all four files
+        (`agent_actions.py`: 28 return-type + 4 pre-existing others; `tasks.py`: 8 return-type + 2
+        pre-existing others; `mcp_server.py`: 1 return-type; `schemas/tasks.py`: 0) — **zero new
+        errors**.
+      - `npx openspec validate --changes --strict` — 2/2 still pass.
+
+      **Not done, correctly deferred:** section 6 (claiming the current item, `hub/hub/scheduler.py`)
+      is next-in-queue and a materially different surface (scheduler firing logic, not an API route).
 
 ## 6. Claiming the current item (`hub/hub/scheduler.py`)
 

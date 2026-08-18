@@ -15,7 +15,9 @@ from ...auth import get_project
 from ...db.engine import get_session
 from ...db.models import (
     AgentHeartbeat,
+    AIJob,
     EvidenceReview,
+    Loop,
     RequirementEvidence,
     RunDivergence,
     SpecDocument,
@@ -281,12 +283,49 @@ async def _latest_heartbeats_by_agent(
     return heartbeats
 
 
+async def _authorize_loop_task_creation(
+    session: AsyncSession, project_id: str, loop_id: str, actor: Actor
+) -> None:
+    """Who may add a task directly to a loop's queue (`2026-08-18-a-loop-writes-its-own-queue`,
+    design D1/D7/D8).
+
+    D8 collapses "creator" into `Loop`'s own `AIJob.agent` — there is no separate creator field,
+    deliberately, so the operator is always exempt and every other caller is measured against that
+    one string. D7 layers an extra gate on top for that same agent once its loop has fired at
+    least once: authoring a queue before the first fire is indistinguishable from `create_loop`
+    itself accepting one, but adding to it after the loop is running needs the operator.
+    """
+    loop = await session.get(Loop, loop_id)
+    if loop is None or loop.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Loop not found")
+    if actor.is_operator:
+        return
+    job = await session.get(AIJob, loop.job_id)
+    if job is None or actor.agent != job.agent:
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "Only this loop's creator, or the operator, may add tasks to its queue "
+                "directly. Use send_message to ask the creator to add it instead."
+            ),
+        )
+    if job.run_count > 0:
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "This loop has already fired at least once — adding directly to its own queue "
+                "now needs operator approval."
+            ),
+        )
+
+
 async def create_task_for_actor(
     body: TaskCreate,
     *,
     project_id: str,
     assigner: Optional[str],
     created_by_run_id: Optional[str],
+    actor: Actor,
     session: AsyncSession,
 ) -> TaskResponse:
     # Honor a client-supplied id when present so the MCP `create_task` tool
@@ -297,6 +336,9 @@ async def create_task_for_actor(
     # transitions can reach it. This is the single `Task(` construction site, so one guard covers
     # both the operator route and the agent plane.
     guard_entry_status(body.status)
+
+    if body.loop_id is not None:
+        await _authorize_loop_task_creation(session, project_id, body.loop_id, actor)
 
     # Resolved before the task exists. A create that stored the task and then refused its
     # requirements would leave work on the board whose author believes it is linked.
@@ -339,6 +381,7 @@ async def create_task_for_actor(
         notes=body.notes,
         created_by_run_id=created_by_run_id,
         spec_document_id=spec_document_id,
+        loop_id=body.loop_id,
     )
     session.add(task)
     try:
@@ -399,6 +442,7 @@ async def create_task(
         project_id=project_id,
         assigner=body.assigner,
         created_by_run_id=None,
+        actor=operator(),
         session=session,
     )
 

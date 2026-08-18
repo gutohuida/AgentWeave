@@ -50,6 +50,10 @@ class TaskCreate(BaseModel):
     # Which document's identifiers to resolve against. Identifiers are minted per document, so a
     # bare `FR-8` is ambiguous where two documents declare one; this is how a caller says which.
     spec_document: Optional[str] = Field(default=None, max_length=255)
+    # Adds this task directly to a loop's queue (design D1, `2026-08-18-a-loop-writes-its-own-
+    # queue`). Gated in `create_task_for_actor`: only the loop's own `AIJob.agent`, or the
+    # operator, may supply this — never trusted from the field alone.
+    loop_id: Optional[str] = Field(default=None, max_length=64)
     acceptance_criteria: Optional[List[Any]] = None
     deliverables: Optional[List[Any]] = None
     notes: Optional[Any] = None

@@ -572,3 +572,53 @@ Corrected the file's own top-of-file summary line ("Sections 1-3" → "Sections 
 
 Committed, pushed. `current`/`next_action` now point at **L5** (creator authorship gate on
 `create_task`, tasks 5.1-5.4) — the queue's own written order, continuing through the L-series.
+
+## Entry 7 — 2026-08-18T23:39+01:00 — L5 done, creator authorship gate on `create_task`
+
+Branch and `git log` matched STATE.json exactly on read (`b9e8304` at HEAD, iteration 6's release
+heartbeat). Continued straight to the queued `next_action`: loop change section 5, the creator
+authorship gate on direct `create_task(loop_id=...)` calls.
+
+**Re-derived D7 against D8's collapse before writing anything, per `next_action`'s own warning not
+to trust its paraphrase.** Design D8 leaves no field on `Loop`/`AIJob` for "creator" distinct from
+`AIJob.agent` — so `_authorize_loop_task_creation` (new, `hub/hub/api/v1/tasks.py`) implements the
+whole gate as two checks against that one string: the operator always passes; any other caller must
+equal `AIJob.agent` (403 naming `send_message` otherwise); and that same caller, having matched, is
+refused (403 naming operator approval) once the job's `run_count > 0`, with the operator exempt from
+that second gate too. Worked out — and wrote into the tasks.md dated note — why this makes D7's own
+"general case: only the creator adds tasks" phrase reduce to "the operator," and why that's not a
+bug: D8's collapse makes every non-operator-privileged loop self-created by construction, which is
+exactly the gap the later D10 addendum (queued separately as `LA1`, an explicit per-loop "controller"
+field) exists to close. This change ships D7's narrower version on purpose; D10 generalises it later.
+
+**Touched:** `hub/hub/schemas/tasks.py` (`TaskCreate.loop_id`), `hub/hub/api/v1/agent_actions.py`
+(`AgentTaskCreate.loop_id`, `create_shared_task` now threads `run_actor(actor.run_id, actor.agent)`
+into `create_task_for_actor`), `hub/hub/api/v1/tasks.py` (new `_authorize_loop_task_creation`,
+`create_task_for_actor` gains a required `actor: Actor` parameter and stamps `Task.loop_id`, the
+operator's own `create_task` route passes `actor=operator()`), `hub/hub/mcp_server.py` (`create_task`
+tool gains `loop_id`, forwarded in the POST body).
+
+**Tests:** four new tests in `hub/tests/test_agent_actions_coordination.py` (chosen over
+`test_jobs.py` because it already carries the `_active_run` fixture — a real bound-run bearer token
+per agent identity — which is what exercising `actor` for real, not just at the ORM layer, needs).
+Added a `_loop_with_agent` fixture mirroring `_declaring_loop`/`_make_job`+`_make_loop` rather than
+inventing a fourth shape. First run of the two operator-route tests failed 405 (`POST /api/v1/tasks`
+doesn't exist — the operator's task route is project-scoped, `/api/v1/projects/{id}/tasks`); fixed
+against the `TASKS` constant in `test_evidence_latest_review_signal.py` and reverified.
+
+**Verification, measured:** `pytest hub/tests/test_agent_actions_coordination.py -q` — 23 passed (19
+pre-existing + 4 new). `pytest hub/tests/test_jobs.py hub/tests/test_scheduler.py
+hub/tests/test_spec_declared_tasks.py -q` — 46 passed, 1 skipped (pre-existing cronite skip).
+`pytest hub/tests/test_mcp_body_contract.py hub/tests/test_mcp_tool_schemas.py
+hub/tests/test_mcp_server.py -q` — 53 passed. `ruff check` clean on all four touched files plus the
+test file. `black` reformatted the new test file once (line-wrapping), clean after. `mypy` on the
+four touched files, filtered to their own lines — every error line and count matches
+`.claude/autonomous/mypy-baseline.txt` exactly, zero new. `npx openspec validate --changes --strict`
+— 2/2.
+
+Marked 5.1-5.4 done in `tasks.md` with the dated note above (fuller version there), corrected the
+file's own summary line ("Sections 1-4" → "Sections 1-5").
+
+Committed, pushed. `current`/`next_action` now point at **L6** (claiming the current item,
+`hub/hub/scheduler.py`, tasks 6.1-6.3) — a materially different surface (scheduler firing logic) from
+everything L1-L5 touched (API routes and schemas).
