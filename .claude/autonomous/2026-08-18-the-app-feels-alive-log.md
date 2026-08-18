@@ -2132,3 +2132,75 @@ this run's last eight iterations is complete. If a next iteration continues Q11/
 right next unit is one of those three reconciliations, `agent-stream-events` first (the most
 load-bearing of the three, referenced by several findings across this pass and earlier ones). Runway
 to `stop_at` (2026-08-18T08:00+01:00) is roughly 1h30m.
+
+## Iteration 24 (2026-08-18T06:45+01:00) — Q11/roadmap #8, second half: `agent-stream-events` reconciliation
+
+16.2's own task text names three specs directly — `agent-stream-events`, `runtime-diagnostics`,
+`agent-conversation-handoff` — separately from the ten delta specs iterations 16–23 spent eight
+iterations mapping. None of the three is one of this umbrella's ten deltas; all three are *current*
+specs the 2026-08-03 `single-runtime` note already claims to have synced. 16.2's text is asking a
+different question about them: does that sync still hold against what actually shipped since? This
+iteration did the first of the three, `agent-stream-events`, the most load-bearing per iteration 23's
+own note.
+
+**Method, deliberately different from iterations 16–23.** There is no delta spec to diff against —
+the comparison is the current spec's own 19 requirements versus live code, requirement by
+requirement, the same shape those iterations used for the *delta* specs but here aimed at whether a
+week-old sync (2026-08-11) is still accurate rather than whether a month-old delta ever landed.
+
+**Every requirement checked held, exactly.** Concrete numeric and structural claims were checked
+directly rather than trusted from memory of the codebase: the closed seven-kind taxonomy
+(`text`/`thinking`/`tool_use`/`tool_result`/`status`/`diagnostic`/`error`) matches
+`hub/hub/schemas/agents.py:11-19`'s `StreamEventKind` literal verbatim. The 64 KiB payload bound and
+8 KiB tool-result bound match `hub/hub/runner_events.py:23-24`'s `MAX_PAYLOAD_BYTES` /
+`MAX_TOOL_RESULT_BYTES` exactly. "Chat history preserves stream semantics" holds —
+`agent_chat.py:64,162` carries `output_kind` through the projection rather than flattening to plain
+content. The two newest-looking requirements in the spec text, "A turn renders in execution order"
+and "Each work block carries independent state" (grouped, independently-expandable tool blocks), are
+not just specified but actually implemented, confirmed by grep hits in `agentTimelineModel.ts` and
+`AgentTimeline.tsx`. "Shared stream renderer" holds too, once "spec chat" was traced to what it
+actually is: not a fourth component, but the same conversation view with a document attached,
+rendered through the identical `AgentOutputPanel`/`AgentTimeline` path as the output panel and
+activity tab — confirmed by grep, no `SpecChat`-named component exists anywhere.
+
+**One observation recorded, explicitly not a violation.** The `diagnostic` event kind is fully wired
+on the UI consumer side — `agentTimelineModel.ts:8` groups it with `status` as a result-rendered kind,
+`AgentTimeline.tsx:536` treats it as error-styled — but grepping every producer site in `hub/hub/`
+and `src/agentweave/stream_events.py` found `diagnostic_event()` (`stream_events.py:556`) defined and
+never called, anywhere. Checked this against the only two scenarios that could require it —
+"Provider adds a new event type" and "Stream line is malformed" — and both say the Hub SHALL emit a
+diagnostic *or* a readable fallback. `parse_claude_line`'s malformed-JSON branch
+(`runner_parsing.py:235-239`) takes the fallback path, wrapping the raw line as a `text_event`. That
+is spec-compliant; the `diagnostic` kind is simply the half of an either/or that nothing currently
+exercises. Worth remembering the next time diagnostics never appear in the UI's own hide-diagnostics
+toggle during testing — it is not broken, it has never had a producer to be broken.
+
+**One thing noted and deliberately left out of scope.** `git log --since=2026-08-11` on this spec's
+own code (`runner_parsing.py`, `agentTimelineModel.ts`, `AgentTimeline.tsx`) turns up several real,
+shipped changes since the last sync — Markdown message rendering, an edit-diff view for tool calls,
+tool-call icons, and this run's own Q2 (no end-of-turn text). All of them belong to
+`openspec/changes/2026-08-16-conversation-formatting-and-quick-nav`, a separate, still-open change
+with its own future archive-and-sync step. They are not this umbrella's content and not evidence
+against `agent-stream-events` today — noted here only so a future reconciliation of *that* change
+does not have to rediscover which files moved.
+
+**Conclusion: `agent-stream-events` needs no changes to reconcile with current behaviour.** One dated
+note added under 16.2 in `openspec/changes/2026-07-30-hub-native-experience/tasks.md` (44 lines, the
+only file touched this iteration). No checkbox ticked, no code changed, per the file's own
+reconciliation rule.
+
+**Verified before committing:** re-read `agent-stream-events/spec.md` in full (284 lines) rather than
+trusting a grep-and-skim; every code citation above was opened and read at the cited lines, not
+assumed from a prior iteration's memory; `git diff --stat` showed exactly the one file, 44 insertions.
+`git status --short` showed only that plus the carried-forward `spec/` and `hub/seed_taste_doc.py`
+scratch, staged nothing from them.
+
+**Tree state before commit:** `openspec/changes/2026-07-30-hub-native-experience/tasks.md` modified
+(1 new note, 44 lines); `.claude/autonomous/STATE.json` updated (iteration, heartbeat, Q11 done_note,
+next_action); `spec/` and `hub/seed_taste_doc.py` (prior-session scratch) untouched.
+
+**Queue status:** Q1–Q10 done. Q11 — roadmap #7 stays parked. Roadmap #8: the eight-delta mapping
+from iterations 16–23 is finished; this iteration started the three-current-spec half 16.2's own text
+also names, closing `agent-stream-events` with no gap found. Two remain — `runtime-diagnostics`,
+`agent-conversation-handoff` — `runtime-diagnostics` next if a future iteration continues this. Runway
+to `stop_at` (2026-08-18T08:00+01:00) is roughly 1h.

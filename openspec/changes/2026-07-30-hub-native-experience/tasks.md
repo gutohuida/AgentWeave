@@ -2467,6 +2467,50 @@ being built twice.*
 > for a decision. 16.1 (scenario exercise) and 16.3 (archive) remain separate, larger asks that stay
 > the operator's call.
 
+> **Update (2026-08-18, iteration 24) — `agent-stream-events` reconciliation, first of the three
+> named directly by 16.2's own task text.** This is a different check from iterations 16–23: those
+> mapped this umbrella's *delta specs* against `openspec/specs/`; `agent-stream-events`,
+> `runtime-diagnostics`, and `agent-conversation-handoff` are not among this umbrella's ten deltas at
+> all — they are *current* specs the 2026-08-03 `single-runtime` note already claims to have synced,
+> and 16.2's text asks whether they still match "their new behaviour" since. So this pass checked
+> `agent-stream-events/spec.md` (19 requirements, last touched 2026-08-11) requirement by requirement
+> against live code, not against a delta.
+>
+> **Every requirement checked held.** The closed seven-kind taxonomy matches
+> `hub/hub/schemas/agents.py:11-19`'s `StreamEventKind` literal exactly. The 64 KiB / 8 KiB payload
+> and tool-result bounds match `hub/hub/runner_events.py:23-24`'s `MAX_PAYLOAD_BYTES` /
+> `MAX_TOOL_RESULT_BYTES` exactly. Chat history projection retains `output_kind`
+> (`agent_chat.py:64,162`), confirming "Chat history preserves stream semantics." The two newest
+> requirements in the spec text, "A turn renders in execution order" and "Each work block carries
+> independent state," are both implemented in `agentTimelineModel.ts` / `AgentTimeline.tsx`, not just
+> specified. "Shared stream renderer" holds: spec chat is not a fourth component, it is a
+> conversation with a document attached, rendered through the same `AgentOutputPanel` /
+> `AgentTimeline` path as the output panel and activity tab — confirmed by grep, no separate
+> `SpecChat`-named component exists.
+>
+> **One observation, not a violation.** The `diagnostic` event kind is fully wired on the consumer
+> side — `agentTimelineModel.ts:8` and `AgentTimeline.tsx:536` both branch on it — but no producer
+> anywhere in `hub/hub/` or `src/agentweave/stream_events.py` ever constructs one (`diagnostic_event()`
+> at `stream_events.py:556` is defined and never called). Checked against the two scenarios that could
+> require it: "Provider adds a new event type" and "Stream line is malformed" both say the Hub SHALL
+> emit a diagnostic *or* a readable fallback — `parse_claude_line`'s malformed-JSON branch
+> (`runner_parsing.py:235-239`) takes the fallback option, wrapping the raw line as a `text_event`.
+> That satisfies the requirement as written; the `diagnostic` kind is simply the unused half of an
+> "either/or." Worth knowing if a future pass wonders why diagnostics never appear in the UI's own
+> hide-diagnostics toggle — it is not broken, it has never had a producer.
+>
+> **Out of scope, noted for later.** `git log --since=2026-08-11` on this spec's own code
+> (`runner_parsing.py`, `agentTimelineModel.ts`, `AgentTimeline.tsx`) surfaces several real, shipped
+> UI changes since the last sync — Markdown message rendering, an edit-diff view for tool calls,
+> tool-call icons, and this run's own Q2 (no end-of-turn text). All belong to
+> `openspec/changes/2026-08-16-conversation-formatting-and-quick-nav`, a separate, still-open change
+> with its own future archive-and-sync step — not this umbrella's ten deltas, and not evidence against
+> `agent-stream-events` today. Flagging it here only so a future reconciliation of *that* change does
+> not have to rediscover which files moved.
+>
+> **`agent-stream-events` needs no changes to reconcile with current behaviour.** Two of the three
+> 16.2-named specs remain: `runtime-diagnostics`, `agent-conversation-handoff`.
+
 - [ ] 16.1 Confirm every scenario in the ten delta specs is exercised.
 - [ ] 16.2 Sync delta specs into `openspec/specs/`; reconcile `agent-stream-events`,
       `runtime-diagnostics`, and `agent-conversation-handoff` with their new behaviour.
