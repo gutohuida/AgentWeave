@@ -57,17 +57,67 @@ section 2's job, and the bundle is byte-identical because of it.
       (`panel-empty-state`) renders when no tabs are open, satisfying the task-8 user-guide's "not an
       empty grey box" requirement; which of 2.1's two allowed readings (shell renders empty vs. shell
       does not open) was chosen is recorded there, not guessed at.
-- [ ] 2.2 Move `ConversationView.tsx`'s panel-hosting block (`:150-291`) into the shell. Do **not**
+- [x] 2.2 Move `ConversationView.tsx`'s panel-hosting block (`:150-291`) into the shell. Do **not**
       rewrite `SpecDocumentPanel`'s internals — this is a re-hosting, and the breadcrumb, archived
       marker, phase and coverage bars, proposals panel, `SpecFrame` bridge and outline rail must all
       still work afterwards.
-- [ ] 2.3 Generalize the breakpoint: compute the combined minimum from the **visible tab's** own
+
+      Done 2026-08-18. `ConversationView` now renders `<PanelShell>` with `availableTabs={[]}`
+      instead of a bare `<SpecDocumentPanel>`; `renderTabContent`/`describeTab` construct that same
+      `SpecDocumentPanel` unchanged, so its internals were never touched. `availableTabs` is empty
+      on purpose — the plus affordance has nothing to offer until section 3 gives the shell a
+      `specs` index tab.
+
+      **Chose the *path-keyed*, single-tab reading, stated explicitly per the queue's instruction
+      not to guess between the two.** This component only ever knew a document *path* (`document:
+      string | null`), never a document id, so the tab it opens is keyed `spec:<path>` rather than
+      `spec:<document_id>` — a real `SpecTabId` by the type (the union is a plain template-literal
+      string), but not yet the durable, rename-surviving key section 3 will switch to once it has
+      an id to key by. Two effects keep the destination (`document` prop) and the store in sync in
+      both directions: opening/changing `document` opens (and closes the previous) tab; closing the
+      tab from the strip calls `onOpenDocument(null)`, reading the store's *live* state
+      (`usePanelTabsStore.getState()`) rather than a possibly one-commit-stale subscribed value, so
+      the two effects cannot race each other when `document` changes in the same render.
+
+      **An honest, unscoped observation, not a bug to fix here:** because the store persists tabs
+      per project independent of this component's lifecycle, navigating away from a conversation
+      entirely and back to a *different* one that opens a *different* document can leave the first
+      document's tab present alongside the new one (only the active one is closed/opened on a
+      `document` prop change within the same mounted instance; a fresh mount does not know about a
+      previous instance's last document to close it). This is section 1's per-project tab memory
+      working as designed, surfacing earlier than section 3's real multi-tab UI — not a defect, but
+      recorded here since it was not this task's use case to solve, and it means the shell can show
+      more than the "one tenant" framing above suggests even before section 3 lands.
+- [x] 2.3 Generalize the breakpoint: compute the combined minimum from the **visible tab's** own
       minimum rather than `SPEC_DOC_MIN_WIDTH` specifically, keeping it *derived* so threshold and
       layout cannot disagree (`ConversationView.tsx:34-38`).
-- [ ] 2.4 Overlay below the breakpoint using the existing `Drawer`, with the reopen affordance kept.
+
+      Done 2026-08-18. Added `minWidthForTabKind(kind: TabKind | null): number` to
+      `specPreferences.ts` — today every kind (`spec`, `specs`, `file`, `files`, `null`) resolves to
+      `SPEC_DOC_MIN_WIDTH`, because `files` has no measured minimum of its own until task 5.5, but
+      the breakpoint, `conversationMax`'s subtraction, and the document-pane's own `minWidth` style
+      all now read from this one function keyed off the *actual visible tab's* kind
+      (`tabKind(panelActiveTabId)`) rather than the constant directly — the three cannot drift apart
+      the way the three-column workspace's did. `DOCUMENT_COLUMN_BREAKPOINT` stays exported as a
+      constant (`minWidthForTabKind('spec')`-derived) because every existing caller and test only
+      ever has a spec tab open; the component itself computes the real, tab-derived threshold
+      (`documentColumnBreakpoint`) rather than reading the export.
+- [x] 2.4 Overlay below the breakpoint using the existing `Drawer`, with the reopen affordance kept.
       Dismissing the overlay keeps the tabs.
-- [ ] 2.5 Width stays `specPreferences.ts`'s single global value. Extend that store; do not invent a
+
+      Unchanged behaviourally from before this task — the `Drawer`/overlay logic already existed
+      and already kept the destination's `document` (and now the store's tab) across a dismiss; this
+      task's only change was making the drawer's `width` read from the same derived minimum as 2.3
+      rather than `SPEC_DOC_MIN_WIDTH` directly. Verified live: narrowing to 700px (below the
+      741px breakpoint) shows the drawer with the shell inside; Escape dismisses it; the reopen
+      button restores it with the same tab still present (Playwright, see task list section 8/PW1).
+- [x] 2.5 Width stays `specPreferences.ts`'s single global value. Extend that store; do not invent a
       second one.
+
+      No second store: `minWidthForTabKind` and `DOCUMENT_COLUMN_BREAKPOINT` both live in
+      `specPreferences.ts` beside `SPEC_DOC_MIN_WIDTH`/`CONVERSATION_MIN_WIDTH`, and the
+      conversation-column width itself is still the one `conversationWidth` preference — unchanged
+      by this task.
 - [x] 2.6 Keyboard: ARIA `tablist`, sequential focus, `Enter`/`Space` to activate, arrow keys between
       tabs, close control reachable, plus menu navigable. Design D11 — nothing here to inherit.
 

@@ -59,6 +59,9 @@ vi.mock('@/api/agents', () => ({
 }))
 
 import { ConversationView } from '@/components/agents/ConversationView'
+import { usePanelTabsStore } from '@/store/panelTabsStore'
+
+const PROJECT_ID = 'proj-drift-report-test'
 
 let queryClient: QueryClient
 
@@ -80,6 +83,7 @@ function renderPanel(document: string | null = 'spec/spec.html') {
       <ConversationView
         agent={agent}
         conversationId="conv-1"
+        projectId={PROJECT_ID}
         document={document}
         onSelectConversation={() => {}}
         onOpenDocument={() => {}}
@@ -93,6 +97,8 @@ function renderPanel(document: string | null = 'spec/spec.html') {
 describe('the document panel — manifest drift report', () => {
   beforeEach(() => {
     cleanup()
+    localStorage.clear()
+    usePanelTabsStore.setState({ projects: {} })
     queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     specListResult = {
       data: {

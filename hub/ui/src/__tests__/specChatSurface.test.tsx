@@ -122,6 +122,9 @@ vi.mock('@/api/modelCatalog', async (importOriginal) => {
 })
 
 import { ConversationView } from '@/components/agents/ConversationView'
+import { usePanelTabsStore } from '@/store/panelTabsStore'
+
+const PROJECT_ID = 'proj-chat-surface-test'
 
 const fetchMock = vi.fn()
 ;(globalThis as unknown as { fetch: ReturnType<typeof vi.fn> }).fetch = fetchMock
@@ -162,6 +165,7 @@ function renderChat(
       <ConversationView
         agent={SPECCER}
         conversationId={conversationId}
+        projectId={PROJECT_ID}
         document={documentPath}
         onSelectConversation={() => {}}
         onOpenDocument={onOpenDocument}
@@ -198,6 +202,8 @@ async function send(text: string) {
 
 beforeEach(() => {
   cleanup()
+  localStorage.clear()
+  usePanelTabsStore.setState({ projects: {} })
   queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   conversations = []
   openQuestions = []

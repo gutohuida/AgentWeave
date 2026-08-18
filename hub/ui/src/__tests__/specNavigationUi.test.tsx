@@ -53,6 +53,9 @@ vi.mock('@/components/agents/AgentOutputPanel', () => ({
 vi.mock('@/api/client', () => ({ fetchWithAuth: vi.fn() }))
 
 import { ConversationView } from '@/components/agents/ConversationView'
+import { usePanelTabsStore } from '@/store/panelTabsStore'
+
+const PROJECT_ID = 'proj-spec-navigation-test'
 
 let queryClient: QueryClient
 let openedDocuments: (string | null)[]
@@ -77,6 +80,7 @@ function renderView(document: string | null = ROADMAP) {
       <ConversationView
         agent={agent}
         conversationId="conv-1"
+        projectId={PROJECT_ID}
         document={document}
         onSelectConversation={() => {}}
         onOpenDocument={(path) => openedDocuments.push(path)}
@@ -89,6 +93,8 @@ function renderView(document: string | null = ROADMAP) {
 
 beforeEach(() => {
   cleanup()
+  localStorage.clear()
+  usePanelTabsStore.setState({ projects: {} })
   openedDocuments = []
   queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   specListResult = {

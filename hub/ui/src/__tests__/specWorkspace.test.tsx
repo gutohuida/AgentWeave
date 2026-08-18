@@ -49,6 +49,9 @@ vi.mock('@/components/agents/AgentOutputPanel', () => ({
 }))
 
 import { ConversationView, DOCUMENT_COLUMN_BREAKPOINT } from '@/components/agents/ConversationView'
+import { usePanelTabsStore } from '@/store/panelTabsStore'
+
+const PROJECT_ID = 'proj-workspace-test'
 
 // The global stub never fires. Capture the callbacks so a test can report a width and drive the
 // real layout-selection path.
@@ -86,6 +89,7 @@ const agent: AgentSummary = {
 beforeEach(() => {
   cleanup()
   localStorage.clear()
+  usePanelTabsStore.setState({ projects: {} })
   observers = []
   queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   ;(globalThis as unknown as { ResizeObserver: unknown }).ResizeObserver = ControllableResizeObserver
@@ -106,6 +110,7 @@ function renderView(document: string | null = HOME) {
       <ConversationView
         agent={agent}
         conversationId="conv-1"
+        projectId={PROJECT_ID}
         document={document}
         onSelectConversation={() => {}}
         onOpenDocument={onOpenDocument}

@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button'
 import { Drawer } from '@/components/layout/Drawer'
 import { PaneResizer } from '@/components/layout/PaneResizer'
 import { useWorkspaceWidth } from '@/components/layout/useWorkspaceWidth'
+import { PanelShell, type PanelTabDescriptor } from '@/components/spec/PanelShell'
 import { SpecDocumentPanel } from '@/components/spec/SpecDocumentPanel'
 import { SpecDocumentPicker } from '@/components/spec/SpecDocumentPicker'
 import { buildInventory } from '@/components/spec/specNavigation'
@@ -19,27 +20,42 @@ import {
   CONVERSATION_DEFAULT_WIDTH,
   CONVERSATION_MIN_WIDTH,
   DEFAULT_SPEC_PREFERENCES,
-  SPEC_DOC_MIN_WIDTH,
   loadSpecPreferences,
+  minWidthForTabKind,
   saveSpecPreferences,
 } from '@/components/spec/specPreferences'
+import {
+  isSpecTabId,
+  selectProjectPanel,
+  specDocumentId,
+  specTabId,
+  tabKind,
+  usePanelTabsStore,
+  type PanelTab,
+  type TabId,
+} from '@/store/panelTabsStore'
 import { AgentOutputPanel } from './AgentOutputPanel'
 
 /** What a divider costs the row. `PaneResizer` is an 11px strip with -5px margins either side. */
 const DIVIDER_WIDTH = 1
 
 /**
- * Below this the two columns stop fitting and the document becomes an overlay.
- *
- * Derived from what has to fit rather than written down, so changing either minimum cannot leave
- * the breakpoint and the layout disagreeing — the mistake the three-column workspace made once.
+ * Below this the two columns stop fitting and the document becomes an overlay, when a specification
+ * document is the tab on screen — the only kind the shell can host until the files tab (section 5
+ * of `2026-08-18-one-shell-three-panels`) exists. `ConversationView` itself computes the *real*
+ * threshold from whichever tab is actually visible (`minWidthForTabKind`, same source as the pane's
+ * own `minWidth`); this export is the spec-tab case of that, kept as a constant because every test
+ * and caller that reads it today only ever has a spec tab open.
  */
 export const DOCUMENT_COLUMN_BREAKPOINT =
-  CONVERSATION_MIN_WIDTH + SPEC_DOC_MIN_WIDTH + DIVIDER_WIDTH
+  CONVERSATION_MIN_WIDTH + minWidthForTabKind('spec') + DIVIDER_WIDTH
 
 interface ConversationViewProps {
   agent: AgentSummary
   conversationId: string | null
+  /** The project this conversation belongs to — the panel shell's tab configuration is
+   *  per-project (`panelTabsStore`), keyed by this id. */
+  projectId: string
   /** The specification document open beside this conversation, from the destination. */
   document: string | null
   onSelectConversation: (conversationId: string | null) => void
@@ -64,6 +80,7 @@ interface ConversationViewProps {
 export function ConversationView({
   agent,
   conversationId,
+  projectId,
   document,
   onSelectConversation,
   onOpenDocument,
@@ -121,8 +138,50 @@ export function ConversationView({
     })
   }, [])
 
+  /* Task 2.2/3's shell has exactly one tenant so far: the document panel this component already
+   * hosted, wrapped as a `spec:<path>`-shaped tab. It is keyed by *path*, not the document id
+   * section 3 will key real spec tabs by (`specTabId` accepts either — the type is a plain
+   * string) — a deliberate, temporary shape, since this component only ever knew a path. Section
+   * 3 (specs as the shell's first tenant, id-keyed, multi-document) replaces this sync, not just
+   * extends it. */
+  const openTab = usePanelTabsStore((state) => state.openTab)
+  const closeTab = usePanelTabsStore((state) => state.closeTab)
+  const panelTabs = usePanelTabsStore((state) => selectProjectPanel(state, projectId).tabs)
+  const panelActiveTabId = usePanelTabsStore(
+    (state) => selectProjectPanel(state, projectId).activeTabId,
+  )
+
+  // Destination -> store: the document the operator navigated to becomes the shell's one tab.
+  // Keyed off the previous *document*, not the store, so this never races the effect below.
+  const previousDocumentRef = useRef<string | null>(null)
+  useEffect(() => {
+    const previous = previousDocumentRef.current
+    previousDocumentRef.current = document
+    if (previous === document) return
+    if (previous) closeTab(projectId, specTabId(previous))
+    if (document) openTab(projectId, specTabId(document))
+  }, [projectId, document, openTab, closeTab])
+
+  // Store -> destination: closing the tab from the strip closes the document. Reads the store's
+  // live state rather than `panelTabs` at the time this effect was scheduled, so it is correct
+  // even when both effects fire in the same commit (the effect above closing/opening a tab does
+  // not make `panelTabs` here stale-but-trusted).
+  useEffect(() => {
+    if (!document) return
+    const stillOpen = selectProjectPanel(usePanelTabsStore.getState(), projectId).tabs.some(
+      (tab) => tab.id === specTabId(document),
+    )
+    if (!stillOpen) onOpenDocument(null)
+  }, [document, projectId, onOpenDocument, panelTabs])
+
   const documentOpen = document !== null
-  const fitsAsColumn = measuredWidth === null || measuredWidth >= DOCUMENT_COLUMN_BREAKPOINT
+  // Derived from whichever tab kind is actually visible — today that can only be a `spec` tab
+  // (files are section 5), but computing it this way means the breakpoint below never has to be
+  // touched again once a second kind exists; it already reads the same source the pane's own
+  // `minWidth` reads.
+  const visibleTabMinWidth = minWidthForTabKind(panelActiveTabId ? tabKind(panelActiveTabId) : null)
+  const documentColumnBreakpoint = CONVERSATION_MIN_WIDTH + visibleTabMinWidth + DIVIDER_WIDTH
+  const fitsAsColumn = measuredWidth === null || measuredWidth >= documentColumnBreakpoint
 
   /* What the conversation may take without pushing the document below its minimum.
    *
@@ -134,7 +193,7 @@ export function ConversationView({
   const conversationMax =
     measuredWidth === null
       ? CONVERSATION_DEFAULT_WIDTH
-      : Math.max(CONVERSATION_MIN_WIDTH, measuredWidth - SPEC_DOC_MIN_WIDTH - DIVIDER_WIDTH)
+      : Math.max(CONVERSATION_MIN_WIDTH, measuredWidth - visibleTabMinWidth - DIVIDER_WIDTH)
   const conversationWidth = Math.min(preferences.conversationWidth, conversationMax)
 
   // The overlay is opened by opening a document and closed by the operator; the document stays in
@@ -151,16 +210,41 @@ export function ConversationView({
     void refetchList()
   }, [refetchList])
 
+  // The shell's one tenant for now (task 2.2): the document panel this component already hosted,
+  // wrapped as the tab section 1's store expects. `availableTabs` is empty — there is nothing else
+  // to add via the plus affordance until section 3 gives the shell a `specs` index tab.
+  const describePanelTab = useCallback(
+    (id: TabId): PanelTabDescriptor => {
+      const path = isSpecTabId(id) ? specDocumentId(id) : id
+      const node = inventory.byPath.get(path)
+      return { id, label: node?.title ?? path, icon: 'article' }
+    },
+    [inventory],
+  )
+  const renderPanelTabContent = useCallback(
+    (tab: PanelTab) => {
+      if (!isSpecTabId(tab.id)) return null
+      return (
+        <SpecDocumentPanel
+          path={specDocumentId(tab.id)}
+          inventory={inventory}
+          specList={specList}
+          listLoading={listLoading}
+          onSelectPath={(path) => onOpenDocument(path)}
+          onOpenPicker={openPicker}
+          onClose={() => onOpenDocument(null)}
+          onRefresh={handleRefresh}
+        />
+      )
+    },
+    [inventory, specList, listLoading, onOpenDocument, openPicker, handleRefresh],
+  )
   const panel = document ? (
-    <SpecDocumentPanel
-      path={document}
-      inventory={inventory}
-      specList={specList}
-      listLoading={listLoading}
-      onSelectPath={(path) => onOpenDocument(path)}
-      onOpenPicker={openPicker}
-      onClose={() => onOpenDocument(null)}
-      onRefresh={handleRefresh}
+    <PanelShell
+      projectId={projectId}
+      availableTabs={[]}
+      describeTab={describePanelTab}
+      renderTabContent={renderPanelTabContent}
     />
   ) : null
 
@@ -272,7 +356,7 @@ export function ConversationView({
           <div
             className="flex min-h-0 min-w-0 flex-1 flex-col"
             data-testid="document-pane"
-            style={{ minWidth: SPEC_DOC_MIN_WIDTH }}
+            style={{ minWidth: visibleTabMinWidth }}
           >
             {panel}
           </div>
@@ -285,7 +369,7 @@ export function ConversationView({
           onOpenChange={setOverlayOpen}
           title="Document"
           side="right"
-          width={SPEC_DOC_MIN_WIDTH}
+          width={visibleTabMinWidth}
           triggerRef={overlayTriggerRef}
         >
           {panel}

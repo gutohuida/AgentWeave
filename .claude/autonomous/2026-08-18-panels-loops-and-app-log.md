@@ -174,3 +174,94 @@ Committed as `77dfd5b` on top of `9e5b961`, pushed. `current`/`next_action` now 
 the width) with the P2a↔section-3 sequencing question named explicitly for whoever picks it up, and
 an explicit instruction to exercise it with Playwright against the live trial Hub once mounted —
 not deferred again.
+
+## Entry 2 — iteration 2: P2b, mounting the shell (2026-08-18 21:45-22:01)
+
+Fresh process. Read `STATE.json`, verified `git log` matched exactly (`352dfd2` release-heartbeat
+tip), confirmed a clean tree before starting. Read `PanelShell.tsx`, `panelTabsStore.ts`,
+`ConversationView.tsx:1-310` and `SpecDocumentPanel.tsx`'s breadcrumb/close section first, per
+`next_action` and `read_first`.
+
+**Work done: P2b — tasks 2.2-2.5 of `2026-08-18-one-shell-three-panels`.**
+
+`ConversationView` now mounts `<PanelShell projectId={projectId} availableTabs={[]} ...>` in place
+of the bare `<SpecDocumentPanel>` it built by hand. `projectId` is a new required prop, threaded
+from `App.tsx`'s `destination.projectId`; four test files that render `ConversationView` directly
+(`specWorkspace`, `specChatSurface`, `specNavigationUi`, `specDriftReport`) got a fixture project id
+and a `usePanelTabsStore.setState({ projects: {} })` reset in `beforeEach`, matching the pattern
+`panelShell.test.tsx` already established.
+
+**The path-keyed, single-tab decision (2.2), stated rather than guessed** — this component only
+ever held a document *path*, never an id, so the tab it opens is `spec:<path>`, not the durable
+`spec:<document_id>` key section 3 will switch to. Two `useEffect`s keep the destination and the
+store in sync both ways: a `document` prop change closes the previous path's tab and opens the new
+one; the tab strip's own close button (which calls the store directly, bypassing `onOpenDocument`)
+is caught by a second effect that re-reads `usePanelTabsStore.getState()` live rather than trusting
+a subscribed value from the same commit — needed because within one render, an effect that just
+called `openTab` has already mutated the module-level store before a *later* effect in the same
+commit runs, but that later effect's own subscribed prop is still the pre-mutation snapshot. Traced
+through by hand before writing it, since a naive "check the subscribed tabs array" version would
+have raced and wrongly nulled the document on every `document` prop change.
+
+**Task 2.3's generalization**, done honestly rather than cosmetically: `specPreferences.ts` gained
+`minWidthForTabKind(kind: TabKind | null): number`, and `ConversationView` now derives its
+breakpoint, `conversationMax`'s subtraction, and the document-pane's own `minWidth` from
+`minWidthForTabKind(tabKind(panelActiveTabId))` — one source, not three places that could disagree.
+Today every kind still resolves to `SPEC_DOC_MIN_WIDTH` (files have no measured minimum until task
+5.5), so behaviourally nothing changed yet — the seam exists for section 5 to fill in, which is what
+"generalize" asked for at this point in the sequence, not a new number. `DOCUMENT_COLUMN_BREAKPOINT`
+stays exported as a constant so the ten-odd existing test assertions that treat it as one keep
+working; the component itself no longer reads that export for its actual layout decision.
+
+**An honest, unscoped observation for whoever picks up section 3**, recorded in `tasks.md` rather
+than silently left for someone to rediscover: because the store persists tabs per project
+independent of this component's lifecycle, a `ConversationView` instance that unmounts (navigating
+away from the conversation destination kind entirely) and remounts on a *different* conversation
+that opens a *different* document can leave the first document's tab sitting in the strip alongside
+the new one — the forward-sync effect only closes the *previous* tab it itself opened, and a fresh
+mount does not know what a previous instance last had open. This is not a bug: it is section 1's
+per-project tab memory doing exactly what it was built to do, surfacing before section 3's real
+multi-tab UI exists to make it legible. Flagging it because 2.2's framing ("the shell's one tenant")
+undersold what can actually appear on screen already.
+
+**Verification, measured — not just vitest this time, per the operator's explicit instruction:**
+- UI vitest: **1028 passed across 102 files** (unchanged from P2a — no tests added here, all
+  existing coverage still green with the new mount).
+- `eslint --max-warnings 0` and `tsc --noEmit`: both clean.
+- `npx openspec validate --changes --strict`: 2/2 changes still pass.
+- **Playwright, against the live trial Hub (`:8010`), for the first time this run — 6 new tests in
+  `hub/tests/browser/test_panel_shell.py`, full package 39 passed** (33 prior + 6 new):
+  the document opens inside the shell with breadcrumb/phase bar intact; the tab strip's own close
+  button closes the document; the narrow-window overlay hosts the shell and survives a
+  dismiss-then-reopen with the same tab; the composer's own "Close the document" pill also tears
+  the shell down (a third close path, unaffected by this task but only correct if it still routes
+  through the same sync); starting from a bare conversation and attaching a document through the
+  Ctrl+K picker mounts the shell (the path most conversations actually take, not just the deep-link
+  `_open` helper); and the ordinary wide-window two-column case. Rebuilt the UI (`npm run build` +
+  `refresh_ui_bundle.py`) before running any of this, and confirmed `/health` no longer reports
+  `ui_stale` — the trial Hub is an editable install, so this was the only step needed for it to serve
+  the new mount.
+- **Which project, and why it had to be a different one than usual:** the browser suite's default
+  fixture (`proj-5e960453`, this repo's own registration) has **zero agents** —
+  `test_command_palette.py` already documents this as a standing gap, since a conversation
+  destination requires one. `proj-b44fac0c` ("Throwaway (taste pass)", already flagged disposable in
+  `STATE.json`) has a real agent (`q2verify`) with a real conversation and a real specification
+  document, so the new tests read from it — never mutating it — rather than creating a throwaway
+  agent in the protected fixture project.
+- ruff (`src/ hub/ tests/`) and black: both clean after removing an unused `pytest` import and
+  accepting black's one reformat of the new test file's long function signature.
+- Did **not** re-run the full `hub/pytest` suite: this iteration touched zero Python besides the new
+  browser-test file (which the browser-suite run above already exercises), so the prior iteration's
+  reasoning for deferring it still holds — inherited from master's last CI measurement, not
+  independently reverified this iteration either.
+
+**Not done, and correctly deferred:** section 3 (specs as the shell's first real, id-keyed,
+multi-document tenant) is the next task — P2b's temporary path-keyed single-document sync is
+explicitly what it replaces, not extends. PW1 (the queue's dedicated Playwright-coverage item) stays
+open rather than being marked done: today's 6 tests cover P2b's re-hosting, not sections 3/4/5's
+tenants, which do not exist yet to test.
+
+Committed, pushed. `current`/`next_action` now point at **P3** (tasks 3.1-3.6: specs as the shell's
+first tenant — a `specs` index tab, id-keyed `spec:` tabs replacing this iteration's path-keyed
+sync, unfusing attach from display per D9, and the 3.6 regression pass this iteration's Playwright
+tests partially anticipated but did not substitute for).

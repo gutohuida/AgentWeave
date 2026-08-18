@@ -9,6 +9,8 @@
 // read them — whether a document is open is now part of the destination, and the Library/History
 // control was deleted along with the navigator column.
 
+import type { TabKind } from '@/store/panelTabsStore'
+
 const STORAGE_KEY = 'aw.spec.presentation.v1'
 
 export interface SpecPreferences {
@@ -32,6 +34,28 @@ export const CONVERSATION_DEFAULT_WIDTH = 480
 /** What the document panel needs before it stops being worth showing as a column. Below
  *  `CONVERSATION_MIN_WIDTH + SPEC_DOC_MIN_WIDTH` the panel becomes an overlay instead. */
 export const SPEC_DOC_MIN_WIDTH = 360
+
+/**
+ * What the *visible panel tab* needs before it stops being worth showing as a column, by kind.
+ *
+ * A single lookup rather than a second constant, so the breakpoint and the pane's own `minWidth`
+ * read from the same source and cannot drift apart — the mistake the three-column workspace made
+ * once, when its threshold and its layout were written down in two places. Every kind but `spec`
+ * falls back to the same number: `files` has no measured minimum of its own yet (task 5.5 of
+ * `2026-08-18-one-shell-three-panels` measures it against the real shell once the files tab
+ * exists), and the index kinds (`specs`, `files`) render a list, not a document, so the document
+ * minimum is a safe, if temporary, floor for them too. `null` covers "no tab is visible yet".
+ */
+export function minWidthForTabKind(kind: TabKind | null): number {
+  switch (kind) {
+    case 'spec':
+    case 'specs':
+    case 'file':
+    case 'files':
+    case null:
+      return SPEC_DOC_MIN_WIDTH
+  }
+}
 
 /** A sanity bound on the *stored* value, not a design decision: the real ceiling is whatever the
  *  measurement leaves once the document has its minimum, and it is applied at render time. This
