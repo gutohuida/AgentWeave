@@ -496,3 +496,72 @@ Nothing implemented; nothing driven live (§10 states this explicitly). `current
 point at Q8 (spec the side panel, full depth, mirroring Q6's format), carrying forward every section
 of this exploration by reference rather than restating it. `time_guard.at_1630` still has real runway
 left at time of writing (~12:48).
+
+## Entry 8 — Q8: the side-panel spec, written unattended
+
+Fresh process, verified branch/log/`git status` against `STATE.json` before starting — matched, tree
+clean except the same two pre-existing untracked leftovers (`spec/`, `hub/seed_taste_doc.py`), neither
+this queue item's concern. Heartbeat was 56 minutes stale at firing start — the release pattern
+working as intended. Started 12:57, comfortably inside `time_guard.at_1630`.
+
+Output: `openspec/changes/2026-08-18-one-shell-three-panels/` — `proposal.md`, `design.md` (D1-D9,
+each with a rejected alternative), `specs/conversation-side-panel/spec.md` (a new capability, 13
+ADDED requirements), `specs/spec-chat-session/spec.md` (1 MODIFIED requirement), `tasks.md` (10
+sections, agent-verifiable/human-only split, ending in a user test guide). Mirrored Q6's change as
+the depth/format precedent throughout, per `next_action`'s own instruction.
+
+**Read Q7's exploration in full first**, then re-verified its load-bearing citations against the
+actual files rather than trusting the exploration's own text: `ConversationView.tsx:1-60`
+(`DOCUMENT_COLUMN_BREAKPOINT`'s derived-not-written comment, the `document` prop's ownership),
+`specPreferences.ts:1-45` (the exact persisted shape — one global `conversationWidth` key),
+`jobs.py`'s `_batch_loop_summaries` candidates query (confirmed `"assigned"` really is missing from
+its `IN` clause, and confirmed via `checkpoints.py`/`task_transitions.py` that two other modules
+already treat it as live), `workspace_paths.py`/`api/v1/workspace.py` (the exact `git ls-files
+--cached --others --exclude-standard` shape, resolved through `project_workspace.
+resolve_project_workspace`), `AgentTimeline.tsx`'s `runVisiblyActive` gate (`:104`), `index.css:708`'s
+blanket reduced-motion rule, and `ComposerSpecControl.tsx`'s docstring/`armed`/`onOpenExisting` shape.
+Every one of Q7's citations checked out exactly as written.
+
+**A new finding this firing, not in Q7's text:** `run_task_binding.py:250-254` already auto-transitions
+a bound task from an entry status to `in_progress` the moment a run binds to it ("The agent is never
+asked, so it cannot forget"). This means the `"assigned"`-status query gap Q7 found — and this
+change's design D6 fixes regardless — may turn out to be a momentary state in practice rather than
+one that persists long enough for the loop tab to routinely observe it. Whether a loop firing's run
+actually goes through that binding path was **not verified this session** — it depends on
+`InboundQueueEntry`-based binding the loop change's own `design.md` D3 does not describe using.
+Decided to fix the query anyway (a query that cannot represent a reachable status is a bug independent
+of how often it is hit) and named the open question explicitly in both `design.md` D6 and
+`proposal.md`'s Non-Goals, rather than either silently assuming the fix is load-bearing or skipping it
+because its impact is uncertain.
+
+**Settled beyond what Q7 left as a recommendation**, each argued with a rejected alternative:
+- **D3 — `SpecDocumentPanel`'s migration is IN this change**, not a prerequisite change first. Q7
+  flagged this as something Q8 had to decide; argued that building the loop/file panels against the
+  shell's final contract from the start is strictly less work than building them against
+  `SpecDocumentPanel`'s current one-off shape and re-plumbing later.
+- **D6 — the file endpoint's exact bounds**, previously unverified per Q7 §10: a 1 MiB size bound,
+  reusing `hub/hub/config.py`'s existing `aw_max_body_size = 1_048_576` rather than inventing a new
+  number, and a first-8,000-bytes NUL-byte binary-detection heuristic matching git's own, chosen
+  because the allowlist is already git-backed. Oversized files are refused, not truncated — argued in
+  deliberate contrast to the loop change's own checkpoint-truncation precedent (D5 there), which is
+  the opposite case: a checkpoint's consumer benefits from partial context, a file viewer's does not.
+- **D8 — motion is scoped to exactly the active-now indicator**, everything else in the loop tab
+  static, argued from T3's own agents-panel precedent (which Q7 already cited but did not turn into a
+  scoping rule).
+- **Kept `spec-chat-session`'s MODIFIED requirement heading unchanged** ("A specification document
+  opens beside a conversation") rather than renaming it to something that reads better on its own —
+  a rename would leave a future `openspec-sync-specs` pass with nothing to match against the archived
+  capability, silently creating an orphan instead of a real modification. Caught by checking the
+  original spec file directly before writing the delta, not assumed.
+
+**Verified, not assumed, before calling it done:** wrote a small Node script checking every
+requirement's first physical line for the SHALL/MUST modal (13 requirements in the new capability, 1
+in the modified one — all passed on the first pass, no wrapped-modal fix needed this time, unlike
+Q6). Ran `npx openspec validate --changes --strict` live: 10/10 changes pass, including this one.
+
+Nothing implemented; no tasks.md box checked; no browser opened. `current`/`next_action` now point at
+Q9 (runway) — `time_guard.at_1630` still has substantial room left (Q8 finished ~13:05). `next_action`
+was rewritten to recommend Q9's items in a practical order (the CLAUDE.md factual corrections first,
+as the lowest-risk and already-drafted item; the two read-only explorations next; the live cheap-model
+turn last and only if the trial Hub is confirmed healthy) rather than leaving the next firing to
+re-derive an order from the queue item's own unordered list.
