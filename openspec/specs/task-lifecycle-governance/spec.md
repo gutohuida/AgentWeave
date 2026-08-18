@@ -953,3 +953,133 @@ what turns that from a theoretical concern into a live one.
 - **AND** the document's rigor is later changed
 - **THEN** the recorded transition still states the policy that applied when it was approved
 
+### Requirement: A task list can be scoped to one loop's queue
+
+The Hub SHALL let a caller of the task list scope the result to exactly the tasks that name one
+loop, and SHALL apply no other filter to that scoped result — an explicit loop scope SHALL show
+every task naming it, regardless of that task's own status.
+
+A scope naming a loop with no queued tasks SHALL return an empty list, and this SHALL NOT be an
+error.
+
+#### Scenario: Scoping to a loop returns exactly its queued tasks
+
+- **WHEN** the task list is requested scoped to one loop
+- **THEN** every task naming that loop is returned
+- **AND** no task naming a different loop, or naming none, is returned
+
+#### Scenario: A loop-scoped view hides nothing regardless of status
+
+- **WHEN** the task list is scoped to a loop that owns a task in a terminal status
+- **THEN** that task is included in the scoped result
+
+### Requirement: A task list can be scoped to one specification document's declared work
+
+The Hub SHALL let a caller of the task list scope the result to exactly the tasks one specification
+document declared, and SHALL apply no other filter to that scoped result — an explicit scope SHALL
+show every task the document declared, regardless of that task's own status or its declaring
+document's phase.
+
+A scope naming a document with no declared tasks SHALL return an empty list, and this SHALL NOT be
+an error.
+
+#### Scenario: Scoping to a document returns exactly its declared tasks
+
+- **WHEN** the task list is requested scoped to one specification document
+- **THEN** every task whose declaring document is that document is returned
+- **AND** no task whose declaring document is a different document is returned
+
+#### Scenario: A scoped view hides nothing regardless of status or phase
+
+- **WHEN** the task list is scoped to a document that is itself archived
+- **AND** that document declared a task whose own status is terminal
+- **THEN** that task is included in the scoped result
+
+### Requirement: The task list's default view retires completed work from archived documents
+
+The Hub SHALL offer a task list mode that excludes a task if, and only if, the task's declaring
+document has reached the `archived` phase and the task's own status is terminal. This exclusion
+SHALL NOT be applied unless the caller asks for it, so a caller that does not ask for it — including
+every caller that existed before this exclusion was added — SHALL see every task exactly as before.
+
+A task with no declaring document SHALL NOT be excluded by this mode, regardless of its status.
+
+An open (non-terminal) task whose declaring document is archived SHALL NOT be excluded by this
+mode — work someone still has to do is not retired because the document that described it was
+tidied away.
+
+This exclusion SHALL NOT alter any task's status, assignee, or any other field. It changes only
+what a request that asks for it is shown.
+
+#### Scenario: A completed task from an archived document is excluded
+
+- **WHEN** the exclusion mode is requested
+- **AND** a task's declaring document is archived
+- **AND** that task's own status is terminal
+- **THEN** that task is absent from the result
+
+#### Scenario: An open task from an archived document is not excluded
+
+- **WHEN** the exclusion mode is requested
+- **AND** a task's declaring document is archived
+- **AND** that task's own status is not terminal
+- **THEN** that task is present in the result
+
+#### Scenario: A task with no declaring document is never excluded
+
+- **WHEN** the exclusion mode is requested
+- **AND** a task has no declaring document
+- **THEN** that task is present in the result regardless of its status
+
+#### Scenario: The exclusion is opt-in
+
+- **WHEN** the task list is requested without asking for the exclusion mode
+- **THEN** every task is returned, including ones the exclusion mode would have hidden
+
+#### Scenario: Exclusion never mutates a task
+
+- **WHEN** the exclusion mode causes a task to be absent from one request's result
+- **THEN** a subsequent unscoped request for that same task returns it with every field unchanged
+
+### Requirement: A task's requirement links are visible where the operator manages the task
+
+The interface presenting a task to the operator SHALL show which specification requirements, if any,
+the task is linked to, without requiring the operator to open the task's full detail first.
+
+Where a linked requirement's only current evidence was rejected, that MUST be visually distinguished
+from a link to a requirement with no such rejection, so a task that looks approvable does not hide a
+refused claim inside it.
+
+#### Scenario: A task's linked requirements are visible on the board
+
+- **WHEN** a task linked to one or more specification requirements is shown on the task board
+- **THEN** the identifiers of its linked requirements are visible without expanding the task
+
+#### Scenario: A rejected requirement's link is visually distinct
+
+- **WHEN** a task is linked to a requirement whose only current evidence was rejected
+- **THEN** that link is shown with a treatment distinct from a link carrying no such rejection
+
+### Requirement: A task's full detail opens in a view sized to hold it
+
+The interface SHALL present a task's full detail — description, acceptance criteria, deliverables,
+notes, and requirement links — in a view sized independently of the task board's column layout, not
+constrained to the width of a board column.
+
+#### Scenario: A task with substantial detail is fully readable when opened
+
+- **WHEN** the operator opens a task carrying a long description, multiple acceptance criteria, and
+  requirement links
+- **THEN** every one of those is rendered without being clipped or requiring the board column's own
+  width
+
+### Requirement: Navigating from a task's requirement link reaches that requirement in its document
+
+Following a task's link to one of its requirements SHALL open the specification document that
+declares it, scrolled to that requirement, not merely to the top of the document.
+
+#### Scenario: Following a requirement link reaches the requirement itself
+
+- **WHEN** the operator follows a task's link to a specific requirement
+- **THEN** the specification document opens with that requirement in view
+
