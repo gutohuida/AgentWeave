@@ -1,302 +1,171 @@
 {
-    "purpose": "Narrowed by the operator mid-run (~10:52): 'Let's ship the fixes and what is ready and deterministic and let's run a explore on the loop and the side panel.' So: land the concrete, measured defects (CI red on two counts, the spec-merge 500 and its false provenance rows, the false ui_stale) and MERGE the parent branch's 70+ commits once CI is green. Then produce two deep explorations -- loops as an agent-usable tool, and the side-panel family with the loop panel designed in detail. NO implementation of loops or the panel this run; the operator will read the designs first.",
-    "branch": "autonomous/2026-08-18-loops-and-side-panels",
-    "parent_branch": "autonomous/2026-08-18-the-app-feels-alive",
-    "parent_sha": "ab7e5fe",
-    "started_at": "2026-08-18T10:40:00+01:00",
-    "stop_at": "2026-08-18T17:00:00+01:00",
-    "stop_when_queue_empties": false,
-    "iteration": 0,
-    "session_stopped": false,
-    "prepared_by": "/autonomous-prep, interactive session 2026-08-18T09:45-10:40+01:00. Intent was fixed with the operator across four rounds of questions BEFORE the queue was written. The spine changed twice during prep because the operator rejected the roadmap's Proposal A on its merits -- see decisions[0]. Every queue item below names real files, verified this session.",
-    "operator_intent": {
-        "asked_for": "REVISED AGAIN ~11:00: 'let's run a explore on the loop then and prepare the spec then we run a explore and spec on the side panel.' So specs ARE in scope -- as openspec changes, at full depth -- but IMPLEMENTATION still is not. Sequence: explore loop, spec loop, explore panel, spec panel. Deterministic fixes still come first (previous instruction, not withdrawn), bounded by time_guard.",
-        "ranked": "Deterministic fixes FIRST and actually landed (Q1-Q4). Explorations second (Q5-Q6), deep rather than broad. Nothing about loops or the panel gets implemented this run.",
-        "philosophy": "The operator framed this explicitly: 'We need to follow the agentweave philosophy of governance and visibility.' A loop that an agent can create is only acceptable if the operator can SEE what it is doing. The panel is not decoration -- it is the governance half of the feature. Design them as one thing.",
-        "original_brief": "'We should have a button that opens the side panel (just like t3 does and other harnesses as well). On top we can click a plus sign and open something else (I strongly recommend you to look at T3 code for this). We could start with a file viewer/navigation of the repo of the project. A loop tab with loop information (with some loop animations and icons we have to explore ui/ux practices and build a screen for this) and the spec that we already have. This could solve also our explore button problem that we have. The explore button is just explore mode and the side panel can opens the spec.' Plus, on loops: 'a loop has a overall goal that once completed it finishes. Either queue exhaustion or time limit. So I guess it could be one of the tools an agent can use. Create it's own loops and a loop has it's own flow of information and execution.'"
+  "purpose": "Operator, 2026-08-18 ~21:05, verbatim: 'I want you to work on both specs. The side panel and the loop. Testing of the UI should be done using playwright. If you finish both specs I want you to work on making the app experience for agentweave better. Having a desktop icon would be nice. You can clear all project from the test hub. The autonomous run should go until 8AM. If all of that is done you can decide on whatever you want to work, fixing anything outstanding or whatever we need.' So: implement BOTH openspec changes in flight, verify UI work with Playwright against the live Hub, and only after both are genuinely done move to app experience (desktop icon named explicitly). Section 1 of the panel change already landed interactively before this run started.",
+  "branch": "autonomous/2026-08-18-panels-loops-and-app",
+  "parent_branch": "panel-shell/2026-08-18-tab-store",
+  "parent_sha": "8d52a93",
+  "parent_note": "The parent is NOT master. It carries panel section 1 (the tab store), built and pushed interactively at 2026-08-18T21:0x. It is itself one commit ahead of master (024bf72). So the morning's diff against master = section 1 + this run.",
+  "started_at": "2026-08-18T21:25:24+01:00",
+  "stop_at": "2026-08-19T08:00:00+01:00",
+  "stop_when_queue_empties": false,
+  "iteration": 0,
+  "session_stopped": false,
+  "last_heartbeat": null,
+  "prepared_by": "/autonomous-prep, interactive session 2026-08-18T20:55-21:30+01:00. Intent was fixed with the operator BEFORE reading the handoff or the git log. Environment was measured, not assumed: browser suite 33 passed against the live Hub, ruff clean, black clean (403 files), openspec 2 changes + 32 specs strict-valid, mypy baselined at 361 pre-existing errors, trial Hub confirmed serving this repo via an editable install.",
+
+  "operator_intent": {
+    "both_specs": "Work BOTH openspec changes. Do not spend the whole night on one. The queue interleaves them deliberately.",
+    "ui_testing": "Playwright, against the live Hub. Not just vitest.",
+    "then_app_experience": "ONLY after both specs are genuinely done. Desktop icon named explicitly as something they'd like.",
+    "then_free_choice": "After all of that, the run picks its own work — outstanding fixes or whatever is needed.",
+    "stop": "08:00 on 2026-08-19."
+  },
+
+  "queue": [
+    {"id": "P2a", "title": "Panel shell: component skeleton, tab strip, keyboard (tasks 2.1, 2.6, 2.7)", "status": "open"},
+    {"id": "P2b", "title": "Panel shell: re-host ConversationView's panel block (tasks 2.2-2.5)", "status": "open"},
+    {"id": "P3",  "title": "Panel: specs as the shell's first tenant (tasks 3.1-3.6)", "status": "open"},
+    {"id": "PW1", "title": "Playwright coverage for the shell against the live Hub", "status": "open"},
+    {"id": "L1",  "title": "Loop: migration + model (tasks 1.1-1.3, 2.1-2.2)", "status": "open"},
+    {"id": "L3",  "title": "Loop: spec materialisation stamps loop_id (tasks 3.1-3.2)", "status": "open"},
+    {"id": "L4",  "title": "Loop: declaring a source document, 409 on conflict (tasks 4.1-4.2)", "status": "open"},
+    {"id": "L5",  "title": "Loop: creator authorship gate (tasks 5.1-5.4)", "status": "open"},
+    {"id": "L6",  "title": "Loop: claiming the current item (tasks 6.1-6.3)", "status": "open"},
+    {"id": "L7",  "title": "Loop: loop-scoped checkpoints + envelope (tasks 7.1-7.4)", "status": "open"},
+    {"id": "L9",  "title": "Loop: the briefing (tasks 9.1-9.3)", "status": "open"},
+    {"id": "L8",  "title": "Loop: refuse resume for a loop's job (tasks 8.1-8.2)", "status": "open"},
+    {"id": "L10", "title": "Loop: empty-queue telemetry event (tasks 10.1-10.2)", "status": "open"},
+    {"id": "L11", "title": "Loop: create_loop MCP tool (tasks 11.1-11.4)", "status": "open"},
+    {"id": "L12", "title": "Loop: full-suite verification + mutation checks (tasks 12.1-12.5)", "status": "open"},
+    {"id": "P4",  "title": "Panel: GET /api/v1/workspace/file endpoint (tasks 4.1-4.5)", "status": "open"},
+    {"id": "P5",  "title": "Panel: the files tab (tasks 5.1-5.5, incl. MEASURING the min width)", "status": "open"},
+    {"id": "P6",  "title": "Panel: strip overflow decision, measured not guessed (task 6.1)", "status": "open"},
+    {"id": "LB1", "title": "Loop B1: archival migration + model columns", "status": "open"},
+    {"id": "LB2", "title": "Loop B2: archival replaces deletion", "status": "open"},
+    {"id": "LB3", "title": "Loop B3: archive_job on the MCP surface", "status": "open"},
+    {"id": "LB4", "title": "Loop B4: the loop summary tells the truth", "status": "open"},
+    {"id": "LB5", "title": "Loop B5: the loops index tab (REQUIRES the shell from P2b/P3)", "status": "open"},
+    {"id": "LB6", "title": "Loop B6: the loop drill-down tab (REQUIRES the shell)", "status": "open"},
+    {"id": "LA1", "title": "Loop A1: control as a per-loop setting (D10)", "status": "open"},
+    {"id": "LA2", "title": "Loop A2: editing, staged and visible (D11)", "status": "open"},
+    {"id": "LA3", "title": "Loop A3: late tasks refused, offered to a new loop (D12)", "status": "open"},
+    {"id": "LA4", "title": "Loop A4: per-loop history + in-progress firing helper (D13)", "status": "open"},
+    {"id": "LA5", "title": "Loop A5: write-once loop_id, and RECORD (do not fix) the D15 name gap", "status": "open"},
+    {"id": "APP1", "title": "App experience: a desktop icon/shortcut for AgentWeave", "status": "open"},
+    {"id": "APP2", "title": "App experience: further improvements, operator's second priority", "status": "open"},
+    {"id": "FREE", "title": "Free choice: outstanding fixes, findings, whatever is most needed", "status": "open"}
+  ],
+  "current": "P2a",
+  "next_action": "Implement panel change tasks 2.1, 2.6 and 2.7. Create hub/ui/src/components/spec/PanelShell.tsx (or a sibling location that fits the existing tree): a shell component owning the tab strip, the plus affordance, and the visible tab's content, rendering exactly ONE tab's content at a time. It consumes hub/ui/src/store/panelTabsStore.ts, which already exists and is fully tested — read that file first; do not re-derive the tab model. Task 2.6: ARIA `tablist` semantics, sequential focus, Enter/Space to activate, arrow keys between tabs, close control keyboard-reachable, plus menu navigable — design D11 says nothing exists to inherit here, so state it explicitly. Task 2.7: use the `Icon` component ONLY, and audit hub/ui/src/components/common/Icon.tsx's map BEFORE assuming a close or plus glyph exists (CLAUDE.md forbids a second icon system). Do NOT re-host ConversationView yet — that is P2b, deliberately a separate iteration. Add vitest coverage for the strip's keyboard behaviour. Then: cd hub/ui && npx vitest run && npm run lint && npx tsc --noEmit.",
+
+  "limits": [
+    "No merging to master unattended — the operator's own words, chosen explicitly tonight. Push the autonomous branch; never merge it.",
+    "Stay on branch autonomous/2026-08-18-panels-loops-and-app. No commits to master or to the parent branch.",
+    "Never mark a task complete on the strength of a plan existing (CLAUDE.md). Only real, verified implementation closes a task.",
+    "Do NOT tick human-only sections: panel 7.1-7.5, loop 13.1-13.4, A6.1-A6.4, B7.1-B7.4. Those are the operator's judgement. The operator said 'they all pass for now' about a DIFFERENT set last session; that does not carry over.",
+    "Do not touch project proj-ff695d96 (aw-loop10) — CLAUDE.md, three handoffs, and an executable guard (FORBIDDEN_PROJECT_IDS in hub/tests/browser/conftest.py).",
+    "Do not delete project proj-5e960453 — it is this repo's registration and the browser suite's DEFAULT_PROJECT_ID fixture.",
+    "Never point the Hub you are editing at this repo as an orchestrator. The trial Hub on :8010 is a separate instance; editing Hub Python code means restarting it, which is fine tonight because no runs are in flight.",
+    "Use openspec, never the aw-* collab skills. Never delegate this repo's work through AgentWeave messaging.",
+    "Stage paths explicitly. Never `git add -A`.",
+    "Always `py -3.11`. Interpreter: C:\\Users\\huida\\AppData\\Local\\Programs\\Python\\Python311\\python.exe",
+    "T3 source under testbed/scratch/t3ref/ is design reference ONLY — study, never copy, never commit.",
+    "Never create .agentweave/, agentweave.yml or spec/ as NEW artefacts at the repo root; the existing ones are the migration's.",
+    "Never commit kimichanges.md or kimiwork.md.",
+    "No force-push, no history rewriting, no release, no publish.",
+    "Every claim is measured or labelled unverified."
+  ],
+
+  "pre_authorised": [
+    {
+      "situation": "Loop task 12.2 asks for `mypy hub/hub/` CLEAN. It is not, and cannot be tonight.",
+      "decision": "There are 361 pre-existing mypy errors across 86 files, baselined this session at .claude/autonomous/mypy-baseline.txt. Scope 12.2 to 'this change introduced NO new mypy errors' — compare the total and the per-file counts against the baseline. Do NOT attempt to fix 361 pre-existing errors. Annotate 12.2 in tasks.md with this reasoning rather than ticking it as if the repo were clean.",
+      "cost_if_wrong": "Low. CI does not gate on mypy (ci.yml has no mypy step). Worst case the operator wants a clean repo later, which is its own change."
     },
-    "queue": [
-        {
-            "id": "Q1-ci-fixes",
-            "title": "Fix the two CI failures and push to both branches",
-            "why": "PR #2 (head autonomous/2026-08-18-the-app-feels-alive, base master) is the FIRST CI run this work has ever had, and it is red: all six matrix `test` jobs fail while hub-test (6m36s) and ui-test (1m49s) pass. Both causes are measured, deterministic, and come from the overnight console-window/icon work. Fix them, then merge -- the operator authorised 'open PR, merge if green'.",
-            "failures": [
-                "ubuntu+macos (4 jobs) fail at the MYPY step: src/agentweave/cli.py:336 'Module has no attribute CREATE_NO_WINDOW'. The line IS guarded -- `subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0` -- but mypy's sys.platform narrowing applies to `if` STATEMENTS, not to a ternary expression, so it still resolves the Windows-only attribute against the Linux stubs. Fix with an if/else block or getattr(subprocess, 'CREATE_NO_WINDOW', 0). Check cli.py:866's DETACHED_PROCESS for the same pattern before assuming 336 is the only site.",
-                "windows (2 jobs) PASS mypy then fail pytest: ModuleNotFoundError: No module named 'PIL' in tests/test_cli.py::TestAppModeNativeWindow::test_app_icon_path_resolves_to_a_real_multi_size_ico. CI never installs Pillow. Decide: pytest.importorskip('PIL') so the assertion degrades to a skip, or add Pillow to the dev extra so the icon is actually validated in CI. PREFER the dev extra -- a skipped icon test is how the wheel-packaging test rotted for three weeks (see known_debts.stale-local-build-cache). If you add it, verify the job actually runs the test rather than silently skipping."
-            ],
-            "steps": [
-                "Fix on THIS branch, then cherry-pick onto autonomous/2026-08-18-the-app-feels-alive and push, because the PR's head is the PARENT branch. Iteration 1 already did exactly this for the packaging fix (05b460c here, 35c9a62 there) -- follow that pattern.",
-                "Re-run: py -3.11 -m mypy src/ and py -3.11 -m pytest tests/ -q locally first. mypy on Windows will NOT reproduce the ubuntu failure (CREATE_NO_WINDOW exists there), so reason about it from the stubs rather than trusting a local green.",
-                "Watch all 8 checks. Merge PR #2 only when every one is green.",
-                "After merging, note in the log whether master's own CI run also goes green -- CI has never run on master either (known_debts.ci-never-ran)."
-            ],
-            "status": "done",
-            "done_note": "Verified 2026-08-18 ~11:14 by this firing: all 8 PR #2 checks green (hub-test 5m37s), merged with a merge commit (10c5ee6). Master's OWN CI then ran for the first time ever, on the merge commit, and went green too (run 32125796514) -- closes known_debts.ci-never-ran for master specifically; the parent branch's own CI history is still whatever PR #2 already showed."
-        },
-        {
-            "id": "Q2-fix-merge-500",
-            "title": "Fix the 500 on merging into a gated spec document",
-            "why": "A live 500 on a shipped route, found by the first real capability merge. hub/hub/api/v1/spec.py:1190 returns {**_document_view(document), 'blocking': result.blocking, 'merged': len(sources)} -- but save_document() returns a ProposeResult (path, proposals, unchanged; NO .blocking) whenever the document's rigor is contract/gate. Worse, `await session.commit()` on line 1186 runs FIRST, so the proposal row is durably written and THEN the request 500s: the operator sees a failure while a pending proposal they never saw created sits in the database.",
-            "steps": [
-                "Branch on the result type rather than assuming SaveResult. spec_service.py:52-62 has ProposeResult's shape.",
-                "Move the commit so nothing is durably written before a response that cannot be built.",
-                "hub/tests/test_spec_merge.py has ZERO references to rigor -- that is why a 500 on a shipped route survived two days. Add cases in BOTH directions (sketch merges normally; contract/gate produces proposals and a coherent response).",
-                "Mutation-check: revert the type branch and watch a named test fail."
-            ],
-            "constraint": "Fix the IMPLEMENTATION only. Whether a gate SHOULD divert merges into per-requirement proposals is decisions_for_user D6 and stays the operator's call -- the behaviour is defensible, only the crash is unambiguously a bug.",
-            "status": "done",
-            "done_note": "Fixed 2026-08-18 ~11:25. spec_service.merge_document() now returns SaveResult | ProposeResult and short-circuits BEFORE adding SpecDocumentMerge/'merged'-event rows when save_document() proposed instead of writing (nothing folded, so nothing to record -- this is also Q3). The route (spec.py merge_document) builds the response dict by isinstance BEFORE session.commit(), matching the established pattern at agent_actions.py:1155. Two new tests in test_spec_merge.py reproduce the exact repro from the-first-real-capability-merge.md (merge at sketch, raise to gate, merge again) and assert a 200 with proposals/unchanged plus a coherent spec_edit_proposals row. Mutation-checked: reverting the isinstance branch reproduces the original AttributeError('ProposeResult' object has no attribute 'blocking') 500 and fails both new tests by name."
-        },
-        {
-            "id": "Q3-fix-false-provenance",
-            "title": "Stop writing merge-provenance rows for merges that failed",
-            "why": "Finding 3 of the-first-real-capability-merge.md: spec_document_merges ended that session with 4 rows from 4 attempts, two of which returned 500. Provenance is committed alongside the proposal, before the failure -- so a capability document's merge history records folds the operator was told had failed. The audit trail is unreliable exactly when something went wrong, which is the only time it matters.",
-            "steps": [
-                "Likely falls out of Q2's commit-ordering fix -- verify rather than assume, and if so say so in the log instead of claiming a separate fix.",
-                "Add a test that a failed merge leaves spec_document_merges unchanged."
-            ],
-            "status": "done",
-            "done_note": "Confirmed to fall out of Q2's fix, as predicted -- no separate implementation needed. The isinstance(result, ProposeResult) short-circuit in spec_service.merge_document() added for Q2 is exactly what stops the false-provenance write: a propose-only attempt never reaches the SpecDocumentMerge/event-adding loop at all. test_a_merge_into_a_gated_capability_document_writes_no_merge_row in test_spec_merge.py asserts the row/event count stays at 1 (from one real sketch-rigor merge) after a second, gated attempt that only proposed."
-        },
-        {
-            "id": "Q4-fix-false-ui-stale",
-            "title": "Stop /health reporting ui_stale on a correct bundle",
-            "why": "hub/hub/main.py:84 ui_source_fingerprint() folds `git status --porcelain` into the hash so uncommitted edits move it. But CLAUDE.md's documented workflow is build -> make ui -> commit TOGETHER, so the stamp is always recorded while the tree is dirty; the moment you commit, that dirty string empties and the fingerprint can never match again. CONFIRMED during prep: commit 8898155 did rebuild and commit the assets, and a fresh rebuild produced BYTE-IDENTICAL output with only the stamp changing (ab7e5fe). So the documented workflow reliably produces a false ui_stale, and the signal has been trained to be ignored -- which is worse than not having it.",
-            "steps": [
-                "Reproduce first: dirty a file under hub/ui/src, stamp, commit, and watch /health flip to stale with no asset change. Do not fix what you have not reproduced.",
-                "Fix shape: stamp from the committed tree, or record the clean-tree fingerprint while keeping the dirty component for the LIVE check only. Keep the property that an uncommitted source edit still reports stale -- that is the whole point of the check.",
-                "hub/tests/test_ui_build_stamp.py exists; extend it. Note the stricter bundle-matches-source assertion is gated behind AW_CHECK_UI_BUNDLE=1."
-            ],
-            "status": "done",
-            "done_note": "Reproduced first (new test test_a_stamp_recorded_against_a_dirty_tree_survives_the_commit: stamp against a dirty tree, then commit exactly what was stamped, and the old algorithm still warned -- failed before the fix, confirming the bug independent of the ab7e5fe anecdote). Fix: ui_source_fingerprint() (main.py) now hashes each git-ls-files-enumerated file's WORKING-TREE BYTES directly, dropping the git-ls-files-s-blob-id + status-porcelain-dirty-diff split entirely. Content-hashing is inherently stage-invariant -- the same bytes hash the same whether staged, committed, or merely present on disk -- so 'stamp before commit' can no longer desync from 'the commit that follows'. The 'uncommitted edit still reports stale' property survives for the right reason now (the bytes really did change) rather than via a separate dirty-diff component. IMPORTANT CONSEQUENCE, handled: changing the hash algorithm invalidated the CURRENTLY COMMITTED stamp (old blob-id-based fingerprint != new content-based one), so /health would have started reporting a false ui_stale on an unrelated bundle the moment this landed. Rebuilt (npm run build) and re-ran scripts/refresh_ui_bundle.py to re-stamp with the new algorithm -- confirmed byte-identical bundle output (git status shows only ui-build-stamp.json changed), the loop-7 pattern the test suite already names. hub/tests/test_ui_build_stamp.py (16 cases, was 15) and test_ui_staleness.py (5 cases) both green; _compute_ui_staleness_warning(UI_DIST, UI_SRC) against the real repo now returns None."
-        },
-        {
-            "id": "Q5-explore-loops",
-            "title": "Exploration: what a loop actually is, and why its queue has never worked",
-            "output": "openspec/explorations/2026-08-18-loops-as-an-agent-tool.md",
-            "why": "EXPLORATION ONLY -- the operator narrowed this run to 'ship the fixes... and run a explore on the loop and the side panel'. Do not implement. Recommend, do not decide anything that is the operator's.",
-            "headline_finding": "MEASURED DURING PREP, and it reframes the whole feature: Task.loop_id is READ in five places and WRITTEN in zero. tasks.py:427 (filter), scheduler.py:86 and :99 (stop-condition counts), scheduler.py:417 (event payload), schemas/jobs.py:71 (a comment). No code path sets it. Every test that exercises it fabricates the row directly in the ORM (test_scheduler.py:244, test_tasks.py:310-312) because no API would. CONSEQUENCE: the loop's queue -- the one thing that justifies Loop existing as a concept distinct from AIJob -- cannot be populated through any real path, and stop_when_queue_empties is therefore dead in production: _loop_stop_reason (scheduler.py:98-101) guards on ever_count, and a queue that can never be filled never trips it. VERIFY THIS INDEPENDENTLY before building the exploration on it.",
-            "must_cover": [
-                "The unwritable queue above, verified independently, with the consequence for stop_when_queue_empties spelled out.",
-                "What writes Task.loop_id, if anything should. Options to weigh: create_loop takes an initial task list; the creating agent files tasks into its own loop; the first firing is a PLANNING firing that decomposes the goal into tasks. Each has a different governance story -- say which the operator can actually supervise.",
-                "What connects a firing to the queue. Today scheduler.py:296 _do_fire_job replays job.message verbatim and never looks at a task. Does a firing CLAIM the next task, or does the agent choose from the queue? This is upstream of the briefing.",
-                "Only then, the briefing: how a firing learns its position (purpose, what is done, what remains, what prior firings concluded), how it is capped so a long-running loop does not drown its own turn, and where it is assembled -- mirror how agents.py:1316 appends the charter to canonical context.",
-                "WHY Loop.charter_id is rejected (roadmap Proposal A). agents.py:1060-1064 builds the turn's charter from agent_row.charter_id; a loop already has an agent and that agent already has a charter, so a second one competes with no precedence rule. Operator's words: 'A loop or a job has an agent attached to it. This agent has a charter already.' Record the rejection so Proposal A does not resurface.",
-                "Field by field, what Loop legitimately holds vs AIJob + Agent: purpose (NO -- duplicates AIJob.name/message and the charter), stop_at / stop_when_queue_empties / stop_reason / stopped_at (YES -- a job runs forever, a loop terminates and records why), Task.loop_id (YES in principle -- see the headline finding). Defend the conclusion: a loop is not 'an agent on a schedule', because a bare AIJob is already exactly that. It is a job that ENDS and OWNS A BACKLOG.",
-                "The MCP gap: mcp_server.py:503-529 create_job exposes only name, agent, message, cron, session_mode, while jobs.py:93 _loop_opts_in means any one of purpose/stop_at/stop_when_queue_empties turns a job into a Loop. So an agent can create a job that runs forever and cannot create a loop that ends. Argue create_loop vs widening create_job; if it comes out even, prefer a separate tool (a distinct name teaches the concept exists; an optional argument hides it). The gate already exists -- jobs.py:21 _require_agent_job_allowance.",
-                "Governance questions the operator will care about, given they framed this as 'governance and visibility': can a loop's agent create another loop (runaway risk)? What bounds unattended spend? What happens when a firing fails, or the agent goes off-task? Raise them even where you cannot answer them.",
-                "The dangling-agent defect: AIJob.agent is a bare String(64), not an FK. scheduler.py:51-56 _job_agent_skip_reason returns None when NO agent row matches -- and None means PROCEED. Rename or archive an agent and its loops keep firing at a name nobody owns.",
-                "MINE THE REPO'S OWN DRIVER. .claude/autonomous/ is a WORKING implementation of exactly this feature, battle-tested across several multi-hour runs including one that died and recovered: STATE.json has a queue, a next_action written for a stranger, stop_at, stop_when_queue_empties, a heartbeat with a takeover grace, decisions_for_user, and a prose log. Map what that driver NEEDS against what Loop HAS, and let the gaps drive the design. This is the strongest evidence available and it is free. It is also the concrete path to Proposal C (the autonomous session as a Loop) -- note that, do not build it."
-            ],
-            "status": "done",
-            "done_note": "Written interactively 2026-08-18 ~11:20 by the operator's request, not by a firing. Output: openspec/explorations/2026-08-18-loops-as-an-agent-tool.md. It found a SECOND read-with-no-write field beyond the queued one: AIJob.last_session_id is read at scheduler.py:328, jobs.py:69, jobs.py:342 and JobCard.tsx:323 and written nowhere, with zero test references, so session_mode='resume' is a silent no-op. Thesis: loops fire but cannot remember -- the scheduling half is complete, the memory half is uniformly unwired."
-        },
-        {
-            "id": "Q6-spec-loops",
-            "title": "Author the openspec change for loops as an agent-usable tool",
-            "depends_on": "Q5-explore-loops",
-            "why": "The operator asked for explore-then-spec on the loop, then explore-then-spec on the panel, in that order. This is the spec half of the first pair.",
-            "system": "openspec, per the operator's explicit choice (CLAUDE.md forbids silently picking a spec system). Use the openspec-propose skill. Requirements use '### Requirement:' with '#### Scenario:' blocks and MUST/SHALL language -- the validator reads ONLY THE FIRST PHYSICAL LINE for the modal, so do not wrap the modal onto a second line. `npx openspec validate --changes --strict` must pass before the item is called done.",
-            "depth": "FULL DEPTH -- the operator chose 'ready to execute'. That means: requirements with scenarios; a design.md that records the alternatives considered AND WHY EACH WAS REJECTED (a design without rejections is a description, and the next session will re-propose what this one already ruled out); and a tasks.md split into agent-verifiable vs human-only tasks, ending with a user test guide. The split and the test guide are a standing operator directive, not optional. A later run must be able to pick this up and build without re-deciding anything.",
-            "must_settle": [
-                "What writes Task.loop_id. This is the load-bearing decision -- see known_debts.loop-queue-is-unwritable. Whatever Q5 concluded, the spec must state it as a requirement with scenarios, not leave it implied.",
-                "What a firing does with the queue: claim the next task, or brief the agent and let it choose. Both are defensible; pick one and record the other as rejected with its reason.",
-                "The create_loop vs widened create_job decision from Q5, with the rejected option named.",
-                "The briefing's content and its CAP, so a long-running loop cannot drown its own turn.",
-                "What happens when a loop's agent is archived or renamed -- AIJob.agent is a bare String(64) and scheduler.py:51-56 currently returns None (meaning PROCEED) when no agent row matches. Either fix it here or record explicitly that it is out of scope.",
-                "The governance bounds: can a loop's agent create another loop? What caps unattended spend? If these are deferred, say so in the design rather than omitting them."
-            ],
-            "constraint": "SPEC ONLY. Do not implement, and do not start tasks.md's own tasks. CLAUDE.md: never mark a task complete on the strength of a plan existing.",
-            "status": "done",
-            "done_note": "Written 2026-08-18 ~12:05-12:45 by this firing. openspec/changes/2026-08-18-a-loop-writes-its-own-queue/ -- proposal.md, design.md (D1-D9, each with a rejected alternative), specs/agent-loops/spec.md (1 MODIFIED requirement rewriting the passive-voice original into two named actors, 7 ADDED requirements), tasks.md (14 sections, all unchecked, split agent-verifiable/human-only, ending in a user test guide). `npx openspec validate --changes --strict` passes for all 9 changes including this one -- confirmed live, not assumed; caught and fixed two requirements whose SHALL/MUST modal was wrapped past the first physical line (the validator only reads that line, exactly as STATE.json's own note warned). Grounded every decision in code read this firing, not only in the exploration's own claims: read spec_tasks.materialise() (approval is operator-only, no loop in its request -- this is why Loop.spec_document_id is a declared binding rather than a threaded parameter), scheduler.py's _do_fire_job/_loop_stop_reason/_job_agent_skip_reason (confirmed content=job.message is passed verbatim today, and the no-FK agent-string-equality trust boundary _job_agent_skip_reason already uses), checkpoints.py's compute_envelope/_tasks_for/latest_checkpoint (confirmed both are conversation-scoped, which is exactly the gap D4 closes), agent_auth.py (AgentActor.agent is the correct, already-trusted identity source for the creator-privilege checks). Settled beyond what the exploration left open: D3 claim-vs-choose (claim, argued from checkpoints.py's own stated 'what the Hub can check it must not delegate' principle), D5's briefing cap (4,000 chars, reasoned from _TRANSCRIPT_CHAR_LIMIT's precedent and the checkpoint body's own terseness), D7's exact boundary for 'once the loop is defined' (a self-created loop's first fire), D8 (accept the no-FK trust boundary rather than adding one -- named as still-open in D9, not silently dropped). Also caught and fixed one internal inconsistency during review: the first draft implied create_loop's 'refuse a loop with no stop condition' rule might tighten POST /jobs itself; corrected across proposal.md/design.md D2/tasks.md to state plainly that the refusal lives only in the new MCP tool function, before it calls the unchanged POST /jobs route -- a human operator's existing 'Make this a loop' form is untouched. Did not implement anything; did not start tasks.md's own boxes."
-        },
-        {
-            "id": "Q7-explore-side-panel",
-            "title": "Exploration: the side-panel family",
-            "output": "openspec/explorations/2026-08-18-the-side-panel-family.md",
-            "why": "EXPLORATION ONLY. The operator's brief: 'We should have a button that opens the side panel (just like t3 does and other harnesses as well). On top we can click a plus sign and open something else. We could start with a file viewer/navigation of the repo of the project. A loop tab with loop information (with some loop animations and icons we have to explore ui/ux practices and build a screen for this) and the spec that we already have. This could solve also our explore button problem that we have. The explore button is just explore mode and the side panel can opens the spec.'",
-            "must_cover": [
-                "The T3 study. testbed/scratch/t3ref/ ALREADY HOLDS 30 original TSX/TS files, extracted during prep from T3 Code's shipped sourcemaps (it ships sourcesContent, so this is real source, not a guess). Read in this order: rightPanelLayout.ts, rightPanelStore.ts (24 KB, the state model), RightPanelTabs.tsx (18.7 KB, THE tab system and the plus affordance), RightPanelSheet.tsx, preview/RightPanelResizeHandle.tsx, chat/PanelLayoutControls.tsx, files/FileBrowserPanel.tsx, files/FilePreviewPanel.tsx, files/fileTreeDragMention.ts, AgentsPanel.tsx. Answer concretely: how does a tab register? Where does 'which tabs are open' live and how is it persisted? What does the plus button offer? How is resize modelled? How does the file tree hand a file to the composer? STUDY THE PATTERNS, DO NOT COPY THE CODE -- see limits.",
-                "AgentWeave already has a panel subsystem: hub/ui/src/components/spec/ (SpecDocumentPanel, SpecFrame, SpecRailNav, specBridge.ts, specNavigation.ts, specPreferences.ts). Does it generalise into a registry, or does a second one-off get bolted next to it? Take a position and cost both.",
-                "What a panel must declare to register: id, title, icon, singleton vs multi-instance. What happens when the same panel is opened twice.",
-                "Persistence: per-project, per-conversation, or global? Cite specPreferences.ts's existing choice and either follow it or reject it with a reason.",
-                "The explore button. Establish what it does TODAY before proposing a replacement -- start at ComposerSpecControl.tsx:48, which records that explore begins by CREATING a document. Per decisions_for_user DEC-explore-button, design so the panel CAN subsume it, but do not propose removing it in this pass.",
-                "The loop panel screen, in detail -- this is the governance half and the operator asked for it specifically: what the loop is doing, what is completed, what stage it is in, whether an agent is running RIGHT NOW, next trigger. Name the data source for each. jobs.py:98 _batch_loop_summaries already computes a per-job loop block in four fixed queries (design D7) -- check what it already answers before proposing an endpoint. Say explicitly what the operator asked for that does NOT exist yet. For 'is an agent active right now', heed handoff 0055 decision 2: the working indicator was deliberately gated on lifecycle events plus the streamed status line, NOT the polled agent.status roster field. Do not repeat that mistake.",
-                "UI/UX: the operator asked for 'some loop animations and icons'. Use the Icon component (lucide wrapper) -- CLAUDE.md forbids a second icon system. Respect prefers-reduced-motion. Say what each animation COMMUNICATES; an animation that does not encode state is decoration and should be cut. Live updates via the existing useSSE hook and React Query invalidation, not polling.",
-                "What the panel does to the composer's width at the narrowest supported window."
-            ],
-            "status": "done",
-            "done_note": "Written 2026-08-18 ~12:45 by this firing, unattended (no operator to converse with, per next_action's own instruction -- written as analysis with recommendations flagged in a closing section rather than decisions). Output: openspec/explorations/2026-08-18-the-side-panel-family.md. Grounded in code read this session, not only the queue's own claims: ConversationView.tsx (the ONLY existing right-side occupant is SpecDocumentPanel -- no tab strip, no plus button, no registry exists today; DOCUMENT_COLUMN_BREAKPOINT's push-to-overlay math already generalizes), specPreferences.ts (global, not per-conversation, width-only persistence), workspace_paths.py + api/v1/workspace.py (GET /workspace/paths already exists and feeds the composer's @path trigger -- a file panel's NAVIGATION half is half-built; its CONTENT-read half does not exist at all and is new security-relevant surface), jobs.py's _batch_loop_summaries (already computes everything a loop card needs, already rendered today on the Jobs page via JobCard's LoopBlock -- the side panel's loop tab surfaces existing data on a new surface, not new data), checkpoints.py/task_transitions.py (both already treat Task.status='assigned' as live). A T3 Code study ran as a parallel research agent (general-purpose, foreground) over testbed/scratch/t3ref/ in the prescribed file order and reported back patterns only, no code quoted -- confirmed T3 itself has no dynamic panel registry either (a fixed literal union hand-kept in sync across 3 places), which grounds the recommendation that a small explicit descriptor array is proportionate for AgentWeave's 3 known panels rather than a full plugin system. FINDING made this session, not carried from Q5/Q6: _batch_loop_summaries's current_task query (jobs.py:122-124) filters status IN ('in_progress','blocked','pending') -- 'assigned' is NOT in that list, but checkpoints.py's _LIVE_TASK_STATUSES and task_transitions.py's ENTRY_STATUSES both already treat 'assigned' as live. Once the loop-writes-its-own-queue change's D3 ships (a firing claims a task by setting status='assigned'), that task will silently vanish from every current_task field -- the Jobs page card AND the future loop panel -- until something moves it to in_progress, which nothing in D3's design does automatically. Flagged in section 6.2 and recommendation 4 as something Q8 (or a follow-up to the already-closed loop change) must resolve, not silently worked around. Position taken and costed (section 2): generalize the right side into one panel shell + small descriptor array, SpecDocumentPanel becomes the spec panel's content untouched internally; bolt-on-a-second-mechanism was rejected with a cost table, not by default. Did not implement anything; did not open a browser."
-        },
-        {
-            "id": "Q8-spec-side-panel",
-            "title": "Author the openspec change for the side-panel family",
-            "depends_on": "Q7-explore-side-panel",
-            "why": "The spec half of the second explore-then-spec pair.",
-            "system": "openspec, per the operator's explicit choice (CLAUDE.md forbids silently picking a spec system). Use the openspec-propose skill. Requirements use '### Requirement:' with '#### Scenario:' blocks and MUST/SHALL language -- the validator reads ONLY THE FIRST PHYSICAL LINE for the modal, so do not wrap the modal onto a second line. `npx openspec validate --changes --strict` must pass before the item is called done.",
-            "depth": "FULL DEPTH -- the operator chose 'ready to execute'. That means: requirements with scenarios; a design.md that records the alternatives considered AND WHY EACH WAS REJECTED (a design without rejections is a description, and the next session will re-propose what this one already ruled out); and a tasks.md split into agent-verifiable vs human-only tasks, ending with a user test guide. The split and the test guide are a standing operator directive, not optional. A later run must be able to pick this up and build without re-deciding anything.",
-            "must_settle": [
-                "The panel registry contract: what a panel declares to register (id, title, icon, singleton vs multi-instance), and what happens when one is opened twice.",
-                "Whether the existing spec panel (hub/ui/src/components/spec/) becomes a registered panel or stays separate, with the migration cost of the choice stated.",
-                "Where the open-panel set is persisted -- per-project, per-conversation, or global -- citing specPreferences.ts's existing choice and either following or rejecting it.",
-                "The loop panel's own requirements: what it shows, and the data source for each field. Per DEC-explore-button, the spec may say the panel CAN subsume the explore button but must not require removing it.",
-                "Responsive behaviour at the narrowest supported window.",
-                "Accessibility: prefers-reduced-motion for the loop animations, and keyboard reachability of the tab strip and the plus affordance."
-            ],
-            "constraint": "SPEC ONLY, and this one is UI-heavy -- resist writing component code into the design. The operator has not seen any of this yet and will have opinions.",
-            "status": "done",
-            "done_note": "Written 2026-08-18 ~13:05 by this firing. openspec/changes/2026-08-18-one-shell-three-panels/ -- proposal.md, design.md (D1-D9, each with a rejected alternative), specs/conversation-side-panel/spec.md (NEW capability, 13 ADDED requirements), specs/spec-chat-session/spec.md (1 MODIFIED requirement -- kept the ORIGINAL heading 'A specification document opens beside a conversation' rather than renaming it, so a future openspec-sync-specs pass can actually match it against the archived capability; only the body/scenarios changed to describe the shell), tasks.md (10 sections, all unchecked, split agent-verifiable/human-only, ending in a user test guide). `npx openspec validate --changes --strict` passes for all 10 changes including this one -- confirmed live. Checked every requirement's first physical line carries the SHALL/MUST modal with a small Node script before calling it done, per Q6's own warning about the validator only reading that line. Grounded every decision in code read this firing, not only in Q7's exploration: confirmed ConversationView.tsx:1-60 (DOCUMENT_COLUMN_BREAKPOINT's derived-not-written comment, the document prop's ownership) and specPreferences.ts:1-45 (the exact persisted shape) match Q7's citations exactly; confirmed jobs.py's _batch_loop_summaries candidates query (:119-131) really does omit 'assigned' from its IN clause and confirmed via checkpoints.py/task_transitions.py that two other modules already treat it as live; confirmed workspace_paths.py/api/v1/workspace.py's exact shape (git ls-files --cached --others --exclude-standard, resolved through project_workspace.resolve_project_workspace) as the file panel's navigation half and the new content endpoint's allowlist basis; confirmed AgentTimeline.tsx's runVisiblyActive gate (:104) and index.css:708's blanket reduced-motion rule; confirmed ComposerSpecControl.tsx's docstring and armed/onOpenExisting shape to ground the explore-button Non-Goal. NEW finding made this firing, not in Q7's text: run_task_binding.py:250-254 already auto-transitions a bound task from an entry status to in_progress the moment a run binds to it, which means the 'assigned' query gap Q7 found (and D6 fixes regardless) may be momentary rather than persisting in practice -- whether a loop firing's run actually goes through that binding path was NOT verified, and D6/proposal.md's Non-Goals name this explicitly as unresolved rather than silently assuming the fix is load-bearing. Settled beyond what Q7 left as a recommendation: D3 (SpecDocumentPanel's migration is IN this change, argued with a rejected 'separate prerequisite change' alternative), D6's exact size bound for the file endpoint (1 MiB, reusing config.py's existing aw_max_body_size=1_048_576 rather than inventing a number) and its binary-detection heuristic (first 8,000 bytes, NUL-byte check, matching git's own heuristic since the allowlist is already git-backed), D6's decision to refuse an oversized file rather than truncate it (argued in contrast to the loop change's own briefing-truncation precedent, which is the opposite case), D8's exact motion scope (only the active-now indicator animates, argued from T3's own agents-panel precedent Q7 already cited). Did not implement anything; did not start tasks.md's own boxes. current/next_action now point at Q9 (runway), comfortably inside time_guard.at_1630 (finished ~13:05)."
-        },
-        {
-            "id": "Q9-runway",
-            "title": "Runway, only once Q1-Q6 are done or blocked",
-            "items": [
-                "openspec/explorations/2026-08-18-candidate-names.md. Operator: 'Explore names, decide nothing yet.' RECOMMEND NOTHING. Ground it in 2026-08-18-does-the-name-still-fit.md (S1 architectural evidence, S3 the six-surface cost table) and 2026-08-15-where-agentweave-fits.md.",
-                "The capability-validation-rule exploration (decisions_for_user D5) -- operator chose 'explore it, decide nothing'. Every requirement in a current-phase capability document is permanently blocking on requirement_without_task because shipped behaviour has nothing left to implement it.",
-                "Apply the FACTUAL corrections to CLAUDE.md from 2026-08-18-claude-md-trial-hub-section-is-stale.md -- the stale database path and the 'no archive phase' claim are provably wrong and actively mislead. Leave anything judgement-shaped to the operator.",
-                "If real runway remains: drive one short cheap-model agent turn on the trial Hub to watch the working indicator, 'Worked for Xs' and scroll pinning against a REAL run. None of yesterday's UX work has ever been seen against a live turn."
-            ],
-            "status": "pending"
-        }
-    ],
-    "current": "Q9-runway",
-    "next_action": "Q9 runway, item 1 (CLAUDE.md factual corrections) is DONE -- decisions_for_user.N3, status APPLIED. Q9 runway, item 2 (candidate-names exploration) is now ALSO DONE: openspec/explorations/2026-08-18-candidate-names.md, grounded in 2026-08-18-does-the-name-still-fit.md (S1 architectural evidence, S3 six-surface cost table) and 2026-08-15-where-agentweave-fits.md (S4-5 the surviving differentiators) -- eight product candidates plus four Hub candidates, grouped by the two directions the two source documents actually point (factory/architecture vs durability/positioning), explicitly NOT scored or recommended, no availability check run (named as deliberately deferred, not an oversight). NEXT: Q9's last remaining item -- the capability-validation-rule exploration for decisions_for_user.D5 (every requirement in a current-phase capability document is permanently blocking on requirement_without_task; operator chose 'explore it, decide nothing'). Ground it by reading hub/hub validation code for requirement_without_task directly rather than trusting D5's one-line description, the same discipline Q9 item 1 used for spec_lifecycle.py. Only after that, and only if real runway remains under time_guard.at_1630 (originally ~16:30, check the clock live -- do not assume), drive one short cheap-model agent turn on the trial Hub (was healthy at :8010 as of the last firing, re-confirm via /health before use) to watch the working indicator, 'Worked for Xs' and scroll pinning against a real run -- limits.4's budget, not a general one. Do NOT start implementing either openspec change from Q6/Q8; DEC-run-narrowed still stands and the operator has not reviewed 2026-08-18-a-loop-writes-its-own-queue/ or 2026-08-18-one-shell-three-panels/ yet.",
-    "limits": [
-        "'Full auto, but only on green CI' -- operator, standing. NEVER merge or release on red or unfinished CI.",
-        "Authorised this session: open a PR to master and MERGE IT if all six CI jobs are green. No release, no tag -- those stay operator-only.",
-        "Live agent turns: 'a few short cheap-model turns'. Enough to watch the working indicator, 'Worked for Xs' and scroll pinning against a real run, and to unblock the two taste-pass tasks needing a tool-heavy turn. Not a general budget.",
-        "Do NOT touch aw-loop10 (proj-ff695d96) on the trial Hub.",
-        "The dev Hub on :8000 holds proj-8f100b95 AgentWeaveWebsite -- REAL operator work on another project. Do not modify its data. Never point the Hub whose code you are editing at this repo; every Hub code change restarts the process and kills runs in flight.",
-        "Trial Hub is :8010 with DATABASE_URL=<repo>/hub/data/agentweave.db. Start it FROM hub/, never the repo root -- python -m puts cwd on sys.path[0] and this repo's hub/ shadows the installed hub package; the child dies 60s later with output already sent to DEVNULL.",
-        "Auth is 'Authorization: Bearer <key>', NOT X-API-Key. :8000's key is in ~/.agentweave/hub/.env, :8010's in hub/.env -- different keys, not interchangeable. GET /api/v1/projects returns a BARE JSON ARRAY, not {projects: [...]}.",
-        "Never create .agentweave/ or agentweave.yml at the repo root. spec/ at the root IS the migration's real fixture content and is deliberately untracked -- do not commit it and do not delete it as cleanup.",
-        "Use openspec, never the aw-* collab skills -- they are product source you implement, not a workflow you run. Do not delegate this repo's work through AgentWeave messaging.",
-        "Always py -3.11. Bare `python` on PATH is the hermes-agent venv and lacks agentweave; it fails collection with 16 ModuleNotFoundErrors that look exactly like a broken tree.",
-        "Never mark a task complete on the strength of a plan existing. Only real, verified implementation closes a task.",
-        "Stage paths explicitly -- never git add -A; testbed/scratch is full of untracked probes.",
-        "T3 Code source in testbed/scratch/t3ref/ is a DESIGN REFERENCE ONLY. Study the patterns, do not copy the code, do not commit it, do not quote it at length in a tracked document.",
-        "Complex python -c with nested quotes hangs this shell (measured: 2 minutes). Write a script into testbed/scratch/ instead. PowerShell must not write STATE.json -- Set-Content -Encoding utf8 writes a BOM that breaks json.load().",
-        "Bash `cd` persists between tool calls in this harness. Use absolute paths or re-cd."
-    ],
-    "environment": {
-        "python": "C:/Users/huida/AppData/Local/Programs/Python/Python311/python.exe (use `py -3.11`)",
-        "hub_8010": "trial, healthy as of 2026-08-18T10:00+01:00, proj-5e960453 = this repo",
-        "hub_8000": "dev app, healthy, holds unrelated real operator work -- read only",
-        "t3_reference": "testbed/scratch/t3ref/ -- 30 original TSX/TS files recovered from T3 Code's shipped sourcemaps by testbed/scratch/extract_t3ref.py. Already extracted; do not re-derive.",
-        "ui_build": "npm run build in hub/ui, then py -3.11 scripts/refresh_ui_bundle.py",
-        "suite_status": "As of handoff 0055 on 70a333b: hub/tests 2337 passed / 11 skipped / 1 xpassed (759s); tests/ 385 passed / 3 skipped / 1 FAILED (test_packaging, pre-existing, Q1 fixes it); hub/ui 987 passed. Not re-run since; re-run before trusting a green."
+    {
+      "situation": "The operator said 'You can clear all project from the test hub.' Two of the four projects are protected by standing rules.",
+      "decision": "Interpreted conservatively. Already done in prep: deleted the stray `Agentweave` registration pointing at <repo>/hub, which CLAUDE.md explicitly says to delete if it appears. proj-b44fac0c (Throwaway taste pass) may be deleted if a clean slate helps. proj-5e960453 and proj-ff695d96 are NOT to be deleted — see limits. Create fresh throwaway projects OUTSIDE the repo for fixtures.",
+      "cost_if_wrong": "The operator may have meant literally all four. Deleting aw-loop10 would be irreversible and contradicts three handoffs and a code guard, so the conservative reading is the only safe one while they sleep. Logged in decisions_for_user."
     },
-    "decisions_for_user": [
-        {
-            "id": "DEC-run-narrowed",
-            "status": "DECIDED-BY-OPERATOR",
-            "question": "Should this run implement the loop tool and the side panel?",
-            "answer": "NO implementation of loops or the panel. Specs ARE in scope as of ~11:00: two openspec changes at full depth, each preceded by its exploration. Author them; do not start executing their tasks.md.",
-            "rejected_alternative": "The original design-then-implement queue, which would have reached create_loop and possibly the per-firing briefing. Dropped because the operator wants to read the designs before code exists, and wants the measured defects actually landed."
-        },
-        {
-            "id": "DEC-spec-system",
-            "status": "DECIDED-BY-OPERATOR",
-            "question": "openspec or the trial Hub's own spec flow for these two changes? CLAUDE.md requires asking rather than picking.",
-            "answer": "openspec, for BOTH. Deterministic unattended, no Hub dependency or restart hazard, and the run can validate its own output with `npx openspec validate --changes --strict`.",
-            "rejected_alternative": "Authoring in the trial Hub, which is the migration's actual goal and would have produced dogfooding findings -- rejected for THIS run because it depends on the Hub staying healthy unattended and the flow has known live defects (the merge 500 in Q2, permanent capability blocking in D5). Worth revisiting when the operator is awake to watch it."
-        },
-        {
-            "id": "DEC-A-rejected",
-            "status": "DECIDED-BY-OPERATOR",
-            "question": "Does a Loop earn a charter of its own (roadmap Proposal A)?",
-            "answer": "NO. Operator reasoning: 'A loop or a job has an agent attached to it. This agent has a charter already. The job makes an existing agent loop basically.' Verified against agents.py:1060-1064 -- the charter comes from agent_row.charter_id, so a Loop.charter_id would be a second competing charter. Proposal A's roster half is rejected too: a loop belongs under its agent, not beside it.",
-            "rejected_alternative": "Proposal A as written in 2026-08-17-architecture-proposals.md -- Loop.charter_id plus loops as roster siblings of agents. Do not re-propose; Q4 must record the rejection so it does not resurface."
-        },
-        {
-            "id": "DEC-panel-placement",
-            "status": "PRE-AUTHORISED",
-            "question": "Which side of the screen does the panel occupy, and does it push or overlay?",
-            "default": "Follow whatever the existing spec panel already does -- consistency with the shipped surface beats matching T3 exactly. If the spec panel has no settled placement, use a right-hand panel that resizes the composer rather than overlaying it, matching T3's RightPanel* family. Cost if wrong: a CSS-level change, not an architectural one."
-        },
-        {
-            "id": "DEC-explore-button",
-            "status": "PRE-AUTHORISED",
-            "question": "The operator said the panel 'could solve also our explore button problem'. Does this change REMOVE the explore button, or just make the panel able to open a spec?",
-            "default": "Design the panel so it CAN subsume the explore button, but do not remove the button in this change. Removing a shipped entry point is a taste call the operator should make while looking at the replacement. Record it as a follow-up. Cost if wrong: one extra button survives a release."
-        },
-        {
-            "id": "DEC-create-loop-tool-shape",
-            "status": "PRE-AUTHORISED",
-            "question": "Widen MCP create_job with the loop fields, or add a separate create_loop tool?",
-            "default": "Argue it properly in Q4 and pick with a stated reason; if the argument comes out even, prefer a SEPARATE create_loop tool. A distinct tool name is what teaches an agent the concept exists -- a widened create_job hides 'this can terminate' behind optional arguments nobody reads. Cost if wrong: one deprecated tool name."
-        },
-        {
-            "id": "D5-capability-validation-rule",
-            "status": "OPEN -- operator chose 'explore it, decide nothing'",
-            "question": "Every requirement in a current-phase capability document is permanently blocking on requirement_without_task, because shipped behaviour has nothing left to implement it. Exempt capability documents, replace it with a merge-provenance rule ('every requirement traces to a cited source change'), or accept blocking as cosmetic for current?",
-            "default": "Q8 writes the exploration. Change no validation behaviour."
-        },
-        {
-            "id": "D6-rigor-coupling",
-            "status": "OPEN",
-            "question": "Merging into a gated document 500s. The BEHAVIOUR (review a gated merge requirement-by-requirement) is defensible; the IMPLEMENTATION is broken. Fix the implementation and keep the behaviour, or make merges ignore rigor entirely?",
-            "default": "Q8 fixes the implementation only -- branch on the result type, and stop committing before a response that cannot be built. Do not change what a gate MEANS without the operator."
-        },
-        {
-            "id": "D2-taste-pass-live-turns",
-            "status": "OPEN, partially unblocked",
-            "question": "conversation-formatting 6.2/6.3 need a real tool-heavy agent turn to judge. 18 taste-pass items remain unjudged; most need only the operator's eye.",
-            "default": "The cheap-turn budget covers driving the turn so the evidence EXISTS. The judgement itself stays the operator's -- never self-certify a human-only task."
-        },
-        {
-            "id": "D3-D4-carried",
-            "status": "OPEN, operator answered 'None yet' on 2026-08-18",
-            "question": "D3: retro-cover 1.0.1 with a change? D4: pyproject.toml pins agentweave-hub>=1.0.0, so pip install --upgrade agentweave-ai can deliver none of a release. D4 needs a 1.0.2 to ship.",
-            "default": "Not this run. Both need a release, which stays operator-only."
-        },
-        {
-            "id": "N3-claude-md-stale",
-            "status": "APPLIED",
-            "question": "CLAUDE.md's Specifications section states AgentWeave has 'no archive phase and no concept of a current-behaviour specification'. Five phases shipped 2026-08-16, so it is factually wrong. Its trial-Hub section names profile beta while :8010 actually serves <repo>/hub/data/.",
-            "default": "Applied 2026-08-18 ~14:20 by this firing: CLAUDE.md's trial-Hub table now names <repo>/hub/data/agentweave.db and hub-trial-8010.pid (verified live against a running 8010 instance and GET /api/v1/projects, matching the drafted proposal in openspec/explorations/2026-08-18-claude-md-trial-hub-section-is-stale.md), and the stray 'pre-migration original, nothing runs against it' paragraph that contradicted the corrected table was rewritten to match. The Specifications section's 'no archive phase and no concept of a current-behaviour specification' claim was corrected too -- verified independently by reading hub/hub/spec_lifecycle.py this firing: ARCHIVED and CURRENT both exist (CURRENT reached only via create_document for capability-kind documents, never via transition()). Left the corpus-migration decision itself to the operator, per this decision's own default. Diff: git diff <the merge commit>..HEAD -- CLAUDE.md once committed."
-        }
-    ],
-    "known_debts": [
-        {
-            "id": "loop-queue-is-unwritable",
-            "summary": "Task.loop_id is read in five places and written in ZERO -- tasks.py:427 (filter), scheduler.py:86/:99 (stop-condition counts), scheduler.py:417 (event payload), schemas/jobs.py:71 (a comment). No code path sets it; every test that exercises it fabricates the row directly in the ORM (test_scheduler.py:244, test_tasks.py:310-312). So a loop's queue cannot be populated through any real path, and stop_when_queue_empties is dead in production because _loop_stop_reason (scheduler.py:98-101) guards on ever_count, which can never become non-zero. Measured during prep 2026-08-18; Q5 must verify independently before relying on it."
-        },
-        {
-            "id": "ui-stale-false-positive",
-            "summary": "hub/hub/main.py:84 ui_source_fingerprint folds `git status --porcelain` into the hash so uncommitted edits move it. But CLAUDE.md's documented workflow is build -> make ui -> commit TOGETHER, so the stamp is always recorded while the tree is dirty; the moment you commit, that dirty string empties and the fingerprint can never match again. Result: /health reports ui_stale on a bundle that is byte-for-byte correct. CONFIRMED this session -- commit 8898155 did rebuild and commit the assets, and a fresh rebuild produced byte-identical output with only the stamp changing (commit ab7e5fe). Fix shape: stamp from the committed tree, or exclude the dirty component from the recorded fingerprint while keeping it for the live check. Queued as Q8."
-        },
-        {
-            "id": "staticpool-fixture-race",
-            "summary": "The Hub test fixture's sqlite+aiosqlite:///:memory: resolves to a StaticPool -- ONE DBAPI connection shared by every session in the process -- so a concurrent session's close rolls back another's pending write while commit() still returns cleanly. Measured 105/200 commits lost with a concurrent poller vs 0/200 without. One test is xfailed for it. THREE attempts have failed: a file-backed DATABASE_URL hung the suite; session-scoped create_all produced 399 errors / 7 failures by skipping _run_alembic_upgrade(); a third attempt (file-backed + WAL + busy_timeout + session-scoped alembic) produced a NEW mode where pytest reports both an XPASS and an XFAIL for the same collected item. Do NOT attempt a fourth this run -- it is not on the queue and has eaten three sessions."
-        },
-        {
-            "id": "fixture-overhead",
-            "summary": "The Hub suite is near-100% fixture overhead -- create_app() plus drop_all/create_all across 43 tables per test is essentially all of its ~8-minute runtime. Entangled with staticpool-fixture-race; same warning applies."
-        },
-        {
-            "id": "ci-never-ran",
-            "summary": "CI has never run on master at 1e0d08e nor on any commit of autonomous/2026-08-18-the-app-feels-alive. Every suite result on record is local. Q1 exists to change this."
-        },
-        {
-            "id": "merge-fixture-damage",
-            "summary": "proj-5e960453 on the trial Hub holds 1 orphan spec_edit_proposals row and 2 bogus spec_document_merges rows from the crashed gated merges. Deliberately NOT cleaned -- it is a regression fixture. Do not tidy it away."
-        },
-        {
-            "id": "duplicate-commits-across-branches",
-            "summary": "The packaging fix and both CI fixes exist on BOTH branches under different SHAs (e.g. 05b460c here vs 35c9a62 on the parent), because PR #2's head is the parent while the run works on autonomous/2026-08-18-loops-and-side-panels. That was the right call -- the PR had to carry the fixes -- but it means that once PR #2 merges to master, this branch is ahead of master with duplicated changes. git rebase matches patch-ids and will usually drop them cleanly; a merge will not. When this branch is eventually landed, REBASE onto master rather than merging, and check the resulting diff contains no duplicated hunks. Flag this in the handoff -- it is the kind of thing that reads as a conflict for reasons nobody remembers."
-        }
-    ],
-    "handover_note": "Prepared 2026-08-18 morning with the operator awake and answering. The spine changed twice during prep: the roadmap's Proposal A was put to the operator, who rejected it on the merits (a loop's agent already has a charter), and the operator then reframed a loop as something an agent creates for itself -- 'a loop has an overall goal that once completed it finishes... it could be one of the tools an agent can use.' That reframing IS the spine. The side panel is not a separate feature bolted on: the operator was explicit that agent-created loops are only acceptable if the operator can see what they are doing, which is the governance-and-visibility philosophy applied. Design them as one thing. Design FIRST and deeply -- the operator asked for a deep dive twice and chose 'design now, the loop implements it'. Do not skip to code.",
-    "standing_checks": {
-        "heartbeat": "Refresh last_heartbeat to now while working; back-date it ~40 minutes at the very end, after pushing, so the next firing takes over instead of standing down.",
-        "branch_claim": "Before ANY work, check whether an interactive session holds the branch: a fresh last_heartbeat means stand down. Note the known hole -- the grace check happens only at firing START, so a firing already running will not notice an interactive session that claims the branch mid-run. That happened at 11:12-11:32 today. If you find uncommitted work you did not write, VERIFY it (run its tests) before committing it, and never `git add -A`."
+    {
+      "situation": "CI only runs on push to master or on a pull request to master (.github/workflows/ci.yml). A plain branch push produces NO CI signal, and the standing rule is 'full auto, but only on green CI'.",
+      "decision": "Open ONE DRAFT pull request from autonomous/2026-08-18-panels-loops-and-app to master, early, so every push gets CI. Mark it draft, never mark it ready, never merge it. This is not merging — it is the only way to get the signal the standing rule requires, and it leaves the operator a reviewable PR in the morning.",
+      "cost_if_wrong": "Low and reversible — close the PR. Logged in decisions_for_user in case they object to any PR at all."
     },
-    "time_guard": {
-        "why": "Four fixes plus two explorations plus two specs will not all fit in the runway remaining at 11:00 (~6h). The operator's priority is explicit, so this says what to DROP rather than leaving a firing to invent an answer at 16:00.",
-        "at_1330": "If Q5 (explore loops) has not STARTED by 13:30, stop taking new fix work: finish the fix in hand, then go straight to Q5. Q3 and Q4 are the droppable ones -- Q3 likely falls out of Q2 anyway, and Q4 is a false-alarm fix with no user-facing behaviour change. Record in the log what was dropped and why.",
-        "at_1530": "If Q7 (explore side panel) has not started by 15:30, do NOT start it. A rushed exploration is worse than none -- it reads authoritative and is not. Spend the remaining time finishing Q6 properly and writing the handoff.",
-        "at_1630": "Stop new work. Write the handoff (/handoff) and the final log entry. The operator returns to this, so the morning-easy rules apply: what changed, what was proven with evidence, what is open, decisions waiting, and what to distrust."
+    {
+      "situation": "Panel tasks 5.5 and 6.1 deliberately refuse to state a number (the files tab's minimum width, and tab-strip overflow behaviour). Design D12 says measure against a real shell.",
+      "decision": "MEASURE both with Playwright against the running Hub once the shell exists, then write the number down beside SPEC_DOC_MIN_WIDTH in hub/ui/src/components/spec/specPreferences.ts with a comment in the same style. Record what was measured and how in the log. Do NOT guess a number and do NOT skip the task.",
+      "cost_if_wrong": "Low — a measured number the operator disagrees with is one constant to change, and the log says how it was derived."
     },
-    "last_heartbeat": "2026-08-18T13:53:00+01:00"
+    {
+      "situation": "An iteration finishes the panel change's agent-verifiable sections while loop work remains, or vice versa.",
+      "decision": "Follow the queue order as written. It already interleaves the two changes so neither is starved — that is the operator's 'work on both specs' made concrete. Do not reorder to finish one change first.",
+      "cost_if_wrong": "Low."
+    },
+    {
+      "situation": "The queue empties before 08:00 (unlikely — 124 tasks remain across both changes).",
+      "decision": "Do NOT stop. Move to APP1/APP2 (desktop icon and app experience), then FREE. The operator explicitly authorised free choice after both specs.",
+      "cost_if_wrong": "None."
+    },
+    {
+      "situation": "A Hub Python change needs the trial Hub restarted to take effect.",
+      "decision": "Restart it detached (see environment.hub_restart below) so it outlives the firing. No agent runs are in flight tonight, so a restart costs nothing.",
+      "cost_if_wrong": "Low."
+    }
+  ],
+
+  "decisions_for_user": [
+    "'Clear all projects from the test hub' — I did NOT delete proj-ff695d96 (aw-loop10) or proj-5e960453 (this repo's registration, the browser suite's fixture). CLAUDE.md, three handoffs and an executable code guard all protect aw-loop10, and deletion is irreversible. I deleted only the stray `Agentweave` registration pointing at <repo>/hub, which CLAUDE.md says to delete. If you genuinely meant all four, say so and it takes one command.",
+    "I pre-authorised ONE DRAFT PR to master purely to get CI to run (CI ignores branch pushes). It will never be marked ready or merged. If you did not want any PR created unattended, close it — nothing depends on it.",
+    "Loop task 12.2 ('mypy clean') is not achievable: 361 pre-existing errors in 86 files. I rescoped it to 'no new errors vs the baseline'. Whether you want a separate change to actually clean mypy is your call.",
+    "Still open from handoff 0058, untouched by this run: the D15 name-reuse hole (a new agent taking an archived agent's name inherits its creator privilege); whether an agent should be able to archive a bare job at all; and the two naming explorations (2026-08-18-candidate-names.md, 2026-08-18-does-the-name-still-fit.md) which may be a live question about renaming the product before more UI is built on the current name."
+  ],
+
+  "environment": {
+    "verified_at": "2026-08-18T21:25+01:00",
+    "trial_hub": "http://127.0.0.1:8010, PID 12496, started 17:23, serving hub/data/agentweave.db. /health returns {\"status\":\"ok\"}. It is an ORPHANED uvicorn — its parent CLI and pywebview window were killed and it survived; it will NOT restart itself if killed.",
+    "hub_is_editable_install": "agentweave-hub 1.0.1 is an EDITABLE install pointing at C:\\Users\\huida\\Documents\\projects\\AgentWeave\\hub. So the running Hub serves THIS repo's code. Static assets are read from disk per request, so a UI rebuild is picked up WITHOUT a restart; Python changes DO need a restart.",
+    "api_key": "GET http://127.0.0.1:8010/api/v1/setup/token returns the instance key (local instances only). api_keys in the DB are hashed — do not try to read a key out of the table, that column does not exist.",
+    "ui_rebuild": "cd hub/ui && npm run build, then py -3.11 scripts/refresh_ui_bundle.py from the repo root. IMPORTANT: the stamp fingerprint enumerates via `git ls-files`, so an UNTRACKED new source file is invisible to it — `git add` the new files BEFORE running refresh_ui_bundle.py, or the stamp goes stale the moment you commit. Verify with `py -3.11 scripts/refresh_ui_bundle.py --check`.",
+    "playwright": "Installed and working. Run: cd hub && AW_HUB_URL=http://127.0.0.1:8010 AW_HUB_API_KEY=<key> py -3.11 -m pytest tests/browser -q. Verified 33 passed at 21:10. Without AW_HUB_URL the whole package skips at collection, which is deliberate — never make it a CI gate.",
+    "hub_restart": "Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{CommandLine='cmd.exe /c \"cd /d C:\\Users\\huida\\Documents\\projects\\AgentWeave\\hub && C:\\Users\\huida\\AppData\\Local\\Programs\\Python\\Python311\\python.exe -m uvicorn hub.main:app --host 127.0.0.1 --port 8010 > %TEMP%\\agentweave-hub.log 2>&1\"'}",
+    "projects_on_hub": "proj-5e960453 (AgentWeave, this repo — KEEP), proj-b44fac0c (Throwaway taste pass — disposable), proj-ff695d96 (aw-loop10 — PROTECTED).",
+    "icon_asset_exists": "src/agentweave/assets/icon.ico already exists — APP1 should reuse it rather than generating a new one."
+  },
+
+  "verified_green_at_prep": {
+    "browser_suite": "33 passed (live Hub, 17.26s)",
+    "ui_vitest": "1014 passed across 101 files",
+    "ui_lint_and_tsc": "eslint clean (--max-warnings 0), tsc --noEmit clean",
+    "ruff": "All checks passed (src/ hub/ tests/)",
+    "black": "403 files unchanged",
+    "openspec": "2 changes strict-valid, 32 specs strict-valid",
+    "hub_pytest": "SEE FIRST ITERATION — a full run was still in flight when prep ended. hub/tests/test_migrations.py alone: 51 passed, 1 skipped. CI's last full run on master reported 2335 passed, 17 skipped, 1 xfailed.",
+    "mypy": "361 errors, 86 files — PRE-EXISTING, baselined, not a regression"
+  },
+
+  "traps": [
+    "Do NOT run two pytest invocations concurrently in this repo. Doing so during prep produced a spurious 'no tests ran' AND a spurious '2385 skipped' — either of which reads as a green or as inherited breakage. Run one at a time.",
+    "The Bash tool's cwd PERSISTS between calls. A bare `cd hub && ...` after a previous `cd hub` silently resolves wrong. Use absolute paths.",
+    "`pytest hub/tests/ tests/` together fails collection. Run them separately.",
+    "The full hub suite exceeds the 600s foreground cap — run it in the background or in file chunks.",
+    "page-jobs / page-tasks / page-spec do NOT exist in the running app — they are mocks in hub/ui/src/__tests__/App-mount.test.tsx. Grepping hub/ui/src without excluding __tests__ reports 104 test ids; production markup has 71.",
+    "Playwright's count() does not auto-wait, and neither do conditional guards. Use expect(...) before acting and assert the post-condition, or you get a false green (this has happened three times here).",
+    "PowerShell here-strings (@'...'@) are a syntax error in the Bash tool. Write commit messages to a file and use `git commit -F`.",
+    "Remove-Item with a VARIABLE path is blocked by a guard regardless of its value. Literal paths work.",
+    "$(pwd) in Git Bash yields /c/Users/... which aiosqlite cannot open. Use the Windows path form.",
+    "Launching `agentweave` from a directory containing hub/ silently produces no server (sys.path shadowing). Launch from a neutral cwd.",
+    "Git Bash `date` on this machine prints UTC but labels it +0100 — a heartbeat written from it lands an hour in the future and stalls the driver. Stamp timestamps from PowerShell or Python.",
+    "Keep any .ps1 ASCII-only. PowerShell 5.1 reads a BOM-less UTF-8 file as ANSI and an em dash breaks quoting.",
+    "A writing agent gets an isolated git worktree, so UNTRACKED files in the project directory are invisible to it."
+  ],
+
+  "read_first": [
+    "openspec/changes/2026-08-18-one-shell-three-panels/tasks.md — section 1 is done and annotated; the 1->2->3 ordering is load-bearing.",
+    "openspec/changes/2026-08-18-one-shell-three-panels/design.md — D1-D12. D6 is a WITHDRAWAL notice, not a decision.",
+    "hub/ui/src/store/panelTabsStore.ts — already built and tested. The shell consumes it; do not re-derive the tab model.",
+    "openspec/changes/2026-08-18-a-loop-writes-its-own-queue/tasks.md and design.md — 95 tasks, D1-D21.",
+    "openspec/explorations/2026-08-18-the-side-panel-with-the-operator.md — the conversation that overturned six unattended decisions; section 0 is the table.",
+    "hub/tests/browser/conftest.py — how the Playwright suite connects, why it is opt-in, and the two hydration traps documented in `goto`.",
+    "hub/ui/src/components/agents/ConversationView.tsx — :34-38 the derived breakpoint, :150-291 the hosting block P2b moves into the shell."
+  ]
 }
