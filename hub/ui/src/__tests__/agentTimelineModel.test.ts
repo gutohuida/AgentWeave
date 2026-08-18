@@ -4,6 +4,7 @@ import {
   entryCategory,
   findPairedResult,
   groupIntoTurns,
+  isSuccessCompletionEntry,
   reduceTurnBlocks,
   runStatusByRunId,
 } from '@/lib/agentTimelineModel'
@@ -37,6 +38,38 @@ describe('entryCategory', () => {
   it('classifies status/diagnostic as a structured result', () => {
     expect(entryCategory(entry({ kind: 'agent_output', output_kind: 'status' }))).toBe('result')
     expect(entryCategory(entry({ kind: 'agent_output', output_kind: 'diagnostic' }))).toBe('result')
+  })
+})
+
+describe('isSuccessCompletionEntry', () => {
+  it('matches runner_parsing.py\'s status_event("completed", ...) sentinel', () => {
+    expect(
+      isSuccessCompletionEntry(
+        entry({ kind: 'agent_output', output_kind: 'status', payload: { phase: 'completed' } }),
+      ),
+    ).toBe(true)
+  })
+
+  it('leaves a non-terminal status phase (e.g. a plan) alone', () => {
+    expect(
+      isSuccessCompletionEntry(
+        entry({ kind: 'agent_output', output_kind: 'status', payload: { phase: 'plan' } }),
+      ),
+    ).toBe(false)
+  })
+
+  it('ignores entries of any other kind or output_kind', () => {
+    expect(isSuccessCompletionEntry(entry({ kind: 'operator_input' }))).toBe(false)
+    expect(
+      isSuccessCompletionEntry(
+        entry({ kind: 'agent_output', output_kind: 'diagnostic', payload: { phase: 'completed' } }),
+      ),
+    ).toBe(false)
+    // A failed run's error_event (runner_parsing.py's is_error branch) is kind='error', never
+    // 'status' — it must keep rendering regardless of this helper.
+    expect(
+      isSuccessCompletionEntry(entry({ kind: 'agent_output', output_kind: 'error' })),
+    ).toBe(false)
   })
 })
 

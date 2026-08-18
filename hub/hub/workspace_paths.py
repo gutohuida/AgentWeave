@@ -13,6 +13,8 @@ import subprocess
 from pathlib import Path
 from typing import List
 
+from .subprocess_windows import no_console_kwargs
+
 _GIT_TIMEOUT_SECONDS = 10
 
 
@@ -32,6 +34,7 @@ def list_workspace_paths(repo_root: Path) -> List[str]:
             capture_output=True,
             text=True,
             timeout=_GIT_TIMEOUT_SECONDS,
+            **no_console_kwargs(),
         )
     except (OSError, subprocess.TimeoutExpired):
         return []

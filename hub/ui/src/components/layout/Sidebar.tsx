@@ -41,8 +41,9 @@ interface SidebarProps {
   /** Opening a specification document while the rail is standing in for the project tree. */
   onOpenSpecDocument?: (projectId: string, path: string) => void
   onAddAgent?: (projectId: string) => void
-  onOpenExisting: () => void
-  onCreateProject: () => void
+  /** Open a folder as a project. `open_existing` initialises it if it is not one yet,
+   *  so this single action covers both opening and creating. */
+  onAddProject: () => void
   /** Collapsed to an icon rail. The operator's choice and only theirs — no destination writes
    *  it (`hub-workspace-shell`: "Navigation collapses only when the operator asks"). */
   compact?: boolean
@@ -109,8 +110,7 @@ export function Sidebar({
   onBackFromAgentSettings,
   onOpenSpecDocument,
   onAddAgent,
-  onOpenExisting,
-  onCreateProject,
+  onAddProject,
   compact = false,
   onCompactChange,
   width = SIDEBAR_WIDTH,
@@ -212,7 +212,7 @@ export function Sidebar({
           activeAgent={activeAgent}
           onOpenProject={onOpenProject}
           onOpenAgent={onOpenAgent}
-          onCreateProject={onCreateProject}
+          onAddProject={onAddProject}
         />
       ) : spec ? (
         <SpecRailNav
@@ -295,23 +295,18 @@ export function Sidebar({
         <>
           <div className="flex items-center justify-between px-1 pb-2">
             <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>Projects</span>
-            <div className="flex items-center gap-0.5">
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                data-testid="rail-view-toggle"
-                data-view={railView}
-                aria-pressed={railView === 'recency'}
-                onClick={() => setRailView((view) => (view === 'tree' ? 'recency' : 'tree'))}
-                aria-label={railView === 'tree' ? 'Switch to recent conversations' : 'Switch to agent tree'}
-                title={railView === 'tree' ? 'Recent conversations' : 'Agent tree'}
-              >
-                <Icon name={railView === 'tree' ? 'schedule' : 'smart_toy'} size={15} />
-              </Button>
-              <Button variant="ghost" size="icon-xs" data-testid="open-existing-project" onClick={onOpenExisting} aria-label="Open existing project" title="Open existing project">
-                <Icon name="folder_open" size={15} />
-              </Button>
-            </div>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              data-testid="rail-view-toggle"
+              data-view={railView}
+              aria-pressed={railView === 'recency'}
+              onClick={() => setRailView((view) => (view === 'tree' ? 'recency' : 'tree'))}
+              aria-label={railView === 'tree' ? 'Switch to recent conversations' : 'Switch to agent tree'}
+              title={railView === 'tree' ? 'Recent conversations' : 'Agent tree'}
+            >
+              <Icon name={railView === 'tree' ? 'schedule' : 'smart_toy'} size={15} />
+            </Button>
           </div>
 
           <div className="min-h-0 flex-1 overflow-auto">
@@ -395,10 +390,21 @@ export function Sidebar({
             })}
           </div>
 
-          <Button variant="outline" size="md" data-testid="create-new-project" onClick={onCreateProject} aria-label="Add project" className="mt-3 w-full">
-            <Icon name="folder_plus" size={15} />
-            Add project
-          </Button>
+          {/* One action, not two. "Open existing" and "Add project" both opened the same modal
+              onto the same folder picker; the only difference was whether the folder had to exist
+              already, which is a mode rather than a second feature — and asking the operator to
+              pick between them happened at the exact moment they knew least. `open_existing`
+              already resolves all three cases on its own (a path the Hub knows, a directory
+              carrying a project marker, or a plain folder it initialises), and the OS folder
+              dialog has its own "New folder" button, so creating never needed an entry point of
+              its own. Operator, 2026-08-18: "Is 2 buttons the right call? Shouldn't this be
+              decided differently?" */}
+          <div className="mt-3">
+            <Button variant="outline" size="md" data-testid="add-project" onClick={onAddProject} aria-label="Add project" title="Open a folder — it is initialised as a project if it is not one yet" className="w-full">
+              <Icon name="folder_open" size={15} />
+              Add project
+            </Button>
+          </div>
         </>
       )}
     </aside>
@@ -422,14 +428,16 @@ function CompactRail({
   activeAgent,
   onOpenProject,
   onOpenAgent,
-  onCreateProject,
+  onAddProject,
 }: {
   projects: ProjectSummary[]
   selectedProjectId: string | null
   activeAgent: string | null
   onOpenProject: (projectId: string) => void
   onOpenAgent: (projectId: string, agent: string) => void
-  onCreateProject: () => void
+  /** Open a folder as a project. `open_existing` initialises it if it is not one yet,
+   *  so this single action covers both opening and creating. */
+  onAddProject: () => void
 }) {
   return (
     <>
@@ -484,17 +492,19 @@ function CompactRail({
           )
         })}
       </nav>
-      <Button
-        variant="ghost"
-        size="icon-sm"
-        data-testid="create-new-project"
-        onClick={onCreateProject}
-        aria-label="Add project"
-        title="Add project"
-        className="mt-2 self-center"
-      >
-        <Icon name="folder_plus" size={15} />
-      </Button>
+      {/* Collapsed rail: the same single action as the expanded one. */}
+      <div className="mt-2 flex flex-col items-center gap-1">
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          data-testid="add-project"
+          onClick={onAddProject}
+          aria-label="Add project"
+          title="Open a folder — it is initialised as a project if it is not one yet"
+        >
+          <Icon name="folder_open" size={15} />
+        </Button>
+      </div>
     </>
   )
 }

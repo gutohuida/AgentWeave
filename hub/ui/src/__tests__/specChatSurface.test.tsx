@@ -405,6 +405,20 @@ describe('the specification is reached from the composer', () => {
     expect(screen.queryByTestId('composer-spec-control')).not.toBeInTheDocument()
   })
 
+  it('offers a distinct way back into a document this conversation left, alongside Explore', async () => {
+    // The complaint this fixes: closing the document (or leaving mid-work) left Explore as the
+    // only control, and pressing it starts something new rather than reopening what was already
+    // there. Both controls must be present and must do different things.
+    renderChat(null)
+    const explore = screen.getByTestId('composer-start-exploration')
+    const reopen = screen.getByTestId('composer-open-existing-spec')
+    expect(explore).toHaveAccessibleName('Start an exploration')
+    expect(reopen).toHaveAccessibleName('Open an existing specification document')
+
+    fireEvent.click(reopen)
+    expect(await screen.findByRole('dialog')).toHaveAccessibleName('Search documents')
+  })
+
   it('separates changing the document from closing it', () => {
     // The original concern still holds: a pill whose press means "open" sometimes and "close"
     // other times is two controls wearing one hat. The toggle keeps them as distinct targets

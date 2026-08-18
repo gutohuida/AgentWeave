@@ -13,6 +13,14 @@ interface ComposerSpecControlProps {
   /** Detach the open document from this conversation. Never deletes it. */
   onStopExploring: () => void
   /**
+   * Reopen a document this conversation isn't currently attached to — the way back in after
+   * leaving mid-work. Distinct from `onOpenPicker`: that one is only reachable once a document
+   * is already open, so it cannot be the answer to "I closed it and now Explore only starts a
+   * new one." Optional, and omitted (not merely unused) on surfaces that have no real picker to
+   * open, e.g. a not-yet-created conversation — there is nothing existing to reopen into yet.
+   */
+  onOpenExisting?: () => void
+  /**
    * Declared, but the document does not exist yet — the new-conversation surface, where there is
    * no conversation to attach one to and no title to name it from until the first message. The
    * document is created on send, so this state lasts exactly as long as it takes to write one
@@ -55,33 +63,55 @@ export function ComposerSpecControl({
   onOpenPicker,
   onStartExploration,
   onStopExploring,
+  onOpenExisting,
   armed = false,
   busy = false,
 }: ComposerSpecControlProps) {
   if (!documentLabel) {
     return (
-      <Button
-        type="button"
-        variant="ghost"
-        size="pill"
-        data-testid="composer-start-exploration"
-        onClick={armed ? onStopExploring : onStartExploration}
-        disabled={busy}
-        data-active={armed ? 'true' : 'false'}
-        className={`${composerControlClassName} min-w-0 max-w-full`}
-        title={
-          armed
-            ? 'Exploring — the document is created with your first message'
-            : 'Start an exploration — creates a specification document for this conversation'
-        }
-        aria-label={armed ? 'Stop exploring' : 'Start an exploration'}
-        aria-pressed={armed}
-      >
-        <Icon name="article" size={13} />
-        <span className="min-w-0 truncate">
-          {busy ? 'Starting…' : armed ? 'Exploring' : 'Explore'}
-        </span>
-      </Button>
+      <span className="flex min-w-0 items-center gap-1">
+        <Button
+          type="button"
+          variant="ghost"
+          size="pill"
+          data-testid="composer-start-exploration"
+          onClick={armed ? onStopExploring : onStartExploration}
+          disabled={busy}
+          data-active={armed ? 'true' : 'false'}
+          className={`${composerControlClassName} min-w-0 max-w-full`}
+          title={
+            armed
+              ? 'Exploring — the document is created with your first message'
+              : 'Start an exploration — creates a specification document for this conversation'
+          }
+          aria-label={armed ? 'Stop exploring' : 'Start an exploration'}
+          aria-pressed={armed}
+        >
+          <Icon name="article" size={13} />
+          <span className="min-w-0 truncate">
+            {busy ? 'Starting…' : armed ? 'Exploring' : 'Explore'}
+          </span>
+        </Button>
+        {/* A second, distinct action -- not a second meaning bolted onto Explore. Explore
+            commits to starting something new; this reopens something that already exists.
+            Conflating them was the bug: leaving mid-work left no way back to the document
+            that was already there, only a button that would have started another one. */}
+        {!armed && onOpenExisting && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="pill"
+            data-testid="composer-open-existing-spec"
+            onClick={onOpenExisting}
+            disabled={busy}
+            className={`${composerControlClassName} min-w-0 max-w-full shrink-0 px-1.5`}
+            title="Open an existing specification document"
+            aria-label="Open an existing specification document"
+          >
+            <Icon name="folder_search" size={13} />
+          </Button>
+        )}
+      </span>
     )
   }
 

@@ -18,6 +18,8 @@ import sys
 from dataclasses import dataclass
 from typing import Literal, Optional
 
+from .subprocess_windows import no_console_kwargs
+
 DEFAULT_TIMEOUT_SECONDS = 120.0
 
 _CHOSEN_PREFIX = "CHOSEN:"
@@ -146,6 +148,7 @@ async def open_folder_dialog(*, timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS
             _DIALOG_SCRIPT,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            **no_console_kwargs(),
         )
         try:
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout_seconds)

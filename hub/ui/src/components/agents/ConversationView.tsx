@@ -193,6 +193,7 @@ export function ConversationView({
       specDocumentPath={document}
       specDocumentLabel={document ? documentNode?.title ?? document : null}
       onOpenSpecPicker={openPicker}
+      onOpenExistingSpec={openPicker}
       onStartExploration={() => startExploration()}
       /* Detach, never delete. An exploration leaves an artifact; a toggle that discarded it on
        * the way back would be a trap dressed as a switch. */

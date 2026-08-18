@@ -246,6 +246,76 @@ describe('AgentTimeline', () => {
     expect(screen.getByText(/Turn folded/)).toBeInTheDocument()
   })
 
+  it('renders no end-of-turn text for a normal successful run (operator: no end-of-conversation message)', () => {
+    render(
+      <AgentTimeline
+        agent={agent}
+        entries={[
+          entry({ id: 'text-1', kind: 'agent_output', output_kind: 'text', content: 'here is the answer', run_id: 'run-ok' }),
+          entry({
+            id: 'status-1',
+            kind: 'agent_output',
+            output_kind: 'status',
+            content: 'Completed',
+            payload: { version: 1, phase: 'completed', summary: 'Completed' },
+            run_id: 'run-ok',
+            timestamp: '2026-08-02T00:00:01Z',
+          }),
+        ]}
+        roster={[agent]}
+        timelineEvents={[]}
+        isRunning={false}
+      />,
+    )
+    expect(screen.getByText('here is the answer')).toBeInTheDocument()
+    expect(screen.queryByText('Completed')).not.toBeInTheDocument()
+    expect(screen.queryByTestId(/result-card-/)).not.toBeInTheDocument()
+  })
+
+  it('still surfaces a failed run\'s error text — only the successful-completion sentinel is hidden', () => {
+    render(
+      <AgentTimeline
+        agent={agent}
+        entries={[
+          entry({
+            id: 'error-1',
+            kind: 'agent_output',
+            output_kind: 'error',
+            content: 'claude_result_error: max turns reached',
+            run_id: 'run-fail',
+          }),
+        ]}
+        roster={[agent]}
+        timelineEvents={[]}
+        isRunning={false}
+      />,
+    )
+    expect(screen.getByText('claude_result_error: max turns reached')).toBeInTheDocument()
+  })
+
+  it('still renders a non-terminal status entry (e.g. a plan), only the completed sentinel is hidden', () => {
+    render(
+      <AgentTimeline
+        agent={agent}
+        entries={[
+          entry({
+            id: 'status-plan',
+            kind: 'agent_output',
+            output_kind: 'status',
+            content: 'Planning the change',
+            payload: { version: 1, phase: 'plan', summary: 'Planning the change' },
+            run_id: 'run-plan',
+          }),
+        ]}
+        roster={[agent]}
+        timelineEvents={[]}
+        isRunning={false}
+      />,
+    )
+    expect(screen.getByText('Planning the change')).toBeInTheDocument()
+    expect(screen.getByTestId('result-card-run-plan')).toBeInTheDocument()
+  })
+
   it('does not fold the newest turn on mount under StrictMode double-invoked effects', () => {
     // The Hub app renders inside <StrictMode>, which double-invokes effects on
     // mount specifically to surface bugs like a "skip the first run" guard

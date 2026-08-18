@@ -27,6 +27,8 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from .subprocess_windows import no_console_kwargs
+
 IS_WINDOWS = sys.platform == "win32"
 
 # Agent CLIs emit newline-delimited JSON records that can be several kilobytes long. ConPTY
@@ -201,6 +203,7 @@ def terminate_process_tree(pid: int, force: bool = True) -> None:
             ["taskkill", "/F", "/T", "/PID", str(pid)],
             capture_output=True,
             check=False,
+            **no_console_kwargs(),
         )
     else:
         import signal
@@ -339,7 +342,7 @@ class PipeSession:
                     "/c",
                     subprocess.list2cmdline(resolved_cmd),
                 ]
-            popen_options["creationflags"] = subprocess.CREATE_NO_WINDOW
+            popen_options.update(no_console_kwargs())
         else:
             # Gives the child its own process group so terminate_process_tree can stop
             # commands Codex launched as well as the direct Codex process.

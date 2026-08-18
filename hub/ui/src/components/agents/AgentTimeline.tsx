@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { format } from 'date-fns'
 import { Icon } from '@/components/common/Icon'
 import { MarkdownMessage } from '@/components/agents/MarkdownMessage'
 import { ToolEditDiff } from '@/components/agents/ToolEditDiff'
 import { editDiffStat } from '@/lib/editDiff'
+import { formatElapsedSeconds, useElapsedSeconds } from '@/hooks/useElapsedSeconds'
 import type { AgentSummary, AgentTimelineEvent } from '@/api/agents'
 import type { TimelineEntry } from '@/api/agentChat'
 import type { QueueStatus } from '@/api/queue'
@@ -12,7 +13,9 @@ import {
   entryCategory,
   findPairedResult,
   groupIntoTurns,
+  isSuccessCompletionEntry,
   reduceTurnBlocks,
+  runDurationsByRunId,
   runStatusByRunId,
   type RunLifecycleStatus,
   type TimelineTurn,
@@ -30,6 +33,15 @@ interface AgentTimelineProps {
   /** Bump to fold every turn — driven by the header's "Fold all turns" button. */
   foldAllSignal?: number
 }
+
+/** Every lifecycle status that means "this run is over", whatever the outcome. `started` is
+ *  the only one that is not terminal. */
+const TERMINAL_STATUSES = new Set<RunLifecycleStatus | undefined>([
+  'completed',
+  'failed',
+  'stopped',
+  'interrupted',
+])
 
 const TERMINAL_LABEL: Partial<Record<RunLifecycleStatus, string>> = {
   failed: 'Turn failed',
@@ -58,6 +70,43 @@ export function AgentTimeline({
 
   const { turns, pending } = useMemo(() => groupIntoTurns(entries), [entries])
   const statusByRun = useMemo(() => runStatusByRunId(timelineEvents), [timelineEvents])
+  const durationByRun = useMemo(() => runDurationsByRunId(timelineEvents), [timelineEvents])
+
+  // `isRunning` is `agent.status === 'running'` — a POLLED roster field, so it stays true for a
+  // beat after the run has actually ended. The response text and the run's terminal lifecycle
+  // event both arrive over SSE well before that poll lands, which left the live indicator sitting
+  // underneath a finished answer, still counting, before flipping to "Worked for Xs" seconds
+  // later (operator, 2026-08-18: "the working indicator then moves to under the message stays
+  // active for a couple more seconds then disappears and collapse at the worked for one").
+  //
+  // So the indicator is gated on the lifecycle events instead — the same source `durationByRun`
+  // reads — which makes the handoff atomic: the instant the terminal event lands, the live
+  // counter goes and the settled line appears. `isRunning` is still required, so the indicator
+  // cannot appear for an idle agent whose last run simply has no terminal event recorded.
+  // Two terminal signals, deliberately, because they arrive at very different speeds:
+  //
+  //   1. The run's own status line, which STREAMS in with the entries (`kind="status"`,
+  //      `payload.phase="completed"` — the row `isSuccessCompletionEntry` hides from view). It
+  //      lands the instant the run ends.
+  //   2. The run-lifecycle timeline event, which is authoritative but arrives late: the SSE event
+  //      only INVALIDATES the timeline query (`useAgentTimeline`), so the value costs a further
+  //      HTTP round trip.
+  //
+  // Gating on (2) alone still left a visible tail — the counter kept running under a finished
+  // answer for as long as the refetch took (operator, 2026-08-18: "It still linger a little
+  // bit"). (1) closes that gap; (2) stays as the backstop for a run whose status line never
+  // arrived, and for history loaded fresh where the entry is long since persisted.
+  const lastTurn = turns.length > 0 ? turns[turns.length - 1] : undefined
+  const lastRunId = lastTurn?.runId ?? null
+  const lastRunSettled =
+    (lastTurn?.entries.some(isSuccessCompletionEntry) ?? false) ||
+    (lastRunId !== null && TERMINAL_STATUSES.has(statusByRun[lastRunId]))
+  const runVisiblyActive = isRunning && !lastRunSettled
+
+  // Timed from the moment this pane saw the run begin. Only ever shown live; once the run ends,
+  // `durationByRun` (from persisted event timestamps) takes over, so a refresh does not change
+  // what a finished turn says it took.
+  const liveElapsed = useElapsedSeconds(runVisiblyActive)
   const [foldOverride, setFoldOverride] = useState<Record<string, boolean>>({})
 
   // The caller always passes a defined counter (never undefined) that starts
@@ -132,7 +181,11 @@ export function AgentTimeline({
         const terminalLabel = runStatus ? TERMINAL_LABEL[runStatus] : undefined
 
         return (
-          <div key={key} className="flex flex-col gap-[21px]">
+          // `data-turn-boundary` is how AgentOutputPanel measures the newest turn, so it can size
+          // the tail spacer and pin a just-sent message to the top of the viewport. A marker
+          // rather than a ref because the panel owns the scroll container and this component owns
+          // the turns; passing refs up for every turn would couple them far more tightly.
+          <div key={key} data-turn-boundary="" className="flex flex-col gap-[21px]">
             {/* Every turn is foldable, including the last. Nothing folds on its own any more,
                 so gating this on `!isLastTurn` would leave a single-turn conversation with no
                 way to fold at all. */}
@@ -150,6 +203,7 @@ export function AgentTimeline({
               turnKey={key}
               agentName={agent.name}
               colorByName={colorByName}
+              durationSeconds={turn.runId ? durationByRun[turn.runId] : undefined}
             />
             {terminalLabel && (
               <div
@@ -166,6 +220,33 @@ export function AgentTimeline({
           </div>
         )
       })}
+
+      {/* Where the answer is about to appear, not down in the composer. Operator, 2026-08-18:
+          "I think the working should be on the composer screen not the chat box. Right where the
+          agent is supposed to answer." Sitting here also means the response arrives *under* it
+          rather than shoving it aside, so nothing jumps as the text streams in. */}
+      {runVisiblyActive && (
+        <div
+          className="flex items-center gap-2 text-[11px]"
+          style={{ color: 'var(--text-3)' }}
+          data-testid="timeline-working-indicator"
+          role="status"
+          aria-live="polite"
+        >
+          <span className="inline-flex items-center gap-[3px]" aria-hidden="true">
+            {[0, 200, 400].map((delay) => (
+              <span
+                key={delay}
+                className="h-1 w-1 rounded-full animate-pulse"
+                style={{ background: 'var(--green)', animationDelay: `${delay}ms` }}
+              />
+            ))}
+          </span>
+          <span>
+            Working{liveElapsed !== null ? ` · ${formatElapsedSeconds(liveElapsed)}` : ''}
+          </span>
+        </div>
+      )}
 
       {pending.map((entry) => (
         <MessageEntry
@@ -234,27 +315,73 @@ function TurnBody({
   turnKey,
   agentName,
   colorByName,
+  durationSeconds,
 }: {
   turn: TimelineTurn
   turnKey: string
   agentName: string
   colorByName: ColorLookup
+  /** Whole-run duration for a finished turn; undefined while running or if unknown. */
+  durationSeconds?: number
 }) {
   // Walked in execution order — a block is never hoisted ahead of the text that
   // preceded it (2026-08-04-hub-charcoal-visual-refresh).
   const blocks = useMemo(() => reduceTurnBlocks(turn.entries), [turn.entries])
 
+  // Where the agent's half of the turn starts — the operator's own message is not something
+  // the agent "worked for", so the duration belongs after it, immediately above the response.
+  const firstAgentBlockId = useMemo(() => {
+    const first = blocks.find(
+      (block) => block.kind === 'work' || block.entry.kind === 'agent_output',
+    )
+    return first?.kind === 'work' ? first.id : first?.entry.id
+  }, [blocks])
+
   return (
     <>
       {blocks.map((block) => {
+        const blockId = block.kind === 'work' ? block.id : block.entry.id
+        // Operator, 2026-08-18: "After answering it could just look like worked for Xs and then
+        // the response underneath." Unlike the "Completed" message this replaces, it says
+        // something — and it sits where the eye already is rather than down in the composer.
+        const durationLine =
+          durationSeconds !== undefined && blockId === firstAgentBlockId ? (
+            <div
+              key={`worked-${blockId}`}
+              className="text-[11px]"
+              style={{ color: 'var(--text-3)' }}
+              data-testid="turn-worked-for"
+            >
+              Worked for {formatElapsedSeconds(durationSeconds)}
+            </div>
+          ) : null
+
         if (block.kind === 'work') {
-          return <WorkBlockDisclosure key={block.id} entries={block.entries} />
+          return (
+            <Fragment key={block.id}>
+              {durationLine}
+              <WorkBlockDisclosure entries={block.entries} />
+            </Fragment>
+          )
         }
         const entry = block.entry
+        // No end-of-turn text for a normal successful run (operator: "We don't want any
+        // end-of-conversation message"). The event itself is untouched — only its card here.
+        if (isSuccessCompletionEntry(entry)) return null
         if (entryCategory(entry) === 'result') {
-          return <ResultCard key={entry.id} entry={entry} turnKey={turnKey} />
+          return (
+            <Fragment key={entry.id}>
+              {durationLine}
+              <ResultCard entry={entry} turnKey={turnKey} />
+            </Fragment>
+          )
         }
-        return <MessageEntry key={entry.id} entry={entry} agentName={agentName} colorByName={colorByName} />
+        return (
+          <Fragment key={entry.id}>
+            {durationLine}
+            <MessageEntry entry={entry} agentName={agentName} colorByName={colorByName} />
+          </Fragment>
+        )
       })}
     </>
   )

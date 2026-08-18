@@ -41,6 +41,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from .repo_hygiene import seed_repo_excludes
+from .subprocess_windows import no_console_kwargs
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +86,7 @@ def _run_git(cwd: Path, *args: str, check: bool = True) -> subprocess.CompletedP
         capture_output=True,
         text=True,
         timeout=_GIT_TIMEOUT_SECONDS,
+        **no_console_kwargs(),
     )
     if check and result.returncode != 0:
         raise GitCommandError(list(args), result.returncode, result.stderr)
@@ -106,6 +108,7 @@ def is_git_repo(path: Path) -> bool:
             capture_output=True,
             text=True,
             timeout=_GIT_TIMEOUT_SECONDS,
+            **no_console_kwargs(),
         )
     except (OSError, subprocess.SubprocessError):
         return False

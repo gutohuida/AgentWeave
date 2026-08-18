@@ -330,8 +330,20 @@ def _docker_available() -> bool:
     """Check if Docker and docker compose are available."""
     if not shutil.which("docker"):
         return False
-    # Check for docker compose (v2) or docker-compose (v1)
-    result = subprocess.run(["docker", "compose", "version"], capture_output=True, timeout=10)
+    # Check for docker compose (v2) or docker-compose (v1). CREATE_NO_WINDOW keeps this
+    # silent probe from flashing a console on Windows -- see cli.py:866's DETACHED_PROCESS
+    # for the same reasoning applied to the long-lived Hub spawn. Hardcoded rather than
+    # `subprocess.CREATE_NO_WINDOW` because that attribute doesn't exist in typeshed's
+    # non-Windows stubs -- mypy fails the attr-defined check even under the platform guard,
+    # same as DETACHED_PROCESS/CREATE_NEW_PROCESS_GROUP below.
+    CREATE_NO_WINDOW = 0x08000000  # noqa: N806
+    creationflags = CREATE_NO_WINDOW if sys.platform == "win32" else 0
+    result = subprocess.run(
+        ["docker", "compose", "version"],
+        capture_output=True,
+        timeout=10,
+        creationflags=creationflags,
+    )
     if result.returncode == 0:
         return True
     # Fallback to docker-compose
@@ -737,6 +749,40 @@ def _open_app_window(url: str) -> None:
     webbrowser.open(url)
 
 
+def _app_icon_path() -> Optional[str]:
+    """Absolute path to the packaged provisional AgentWeave mark, if the asset is
+    present on disk. Both an editable install and a built wheel put it at
+    agentweave/assets/icon.ico; returns None rather than raising if it is missing,
+    so a stripped-down install still opens a window, just with pywebview's own
+    fallback icon."""
+    try:
+        from importlib import resources
+
+        icon = resources.files("agentweave").joinpath("assets", "icon.ico")
+        if icon.is_file():
+            return str(icon)
+    except Exception:
+        pass
+    return None
+
+
+def _set_windows_app_user_model_id() -> None:
+    """On Windows, tell the shell this process is its own app rather than a
+    fungible `python.exe`. Without this, `webview.start(icon=...)` still sets
+    the *window's* icon (title bar, Alt-Tab), but the taskbar button keeps
+    showing python.exe's own icon regardless -- confirmed empirically: the
+    taskbar button only picks up the packaged mark once this is set before
+    the window is created. No-op, and never raises, off Windows."""
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("AgentWeave.Hub")
+    except Exception:
+        pass
+
+
 def _open_app_window_native(url: str) -> bool:
     """Open `url` in a native OS window via pywebview.
 
@@ -748,9 +794,11 @@ def _open_app_window_native(url: str) -> bool:
     except ImportError:
         return False
 
+    _set_windows_app_user_model_id()
+
     try:
         webview.create_window("AgentWeave", url)
-        webview.start()
+        webview.start(icon=_app_icon_path())
         return True
     except Exception as exc:
         print_error(f"Native app window unavailable ({exc}); falling back to browser.")

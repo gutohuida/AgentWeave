@@ -18,6 +18,13 @@ dependencies = [
     "alembic>=1.13",
     "fastmcp>=2.0",
     "sse-starlette>=2.0",
+    # starlette is transitive via fastapi, but pinned explicitly: an unbounded fastapi>=0.110
+    # once let pip silently resolve starlette 1.6.0 in CI while dev ran 0.52.1, crossing a major
+    # version boundary nobody had tested (openspec/explorations/2026-08-17-the-hub-suite-has-never-run-clean.md).
+    # Both 0.52.1 and 1.6.0 are now verified compatible (hub/tests/_routing.py handles both route
+    # shapes); the upper bound exists so an untested future 2.x needs a conscious bump, not a
+    # silent one.
+    "starlette<2.0",
     "croniter>=2.0",
     "apscheduler>=3.10",
     "pywinpty>=2.0; sys_platform == 'win32'",

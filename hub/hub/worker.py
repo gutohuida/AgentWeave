@@ -46,6 +46,7 @@ from .db.engine import async_session_factory
 from .db.models import WorkerInvocation
 from .model_catalog import get_provider
 from .pty_runner import resolve_executable
+from .subprocess_windows import no_console_kwargs
 from .utils import short_id
 
 logger = logging.getLogger(__name__)
@@ -310,6 +311,7 @@ def _run_worker_process(cmd: List[str], cwd: Optional[str], timeout: int) -> _Sp
             errors="replace",
             timeout=timeout,
             stdin=subprocess.DEVNULL,
+            **no_console_kwargs(),
         )
     except subprocess.TimeoutExpired:
         return _Spawn("timeout", error=f"worker exceeded {timeout}s")

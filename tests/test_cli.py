@@ -294,8 +294,9 @@ class TestAppModeNativeWindow:
 
     def test_pywebview_installed_opens_window_with_resolved_url(self, monkeypatch):
         """4.2 — create_window/start receive the exact title and URL
-        `_hub_resolve_launch_url` already resolves, and the function reports True (the
-        caller's signal not to also call `_open_app_window`)."""
+        `_hub_resolve_launch_url` already resolves, `start` also receives the packaged
+        mark's path as `icon=`, and the function reports True (the caller's signal not
+        to also call `_open_app_window`)."""
         import sys
         import types
 
@@ -304,16 +305,22 @@ class TestAppModeNativeWindow:
         calls = []
         fake_webview = types.SimpleNamespace(
             create_window=lambda title, url: calls.append(("create_window", title, url)),
-            start=lambda: calls.append(("start",)),
+            start=lambda **kwargs: calls.append(("start", kwargs.get("icon"))),
         )
         monkeypatch.setitem(sys.modules, "webview", fake_webview)
 
         result = _open_app_window_native("http://127.0.0.1:8010/?project=proj-1")
         assert result is True
-        assert calls == [
-            ("create_window", "AgentWeave", "http://127.0.0.1:8010/?project=proj-1"),
-            ("start",),
-        ]
+        assert calls[0] == (
+            "create_window",
+            "AgentWeave",
+            "http://127.0.0.1:8010/?project=proj-1",
+        )
+        assert calls[1][0] == "start"
+        icon_path = calls[1][1]
+        assert icon_path is not None, "packaged icon.ico should resolve in this dev install"
+        assert Path(icon_path).name == "icon.ico"
+        assert Path(icon_path).is_file()
 
     def test_webview_start_exception_falls_back(self, monkeypatch, capsys):
         """4.3 — a broken backend (e.g. no WebView2/WebKitGTK/Qt) must not crash the
@@ -324,7 +331,7 @@ class TestAppModeNativeWindow:
 
         from agentweave.cli import _open_app_window_native
 
-        def _boom():
+        def _boom(**kwargs):
             raise RuntimeError("no WebView2 runtime found")
 
         fake_webview = types.SimpleNamespace(create_window=lambda title, url: None, start=_boom)
@@ -332,6 +339,99 @@ class TestAppModeNativeWindow:
 
         assert _open_app_window_native("http://127.0.0.1:8000") is False
         assert "WebView2" in capsys.readouterr().out
+
+    def test_open_app_window_native_sets_windows_app_user_model_id_first(self, monkeypatch):
+        """Confirmed empirically (see the Q7 log entry): `webview.start(icon=...)`
+        alone sets the window's own icon but not the taskbar button's — Windows
+        keeps showing python.exe's icon there until the process claims an explicit
+        AppUserModelID. That claim must happen before `create_window`, not after,
+        so assert both the call and its ordering relative to the two webview calls."""
+        import sys
+        import types
+
+        from agentweave import cli
+
+        calls = []
+        monkeypatch.setattr(
+            cli,
+            "_set_windows_app_user_model_id",
+            lambda: calls.append("aumid"),
+        )
+        fake_webview = types.SimpleNamespace(
+            create_window=lambda title, url: calls.append("create_window"),
+            start=lambda **kwargs: calls.append("start"),
+        )
+        monkeypatch.setitem(sys.modules, "webview", fake_webview)
+
+        assert cli._open_app_window_native("http://127.0.0.1:8000") is True
+        assert calls == ["aumid", "create_window", "start"]
+
+    def test_set_windows_app_user_model_id_noop_off_windows(self, monkeypatch):
+        """The AUMID call is a ctypes.windll shell32 call, which only exists on
+        Windows — must not even attempt it, let alone raise, on other platforms."""
+        from agentweave import cli
+
+        monkeypatch.setattr(cli.sys, "platform", "darwin")
+        cli._set_windows_app_user_model_id()  # must not raise
+
+    def test_set_windows_app_user_model_id_swallows_shell_errors(self, monkeypatch):
+        """A shell32 call that fails (old Windows, sandboxed process, whatever) must
+        not take down window opening — same swallow-and-continue posture as the
+        pywebview backend exception handling right next to this call site."""
+        import ctypes
+        import types
+
+        from agentweave import cli
+
+        monkeypatch.setattr(cli.sys, "platform", "win32")
+
+        class _BoomShell32:
+            # Mirrors the real Windows API's PascalCase name — noqa: N802.
+            def SetCurrentProcessExplicitAppUserModelID(self, *_a, **_k):  # noqa: N802
+                raise OSError("no shell32 in this sandbox")
+
+        monkeypatch.setattr(
+            ctypes, "windll", types.SimpleNamespace(shell32=_BoomShell32()), raising=False
+        )
+        cli._set_windows_app_user_model_id()  # must not raise
+
+    def test_app_icon_path_resolves_to_a_real_multi_size_ico(self):
+        """The mark ships as a real asset, not a stub — resolve it once via the same
+        importlib.resources path `_open_app_window_native` uses, and confirm the file
+        it finds is a genuine multi-size .ico rather than a placeholder."""
+        from PIL import Image
+
+        from agentweave.cli import _app_icon_path
+
+        path = _app_icon_path()
+        assert path is not None
+        assert Path(path).is_file()
+        with Image.open(path) as img:
+            assert img.format == "ICO"
+            sizes = set(img.info.get("sizes", []))
+            assert (256, 256) in sizes
+            assert (16, 16) in sizes
+
+    def test_app_icon_path_missing_asset_returns_none(self, monkeypatch):
+        """A stripped-down install without the asset must not crash the window
+        open — `webview.start(icon=None)` is exactly today's un-iconed behaviour."""
+        import importlib.resources as resources_mod
+
+        from agentweave import cli
+
+        class _MissingIcon:
+            def joinpath(self, *parts):
+                return self
+
+            def is_file(self):
+                return False
+
+        class _FakeTraversable:
+            def joinpath(self, *parts):
+                return _MissingIcon()
+
+        monkeypatch.setattr(resources_mod, "files", lambda pkg: _FakeTraversable())
+        assert cli._app_icon_path() is None
 
     def test_hub_native_start_already_running_prefers_native_window(self, monkeypatch):
         """Exercises a real call site (task 3.3's first of four): `_hub_native_start`'s

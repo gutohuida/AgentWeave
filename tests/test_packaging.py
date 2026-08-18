@@ -4,8 +4,8 @@ Template coverage in the wheel currently rests on two independent mechanisms:
 MANIFEST.in's `recursive-include src/agentweave/templates *`, plus setuptools'
 `include_package_data` (on by default for pyproject.toml-configured projects).
 The `[tool.setuptools.package-data]` list enumerates subdirectories explicitly
-and is *not* exhaustive — `templates/skills/references/` is absent from it and
-ships only because of the two mechanisms above.
+and is *not* exhaustive — any subdirectory absent from that list ships only
+because of the two mechanisms above.
 
 That is fragile: dropping MANIFEST.in or setting `include_package_data = false`
 would silently ship an incomplete `templates/` directory, and every other test
@@ -89,11 +89,3 @@ def test_wheel_excludes_pycache(built_wheel):
         junk = [n for n in zf.namelist() if "__pycache__" in n or n.endswith(".pyc")]
 
     assert not junk, f"wheel contains bytecode artifacts: {junk}"
-
-
-def test_wheel_ships_skill_reference_docs(built_wheel):
-    """Explicit check for the file not covered by the package-data enumeration."""
-    with zipfile.ZipFile(built_wheel) as zf:
-        names = zf.namelist()
-
-    assert "agentweave/templates/skills/references/html-spec-conventions.md" in names

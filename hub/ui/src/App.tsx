@@ -471,8 +471,9 @@ export default function App() {
               navigateTo(projectDestination(id, 'spec', path), { replace: true })
             }
             onAddAgent={(id) => setAgentCreateProjectId(id)}
-            onOpenExisting={() => setProjectManagerMode('open')}
-            onCreateProject={() => setProjectManagerMode('create')}
+            // One action. `open_existing` resolves a known path, a marked directory, or a plain
+            // folder it initialises, so "create" never needed a separate entry point.
+            onAddProject={() => setProjectManagerMode('open')}
             compact={sidebarCollapsed}
             onCompactChange={setSidebarCollapsed}
             width={sidebarWidth}

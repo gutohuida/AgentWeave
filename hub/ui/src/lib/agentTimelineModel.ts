@@ -15,6 +15,17 @@ export function entryCategory(entry: TimelineEntry): EntryCategory {
   return 'message'
 }
 
+/** `runner_parsing.py`'s successful-turn sentinel — `status_event("completed", ...)`, kept on the
+ * wire because the Handoff flow's separate SSE broadcast depends on the run having *some* typed
+ * end marker to key off (see `agent_trigger.py`'s "Kept alongside the typed lifecycle event"
+ * comment) — but the operator does not want its rendered text ("Completed") ending every turn.
+ * A `status` entry for a still-open phase (e.g. codex's "plan") is unrelated and still renders. */
+export function isSuccessCompletionEntry(entry: TimelineEntry): boolean {
+  if (entry.kind !== 'agent_output' || entry.output_kind !== 'status') return false
+  const payload = entry.payload as Record<string, unknown> | null | undefined
+  return payload?.phase === 'completed'
+}
+
 export interface TimelineTurn {
   /** null for a legacy row with no recorded run (pre-Phase-3 data). */
   runId: string | null
@@ -111,6 +122,51 @@ const LIFECYCLE_EVENT_STATUS: Record<string, RunLifecycleStatus> = {
  * `_broadcast_run_lifecycle` and run_reconciliation.py). Reused rather than
  * duplicated so the timeline and the Activity tab never disagree about a
  * run's outcome. */
+/**
+ * run_id -> whole-run duration in seconds, from the lifecycle events' own timestamps.
+ *
+ * Deliberately derived from persisted events rather than from the live `useElapsedSeconds`
+ * counter: the counter measures how long *this browser tab* watched a run, so it is null for
+ * every turn that finished before the page loaded, and wrong for one that began before it. The
+ * "Worked for 12s" line has to read the same after a refresh as it did when the turn landed.
+ *
+ * A run with no terminal event yet (still going, or the process died without one) is absent
+ * rather than zero — the live indicator covers the first case and nothing should be claimed
+ * about the second.
+ */
+export function runDurationsByRunId(
+  timelineEvents: Array<{
+    event_type: string
+    timestamp: string
+    data?: Record<string, unknown> | null
+  }>,
+): Record<string, number> {
+  const startedAt: Record<string, number> = {}
+  const endedAt: Record<string, number> = {}
+
+  for (const event of timelineEvents) {
+    const runId = event.data?.run_id
+    if (typeof runId !== 'string') continue
+    const at = Date.parse(event.timestamp)
+    if (Number.isNaN(at)) continue
+    if (event.event_type === 'run_started') {
+      startedAt[runId] = at
+    } else if (LIFECYCLE_EVENT_STATUS[event.event_type]) {
+      endedAt[runId] = at
+    }
+  }
+
+  const durations: Record<string, number> = {}
+  for (const [runId, start] of Object.entries(startedAt)) {
+    const end = endedAt[runId]
+    // A clock that went backwards between two rows would otherwise produce a negative
+    // "Worked for -3s", which reads as a bug in the product rather than in the clock.
+    if (end === undefined || end < start) continue
+    durations[runId] = Math.round((end - start) / 1000)
+  }
+  return durations
+}
+
 export function runStatusByRunId(
   timelineEvents: Array<{ event_type: string; data?: Record<string, unknown> | null }>,
 ): Record<string, RunLifecycleStatus> {

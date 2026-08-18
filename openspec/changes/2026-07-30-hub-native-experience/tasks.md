@@ -1431,6 +1431,49 @@ projects API and no UI. `hub-visual-language` depends on this.*
 > implemented and verified. The checkboxes remain unchanged under the reconciliation rule; 12.5's
 > durable handoffs exist in the successor archives.
 
+> **Correction (2026-08-18) — 12.1's closure above is stale; it was reversed three days later, and
+> nothing in this file said so until now.** Found while doing the roadmap's Tier-3 item 8
+> (`openspec/explorations/2026-08-17-what-to-work-on-next.md` §8) audit pass, prompted by
+> `openspec/changes/2026-07-30-hub-native-experience/specs/agent-composer/spec.md`'s "The active
+> agent can be changed from the conversation" requirement reading as the *opposite* of
+> `openspec/specs/agent-composer/spec.md`'s current "The composer addresses the conversation it
+> belongs to" requirement ("the composer MUST NOT offer a control that redirects a submission to a
+> different agent") — the two cannot both be true of the same shipped product, so one had to be
+> checked against the tree rather than trusted from either document's prose.
+>
+> The archived change `2026-08-06-hub-collaboration-and-conversation-fixes`, in its own
+> `specs/agent-composer/spec.md`, **REMOVED** the in-place selector three days after this phase's
+> 2026-08-03 closure note, with the reason recorded verbatim: "the composer's target-agent selector
+> let a message typed in one agent's conversation be delivered to a different agent... the send path
+> is not scoped to the visible conversation, [so] a retargeted message left no trace in the
+> conversation the operator was looking at... the operator reported the affordance as counterintuitive
+> and asked for its removal." Confirmed
+> still live today, not just recorded as a past decision: `hub/ui/src/components/agents/Composer.tsx`
+> (:277-283) has no recipient-selector control, with an inline comment stating the same rationale —
+> "No recipient selector: a message goes to the agent whose conversation this is. The selector that
+> used to sit here could redirect a submission to a different agent with no trace in the visible
+> timeline."
+>
+> **What this means for 12.1 specifically:** "in-place switching" (redirecting an existing
+> conversation to a different agent mid-stream) is not merely unbuilt, it is a *rejected design* —
+> reopening it would contradict a recorded operator decision. "Search" and "launchability indicators"
+> did ship, but as part of the agent-creation and pre-conversation agent-choice surfaces
+> (`AgentCreateDialog.tsx`'s `useProviderLaunchability`, cited in this file's own phase 13 N6 note),
+> not as an in-conversation redirect control — there is no single shipped feature "12.1" names as a
+> whole. The 2026-08-03 note's claim that "every item in 12.1-12.4 is now implemented and verified"
+> should be read as **12.2-12.4 verified; 12.1 built-then-reversed, and now not wanted at all** — a
+> materially different claim than "closed." The checkboxes stay unchanged either way, per this file's
+> own reconciliation rule (a box does not retroactively tick for a decision, only for verified
+> behaviour), but a future reader relying on the 2026-08-03 note alone would believe a redirect
+> control exists. It does not, deliberately.
+>
+> **Consequence for 16.2:** the "present under the same name (2): `agent-composer`, `agent-tool-surface`"
+> line in that phase's 2026-08-12 note is true of the filename only. `agent-composer`'s current content
+> is not a superset of this umbrella's delta — it contains a requirement that directly contradicts one
+> of the delta's — so 16.2 cannot tick `agent-composer` as "mapped, no gap" on the strength of the name
+> match alone. Recorded here rather than re-litigated in section 16, per that section's own "closing
+> 16.2 requires deciding, per delta spec and per requirement" instruction.
+
 - [ ] 12.1 Build the agent/runner selector: in-place switching, search, launchability indicators from
       the Phase 3 probe.
 - [ ] 12.2 Add inline composer controls with responsive collapse into an overflow menu.
@@ -1860,6 +1903,740 @@ being built twice.*
 > (one home for requirement identifiers, evidence, and proposals — the note on phase 14 states it),
 > then do the 16.2 requirement-level mapping, then 16.1. Phase 13's four verified gaps and phase 15
 > are independent of that and can be picked up separately.
+
+> **Update (2026-08-18) — this note's own recommended prerequisite is now satisfied; the
+> requirement-level mapping itself is started, not finished.** Phase 14's design question this note
+> named as the blocker was settled the same week: section 14's 2026-08-17 update records
+> `spec-document-authority`/`spec-chat-session`/`requirement-traceability`/`task-lifecycle-governance`
+> as the one shipped home for identifiers, evidence, and proposals (15 of 19 items ticked against
+> cited scenarios). That clears this note's stated precondition for starting the requirement-level
+> mapping; it does not itself do that mapping for the other seven un-ticked delta specs
+> (`agent-conversation-timeline`, `agent-identity-and-skills`, `agent-inbound-queue`,
+> `hub-interface-feel`, `hub-native-runtime`, `hub-visual-language`, plus re-confirming
+> `agent-tool-surface` at requirement level rather than trusting the 2026-08-03 partial note above).
+>
+> One requirement-level check was done this pass, on the two specs already marked "present under the
+> same name": see phase 12's 2026-08-18 correction note above. `agent-composer`'s current spec
+> contains a requirement ("the composer MUST NOT offer a control that redirects a submission to a
+> different agent") that directly contradicts this umbrella's delta ("the active agent can be changed
+> from the conversation... without leaving the conversation") — a later, operator-requested reversal
+> (`archive/2026-08-06-hub-collaboration-and-conversation-fixes`), not an oversight. So even the two
+> specs this note's 2026-08-12 pass called "present under the same name" are not a clean match at
+> requirement level; `agent-composer` needs its own per-requirement pass alongside the seven renamed
+> ones before 16.2 can tick. `agent-tool-surface` was not re-checked this pass and should not be
+> assumed clean merely because it wasn't flagged.
+
+> **Update (2026-08-18) — `agent-inbound-queue` requirement-level pass, second of the eight
+> renamed/absent specs.** No current spec is named `agent-inbound-queue`; its six requirements are
+> not concentrated in one successor but scattered across at least `agent-conversation-workspace`,
+> `agent-tool-surface`, `agent-configuration`, `conversation-lifecycle`, and
+> `local-project-workspace` (grepped for `hop budget`/`hop depth`/`queue` across all 31 current
+> specs to find them, rather than guessing from the one file this umbrella's phase 6 pointed at).
+>
+> Five of the six requirements are confirmed shipped as described, including two numeric defaults
+> that still match five weeks later: `hop_budget` defaults to 6 and `turn_delivery_cap` to 10,
+> exactly as the delta specified, live in `hub/hub/inbound_queue.py:15-16`
+> (`DEFAULT_HOP_BUDGET`/`DEFAULT_TURN_DELIVERY_CAP`) and column defaults in
+> `hub/hub/db/models.py:48-49`. Delivered-entries-not-redelivered-after-stop is intact too, just
+> phrased as "its input is not returned to the queue" rather than the delta's "MUST NOT be
+> redelivered" (`agent-conversation-workspace/spec.md:1210,1268-1271`).
+>
+> One requirement did not merely move, it was superseded by a materially different architecture,
+> and this could only be found by reading the current spec's own scenarios and the live code, not
+> by matching prose. The delta's first requirement is "each agent has one ordered inbound queue" —
+> singular, agent-scoped, with no notion of which conversation an entry belongs to (the word
+> `conversation` does not appear in the delta file at all). The shipped model is conversation-scoped:
+> `InboundQueueEntry` carries a `conversation_id` (`hub/hub/db/models.py`), `queued_entries()`
+> filters by it (`hub/hub/inbound_queue.py:72-89`), and `agent-conversation-workspace/spec.md`'s own
+> "Different conversations never share one provider turn" scenario (line 71) states plainly that
+> "one agent has eligible queued entries for multiple conversations" — the opposite of one ordered
+> queue. This is not a naming drift like `agent-composer`'s; it is a real widening of the model
+> (conversations didn't exist as a first-class entity when this delta was written) that a
+> requirement-level sync must record as a redefinition, not tick as a match.
+>
+> Two of the eight remaining unmapped specs are now done (`agent-composer`, `agent-inbound-queue`).
+> Six remain: `agent-conversation-timeline`, `agent-identity-and-skills`, `hub-interface-feel`,
+> `hub-native-runtime`, `hub-visual-language`, plus re-confirming `agent-tool-surface` at
+> requirement level per the note above.
+
+> **Update (2026-08-18) — `agent-conversation-timeline` requirement-level pass, third of the eight
+> renamed/absent specs.** No current spec carries this name. Its seven requirements (one timeline
+> with no separate inbox; typed entries instead of uniform bubbles; stable per-agent identity color;
+> peer messages tinted with the other agent's color; queued entries visible pre-delivery with a
+> hop-budget explanation; undelivered entries withdrawable; timeline built from recorded association
+> rather than timestamp proximity) land mostly in `agent-conversation-workspace`, with the typed-entry
+> and structured-result requirements in `agent-stream-events`, and the color requirement in
+> `local-project-workspace` and `operator-agent-creation`.
+>
+> Five of the seven are confirmed shipped and adequately documented in current spec prose:
+> - No separate inbox / peer traffic inline: `agent-conversation-workspace/spec.md:170-180` ("no
+>   *Agents* destination and no *Messages* destination").
+> - Typed entries, intermediate work collapsible: `agent-stream-events/spec.md:238-273` (consecutive
+>   tool activity grouped into one collapsible block); confirmed live in
+>   `hub/ui/src/components/agents/AgentTimeline.tsx`, which renders `operator_input`, `inbound_peer`,
+>   `outbound_peer`, tool-activity, and `ResultCard` entries through entirely distinct branches, not
+>   one bubble type.
+> - Queued-visible-before-delivery / hop-budget explanation: `agent-conversation-workspace/spec.md:
+>   181-204` (undelivered state on submit) and `:440-443` (hop-budget-blocked chain deliverable),
+>   which defer to `agent-tool-surface`'s hop-budget requirement per this umbrella's own
+>   `agent-inbound-queue` note above; confirmed live in
+>   `AgentTimeline.tsx:193,197` ("Autonomous continuation paused ... reached the hop budget. They'll
+>   be delivered with your next message" — near-verbatim match to the delta's own scenario language).
+> - Undelivered entries withdrawable, delivered ones not: `agent-conversation-workspace/spec.md:
+>   426-443` ("withdraw" named four times across the requirement and its scenarios).
+> - Attribution recorded, not inferred: `agent-conversation-workspace/spec.md:79`, verbatim match —
+>   "neither provider session matching nor timestamp proximity determines membership."
+>
+> **Two requirements are shipped and verified live in code, but have no requirement text anywhere in
+> the current 31 specs — a real documentation gap, not a functionality gap, and the first of this
+> kind found in this mapping pass (the two prior passes found renamed or superseded content, not
+> undocumented content).**
+> - *Peer messages tinted with the sending/receiving agent's color.* Grepped `tint`, `sending agent's
+>   color`, `recipient.*color` across all current specs — nothing describes this. It is live:
+>   `AgentTimeline.tsx:678-698` looks up `colorByName.get(entry.participant)` and applies it as a
+>   background tint on inbound peer entries and a left-border accent on outbound ones, exactly as the
+>   delta specifies (sender's color inbound, recipient's color outbound while staying on the subject
+>   agent's side).
+> - *Clipped content is signalled.* Grepped `clipped`, `truncat`, `exceeds.*height` — no current spec
+>   describes a long-result affordance (the truncation hits that exist are for conversation titles and
+>   composer option labels, an unrelated requirement). It is live: `AgentTimeline.tsx:534-563`'s
+>   `ResultCard` caps height at 96px past a 240-character threshold and renders a gradient "Show more"
+>   button that lifts the cap on click — the delta's "structured results are presented as a distinct
+>   surface" and "clipped content is signalled" scenarios both realized in the same component, neither
+>   written up anywhere in `openspec/specs/`.
+>
+> **The identity-color requirement's detail was narrowed when it was carried forward, not lost.**
+> `local-project-workspace/spec.md:223-232` ("Agent identity color remains project-consistent") and
+> `operator-agent-creation/spec.md:20` ("stable project color") carry the requirement's outcome
+> (consistent across surfaces, always paired with the name) but drop three specifics the delta stated
+> explicitly: stability across restart and rename, non-derivation from the agent's name, and distinct
+> colors until the palette is exhausted. All three are still true, verified directly in
+> `hub/hub/agent_colors.py`, not assumed from the docstring: `color_index` is a persisted column on
+> the `Agent` row (survives restart and rename because it is database state, not derived), assignment
+> is `func.max(...) + 1` per project — monotonically increasing, so no gap-reuse and no two
+> concurrently-registered agents ever share a color — and the module's own docstring names the
+> rejected alternative ("a name hash would collide... and change on rename") as the reason. No UI test
+> exercises restart/rename stability or non-derivation directly (`agentColorSurfaces.test.tsx` and
+> `agentColors.test.ts` were grepped for `restart`/`rename`/`derive`/`hash` — no matches), so this is a
+> spec-prose-thinning plus a light test gap, not a behavior gap.
+>
+> Three of the eight remaining unmapped specs are now done (`agent-composer`, `agent-inbound-queue`,
+> `agent-conversation-timeline`). Five remain: `agent-identity-and-skills`, `hub-interface-feel`,
+> `hub-native-runtime`, `hub-visual-language`, plus re-confirming `agent-tool-surface` at requirement
+> level per the 2026-08-18 note above.
+>
+> **Update (2026-08-18, iteration 19) — fourth 16.2 requirement-level mapping:
+> `agent-identity-and-skills`.** No current spec carries that name. Its ten requirements scattered
+> across `runner-registry`, `operator-agent-creation`, `agent-charter`, `agent-configuration`,
+> `agent-context-onboarding`, and `agent-tool-surface` — found by grepping `persona`, `template`,
+> `skill`, `roster`, `budget`, `scope`, and `precedence` across all 31 current specs, not by trusting
+> the umbrella pointer. This pass found more genuine divergence than the previous three combined.
+>
+> **Four of ten requirements confirmed shipped and adequately documented**, re-checked against live
+> code immediately before citing:
+> - Agent names unique within their project, a duplicate refused without losing input:
+>   `operator-agent-creation/spec.md:39-43`, live in the name-uniqueness check inside
+>   `hub/hub/api/v1/agents.py`'s `request_agent` (:1386-1391) and the ordinary creation path.
+> - No persona or job-title role required at creation or configurable afterward:
+>   `operator-agent-creation/spec.md:11-12` and `agent-configuration/spec.md:295-296,303-306` ("No
+>   persona or role is configurable").
+> - Charter defines behaviour, not persona, and an unbound agent stays fully usable:
+>   `agent-charter/spec.md:56-71`.
+> - A live roster is supplied at the start of every turn: `agent-context-onboarding/spec.md:34,42-45`
+>   ("Profile names every agent registered"); confirmed freshly queried per turn, not cached, at
+>   `hub/hub/api/v1/agents.py:1074-1077`.
+>
+> **One requirement is shipped and verified live in code but has zero requirement text anywhere in
+> the current 31 specs** — the same undocumented-but-shipped pattern iteration 18 found twice for
+> `agent-conversation-timeline`:
+> - A single-agent project carries no multi-agent overhead: grepped `single.agent`, `no.*roster`,
+>   `collaboration protocol` across every current spec — nothing states this. Live at
+>   `hub/hub/api/v1/agents.py:1238-1246`: a project with no peers renders no `### Team` section at
+>   all, and the code's own comment names and rejects the alternative the delta itself worried
+>   about — an earlier `else` branch that printed "No other agents are registered" on every
+>   single-agent turn, deliberately removed.
+>
+> **Three requirements were not renamed or superseded — they were never built as the delta
+> described, and what exists instead is architecturally different, not just smaller:**
+> - *Skills as invocable capability, available to any agent regardless of charter, defaultable per
+>   charter.* Grepped `class Skill`, `invoke_skill`, `skill_id` across `hub/hub/` — no matches; no
+>   such concept exists server-side. The only "skill" in the current product is
+>   `agent-composer/spec.md:80-94`, the composer's `@`-mention autocomplete over a project's
+>   `.claude/skills/` directory — a file-reference convenience for whatever the runner's own CLI
+>   happens to support, not a Hub-modelled capability. The delta's "invoking a skill MUST NOT change
+>   the agent's scope" and "default skills load without preventing others" have nothing to be true or
+>   false of.
+> - *Agent templates, for repeated instantiation each producing a distinct name/queue/session/colour.*
+>   Grepped `AgentTemplate`, `agent_template` across `hub/hub/` — no matches. What `request_agent`
+>   (`hub/hub/api/v1/agents.py:1348-1466`, MCP tool at `hub/hub/mcp_server.py:491`) actually reads as
+>   a "template" is `session_data.get("agents", {})` (`agents.py:1377-1379`) — a dict keyed by name
+>   inside the legacy synced-session blob, the same `agentweave.yml`-derived state
+>   `agent-context-onboarding/spec.md:30-32` says "MAY continue to be read... provided it never
+>   determines... what work it is permitted to do." Here it does exactly that: whether an
+>   agent-creation request is fulfilled at all is gated on a name existing in that legacy dict
+>   (`agents.py:1379-1384`, refused with 400 if absent). This is a contradiction between two current
+>   specs' own terms, not just a gap against the retired delta.
+> - *Behaviour resolves in a defined, inspectable precedence order (project instructions < charter <
+>   skills < acceptance criteria, more specific wins).* Grepped `precedence`, `more specific`,
+>   `inspectable` across all current specs — the hits are unrelated (`spec-document-authority`'s
+>   charter-independent authority statement, `requirement-traceability`'s coverage-state ranking,
+>   `run-task-binding`'s conversation-rebind rule). No current spec states an ordering among project
+>   instructions, charter, and task acceptance criteria, and none states the composition is
+>   inspectable. `hub/hub/api/v1/agents.py` does compose them in one fixed order — roster, quality
+>   gates, evidence grant, project instructions, charter, re-read end to end at :1081-1326 to confirm
+>   — but nothing states this is a *precedence* rule that resolves conflicts, and no surface exposes
+>   the composition for inspection.
+>
+> **One requirement is implemented more crudely than specified, not absent.** "An agent may request a
+> new agent within a budget": the budget gate is real (`agent-tool-surface/spec.md:67-78`, live at
+> `agents.py:1396-1403`), but the delta's finer distinction — a within-budget, pre-approved-template
+> request auto-fulfils, while an over-budget or unapproved-template request "SHALL be presented to
+> the operator as a decision awaiting response" rather than simply failing — was not built. Both
+> refusal paths (`agents.py:1381-1384` unknown template, `:1396-1403` budget exhausted) raise a
+> synchronous `HTTPException`, not a pending-decision record the operator later resolves; there is no
+> queued-approval surface for a request an agent made that the operator has not yet answered. The
+> "approved for automatic instantiation" distinction cannot exist either, since there is no template
+> record to carry that flag — see the templates finding above.
+>
+> **One requirement was reversed against a fact this project's own `runner-registry` spec now states
+> as settled, not merely left undocumented.** The delta: "A runner SHALL be reusable by any number of
+> agents across any number of projects." The current spec, unambiguous: `runner-registry/spec.md:10-14`,
+> "The Hub SHALL persist runner definitions as **project-scoped** database rows." Cross-project runner
+> reuse was not carried forward partially — it was reversed. Worth flagging distinctly from the rest
+> of this note: it is the first finding across this mapping pass's four specs that reads as a
+> considered later decision rather than drift.
+>
+> Four of the nine remaining unmapped specs are now done (`agent-composer`, `agent-inbound-queue`,
+> `agent-conversation-timeline`, `agent-identity-and-skills`). Four remain: `hub-interface-feel`,
+> `hub-native-runtime`, `hub-visual-language`, plus re-confirming `agent-tool-surface` at requirement
+> level per the 2026-08-18 note above.
+
+> **Update (2026-08-18, iteration 20) — fifth 16.2 requirement-level mapping:
+> `hub-interface-feel`.** No current spec carries that name. Its nine requirements are visual-system
+> rules (typography, icons, motion, layout stability, elevation, radius, icon prominence, touch
+> targets, event-driven state) rather than a single feature, so this pass checked each one against
+> `hub/ui/src/index.css`, `hub/ui/src/components/ui/buttonVariants.ts`, and `hub/ui/src/api/` directly
+> — the delta describes design-system mechanics that live in CSS/token files, not just component
+> markup, and grepping `openspec/specs/` alone (as prior passes did first) turned up almost nothing
+> because most of this is undocumented rather than renamed.
+>
+> **One requirement is well-documented already**, confirmed to still match:
+> - Interactive state feedback (hover/pressed/focus, eased transitions, reduced-motion, shared
+>   semantic tokens): `hub-interaction-feedback/spec.md` (split out of `hub-workspace-shell` by
+>   `2026-08-04-hub-contextual-navigation`) covers this requirement almost verbatim, including its own
+>   "gaining emphasis never moves anything" and reduced-motion scenarios.
+>
+> **One requirement is partially documented**, scoped narrower than the delta:
+> - "Icons render from a single system without blocking": `hub-workspace-shell/spec.md:83-106` states
+>   the Lucide-only rule but only for the project rail's seven named actions, not the interface as a
+>   whole. The broader claim is true in code — `hub/ui/src/components/common/Icon.tsx:67-77`'s own
+>   comment: "This previously wrapped the Material Symbols Rounded variable font, loaded from a
+>   third-party stylesheet with `display=block` — which held every icon invisible until that network
+>   request completed. Icons are now SVG components bundled with the app" — but no current spec states
+>   it globally.
+>
+> **Five requirements are shipped and verified live in code but have zero requirement text anywhere
+> in the current 31 specs** — the same undocumented-but-shipped pattern iterations 18 and 19 each
+> found, now the majority outcome for this spec rather than the exception:
+> - *Typography self-hosted and variable, tabular figures for live numbers.*
+>   `hub/ui/src/index.css:1-5`, comment: "Self-hosted variable fonts. Bundled by Vite — no third-party
+>   request on the render path... Replaces the former fonts.googleapis.com stylesheets" —
+>   `@fontsource-variable/dm-sans` (a true variable font) for UI text,
+>   `@fontsource/jetbrains-mono` for monospace (static weights, which the requirement's wording
+>   permits — only the UI typeface is required to be variable). `tabular-nums` applied at
+>   `index.css:233-235` with its own comment, "Live numeric readouts must not shift horizontally as
+>   digits change," plus two call sites (:605, :613).
+> - *Controls change appearance without changing layout.* `buttonVariants.ts:6-19`'s own docstring
+>   states the mechanism as a design rule, not an incidental detail: `border border-transparent` is
+>   always present in the base class so no variant can opt out, and horizontal padding subtracts the
+>   border thickness so label insets look identical with or without a visible border — this is the
+>   same principle `hub-interaction-feedback/spec.md`'s "gaining emphasis never moves anything"
+>   states, but for controls specifically (not just navigation rows) and with the concrete mechanism,
+>   which no current spec names.
+> - *Controls express press physically.* `buttonVariants.ts:44-52` (`primary` variant): lit from above
+>   at rest via `shadow-[inset_0_1px_0_var(--lift-hi),...]`, and `active:shadow-[inset_0_1px_0_var(--press-lo)]`
+>   on press — the resting top-edge highlight is replaced by an inset shadow while pressed, matching
+>   the requirement exactly; `disabled:opacity-[0.64] disabled:shadow-none disabled:pointer-events-none`
+>   in the shared base class removes elevation and reactivity together. One scenario is a partial
+>   match, not a clean one: "elevation is tinted, not neutral" — `--lift-hi`/`--press-lo`
+>   (`index.css:53-54,129-130`) are fixed white/black alpha values, identical across `primary`,
+>   `ghost`, `outline`, and `destructive` variants, not a per-colour token. Composited over each
+>   variant's own background they read as a tint of that background rather than neutral grey, so the
+>   visible effect the scenario asks for happens — but through alpha-blending over whatever colour is
+>   underneath, not through a mechanism that is "tinted by that colour" by design intent.
+> - *Corner radius distinguishes chrome from content.* `index.css:168-176`, comment: "Radius and
+>   motion are mode-independent. One base, derived steps" — `--radius: 10px` with `--radius-sm/md/lg/xl`
+>   all `calc()` off it, and `--radius-content: 24px` (comment: "Self-contained results are markedly
+>   softer than chrome") applied to result cards while control radii stay in the 8-14px band. The
+>   nested-concentric-corner scenario (decoration inset within a rounded element reduced by the
+>   separating thickness) was not spot-checked this pass — flagged rather than assumed.
+> - *Iconography is subordinate to its label.* `buttonVariants.ts:34`,
+>   `"[&_svg:not([class*='opacity-'])]:opacity-80"` — every icon inside a button renders at 80%
+>   opacity by default, and the selector explicitly excludes any icon that already carries an
+>   `opacity-*` class, which is exactly the requirement's "deliberate emphasis is preserved" scenario.
+> - *Pointer targets are adequate on coarse pointers.* `buttonVariants.ts:36-40`: a
+>   `pointer-coarse:after` pseudo-element sized `min-h-11 min-w-11` (44px, the platform minimum)
+>   centered on the control, present only under `pointer-coarse` media state — the control's own box
+>   (and therefore its fine-pointer visual size) is untouched, matching both scenarios precisely.
+>
+> **One requirement was not carried forward as an absolute rule — it was deliberately narrowed to a
+> "prefer events, but poll as a backstop" rule for exactly the cases where a dropped event is costly,
+> confirmed by comments the implementers themselves left:**
+> - "Live state is driven by the event stream, not by polling. The interface MUST NOT poll REST
+>   endpoints on a fixed interval to discover state that the event stream already reports." Grepped
+>   `refetchInterval`/`setInterval` across `hub/ui/src/api/` and `hooks/`: three query hooks combine
+>   SSE invalidation with a fixed-interval `refetchInterval` on top of it, not instead of it —
+>   `usePendingPermissionRequests` (`api/permissions.ts:21-51`, 3s, comment: "A run blocks while one
+>   of these is pending and gives up after its own timeout, so this refetches on a short interval as
+>   well as on SSE: arriving late is the same as not arriving, and a dropped event would leave an
+>   agent waiting for a card that never appeared"), `useQuestions` (`api/questions.ts:39-49`, 3s,
+>   comment: "An agent blocks on a question it asked, so arriving late is close to not arriving. SSE
+>   already invalidates this key; the interval is the backstop for a dropped event"), and
+>   `usePendingUnaskedQuestions` (`api/unaskedQuestions.ts:16-40`, 5s, comment: "nothing is blocked on
+>   these... they still refetch on an interval as well as on SSE, because a dropped event would leave
+>   the operator looking at a finished conversation with no sign that the agent is waiting on them").
+>   All three are operator-in-the-loop surfaces where a silently-dropped SSE event has an outsized
+>   cost (a blocked agent, or a finished run nobody knows is waiting) — this reads the same way
+>   iteration 19's runner cross-project reversal did: a considered, written-down later decision, not
+>   drift. Every other query hook checked (`agents.ts`, `tasks.ts`, `messages.ts`,
+>   `agentChat.ts`) carries no `refetchInterval`, so the delta's rule holds everywhere except these
+>   three explicitly-justified exceptions.
+>
+> Five of the nine remaining unmapped specs are now done (`agent-composer`, `agent-inbound-queue`,
+> `agent-conversation-timeline`, `agent-identity-and-skills`, `hub-interface-feel`). Three remain:
+> `hub-native-runtime`, `hub-visual-language`, plus re-confirming `agent-tool-surface` at requirement
+> level per the 2026-08-18 note above.
+>
+> **Update (2026-08-18, iteration 21) — sixth 16.2 requirement-level mapping:
+> `hub-native-runtime`.** No current spec carries that name. Its eight requirements were checked
+> against `openspec/specs/` by concept (not name), then against live code wherever spec prose came up
+> empty — `hub/hub/pty_runner.py`, `hub/hub/run_reconciliation.py`, `hub/hub/worktrees.py`,
+> `hub/hub/api/v1/agent_trigger.py`, `hub/hub/api/v1/worktrees.py`, `hub/hub/scheduler.py`,
+> `hub/hub/usage_accounting.py`, `hub/hub/launchability.py`, and the corresponding UI files, following
+> the method iteration 20 established for `hub-interface-feel`.
+>
+> **Two requirements are shipped and cleanly documented:**
+> - *Turns are accounted in tokens, currency reported as derived.* `usage-accounting/spec.md` is
+>   essentially a direct, expanded restatement, checked against `hub/hub/usage_accounting.py:39`
+>   (`status="measured" if measured else "unavailable"` — never invented as zero), `:170`
+>   (`"label": "API-equivalent estimate"`), `:176` (`{"kind": "unavailable", ...}`). The cleanest,
+>   most fully-reconciled requirement found across all six passes so far (iterations 17-21) — no gap,
+>   no drift, no crude implementation.
+> - *Hub runs natively, container mode stays non-default.* `app-lifecycle/spec.md:10-14` (bare
+>   invocation is the only entry point) plus `local-project-workspace/spec.md:256-270` (Docker is an
+>   explicit, bounded, non-default mode) together cover the delta's installation half.
+>   Process-lifecycle ownership itself (spawn/output/session/interruption/exit) has no requirement
+>   text of its own anywhere — it is asserted only in a code comment,
+>   `hub/hub/pty_runner.py:3-4`: "Decision 1 makes the Hub own agent execution directly... its server
+>   spawns the agent, owns the PTY."
+>
+> **Four requirements are shipped and verified live in code but have zero requirement text anywhere
+> in the current 31 specs** — continuing the dominant pattern of this reconciliation pass since
+> iteration 18:
+> - *Triggering is direct, no message-polling, no text-encoded session directive, typed session
+>   field.* `agent_trigger.py:9-12`'s own module docstring states this almost verbatim ("no synthetic
+>   `Message` row, no `[Session: ...]` text tags, no `execution_confidence` guess... session identity
+>   is a typed field on the run record, never text embedded in a message body"). The delta's binary
+>   started/failed outcome model was deliberately widened to a third state, `queued`, once conversations
+>   could compete for one agent — `agent-conversation-workspace/spec.md:36,190-192` states this as
+>   intentional ("the trigger endpoint reports whether a turn started or the input was queued, and that
+>   report is the only source of truth"), consistent with the widening iteration 17 already found for
+>   `agent-inbound-queue`. Not a violation of "no speculative status" — `queued` is itself definite, not
+>   graded.
+> - *Manual connection ceremony removed.* Grepped `copy.?paste`/`shell export`/`shell preparation`
+>   across all 31 specs — zero hits. True in code: `launchability.py:115-155`'s `resolve_agent_env`
+>   resolves provider credentials inside the Hub process before spawn; `agent_trigger.py:371-372` feeds
+>   `conversation.provider_session_id` straight into the spawn as a typed field, no operator entry. This
+>   requirement was apparently never written up once the legacy CLI ceremony was deleted
+>   (`app-lifecycle/spec.md:81-91` documents the adjacent "no CLI command manipulates collaboration
+>   state" fact without naming this one).
+> - *Interrupted runs reconciled on restart; entries returned undelivered; no orphaned process on
+>   stop.* Read `hub/hub/run_reconciliation.py` in full rather than trusting its docstring:
+>   `reconcile_interrupted_runs()` runs once from `main.py:280`'s `lifespan()` startup, marks any
+>   `"running"` `Run` row with a dead or absent pid as `"interrupted"`, and calls
+>   `return_run_entries` (`inbound_queue.py:174-229`), which returns delivered-but-uncommitted entries
+>   to `state="queued"` while preserving arrival order — plus a refinement the delta didn't anticipate,
+>   a per-entry delivery-attempt cap that gives up and marks an entry `withdrawn` past
+>   `RESUME_RETRY_LIMIT` rather than requeuing it forever (docstring: "four entries, four consecutive
+>   failures, no way through"). `terminate_all_active_runs()` (`agent_trigger.py:926-949`), called from
+>   `lifespan()` teardown, force-terminates every tracked process tree on Hub stop — deliberately not
+>   touching `Run` row status itself (its own docstring: "duplicating that here risks the two
+>   disagreeing about *when* a run's status actually changes," leaving that exclusively to the next
+>   boot's reconciliation). Grepped `interrupted`/`orphan`/`reconcil` across all 31 specs: the mechanism
+>   itself is undocumented anywhere; only its downstream consequence has prose —
+>   `run-task-binding/spec.md:145-189` treats "reconciled to an ended state" as a precondition it
+>   builds on ("a run that crashed, failed, or was interrupted is still a run that ended holding a task
+>   nobody moved") without documenting how a run gets there. The clearest case this pass of a
+>   load-bearing startup routine with zero requirement-level coverage.
+> - *Watchdog limited to time-based duties.* `src/agentweave/watchdog.py` no longer exists (confirmed
+>   by `ls`, matching CLAUDE.md's own note that it was deleted). Remaining "watchdog" references in
+>   `hub/hub/` are code comments citing the deleted mechanism as what was replaced —
+>   `scheduler.py:41-42,287,304-307` — and `JobScheduler._fire_job_internal` fires scheduled jobs
+>   through the same `trigger_agent_directly` path a manual trigger uses
+>   (`agent_trigger.py:256-277`'s docstring confirms this explicitly). No current spec states either
+>   half of this requirement (scope limited to time-based duties; message creation no longer triggers
+>   polling execution) — grepped `watchdog`/`scheduled job`/`AIJob` across all 31, the only hits are an
+>   unrelated stale-titled requirement (`runtime-diagnostics/spec.md:51`, "Watchdog launch preflight,"
+>   actually about pre-spawn checks) and scattered mentions of scheduled jobs as one of several trigger
+>   sources elsewhere.
+>
+> **One requirement is shipped and documented for its mechanism, with the anti-polling half of the
+> rule itself left unstated:**
+> - *Agent output streams live via SSE.* `agent-stream-events/spec.md` documents the event envelope
+>   and closed kind taxonomy thoroughly, covering "a terminal event carrying the outcome is emitted."
+>   The explicit client-side prohibition ("clients do not poll a REST endpoint to discover it") has no
+>   spec text anywhere, verified true in code rather than assumed:
+>   `hub/ui/src/api/agents.ts` has three `useSSE` call sites and no `refetchInterval`, checked against
+>   iteration 20's own three named exceptions (`permissions.ts`/`questions.ts`/`unaskedQuestions.ts`) —
+>   agent output is not among them.
+>
+> **One requirement is a real, actionable product gap, not a documentation gap — the first of its
+> kind found across all six passes of this reconciliation:**
+> - *Agents write in isolated checkouts; divergent changes surface as a conflict.* The isolation model
+>   itself is shipped and documented cleanly: one worktree per writing agent on branch
+>   `agentweave/<agent>` sharing the primary checkout's object database (`worktrees.py:48,131-138`),
+>   read-only agents sharing the primary checkout (`is_writing_agent`, :141-145), isolation provisioned
+>   before the first writing turn with the turn refused (not silently degraded) if provisioning fails
+>   (`operator-agent-creation/spec.md:63-72,79-91`), and release-with-unmerged-work-reported on removal
+>   (`release_worktree`, `worktrees.py:364-388`, wired to `session_sync.py:131-156`). But the
+>   conflict-detection half — `detect_conflicts` (`worktrees.py:447-460`, pairwise `git merge-tree
+>   --write-tree --name-only` across every provisioned branch) and its route,
+>   `GET /api/v1/projects/{id}/worktrees/conflicts` (`api/v1/worktrees.py:76-91`) — is fully built,
+>   even cites this exact umbrella delta scenario by name in its own docstring
+>   (`worktrees.py:3-6,447-451`: "the 'interface identifies which agents diverged' half of
+>   hub-native-runtime's 'Divergent changes surface as a conflict' scenario"), and has **no UI
+>   consumer anywhere**. `hub/ui/src/components/environment/WorktreesPanel.tsx` unconditionally
+>   renders "No worktree activity yet." and never calls the conflicts endpoint; `hub/ui/src/api/workspace.ts`
+>   exposes only the single-agent `useAgentWorkspace` hook, no `useWorktreeConflicts`. An operator has
+>   no way to see a detected conflict today. Recorded as IMPLEMENTED MORE CRUDELY THAN SPECIFIED, the
+>   same register as iteration 19's synchronous-`HTTPException`-instead-of-pending-decision finding —
+>   real machinery, missing the last mile that makes it usable. Not fixed this pass (16.2 is a mapping
+>   exercise, not implementation, per this file's own reconciliation rule and `decisions_for_user` D1
+>   in `STATE.json`) but worth surfacing to the operator as a shippable follow-up, distinct from a
+>   documentation debt.
+>
+> Six of the nine remaining unmapped specs are now done (`agent-composer`, `agent-inbound-queue`,
+> `agent-conversation-timeline`, `agent-identity-and-skills`, `hub-interface-feel`,
+> `hub-native-runtime`). Two remain: `hub-visual-language`, plus re-confirming `agent-tool-surface` at
+> requirement level per the 2026-08-18 note above.
+>
+> **Update (2026-08-18, iteration 22) — seventh 16.2 requirement-level mapping:
+> `hub-visual-language`.** No current spec carries that name. Its six requirements were checked
+> against `openspec/specs/` by concept (grepping indigo/ink plane/dividing line/resiz/scrollbar/
+> navigation region/agent colour across all 31), then against live code — `PaneResizer.tsx`,
+> `App.tsx`, `ConversationView.tsx`, `hub/ui/src/index.css` — wherever spec prose came up empty,
+> following the method the last two passes established.
+>
+> **One requirement was already reconciled, in the delta file itself rather than in this note.**
+> *Navigation lists live entities; project views are reached in the content area.* Carries its own
+> "Superseded in part by `2026-08-04-hub-contextual-navigation`" note, added the same day as that
+> change (`git log`: commit `8526bea`), pointing at `hub-workspace-shell/spec.md:387`'s "The
+> navigation region carries the navigation of whatever the operator has entered." Confirmed current,
+> not stale — nothing since has moved configuration back into a content-area tab. No action needed;
+> flagged so the next pass does not re-derive it.
+>
+> **One requirement is a considered, documented supersession, not drift** — same register as
+> iteration 19's runner cross-project reversal and iteration 20's SSE-polling exceptions:
+> - *The interface presents related navigation and content planes* (the delta's indigo rail / ink
+>   content plane). `hub-workspace-shell/spec.md:15-18` states outright that "the mock's *palette* is
+>   explicitly superseded... the running application SHALL instead use the neutral graphite ramp,"
+>   and `:49-57`'s "Navigation and content use distinct but related planes" requirement says in its
+>   own text that it "supersedes... the subsequent direction that required the mock's indigo and ink
+>   fills." Not a gap — a later, written-down palette decision.
+>
+> **One requirement is documented, but folded into the same requirement as the one above rather than
+> standing alone, and scoped narrower than the delta asked:**
+> - *Two adjacent regions are separated by one signal, not two.* The delta states this as a general
+>   rule for any two adjacent regions. `hub-workspace-shell/spec.md:49-63` states it only for the
+>   nav/content boundary specifically ("their boundary SHALL remain subtle and MUST NOT combine a
+>   strong fill contrast with a strong dividing line," "the boundary remains less prominent than an
+>   interactive control outline" — a near-verbatim match to the delta's two scenarios, but scoped to
+>   one boundary). The general principle is applied in code beyond that one boundary —
+>   `PaneResizer.tsx:30-32`'s own comment states "the panes then share one ground plane with a single
+>   separation signal," and the component is used for both the nav/content boundary (`App.tsx:482`)
+>   and the conversation/spec-panel boundary (`ConversationView.tsx:263`) — but no requirement text
+>   states the general rule; only the one instance is specified. Documented-but-narrower, the same
+>   pattern iteration 20 found for the single-icon-system requirement.
+>
+> **One requirement is shipped and cleanly documented:**
+> - *An agent's identity colour is applied consistently wherever it appears.* Matches
+>   `local-project-workspace/spec.md:223-232`'s "Agent identity color remains project-consistent"
+>   almost word for word, including the "colour never stands alone" half ("Color MUST always be
+>   accompanied by the agent name"). No narrowing this time, unlike iteration 18's finding for the
+>   same underlying mechanism in `agent-conversation-timeline` (which asked for three more specifics
+>   this delta's simpler wording does not).
+>
+> **Two requirements are shipped and verified live in code but have zero requirement text anywhere in
+> the current 31 specs** — continuing the dominant pattern since iteration 18:
+> - *Primary panes are resizable and the choice is remembered.* Only a passing mention survives
+>   anywhere in the current corpus — "rail resizing" in `hub-workspace-shell/spec.md:33`'s scenario
+>   list for an unrelated requirement (visual alignment to the mock) — with no dedicated requirement
+>   for drag affordance, clamping, persistence, or reset. All four are shipped:
+>   `PaneResizer.tsx:38-113` implements a wider-than-visible hit target (11px strip around a 1px
+>   line, `:125`), hover/focus strengthening (`:140`), pointer-capture dragging with `min`/`max`
+>   clamping (`:50-53`), keyboard resizing (arrow keys, `:101-113`), and a reset-to-default on
+>   double-click or `Home` (`:112,132`). Persistence: `App.tsx:72-96` reads/writes
+>   `SIDEBAR_WIDTH_KEY` in `localStorage`, clamped against `SIDEBAR_MIN_WIDTH`/`SIDEBAR_MAX_WIDTH` on
+>   read with a graceful fallback to the default if the stored value is invalid.
+> - *Scrollbars are unobtrusive.* Grepped `scrollbar` across all 31 specs: zero hits. Shipped exactly
+>   as the delta describes: `hub/ui/src/index.css:238-259` sets `scrollbar-width: thin` with a
+>   transparent track (Firefox), and for WebKit hides the track, corner, and stepper buttons
+>   (`display: none`) while rendering only an inset, rounded thumb (`border: 3px solid transparent`
+>   plus `background-clip: content-box`) that strengthens on hover (`:256-259`).
+>
+> Seven of the nine remaining unmapped specs are now done (`agent-composer`, `agent-inbound-queue`,
+> `agent-conversation-timeline`, `agent-identity-and-skills`, `hub-interface-feel`,
+> `hub-native-runtime`, `hub-visual-language`). One remains: re-confirming `agent-tool-surface` at
+> requirement level per the 2026-08-18 note above (the 2026-08-03 partial note only confirmed it by
+> name).
+
+> **Update (2026-08-18, iteration 23) — eighth and final 16.2 requirement-level mapping:
+> `agent-tool-surface`, present under the same name.** The 2026-08-03 partial note only confirmed the
+> filename survives and named two prose revisions (least-privilege read boundary, run-credential
+> identity); it explicitly did not check requirement-by-requirement, the same gap iteration 18 found
+> and closed for `agent-composer`. Checked all seven delta requirements against
+> `openspec/specs/agent-tool-surface/spec.md` (335 lines, 11 requirements — it has grown well beyond
+> the delta) and, wherever spec prose was silent or its own preamble made a claim, against
+> `hub/hub/launchability.py` and `hub/hub/api/v1/agent_trigger.py` directly.
+>
+> **Four of seven requirements are a clean or self-documented match:**
+> - *Outbound intent remains available* and *Creating agents and scheduling recurring work are
+>   governed, not free* carry over verbatim, text and scenarios both.
+> - *The Hub supplies state; the tool surface carries intent* is revised — effect-only replaced by a
+>   least-privilege read boundary — but the current spec's own preamble names the reconciliation,
+>   dates it (2026-08-07), and cites its source
+>   (`openspec/explorations/2026-08-02-product-direction.md`). Scenarios unchanged.
+> - *An agent's identity is bound by the Hub, never asserted by the agent* is revised — run-credential
+>   authentication in place of environment-variable binding, plus a new "credential from another
+>   instance is refused" scenario — and this one the 2026-08-03 partial note already named and cited
+>   correctly (`archive/2026-08-03-agent-capability-plane`, confirmed archived and real).
+>
+> **One requirement's removal is accurately documented.** *The tool surface is available without a
+> tool-protocol server* (full-capability command-based fallback). The current spec's preamble states
+> `2026-08-03-single-runtime` removed it because it deletes the CLI collaboration commands it
+> depended on. Confirmed live: `launchability.py:275-291`'s `access_path_notice`, on its non-`mcp`
+> branch, has its own code comment — "No CLI equivalents are offered any more... Saying so plainly is
+> better than sending an agent after commands that do not exist" — and tells the agent it has **no**
+> tool surface this turn at all, not an equal-capability command alternative. The preamble's claim
+> holds for this requirement without qualification.
+>
+> **One requirement's removal is overclaimed — the mechanism it describes is still live and runs every
+> turn, only degraded, not deleted.** *The access path is chosen per runner from probed capability.*
+> The same preamble sentence bundles this requirement in with the one above ("removed the per-runner
+> access-path selection and command-based-fallback requirements below"). That is not what the code
+> shows. `resolve_access_path(runner, cli, override)` (`launchability.py:215-222`) still runs on
+> every triggered turn (`agent_trigger.py:474`, `access_path = resolve_access_path(runner, probe["cli"]
+> or agent, config.get("hub_client"))`), still resolves per runner via a capability table
+> (`MCP_INJECTABLE_RUNNERS`), and still honours an explicit operator override
+> (`config.get("hub_client")`, matching the delta's own "operator MAY override" scenario). What
+> changed, confirmed by `git log -p`: at `2026-08-03-single-runtime` (commit `c31b3df`) the function's
+> body was rewritten from `return "mcp" if probe_mcp_registered(cli) else "cli"` to a static
+> `MCP_INJECTABLE_RUNNERS` membership check with the `cli` parameter explicitly discarded
+> (`del cli`). `probe_mcp_registered` (`launchability.py:185-212`) still exists, is still unit-tested
+> (`test_launchability.py`), and is no longer called by anything in `hub/hub/` outside its own tests —
+> confirmed by grepping the whole repo for its name. So the delta's "the Hub SHALL record what is
+> actually available, not what is theoretically supported" and the "prohibited is distinguished from
+> unsupported" scenario are no longer true of the code: there is no live probe left to draw that
+> distinction, only a fixed table. The requirement was narrowed to a static lookup, not removed — the
+> spec's preamble should say so rather than folding it into the same "removed" sentence as the command
+> fallback, which really was deleted outright.
+>
+> **One requirement kept its title but had its scenarios replaced, not merely narrowed.** *One tool
+> surface, configured automatically.* The delta's two scenarios ("tools available without operator
+> configuration," "only one surface exists") do not appear in the current text at all — replaced by
+> three scenarios about verifying the served surface against a spawned subprocess rather than an
+> import (added `2026-08-13`, the entry-point-guard fix). Checked whether the delta's original
+> guarantee still holds now that its own scenario text is gone: it does. `runner_commands.py:224-236`
+> (Claude) and `:273-292` (Codex) build `--mcp-config` / `-c mcp_servers...` on the spawn command line
+> per run — no config file the operator edits — and a repo-wide grep for `FastMCP(` finds exactly one
+> server, `hub/hub/mcp_server.py`. Shipped, verified live, zero requirement text — the same pattern
+> iterations 18, 19, and 21 found repeatedly for other deltas under this umbrella, here inside a
+> requirement whose *name* survived while its *content* moved to a different, newer concern.
+>
+> All eight originally-in-scope delta specs under this umbrella's `specs/` are now checked at
+> requirement level: `agent-composer`, `agent-inbound-queue`, `agent-conversation-timeline`,
+> `agent-identity-and-skills`, `hub-interface-feel`, `hub-native-runtime`, `hub-visual-language`, and
+> now `agent-tool-surface`. The other two originally-listed delta specs, `spec-authoring` and
+> `spec-traceability`, are not part of this tally — they were already established elsewhere in this
+> file (14.18, 15.3, and the 2026-08-12 note) as genuinely never built (phase 14 was never
+> implemented), a different category from "renamed or superseded," so there is no successor content
+> to map them into. **16.2's per-delta-spec requirement-level mapping is therefore complete.** 16.2
+> itself is not ticked here — it also requires reconciling `agent-stream-events`,
+> `runtime-diagnostics`, and `agent-conversation-handoff` per its own task text above, which this pass
+> did not touch, and per this file's own reconciliation rule a box ticks for verified behaviour, not
+> for a decision. 16.1 (scenario exercise) and 16.3 (archive) remain separate, larger asks that stay
+> the operator's call.
+
+> **Update (2026-08-18, iteration 24) — `agent-stream-events` reconciliation, first of the three
+> named directly by 16.2's own task text.** This is a different check from iterations 16–23: those
+> mapped this umbrella's *delta specs* against `openspec/specs/`; `agent-stream-events`,
+> `runtime-diagnostics`, and `agent-conversation-handoff` are not among this umbrella's ten deltas at
+> all — they are *current* specs the 2026-08-03 `single-runtime` note already claims to have synced,
+> and 16.2's text asks whether they still match "their new behaviour" since. So this pass checked
+> `agent-stream-events/spec.md` (19 requirements, last touched 2026-08-11) requirement by requirement
+> against live code, not against a delta.
+>
+> **Every requirement checked held.** The closed seven-kind taxonomy matches
+> `hub/hub/schemas/agents.py:11-19`'s `StreamEventKind` literal exactly. The 64 KiB / 8 KiB payload
+> and tool-result bounds match `hub/hub/runner_events.py:23-24`'s `MAX_PAYLOAD_BYTES` /
+> `MAX_TOOL_RESULT_BYTES` exactly. Chat history projection retains `output_kind`
+> (`agent_chat.py:64,162`), confirming "Chat history preserves stream semantics." The two newest
+> requirements in the spec text, "A turn renders in execution order" and "Each work block carries
+> independent state," are both implemented in `agentTimelineModel.ts` / `AgentTimeline.tsx`, not just
+> specified. "Shared stream renderer" holds: spec chat is not a fourth component, it is a
+> conversation with a document attached, rendered through the same `AgentOutputPanel` /
+> `AgentTimeline` path as the output panel and activity tab — confirmed by grep, no separate
+> `SpecChat`-named component exists.
+>
+> **One observation, not a violation.** The `diagnostic` event kind is fully wired on the consumer
+> side — `agentTimelineModel.ts:8` and `AgentTimeline.tsx:536` both branch on it — but no producer
+> anywhere in `hub/hub/` or `src/agentweave/stream_events.py` ever constructs one (`diagnostic_event()`
+> at `stream_events.py:556` is defined and never called). Checked against the two scenarios that could
+> require it: "Provider adds a new event type" and "Stream line is malformed" both say the Hub SHALL
+> emit a diagnostic *or* a readable fallback — `parse_claude_line`'s malformed-JSON branch
+> (`runner_parsing.py:235-239`) takes the fallback option, wrapping the raw line as a `text_event`.
+> That satisfies the requirement as written; the `diagnostic` kind is simply the unused half of an
+> "either/or." Worth knowing if a future pass wonders why diagnostics never appear in the UI's own
+> hide-diagnostics toggle — it is not broken, it has never had a producer.
+>
+> **Out of scope, noted for later.** `git log --since=2026-08-11` on this spec's own code
+> (`runner_parsing.py`, `agentTimelineModel.ts`, `AgentTimeline.tsx`) surfaces several real, shipped
+> UI changes since the last sync — Markdown message rendering, an edit-diff view for tool calls,
+> tool-call icons, and this run's own Q2 (no end-of-turn text). All belong to
+> `openspec/changes/2026-08-16-conversation-formatting-and-quick-nav`, a separate, still-open change
+> with its own future archive-and-sync step — not this umbrella's ten deltas, and not evidence against
+> `agent-stream-events` today. Flagging it here only so a future reconciliation of *that* change does
+> not have to rediscover which files moved.
+>
+> **`agent-stream-events` needs no changes to reconcile with current behaviour.** Two of the three
+> 16.2-named specs remain: `runtime-diagnostics`, `agent-conversation-handoff`.
+
+> **Update (2026-08-18, iteration 25) — `runtime-diagnostics` reconciliation, second of the three
+> named directly by 16.2's own task text.** 12 requirements, checked one by one against live code
+> via a research agent whose file:line citations were then spot-checked directly (the
+> `turn_scheduler.py` no-event branch and the `agents.py`/`agent_trigger.py` address-presence-only
+> check below were both re-read personally before writing this note).
+>
+> **Two requirements are recent, precise, and need no change.** "The built interface artefact can be
+> asserted current" matches all seven of its own scenarios exactly against
+> `hub/hub/main.py:133-220`'s fingerprint-over-timestamp staleness check, TTL cache, and
+> `refresh_ui_bundle.py` rebuild instruction — do not flag this one as a gap, it describes
+> already-implemented, already-tested code. "A runtime that dies reports what it was doing" holds
+> fully for the Codex app-server transport (`codex_appserver.py`'s bounded 200-line stderr
+> `deque`, `readable_exit_code`'s large-unsigned-value normalization, the synthetic-vs-real exit
+> code split at `agent_trigger.py:2017/1055`) but the spec text makes no transport carve-out, and
+> the PTY transport (Claude, Codex `exec`) does not do any of it — the post-run failure broadcast at
+> `agent_trigger.py:1461-1462,1549-1558` carries only `exit_code`/`conversation_id`, no stderr tail,
+> and never calls `readable_exit_code`, so a Windows Ctrl+C on a Claude run is exactly the unrendered
+> case the requirement describes fixing. Scope the requirement to the app-server transport
+> explicitly, or record PTY-path parity as real unfinished work — this pass does not decide which.
+>
+> **"Watchdog launch preflight" has stale terminology but a live successor.** `watchdog.py` is
+> deleted per CLAUDE.md; the behaviour survives in `hub/hub/launchability.py`'s `probe_agent` plus
+> the `agent_trigger.py:319-337` pre-spawn gate. But "records a structured diagnostic event" is false
+> for both named refusal scenarios — confirmed personally: `turn_scheduler.py:94-116` only calls
+> `persist_event` on the `workspace_unavailable` branch (:94-106); a missing-CLI or missing-key
+> refusal returns `ScheduleResult(waiting_reason=exc.detail)` at :116 with nothing persisted.
+>
+> **"Collaboration readiness is checkable before it is needed" only detects an *unknown* address,
+> never a *mismatched* one** — confirmed personally, not just from the agent's report:
+> `agents.py:186` is `bool(os.environ.get("HUB_URL")) or bound_address.get() is not None`, presence
+> only; `agent_trigger.py:549-566` unconditionally trusts an explicit `HUB_URL` when set with no
+> comparison against `bound_address.get()`. The tool-surface-refusal half of this requirement (Codex
+> without yolo, `agents.py:214-228`) does match. This is a real, citable gap in a requirement added
+> after the spec's original 2026-08-03 sync, not drift from an old one.
+>
+> **Four more requirements are narrower than their text, not wrong:** `agentweave status`
+> (`cli.py:70-112`) never calls `collect_diagnostics`/renders a `DiagnosticResult` — only `doctor`
+> does, so the "same semantics across doctor and status" scenario is stale. Structured
+> agent-process-failure events omit `duration` and `runner type` entirely and never redact
+> `stderr_tail` (`agent_trigger.py:1011-1058`, `redact_secrets` never called on that path) — a
+> concrete secret-handling gap, not just a documentation gap. Job failures are recorded correctly
+> (`scheduler.py:487-499`, `jobs.py:53-90`) but only surface once a `JobCard` is expanded into Run
+> History — the collapsed list has no failure indicator (`JobCard.tsx:21-27` only distinguishes
+> Active/Paused). Agent readiness (`launchability.py:38-112` via `GET /launchability`) has no
+> `context status` field at all and persists no diagnostic event on a warn/fail result — the route's
+> own docstring calls itself side-effect-free.
+>
+> **Three requirements are clean matches, one with a naming nuance:** runtime readiness checks
+> (`diagnostics.py:971-987`, all six checks, non-mutating, no state created before first launch).
+> proxy credential diagnostics (`launchability.py:73-85` + `agent_trigger.py:334-337`, pre-spawn 409
+> naming the missing var). Hub logs usability (`GET /logs/agents` unions live agent sources, not a
+> fixed list; `LogsView.tsx`'s category filters cover every named category plus two extras). Hub
+> trigger confidence reporting works exactly as scenario'd for a manual runner, but "confidence" is
+> really one reused `waiting_reason` string shared with unrelated causes (hop budget, stale
+> conversation) rather than a distinct typed value — a framing overstatement, not a behavior gap.
+>
+> **`runtime-diagnostics` needs real reconciliation, not just a note** — six requirements (Watchdog
+> preflight's missing events, structured events' missing fields/redaction, job-failure UI depth,
+> agent readiness's missing fields, the address-mismatch gap, and the PTY-transport carve-out) name
+> genuine, citable gaps between spec text and shipped behaviour, distinct from every prior 16.2 pass
+> in this file, which mostly found renamed/superseded/undocumented content rather than unmet
+> requirements. Fixing any of them is product work, out of scope for a reconciliation pass and not
+> attempted here per this file's own rule (a box ticks for verified behaviour, not a decision) and
+> per `decisions_for_user` D1 in this run's STATE.json. One 16.2-named spec remains:
+> `agent-conversation-handoff`.
+
+> **Update (2026-08-18, iteration 25) — `agent-conversation-handoff` reconciliation, the third and
+> last of the three specs 16.2 names directly.** Read the spec in full (four requirements, 12
+> scenarios), then read `hub/hub/checkpoint_cutover.py`, `hub/hub/checkpoint_trigger.py`,
+> `hub/hub/api/v1/checkpoints.py` and `ConversationControls.tsx`/`AgentOutputPanel.tsx` directly —
+> no research agent this pass, the surface area was small enough to read end to end personally.
+>
+> **The vocabulary changed and the spec did not follow.** `ConversationControls.tsx:65` renders the
+> button as `Checkpoint` (`Checkpointing…` while in flight), with its own comment stating this
+> directly: *"'Checkpoint' is the vocabulary the product uses now: the record is the thing"*. The
+> spec's requirement titles, scenario prose and disabled-reason text ("durable transitions are
+> initiated through `Handoff`", "the UI explains that handoff requires an automatically managed
+> runner") all still say `Handoff`, and the live disabled-reason string is in fact `"Requires an
+> automatically managed runner"` — no `handoff` in the rendered text. Internally `handoff` survives
+> as the prop/state/test-id vocabulary (`HandoffState`, `data-testid="conversation-handoff"`), so
+> nothing is broken, but the spec is describing a button name the UI no longer shows.
+>
+> **A real behavioural gap, not a naming one: the successor is not deferred to "the next user
+> message."** Requirement 3 states "After a handoff is ready, the next user message MUST create
+> exactly one unbound successor conversation." That is not what ships. Clicking `Checkpoint` fires
+> two calls in sequence — confirmed both from reading `AgentOutputPanel.tsx`'s `handleCheckpoint`
+> and from `agentHandoff.test.tsx:176-177`'s own assertion order, `POST
+> /conversations/{id}/checkpoint` then `POST /checkpoints/{id}/cutover` — and `cutover_to_successor`
+> (`checkpoints.py:238-272`) calls `cut_over()` immediately, which creates the successor
+> `Conversation` row and its queued `InboundQueueEntry` synchronously, before any further user
+> input exists. The automatic path is further from the spec still: `checkpoint_trigger.py`'s
+> context-pressure `consider()` can call `cut_over(..., auto_continue=True)` and then
+> `schedule_agent()` the successor directly (`checkpoint_cutover.py:128-141`) with no user message
+> at all, ever, when `project.checkpoint_auto_continue` is set. The requirement as written describes
+> an operator-gated, message-triggered creation; the shipped mechanism is button- or
+> pressure-triggered and eager. This reads as the same kind of considered later redesign iteration
+> 19–22 found elsewhere in this umbrella (runner cross-project reversal, SSE-polling exceptions,
+> palette supersession) — the whole context-pressure/auto-continue/warning-dismissal machinery
+> (`checkpoint_trigger.py`, `checkpoint_policy.py`) postdates this spec's last wording and has no
+> requirement text of its own anywhere in the 31 current specs (grepped `checkpoint_due|checkpoint
+> policy|auto.continue|context pressure` — no hits outside `conversation-checkpoint`, which the
+> spec's own Requirement 2 preamble explicitly carves out as covering only "content and
+> verification," not the trigger mechanism this finding is about).
+>
+> **Everything else holds, checked directly, not assumed:** existing-conversation selection and
+> `New conversation (start fresh)` (Requirement 1) match `AgentOutputPanel.tsx`'s conversation
+> picker; `Compact`/`Reset` are absent from `hub/ui/src/components/agents/` (grepped, zero
+> matches — the legacy-actions scenario holds); the checkpoint is delivered as a
+> conversation-scoped `InboundQueueEntry` via `inbound_queue.new_entry(..., conversation_id=successor.id)`
+> (`checkpoint_cutover.py:112-121`), not through the agent-scoped canonical-context file, matching
+> Requirement 3's stronger clause exactly; `delivery_content()` embeds the rendered checkpoint
+> inline with no filesystem-path instruction, matching "the successor is not asked to find
+> anything"; the manual button is disabled with a stated reason for a manual runner
+> (`handoffReason()` returns `'Requires an automatically managed runner'`), matching Requirement
+> 2's last scenario; and transition state (`handoffState`, `startingFresh`, etc.) resets on a
+> `useEffect` keyed on `[agent.name, conversationId]` (`AgentOutputPanel.tsx:188-199`), matching
+> Requirement 4's two scenarios.
+>
+> **`agent-conversation-handoff` needs real reconciliation, not just a note** — the eager,
+> button-or-pressure-triggered cutover contradicts Requirement 3's literal "next user message"
+> wording, and the whole vocabulary shifted from `Handoff` to `Checkpoint` without the spec text
+> following. Not fixed here, per this file's own rule and `decisions_for_user` D1. This closes the
+> three-spec half of 16.2 that iterations 24–25 worked through
+> (`agent-stream-events`, `runtime-diagnostics`, `agent-conversation-handoff`); 16.2 itself still
+> cannot tick — it also requires 16.1 (scenario exercise) and stays a decision for the operator per
+> `decisions_for_user` D1.
 
 - [ ] 16.1 Confirm every scenario in the ten delta specs is exercised.
 - [ ] 16.2 Sync delta specs into `openspec/specs/`; reconcile `agent-stream-events`,

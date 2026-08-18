@@ -53,8 +53,7 @@ function renderRail(overrides: Partial<React.ComponentProps<typeof Sidebar>> = {
     onOpenAgent: vi.fn(),
     onOpenEnvironment: vi.fn(),
     onAddAgent: vi.fn(),
-    onOpenExisting: vi.fn(),
-    onCreateProject: vi.fn(),
+    onAddProject: vi.fn(),
     ...overrides,
   }
   // The rail fetches each project's conversations now that agents expand to them, so it
@@ -142,13 +141,14 @@ describe('phase 5 project collection rail', () => {
   })
 
   it('offers distinct open-existing and create-new actions', () => {
-    const onOpenExisting = vi.fn()
-    const onCreateProject = vi.fn()
-    renderRail({ onOpenExisting, onCreateProject })
-    fireEvent.click(screen.getByTestId('open-existing-project'))
-    fireEvent.click(screen.getByTestId('create-new-project'))
-    expect(onOpenExisting).toHaveBeenCalledOnce()
-    expect(onCreateProject).toHaveBeenCalledOnce()
+    const onAddProject = vi.fn()
+    renderRail({ onAddProject })
+    fireEvent.click(screen.getByTestId('add-project'))
+    expect(onAddProject).toHaveBeenCalledOnce()
+    // One action, not two: the second entry point was removed deliberately, so assert it is
+    // gone rather than leaving its absence to be noticed by a human reading the rail.
+    expect(screen.queryByTestId('open-existing-project')).toBeNull()
+    expect(screen.queryByTestId('create-new-project')).toBeNull()
   })
 })
 
@@ -190,6 +190,14 @@ describe('the collapsed rail', () => {
 
     fireEvent.click(screen.getByTestId('rail-compact-agent-proj-a-claude'))
     expect(onOpenAgent).toHaveBeenCalledWith('proj-a', 'claude')
+  })
+
+  it('offers open-existing alongside add-project when collapsed', () => {
+    const onAddProject = vi.fn()
+    renderRail({ compact: true, onCompactChange: vi.fn(), onAddProject })
+
+    fireEvent.click(screen.getByTestId('add-project'))
+    expect(onAddProject).toHaveBeenCalledOnce()
   })
 
   it('indicates the active project and agent', () => {

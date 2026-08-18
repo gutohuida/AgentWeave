@@ -24,6 +24,7 @@ from .db.engine import init_db
 from .run_reconciliation import reconcile_interrupted_runs
 from .run_task_binding import TaskBindingError
 from .scheduler import init_scheduler, shutdown_scheduler
+from .subprocess_windows import no_console_kwargs
 from .task_transition_service import TransitionRefusedError
 
 logger = logging.getLogger(__name__)
@@ -71,6 +72,7 @@ def _git_last_commit_iso(path: Path, *, exclude: Sequence[str] = ()) -> Optional
             capture_output=True,
             text=True,
             timeout=5,
+            **no_console_kwargs(),
         )
     except (OSError, subprocess.SubprocessError):
         return None
@@ -97,6 +99,7 @@ def ui_source_fingerprint(
             capture_output=True,
             text=True,
             timeout=5,
+            **no_console_kwargs(),
         )
         dirty = subprocess.run(
             ["git", "status", "--porcelain", "--", *pathspec],
@@ -104,6 +107,7 @@ def ui_source_fingerprint(
             capture_output=True,
             text=True,
             timeout=5,
+            **no_console_kwargs(),
         )
     except (OSError, subprocess.SubprocessError):
         return None
@@ -194,6 +198,7 @@ def _has_uncommitted_ui_source(ui_src: Path) -> bool:
             capture_output=True,
             text=True,
             timeout=5,
+            **no_console_kwargs(),
         )
     except (OSError, subprocess.SubprocessError):
         return False
