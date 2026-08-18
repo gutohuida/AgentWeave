@@ -1049,3 +1049,96 @@ this driver per `limits`.
 already closed on a merged branch; #7 (StaticPool race/fixture overhead) remains open and is the
 deepest remaining item, not attempted again this iteration per the reasoning above. Runway to
 `stop_at` (2026-08-18T08:00+01:00) is still roughly 3.5 hours.
+
+---
+
+## Iteration 14 — Q11: roadmap item #6, scoped down and verified, not the full literal proposal
+
+Started fresh, verified branch (`autonomous/2026-08-18-the-app-feels-alive`) and `git log` matched
+`STATE.json`'s `iteration: 13` claim exactly (`a62f910` heartbeat back-date on top of `6caf230`, the
+starlette-bound commit). Clock at start: `2026-08-18T04:12:04+01:00`, ~3h48m of runway to `stop_at`.
+
+`next_action` offered roadmap item #6 ("make CI prove it's testing a clean environment") as the more
+approachable of the two remaining Tier 2/3 candidates, item #7 (StaticPool race) being the deep one
+with two prior failed attempts already on record. Read both source documents before writing anything:
+`openspec/explorations/2026-08-17-what-to-work-on-next.md`'s item 6, and the incident it cites,
+`openspec/explorations/2026-08-17-the-hub-suite-has-never-run-clean.md` decision #3.
+
+**The literal roadmap proposal turned out to be weaker than it reads.** Its own sizing note hedges
+("likely a CI-only assertion that skip counts match an expected baseline, or that CI's dependency
+resolution is pinned/checked" — the author's own uncertainty, not a spec). Traced the actual incident
+narrative in the source doc rather than trusting the roadmap's compressed summary: `hub-test` failed
+in CI with `ModuleNotFoundError: No module named 'agentweave'` for three weeks, unfixed, because a
+red CI job was dismissed as "a CI problem" rather than investigated — the job was already loud and
+failing; nobody looked. A skip-count baseline assertion would not have caught that (it never reached
+a skip; it failed outright), and no code change fixes "a red job got ignored for three weeks" — that's
+vigilance, not a coverage gap. Recording this rather than silently implementing the literal proposal
+and claiming it solves what the roadmap said it solves.
+
+**Checked whether a skip-count baseline was even implementable.** Grepped `hub/tests/` and `tests/`
+for `skipif`/`pytest.mark.skip`: every skip is a legitimate platform gate (Windows-only pty/ConPTY
+behaviour, POSIX-only file-mode tests, `croniter` availability) — none skip because CI is missing a
+binary it's "meant to provide." Also confirmed the CLI suite's skip count is platform-dependent
+(`tests/test_utils.py`'s two POSIX-only tests skip on Windows, run on Linux/macOS), so a single fixed
+baseline number across the `test` job's 3-OS × 2-Python matrix would be wrong on at least two of six
+legs from day one — a fragile, matrix-aware baseline file was the only correct version, and verifying
+it would need pushing and watching six real GitHub Actions legs, which this session cannot do (no CI
+credentials/runner access here, and matrix-fragile baselines are exactly the kind of check people
+learn to ignore, the same failure mode as the incident itself). Decided not to build something that
+can only be verified by trusting it, unpushed, against six unseen runners.
+
+**Scoped down to what's small, safe, and actually verifiable from here — a `Verify environment` step
+in both `test` and `hub-test`, running an import check plus `pip check`, right after each job's
+install step.** This targets the same incident more literally: `pip install` succeeding is not the
+same as the installed packages resolving correctly from that checkout (exactly what went silently
+missing) or the dependency graph being internally consistent (the same class of surprise as the
+fastapi/starlette incident item #5 closed last iteration, even though `pip check` would not itself
+have caught that specific case — it catches conflicting requirement declarations, not an unpinned
+range resolving to an untested version). A dedicated, clearly-named step gives CI a distinct,
+unambiguous failure point for "the environment is broken" separate from "a test failed" — the
+closest a code change gets to preventing a repeat, short of fixing human vigilance.
+
+**Hit and worked around a real trap while writing the `test`-job check, rather than shipping it
+blind.** First attempt checked both `agentweave` and `hub` from the repo root (the `test` job's cwd
+throughout) — `python -c "import hub"` from there raises `ImportError: cannot import name
+'__version__' from 'hub' (unknown location)`, the exact shadowing bug CLAUDE.md's "trial Hub" section
+documents for `-m uvicorn`: the repo-root `hub/` directory resolves as a namespace package before the
+editable-installed `hub` package (rooted at `hub/hub/`) is found, because cwd is on `sys.path[0]` for
+plain `python -c` too, not just `-m`. This would have made the new check fail every single `test` job
+run for a reason with nothing to do with what it exists to catch — verified the failure directly with
+`py -3.11 -c "import hub"` from the repo root before deciding what to do about it, not assumed from
+memory of CLAUDE.md's prose. Fixed by checking only `agentweave` in the `test` job's step (its cwd is
+the repo root, where `hub` cannot be checked safely) and checking both `agentweave` and `hub` in the
+`hub-test` job's step (its cwd is `hub/`, confirmed clean by testing the same import from there — no
+shadowing, since the namespace-package match at that level doesn't recur one directory down). Left an
+inline comment on both steps explaining the asymmetry so a future editor doesn't "fix" it back into
+the trap.
+
+**Verified, not just written.** Ran both exact `run:` blocks locally, from the exact cwd each job
+uses (repo root for `test`; `hub/` for `hub-test`, matching the job's `defaults.run.working-directory`
+and the one step-level override): both `python -c` imports resolved to the expected editable-install
+paths (`src/agentweave/__init__.py`, `hub/hub/__init__.py`) and both `pip check` runs reported "No
+broken requirements found" with exit 0. Parsed the new YAML with `yaml.safe_load` to confirm it's
+well-formed. Cross-checked the PowerShell quoting (GitHub's `windows-latest` runner defaults `run:`
+steps to `pwsh`, not bash) by running the identical `python -c "..."` line through this session's own
+PowerShell tool — it parsed and ran correctly, so the double-quoted-with-embedded-single-quotes form
+is not bash-only syntax that would break on the Windows matrix legs. Did **not** verify by pushing and
+watching real Actions runs — no way to do that from here — which is exactly why the change was kept
+to the smallest piece that's provably correct standalone, rather than the matrix-aware baseline file
+that could only be trusted after the fact.
+
+**What this does not solve, stated plainly rather than left implicit:** it would not, by itself, have
+prevented the three-week gap the roadmap item is named for — that job was already failing loudly and
+was ignored regardless of how clearly the failure was named. It also does not implement either of the
+roadmap's own two literal suggestions in full (no skip-count baseline, and `pip check` doesn't cover
+the "unpinned range, untested version" class the fastapi/starlette incident actually was). It is a
+smaller, honestly-scoped, verifiable slice: a broken install now fails at an unmistakably-named step
+instead of surfacing as one more red result buried inside the pytest step's output.
+
+**Tree state before commit:** `.github/workflows/ci.yml` modified (two new steps); `spec/` and
+`hub/seed_taste_doc.py` (prior-session scratch) untouched, staged nothing from them.
+
+**Queue status:** Q1–Q10 done. Q11 (Tier 2/3 runway) — roadmap items #4, #5, and now a scoped #6 are
+closed or addressed; only #7 (StaticPool race / fixture overhead) remains, still deliberately not
+attempted a third time this iteration for the reasons `known_debts.fixture-overhead-hits-the-staticpool-race`
+already records. Runway to `stop_at` (2026-08-18T08:00+01:00) is still roughly 3.5 hours.
