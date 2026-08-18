@@ -2300,3 +2300,75 @@ from iterations 16–23 is finished; two of the three named-current specs are no
 a future iteration continues this. Even once all three land, 16.2 itself still cannot tick: 16.1
 (scenario exercise) and 16.3 (archive) are separate, larger asks reserved for the operator. Runway to
 `stop_at` (2026-08-18T08:00+01:00) is roughly 50 minutes as of this write.
+
+## Iteration 26 (2026-08-18T07:13+01:00)
+
+**Q11 / roadmap #8, tenth 16.2 requirement-level pass — `agent-conversation-handoff`, the third and
+last of the three CURRENT specs 16.2 names directly (`agent-stream-events`, `runtime-diagnostics`
+done in iterations 24–25; this closes the set).** Read the 160-line spec in full personally (no
+research agent delegated this pass — small surface, four requirements/12 scenarios), then read
+`hub/hub/checkpoint_cutover.py`, `hub/hub/checkpoint_trigger.py`, `hub/hub/api/v1/checkpoints.py`,
+`ConversationControls.tsx` and `AgentOutputPanel.tsx` end to end.
+
+**Two findings, one cosmetic and one real:**
+
+1. **Naming drift.** The button the spec calls `Handoff` throughout (title, scenario prose, the
+   disabled-reason scenario) is rendered as `Checkpoint` in the live UI
+   (`ConversationControls.tsx:65`), with the component's own comment stating the product's
+   vocabulary changed. `handoff` survives only as internal prop/state/test-id naming. Nothing is
+   broken; the spec describes a label the UI no longer shows.
+
+2. **Real gap: Requirement 3's "next user message" wording does not match the shipped mechanism.**
+   The spec says the successor conversation is created by "the next user message" after a handoff
+   is ready. What ships is eager: clicking `Checkpoint` chains `POST .../checkpoint` then `POST
+   .../cutover` (confirmed both from `AgentOutputPanel.tsx`'s handler and from
+   `agentHandoff.test.tsx:176-177`'s own call-order assertion), and `cutover_to_successor` creates
+   the successor conversation and delivers the checkpoint synchronously — before any further user
+   input exists. The automatic path (`checkpoint_trigger.py`'s context-pressure `consider()`) goes
+   further: with `project.checkpoint_auto_continue` set, it calls `cut_over(auto_continue=True)`
+   and schedules the successor directly, with no user message ever involved. This is a considered
+   later redesign, the same register as iterations 19–22's runner/SSE-polling/palette findings —
+   the whole context-pressure/auto-continue machinery in `checkpoint_trigger.py`/
+   `checkpoint_policy.py` postdates this spec's wording and has no requirement text anywhere in the
+   31 current specs (grepped `checkpoint_due|checkpoint policy|auto.continue|context pressure` —
+   nothing outside `conversation-checkpoint`, whose own Requirement 2 explicitly scopes it to
+   "content and verification," not the trigger mechanism).
+
+**Everything else in the spec held, checked directly against the same files**: existing-conversation
+selection and start-fresh (Requirement 1); `Compact`/`Reset` absence (grepped
+`hub/ui/src/components/agents/`, zero matches); checkpoint delivery as a conversation-scoped
+`InboundQueueEntry` rather than the agent-scoped canonical-context file (`checkpoint_cutover.py:112-121`,
+matches Requirement 3's stronger clause exactly); no filesystem-path instruction in the delivered
+content (`delivery_content()`); the manual-runner disabled reason (`handoffReason()`); and
+transition-state reset scoped to `[agent.name, conversationId]` (`AgentOutputPanel.tsx:188-199`,
+Requirement 4).
+
+One dated note added under 16.2 in
+`openspec/changes/2026-07-30-hub-native-experience/tasks.md` (68 lines, the only file touched this
+iteration). No checkbox ticked, no code changed, no archiving attempted, per the file's own
+reconciliation rule and `decisions_for_user` D1.
+
+**This finishes the three-CURRENT-spec half of 16.2** that iterations 24–25 started
+(`agent-stream-events`, `runtime-diagnostics`, `agent-conversation-handoff` — all three now have a
+dated reconciliation note). Combined with iterations 16–23's eight-delta-spec mapping, every piece
+of 16.2's own task text that this loop can do unattended is now done. 16.2 itself still cannot tick:
+16.1 (scenario exercise) and 16.3 (archive) are separate, larger asks reserved for the operator, and
+this pass's two findings (the Handoff→Checkpoint rename, the eager-vs-deferred cutover) are product
+decisions, not something a reconciliation note resolves on its own.
+
+**Verified before committing:** re-read the spec's four requirements against the code once more
+after drafting, to confirm the note's claims matched what was cited rather than what was assumed;
+`agentHandoff.test.tsx` was opened directly to confirm the call-order claim rather than inferred
+from the handler alone; `git diff --stat` showed exactly the one file (`tasks.md`); `git status
+--short` showed only that plus the carried-forward `spec/` and `hub/seed_taste_doc.py` scratch,
+staged nothing from them.
+
+**Tree state before commit:** `openspec/changes/2026-07-30-hub-native-experience/tasks.md` modified
+(1 new note); `.claude/autonomous/STATE.json` updated (iteration, heartbeat, Q11 done_note,
+next_action); `spec/` and `hub/seed_taste_doc.py` (prior-session scratch) untouched.
+
+**Queue status:** Q1–Q10 done. Q11 — roadmap #7 stays parked (known_debts). Roadmap #8: all three
+CURRENT-spec reconciliations plus all eight delta-spec mappings are now complete; 16.2 needs 16.1 and
+16.3 to actually tick, both reserved for the operator. Runway to `stop_at` (2026-08-18T08:00+01:00)
+is roughly 40 minutes as of this write — likely the last iteration before stop, since nothing
+self-directed remains in scope beyond idling the branch clean.

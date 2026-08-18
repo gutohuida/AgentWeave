@@ -2577,6 +2577,67 @@ being built twice.*
 > per `decisions_for_user` D1 in this run's STATE.json. One 16.2-named spec remains:
 > `agent-conversation-handoff`.
 
+> **Update (2026-08-18, iteration 25) — `agent-conversation-handoff` reconciliation, the third and
+> last of the three specs 16.2 names directly.** Read the spec in full (four requirements, 12
+> scenarios), then read `hub/hub/checkpoint_cutover.py`, `hub/hub/checkpoint_trigger.py`,
+> `hub/hub/api/v1/checkpoints.py` and `ConversationControls.tsx`/`AgentOutputPanel.tsx` directly —
+> no research agent this pass, the surface area was small enough to read end to end personally.
+>
+> **The vocabulary changed and the spec did not follow.** `ConversationControls.tsx:65` renders the
+> button as `Checkpoint` (`Checkpointing…` while in flight), with its own comment stating this
+> directly: *"'Checkpoint' is the vocabulary the product uses now: the record is the thing"*. The
+> spec's requirement titles, scenario prose and disabled-reason text ("durable transitions are
+> initiated through `Handoff`", "the UI explains that handoff requires an automatically managed
+> runner") all still say `Handoff`, and the live disabled-reason string is in fact `"Requires an
+> automatically managed runner"` — no `handoff` in the rendered text. Internally `handoff` survives
+> as the prop/state/test-id vocabulary (`HandoffState`, `data-testid="conversation-handoff"`), so
+> nothing is broken, but the spec is describing a button name the UI no longer shows.
+>
+> **A real behavioural gap, not a naming one: the successor is not deferred to "the next user
+> message."** Requirement 3 states "After a handoff is ready, the next user message MUST create
+> exactly one unbound successor conversation." That is not what ships. Clicking `Checkpoint` fires
+> two calls in sequence — confirmed both from reading `AgentOutputPanel.tsx`'s `handleCheckpoint`
+> and from `agentHandoff.test.tsx:176-177`'s own assertion order, `POST
+> /conversations/{id}/checkpoint` then `POST /checkpoints/{id}/cutover` — and `cutover_to_successor`
+> (`checkpoints.py:238-272`) calls `cut_over()` immediately, which creates the successor
+> `Conversation` row and its queued `InboundQueueEntry` synchronously, before any further user
+> input exists. The automatic path is further from the spec still: `checkpoint_trigger.py`'s
+> context-pressure `consider()` can call `cut_over(..., auto_continue=True)` and then
+> `schedule_agent()` the successor directly (`checkpoint_cutover.py:128-141`) with no user message
+> at all, ever, when `project.checkpoint_auto_continue` is set. The requirement as written describes
+> an operator-gated, message-triggered creation; the shipped mechanism is button- or
+> pressure-triggered and eager. This reads as the same kind of considered later redesign iteration
+> 19–22 found elsewhere in this umbrella (runner cross-project reversal, SSE-polling exceptions,
+> palette supersession) — the whole context-pressure/auto-continue/warning-dismissal machinery
+> (`checkpoint_trigger.py`, `checkpoint_policy.py`) postdates this spec's last wording and has no
+> requirement text of its own anywhere in the 31 current specs (grepped `checkpoint_due|checkpoint
+> policy|auto.continue|context pressure` — no hits outside `conversation-checkpoint`, which the
+> spec's own Requirement 2 preamble explicitly carves out as covering only "content and
+> verification," not the trigger mechanism this finding is about).
+>
+> **Everything else holds, checked directly, not assumed:** existing-conversation selection and
+> `New conversation (start fresh)` (Requirement 1) match `AgentOutputPanel.tsx`'s conversation
+> picker; `Compact`/`Reset` are absent from `hub/ui/src/components/agents/` (grepped, zero
+> matches — the legacy-actions scenario holds); the checkpoint is delivered as a
+> conversation-scoped `InboundQueueEntry` via `inbound_queue.new_entry(..., conversation_id=successor.id)`
+> (`checkpoint_cutover.py:112-121`), not through the agent-scoped canonical-context file, matching
+> Requirement 3's stronger clause exactly; `delivery_content()` embeds the rendered checkpoint
+> inline with no filesystem-path instruction, matching "the successor is not asked to find
+> anything"; the manual button is disabled with a stated reason for a manual runner
+> (`handoffReason()` returns `'Requires an automatically managed runner'`), matching Requirement
+> 2's last scenario; and transition state (`handoffState`, `startingFresh`, etc.) resets on a
+> `useEffect` keyed on `[agent.name, conversationId]` (`AgentOutputPanel.tsx:188-199`), matching
+> Requirement 4's two scenarios.
+>
+> **`agent-conversation-handoff` needs real reconciliation, not just a note** — the eager,
+> button-or-pressure-triggered cutover contradicts Requirement 3's literal "next user message"
+> wording, and the whole vocabulary shifted from `Handoff` to `Checkpoint` without the spec text
+> following. Not fixed here, per this file's own rule and `decisions_for_user` D1. This closes the
+> three-spec half of 16.2 that iterations 24–25 worked through
+> (`agent-stream-events`, `runtime-diagnostics`, `agent-conversation-handoff`); 16.2 itself still
+> cannot tick — it also requires 16.1 (scenario exercise) and stays a decision for the operator per
+> `decisions_for_user` D1.
+
 - [ ] 16.1 Confirm every scenario in the ten delta specs is exercised.
 - [ ] 16.2 Sync delta specs into `openspec/specs/`; reconcile `agent-stream-events`,
       `runtime-diagnostics`, and `agent-conversation-handoff` with their new behaviour.
