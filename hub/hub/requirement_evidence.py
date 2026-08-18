@@ -49,6 +49,7 @@ from .db.models import (
 )
 from .project_workspace import ProjectWorkspace
 from .spec_lifecycle import Actor
+from .subprocess_windows import no_console_kwargs
 from .utils import short_id
 
 AWAITING = "awaiting"
@@ -215,6 +216,7 @@ def _git(root: Path, *args: str) -> Optional[str]:
             text=True,
             timeout=15,
             check=False,
+            **no_console_kwargs(),
         )
     except (OSError, subprocess.SubprocessError):
         return None
@@ -295,6 +297,7 @@ def is_reachable_from(root: Path, commit: str, branch: str) -> Optional[bool]:
             capture_output=True,
             timeout=15,
             check=False,
+            **no_console_kwargs(),
         )
     except (OSError, subprocess.SubprocessError):
         return None

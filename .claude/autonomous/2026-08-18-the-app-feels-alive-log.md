@@ -476,3 +476,115 @@ idiom that view already uses everywhere else.
 spawn site with `CREATE_NO_WINDOW` today; every other bare subprocess call in `hub/hub/` needs a
 shared helper and a guard test, and the operator's own eyes watching for the flash matter more here
 than the test suite does.
+
+---
+
+## Entry 7 — 2026-08-18T01:50+01:00 · Q6 done: no more console-window flash on Windows
+
+**Inherited state.** This iteration started with the fix already written but uncommitted and
+unlogged — `hub/hub/subprocess_windows.py` (new), ten `hub/hub/*.py` files wired to it, a new
+`hub/tests/test_no_console_flash.py` guard test, and a matching `src/agentweave/cli.py` fix for
+the Docker-probe spawn, all sitting dirty in the tree with no prior log entry. Rather than trust
+that and move on (never mark complete on the strength of a plan existing applies just as much to
+someone else's unlogged work as your own), this iteration read every diff line by line before
+doing anything else, then ran the full verification the queue item asked for.
+
+**The fix, as found.** `hub/hub/subprocess_windows.py` exports one function,
+`no_console_kwargs()` — returns `{"creationflags": subprocess.CREATE_NO_WINDOW}` on Windows,
+`{}` elsewhere, so the same `**no_console_kwargs()` splat works for `subprocess.run`/`Popen` and
+`asyncio.create_subprocess_exec`/`create_subprocess_shell` alike. Every spawn site prep had
+identified — `conversation_titles.py`, `requirement_evidence.py` (x2), `launchability.py`,
+`main.py` (x3 git/UI-fingerprint calls), `task_integration.py`, `workspace_paths.py`, `worker.py`,
+`worktrees.py` (x2), `codex_appserver.py`, `native_dialog.py` — now passes it, plus
+`pty_runner.py`'s pre-existing literal `creationflags=subprocess.CREATE_NO_WINDOW` was refactored
+to call the same helper so there is exactly one place the flag is decided.
+
+**The guard.** `hub/tests/test_no_console_flash.py` walks the AST of every `.py` file under
+`hub/hub/`, flags any `subprocess.run/Popen/call/check_call/check_output` or
+`asyncio.create_subprocess_exec/create_subprocess_shell` call whose enclosing function does not
+contain `no_console_kwargs` or `creationflags` anywhere in its source, and fails with the exact
+line numbers. It matches on (attribute, allowed base identifiers) pairs specifically so it does
+not false-positive on `uvicorn.run(...)`, `mcp.run(...)` (FastMCP, not a spawn), or
+`asyncio.run(...)` in the migrations env — a real risk given how common `.run(` is outside the
+subprocess context. A second test asserts the file-discovery glob actually found something, so an
+empty parametrize list (e.g. a bad path after a directory rename) cannot pass this vacuously.
+
+**`src/agentweave/cli.py`'s Docker probe** (`_docker_available`, was line 337) got the same
+treatment directly with `subprocess.CREATE_NO_WINDOW` (not the hub helper — the CLI has no
+dependency on `hub`, deliberately, per `CLAUDE.md`), with a comment pointing at the existing
+`DETACHED_PROCESS` handling for the long-lived Hub spawn as the established precedent. Checked
+`src/agentweave/` for the same pattern elsewhere: `cli.py`'s `_open_app_window` `Popen` launches a
+GUI browser binary (`chrome.exe --app=...`), which never attaches a console regardless of
+`creationflags` — correctly left alone. `tool_surface.py`'s `probe_mcp_registered` has the
+identical `shell=True` `cli mcp list` pattern `launchability.py` already fixed, but grepping for
+its callers turned up nothing in `src/agentweave/` or `hub/hub/` — it is dead, unreferenced code
+(the live path is `hub.launchability.resolve_access_path`, called from `agent_trigger.py`), and
+out of the queue item's stated `hub/hub/` scope besides. Left untouched rather than fixed
+speculatively.
+
+**Verified, not assumed:**
+
+1. **The guard test itself**, `test_no_console_flash.py`: 192 passed — meaning every spawn site in
+   the package today reaches the helper, confirmed by the test that exists specifically to prove
+   that claim rather than eyeballing the diff.
+2. **Every touched module's own test file** plus `test_pty_runner.py`: 428 passed
+   (`test_no_console_flash.py`, `test_pty_runner.py`, `test_launchability.py`,
+   `test_conversation_titles.py`, `test_workspace_paths.py`, `test_worktrees.py`,
+   `test_requirement_evidence.py`, `test_task_integration.py`, `test_worker.py`,
+   `test_codex_appserver.py`, `test_native_dialog.py`).
+3. **The CLI suite, in full, including the two tests that used to hang** (Q1b's fixture removed
+   the trap): 379 passed, 3 skipped with all 384 collected items selected — no deselection needed
+   this time, unlike every prior iteration's note that assumed Q1b's fix but never re-tested it
+   with the hanging tests included. `ruff check` and `black --check` both clean on `hub/hub/` and
+   `src/agentweave/`.
+4. **Live, twice — because the first attempt did not exercise the real code path.** Restarted the
+   trial Hub on :8010 (it was still running yesterday's binary, so today's fix was not loaded)
+   against the same `hub/data/agentweave.db` fixture DB Q1 pointed it at, from `hub/` per the
+   startup trap, and confirmed the same three projects came back with no duplicate registration.
+   A background PowerShell poller logged any new `conhost.exe`/`cmd.exe` process for its
+   duration. First attempt drove a real turn through the actual UI via Playwright
+   (`testbed/scratch/shot_console_flash_check.py`, deleted after use) — but the app has no URL
+   router (confirmed by grep: no react-router in `hub/ui/src`), so navigating by URL fragment
+   silently no-opped and the turn landed on the wrong agent; fixed by clicking through the sidebar
+   instead, which reached `q2verify` and got a real "pong" back. That reused an existing
+   conversation, though, so it never touched `conversation_titles.py` (title generation is
+   new-conversation-only) — the queue item's own prime suspect. Followed up with a second, more
+   surgical probe: called `hub.conversation_titles._run_titler` directly with a real
+   `build_title_command(cli="claude", model="claude-haiku-4-5-20251001", ...)` invocation
+   (`testbed/scratch/probe_titler_flash.py`, deleted after use) while the same poller watched —
+   real `claude` CLI spawn, real "Hi!" response, and the poll log's only new process during that
+   window was an unrelated `tasklist | findstr ...Code.exe...` from something outside this
+   session's control (a different parent PID each time, not `python.exe` or `claude`) — no new
+   `conhost.exe`/`cmd.exe` traceable to the titler spawn. This is the actual site the operator's
+   complaint pointed at, driven directly rather than hoped-for via a UI path that happened not to
+   reach it.
+
+**What a reviewer should distrust:**
+
+- This iteration inherited the diff rather than writing it from scratch. Every file was read in
+  full during this session and the guard test's own pass proves the coverage claim mechanically,
+  but the design choices (which files, the AST-matching strategy, the CLI/hub split) were made by
+  whichever process wrote them, unlogged. Nothing here found a defect in that work, but "found no
+  defect" is not the same confidence as having derived the design.
+- The live poller is a proxy, not a screenshot of an actual flash — it detects new
+  `conhost.exe`/`cmd.exe` process creation, which is what a console flash requires, but a human
+  eye watching the screen (the queue item's own stated stronger bar) was not available in this
+  unattended run. The absence-of-new-console-process signal is strong but not identical to "an
+  operator watched and saw nothing."
+- `tool_surface.py`'s duplicate, unused `probe_mcp_registered` still has the un-suppressed
+  `shell=True` spawn. It is dead code today, confirmed by a caller search, but if something starts
+  importing it later without noticing the live copy in `hub.launchability`, the flash comes back
+  through a path this session's guard test cannot see (it only walks `hub/hub/`, not
+  `src/agentweave/`).
+- The Hub restart (needed to load today's code) means the taste-pass fixtures Q1 pointed at are
+  being served by a fresh process; not expected to matter, but worth naming since a prior entry's
+  guard rail was specifically about not losing track of which database was live.
+
+**Next:** Q7 — ship a provisional AgentWeave taskbar icon in place of the generic Python one.
+`cli.py`'s `webview.create_window('AgentWeave', url)` call (was line 752) has no icon; no
+`.ico`/`.png`/`.svg` asset exists anywhere in the repo yet. Pillow 12.1.1 is available to generate
+one programmatically. Per the queue item: timebox the taskbar-icon mechanism hunt (pywebview may
+not expose it at all on Windows, where the taskbar often follows the host process rather than the
+window) — a committed `.ico` plus a working favicon plus a precise written explanation of what
+blocks the taskbar is an acceptable stopping point; do not spend the whole remaining budget
+chasing the mechanism.

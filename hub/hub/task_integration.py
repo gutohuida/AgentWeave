@@ -39,6 +39,7 @@ from .db.models import (
     TaskIntegration,
     TaskRequirementLink,
 )
+from .subprocess_windows import no_console_kwargs
 from .utils import short_id
 
 MERGED = "merged"
@@ -78,6 +79,7 @@ def _git(root: Path, *args: str) -> subprocess.CompletedProcess:
         text=True,
         timeout=60,
         check=False,
+        **no_console_kwargs(),
     )
 
 

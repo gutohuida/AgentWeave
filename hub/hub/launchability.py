@@ -18,6 +18,8 @@ from typing import Any, Dict, Optional, Tuple
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from .subprocess_windows import no_console_kwargs
+
 # Runner -> CLI binary name. Mirrors the "cli" field of RUNNER_CONFIGS in
 # agentweave.constants (kept independent — see module docstring).
 RUNNER_CLI: Dict[str, Optional[str]] = {
@@ -200,6 +202,7 @@ def probe_mcp_registered(cli: str) -> bool:
             text=True,
             shell=(os.name == "nt"),
             timeout=10,
+            **no_console_kwargs(),
         )
         available = result.returncode == 0 and "agentweave" in (result.stdout or "").lower()
     except Exception:

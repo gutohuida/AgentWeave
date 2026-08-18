@@ -330,8 +330,16 @@ def _docker_available() -> bool:
     """Check if Docker and docker compose are available."""
     if not shutil.which("docker"):
         return False
-    # Check for docker compose (v2) or docker-compose (v1)
-    result = subprocess.run(["docker", "compose", "version"], capture_output=True, timeout=10)
+    # Check for docker compose (v2) or docker-compose (v1). CREATE_NO_WINDOW keeps this
+    # silent probe from flashing a console on Windows -- see cli.py:866's DETACHED_PROCESS
+    # for the same reasoning applied to the long-lived Hub spawn.
+    creationflags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+    result = subprocess.run(
+        ["docker", "compose", "version"],
+        capture_output=True,
+        timeout=10,
+        creationflags=creationflags,
+    )
     if result.returncode == 0:
         return True
     # Fallback to docker-compose

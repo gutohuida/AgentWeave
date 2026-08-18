@@ -26,6 +26,7 @@ from .conversations import get_conversation_by_id, title_from_message
 from .db.engine import async_session_factory
 from .db.models import Agent, AgentOutput, Conversation, InboundQueueEntry, Project, Runner
 from .pty_runner import resolve_executable
+from .subprocess_windows import no_console_kwargs
 from .utils import persist_event
 
 logger = logging.getLogger(__name__)
@@ -102,6 +103,7 @@ def _run_titler(cmd: List[str], cwd: Optional[str]) -> str:
             errors="replace",
             timeout=TITLE_TIMEOUT_SECONDS,
             stdin=subprocess.DEVNULL,
+            **no_console_kwargs(),
         )
     except (OSError, subprocess.SubprocessError) as exc:
         logger.debug("conversation titling spawn failed: %s", exc)

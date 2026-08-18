@@ -50,6 +50,7 @@ from .runner_events import (
     tool_result_event,
     tool_use_event,
 )
+from .subprocess_windows import no_console_kwargs
 
 # Transport sentinels. Both may appear in a bound Runner's `flags` list; neither is a real
 # `codex` CLI argument, so the caller strips them before `flags` reaches argv.
@@ -613,6 +614,7 @@ class AppServerProcess:
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            **no_console_kwargs(),
         )
         session = cls(proc)
         loop = asyncio.get_running_loop()
