@@ -1812,3 +1812,112 @@ fixed refetch interval on purpose alongside SSE) is a second instance of the sam
 decision, not drift" pattern iteration 19 found once — worth surfacing next to that one in the
 morning report rather than treating either as an isolated curiosity. Runway to `stop_at`
 (2026-08-18T08:00+01:00) is roughly 2h15m.
+
+## Iteration 21 — sixth 16.2 requirement-level mapping: `hub-native-runtime`
+
+Continued Q11/roadmap #8, same pattern as iterations 16–20. Picked `hub-native-runtime` — eight
+requirements, no current spec carries that name. Delegated the research (read the delta spec in
+full, grep all 31 current specs by concept rather than name, check live code wherever spec prose
+came up empty — following iteration 20's own method, which needed it for `hub-interface-feel`) to a
+background research agent rather than doing every grep and file read inline, since the delta spans
+process lifecycle, worktree isolation, run reconciliation, token accounting, and the scheduler —
+five genuinely separate subsystems. Read the agent's report in full, then personally spot-checked
+its four most load-bearing citations before writing anything into `tasks.md`: `WorktreesPanel.tsx`'s
+static "No worktree activity yet." stub and the absence of any `useWorktreeConflicts` hook or
+`worktrees/conflicts` caller anywhere in `hub/ui/src/` (grepped myself — zero hits, confirming an
+operator genuinely cannot see a detected conflict today), `worktrees.py`'s `detect_conflicts`
+docstring citing this exact umbrella delta scenario by name, and the `usage_accounting.py` /
+`run_reconciliation.py` line citations. All four held up exactly as reported.
+
+**Findings, by requirement (eight total):**
+
+1. **Turns accounted in tokens, currency reported as derived** — shipped and cleanly documented.
+   `usage-accounting/spec.md` is an expanded, near-verbatim restatement, checked against
+   `hub/hub/usage_accounting.py:39,170,176` directly. The cleanest, most fully-reconciled requirement
+   found across all six passes so far (iterations 17–21) — no gap, no drift, no crude
+   implementation.
+
+2. **Hub runs natively, owns process lifecycle, container mode stays non-default** — shipped and
+   documented for the installation half (`app-lifecycle/spec.md:10-14`, `local-project-workspace/
+   spec.md:256-270`). Process-lifecycle ownership itself (spawn/output/session/interruption/exit)
+   has no requirement text of its own anywhere — only a code comment,
+   `hub/hub/pty_runner.py:3-4`: "Decision 1 makes the Hub own agent execution directly... its server
+   spawns the agent, owns the PTY."
+
+3. **Trigger is direct, no message-polling, no text-encoded session directive** — shipped, zero spec
+   text, but `agent_trigger.py:9-12`'s own module docstring states this almost verbatim. The delta's
+   binary started/failed outcome model was deliberately widened to a third state, `queued`, once
+   conversations could compete for one agent — `agent-conversation-workspace/spec.md:36,190-192`
+   states this as intentional, consistent with the widening iteration 17 already found for
+   `agent-inbound-queue`. Not a violation of "no speculative status" — `queued` is itself definite.
+
+4. **Manual connection ceremony removed** — shipped, zero spec text anywhere in the current 31.
+   True in code: `launchability.py:115-155` resolves provider credentials inside the Hub process
+   before spawn; `agent_trigger.py:371-372` feeds the session id in as a typed field, no operator
+   entry. Apparently never written up once the legacy CLI ceremony was deleted.
+
+5. **Agent output streams live via SSE, no client poll** — mechanism documented
+   (`agent-stream-events/spec.md`), the explicit anti-polling half of the rule itself is not, verified
+   true in code rather than assumed: `hub/ui/src/api/agents.ts` has three `useSSE` call sites and no
+   `refetchInterval`, checked against iteration 20's own three named exceptions.
+
+6. **Interrupted runs reconciled on restart; entries returned undelivered; no orphaned process on
+   stop** — shipped, zero spec text for the mechanism itself; only its downstream consequence has
+   prose (`run-task-binding/spec.md:145-189` assumes reconciliation happens without documenting how).
+   Read `hub/hub/run_reconciliation.py` in full: `reconcile_interrupted_runs()` runs once from
+   `main.py:280`'s `lifespan()` startup, marks any `"running"` row with a dead/absent pid as
+   `"interrupted"`, and returns delivered-but-uncommitted entries to the queue — plus a refinement
+   the delta didn't anticipate, a per-entry delivery-attempt cap that gives up rather than requeuing
+   forever. `terminate_all_active_runs()` force-terminates every tracked process on Hub stop,
+   deliberately not touching `Run` row status itself (its own docstring explains why — a single-owner
+   decision, not a gap). The clearest case this pass of a load-bearing startup routine with zero
+   requirement-level coverage.
+
+7. **Watchdog limited to time-based duties** — shipped, zero spec text. `src/agentweave/watchdog.py`
+   no longer exists; remaining "watchdog" references in `hub/hub/` are code comments citing the
+   deleted mechanism (`scheduler.py:41-42,287,304-307`). `JobScheduler` fires scheduled jobs through
+   the same direct-execution path a manual trigger uses.
+
+8. **Agents write in isolated checkouts; divergent changes surface as a conflict** — the one genuine,
+   actionable product gap found across all six passes of this reconciliation, not a documentation gap.
+   Isolation and release are shipped and documented cleanly (`operator-agent-creation/
+   spec.md:63-72,79-91`, `worktrees.py:364-388`). But the conflict-detection backend
+   (`detect_conflicts`, `worktrees.py:447-460`, and `GET /api/v1/projects/{id}/worktrees/conflicts`)
+   is fully built, even cites this exact umbrella delta scenario by name in its own docstring
+   ("the 'interface identifies which agents diverged' half of hub-native-runtime's 'Divergent changes
+   surface as a conflict' scenario"), and has **no UI consumer anywhere** —
+   `WorktreesPanel.tsx` unconditionally renders "No worktree activity yet." and never calls the
+   endpoint; `workspace.ts` exposes only the single-agent `useAgentWorkspace` hook. An operator has
+   no way to see a detected conflict today. Recorded as IMPLEMENTED MORE CRUDELY THAN SPECIFIED, same
+   register as iteration 19's synchronous-`HTTPException`-instead-of-pending-decision finding.
+
+**What was written, not implemented.** One dated note added under 16.2 in
+`openspec/changes/2026-07-30-hub-native-experience/tasks.md` (113 lines, the only file touched this
+iteration) — six of the nine remaining unmapped specs now done (`agent-composer`,
+`agent-inbound-queue`, `agent-conversation-timeline`, `agent-identity-and-skills`,
+`hub-interface-feel`, `hub-native-runtime`); two remain (`hub-visual-language`, plus re-confirming
+`agent-tool-surface`). The worktree-conflict UI gap is not fixed — 16.2 is a mapping exercise, not
+implementation, per the file's own reconciliation rule and `decisions_for_user` D1 — but it is worth
+surfacing to the operator as a shippable follow-up, distinct from a documentation debt, since it's
+the first genuine product gap this reconciliation pass has found rather than a prose omission.
+
+No checkbox ticked, no code changed, no archiving attempted.
+
+**Verified before committing:** fixed one typo the research introduced while drafting the note
+(`CLAAUDE.md` → `CLAUDE.md`). Personally re-ran and read, not trusted from the agent's report alone:
+`grep -n "No worktree activity" hub/ui/src/components/environment/WorktreesPanel.tsx` and
+`grep -rn "useWorktreeConflicts\|worktrees/conflicts" hub/ui/src/` (zero hits, confirming the gap),
+`sed -n` over `worktrees.py:1-10,445-452` (confirmed the docstring citation), and grep over
+`usage_accounting.py` and `run_reconciliation.py` for the four cited lines/functions — all four
+checks matched the report exactly. `git diff --stat` showed exactly the one file, 113 insertions.
+`git status --short` showed only that plus the carried-forward `spec/` and `hub/seed_taste_doc.py`
+scratch, staged nothing from them.
+
+**Tree state before commit:** `openspec/changes/2026-07-30-hub-native-experience/tasks.md` modified
+(1 new note, 113 lines); `.claude/autonomous/STATE.json` updated (iteration, heartbeat, Q11
+done_note, next_action); `spec/` and `hub/seed_taste_doc.py` (prior-session scratch) untouched.
+
+**Queue status:** Q1–Q10 done. Q11 — roadmap #7 stays parked (three failure modes on record);
+roadmap #8 now has six of nine remaining delta-spec mappings done, two left (`hub-visual-language`,
+`agent-tool-surface` re-check), listed in the 16.2 note for whoever continues it. Runway to `stop_at`
+(2026-08-18T08:00+01:00) is roughly 1h55m.

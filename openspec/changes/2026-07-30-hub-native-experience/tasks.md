@@ -2206,6 +2206,119 @@ being built twice.*
 > `agent-conversation-timeline`, `agent-identity-and-skills`, `hub-interface-feel`). Three remain:
 > `hub-native-runtime`, `hub-visual-language`, plus re-confirming `agent-tool-surface` at requirement
 > level per the 2026-08-18 note above.
+>
+> **Update (2026-08-18, iteration 21) — sixth 16.2 requirement-level mapping:
+> `hub-native-runtime`.** No current spec carries that name. Its eight requirements were checked
+> against `openspec/specs/` by concept (not name), then against live code wherever spec prose came up
+> empty — `hub/hub/pty_runner.py`, `hub/hub/run_reconciliation.py`, `hub/hub/worktrees.py`,
+> `hub/hub/api/v1/agent_trigger.py`, `hub/hub/api/v1/worktrees.py`, `hub/hub/scheduler.py`,
+> `hub/hub/usage_accounting.py`, `hub/hub/launchability.py`, and the corresponding UI files, following
+> the method iteration 20 established for `hub-interface-feel`.
+>
+> **Two requirements are shipped and cleanly documented:**
+> - *Turns are accounted in tokens, currency reported as derived.* `usage-accounting/spec.md` is
+>   essentially a direct, expanded restatement, checked against `hub/hub/usage_accounting.py:39`
+>   (`status="measured" if measured else "unavailable"` — never invented as zero), `:170`
+>   (`"label": "API-equivalent estimate"`), `:176` (`{"kind": "unavailable", ...}`). The cleanest,
+>   most fully-reconciled requirement found across all six passes so far (iterations 17-21) — no gap,
+>   no drift, no crude implementation.
+> - *Hub runs natively, container mode stays non-default.* `app-lifecycle/spec.md:10-14` (bare
+>   invocation is the only entry point) plus `local-project-workspace/spec.md:256-270` (Docker is an
+>   explicit, bounded, non-default mode) together cover the delta's installation half.
+>   Process-lifecycle ownership itself (spawn/output/session/interruption/exit) has no requirement
+>   text of its own anywhere — it is asserted only in a code comment,
+>   `hub/hub/pty_runner.py:3-4`: "Decision 1 makes the Hub own agent execution directly... its server
+>   spawns the agent, owns the PTY."
+>
+> **Four requirements are shipped and verified live in code but have zero requirement text anywhere
+> in the current 31 specs** — continuing the dominant pattern of this reconciliation pass since
+> iteration 18:
+> - *Triggering is direct, no message-polling, no text-encoded session directive, typed session
+>   field.* `agent_trigger.py:9-12`'s own module docstring states this almost verbatim ("no synthetic
+>   `Message` row, no `[Session: ...]` text tags, no `execution_confidence` guess... session identity
+>   is a typed field on the run record, never text embedded in a message body"). The delta's binary
+>   started/failed outcome model was deliberately widened to a third state, `queued`, once conversations
+>   could compete for one agent — `agent-conversation-workspace/spec.md:36,190-192` states this as
+>   intentional ("the trigger endpoint reports whether a turn started or the input was queued, and that
+>   report is the only source of truth"), consistent with the widening iteration 17 already found for
+>   `agent-inbound-queue`. Not a violation of "no speculative status" — `queued` is itself definite, not
+>   graded.
+> - *Manual connection ceremony removed.* Grepped `copy.?paste`/`shell export`/`shell preparation`
+>   across all 31 specs — zero hits. True in code: `launchability.py:115-155`'s `resolve_agent_env`
+>   resolves provider credentials inside the Hub process before spawn; `agent_trigger.py:371-372` feeds
+>   `conversation.provider_session_id` straight into the spawn as a typed field, no operator entry. This
+>   requirement was apparently never written up once the legacy CLI ceremony was deleted
+>   (`app-lifecycle/spec.md:81-91` documents the adjacent "no CLI command manipulates collaboration
+>   state" fact without naming this one).
+> - *Interrupted runs reconciled on restart; entries returned undelivered; no orphaned process on
+>   stop.* Read `hub/hub/run_reconciliation.py` in full rather than trusting its docstring:
+>   `reconcile_interrupted_runs()` runs once from `main.py:280`'s `lifespan()` startup, marks any
+>   `"running"` `Run` row with a dead or absent pid as `"interrupted"`, and calls
+>   `return_run_entries` (`inbound_queue.py:174-229`), which returns delivered-but-uncommitted entries
+>   to `state="queued"` while preserving arrival order — plus a refinement the delta didn't anticipate,
+>   a per-entry delivery-attempt cap that gives up and marks an entry `withdrawn` past
+>   `RESUME_RETRY_LIMIT` rather than requeuing it forever (docstring: "four entries, four consecutive
+>   failures, no way through"). `terminate_all_active_runs()` (`agent_trigger.py:926-949`), called from
+>   `lifespan()` teardown, force-terminates every tracked process tree on Hub stop — deliberately not
+>   touching `Run` row status itself (its own docstring: "duplicating that here risks the two
+>   disagreeing about *when* a run's status actually changes," leaving that exclusively to the next
+>   boot's reconciliation). Grepped `interrupted`/`orphan`/`reconcil` across all 31 specs: the mechanism
+>   itself is undocumented anywhere; only its downstream consequence has prose —
+>   `run-task-binding/spec.md:145-189` treats "reconciled to an ended state" as a precondition it
+>   builds on ("a run that crashed, failed, or was interrupted is still a run that ended holding a task
+>   nobody moved") without documenting how a run gets there. The clearest case this pass of a
+>   load-bearing startup routine with zero requirement-level coverage.
+> - *Watchdog limited to time-based duties.* `src/agentweave/watchdog.py` no longer exists (confirmed
+>   by `ls`, matching CLAUDE.md's own note that it was deleted). Remaining "watchdog" references in
+>   `hub/hub/` are code comments citing the deleted mechanism as what was replaced —
+>   `scheduler.py:41-42,287,304-307` — and `JobScheduler._fire_job_internal` fires scheduled jobs
+>   through the same `trigger_agent_directly` path a manual trigger uses
+>   (`agent_trigger.py:256-277`'s docstring confirms this explicitly). No current spec states either
+>   half of this requirement (scope limited to time-based duties; message creation no longer triggers
+>   polling execution) — grepped `watchdog`/`scheduled job`/`AIJob` across all 31, the only hits are an
+>   unrelated stale-titled requirement (`runtime-diagnostics/spec.md:51`, "Watchdog launch preflight,"
+>   actually about pre-spawn checks) and scattered mentions of scheduled jobs as one of several trigger
+>   sources elsewhere.
+>
+> **One requirement is shipped and documented for its mechanism, with the anti-polling half of the
+> rule itself left unstated:**
+> - *Agent output streams live via SSE.* `agent-stream-events/spec.md` documents the event envelope
+>   and closed kind taxonomy thoroughly, covering "a terminal event carrying the outcome is emitted."
+>   The explicit client-side prohibition ("clients do not poll a REST endpoint to discover it") has no
+>   spec text anywhere, verified true in code rather than assumed:
+>   `hub/ui/src/api/agents.ts` has three `useSSE` call sites and no `refetchInterval`, checked against
+>   iteration 20's own three named exceptions (`permissions.ts`/`questions.ts`/`unaskedQuestions.ts`) —
+>   agent output is not among them.
+>
+> **One requirement is a real, actionable product gap, not a documentation gap — the first of its
+> kind found across all six passes of this reconciliation:**
+> - *Agents write in isolated checkouts; divergent changes surface as a conflict.* The isolation model
+>   itself is shipped and documented cleanly: one worktree per writing agent on branch
+>   `agentweave/<agent>` sharing the primary checkout's object database (`worktrees.py:48,131-138`),
+>   read-only agents sharing the primary checkout (`is_writing_agent`, :141-145), isolation provisioned
+>   before the first writing turn with the turn refused (not silently degraded) if provisioning fails
+>   (`operator-agent-creation/spec.md:63-72,79-91`), and release-with-unmerged-work-reported on removal
+>   (`release_worktree`, `worktrees.py:364-388`, wired to `session_sync.py:131-156`). But the
+>   conflict-detection half — `detect_conflicts` (`worktrees.py:447-460`, pairwise `git merge-tree
+>   --write-tree --name-only` across every provisioned branch) and its route,
+>   `GET /api/v1/projects/{id}/worktrees/conflicts` (`api/v1/worktrees.py:76-91`) — is fully built,
+>   even cites this exact umbrella delta scenario by name in its own docstring
+>   (`worktrees.py:3-6,447-451`: "the 'interface identifies which agents diverged' half of
+>   hub-native-runtime's 'Divergent changes surface as a conflict' scenario"), and has **no UI
+>   consumer anywhere**. `hub/ui/src/components/environment/WorktreesPanel.tsx` unconditionally
+>   renders "No worktree activity yet." and never calls the conflicts endpoint; `hub/ui/src/api/workspace.ts`
+>   exposes only the single-agent `useAgentWorkspace` hook, no `useWorktreeConflicts`. An operator has
+>   no way to see a detected conflict today. Recorded as IMPLEMENTED MORE CRUDELY THAN SPECIFIED, the
+>   same register as iteration 19's synchronous-`HTTPException`-instead-of-pending-decision finding —
+>   real machinery, missing the last mile that makes it usable. Not fixed this pass (16.2 is a mapping
+>   exercise, not implementation, per this file's own reconciliation rule and `decisions_for_user` D1
+>   in `STATE.json`) but worth surfacing to the operator as a shippable follow-up, distinct from a
+>   documentation debt.
+>
+> Six of the nine remaining unmapped specs are now done (`agent-composer`, `agent-inbound-queue`,
+> `agent-conversation-timeline`, `agent-identity-and-skills`, `hub-interface-feel`,
+> `hub-native-runtime`). Two remain: `hub-visual-language`, plus re-confirming `agent-tool-surface` at
+> requirement level per the 2026-08-18 note above.
 
 - [ ] 16.1 Confirm every scenario in the ten delta specs is exercised.
 - [ ] 16.2 Sync delta specs into `openspec/specs/`; reconcile `agent-stream-events`,
