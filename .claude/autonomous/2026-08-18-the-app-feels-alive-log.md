@@ -766,3 +766,70 @@ and "hub" still fit), folding in `decisions_for_user.N1` per its own pre-authori
 stated actual objective (items 1-6, i.e. Q1-Q7) was already complete as of iteration 8; Q8 and the
 coming Q9 are the two explicitly-scoped discussion items (7 and 9), decided nothing, exactly as
 asked.
+
+---
+
+## Iteration 10 — 2026-08-18T02:45+01:00 — Q9: the naming exploration, decide nothing
+
+Wrote `openspec/explorations/2026-08-18-does-the-name-still-fit.md`, answering both operator
+questions from item 9 ("AgentWeave may not fit the product anymore — it feels more like a factory
+now") and item 2's folded-in aside ("also open to renaming hub if there's a better term") as one
+document, per `decisions_for_user.N1`'s pre-authorisation.
+
+Read both required documents first, as `next_action` specified, rather than writing from the name
+alone: `2026-08-15-where-agentweave-fits.md` (already narrowed the surviving claim to durability,
+addressable identity, and an operator-facing UI — not "multi-agent collaboration" as a headline) and
+`2026-08-17-architecture-proposals.md` (proposed building on `Loop` and the capability document's
+`current` phase, and named directly that "the loop that runs this very session is not in the
+product"). Grounded the "feels like a factory" instinct in three shipped, load-bearing facts rather
+than restating the operator's mood back at them: the Runner/Agent/Charter separation now three
+distinct concepts instead of one CLI role; the archived/current spec lifecycle (confirmed shipped
+2026-08-16, this run's own Q8 finding last iteration); and `Loop` as a first-class recurring,
+purposeful, queued unit, quoting the operator's own "security scans" example from the architecture
+document. Gave both sides of whether "weave" still fits — interlacing threads that depend on each
+other mid-process, vs. independent stations producing durable output that accumulates for later
+operator inspection — and named what adopting "factory" language would imply (production lines,
+a foreman/operator review role, throughput/repeatability) without picking a winner.
+
+Priced a rename against six surfaces, each grepped directly rather than estimated: `agentweave-ai`
+and `agentweave-hub` (both published PyPI packages at `1.0.1` — the name-permanence problem exists
+the moment a name is published, independent of user count, which sharpens rather than dulls the
+operator's "no users yet, wouldn't be too disruptive" framing — it's true for social cost, not for
+this mechanical list); the `agentweave`/`aw` CLI entry points (`pyproject.toml:67-68`); the GHCR
+image `ghcr.io/gutohuida/agentweave-hub` (`hub/docker-compose.yml:12`); the docs site and its
+GitHub-Pages URL, which is coupled to the *repository* name, not just `mkdocs.yml`'s `site_name`;
+and the per-project `.agentweave/` marker directory (`src/agentweave/constants.py:8`, with every
+other on-disk path derived from it) — this one is not just an in-repo constant, it is a marker
+already bound to real registered projects including this repo's own `proj-5e960453`, so renaming it
+needs a migration path, not a find-replace. `CLAUDE.md` itself was named as a seventh cost: it uses
+"the Hub" as a specific proper-noun referent in well over 100 places, which a bare find-replace of
+the word "hub" would corrupt if that term is also renamed — the two questions (product name, hub
+term) interact at the prose level even though the document treats them as two separately-costed
+decisions.
+
+For the "hub" term specifically, gave three options — keep it (short, matches the literal
+multi-project topology, comparatively low external cost since it's a common noun not a trademarked
+registry name), rename it to match a factory reframing if one is chosen (same shape of cost as the
+product rename, one layer down: `hub/` the directory, `hub.main:app`/`hub.main:run`, the
+`agentweave-hub` PyPI package, the GHCR image), or decouple the two decisions entirely (lower
+per-decision cost but risks the half-migrated feel `CLAUDE.md`'s own opening section already warns
+against for the openspec migration) — recommending none.
+
+Closed with a point this run is well-placed to make honestly: `CLAUDE.md`'s own prose about the
+product already went stale once this week — its "no archive phase" claim was true when written and
+false by the time this run's Q8 exploration read the code directly (the archive phase shipped
+2026-08-16, three days before Q8 checked it, unreconciled with the file's prose). Named that
+explicitly as the reason a naming decision, whenever made, should be dated and re-verified against
+the code before anyone acts on it, rather than treated as permanently settled prose — the exact
+failure mode that bit the archive-phase claim.
+
+No name touched anywhere in code, docs, or UI. Committed on its own
+(`openspec/explorations/2026-08-18-does-the-name-still-fit.md`), leaving `spec/` and
+`hub/seed_taste_doc.py` (prior-session scratch) untouched per the queue's own limits.
+
+**Queue status:** Q1–Q9 all done. Both decide-nothing explorations (items 7 and 9) are written; the
+night's actual objective (items 1–6, Q1–Q7) has been complete since iteration 8. Next in queue order
+is Q10 (item 8, translating one openspec capability into an AgentWeave-native document), which
+depends on Q8 and inherits the concrete 409 blocker Q8's done_note already named — read it before
+starting rather than rediscovering it live against the merge endpoint. Q11 (Tier 2/3 runway) remains
+lowest priority and gated behind Q10 finishing or being explicitly parked.
