@@ -2422,3 +2422,34 @@ loop does not apply it itself. Runway to `stop_at` (2026-08-18T08:00+01:00) is u
 of this write. Nothing further self-directed and unattended-safe remains in scope; the next
 iteration should treat an unchanged queue as a sign to hold the branch clean and idle, not to
 manufacture work.
+
+---
+
+## Iteration 28 — 2026-08-18T07:44:00+01:00
+
+Runway to `stop_at` (2026-08-18T08:00+01:00) is under 18 minutes. Checked
+`decisions_for_user` for anything the operator answered since iteration 27 wrote the N3
+proposal: `git fetch origin` shows `master` unchanged at `1e0d08e`, and no commit exists on
+this branch or any other since iteration 27's push — no new operator direction arrived.
+N1/N2/N3 stay at their recorded status (N3 PROPOSAL-WRITTEN, awaiting the operator); D2/D3/D4
+stay OPEN with the operator's own "not tonight" / "None yet" answers already on record, so
+none license unattended work.
+
+Verified live rather than trusting the snapshot: `GET http://127.0.0.1:8010/health` →
+`{"status":"ok"}`; `GET /api/v1/projects` still returns exactly the three fixture projects Q1
+restored (`proj-5e960453`, `proj-b44fac0c`, `proj-ff695d96`) — the trial Hub is unchanged and
+healthy since iteration 27's check.
+
+No code change this iteration. Per iteration 27's own conclusion (confirmed, not re-derived):
+Q1–Q10 are done and verified; Q11's unattended-safe half (roadmap #8's 16.2 mapping) is fully
+worked through; roadmap #7 (StaticPool race) stays parked per `known_debts`, not safe to retry
+blind with minutes of runway left. There is nothing left in scope for this loop to do
+unattended before `stop_at`. Holding the branch clean is the correct move, not manufacturing a
+task to fill the remaining minutes.
+
+**Tree state before commit:** only `.claude/autonomous/STATE.json` and this log entry change;
+`spec/` and `hub/seed_taste_doc.py` (prior-session scratch) untouched, not staged.
+
+**Queue status:** unchanged from iteration 27. Runway to `stop_at` is now under 15 minutes as
+of this write. The next scheduled firing should land at or after `stop_at` — if so, it should
+record `session_stopped: true` and end the loop rather than starting another idle iteration.
