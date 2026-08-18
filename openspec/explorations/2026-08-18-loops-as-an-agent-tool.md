@@ -125,6 +125,45 @@ The operator's design, recorded as given:
 safe. A loop whose executor can file its own tasks controls its own stop condition — it can always
 add one more and never terminate. Under this model it structurally cannot.
 
+### 5a. Creator and controller are two different subjects
+
+A first pass at this section asked who may extend a loop the *operator* created, since
+`created_by_run_id` is populated from the `X-AgentWeave-Run` header and
+`_require_agent_job_allowance` treats the absence of headers as "this is the operator"
+(`jobs.py:21-27`) — so an operator-created loop would record no creator at all, leaving the rule with
+no subject. The operator dissolved the premise:
+
+> "The operator will never create loops by himself. He will do it with an agent. So we have two
+> subjects there. The one who created and the one who controls it. The operator can create a loop
+> with the an agent but be the one in control. This mean that any new task or decision should reach
+> the operator via the agent he used and only the operator can decide on it. But the operator can
+> leave the control to the agent that can decide for himself."
+
+```
+   CREATOR ─────────── CONTROLLER ─────────── EXECUTOR
+   the agent whose      operator (default)     the attributed agent
+   run made the loop    or, if delegated,      works the queue down
+                        the creator agent      cannot add tasks
+
+   executor needs work
+        └─▶ messages the CREATOR
+                ├─ operator-controlled: the creator relays it; only the operator decides
+                └─ delegated:           the creator decides for itself
+```
+
+So a loop always has a creating agent — loops are made *through* a conversation, never by the
+operator directly — and control is a separate, per-loop setting.
+
+**There is an exact precedent for the control field.** `Agent.default_permission_mode`
+(`models.py:196`) is nullable with the comment: *"NULL for the built-in default — a row storing
+today's default would keep saying it after the default moved. This is the same choice the composer's
+Permissions pill makes."* A loop's control setting wants the same shape: nullable, inheriting, with
+NULL meaning the current default rather than a stored copy of it. It is the same operator-in-the-loop
+posture the product already applies to permissions, pointed at queue extension.
+
+**What this fixes and what it does not.** It removes the missing-subject problem entirely. What
+remains is ordinary identity hygiene, described in §8 item 4.
+
 **Two work sources.** Spec-declared tasks are one: `spec_tasks.materialise()` creates the tasks a
 document declares when it is approved, idempotent by `(document, key)`. That module exists because
 of a measured failure — *"an operator approved nineteen requirements and got nothing"* — and it is
@@ -195,10 +234,27 @@ conversation.id, anchor)`, `_open_questions_for(conversation.id)` — and `_task
 2. **What a firing does with the queue** — claim the next task, or be briefed and choose.
 3. **`create_loop` vs widening `create_job`.** Prefer a distinct tool: a separate name teaches the
    concept exists, where an optional argument hides it. Not decided.
-4. **Creator identity is now load-bearing** — "only the creator can add tasks" is a permission rule —
-   but `AIJob.agent` is a bare `String(64)` with no foreign key, and `scheduler.py:51-56` returns
-   `None`, meaning *proceed*, when no agent row matches the name. Archive or rename the creator and
-   the permission model loses its author. **Unresolved.**
+4. **Creator identity is now load-bearing.** Until §5 it was provenance — an audit breadcrumb, the
+   same `created_by_run_id` a dozen tables carry, that nothing read to make a decision. "Only the
+   creator can add tasks" makes it an **authorization check**. The field did not change; the weight
+   on it did. Three things follow, none resolved:
+   - **The creator is a name at the end of two unenforced hops** — `Loop.created_by_run_id`
+     (nullable, no FK) → `Run.agent` (`String(64)`, no FK) → a name. Attribution *is* genuinely
+     verified at creation (`jobs.py:31-33`: the run must exist, match the project and the claimed
+     agent, and be `running`), but only **once**. Afterwards only the string survives.
+   - **Name reuse transfers authority.** Identity here is a name, not a row: archive `arch`, create a
+     new agent also called `arch`, and it inherits permission over every loop the old one made.
+     Renaming fails the other way — the loop points at a name nobody holds and becomes unextendable
+     with nothing explaining why.
+   - **The precedent next door fails open.** `scheduler.py:51-56` returns `None` — meaning *proceed* —
+     when no agent row matches. A permission check written in that house style would read "creator
+     not found" as "allow", which is backwards. Whatever this change does, it must fail closed.
+
+   Note this is **not** a live vulnerability: the Hub is local and single-operator, and the API key is
+   the real boundary. It is a field being asked to carry weight it was not built for.
+5. **Where the control setting lives** (§5a) — a nullable `Loop` column following
+   `Agent.default_permission_mode`'s shape is the obvious candidate, but it is not decided, and
+   neither is whether control can be handed over after creation.
 5. **Loop telemetry** (§5): what is recorded, and where an operator reads it.
 6. **Overlapping firings** — prevented, queued, or undefined? See §9.
 7. **Spend bounds** for unattended work, and whether a loop's executor may create loops of its own.
