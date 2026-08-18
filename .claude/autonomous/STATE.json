@@ -1,5 +1,5 @@
 {
-  "purpose": "Design, then build, two things that make AgentWeave's own philosophy -- governance and visibility -- true of loops. (1) A loop becomes a tool an agent can create for itself: a unit of durable, terminating work with its own goal, queue and briefing. (2) A side-panel framework, modelled on T3 Code's right panel, giving the operator a visible control surface -- file navigation, the existing spec panel, and a new loop panel showing what a loop is doing, what it has completed, what stage it is in, whether an agent is running right now, and when it next fires. Design FIRST and deeply; implement against the design.",
+  "purpose": "Narrowed by the operator mid-run (~10:52): 'Let's ship the fixes and what is ready and deterministic and let's run a explore on the loop and the side panel.' So: land the concrete, measured defects (CI red on two counts, the spec-merge 500 and its false provenance rows, the false ui_stale) and MERGE the parent branch's 70+ commits once CI is green. Then produce two deep explorations -- loops as an agent-usable tool, and the side-panel family with the loop panel designed in detail. NO implementation of loops or the panel this run; the operator will read the designs first.",
   "branch": "autonomous/2026-08-18-loops-and-side-panels",
   "parent_branch": "autonomous/2026-08-18-the-app-feels-alive",
   "parent_sha": "ab7e5fe",
@@ -10,123 +10,113 @@
   "session_stopped": false,
   "prepared_by": "/autonomous-prep, interactive session 2026-08-18T09:45-10:40+01:00. Intent was fixed with the operator across four rounds of questions BEFORE the queue was written. The spine changed twice during prep because the operator rejected the roadmap's Proposal A on its merits -- see decisions[0]. Every queue item below names real files, verified this session.",
   "operator_intent": {
-    "asked_for": "Loops as a real AgentWeave tool an agent can create, plus a side-panel framework. Operator's words: 'We should have a button that opens the side panel (just like t3 does and other harnesses as well). On top we can click a plus sign and open something else (I strongly recommend you to look at T3 code for this). We could start with a file viewer/navigation of the repo of the project. A loop tab with loop information (with some loop animations and icons we have to explore ui/ux practices and build a screen for this) and the spec that we already have. This could solve also our explore button problem that we have. The explore button is just explore mode and the side panel can opens the spec.'",
-    "ranked": "Design depth first -- operator said 'Explore and plan first. Deep dive on it. Think, plan.' and then 'Let's design now and the loop implement it'. Read as: the run designs first, producing explorations and a validated openspec change, THEN implements against its own design. Side-panel scope: 'The framework + the loop panel deeply' -- file browsing and spec reopening sketched as proof the framework generalises, not specced to implementation depth.",
-    "philosophy": "The operator framed this explicitly: 'We need to follow the agentweave philosophy of governance and visibility.' A loop that an agent can create is only acceptable if the operator can SEE what it is doing. The panel is not decoration -- it is the governance half of the feature. Design them as one thing."
+    "asked_for": "REVISED mid-run at ~10:52: 'Let's change it a little bit. Let's ship the fixes and what is ready and deterministic and let's run a explore on the loop and the side panel.' The original brief (loops as an agent tool + the side-panel framework, design then implement) still describes WHAT is being designed -- it is preserved in operator_intent.original_brief -- but implementation is now out of scope for this run.",
+    "ranked": "Deterministic fixes FIRST and actually landed (Q1-Q4). Explorations second (Q5-Q6), deep rather than broad. Nothing about loops or the panel gets implemented this run.",
+    "philosophy": "The operator framed this explicitly: 'We need to follow the agentweave philosophy of governance and visibility.' A loop that an agent can create is only acceptable if the operator can SEE what it is doing. The panel is not decoration -- it is the governance half of the feature. Design them as one thing.",
+    "original_brief": "'We should have a button that opens the side panel (just like t3 does and other harnesses as well). On top we can click a plus sign and open something else (I strongly recommend you to look at T3 code for this). We could start with a file viewer/navigation of the repo of the project. A loop tab with loop information (with some loop animations and icons we have to explore ui/ux practices and build a screen for this) and the spec that we already have. This could solve also our explore button problem that we have. The explore button is just explore mode and the side panel can opens the spec.' Plus, on loops: 'a loop has a overall goal that once completed it finishes. Either queue exhaustion or time limit. So I guess it could be one of the tools an agent can use. Create it's own loops and a loop has it's own flow of information and execution.'"
   },
   "queue": [
     {
-      "id": "Q1-pr-and-ci",
-      "title": "Open the PR for the parent branch and get CI green",
-      "why": "70+ commits sit unmerged on autonomous/2026-08-18-the-app-feels-alive and CI has NEVER run on any of it. CI triggers only on push-to-master and PR-to-master, so a PR is the only way to get the signal. Do this FIRST so six matrix jobs run during the design work rather than after it.",
+      "id": "Q1-ci-green-and-merge",
+      "title": "Fix the two CI failures, get PR #2 green, merge it",
+      "why": "PR #2 (head autonomous/2026-08-18-the-app-feels-alive, base master) is the FIRST CI run this work has ever had, and it is red: all six matrix `test` jobs fail while hub-test (6m36s) and ui-test (1m49s) pass. Both causes are measured, deterministic, and come from the overnight console-window/icon work. Fix them, then merge -- the operator authorised 'open PR, merge if green'.",
+      "failures": [
+        "ubuntu+macos (4 jobs) fail at the MYPY step: src/agentweave/cli.py:336 'Module has no attribute CREATE_NO_WINDOW'. The line IS guarded -- `subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0` -- but mypy's sys.platform narrowing applies to `if` STATEMENTS, not to a ternary expression, so it still resolves the Windows-only attribute against the Linux stubs. Fix with an if/else block or getattr(subprocess, 'CREATE_NO_WINDOW', 0). Check cli.py:866's DETACHED_PROCESS for the same pattern before assuming 336 is the only site.",
+        "windows (2 jobs) PASS mypy then fail pytest: ModuleNotFoundError: No module named 'PIL' in tests/test_cli.py::TestAppModeNativeWindow::test_app_icon_path_resolves_to_a_real_multi_size_ico. CI never installs Pillow. Decide: pytest.importorskip('PIL') so the assertion degrades to a skip, or add Pillow to the dev extra so the icon is actually validated in CI. PREFER the dev extra -- a skipped icon test is how the wheel-packaging test rotted for three weeks (see known_debts.stale-local-build-cache). If you add it, verify the job actually runs the test rather than silently skipping."
+      ],
       "steps": [
-        "Fix tests/test_packaging.py::test_wheel_ships_skill_reference_docs first -- it asserts agentweave/templates/skills/references/html-spec-conventions.md, which commit a44c8a8 (2026-08-12) deliberately deleted. It only ever passed because a stale gitignored build/lib/ resurrected deleted files into local wheels. Update the assertion to the reference docs that actually ship; do not re-add the file.",
-        "gh pr create from autonomous/2026-08-18-the-app-feels-alive into master.",
-        "Watch all 6 matrix jobs (ubuntu/windows/macos x py3.11/3.12). Fix real failures.",
-        "Merge ONLY when every job is green -- operator directive 'Full auto, but only on green CI'. If CI is red in a way that needs a product decision, record it in decisions_for_user and move on; do not merge, and do not block the rest of the run."
+        "Fix on THIS branch, then cherry-pick onto autonomous/2026-08-18-the-app-feels-alive and push, because the PR's head is the PARENT branch. Iteration 1 already did exactly this for the packaging fix (05b460c here, 35c9a62 there) -- follow that pattern.",
+        "Re-run: py -3.11 -m mypy src/ and py -3.11 -m pytest tests/ -q locally first. mypy on Windows will NOT reproduce the ubuntu failure (CREATE_NO_WINDOW exists there), so reason about it from the stubs rather than trusting a local green.",
+        "Watch all 8 checks. Merge PR #2 only when every one is green.",
+        "After merging, note in the log whether master's own CI run also goes green -- CI has never run on master either (known_debts.ci-never-ran)."
+      ],
+      "status": "in_progress"
+    },
+    {
+      "id": "Q2-fix-merge-500",
+      "title": "Fix the 500 on merging into a gated spec document",
+      "why": "A live 500 on a shipped route, found by the first real capability merge. hub/hub/api/v1/spec.py:1190 returns {**_document_view(document), 'blocking': result.blocking, 'merged': len(sources)} -- but save_document() returns a ProposeResult (path, proposals, unchanged; NO .blocking) whenever the document's rigor is contract/gate. Worse, `await session.commit()` on line 1186 runs FIRST, so the proposal row is durably written and THEN the request 500s: the operator sees a failure while a pending proposal they never saw created sits in the database.",
+      "steps": [
+        "Branch on the result type rather than assuming SaveResult. spec_service.py:52-62 has ProposeResult's shape.",
+        "Move the commit so nothing is durably written before a response that cannot be built.",
+        "hub/tests/test_spec_merge.py has ZERO references to rigor -- that is why a 500 on a shipped route survived two days. Add cases in BOTH directions (sketch merges normally; contract/gate produces proposals and a coherent response).",
+        "Mutation-check: revert the type branch and watch a named test fail."
+      ],
+      "constraint": "Fix the IMPLEMENTATION only. Whether a gate SHOULD divert merges into per-requirement proposals is decisions_for_user D6 and stays the operator's call -- the behaviour is defensible, only the crash is unambiguously a bug.",
+      "status": "pending"
+    },
+    {
+      "id": "Q3-fix-false-provenance",
+      "title": "Stop writing merge-provenance rows for merges that failed",
+      "why": "Finding 3 of the-first-real-capability-merge.md: spec_document_merges ended that session with 4 rows from 4 attempts, two of which returned 500. Provenance is committed alongside the proposal, before the failure -- so a capability document's merge history records folds the operator was told had failed. The audit trail is unreliable exactly when something went wrong, which is the only time it matters.",
+      "steps": [
+        "Likely falls out of Q2's commit-ordering fix -- verify rather than assume, and if so say so in the log instead of claiming a separate fix.",
+        "Add a test that a failed merge leaves spec_document_merges unchanged."
       ],
       "status": "pending"
     },
     {
-      "id": "Q2-t3-study",
-      "title": "Study T3 Code's right-panel implementation and write down what transfers",
-      "why": "The operator named T3 Code as the reference and it is installed on this machine. Its production sourcemaps ship sourcesContent, so the ORIGINAL unminified TSX is recoverable -- 1257 sources. The 30 panel/sidebar/file-tree files are ALREADY EXTRACTED to testbed/scratch/t3ref/ by testbed/scratch/extract_t3ref.py (run this session). Do not re-derive the extraction.",
+      "id": "Q4-fix-false-ui-stale",
+      "title": "Stop /health reporting ui_stale on a correct bundle",
+      "why": "hub/hub/main.py:84 ui_source_fingerprint() folds `git status --porcelain` into the hash so uncommitted edits move it. But CLAUDE.md's documented workflow is build -> make ui -> commit TOGETHER, so the stamp is always recorded while the tree is dirty; the moment you commit, that dirty string empties and the fingerprint can never match again. CONFIRMED during prep: commit 8898155 did rebuild and commit the assets, and a fresh rebuild produced BYTE-IDENTICAL output with only the stamp changing (ab7e5fe). So the documented workflow reliably produces a false ui_stale, and the signal has been trained to be ignored -- which is worse than not having it.",
       "steps": [
-        "Read, in this order: src/rightPanelLayout.ts (352 B, the layout model), src/rightPanelStore.ts (24 KB, the state model -- which tab is open, width, persistence), src/components/RightPanelTabs.tsx (18.7 KB, THE tab system and the plus affordance), src/components/RightPanelSheet.tsx, src/components/preview/RightPanelResizeHandle.tsx, src/components/chat/PanelLayoutControls.tsx, src/components/files/FileBrowserPanel.tsx (13.9 KB), src/components/files/FilePreviewPanel.tsx (38 KB), src/components/files/fileTreeDragMention.ts, src/components/AgentsPanel.tsx.",
-        "Answer concretely: how does a tab register itself? Where does 'which tabs are open' live and how is it persisted? What does the plus button actually offer? How is width/resize modelled? How does the file tree lazy-load, and how does it hand a file to the composer (fileTreeDragMention is the clue)?",
-        "Write the answers as a section of the Q3 exploration, with an explicit column for 'does this fit AgentWeave' -- AgentWeave uses React Query + Zustand and a lucide Icon wrapper; T3 uses its own stack. Transfer STRUCTURE, not code."
+        "Reproduce first: dirty a file under hub/ui/src, stamp, commit, and watch /health flip to stale with no asset change. Do not fix what you have not reproduced.",
+        "Fix shape: stamp from the committed tree, or record the clean-tree fingerprint while keeping the dirty component for the LIVE check only. Keep the property that an uncommitted source edit still reports stale -- that is the whole point of the check.",
+        "hub/tests/test_ui_build_stamp.py exists; extend it. Note the stricter bundle-matches-source assertion is gated behind AW_CHECK_UI_BUNDLE=1."
       ],
-      "constraint": "STUDY THE PATTERNS, DO NOT COPY THE SOURCE. This is a proprietary alpha app's source recovered from sourcemaps on the operator's own machine, read at the operator's explicit request as a design reference. Do not paste T3 code into AgentWeave, do not commit anything from testbed/scratch/t3ref/ (it is gitignored), and do not quote it at length in a tracked document. Describe the pattern in your own words and implement it in AgentWeave's own idiom.",
       "status": "pending"
     },
     {
-      "id": "Q3-explore-side-panel",
+      "id": "Q5-explore-loops",
+      "title": "Exploration: what a loop actually is, and why its queue has never worked",
+      "output": "openspec/explorations/2026-08-18-loops-as-an-agent-tool.md",
+      "why": "EXPLORATION ONLY -- the operator narrowed this run to 'ship the fixes... and run a explore on the loop and the side panel'. Do not implement. Recommend, do not decide anything that is the operator's.",
+      "headline_finding": "MEASURED DURING PREP, and it reframes the whole feature: Task.loop_id is READ in five places and WRITTEN in zero. tasks.py:427 (filter), scheduler.py:86 and :99 (stop-condition counts), scheduler.py:417 (event payload), schemas/jobs.py:71 (a comment). No code path sets it. Every test that exercises it fabricates the row directly in the ORM (test_scheduler.py:244, test_tasks.py:310-312) because no API would. CONSEQUENCE: the loop's queue -- the one thing that justifies Loop existing as a concept distinct from AIJob -- cannot be populated through any real path, and stop_when_queue_empties is therefore dead in production: _loop_stop_reason (scheduler.py:98-101) guards on ever_count, and a queue that can never be filled never trips it. VERIFY THIS INDEPENDENTLY before building the exploration on it.",
+      "must_cover": [
+        "The unwritable queue above, verified independently, with the consequence for stop_when_queue_empties spelled out.",
+        "What writes Task.loop_id, if anything should. Options to weigh: create_loop takes an initial task list; the creating agent files tasks into its own loop; the first firing is a PLANNING firing that decomposes the goal into tasks. Each has a different governance story -- say which the operator can actually supervise.",
+        "What connects a firing to the queue. Today scheduler.py:296 _do_fire_job replays job.message verbatim and never looks at a task. Does a firing CLAIM the next task, or does the agent choose from the queue? This is upstream of the briefing.",
+        "Only then, the briefing: how a firing learns its position (purpose, what is done, what remains, what prior firings concluded), how it is capped so a long-running loop does not drown its own turn, and where it is assembled -- mirror how agents.py:1316 appends the charter to canonical context.",
+        "WHY Loop.charter_id is rejected (roadmap Proposal A). agents.py:1060-1064 builds the turn's charter from agent_row.charter_id; a loop already has an agent and that agent already has a charter, so a second one competes with no precedence rule. Operator's words: 'A loop or a job has an agent attached to it. This agent has a charter already.' Record the rejection so Proposal A does not resurface.",
+        "Field by field, what Loop legitimately holds vs AIJob + Agent: purpose (NO -- duplicates AIJob.name/message and the charter), stop_at / stop_when_queue_empties / stop_reason / stopped_at (YES -- a job runs forever, a loop terminates and records why), Task.loop_id (YES in principle -- see the headline finding). Defend the conclusion: a loop is not 'an agent on a schedule', because a bare AIJob is already exactly that. It is a job that ENDS and OWNS A BACKLOG.",
+        "The MCP gap: mcp_server.py:503-529 create_job exposes only name, agent, message, cron, session_mode, while jobs.py:93 _loop_opts_in means any one of purpose/stop_at/stop_when_queue_empties turns a job into a Loop. So an agent can create a job that runs forever and cannot create a loop that ends. Argue create_loop vs widening create_job; if it comes out even, prefer a separate tool (a distinct name teaches the concept exists; an optional argument hides it). The gate already exists -- jobs.py:21 _require_agent_job_allowance.",
+        "Governance questions the operator will care about, given they framed this as 'governance and visibility': can a loop's agent create another loop (runaway risk)? What bounds unattended spend? What happens when a firing fails, or the agent goes off-task? Raise them even where you cannot answer them.",
+        "The dangling-agent defect: AIJob.agent is a bare String(64), not an FK. scheduler.py:51-56 _job_agent_skip_reason returns None when NO agent row matches -- and None means PROCEED. Rename or archive an agent and its loops keep firing at a name nobody owns.",
+        "MINE THE REPO'S OWN DRIVER. .claude/autonomous/ is a WORKING implementation of exactly this feature, battle-tested across several multi-hour runs including one that died and recovered: STATE.json has a queue, a next_action written for a stranger, stop_at, stop_when_queue_empties, a heartbeat with a takeover grace, decisions_for_user, and a prose log. Map what that driver NEEDS against what Loop HAS, and let the gaps drive the design. This is the strongest evidence available and it is free. It is also the concrete path to Proposal C (the autonomous session as a Loop) -- note that, do not build it."
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "Q6-explore-side-panel",
       "title": "Exploration: the side-panel family",
       "output": "openspec/explorations/2026-08-18-the-side-panel-family.md",
-      "why": "AgentWeave already has a panel subsystem in hub/ui/src/components/spec/ (SpecDocumentPanel, SpecFrame, SpecRailNav, specBridge.ts, specNavigation.ts, specPreferences.ts). The question is whether that generalises into a registry of panels or whether a second one-off gets bolted next to it.",
+      "why": "EXPLORATION ONLY. The operator's brief: 'We should have a button that opens the side panel (just like t3 does and other harnesses as well). On top we can click a plus sign and open something else. We could start with a file viewer/navigation of the repo of the project. A loop tab with loop information (with some loop animations and icons we have to explore ui/ux practices and build a screen for this) and the spec that we already have. This could solve also our explore button problem that we have. The explore button is just explore mode and the side panel can opens the spec.'",
       "must_cover": [
-        "How a panel registers (a registry vs. a switch statement), and what a panel must provide: id, title, icon, whether it is singleton or multi-instance.",
-        "The tab strip and the plus affordance -- what the plus offers, and what happens when the same panel is opened twice.",
-        "Persistence: is the open set per-project, per-conversation, or global? Cite the existing specPreferences.ts choice and either follow or reject it with a reason.",
-        "Coexistence with the existing spec panel -- does SpecDocumentPanel become a registered panel, or stay separate? Migration cost either way.",
-        "The explore button. The operator said the panel 'could solve also our explore button problem... The explore button is just explore mode and the side panel can opens the spec.' Establish what the explore button does TODAY (start at ComposerSpecControl.tsx:48, which records that explore begins by creating a document) before proposing what replaces it.",
-        "Where the panel lives on screen, and what it does to the composer's width at the narrowest supported window."
+        "The T3 study. testbed/scratch/t3ref/ ALREADY HOLDS 30 original TSX/TS files, extracted during prep from T3 Code's shipped sourcemaps (it ships sourcesContent, so this is real source, not a guess). Read in this order: rightPanelLayout.ts, rightPanelStore.ts (24 KB, the state model), RightPanelTabs.tsx (18.7 KB, THE tab system and the plus affordance), RightPanelSheet.tsx, preview/RightPanelResizeHandle.tsx, chat/PanelLayoutControls.tsx, files/FileBrowserPanel.tsx, files/FilePreviewPanel.tsx, files/fileTreeDragMention.ts, AgentsPanel.tsx. Answer concretely: how does a tab register? Where does 'which tabs are open' live and how is it persisted? What does the plus button offer? How is resize modelled? How does the file tree hand a file to the composer? STUDY THE PATTERNS, DO NOT COPY THE CODE -- see limits.",
+        "AgentWeave already has a panel subsystem: hub/ui/src/components/spec/ (SpecDocumentPanel, SpecFrame, SpecRailNav, specBridge.ts, specNavigation.ts, specPreferences.ts). Does it generalise into a registry, or does a second one-off get bolted next to it? Take a position and cost both.",
+        "What a panel must declare to register: id, title, icon, singleton vs multi-instance. What happens when the same panel is opened twice.",
+        "Persistence: per-project, per-conversation, or global? Cite specPreferences.ts's existing choice and either follow it or reject it with a reason.",
+        "The explore button. Establish what it does TODAY before proposing a replacement -- start at ComposerSpecControl.tsx:48, which records that explore begins by CREATING a document. Per decisions_for_user DEC-explore-button, design so the panel CAN subsume it, but do not propose removing it in this pass.",
+        "The loop panel screen, in detail -- this is the governance half and the operator asked for it specifically: what the loop is doing, what is completed, what stage it is in, whether an agent is running RIGHT NOW, next trigger. Name the data source for each. jobs.py:98 _batch_loop_summaries already computes a per-job loop block in four fixed queries (design D7) -- check what it already answers before proposing an endpoint. Say explicitly what the operator asked for that does NOT exist yet. For 'is an agent active right now', heed handoff 0055 decision 2: the working indicator was deliberately gated on lifecycle events plus the streamed status line, NOT the polled agent.status roster field. Do not repeat that mistake.",
+        "UI/UX: the operator asked for 'some loop animations and icons'. Use the Icon component (lucide wrapper) -- CLAUDE.md forbids a second icon system. Respect prefers-reduced-motion. Say what each animation COMMUNICATES; an animation that does not encode state is decoration and should be cut. Live updates via the existing useSSE hook and React Query invalidation, not polling.",
+        "What the panel does to the composer's width at the narrowest supported window."
       ],
       "status": "pending"
     },
     {
-      "id": "Q4-explore-loops-as-tool",
-      "title": "Exploration: loops as an agent-usable tool (supersedes Proposal A)",
-      "output": "openspec/explorations/2026-08-18-loops-as-an-agent-tool.md",
-      "why": "The operator rejected Proposal A from 2026-08-17-architecture-proposals.md on its merits during prep. This exploration must say so explicitly and record why, so Proposal A is not re-proposed later.",
-      "must_cover": [
-        "WHY Loop.charter_id is rejected: hub/hub/api/v1/agents.py:1060-1064 builds the turn's charter from agent_row.charter_id. A loop already has an agent, and that agent already has a charter. A second charter would compete for the same turn with no precedence rule. Operator's own words: 'A loop or a job has an agent attached to it. This agent has a charter already... So I don't know if a loop earns it's place on agentweave.'",
-        "What a Loop DOES legitimately contain, field by field, vs AIJob + Agent: purpose (no -- duplicates AIJob.name/message and the charter), stop_at / stop_when_queue_empties / stop_reason / stopped_at (YES -- a job runs forever, a loop terminates and records why), Task.loop_id (YES -- a scoped backlog). Conclusion to defend: a loop is not 'an agent on a schedule' (a bare AIJob is already exactly that) -- it is a job that ENDS and OWNS A BACKLOG.",
-        "The MCP gap: hub/hub/mcp_server.py:503-529 create_job takes only name, agent, message, cron, session_mode. hub/hub/api/v1/jobs.py:93 _loop_opts_in(purpose, stop_at, stop_when_queue_empties) is 'design D6's at least one field rule' -- supply any one to POST /jobs and the job becomes a Loop. So an agent can create a job that runs forever and CANNOT create a loop that ends. Decide: widen create_job, or add a distinct create_loop tool? Argue it, do not assume.",
-        "The permission gate already exists: hub/hub/api/v1/jobs.py:21 _require_agent_job_allowance. Confirm agent-created loops inherit it and that no new permission concept is needed -- or say why one is.",
-        "The briefing / amnesia problem. hub/hub/scheduler.py:296 _do_fire_job replays job.message verbatim every firing. The agent gets NO queue state -- what is left, what is done, what prior firings concluded. A loop has its own thread (Conversation origin='job', JobRun.conversation_id) but no memory of its own progress. Design the briefing: what goes in, how it is capped so a long-running loop does not dominate its own turn, and where it is assembled (mirror how agents.py:1316 appends the charter to canonical context).",
-        "The dangling-agent defect: AIJob.agent is a bare String(64), not an FK to agents.id. hub/hub/scheduler.py:51-56 _job_agent_skip_reason returns None when NO agent row matches the name -- and None means PROCEED. Rename or archive an agent and its loops keep firing at a name nobody owns. Decide whether this change fixes it (refuse to fire + record stop_reason is the obvious shape) or merely records it.",
-        "Loops on the roster: the operator's objection implies a loop belongs UNDER its agent, not beside it -- an agent row reading '2 loops, next fires 14:00' rather than claude-dev and nightly-scan as siblings. Take a position.",
-        "Forward note, do not build: this is what makes Proposal C (the autonomous session itself as a Loop) reachable, because the missing piece there was always 'how does a firing know where the last one got to' -- which is exactly the briefing."
-      ],
-      "status": "pending"
-    },
-    {
-      "id": "Q5-design-loop-panel",
-      "title": "Design the loop control panel screen",
-      "why": "This is the governance-and-visibility half, and the operator asked for it in detail: 'have a visible control of the loop. Where can see what are the things that the loop is doing, What has been completed, what stage the loop is in, if there is an active agent right now, next trigger, any information from the loop.'",
-      "must_cover": [
-        "What data already exists to render it, named by source: Loop.purpose / stop_at / stop_when_queue_empties / stop_reason / stopped_at (models.py:1201), the queue via Task.loop_id, per-firing history via JobRun and its conversation_id, AIJob.next_run / last_run / run_count, and the loop_stopped SSE event (scheduler.py:415-423). Say explicitly what the operator asked for that does NOT exist yet and would need an endpoint -- hub/hub/api/v1/jobs.py:98 _batch_loop_summaries already computes a per-job loop block in four fixed queries (design D7); check whether it already answers most of this.",
-        "'If there is an active agent right now' -- work out how live-running is actually known. Handoff 0055 decision 2 is directly relevant: the working indicator was deliberately gated on lifecycle events plus the streamed status line, NOT on the polled agent.status roster field. Do not repeat that mistake in the panel.",
-        "Stage/progress: what 'what stage the loop is in' means concretely when a loop's only structure is a task queue. Propose a stage model and defend it.",
-        "UI/UX: the operator asked for 'some loop animations and icons we have to explore ui/ux practices'. Use the Icon component (lucide wrapper) -- CLAUDE.md forbids a second icon system; the Material Symbols webfont was removed deliberately. Respect prefers-reduced-motion. Say what each animation COMMUNICATES; an animation that does not encode state is decoration and should be cut.",
-        "Live updates via the existing useSSE hook and React Query invalidation, not polling."
-      ],
-      "status": "pending"
-    },
-    {
-      "id": "Q6-propose-change",
-      "title": "Turn the design into an openspec change and validate it",
-      "why": "CLAUDE.md: new work is authored as a change. This is a large slice; it may well want to be two changes (the panel framework; loops-as-a-tool). Decide and say why.",
-      "steps": [
-        "Use the openspec-propose skill. Requirements use '### Requirement:' with '#### Scenario:' blocks and MUST/SHALL language -- the validator reads only the FIRST physical line for the modal.",
-        "Split tasks into agent-verifiable vs human-only, and emit a user test guide. This is a standing operator directive, not optional.",
-        "npx openspec validate --changes --strict must pass before any implementation."
-      ],
-      "status": "pending"
-    },
-    {
-      "id": "Q7-implement",
-      "title": "Implement, least-likely-to-be-redesigned first",
-      "order": [
-        "MCP loop fields (mirrors an existing REST endpoint, lowest redesign risk). Note CLAUDE.md's hard rule: hub/hub/mcp_server.py is spawned standalone and may import ONLY stdlib + fastmcp -- anything it needs from the Hub is restated there, with a test asserting the two agree.",
-        "The per-firing briefing in the scheduler, with tests.",
-        "The panel framework shell + tab registry + plus affordance.",
-        "The loop panel itself.",
-        "The file browser panel, only if runway allows."
-      ],
-      "constraints": [
-        "hub/ui/src and hub/hub/static/ui are committed TOGETHER. Run npm run build then py -3.11 scripts/refresh_ui_bundle.py. See known_debts.ui-stale-false-positive for why the stamp may still read stale after committing -- re-stamp on a CLEAN tree.",
-        "Adding a DB column: field in models.py, a migration guarding for a missing table as 0033/0034 do, bump head assertions in BOTH hub/tests/test_migrations.py and hub/tests/test_project_persistence.py, then the Pydantic schema.",
-        "pytest hub/tests/ is ~7 minutes and exceeds the 600s command cap -- run it in file chunks. pytest hub/tests/ tests/ together fails collection."
-      ],
-      "status": "pending"
-    },
-    {
-      "id": "Q8-runway",
-      "title": "Runway, in this order, only when Q1-Q7 are done or blocked",
+      "id": "Q7-runway",
+      "title": "Runway, only once Q1-Q6 are done or blocked",
       "items": [
-        "Fix the merge 500: hub/hub/api/v1/spec.py:1190 returns {**_document_view(document), 'blocking': result.blocking, ...} but save_document() returns a ProposeResult (no .blocking) whenever rigor is contract/gate -- and await session.commit() on line 1186 runs FIRST, so the proposal is durably written and then the request 500s. Branch on the result type. Add rigor cases to hub/tests/test_spec_merge.py, which today has zero references to rigor.",
-        "Stop writing spec_document_merges provenance rows for FAILED merges (Finding 3 of the-first-real-capability-merge.md). The audit trail currently lies exactly when something went wrong.",
-        "Fix the false ui_stale -- see known_debts.ui-stale-false-positive.",
-        "Write openspec/explorations/2026-08-18-candidate-names.md. Operator directive: 'Explore names, decide nothing yet.' RECOMMEND NOTHING. Ground it in 2026-08-18-does-the-name-still-fit.md (S1 architectural evidence, S3 six-surface cost table) and 2026-08-15-where-agentweave-fits.md.",
-        "Write the capability-validation-rule exploration (decisions_for_user D5). Operator chose 'Explore it, decide nothing.'"
+        "openspec/explorations/2026-08-18-candidate-names.md. Operator: 'Explore names, decide nothing yet.' RECOMMEND NOTHING. Ground it in 2026-08-18-does-the-name-still-fit.md (S1 architectural evidence, S3 the six-surface cost table) and 2026-08-15-where-agentweave-fits.md.",
+        "The capability-validation-rule exploration (decisions_for_user D5) -- operator chose 'explore it, decide nothing'. Every requirement in a current-phase capability document is permanently blocking on requirement_without_task because shipped behaviour has nothing left to implement it.",
+        "Apply the FACTUAL corrections to CLAUDE.md from 2026-08-18-claude-md-trial-hub-section-is-stale.md -- the stale database path and the 'no archive phase' claim are provably wrong and actively mislead. Leave anything judgement-shaped to the operator.",
+        "If real runway remains: drive one short cheap-model agent turn on the trial Hub to watch the working indicator, 'Worked for Xs' and scroll pinning against a REAL run. None of yesterday's UX work has ever been seen against a live turn."
       ],
       "status": "pending"
     }
   ],
-  "current": "Q1-pr-and-ci",
-  "next_action": "Cut branch autonomous/2026-08-18-loops-and-side-panels from ab7e5fe on autonomous/2026-08-18-the-app-feels-alive. Then start Q1: open tests/test_packaging.py, find test_wheel_ships_skill_reference_docs, and change its assertion so it names reference docs that actually ship (a44c8a8 deleted references/html-spec-conventions.md deliberately -- do NOT re-add the file). Verify with py -3.11 -m pytest tests/test_packaging.py -q, commit, then gh pr create from the PARENT branch into master and start watching the six matrix jobs.",
+  "current": "Q1-ci-green-and-merge",
+  "next_action": "Q1. PR #2 is open (head autonomous/2026-08-18-the-app-feels-alive, base master) and RED: all six matrix `test` jobs fail, hub-test and ui-test pass. Two causes, both measured. (a) ubuntu+macos fail at MYPY -- src/agentweave/cli.py:336 'Module has no attribute CREATE_NO_WINDOW'; the guard is a TERNARY and mypy's sys.platform narrowing only applies to `if` statements, so use an if/else block or getattr(subprocess, 'CREATE_NO_WINDOW', 0), and check cli.py:866's DETACHED_PROCESS for the same pattern. (b) windows passes mypy then fails pytest with ModuleNotFoundError: No module named 'PIL' in tests/test_cli.py::TestAppModeNativeWindow::test_app_icon_path_resolves_to_a_real_multi_size_ico -- prefer adding Pillow to the dev extra over importorskip, and verify the test actually RUNS rather than silently skipping. Fix on this branch, cherry-pick onto the PARENT branch (that is the PR head), push, watch all 8 checks, merge only on all green. Note that local mypy on Windows will NOT reproduce (a).",
   "limits": [
     "'Full auto, but only on green CI' -- operator, standing. NEVER merge or release on red or unfinished CI.",
     "Authorised this session: open a PR to master and MERGE IT if all six CI jobs are green. No release, no tag -- those stay operator-only.",
@@ -153,6 +143,13 @@
     "suite_status": "As of handoff 0055 on 70a333b: hub/tests 2337 passed / 11 skipped / 1 xpassed (759s); tests/ 385 passed / 3 skipped / 1 FAILED (test_packaging, pre-existing, Q1 fixes it); hub/ui 987 passed. Not re-run since; re-run before trusting a green."
   },
   "decisions_for_user": [
+    {
+      "id": "DEC-run-narrowed",
+      "status": "DECIDED-BY-OPERATOR",
+      "question": "Should this run implement the loop tool and the side panel?",
+      "answer": "NO. Operator narrowed the run at ~10:52 to shipping deterministic fixes plus two explorations. Do not implement loops or the panel, and do not open an openspec change for them unless an exploration concludes one is the obvious next step -- and even then, propose it, do not start it.",
+      "rejected_alternative": "The original design-then-implement queue, which would have reached create_loop and possibly the per-firing briefing. Dropped because the operator wants to read the designs before code exists, and wants the measured defects actually landed."
+    },
     {
       "id": "DEC-A-rejected",
       "status": "DECIDED-BY-OPERATOR",
@@ -210,6 +207,10 @@
     }
   ],
   "known_debts": [
+    {
+      "id": "loop-queue-is-unwritable",
+      "summary": "Task.loop_id is read in five places and written in ZERO -- tasks.py:427 (filter), scheduler.py:86/:99 (stop-condition counts), scheduler.py:417 (event payload), schemas/jobs.py:71 (a comment). No code path sets it; every test that exercises it fabricates the row directly in the ORM (test_scheduler.py:244, test_tasks.py:310-312). So a loop's queue cannot be populated through any real path, and stop_when_queue_empties is dead in production because _loop_stop_reason (scheduler.py:98-101) guards on ever_count, which can never become non-zero. Measured during prep 2026-08-18; Q5 must verify independently before relying on it."
+    },
     {
       "id": "ui-stale-false-positive",
       "summary": "hub/hub/main.py:84 ui_source_fingerprint folds `git status --porcelain` into the hash so uncommitted edits move it. But CLAUDE.md's documented workflow is build -> make ui -> commit TOGETHER, so the stamp is always recorded while the tree is dirty; the moment you commit, that dirty string empties and the fingerprint can never match again. Result: /health reports ui_stale on a bundle that is byte-for-byte correct. CONFIRMED this session -- commit 8898155 did rebuild and commit the assets, and a fresh rebuild produced byte-identical output with only the stamp changing (commit ab7e5fe). Fix shape: stamp from the committed tree, or exclude the dirty component from the recorded fingerprint while keeping it for the live check. Queued as Q8."

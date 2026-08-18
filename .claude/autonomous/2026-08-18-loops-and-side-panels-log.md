@@ -103,3 +103,50 @@ registered from the previous run.
 
 **Not verified:** no suite was re-run this prep session. The figures in `STATE.json.environment`
 are handoff 0055's, from `70a333b`. Re-run before trusting a green.
+
+## Entry 1 — the run was narrowed, and CI spoke for the first time
+
+**Operator, ~10:52:** *"Let's change it a little bit. Let's ship the fixes and what is ready and
+deterministic and let's run a explore on the loop and the side panel."*
+
+Queue repointed. Implementation of loops and the side panel is **out of scope for this run** —
+recorded as `decisions_for_user.DEC-run-narrowed` so a later firing does not helpfully start coding.
+New order: four deterministic fixes, then two deep explorations, then runway.
+
+**Iteration 1 (10:41–10:47) did well.** Fixed the packaging test and opened **PR #2**. It landed the
+fix on *both* branches (`05b460c` here, `35c9a62` on the parent) — correct, because the PR's head is
+the parent branch, not this one. It did not rewrite `STATE.json`, which is a deviation from the
+skill's own per-iteration rule; harmless here only because it stopped to wait on CI.
+
+**CI has now run on this work for the first time ever, and it is red.** Two causes, both measured,
+both from last night's console-window/icon work:
+
+| Jobs | Step | Cause |
+|---|---|---|
+| ubuntu ×2, macos ×2 | mypy | `cli.py:336` — `Module has no attribute "CREATE_NO_WINDOW"` |
+| windows ×2 | pytest | `ModuleNotFoundError: No module named 'PIL'` |
+| hub-test, ui-test | — | **pass** (6m36s, 1m49s) |
+
+The mypy one is subtle and worth writing down: the line **is** guarded —
+`subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0` — but mypy's `sys.platform`
+narrowing applies to `if` **statements**, not to a ternary expression, so it still resolves a
+Windows-only attribute against the Linux stubs. **A local mypy run on this machine will not
+reproduce it**, because the attribute genuinely exists here. Do not trust a local green.
+
+The Pillow one is a choice, not just a fix: `importorskip` makes it go green while testing nothing,
+and a silently-skipped test is exactly how `test_wheel_ships_skill_reference_docs` rotted for three
+weeks. Prefer adding Pillow to the dev extra, and verify the job actually *runs* the test.
+
+**A finding that reframes the loop work, measured during prep and queued into Q5.** `Task.loop_id`
+is **read in five places and written in zero** — `tasks.py:427`, `scheduler.py:86`, `:99`, `:417`,
+and a comment in `schemas/jobs.py:71`. No code path sets it. Every test that exercises it fabricates
+the row directly in the ORM (`test_scheduler.py:244`, `test_tasks.py:310-312`) because no API would.
+
+So the loop's queue — the single thing that justifies `Loop` existing as a concept distinct from
+`AIJob` — **cannot be populated through any real path**, and `stop_when_queue_empties` is
+consequently dead in production: `_loop_stop_reason` (`scheduler.py:98-101`) guards on `ever_count`,
+which can never become non-zero. Q5 must verify this independently rather than inherit it.
+
+That makes the per-firing briefing a *symptom*. The upstream questions are what writes `Task.loop_id`
+and what connects a firing to the queue — and the best evidence available is `.claude/autonomous/`
+itself, a working, battle-tested implementation of exactly this feature. Q5 says to mine it.
