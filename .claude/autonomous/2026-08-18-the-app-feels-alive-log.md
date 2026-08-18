@@ -2453,3 +2453,30 @@ task to fill the remaining minutes.
 **Queue status:** unchanged from iteration 27. Runway to `stop_at` is now under 15 minutes as
 of this write. The next scheduled firing should land at or after `stop_at` — if so, it should
 record `session_stopped: true` and end the loop rather than starting another idle iteration.
+
+---
+
+## Iteration 29 — 2026-08-18T07:57:07+01:00
+
+Fresh process, no memory of iteration 28. Reconciled first: branch is
+`autonomous/2026-08-18-the-app-feels-alive`, `git log` head is `9aadadd` ("Back-date the
+heartbeat to release the branch for the next firing"), matching STATE.json exactly — no
+reconciliation needed.
+
+Current time is `2026-08-18T07:57:07+01:00`, still (barely) before `stop_at`
+(`2026-08-18T08:00:00+01:00`) — under 3 minutes of runway. `next_action` was explicit: only
+continue idling if current time is still before `stop_at`; it is, by a margin too small to
+start any unit of work. Verified live rather than assuming the snapshot still holds: `master`
+is unchanged at `1e0d08e` (`git rev-parse master`), and `GET http://127.0.0.1:8010/health`
+returns `{"status":"ok"}` — the trial Hub is still up and unchanged since iteration 28's check.
+No new operator direction arrived. Q1–Q10 stay done and verified; Q11's unattended-safe half
+stays fully worked through; roadmap #7 stays parked per `known_debts`. Nothing else is in scope
+to start with three minutes of runway.
+
+No code change this iteration. Only `.claude/autonomous/STATE.json` and this log entry change;
+`spec/` and `hub/seed_taste_doc.py` (prior-session scratch) untouched, not staged.
+
+**Queue status:** unchanged. Runway to `stop_at` is now effectively exhausted. The next
+scheduled firing will almost certainly land at or after `stop_at` and should record
+`session_stopped: true`, write a short closing entry, and end the loop rather than starting
+another idle iteration.

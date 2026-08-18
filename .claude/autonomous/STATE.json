@@ -6,8 +6,8 @@
   "started_at": "2026-08-17T23:00:54+01:00",
   "stop_at": "2026-08-18T08:00:00+01:00",
   "stop_when_queue_empties": false,
-  "iteration": 28,
-  "last_heartbeat": "2026-08-18T07:04:00+01:00",
+  "iteration": 29,
+  "last_heartbeat": "2026-08-18T07:57:07+01:00",
   "session_stopped": false,
   "prepared_by": "/autonomous-prep, interactive session 2026-08-17T22:20-23:05+01:00. Intent was fixed with the operator BEFORE the codebase was read, per the skill. Every queue item below was located in real files during prep -- none is a guess about where the code lives.",
   "operator_intent": {
@@ -138,7 +138,7 @@
     }
   ],
   "current": "Q11-tier-2-and-3",
-  "next_action": "Iteration 28 was a verified no-op: no new operator direction arrived since iteration 27 (master unchanged at 1e0d08e, trial Hub on :8010 confirmed healthy with all three fixture projects intact), and runway to stop_at (2026-08-18T08:00+01:00) is now under 15 minutes -- too little to start any unattended-safe unit of work not already ruled out. Q1-Q10 remain done; Q11/roadmap #7 (StaticPool race) stays parked, do not retry blind, read known_debts.staticpool-fixture-race-third-attempt first. Q11/roadmap #8 (16.2 reconciliation) is fully worked through at the requirement-mapping level; 16.1 and 16.3 remain the operator's. The NEXT firing will land at or after stop_at: check current time first. If it is at or past 2026-08-18T08:00+01:00, set session_stopped: true, write a short closing log entry summarizing the run (Q1-Q10 shipped and verified, Q11 partially worked with known_debts recorded, three decisions_for_user items left OPEN/PROPOSAL-WRITTEN for the operator), commit, push, and stop -- do NOT back-date the heartbeat in that case, since there is no more work to hand off to. Only continue idling if, against expectation, current time is still before stop_at.",
+  "next_action": "Iteration 29 was a verified no-op: no new operator direction arrived since iteration 28 (master unchanged at 1e0d08e, trial Hub on :8010 confirmed healthy), and runway to stop_at (2026-08-18T08:00+01:00) was under 3 minutes at the time of this write -- too little to start any unattended-safe unit of work not already ruled out. Q1-Q10 remain done; Q11/roadmap #7 (StaticPool race) stays parked, do not retry blind, read known_debts.staticpool-fixture-race-third-attempt first. Q11/roadmap #8 (16.2 reconciliation) is fully worked through at the requirement-mapping level; 16.1 and 16.3 remain the operator's. The NEXT firing will almost certainly land at or after stop_at: check current time first. If it is at or past 2026-08-18T08:00+01:00, set session_stopped: true, write a short closing log entry summarizing the run (Q1-Q10 shipped and verified, Q11 partially worked with known_debts recorded, three decisions_for_user items left OPEN/PROPOSAL-WRITTEN for the operator), commit, push, and stop -- do NOT back-date the heartbeat in that case, since there is no more work to hand off to. Only continue idling if, against expectation, current time is still before stop_at.",
   "limits": [
     "ALWAYS invoke Python as `py -3.11` or the absolute path in environment.python. NEVER bare `python`. On this machine `python` resolves to C:/Users/huida/AppData/Local/hermes/hermes-agent/venv/Scripts/python.exe, which does NOT have agentweave installed -- `python -m pytest tests/` fails collection with 16 ModuleNotFoundError entries that look exactly like a broken tree. Prep hit this and nearly mistook it for real breakage. Do not spend an iteration 'fixing' it.",
     "Never publish to PyPI, push a tag, or cut a release. The operator asked for fixes, not a version. master is already 30 commits past v1.0.1 and unreleased; that stays a decision for an attended session.",
