@@ -2372,3 +2372,53 @@ CURRENT-spec reconciliations plus all eight delta-spec mappings are now complete
 16.3 to actually tick, both reserved for the operator. Runway to `stop_at` (2026-08-18T08:00+01:00)
 is roughly 40 minutes as of this write — likely the last iteration before stop, since nothing
 self-directed remains in scope beyond idling the branch clean.
+
+---
+
+## Iteration 27 — 2026-08-18T07:29:03+01:00
+
+Q1-Q10 are done and Q11's unattended-safe work (the 16.2 reconciliation pass) finished last
+iteration; roughly 30 minutes of runway remained before `stop_at`. Per `next_action`'s own
+guidance, the only remaining unattended-safe options were 16.1-adjacent spot-checks or further
+product findings write-ups — not 16.3 (archive) or any code change. Picked `decisions_for_user.N3`
+("CLAUDE.md's trial Hub section is stale"), whose own `default` explicitly asks the loop to
+"propose a corrected CLAUDE.md section as a diff on the branch, but NOT rewrite the file's
+governing prose unilaterally."
+
+**Verified live before writing anything**, rather than trusting the STATE.json snapshot: `GET
+http://127.0.0.1:8010/health` → `{"status":"ok"}`; `GET /api/v1/projects` → still exactly the same
+three projects Q1 fixed (`proj-5e960453`, `proj-b44fac0c`, `proj-ff695d96`), confirming the trial
+Hub is still healthy and unchanged. Checked the actual PID files under `~/.agentweave/hub/`
+directly rather than assuming Q1's recorded PID (27792) was still current — it is not:
+`hub-8010.pid` holds a stale `12296`, and the port is actually held by a *third* file CLAUDE.md
+never mentions, `hub-trial-8010.pid` (`23540`), consistent with at least one restart since Q1
+(Q6's own done_note records restarting 8010 to verify the console-flash fix). This confirms the
+drift is not just "wrong path," it's also "wrong PID file name" — CLAUDE.md's table would send a
+reader checking `hub-8010.pid` to a dead process.
+
+Wrote `openspec/explorations/2026-08-18-claude-md-trial-hub-section-is-stale.md`: what CLAUDE.md's
+"trial Hub — fixed 2026-08-16" table says today, what is actually true (verified above, plus the
+four-database inventory this run's own `STATE.json.environment.databases` already established),
+and a proposed replacement table + start command the operator can paste in directly. CLAUDE.md
+itself is untouched, per N3's own constraint. Left `profiles/dev` uninvestigated — out of scope
+for what N3 asked about, noted explicitly in the file's own "what this does not do" section rather
+than silently ignored.
+
+One correction made to the file's own draft before committing: the first version used a
+zero-width-space trick (`​\`\`\`bash`) to nest a fenced code block inside another fenced block,
+which works but leaves an invisible Unicode character sitting in a committed file for no good
+reason. Replaced both occurrences with the standard four-backtick outer fence / three-backtick
+inner fence pattern instead — cleaner, and `grep` on the file no longer needs to know about the
+zero-width character to make sense of the fence count.
+
+**Tree state before commit:** `openspec/explorations/2026-08-18-claude-md-trial-hub-section-is-stale.md`
+added (new file); `.claude/autonomous/STATE.json` updated (iteration, heartbeat, N3 decision status,
+next_action); `spec/` and `hub/seed_taste_doc.py` (prior-session scratch) untouched, not staged.
+
+**Queue status:** Q1–Q10 done. Q11 roadmap #7 (StaticPool race) stays parked. Roadmap #8 (16.2) is
+fully worked through at the requirement-mapping level; 16.1/16.3 remain the operator's. N3 now has
+a concrete proposal on the branch for the operator to review and apply (or not) by hand — this
+loop does not apply it itself. Runway to `stop_at` (2026-08-18T08:00+01:00) is under 30 minutes as
+of this write. Nothing further self-directed and unattended-safe remains in scope; the next
+iteration should treat an unchanged queue as a sign to hold the branch clean and idle, not to
+manufacture work.

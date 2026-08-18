@@ -6,8 +6,8 @@
   "started_at": "2026-08-17T23:00:54+01:00",
   "stop_at": "2026-08-18T08:00:00+01:00",
   "stop_when_queue_empties": false,
-  "iteration": 26,
-  "last_heartbeat": "2026-08-18T06:40:00+01:00",
+  "iteration": 27,
+  "last_heartbeat": "2026-08-18T07:30:00+01:00",
   "session_stopped": false,
   "prepared_by": "/autonomous-prep, interactive session 2026-08-17T22:20-23:05+01:00. Intent was fixed with the operator BEFORE the codebase was read, per the skill. Every queue item below was located in real files during prep -- none is a guess about where the code lives.",
   "operator_intent": {
@@ -138,7 +138,7 @@
     }
   ],
   "current": "Q11-tier-2-and-3",
-  "next_action": "Iteration 26 finished 16.2's three-CURRENT-spec reconciliation set (agent-stream-events, runtime-diagnostics, agent-conversation-handoff all now have dated notes) and found two real product findings for agent-conversation-handoff (Handoff->Checkpoint naming drift; eager cutover vs the spec's 'next user message' wording) -- recorded, not fixed, per this loop's standing rule. Combined with iterations 16-23's eight-delta-spec mapping, 16.2's own task text is now fully worked through by this loop; it still cannot tick (16.1 scenario exercise, 16.3 archive -- both reserved for the operator per decisions_for_user D1). Q11/roadmap #7 (StaticPool race) stays parked -- three independent failure modes on record, do not attempt a fourth time blind, read known_debts.staticpool-fixture-race-third-attempt first. Check decisions_for_user first in case the operator answered anything overnight. Runway to stop_at (2026-08-18T08:00+01:00) is roughly 40 minutes as of this write -- if genuinely nothing self-directed remains in scope for the time left, holding the branch clean and idling is acceptable, per this state's own standing guidance. If a next iteration still has runway and no new operator direction, the only remaining unattended-safe roadmap items are 16.1-adjacent spot-checks (exercising a scenario live rather than reading code) or further product findings write-ups -- do not start 16.3 (archive) or any code change without the operator.",
+  "next_action": "Iteration 27 closed decisions_for_user.N3 (CLAUDE.md's stale trial-Hub section) with a written proposal on the branch, per N3's own default instruction -- CLAUDE.md itself was not touched. Q1-Q10 remain done; Q11/roadmap #7 (StaticPool race) stays parked, do not retry blind, read known_debts.staticpool-fixture-race-third-attempt first. Q11/roadmap #8 (16.2 reconciliation) is fully worked through at the requirement-mapping level; 16.1 (scenario exercise) and 16.3 (archive) remain the operator's per decisions_for_user history. Runway to stop_at (2026-08-18T08:00+01:00) is now under 30 minutes. If a future iteration resumes with runway and no new operator direction, there is genuinely nothing further self-directed and unattended-safe left in this queue -- holding the branch clean and idling is the correct move, not manufacturing new work. Check decisions_for_user first in case the operator answered anything since this was written.",
   "limits": [
     "ALWAYS invoke Python as `py -3.11` or the absolute path in environment.python. NEVER bare `python`. On this machine `python` resolves to C:/Users/huida/AppData/Local/hermes/hermes-agent/venv/Scripts/python.exe, which does NOT have agentweave installed -- `python -m pytest tests/` fails collection with 16 ModuleNotFoundError entries that look exactly like a broken tree. Prep hit this and nearly mistook it for real breakage. Do not spend an iteration 'fixing' it.",
     "Never publish to PyPI, push a tag, or cut a release. The operator asked for fixes, not a version. master is already 30 commits past v1.0.1 and unreleased; that stays a decision for an attended session.",
@@ -193,9 +193,9 @@
     },
     {
       "id": "N3-claude-md-is-stale",
-      "status": "OPEN",
+      "status": "PROPOSAL-WRITTEN",
       "question": "CLAUDE.md's 'trial Hub' section documents profile `beta` at ~/.agentweave/hub/profiles/beta/agentweave.db and project proj-5e960453. Reality: 8010 serves profiles/trial/, the fixtures live in <repo>/hub/data/, and beta has been stale since 02:41. Three documents name three different databases.",
-      "default": "The loop should propose a corrected CLAUDE.md section as a diff on the branch, but NOT rewrite the file's governing prose unilaterally -- CLAUDE.md is the operator's instrument. Flag it in the morning report."
+      "default": "Proposal written iteration 27: openspec/explorations/2026-08-18-claude-md-trial-hub-section-is-stale.md lays out the current stale text, verified-live current facts (including that hub-8010.pid itself is also stale -- the real PID file is hub-trial-8010.pid, which CLAUDE.md does not mention), and a proposed replacement table + start command. CLAUDE.md itself is untouched -- applying it is the operator's call."
     },
     {
       "id": "D2-taste-pass-live-turns",
