@@ -542,8 +542,11 @@ async def test_patch_opts_a_plain_job_into_a_loop_for_the_first_time(app, auth_h
 
 
 @pytest.mark.asyncio
-async def test_patch_updates_an_existing_loop(app, auth_headers):
-    """PATCH supplying a loop field on a job with an existing loop updates it in place."""
+async def test_patch_stages_an_edit_to_an_existing_loop_rather_than_applying_it(app, auth_headers):
+    """Design D11 (task A2.1/A2.4): PATCHing purpose/stop_at/stop_when_queue_empties onto a job
+    with an existing loop is always accepted, but never applied on the spot — it lands in
+    `pending_edit`, distinct from the still-unchanged live `purpose`, and is applied only at the
+    loop's next firing (`test_scheduler.py`'s own firing-boundary tests exercise that half)."""
     create_resp = await app.post(
         "/api/v1/projects/proj-test/jobs",
         json={
@@ -563,7 +566,61 @@ async def test_patch_updates_an_existing_loop(app, auth_headers):
         headers=auth_headers,
     )
     assert resp.status_code == 200
-    assert resp.json()["loop"]["purpose"] == "Revised purpose"
+    loop = resp.json()["loop"]
+    # The live field is untouched — a firing in flight (or the next one to fire, before it starts)
+    # must keep reading the definition it already has.
+    assert loop["purpose"] == "Initial purpose"
+    assert loop["pending_edit"]["purpose"] == "Revised purpose"
+    assert loop["pending_edit"]["staged_by"] == "operator"
+    assert loop["pending_edit"]["staged_at"] is not None
+
+
+@pytest.mark.asyncio
+async def test_patch_staging_an_edit_records_actor_and_time(app, auth_headers):
+    """Design D11 (task A2.5): each staged edit is recorded against the loop with actor and time —
+    mirrors `loop_control_changed`'s own persist_event/broadcast pair (A1)."""
+    from sqlalchemy import select
+
+    from hub.db.engine import async_session_factory
+    from hub.db.models import EventLog
+
+    create_resp = await app.post(
+        "/api/v1/projects/proj-test/jobs",
+        json={
+            "name": "Loop For Edit Event",
+            "agent": "kimi",
+            "message": "Test",
+            "cron": "0 9 * * *",
+            "purpose": "Original",
+        },
+        headers=auth_headers,
+    )
+    loop_id = create_resp.json()["loop"]["id"]
+    job_id = create_resp.json()["id"]
+
+    resp = await app.patch(
+        f"/api/v1/projects/proj-test/jobs/{job_id}",
+        json={"purpose": "Edited by operator"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+
+    async with async_session_factory() as session:
+        events = (
+            (
+                await session.execute(
+                    select(EventLog).where(EventLog.event_type == "loop_edit_staged")
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert len(events) == 1
+        event = events[0]
+        assert event.data["id"] == loop_id
+        assert event.data["actor"] == "operator"
+        assert event.agent is None
+        assert event.data["changes"] == {"purpose": "Edited by operator"}
 
 
 @pytest.mark.asyncio

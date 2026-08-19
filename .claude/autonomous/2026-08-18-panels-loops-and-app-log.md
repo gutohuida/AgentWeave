@@ -2054,3 +2054,97 @@ guessed at here.
 
 Committed and pushed as the work landed. Heartbeat refreshed before the push; releasing it
 (backdating ~40 minutes) as the very last step per the driver's own instructions.
+
+## Iteration 24 (2026-08-19 ~05:45–06:20+01:00) — LA2 done: editing, staged and visible (D11)
+
+Full account is in `tasks.md`'s own "A2. Editing, staged and visible" section (dated note,
+iteration 24) — this entry is the shorter version.
+
+**The scope decision, made before writing any code**: D11 talks about "a loop's definition"
+changing over its life. Read literally that could mean any of the five fields `JobUpdate` accepts
+for a loop (`purpose`, `stop_at`, `stop_when_queue_empties`, `stop_reason`, `spec_document_id`).
+Scoped it to exactly the three `_loop_opts_in` already treats as one set — the same triplet
+`create_job`/`update_job` have always accepted together as "this makes a job a loop" —
+because `stop_reason` is the operator annotating why a loop already stopped (not editing what it
+will do next) and `spec_document_id` is set once at creation in every case this codebase
+exercises. Recorded in `tasks.md`'s dated note so the next reader sees the reasoning, not just the
+boundary.
+
+**The bigger decision**: `PATCH /jobs/{job_id}` (`update_job`) already had a live code path that
+wrote `purpose`/`stop_at`/`stop_when_queue_empties` onto an *existing* loop's live fields
+immediately — built back in the L1/L2 migration-and-model task, before D11 existed. Adding a
+*second*, separate staging route (mirroring A1's `/loops/{id}/control`) while leaving that one live
+would have made D11's guarantee optional depending which endpoint a caller used — so the existing
+route was changed instead: for a loop that already existed before the call, these three fields now
+land in new `pending_*` columns (migration `0080`) rather than the live ones; a loop being opted
+into existence by *that same call* still writes directly, since it has no firing history to
+protect yet. One existing test asserted the *old* immediate-write behaviour
+(`test_patch_updates_an_existing_loop`) and is now
+`test_patch_stages_an_edit_to_an_existing_loop_rather_than_applying_it`, asserting staging instead
+— a real behavioural change to a pre-existing test, flagged here rather than buried in a diff.
+
+Application happens in `scheduler.py`, split into a pure in-memory mutation
+(`_stage_pending_loop_edit`, called at the very top of `_do_fire_job`'s handling of the loop —
+before the stop check, so a lowered `stop_at` is honoured by *that* firing, and before the
+briefing) and a separate audit-emitting step (`_emit_loop_edit_applied`) called only after the
+firing's own branch commits `run`'s final status. The two were split deliberately during this
+iteration, not from the start: the first draft called `persist_event` (which commits) immediately
+inside the mutation helper, which would have written the `JobRun` row to the database mid-update —
+transiently `"fired"` before a stop check flipped it to `"skipped"` moments later. Caught before
+writing any tests, by reading the surrounding commit structure rather than by a failing assertion.
+
+A2.3's requirement ("a firing in flight keeps the definition it was briefed with") needs no special
+casing to be true — `_do_fire_job` stages a pending edit exactly once, at the start of its own
+firing, and nothing re-reads the loop's fields mid-turn, so a `PATCH` landing while an agent is
+still working on the current firing cannot reach that firing's already-composed briefing by
+construction. Proven, not just asserted, in one comprehensive scheduler test that fires a loop
+twice with a staged edit landing in between, and asserts both entries' briefing content directly.
+
+**Verified**: `pytest hub/tests/test_jobs.py hub/tests/test_scheduler.py
+hub/tests/test_agent_actions_coordination.py hub/tests/test_migrations.py
+hub/tests/test_project_persistence.py hub/tests/test_loop_archival.py
+hub/tests/test_spec_declared_tasks.py` — 165 passed, 2 skipped, 0 failed (4 new tests, 1 test
+changed in place per above). `ruff check`/`black --check` clean across the whole repo (`src/ hub/
+tests/`), not just the touched files. `mypy hub/hub/`: 364 errors in both a `git stash` of this
+iteration's diff and the current tree — identical, zero new (the same number A1 measured last
+iteration, confirming it hadn't drifted further). `npx openspec validate --changes --strict`: 2/2
+still valid. The full `hub/tests/` suite (2400+ tests, ~12 minutes historically) was started in the
+background before this entry was written; its numeric result was not yet available at write time —
+confirm at the top of the next iteration before trusting anything beyond what's listed above, per
+this file's own standing rule.
+
+**Live smoke test against the trial Hub**, not just pytest — this task changed Python and a
+migration, so a restart was required. Found the real PID via `Get-NetTCPConnection -LocalPort
+8010` (`22164`, iteration 23's own restart, still alive at the top of this iteration), applied
+migration `0080` to `hub/data/agentweave.db` (`0079 -> 0080`, clean; the correct alembic.ini path
+turned out to be `hub/hub/alembic.ini` relative to the repo root — `hub/alembic.ini` does not exist
+despite iteration 23's note reading that way, which only worked because that iteration's own bash
+cwd was already inside `hub/` when it ran the command; recorded here so a future iteration doesn't
+lose the same few minutes to it), restarted via the documented `Invoke-CimMethod` command (new PID
+`24180`). Exercised the full staged-edit-and-apply cycle live against `proj-5e960453`'s existing
+`loop-f1eab23e`/`job-8d959810` fixture (already disabled, already ended — the same one A1 used):
+`PATCH .../jobs/job-8d959810 {"purpose": "..."}` → live `purpose` unchanged, `pending_edit` visible
+with the staged value; enabled the job, `POST .../jobs/job-8d959810/run` → 400 `"loop queue is
+empty"` (expected — the fixture's queue is genuinely drained) but the loop's `purpose` was updated
+to the staged value and `pending_edit` cleared regardless, confirming the edit applies even on a
+firing that itself gets skipped; the job auto-disabled itself again exactly as the stop-branch
+always has. Repeated once more to stage and apply the reverse edit, restoring `purpose` to its
+original value and `enabled` to `false` — fixture left exactly as found, per this run's own
+non-destructive precedent. Queried `event_logs` directly via sqlite for both `loop_edit_staged` and
+`loop_edit_applied` rows from both directions — all four present with the correct `actor`/`changes`
+payloads. Re-ran `hub/tests/browser/test_loops_index.py` against the restarted Hub: 5 passed, no
+regression from the restart or the schema change.
+
+`tasks.md`'s top summary line and A2.1-A2.5 ticked with a dated note (this file's own section
+above). `current`/`next_action` now point at **LA3**: "Late tasks refused, offered to a new loop
+(design D12)" — `_authorize_loop_task_creation` (`hub/hub/api/v1/tasks.py:286`) is the natural
+place for the refusal (it already loads the `Loop` row and gates on `actor`/`control` before
+D7/D10's checks; A3.1 needs a check on `loop.ending_state`/`stop_reason`/`stopped_at` ahead of
+those). A3.2 ("offer the refused task as the initial work of a new loop") most likely means the
+refusal response echoes back enough of the submitted task (title/description/acceptance criteria)
+for the caller to retry via `create_loop`'s own `initial_tasks` — D12 explicitly rejects reviving
+the stopped loop itself, so nothing should be created automatically. Left for LA3 to read D12 fresh
+and decide the exact response shape, not guessed at here.
+
+Committed and pushed as the work landed. Heartbeat refreshed before the push; releasing it
+(backdating ~40 minutes) as the very last step per the driver's own instructions.

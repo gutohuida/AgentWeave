@@ -36,7 +36,7 @@ ALEMBIC_INI = Path(__file__).parent.parent / "hub" / "alembic.ini"
 # The revision `alembic upgrade head` must land on. Named once so the assertion and its failure
 # message cannot disagree — they did, for two head bumps, telling anyone debugging a failure to go
 # read the wrong migration.
-HEAD_REVISION = "0079"
+HEAD_REVISION = "0080"
 
 
 # ---------------------------------------------------------------------------
@@ -2487,7 +2487,11 @@ def test_migration_0079_downgrade_then_upgrade_round_trips(tmp_path) -> None:
     cfg = Config(str(ALEMBIC_INI))
     cfg.set_main_option("sqlalchemy.url", db_url)
     with patch.object(settings, "database_url", db_url):
-        command.downgrade(cfg, "-1")
+        # Absolute target, not "-1": head has moved past 0079 since this test was written (0080
+        # adds its own columns on top), so a relative one-step-back would only undo 0080 and leave
+        # this test asserting on the wrong migration's column — the same trap 0077's and 0078's own
+        # round-trip tests already hit once each, above.
+        command.downgrade(cfg, "0078")
 
         with sqlite3.connect(db_file) as conn:
             loop_columns = {row[1] for row in conn.execute("PRAGMA table_info(loops)")}
@@ -2505,3 +2509,100 @@ def test_migration_0079_downgrade_then_upgrade_round_trips(tmp_path) -> None:
         assert "control" in loop_columns
         # The upgrade cannot recover what the downgrade discarded.
         assert conn.execute("SELECT control FROM loops WHERE id = 'loop-1'").fetchone()[0] is None
+
+
+# ---------------------------------------------------------------------------
+# 0080 — a loop's definition edits are staged, not applied immediately
+# ---------------------------------------------------------------------------
+
+
+def test_migration_0080_adds_pending_edit_columns(tmp_path) -> None:
+    """Design D11 (task A2.1/A2.5): five nullable columns, no backfill."""
+    db_file = tmp_path / "loop_pending_edit.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    _run_alembic_with(db_url)
+
+    with sqlite3.connect(db_file) as conn:
+        loop_columns = {row[1]: row for row in conn.execute("PRAGMA table_info(loops)")}
+        for column in (
+            "pending_purpose",
+            "pending_stop_at",
+            "pending_stop_when_queue_empties",
+            "pending_edit_actor",
+            "pending_edit_at",
+        ):
+            assert column in loop_columns
+            assert loop_columns[column][3] == 0  # notnull
+            assert loop_columns[column][4] is None  # dflt_value — no backfill guess
+
+
+def test_migration_0080_downgrade_then_upgrade_round_trips(tmp_path) -> None:
+    """Down and back up again, with a row populated in every new column beforehand."""
+    from alembic import command
+    from alembic.config import Config
+
+    db_file = tmp_path / "roundtrip_0080.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    _run_alembic_with(db_url)
+
+    stamp = "2026-01-01T00:00:00Z"
+    with sqlite3.connect(db_file) as conn:
+        conn.execute(
+            "INSERT INTO projects (id, name, created_at) " f"VALUES ('proj-1', 'p', '{stamp}')"
+        )
+        conn.execute(
+            "INSERT INTO ai_jobs (id, project_id, name, agent, message, cron, created_at, "
+            "session_mode, enabled, source) "
+            f"VALUES ('job-1', 'proj-1', 'n', 'claude', 'go', '0 9 * * *', '{stamp}', 'new', 1, "
+            "'hub')"
+        )
+        conn.execute(
+            "INSERT INTO loops (id, project_id, job_id, purpose, stop_when_queue_empties, "
+            "created_at, pending_purpose, pending_stop_when_queue_empties, pending_edit_actor, "
+            "pending_edit_at) VALUES ('loop-1', 'proj-1', 'job-1', 'p', 0, "
+            f"'{stamp}', 'new purpose', 1, 'operator', '{stamp}')"
+        )
+        conn.commit()
+
+    cfg = Config(str(ALEMBIC_INI))
+    cfg.set_main_option("sqlalchemy.url", db_url)
+    with patch.object(settings, "database_url", db_url):
+        command.downgrade(cfg, "-1")
+
+        with sqlite3.connect(db_file) as conn:
+            loop_columns = {row[1] for row in conn.execute("PRAGMA table_info(loops)")}
+            for column in (
+                "pending_purpose",
+                "pending_stop_at",
+                "pending_stop_when_queue_empties",
+                "pending_edit_actor",
+                "pending_edit_at",
+            ):
+                assert column not in loop_columns
+            # The row itself survives — only the pending-edit columns are dropped.
+            assert conn.execute("SELECT COUNT(*) FROM loops").fetchone()[0] == 1
+
+        command.upgrade(cfg, "head")
+
+    with sqlite3.connect(db_file) as conn:
+        assert (
+            conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == HEAD_REVISION
+        )
+        loop_columns = {row[1] for row in conn.execute("PRAGMA table_info(loops)")}
+        for column in (
+            "pending_purpose",
+            "pending_stop_at",
+            "pending_stop_when_queue_empties",
+            "pending_edit_actor",
+            "pending_edit_at",
+        ):
+            assert column in loop_columns
+        # The upgrade cannot recover what the downgrade discarded — every pending-edit column
+        # comes back as NULL, not restored.
+        row = conn.execute(
+            "SELECT pending_purpose, pending_stop_when_queue_empties, pending_edit_actor, "
+            "pending_edit_at FROM loops WHERE id = 'loop-1'"
+        ).fetchone()
+        assert row == (None, None, None, None)

@@ -102,6 +102,12 @@ class LoopSummary(BaseModel):
     # current default (the operator) — returned as-is, never resolved to "operator" here, mirroring
     # `Agent.default_permission_mode`'s own serialization (`agents.py:1858`).
     control: Optional[str] = None
+    # Design D11 (task A2.4): the pending edit, reported SEPARATELY from the live fields above —
+    # "a requirement, not polish" (the task's own words). Only present (non-None) while a
+    # `POST /jobs/{job_id}` edit is staged and waiting for the next firing to apply it; only the
+    # keys among "purpose"/"stop_at"/"stop_when_queue_empties" that were actually staged appear,
+    # alongside "staged_by" and "staged_at".
+    pending_edit: Optional[Dict[str, Any]] = None
 
 
 class LoopDetail(LoopSummary):

@@ -232,6 +232,79 @@ async def _claim_loop_task(session: AsyncSession, loop: Loop) -> Optional[Task]:
 _LOOP_BRIEFING_CHECKPOINT_CHARS = 4_000
 
 
+def _stage_pending_loop_edit(loop: Loop) -> Optional[dict]:
+    """Move a staged edit (design D11, task A2.2) from `loop`'s pending_* columns onto its live
+    fields, in memory only — no commit, no event. Returns the audit payload for
+    `_emit_loop_edit_applied` below, or `None` if nothing was staged.
+
+    Applied once, at the very top of `_do_fire_job`'s handling of *loop* — before
+    `_loop_stop_reason` and before `_compose_loop_briefing` are ever consulted, so both see the
+    loop's current definition rather than one waiting on the firing after next. Deliberately does
+    not commit or persist an event itself: `_do_fire_job` is about to mutate `run`'s status too,
+    and a premature commit here would write that row to the database mid-update (transiently
+    "fired" before a stop check turns it "skipped" moments later) — the caller commits everything
+    together once its own branch knows the firing's final outcome, then calls
+    `_emit_loop_edit_applied`.
+
+    A firing already under way when the edit was staged (task A2.3) is unaffected by construction:
+    `_do_fire_job` loads and applies pending edits exactly once, at the start of its own firing —
+    nothing re-reads `loop.purpose`/`loop.stop_at`/`loop.stop_when_queue_empties` mid-turn, so a
+    `PATCH` landing while an agent is still working on this firing only ever affects the *next*
+    one.
+    """
+    if loop.pending_edit_at is None:
+        return None
+
+    changes: dict[str, Any] = {}
+    if loop.pending_purpose is not None:
+        changes["purpose"] = {"from": loop.purpose, "to": loop.pending_purpose}
+        loop.purpose = loop.pending_purpose
+    if loop.pending_stop_at is not None:
+        changes["stop_at"] = {
+            "from": loop.stop_at.isoformat() if loop.stop_at else None,
+            "to": loop.pending_stop_at.isoformat(),
+        }
+        loop.stop_at = loop.pending_stop_at
+    if loop.pending_stop_when_queue_empties is not None:
+        changes["stop_when_queue_empties"] = {
+            "from": loop.stop_when_queue_empties,
+            "to": loop.pending_stop_when_queue_empties,
+        }
+        loop.stop_when_queue_empties = loop.pending_stop_when_queue_empties
+
+    actor = loop.pending_edit_actor
+    staged_at = loop.pending_edit_at
+
+    loop.pending_purpose = None
+    loop.pending_stop_at = None
+    loop.pending_stop_when_queue_empties = None
+    loop.pending_edit_actor = None
+    loop.pending_edit_at = None
+
+    return {
+        "id": loop.id,
+        "project_id": loop.project_id,
+        "actor": actor,
+        "staged_at": staged_at.isoformat() if staged_at else None,
+        "changes": changes,
+    }
+
+
+async def _emit_loop_edit_applied(session: AsyncSession, payload: dict) -> None:
+    """Persist and broadcast the audit event (task A2.5) for a pending edit
+    `_stage_pending_loop_edit` already applied in memory. Called only after the caller's own
+    commit has landed `run`'s final status, so this never forces an early, partial commit."""
+    actor = payload["actor"]
+    await persist_event(
+        session,
+        payload["project_id"],
+        "loop_edit_applied",
+        payload,
+        agent=None if actor in (None, "operator") else actor,
+    )
+    await sse_manager.broadcast(payload["project_id"], "loop_edit_applied", payload)
+
+
 async def _compose_loop_briefing(
     session: AsyncSession,
     loop: Loop,
@@ -580,12 +653,19 @@ class JobScheduler:
                 logger.info(f"Job {job.id} fire skipped: {skip_reason}")
                 return False
 
+            loop_result = await session.execute(select(Loop).where(Loop.job_id == job.id))
+            loop = loop_result.scalars().first()
+            # Design D11 (task A2.2): stage-apply any pending edit in memory before the stop check
+            # below and before the briefing is composed further down — both must see this loop's
+            # current definition, not one still waiting on the firing after next. The audit event
+            # is emitted only after this branch's own commit lands `run`'s final status (below),
+            # not here — see `_stage_pending_loop_edit`'s own comment for why.
+            pending_edit_payload = _stage_pending_loop_edit(loop) if loop is not None else None
+
             loop_stop_reason = await _loop_stop_reason(session, job)
             if loop_stop_reason:
                 run.status = "skipped"
                 run.error_summary = loop_stop_reason
-                loop_result = await session.execute(select(Loop).where(Loop.job_id == job.id))
-                loop = loop_result.scalars().first()
                 if loop is not None:
                     loop.stop_reason = loop_stop_reason
                     loop.stopped_at = fired_at
@@ -597,6 +677,8 @@ class JobScheduler:
                     )
                 job.enabled = False
                 await session.commit()
+                if pending_edit_payload is not None:
+                    await _emit_loop_edit_applied(session, pending_edit_payload)
                 await persist_event(
                     session,
                     job.project_id,
@@ -649,8 +731,6 @@ class JobScheduler:
                 logger.info(f"Job {job.id} loop stopped: {loop_stop_reason}")
                 return False
 
-            loop_result = await session.execute(select(Loop).where(Loop.job_id == job.id))
-            loop = loop_result.scalars().first()
             content = job.message
             if loop is not None:
                 claimed_task = await _claim_loop_task(session, loop)
@@ -680,6 +760,9 @@ class JobScheduler:
             )
             session.add(entry)
             await session.commit()
+
+            if pending_edit_payload is not None:
+                await _emit_loop_edit_applied(session, pending_edit_payload)
 
             queue_payload = {
                 "entry_id": entry.id,

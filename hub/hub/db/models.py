@@ -1272,6 +1272,28 @@ class Loop(Base):
     # (`_authorize_loop_task_creation`, `tasks.py`), never write "operator" into this column.
     control: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
 
+    # Design D11 (addendum, task A2.1): an edit to a loop's definition is always accepted and
+    # staged here, never applied on the spot — a firing already under way keeps the definition it
+    # was briefed with. Applied by `scheduler._apply_pending_loop_edit` at the loop's next firing,
+    # before that firing's briefing is composed. NULL means "no change staged to this field",
+    # mirroring `JobUpdate`'s own untouched-vs-explicit convention for the live columns above, so
+    # an edit that only touches `purpose` leaves `stop_at`/`stop_when_queue_empties` alone.
+    pending_purpose: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    pending_stop_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    pending_stop_when_queue_empties: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+    # Task A2.5: who staged the pending edit and when — the agent name, or the literal string
+    # "operator" (never NULL for an operator edit; NULL here means "no pending edit", the same
+    # role `pending_edit_at` plays below, so "operator" cannot collapse into "unset").
+    pending_edit_actor: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # The sentinel for "is there a pending edit at all" — non-NULL iff at least one of the three
+    # pending_* fields above is set (an edit always touches at least one, mirroring
+    # `_loop_opts_in`'s own "at least one field" rule for loop creation).
+    pending_edit_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     __table_args__ = (Index("ix_loops_project", "project_id"),)
 
 

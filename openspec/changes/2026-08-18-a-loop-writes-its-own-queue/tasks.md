@@ -3,8 +3,9 @@
 Sections 1-12 are implemented and verified (dated notes below). From the archival addendum, B1
 through B5 are also implemented and verified, plus B6.1/B6.5/B6.6 (the drill-down's static
 content); B6.2-B6.4 (live "running now") are still open, blocked on A4/LA4. A1 (control as a
-per-loop setting) is now implemented and verified too (dated note below); A2 onward remain a spec
-only, unchecked — CLAUDE.md: "Never mark a task complete on the strength of a plan existing."
+per-loop setting) and A2 (editing, staged and visible) are now implemented and verified too (dated
+notes below); A3 onward remain a spec only, unchecked — CLAUDE.md: "Never mark a task complete on
+the strength of a plan existing."
 
 ## 1. Migration
 
@@ -1076,12 +1077,95 @@ in B5/B6's frontend reads `control` yet).
 
 ## A2. Editing, staged and visible (design D11)
 
-- [ ] A2.1 Accept an edit at any time, including during a firing; store it as pending.
-- [ ] A2.2 Apply pending edits at the next firing, before briefing.
-- [ ] A2.3 Test that a firing in flight continues under the definition it was briefed with, with an
+- [x] A2.1 Accept an edit at any time, including during a firing; store it as pending.
+- [x] A2.2 Apply pending edits at the next firing, before briefing.
+- [x] A2.3 Test that a firing in flight continues under the definition it was briefed with, with an
       edit landing mid-firing.
-- [ ] A2.4 Report pending and in-force definitions **separately** — a requirement, not polish.
-- [ ] A2.5 Record each edit against the loop with actor and time.
+- [x] A2.4 Report pending and in-force definitions **separately** — a requirement, not polish.
+- [x] A2.5 Record each edit against the loop with actor and time.
+
+**Done, iteration 24 (2026-08-19).** Scoped the "definition" D11 talks about to exactly the three
+fields `_loop_opts_in` already treats as one cohesive set — `purpose`/`stop_at`/
+`stop_when_queue_empties` — the same triplet `create_job`/`update_job` have always accepted as a
+loop's opt-in fields. `stop_reason`/`spec_document_id` are untouched by this task: `stop_reason` is
+an operator annotating why a loop already stopped, not editing what it will do next, and
+`spec_document_id` is set once at creation in every case this codebase exercises; D11's own
+examples ("the operator adds tasks, a loop's definition changes") are about purpose and stop
+conditions, not either of those two.
+
+Five nullable columns on `loops` (migration `0080`): `pending_purpose`, `pending_stop_at`,
+`pending_stop_when_queue_empties` — NULL means "no change staged to this field", the identical
+untouched-vs-explicit convention `JobUpdate`'s own live fields already use — plus
+`pending_edit_actor` and `pending_edit_at` (task A2.5); `pending_edit_at`'s own non-NULL-ness is
+the single sentinel for "is there a pending edit at all", never inferred from the three per-field
+columns (any one of which staying NULL is legitimate "not touched by this edit").
+
+**Where the edit is accepted (A2.1):** `PATCH /jobs/{job_id}` (`hub/hub/api/v1/jobs.py`,
+`update_job`) — the existing surface these three fields have always gone through, not a new route.
+For a loop that already existed before this call, purpose/stop_at/stop_when_queue_empties now write
+into the `pending_*` columns instead of the live ones; a loop being opted into existence by *this
+same call* still writes directly, since it has no firing history to protect. This closes a real gap
+the task's own text implied: leaving the old immediate-write path live while adding a separate
+staging route elsewhere would have made D11's guarantee optional depending which endpoint a caller
+used.
+
+**Where the edit is applied (A2.2):** `_stage_pending_loop_edit` (`hub/hub/scheduler.py`), called at
+the very top of `_do_fire_job`'s handling of the loop — before `_loop_stop_reason` (so a lowered
+`stop_at` is honoured by *this* firing, not the one after) and before `_compose_loop_briefing`. Pure
+in-memory mutation, no commit of its own: an early commit here would have written the `JobRun` row
+mid-update (transiently `"fired"` before a stop check flips it to `"skipped"` moments later) — the
+audit event (`_emit_loop_edit_applied`) is emitted only after the caller's own branch commits
+`run`'s final status, at both of `_do_fire_job`'s two commit points (the stop-and-skip branch and
+the success branch).
+
+**Why A2.3 needs no extra machinery to be true:** `_do_fire_job` loads and stages a loop's pending
+edit exactly once, at the start of its own firing — nothing re-reads
+`loop.purpose`/`stop_at`/`stop_when_queue_empties` mid-turn. A `PATCH` landing while an agent is
+still working on the current firing therefore cannot reach that firing's already-composed briefing
+by construction, not by a special case. Proven, not just asserted, in
+`test_loop_edit_staged_mid_firing_leaves_that_firings_briefing_untouched_and_applies_next`
+(`hub/tests/test_scheduler.py`): fires once (briefing carries the original purpose), stages an edit
+via the real `PATCH` route, asserts the live field is still the original value and the staged one is
+visible only under `pending_edit`, fires again (the *next* firing), and asserts the second entry's
+briefing carries the new purpose while the first entry's is untouched — plus the `EventLog` audit
+row and the live `GET /loops/{id}` response both agree afterward.
+
+**A2.4 (report separately):** `LoopSummary.pending_edit: Optional[Dict[str, Any]]`
+(`hub/hub/schemas/jobs.py`) — `None` when nothing is staged; otherwise only the keys among
+`purpose`/`stop_at`/`stop_when_queue_empties` actually staged, plus `staged_by`/`staged_at`. Built
+by `_pending_loop_edit` in `_batch_loop_summaries` (`hub/hub/api/v1/jobs.py`), so it is visible from
+both `GET /jobs`/`GET /jobs/{id}` and every `/loops/...` route (`LoopSummary`/`LoopDetail` share the
+same batch function A1 already established). No UI reads this yet — no edit form exists in the
+panel shell to stage one from (checked: `JobForm.tsx` only creates jobs, never updates one) — so
+this stays a backend contract, same as A1.1's `control` column before B5 read it.
+
+**A2.5 (actor and time):** `loop_edit_staged` (persisted at the `PATCH` call, `agent=None` when the
+actor is `"operator"`) and `loop_edit_applied` (persisted at the firing that applies it) — both
+follow `loop_control_changed`'s own `persist_event`/`sse_manager.broadcast` pair.
+
+**Verified:** `pytest hub/tests/test_jobs.py hub/tests/test_scheduler.py
+hub/tests/test_agent_actions_coordination.py` — 79 passed, 1 skipped (three new tests in
+`test_jobs.py`, one new in `test_scheduler.py`; `test_patch_updates_an_existing_loop`, which
+asserted the *old* immediate-write behaviour, is now
+`test_patch_stages_an_edit_to_an_existing_loop_rather_than_applying_it` and asserts staging
+instead — a real behavioural change to an existing test, not a rename). Migration `0080` — its own
+`test_migration_0080_adds_pending_edit_columns` and
+`test_migration_0080_downgrade_then_upgrade_round_trips` pass; `0079`'s own round-trip test needed
+the *exact* fix its own comment predicted one migration ago: `command.downgrade(cfg, "-1")` moved to
+the absolute `"0078"`, since `"-1"` from the new head (`0080`) would only have undone `0080` and left
+that test asserting on the wrong migration's column — the same trap recurring a second time,
+fixed the same way, comment updated to name `0080` as the reason for the next author. `HEAD_REVISION`
+bumped to `"0080"` in `test_migrations.py` and `test_project_persistence.py`. Full
+`hub/tests/test_migrations.py`: 60 passed, 1 skipped. `ruff check` clean (src/ hub/ tests/). `black`
+applied to every file this task touched (5 needed reformatting; the working tree's own black version
+disagrees with a Python-3.12-formatted upstream on some files unrelated to this task — not
+touched). `mypy hub/hub/`: compared current tree against a `git stash` of this task's own diff
+(not the prep-time baseline, drifted upward by 23 iterations of prior work) — **364 errors in both
+trees, identical** — zero new. `npx openspec validate --changes --strict`: 2/2 still valid.
+
+**Full `hub/tests/` suite**, backgrounded — result recorded in the autonomous log for this
+iteration, not repeated here to avoid this file drifting out of sync with a number that changes
+every iteration.
 
 ## A3. Late tasks (design D12)
 

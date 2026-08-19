@@ -812,6 +812,123 @@ async def test_loop_briefing_truncates_an_oversized_prior_checkpoint_to_exactly_
 
 
 @pytest.mark.asyncio
+async def test_loop_edit_staged_mid_firing_leaves_that_firings_briefing_untouched_and_applies_next(
+    app, auth_headers, bind_runner
+):
+    """Design D11 (tasks A2.2/A2.3): an edit staged while a firing is already under way must not
+    reach that firing's own briefing — the firing already in flight keeps the definition it was
+    briefed with — and must be applied, in full, at the very next firing, before that firing's own
+    briefing is composed."""
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {"loop-agent-pending-edit": {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    await bind_runner("loop-agent-pending-edit", cli="claude")
+
+    fake_session = MagicMock()
+    fake_session.pid = 5151
+    fake_session.read.side_effect = [
+        '{"type":"result","subtype":"success","is_error":false,"session_id":"sess-pending-1"}\n',
+        "",
+        '{"type":"result","subtype":"success","is_error":false,"session_id":"sess-pending-2"}\n',
+        "",
+    ]
+    fake_session.wait.return_value = 0
+
+    async with async_session_factory() as db:
+        job = await _make_job(db, suffix="pending-edit", agent="loop-agent-pending-edit")
+        loop = await _make_loop(db, job_id=job.id, purpose="the original purpose")
+        job_id = job.id
+        loop_id = loop.id
+
+    with patch(  # noqa: SIM117
+        "hub.api.v1.agent_trigger.PtySession.spawn", MagicMock(return_value=fake_session)
+    ):
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            scheduler = JobScheduler()
+
+            # Firing 1: briefed with the original purpose.
+            async with async_session_factory() as db:
+                fresh_job = await db.get(AIJob, job_id)
+                first_success = await scheduler._fire_job_internal(
+                    fresh_job, trigger="scheduled", session=db
+                )
+            for task in list(agent_trigger._background_runs):
+                await task
+            assert first_success is True
+
+            # An edit lands while firing 1's agent turn is still the most recent thing that
+            # happened — the scenario A2.3 exists to protect. `_fire_job_internal` has already
+            # returned by this point in the test, but nothing about the edit path knows that; it
+            # behaves identically whether the prior firing's turn is still running or already
+            # finished, because nothing re-reads the loop mid-turn (see
+            # `_stage_pending_loop_edit`'s own comment).
+            staged = await app.patch(
+                f"/api/v1/projects/proj-test/jobs/{job_id}",
+                json={"purpose": "the revised purpose"},
+                headers=auth_headers,
+            )
+            assert staged.status_code == 200
+            assert staged.json()["loop"]["purpose"] == "the original purpose"
+            assert staged.json()["loop"]["pending_edit"]["purpose"] == "the revised purpose"
+
+            # Firing 2: applies the staged edit before composing its own briefing.
+            async with async_session_factory() as db:
+                fresh_job = await db.get(AIJob, job_id)
+                second_success = await scheduler._fire_job_internal(
+                    fresh_job, trigger="scheduled", session=db
+                )
+            for task in list(agent_trigger._background_runs):
+                await task
+            assert second_success is True
+
+    async with async_session_factory() as db:
+        entries = (
+            (
+                await db.execute(
+                    select(InboundQueueEntry)
+                    .where(InboundQueueEntry.agent == "loop-agent-pending-edit")
+                    .order_by(InboundQueueEntry.sequence)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        loop = await db.get(Loop, loop_id)
+        applied_events = (
+            (await db.execute(select(EventLog).where(EventLog.event_type == "loop_edit_applied")))
+            .scalars()
+            .all()
+        )
+
+    assert len(entries) == 2
+    assert "Purpose: the original purpose" in entries[0].content
+    assert "the revised purpose" not in entries[0].content
+    assert "Purpose: the revised purpose" in entries[1].content
+    assert "the original purpose" not in entries[1].content
+
+    # The live field is now the applied value, and nothing is pending any more.
+    assert loop.purpose == "the revised purpose"
+    assert loop.pending_purpose is None
+    assert loop.pending_edit_at is None
+
+    assert len(applied_events) == 1
+    assert applied_events[0].data["id"] == loop_id
+    assert applied_events[0].data["actor"] == "operator"
+    assert applied_events[0].data["changes"]["purpose"] == {
+        "from": "the original purpose",
+        "to": "the revised purpose",
+    }
+
+    detail_resp = await app.get(f"/api/v1/projects/proj-test/loops/{loop_id}", headers=auth_headers)
+    assert detail_resp.status_code == 200
+    assert detail_resp.json()["purpose"] == "the revised purpose"
+    assert detail_resp.json()["pending_edit"] is None
+
+
+@pytest.mark.asyncio
 async def test_non_loop_job_fired_content_is_byte_identical_to_job_message(
     app, auth_headers, bind_runner
 ):

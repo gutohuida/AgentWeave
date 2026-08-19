@@ -1,7 +1,7 @@
 """AI Jobs endpoints — CRUD + run for scheduled agent tasks."""
 
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from pydantic import ValidationError
@@ -216,8 +216,29 @@ async def _batch_loop_summaries(
             current_task=current_task_by_loop.get(loop.id),
             open_questions=open_questions_by_job.get(job_id, 0),
             control=loop.control,
+            pending_edit=_pending_loop_edit(loop),
         )
     return summaries
+
+
+def _pending_loop_edit(loop: Loop) -> Optional[Dict[str, Any]]:
+    """Design D11 (task A2.4): report the staged edit separately from the live fields above,
+    reading only `pending_edit_at`'s own presence — never inferring "is there a pending edit"
+    from the three per-field columns alone, since any one of them staying NULL is a legitimate
+    "not touched by this edit", not "there is no edit"."""
+    if loop.pending_edit_at is None:
+        return None
+    pending: Dict[str, Any] = {
+        "staged_by": loop.pending_edit_actor,
+        "staged_at": loop.pending_edit_at,
+    }
+    if loop.pending_purpose is not None:
+        pending["purpose"] = loop.pending_purpose
+    if loop.pending_stop_at is not None:
+        pending["stop_at"] = loop.pending_stop_at
+    if loop.pending_stop_when_queue_empties is not None:
+        pending["stop_when_queue_empties"] = loop.pending_stop_when_queue_empties
+    return pending
 
 
 @router.post("", response_model=JobResponse, status_code=status.HTTP_201_CREATED)
@@ -493,9 +514,11 @@ async def update_job(
         or body.stop_reason is not None
         or body.spec_document_id is not None
     )
+    staged_edit_event: Optional[Dict[str, Any]] = None
     if loop_fields_supplied:
         loop_result = await session.execute(select(Loop).where(Loop.job_id == job_id))
         loop = loop_result.scalar_one_or_none()
+        loop_already_existed = loop is not None
         if loop is None:
             if not _loop_opts_in(body.purpose, body.stop_at, body.stop_when_queue_empties):
                 raise HTTPException(
@@ -517,12 +540,46 @@ async def update_job(
                 session, project_id, body.spec_document_id, exclude_loop_id=loop.id
             )
             loop.spec_document_id = body.spec_document_id
-        if body.purpose is not None:
-            loop.purpose = body.purpose
-        if body.stop_at is not None:
-            loop.stop_at = body.stop_at
-        if body.stop_when_queue_empties is not None:
-            loop.stop_when_queue_empties = body.stop_when_queue_empties
+
+        # Design D11 (task A2.1/A2.2): once a loop already exists, purpose/stop_at/
+        # stop_when_queue_empties are its *definition*, and an edit to it is always accepted but
+        # never applied on the spot — it is staged here and applied at the loop's next firing,
+        # before that firing's briefing is composed (`scheduler._stage_pending_loop_edit`), so a
+        # firing already under way keeps the definition it was briefed with. A loop being opted
+        # into existence by THIS call has no firing history to protect, so it is written directly,
+        # exactly as loop creation always has been.
+        definition_edit_supplied = (
+            body.purpose is not None
+            or body.stop_at is not None
+            or body.stop_when_queue_empties is not None
+        )
+        if definition_edit_supplied and loop_already_existed:
+            changes: Dict[str, Any] = {}
+            if body.purpose is not None:
+                changes["purpose"] = body.purpose
+                loop.pending_purpose = body.purpose
+            if body.stop_at is not None:
+                changes["stop_at"] = body.stop_at.isoformat()
+                loop.pending_stop_at = body.stop_at
+            if body.stop_when_queue_empties is not None:
+                changes["stop_when_queue_empties"] = body.stop_when_queue_empties
+                loop.pending_stop_when_queue_empties = body.stop_when_queue_empties
+            actor = agent_identity or "operator"
+            loop.pending_edit_actor = actor
+            loop.pending_edit_at = datetime.now(timezone.utc)
+            staged_edit_event = {
+                "id": loop.id,
+                "actor": actor,
+                "changes": changes,
+            }
+        else:
+            if body.purpose is not None:
+                loop.purpose = body.purpose
+            if body.stop_at is not None:
+                loop.stop_at = body.stop_at
+            if body.stop_when_queue_empties is not None:
+                loop.stop_when_queue_empties = body.stop_when_queue_empties
+
         if body.stop_reason is not None:
             loop.stop_reason = body.stop_reason
             # B2.5/D17: an operator stating why this loop stopped is itself "an operator stop" —
@@ -594,6 +651,19 @@ async def update_job(
 
     await session.commit()
     await session.refresh(job)
+
+    if staged_edit_event is not None:
+        # Task A2.5: recorded with actor and time — mirrors `loop_control_changed`'s own
+        # persist_event/broadcast pair (A1), fired after the commit above so a reader reacting to
+        # the event can already see the staged fields on the row.
+        await persist_event(
+            session,
+            project_id,
+            "loop_edit_staged",
+            staged_edit_event,
+            agent=None if staged_edit_event["actor"] == "operator" else staged_edit_event["actor"],
+        )
+        await sse_manager.broadcast(project_id, "loop_edit_staged", staged_edit_event)
 
     # Update scheduler
     if update_scheduler:
