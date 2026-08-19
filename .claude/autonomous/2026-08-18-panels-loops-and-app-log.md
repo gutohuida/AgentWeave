@@ -1041,3 +1041,79 @@ section already works.
 
 Committed, pushed. `current`/`next_action` now point at **L11** (`create_loop` MCP tool,
 `hub/hub/mcp_server.py` + schema widening, tasks 11.1-11.4) — the queue's next item.
+
+## Entry 13 — iteration 13: L11, `create_loop` MCP tool (2026-08-19T00:59-01:09+01:00)
+
+Fresh process. Branch and `git log` matched STATE.json exactly on read (HEAD at the release-heartbeat
+commit following entry 12). Read design D2 (`design.md:48-85`) fresh before touching code, per
+`next_action`'s instruction — it resolves `create_loop`'s shape outright: MCP-only, posting to the same
+`/agent-actions/jobs` route `create_job` already calls.
+
+**Work done: L11 — tasks 11.1-11.4.** Full detail is in the tasks.md note (section 11); summarised here.
+
+Confirmed fresh, correcting the prior iteration's scouting note on one point: `AgentJobCreate`
+(`agent_actions.py`) did not already mirror any of `JobCreate`'s loop fields — not just `initial_tasks`
+as the note assumed, but `purpose`/`stop_at`/`stop_when_queue_empties`/`spec_document_id` were absent
+too, so an agent could never opt a job into a loop through `/agent-actions/jobs` before this iteration.
+Added all five to `AgentJobCreate` together, since `create_governed_job` does
+`JobCreate(**body.model_dump(), source="hub")` and a field missing on one side silently drops. Added
+`initial_tasks: Optional[List[Dict[str, Any]]]` to `JobCreate` itself (`schemas/jobs.py`) — the only
+field genuinely new to that schema.
+
+`create_loop` (`mcp_server.py`) refuses client-side (`HubAPIError(400, ...)`, zero HTTP calls made)
+when neither `stop_at` nor `stop_when_queue_empties` is supplied, before `_job_effect` runs. `POST
+/jobs` itself gained no such check — `JobForm.tsx`'s existing "Make this a loop" section keeps working
+unmodified, per D2's explicit reasoning. `initial_tasks` seeds the queue via `create_task_for_actor`
+(the single `Task(` construction site) — validated into `TaskCreate` objects *before* the job/loop rows
+are created, so one malformed entry 422s before anything is persisted, rather than after (moved earlier
+than my own first draft, once I noticed the original placement would 422 behind an already-committed
+job+loop). The loop-authorship "already fired" gate is satisfied for free, not bypassed:
+`job.run_count` is always 0 for a job the same call just created.
+
+**Tests**: `test_mcp_tool_schemas.py` gained a schema-parity test comparing `create_loop`'s offered
+fields against `AgentJobCreate`'s. `test_mcp_server.py` gained three tests against the existing
+mocked-`urlopen` fixture (refusal makes zero HTTP calls; `stop_at` alone is accepted; full payload
+shape). `test_agent_actions_governed.py` gained three tests against the real app/DB (empty-queue loop;
+`initial_tasks` seeds it with fields round-tripped; a malformed entry 422s). `test_spec_declared_tasks.py`
+gained the spec_document_id integration test spanning section 3 and this section, built through the real
+`/agent-actions/jobs` route rather than the file's existing direct-DB `_declaring_loop` fixture.
+
+**Verification, measured:**
+- `py -3.11 -m pytest hub/tests/test_mcp_server.py hub/tests/test_mcp_tool_schemas.py -q` — 45 passed.
+- `py -3.11 -m pytest hub/tests/test_jobs.py hub/tests/test_scheduler.py
+  hub/tests/test_agent_actions_governed.py hub/tests/test_spec_declared_tasks.py
+  hub/tests/test_mcp_server.py hub/tests/test_mcp_tool_schemas.py hub/tests/test_tasks.py -q` — 130
+  passed, 1 skipped (pre-existing croniter skip).
+- `ruff check` on every touched file — clean.
+- `black --fast` — `jobs.py` and `test_agent_actions_governed.py` needed wrap-only reformatting;
+  reformatted, re-verified green.
+- `mypy`, filtered per file against the baseline: `mcp_server.py` 1 line (matches baseline exactly —
+  `create_loop` added zero new errors, fully annotated); `jobs.py` 16 lines (matches baseline exactly);
+  `agent_actions.py` 34 lines — baseline's 33 errors plus one `note:` attached to a pre-existing error,
+  every category and count otherwise identical; `schemas/jobs.py` 0 lines, matching baseline's absence
+  of an entry. Zero new errors across all four touched files.
+- `npx openspec validate --changes --strict` — 2/2.
+
+No Hub restart this iteration: verified entirely through pytest, no UI or live-Hub surface to exercise.
+
+Marked 11.1-11.4 done in `tasks.md` with a dated note, and updated the summary line to "Sections 1-11
+are implemented and verified."
+
+**Scouted ahead for L12 (full-suite verification + mutation checks, tasks 12.1-12.5)**: 12.1 is the full
+`hub/tests` suite (background — exceeds the 600s foreground cap per the traps list). 12.2 is
+pre-authorised: rescope to "no new errors vs `.claude/autonomous/mypy-baseline.txt`", do not attempt to
+clean 361 pre-existing errors. 12.3 is `npx openspec validate --changes --strict` from the repo root —
+already 2/2 as of this iteration, re-run after 12.1's suite in case anything in between drifted. 12.4
+mutation-checks design D3's claim-selection determinism: temporarily revert the deterministic-selection
+logic in `hub/hub/scheduler.py` (the claim-the-current-item code section 6 built) to "always claim the
+newest task" and confirm `test_loop_fire_claims_the_oldest_pending_task`
+(`hub/tests/test_scheduler.py:371`) fails by name, then revert the mutation. 12.5 mutation-checks design
+D8's identity check: temporarily remove the string-equality comparison in
+`_authorize_loop_task_creation` (`hub/hub/api/v1/tasks.py:286-311`, section 5's own gate) and confirm
+`test_loop_non_creator_non_operator_is_refused_and_told_to_send_message`
+(`hub/tests/test_agent_actions_coordination.py:238`) fails by name, then revert. Both mutation checks are
+temporary edits, reverted immediately after confirming the named test fails — never left in the tree.
+
+Committed, pushed. `current`/`next_action` now point at **L12** (full-suite verification + mutation
+checks, tasks 12.1-12.5) — the queue's next item, and the last item in the loop-writes-its-own-queue
+change before P4 (panel work) resumes.

@@ -215,6 +215,59 @@ def test_job_mutations_reach_only_governed_api(call, method, path, body, hub):
     assert _body(calls[0]) == body
 
 
+def test_create_loop_refuses_with_no_stop_condition_before_any_hub_call(hub):
+    """Design D2: the refusal is client-side, in `create_loop` itself, checked before the HTTP
+    call is made — a loop with no stop condition never reaches the Hub at all."""
+    from hub.mcp_server import HubAPIError, create_loop
+
+    calls, _ = hub
+    with pytest.raises(HubAPIError, match="stop condition"):
+        create_loop("N", "worker", "M", "0 2 * * *")
+    assert calls == []
+
+
+def test_create_loop_accepts_stop_at_alone(hub):
+    from hub.mcp_server import create_loop
+
+    calls, responses = hub
+    responses.append(b'{"ok":true}')
+    create_loop("N", "worker", "M", "0 2 * * *", stop_at="2026-09-01T00:00:00Z")
+    assert calls[0].method == "POST"
+
+
+def test_create_loop_sends_the_widened_governed_jobs_payload(hub):
+    """`create_loop` posts to the same `/agent-actions/jobs` route `create_job` does, now
+    widened with the loop-opt-in and `initial_tasks` fields (design D2). No `session_mode` —
+    a loop's continuity is always by checkpoint (design D4), never a resumed session."""
+    from hub.mcp_server import create_loop
+
+    calls, responses = hub
+    responses.append(b'{"ok":true}')
+    create_loop(
+        "Nightly decomposition",
+        "worker",
+        "Work the queue",
+        "0 2 * * *",
+        purpose="decompose the backlog",
+        stop_when_queue_empties=True,
+        spec_document_id="doc-1",
+        initial_tasks=[{"title": "First task"}],
+    )
+    assert calls[0].method == "POST"
+    assert calls[0].full_url.endswith("/api/v1/agent-actions/jobs")
+    assert _body(calls[0]) == {
+        "name": "Nightly decomposition",
+        "agent": "worker",
+        "message": "Work the queue",
+        "cron": "0 2 * * *",
+        "purpose": "decompose the backlog",
+        "stop_at": None,
+        "stop_when_queue_empties": True,
+        "spec_document_id": "doc-1",
+        "initial_tasks": [{"title": "First task"}],
+    }
+
+
 def test_job_mutation_preserves_forbidden_failure(hub):
     from hub.mcp_server import HubAPIError, run_job
 

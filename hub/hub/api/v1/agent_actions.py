@@ -4,7 +4,8 @@ Capability routers are added here phase-by-phase. Keeping a distinct namespace m
 impossible to accidentally apply the project-key dependency to an agent operation.
 """
 
-from typing import Any, List, Optional
+from datetime import datetime
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field, field_validator
@@ -165,6 +166,15 @@ class AgentJobCreate(BaseModel):
     cron: str = Field(max_length=128)
     session_mode: str = Field(default="new", max_length=64)
     enabled: bool = True
+    # Mirrors `JobCreate`'s loop-opt-in fields (`2026-08-18-a-loop-writes-its-own-queue` design
+    # D2). `create_governed_job` builds `JobCreate(**body.model_dump(), source="hub")` from this
+    # schema, so a field present there but not here silently drops on the agent path — this is
+    # what `create_loop` (MCP-only, `mcp_server.py`) posts through.
+    purpose: Optional[str] = Field(default=None, max_length=4000)
+    stop_at: Optional[datetime] = None
+    stop_when_queue_empties: bool = False
+    spec_document_id: Optional[str] = Field(default=None, max_length=64)
+    initial_tasks: Optional[List[Dict[str, Any]]] = None
 
     model_config = {"extra": "forbid"}
 

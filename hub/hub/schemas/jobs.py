@@ -25,6 +25,12 @@ class JobCreate(BaseModel):
     # unique across loops at the route layer (409) and the DB layer (`Loop.spec_document_id`'s own
     # `unique=True`), not just one or the other.
     spec_document_id: Optional[str] = Field(default=None, max_length=64)
+    # Seeds the new loop's queue in the same call that creates it (design D2, `create_loop`'s
+    # "definition window"). Each entry is the same shape `TaskCreate` accepts — a plain dict
+    # rather than a nested model, matching `submit_spec_document`'s own reasoning: a closed
+    # object type would silently drop a field a later schema version adds. Ignored (never an
+    # implicit loop opt-in) unless the job is already opting into a loop via the fields above.
+    initial_tasks: Optional[List[Dict[str, Any]]] = None
 
     model_config = {"extra": "forbid"}
 

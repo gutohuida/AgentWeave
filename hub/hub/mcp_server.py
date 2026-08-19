@@ -534,6 +534,65 @@ def create_job(
 
 
 @mcp.tool()
+def create_loop(
+    name: str,
+    agent: str,
+    message: str,
+    cron: str,
+    purpose: str = "",
+    stop_at: Optional[str] = None,
+    stop_when_queue_empties: bool = False,
+    spec_document_id: Optional[str] = None,
+    initial_tasks: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    """Create a loop: recurring work with a stated purpose and a stop condition.
+
+    Continuity across firings is by checkpoint (see submit_checkpoint_notes), never by a
+    resumed session — every firing starts fresh. Refused outright with no stop condition: a
+    loop that cannot stop is not created.
+
+    Args:
+        name: Job name.
+        agent: Exact name of the registered agent the loop triggers.
+        message: The message delivered to that agent on each firing.
+        cron: Cron expression for the schedule.
+        purpose: What this loop exists to do — carried into every firing's briefing.
+        stop_at: ISO-8601 timestamp after which the loop stops firing. At least one of
+            stop_at or stop_when_queue_empties is required.
+        stop_when_queue_empties: Stop once this loop's queue has no open task left.
+        spec_document_id: A specification document this loop decomposes. Tasks materialised
+            from that document, once it is approved, are added to this loop's queue
+            automatically.
+        initial_tasks: Tasks to seed the queue with, created in this same call. Each entry is
+            a dict with "title" required and the same optional fields create_task accepts:
+            description, assignee, priority, requirements, requirement_ids, spec_document,
+            acceptance_criteria.
+    """
+    if stop_at is None and not stop_when_queue_empties:
+        raise HubAPIError(
+            400,
+            "a loop needs a stop condition: supply stop_at or stop_when_queue_empties=True",
+            "POST",
+            "/jobs",
+        )
+    return _job_effect(
+        "POST",
+        "/jobs",
+        {
+            "name": name,
+            "agent": agent,
+            "message": message,
+            "cron": cron,
+            "purpose": purpose,
+            "stop_at": stop_at,
+            "stop_when_queue_empties": stop_when_queue_empties,
+            "spec_document_id": spec_document_id,
+            "initial_tasks": initial_tasks,
+        },
+    )
+
+
+@mcp.tool()
 def delete_job(job_id: str) -> Dict[str, Any]:
     """Delete recurring work only when the operator enabled the allowance."""
     return _job_effect("DELETE", f"/jobs/{job_id}")

@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
+from pydantic import ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,8 +13,11 @@ from ...auth import get_project
 from ...db.engine import get_session
 from ...db.models import AgentJobDeletion, AIJob, JobRun, Loop, Project, Question, Run, Task
 from ...schemas.jobs import JobCreate, JobResponse, JobRunResponse, JobUpdate, LoopSummary
+from ...schemas.tasks import TaskCreate
 from ...sse import sse_manager
+from ...task_transitions import operator, run_actor
 from ...utils import persist_event, short_id
+from .tasks import create_task_for_actor
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
@@ -231,6 +235,18 @@ async def create_job(
             detail=f"Invalid cron expression: {e}",
         ) from e
 
+    # Design D2's "definition window": `initial_tasks` is validated up front, before any row is
+    # created, so one malformed entry cannot leave a job (and its loop) half-created behind a 422.
+    initial_task_bodies: List[TaskCreate] = []
+    for item in body.initial_tasks or []:
+        try:
+            initial_task_bodies.append(TaskCreate(**item))
+        except ValidationError as e:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"invalid initial_tasks entry: {e}",
+            ) from e
+
     job_id = f"job-{short_id()}"
 
     # Compute next run
@@ -303,6 +319,27 @@ async def create_job(
             current_task=None,
             open_questions=0,
         )
+
+        # Seeds the new loop's queue in the same call that creates it (design D2's "definition
+        # window"). `create_task_for_actor` is the single `Task(` construction site — reused here
+        # rather than duplicated — and its own loop-authorship gate (`_authorize_loop_task_creation`)
+        # is satisfied for free: `job.run_count` is always 0 for a job this call just created, so
+        # the "already fired" restriction it enforces never applies here.
+        actor = (
+            run_actor(run_identity, agent_identity)
+            if agent_identity and run_identity
+            else operator()
+        )
+        for task_body in initial_task_bodies:
+            task_body.loop_id = loop.id
+            await create_task_for_actor(
+                task_body,
+                project_id=project_id,
+                assigner=agent_identity,
+                created_by_run_id=run_identity,
+                actor=actor,
+                session=session,
+            )
 
     # Add to scheduler if enabled
     try:

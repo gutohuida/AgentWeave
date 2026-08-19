@@ -1,6 +1,6 @@
 # Tasks — A loop writes its own queue
 
-Sections 1-10 are implemented and verified (dated notes below); everything from section 11 onward is
+Sections 1-11 are implemented and verified (dated notes below); everything from section 12 onward is
 still a spec only, unchecked — CLAUDE.md: "Never mark a task complete on the strength of a plan
 existing."
 
@@ -744,21 +744,110 @@ existing."
 
 ## 11. `create_loop` MCP tool (`hub/hub/mcp_server.py`)
 
-- [ ] 11.1 New `@mcp.tool() create_loop(name, agent, message, cron, purpose="", stop_at=None,
+- [x] 11.1 New `@mcp.tool() create_loop(name, agent, message, cron, purpose="", stop_at=None,
       stop_when_queue_empties=False, spec_document_id=None, initial_tasks=None)` (design D2), gated
       by the same `_require_agent_job_allowance` `create_job` already uses. Refuses (400) creation
       when neither `stop_at` nor `stop_when_queue_empties` is supplied — a loop with no stop condition
       is refused outright, per design D2.
-- [ ] 11.2 `initial_tasks`, if supplied, creates the named tasks with `loop_id` set to the new loop's
+- [x] 11.2 `initial_tasks`, if supplied, creates the named tasks with `loop_id` set to the new loop's
       id in the same call — the "definition window" design D7 treats as pre-first-fire authorship,
       not subject to D7's post-first-fire gate.
-- [ ] 11.3 `test_mcp_tool_schemas.py`: assert `create_loop`'s generated schema agrees with the REST
+- [x] 11.3 `test_mcp_tool_schemas.py`: assert `create_loop`'s generated schema agrees with the REST
       schema it calls, matching the existing pattern for every other MCP tool restated from the Hub's
       validators (CLAUDE.md's standing rule for `mcp_server.py`).
-- [ ] 11.4 Tests: `create_loop` with no stop condition is refused; with a stop condition and no
+- [x] 11.4 Tests: `create_loop` with no stop condition is refused; with a stop condition and no
       initial tasks, creates an empty-queue loop; with `initial_tasks`, creates a loop whose queue
       already holds them; with `spec_document_id`, creates a loop that later materialises tasks into
       its queue when that document is approved (integration test spanning 3.1 and 11.1).
+
+      **2026-08-19, iteration 13.** `create_loop` calls the same `/agent-actions/jobs` route
+      (`create_governed_job` → `create_job`) `create_job` already calls, per design D2's stated
+      shape — no new REST route. `JobCreate` already had `purpose`/`stop_at`/
+      `stop_when_queue_empties`/`spec_document_id` (sections 1-5); the only schema widening this
+      section needed was `initial_tasks: Optional[List[Dict[str, Any]]]`, added to `JobCreate`
+      (`schemas/jobs.py`) — a plain-dict shape, not a nested model, matching
+      `submit_spec_document`'s own reasoning against closed object types. Confirmed fresh that
+      `AgentJobCreate` (`agent_actions.py`) did **not** already mirror `JobCreate`'s loop fields at
+      all (not just `initial_tasks` — `purpose`/`stop_at`/`stop_when_queue_empties`/
+      `spec_document_id` were absent too, so an agent could never opt a job into being a loop
+      through `/agent-actions/jobs` before this section), so all five fields were added there
+      together — `create_governed_job` builds `JobCreate(**body.model_dump(), source="hub")`, so a
+      field on one schema and not the other silently drops the caller's intent.
+
+      The "no stop condition" refusal lives in `create_loop` itself (`mcp_server.py`), raised as
+      `HubAPIError(400, ..., "POST", "/jobs")` **before** `_hub_request`/`_job_effect` is called —
+      reusing `HubAPIError`'s existing "Hub rejected ..." shape for a rejection the Hub never saw,
+      rather than inventing a second exception type for what an agent experiences identically
+      either way. `POST /jobs` itself gained no such check, per D2: the operator's own
+      `JobForm.tsx` "Make this a loop" section already posts a `purpose`-only, no-stop-condition
+      job and must keep working unmodified. `stop_at` is typed `Optional[str]` (an ISO-8601
+      timestamp) on the MCP surface, matching what `JobForm.tsx` already sends over the wire
+      (`new Date(stopAt).toISOString()`) — `mcp_server.py` stays stdlib-only, so it never touches a
+      `datetime` object itself.
+
+      Seeding the queue (11.2) reuses `create_task_for_actor` — the single `Task(` construction
+      site (`tasks.py`) — rather than a second construction, per CLAUDE.md's standing instruction
+      for `mcp_server.py`-adjacent Hub code. `initial_tasks` entries are validated into
+      `TaskCreate` objects **before** the job or loop row is created (moved earlier than the first
+      draft of this section put it), so one malformed entry 422s before anything is persisted,
+      never leaving a half-created job+loop behind — the same "no error response leaves partial
+      state" discipline design D4's resume-refusal already established for this route. Task
+      authorship's own gate (`_authorize_loop_task_creation`'s "already fired" check) is satisfied
+      for free, not bypassed: `job.run_count` is always `0` for a job this same call just created,
+      so D7's post-first-fire restriction structurally cannot fire here — decided against a special
+      bypass parameter, since the existing gate already produces the right answer unmodified.
+
+      Tests: `test_mcp_tool_schemas.py` gained
+      `test_create_loop_offers_exactly_the_fields_the_route_it_posts_to_accepts`, asserting
+      `create_loop`'s generated schema's property set equals `AgentJobCreate`'s fields minus
+      `session_mode`/`enabled` (deliberately absent — a loop's continuity is always by checkpoint,
+      design D4, and an agent could not usefully create a disabled loop). `test_mcp_server.py`
+      gained three tests against the existing mocked-`urlopen` `hub` fixture: the no-stop-condition
+      refusal fires with **zero** HTTP calls made (`calls == []`, mirroring
+      `test_effect_refuses_unbound_run_credential`'s own assertion shape); `stop_at` alone is
+      accepted; and the full payload shape reaches `/api/v1/agent-actions/jobs` unchanged.
+      `test_agent_actions_governed.py` gained three tests against the real `app`/DB: a stop
+      condition with no `initial_tasks` produces a `Loop` row with zero queued `Task`s; supplying
+      `initial_tasks` produces `Task` rows carrying the new loop's id with fields round-tripped
+      (`title`/`description`/`priority`); and a malformed entry (missing `title`) 422s.
+      `test_spec_declared_tasks.py` gained
+      `test_create_loop_declares_a_document_that_later_materialises_into_its_queue`, the integration
+      case spanning section 3 and this section: a loop created through the real
+      `/agent-actions/jobs` route with `spec_document_id` set, whose queue is empty until the
+      document is later approved through the normal spec-lifecycle route, at which point
+      `spec_tasks.materialise()` (section 3, unmodified by this section) stamps the produced tasks
+      with this loop's id — mirroring the existing `_declaring_loop`-fixture version of the same
+      test, but building the loop through the API this section added instead of constructing the
+      row directly.
+
+      **Verification, measured:**
+      - `py -3.11 -m pytest hub/tests/test_mcp_server.py hub/tests/test_mcp_tool_schemas.py -q` —
+        **45 passed**.
+      - `py -3.11 -m pytest hub/tests/test_agent_actions_governed.py
+        hub/tests/test_spec_declared_tasks.py -q` — **17 passed**.
+      - `py -3.11 -m pytest hub/tests/test_jobs.py hub/tests/test_scheduler.py
+        hub/tests/test_agent_actions_governed.py hub/tests/test_spec_declared_tasks.py
+        hub/tests/test_mcp_server.py hub/tests/test_mcp_tool_schemas.py hub/tests/test_tasks.py -q`
+        — **130 passed, 1 skipped** (the pre-existing `croniter`-not-installed skip) — the wider
+        sweep of every suite reading `AIJob`/`Loop`/`Task` state this section touches, confirming
+        no regression to sections 1-10 or to plain (non-loop) task/job creation.
+      - `py -3.11 -m ruff check` on every touched file — clean.
+      - `black --fast` — `hub/hub/api/v1/jobs.py` and `hub/tests/test_agent_actions_governed.py`
+        needed reformatting (wrapping only, no logic change); reformatted and re-verified green;
+        the other touched files were already formatted.
+      - `py -3.11 -m mypy` on `hub/hub/mcp_server.py`, `hub/hub/api/v1/jobs.py`,
+        `hub/hub/api/v1/agent_actions.py`, `hub/hub/schemas/jobs.py`, filtered to lines attributed
+        to each file, against `.claude/autonomous/mypy-baseline.txt`: `mcp_server.py` 1 line
+        (matches baseline's 1 exactly — `create_loop` itself is fully annotated, so it added
+        nothing); `jobs.py` 16 lines (matches baseline's 16 exactly, same as section 8's
+        confirmation); `agent_actions.py` 34 lines, which is baseline's 33 **errors** plus one
+        `note:` line attached to a pre-existing error (not a new error — every error *category*
+        and count matches baseline exactly); `schemas/jobs.py` 0 lines, matching baseline's absence
+        of an entry for that file — **zero new errors** across all four.
+      - `npx openspec validate --changes --strict` (repo root) — 2/2.
+
+      No Hub restart this iteration: like sections 3-10, this section is verified entirely through
+      pytest against the API layer, with no UI or live-Hub surface to exercise.
 
 ## 12. Full-suite verification — agent-verifiable
 

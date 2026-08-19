@@ -354,6 +354,64 @@ async def test_a_document_with_a_declaring_loop_stamps_its_tasks_with_the_loop(
 
 
 @pytest.mark.asyncio
+async def test_create_loop_declares_a_document_that_later_materialises_into_its_queue(
+    app, auth_headers, author
+):
+    """Integration across section 3 (`spec_tasks.materialise` stamps `loop_id`) and section 11
+    (`create_loop`, `mcp_server.py`, declares `spec_document_id` at creation via the widened
+    `/agent-actions/jobs` route — design D1/D2): a loop created through the agent-facing route
+    still owns the tasks a later approval of that document produces, exactly like a loop built
+    directly against the model in `_declaring_loop` above."""
+    await make_document(app, auth_headers, author)
+
+    from sqlalchemy import select
+
+    from hub.db.models import SpecDocument
+
+    async with async_session_factory() as session:
+        document = (
+            (await session.execute(select(SpecDocument).where(SpecDocument.path == PATH)))
+            .scalars()
+            .first()
+        )
+        document_id = document.id
+
+    settings = await app.patch(
+        "/api/v1/projects/proj-test/queue/settings",
+        headers=auth_headers,
+        json={
+            "hop_budget": 8,
+            "turn_delivery_cap": 10,
+            "agent_budget": 8,
+            "allow_agent_jobs": True,
+        },
+    )
+    assert settings.status_code == 200
+
+    created = await app.post(
+        "/api/v1/agent-actions/jobs",
+        headers=author,
+        json={
+            "name": "decomposition loop",
+            "agent": "author",
+            "message": "decompose the document",
+            "cron": "0 9 * * *",
+            "stop_when_queue_empties": True,
+            "spec_document_id": document_id,
+        },
+    )
+    assert created.status_code == 201, created.text
+    loop_id = created.json()["loop"]["id"]
+
+    response = await approve(app, auth_headers)
+    assert len(response.json()["tasks_created"]) == 2
+
+    on_the_loop = await app.get(TASKS, params={"loop_id": loop_id}, headers=auth_headers)
+    assert on_the_loop.status_code == 200, on_the_loop.text
+    assert len(on_the_loop.json()) == 2
+
+
+@pytest.mark.asyncio
 async def test_a_document_with_no_declaring_loop_stamps_nothing(app, auth_headers, author):
     """Unchanged from before this change: no declaring loop means `loop_id` stays `None`."""
     await make_document(app, auth_headers, author)

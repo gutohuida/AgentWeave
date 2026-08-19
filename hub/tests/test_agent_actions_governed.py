@@ -5,7 +5,17 @@ from sqlalchemy import select
 
 from hub.agent_auth import hash_run_token
 from hub.db.engine import async_session_factory
-from hub.db.models import Agent, AgentJobDeletion, AIJob, JobRun, Project, ProjectSession, Run
+from hub.db.models import (
+    Agent,
+    AgentJobDeletion,
+    AIJob,
+    JobRun,
+    Loop,
+    Project,
+    ProjectSession,
+    Run,
+    Task,
+)
 
 
 async def _actor(agent: str = "lead", run_id: str = "run-governed") -> dict[str, str]:
@@ -128,3 +138,114 @@ async def test_agent_job_operations_require_allowance_and_retain_run(app, auth_h
         ).scalar_one()
         assert audit.run_id == "run-job-owner"
         assert audit.agent == "lead"
+
+
+async def _allow_agent_jobs(app, auth_headers):
+    settings = await app.patch(
+        "/api/v1/projects/proj-test/queue/settings",
+        headers=auth_headers,
+        json={
+            "hop_budget": 8,
+            "turn_delivery_cap": 10,
+            "agent_budget": 8,
+            "allow_agent_jobs": True,
+        },
+    )
+    assert settings.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_create_loop_via_agent_actions_with_a_stop_condition_makes_an_empty_queue_loop(
+    app, auth_headers
+):
+    """`create_loop` (`mcp_server.py`) posts here — `/agent-actions/jobs` widened with the loop
+    fields (design D2, `2026-08-18-a-loop-writes-its-own-queue`). No `initial_tasks` supplied, so
+    the loop exists with nothing queued."""
+    headers = await _actor(run_id="run-loop-empty")
+    await _allow_agent_jobs(app, auth_headers)
+
+    created = await app.post(
+        "/api/v1/agent-actions/jobs",
+        headers=headers,
+        json={
+            "name": "nightly loop",
+            "agent": "lead",
+            "message": "work the queue",
+            "cron": "0 2 * * *",
+            "purpose": "decompose the backlog",
+            "stop_when_queue_empties": True,
+        },
+    )
+    assert created.status_code == 201, created.text
+    job_id = created.json()["id"]
+    loop = created.json()["loop"]
+    assert loop is not None
+    assert loop["purpose"] == "decompose the backlog"
+
+    async with async_session_factory() as session:
+        loop_row = (await session.execute(select(Loop).where(Loop.job_id == job_id))).scalar_one()
+        assert loop_row.created_by_run_id == "run-loop-empty"
+        queued = (
+            (await session.execute(select(Task).where(Task.loop_id == loop_row.id))).scalars().all()
+        )
+        assert queued == []
+
+
+@pytest.mark.asyncio
+async def test_create_loop_via_agent_actions_with_initial_tasks_seeds_the_queue(app, auth_headers):
+    """`initial_tasks` creates the named tasks with `loop_id` set to the new loop's id, in the
+    same call (design D2 task 11.2) — the "definition window" is pre-first-fire authorship, so
+    the loop's own creator adding to its own brand-new queue is never subject to design D7's
+    already-fired gate (`job.run_count` is 0 for a job this same call just created)."""
+    headers = await _actor(run_id="run-loop-seeded")
+    await _allow_agent_jobs(app, auth_headers)
+
+    created = await app.post(
+        "/api/v1/agent-actions/jobs",
+        headers=headers,
+        json={
+            "name": "seeded loop",
+            "agent": "lead",
+            "message": "work the queue",
+            "cron": "0 2 * * *",
+            "stop_when_queue_empties": True,
+            "initial_tasks": [
+                {"title": "First task", "description": "Do the first thing"},
+                {"title": "Second task", "priority": "high"},
+            ],
+        },
+    )
+    assert created.status_code == 201, created.text
+    job_id = created.json()["id"]
+
+    async with async_session_factory() as session:
+        loop_row = (await session.execute(select(Loop).where(Loop.job_id == job_id))).scalar_one()
+        queued = (
+            (await session.execute(select(Task).where(Task.loop_id == loop_row.id))).scalars().all()
+        )
+        assert {task.title for task in queued} == {"First task", "Second task"}
+        assert all(task.loop_id == loop_row.id for task in queued)
+        by_title = {task.title: task for task in queued}
+        assert by_title["First task"].description == "Do the first thing"
+        assert by_title["Second task"].priority == "high"
+
+
+@pytest.mark.asyncio
+async def test_create_loop_via_agent_actions_rejects_an_invalid_initial_task(app, auth_headers):
+    """A malformed entry is refused (422) rather than silently dropped or stored half-shaped."""
+    headers = await _actor(run_id="run-loop-bad-task")
+    await _allow_agent_jobs(app, auth_headers)
+
+    created = await app.post(
+        "/api/v1/agent-actions/jobs",
+        headers=headers,
+        json={
+            "name": "bad loop",
+            "agent": "lead",
+            "message": "work the queue",
+            "cron": "0 2 * * *",
+            "stop_when_queue_empties": True,
+            "initial_tasks": [{"description": "No title at all"}],
+        },
+    )
+    assert created.status_code == 422, created.text
