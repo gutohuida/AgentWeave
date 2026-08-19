@@ -29,7 +29,7 @@ export function SpecDocumentTasksLink({ path, onOpenTasks }: SpecDocumentTasksLi
     <div
       className="flex shrink-0 items-center gap-1.5 px-3 py-1.5 text-xs"
       data-testid="spec-document-tasks-link"
-      style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-2)' }}
+      style={{ color: 'var(--text-2)' }}
     >
       <Icon name="task_alt" size={14} />
       {onOpenTasks ? (

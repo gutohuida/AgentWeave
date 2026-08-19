@@ -95,7 +95,7 @@ export function SpecCoverageBar({ path, onOpenTasks }: SpecCoverageBarProps) {
     <div
       className="flex shrink-0 flex-col gap-1.5 px-3 py-2 text-xs"
       data-testid="spec-coverage"
-      style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-2)' }}
+      style={{ color: 'var(--text-2)' }}
     >
       <button
         type="button"

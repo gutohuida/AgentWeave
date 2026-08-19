@@ -41,7 +41,6 @@ export function FilesIndexTab({ paths, isLoading, currentPath, onSelect }: Files
         style={{
           padding: '12px 14px',
           border: 'none',
-          borderBottom: '1px solid var(--border)',
           background: 'transparent',
           color: 'var(--text)',
           fontSize: 13,

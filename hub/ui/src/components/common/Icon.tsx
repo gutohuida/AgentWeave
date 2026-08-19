@@ -62,6 +62,25 @@ import {
   Wrench,
   X,
   Zap,
+  // File-type glyphs for the files tab's tree and tabs. Lucide dropped brand marks, so there is
+  // no literal Docker whale or Python logo to use — `Container` and the generic code/config
+  // shapes below are the closest honest equivalents, and staying inside lucide is what keeps
+  // CLAUDE.md's "one icon system" rule true.
+  Braces,
+  Container,
+  Database,
+  FileCode2,
+  FileCog,
+  FileImage,
+  FileJson2,
+  FileLock2,
+  FileType2,
+  GitBranch,
+  Hash,
+  Package,
+  Palette,
+  ScrollText,
+  Sheet,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -79,6 +98,22 @@ import {
 const ICONS: Record<string, LucideIcon> = {
   add: Plus,
   all_inclusive: InfinityIcon,
+  // --- file-type glyphs (see fileIcons.ts for the extension -> name mapping) ---
+  file_braces: Braces,
+  file_code: FileCode2,
+  file_config: FileCog,
+  file_container: Container,
+  file_database: Database,
+  file_image: FileImage,
+  file_json: FileJson2,
+  file_lock: FileLock2,
+  file_markdown: ScrollText,
+  file_package: Package,
+  file_sheet: Sheet,
+  file_style: Palette,
+  file_type: FileType2,
+  file_vcs: GitBranch,
+  hash: Hash,
   archive: Archive,
   arrow_downward: ArrowDown,
   arrow_left: ArrowLeft,
@@ -207,6 +242,12 @@ interface ProviderMarkProps {
   size?: number
   className?: string
 }
+
+/** Every name `Icon` will render. Exported so callers that *compute* a name — `fileIcons.ts` maps
+ *  a filename to one — can assert in a test that every name they can produce exists here. An
+ *  unknown name renders nothing and only warns to the console, which is how `all_inclusive`
+ *  shipped invisible in `JobCard`. */
+export const ICON_NAMES: readonly string[] = Object.keys(ICONS)
 
 /** A provider's brand mark, or a text-initials fallback for a provider this module has no
  * mark for — the "unknown provider falls back to a text label rather than a wrong mark"

@@ -42,6 +42,37 @@ describe('PanelShell', () => {
     expect(screen.getByRole('tablist')).toBeInTheDocument()
   })
 
+  it('the empty state is a launcher offering every openable panel, not just a hint', () => {
+    // It used to be one line of grey text pointing at the `+`, which said where to click without
+    // saying what could be opened (operator, 2026-08-19).
+    renderShell()
+
+    expect(screen.getByTestId('panel-launch-specs')).toBeInTheDocument()
+    expect(screen.getByTestId('panel-launch-files')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Specs/ })).toBeInTheDocument()
+  })
+
+  it('a launcher card opens its panel', async () => {
+    const user = userEvent.setup()
+    renderShell()
+
+    await user.click(screen.getByTestId('panel-launch-files'))
+
+    expect(await screen.findByTestId('panel-tab-files')).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByTestId('content-body')).toHaveTextContent('content for files')
+    expect(screen.queryByTestId('panel-empty-state')).not.toBeInTheDocument()
+  })
+
+  it('the launcher offers exactly what the plus menu does — one set, two doors', () => {
+    renderShell([DESCRIPTORS.specs, DESCRIPTORS.files])
+
+    const launched = screen
+      .getAllByTestId(/^panel-launch-/)
+      .map((el) => el.getAttribute('data-testid')?.replace('panel-launch-', ''))
+
+    expect(launched).toEqual(['specs', 'files'])
+  })
+
   it('renders exactly one tab’s content at a time', () => {
     usePanelTabsStore.getState().openTab(PROJECT, 'specs')
     usePanelTabsStore.getState().openTab(PROJECT, 'files')

@@ -16,6 +16,14 @@ export interface PanelTabDescriptor {
   icon: string
 }
 
+/** One line saying what a panel is *for*, shown only on the empty-state launcher cards. Keyed by
+ *  the index tab ids, which are a closed literal set; a kind with no entry simply shows none. */
+const PANEL_BLURBS: Record<string, string> = {
+  specs: 'Browse and read specification documents',
+  files: 'Browse this project’s workspace files',
+  loops: 'What is running, and what it has queued',
+}
+
 interface PanelShellProps {
   projectId: string
   /** Index tabs the plus affordance can open, in a fixed display order. Only entries not already
@@ -119,7 +127,6 @@ export function PanelShell({ projectId, availableTabs, describeTab, renderTabCon
         aria-label="Panel"
         aria-orientation="horizontal"
         className="flex shrink-0 items-center gap-0.5 overflow-x-auto px-1"
-        style={{ borderBottom: '1px solid var(--border)' }}
         data-testid="panel-tab-strip"
       >
         {panel.tabs.map((tab, index) => {
@@ -186,14 +193,46 @@ export function PanelShell({ projectId, availableTabs, describeTab, renderTabCon
             {renderTabContent(activeTab)}
           </div>
         ) : (
-          // Task 2.1 / user test guide step 1: a shell with nothing open is a real, chosen state
-          // (task 3's specs-index tenant is what usually fills this), never an empty grey box.
+          /* Task 2.1 / user test guide step 1: a shell with nothing open is a real, chosen state,
+           * never an empty grey box. It used to be one line of grey text pointing at the `+`,
+           * which told the operator where to click without telling them what they could open —
+           * so the panel read as broken rather than as waiting (operator, 2026-08-19: "when we
+           * open the right screen and there is nothing there weird"). It is now a launcher: every
+           * tab this shell can open, as a card, the same shape T3 uses for its own empty right
+           * panel. The `+` menu still exists and offers exactly the same set. */
           <div
-            className="flex h-full items-center justify-center p-4 text-center"
-            style={{ color: 'var(--text-3)', fontSize: 12 }}
+            className="flex h-full flex-col items-center justify-center p-6"
             data-testid="panel-empty-state"
           >
-            No tabs open. Use the + button to add one.
+            <p
+              className="mb-4 text-center"
+              style={{ color: 'var(--text-3)', fontSize: 12 }}
+            >
+              Open a panel
+            </p>
+            <div className="grid w-full max-w-[420px] grid-cols-2 gap-2">
+              {availableTabs.map((descriptor) => (
+                <button
+                  key={descriptor.id}
+                  type="button"
+                  data-testid={`panel-launch-${descriptor.id}`}
+                  onClick={() => openTab(projectId, descriptor.id)}
+                  className="flex flex-col items-start gap-1.5 rounded-[var(--radius-md)] p-3 text-left"
+                  style={{
+                    background: 'var(--surface-2)',
+                    border: '1px solid var(--border)',
+                    color: 'var(--text)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <Icon name={descriptor.icon} size={18} />
+                  <span style={{ fontSize: 13, fontWeight: 500 }}>{descriptor.label}</span>
+                  <span style={{ fontSize: 11, color: 'var(--text-3)' }}>
+                    {PANEL_BLURBS[descriptor.id] ?? ''}
+                  </span>
+                </button>
+              ))}
+            </div>
           </div>
         )}
       </div>

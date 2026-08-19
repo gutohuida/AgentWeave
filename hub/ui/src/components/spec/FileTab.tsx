@@ -2,6 +2,8 @@ import { Icon } from '@/components/common/Icon'
 import { Button } from '@/components/ui/button'
 import { readableApiError } from '@/api/client'
 import { useWorkspaceFile } from '@/api/workspace'
+import { fileColourFor, fileIconFor } from './fileIcons'
+import { FilePreview } from './FilePreview'
 
 interface FileTabProps {
   path: string
@@ -30,7 +32,7 @@ export function FileTab({ path, onInsertIntoComposer, onClose }: FileTabProps) {
     >
       <div className="flex shrink-0 items-center gap-2 px-3 py-2">
         <div className="flex min-w-0 items-center gap-1.5 px-2 py-1" title={path}>
-          <Icon name="description" size={14} />
+          <Icon name={fileIconFor(path)} size={14} style={{ color: fileColourFor(path) }} />
           <span className="truncate" style={{ fontSize: 12, color: 'var(--text-2)' }}>
             {filename}
           </span>
@@ -73,20 +75,7 @@ export function FileTab({ path, onInsertIntoComposer, onClose }: FileTabProps) {
             This file is binary ({data.size.toLocaleString()} bytes) and cannot be previewed.
           </div>
         ) : (
-          <pre
-            data-testid="file-tab-content"
-            className="p-3"
-            style={{
-              margin: 0,
-              fontSize: 12,
-              fontFamily: "'JetBrains Mono', monospace",
-              whiteSpace: 'pre-wrap',
-              wordBreak: 'break-word',
-              color: 'var(--text)',
-            }}
-          >
-            {data?.content ?? ''}
-          </pre>
+          <FilePreview path={path} content={data?.content ?? ''} />
         )}
       </div>
     </div>

@@ -64,7 +64,6 @@ export function LoopsIndexTab({
     <div className="flex h-full min-h-0 min-w-0 flex-col" data-testid="loops-index-tab">
       <div
         className="flex shrink-0 items-center justify-between gap-2 px-3 py-2"
-        style={{ borderBottom: '1px solid var(--border)' }}
       >
         <span style={{ fontSize: 11, color: 'var(--text-3)' }} data-testid="loops-index-summary">
           {summary}

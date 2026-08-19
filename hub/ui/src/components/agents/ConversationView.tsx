@@ -20,6 +20,7 @@ import { PanelShell, type PanelTabDescriptor } from '@/components/spec/PanelShel
 import { SpecDocumentPanel } from '@/components/spec/SpecDocumentPanel'
 import { SpecDocumentPicker } from '@/components/spec/SpecDocumentPicker'
 import { SpecIndexTab } from '@/components/spec/SpecIndexTab'
+import { fileIconFor } from '@/components/spec/fileIcons'
 import { buildInventory, resolveTabPath, tabKeyForNode } from '@/components/spec/specNavigation'
 import { useWorkspacePaths } from '@/api/workspace'
 import { useLoops } from '@/api/loops'
@@ -280,7 +281,7 @@ export function ConversationView({
   )
   const availablePanelTabs: PanelTabDescriptor[] = useMemo(
     () => [
-      { id: 'specs', label: 'Specs', icon: 'folder_open' },
+      { id: 'specs', label: 'Specs', icon: 'menu_book' },
       { id: 'files', label: 'Files', icon: 'folder_open' },
       { id: 'loops', label: 'Loops', icon: 'sync' },
     ],
@@ -288,12 +289,12 @@ export function ConversationView({
   )
   const describePanelTab = useCallback(
     (id: TabId): PanelTabDescriptor => {
-      if (id === 'specs') return { id, label: 'Specs', icon: 'folder_open' }
+      if (id === 'specs') return { id, label: 'Specs', icon: 'menu_book' }
       if (id === 'files') return { id, label: 'Files', icon: 'folder_open' }
       if (id === 'loops') return { id, label: 'Loops', icon: 'sync' }
       if (isFileTabId(id)) {
         const path = filePath(id)
-        return { id, label: path.slice(path.lastIndexOf('/') + 1), icon: 'description' }
+        return { id, label: path.slice(path.lastIndexOf('/') + 1), icon: fileIconFor(path) }
       }
       if (isLoopTabId(id)) {
         const loop = allLoops.find((entry) => entry.id === loopIdFromTab(id))

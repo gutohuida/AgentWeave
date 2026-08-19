@@ -54,7 +54,6 @@ export function SpecProposalsPanel({ path }: { path: string }) {
   return (
     <div
       className="flex shrink-0 flex-col gap-1.5 px-3 py-2 text-xs"
-      style={{ borderBottom: '1px solid var(--border)' }}
       data-testid="spec-proposals-panel"
     >
       <div className="flex items-center gap-1.5" style={{ color: 'var(--text-3)' }}>

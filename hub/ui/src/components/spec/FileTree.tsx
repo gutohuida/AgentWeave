@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Icon } from '@/components/common/Icon'
 import { buildFilePathTree } from './specNavigation'
+import { fileColourFor, fileIconFor } from './fileIcons'
 
 const COLLAPSED_KEY = 'aw.files.treeCollapsed'
 
@@ -121,7 +122,11 @@ export function FileTree({ paths, currentPath = null, onSelect }: FileTreeProps)
               borderRadius: 'var(--radius-sm)',
             }}
           >
-            <Icon name="description" size={12} />
+            <Icon
+              name={fileIconFor(row.path)}
+              size={12}
+              style={{ color: fileColourFor(row.path), flexShrink: 0 }}
+            />
             <span className="truncate">{row.label}</span>
           </button>
         ),
