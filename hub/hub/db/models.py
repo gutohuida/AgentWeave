@@ -1152,6 +1152,11 @@ class AIJob(Base):
     )  # "local" or "hub" - tracks origin for sync logic
     created_by_run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     updated_by_run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    # D16: a plain job with no loop is archivable, never deletable — the same uniform rule as
+    # `Loop.archived_at` below, not a conditional one that only applies once a loop exists.
+    # NULL means live; `DELETE /api/v1/jobs/{job_id}` refuses outright rather than reinterpreting
+    # itself as an archive (B2.1) — this column is written only by the archive route.
+    archived_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     project: Mapped["Project"] = relationship(back_populates="jobs")
     runs: Mapped[List["JobRun"]] = relationship(back_populates="job", cascade="all, delete-orphan")
@@ -1205,6 +1210,10 @@ class Loop(Base):
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
+    # `ondelete="CASCADE"` predates D16 (nothing is deletable — see `archived_at` below) and stays
+    # unreachable rather than removed: no code path deletes an `AIJob` that owns a `Loop` anymore
+    # (B2.1 refuses the delete route outright), so the cascade never fires, and dropping it would
+    # force SQLite to recreate the table for a behavioural change nothing exercises.
     job_id: Mapped[str] = mapped_column(
         String(64), ForeignKey("ai_jobs.id", ondelete="CASCADE"), unique=True, nullable=False
     )
@@ -1238,6 +1247,22 @@ class Loop(Base):
     spec_document_id: Mapped[Optional[str]] = mapped_column(
         String(64), unique=True, index=True, nullable=True
     )
+    # D17: housekeeping visibility, not lifecycle — a loop archives only after it has ended
+    # (B2.3 refuses archiving a running loop), and archiving destroys nothing, so this is
+    # orthogonal to `ending_state` below rather than a terminal value of the same axis. Mirrors
+    # `Agent.archived_at`/`Conversation.archived_at`. NULL means visible in default listings.
+    archived_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # D17: what happened, not housekeeping — the value a governance surface can count and filter
+    # on ("4 complete · 1 stopped early · 2 running", B5.3) without string-matching `stop_reason`,
+    # which stays exactly as free-text as it is today and keeps carrying the human explanation.
+    # NULL while the loop is still running (`AIJob.enabled` is still the sole firing gate, D17).
+    # Permitted values, deliberately only these two: "completed" (the queue drained on its own —
+    # `stop_when_queue_empties`) and "stopped" (everything else that ends a loop: `stop_at`
+    # elapsing, an operator stop, or any other path `scheduler.py`'s stop-condition check takes).
+    # A third value is not wanted here — D17 rejected a single lifecycle-with-archived-as-terminal
+    # design precisely so this column can stay a two-way fact instead of growing to answer
+    # questions `archived_at` and `stop_reason` already answer between them.
+    ending_state: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
 
     __table_args__ = (Index("ix_loops_project", "project_id"),)
 

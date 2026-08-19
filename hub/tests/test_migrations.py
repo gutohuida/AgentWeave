@@ -36,7 +36,7 @@ ALEMBIC_INI = Path(__file__).parent.parent / "hub" / "alembic.ini"
 # The revision `alembic upgrade head` must land on. Named once so the assertion and its failure
 # message cannot disagree — they did, for two head bumps, telling anyone debugging a failure to go
 # read the wrong migration.
-HEAD_REVISION = "0077"
+HEAD_REVISION = "0078"
 
 
 # ---------------------------------------------------------------------------
@@ -2304,7 +2304,10 @@ def test_migration_0077_downgrade_then_upgrade_round_trips(tmp_path) -> None:
     cfg = Config(str(ALEMBIC_INI))
     cfg.set_main_option("sqlalchemy.url", db_url)
     with patch.object(settings, "database_url", db_url):
-        command.downgrade(cfg, "-1")
+        # Absolute target, not "-1": head has moved past 0077 since this test was written (0078
+        # adds its own columns on top), so a relative one-step-back would only undo 0078 and leave
+        # this test asserting on the wrong migration's columns.
+        command.downgrade(cfg, "0076")
 
         with sqlite3.connect(db_file) as conn:
             loop_columns = {row[1] for row in conn.execute("PRAGMA table_info(loops)")}
@@ -2333,4 +2336,97 @@ def test_migration_0077_downgrade_then_upgrade_round_trips(tmp_path) -> None:
         )
         assert (
             conn.execute("SELECT loop_id FROM checkpoints WHERE id = 'cp-1'").fetchone()[0] is None
+        )
+
+
+# ---------------------------------------------------------------------------
+# 0078 — a loop and a plain job are archivable, and a loop records how it ended
+# ---------------------------------------------------------------------------
+
+
+def test_migration_0078_adds_archival_and_ending_state_columns(tmp_path) -> None:
+    """`2026-08-18-a-loop-writes-its-own-queue` design D16/D17 (task B1): three nullable
+    columns, none backfilled, none indexed — plain housekeeping/value columns, not a lookup key."""
+    db_file = tmp_path / "loop_archival.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    _run_alembic_with(db_url)
+
+    with sqlite3.connect(db_file) as conn:
+        loop_columns = {row[1]: row for row in conn.execute("PRAGMA table_info(loops)")}
+        assert "archived_at" in loop_columns
+        assert loop_columns["archived_at"][3] == 0  # notnull
+        assert loop_columns["archived_at"][4] is None  # dflt_value — no backfill guess
+        assert "ending_state" in loop_columns
+        assert loop_columns["ending_state"][3] == 0
+        assert loop_columns["ending_state"][4] is None
+
+        job_columns = {row[1]: row for row in conn.execute("PRAGMA table_info(ai_jobs)")}
+        assert "archived_at" in job_columns
+        assert job_columns["archived_at"][3] == 0
+        assert job_columns["archived_at"][4] is None
+
+
+def test_migration_0078_downgrade_then_upgrade_round_trips(tmp_path) -> None:
+    """Down and back up again, with rows populated in all three new columns beforehand — the
+    rollback escape hatch is only real if the columns it drops actually come back on the way up."""
+    from alembic import command
+    from alembic.config import Config
+
+    db_file = tmp_path / "roundtrip_0078.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    _run_alembic_with(db_url)
+
+    stamp = "2026-01-01T00:00:00Z"
+    with sqlite3.connect(db_file) as conn:
+        conn.execute(
+            "INSERT INTO projects (id, name, created_at) " f"VALUES ('proj-1', 'p', '{stamp}')"
+        )
+        conn.execute(
+            "INSERT INTO ai_jobs (id, project_id, name, agent, message, cron, created_at, "
+            "session_mode, enabled, source, archived_at) "
+            f"VALUES ('job-1', 'proj-1', 'n', 'claude', 'go', '0 9 * * *', '{stamp}', 'new', 1, "
+            f"'hub', '{stamp}')"
+        )
+        conn.execute(
+            "INSERT INTO loops (id, project_id, job_id, purpose, stop_when_queue_empties, "
+            "created_at, archived_at, ending_state) VALUES ('loop-1', 'proj-1', 'job-1', 'p', 0, "
+            f"'{stamp}', '{stamp}', 'completed')"
+        )
+        conn.commit()
+
+    cfg = Config(str(ALEMBIC_INI))
+    cfg.set_main_option("sqlalchemy.url", db_url)
+    with patch.object(settings, "database_url", db_url):
+        command.downgrade(cfg, "-1")
+
+        with sqlite3.connect(db_file) as conn:
+            loop_columns = {row[1] for row in conn.execute("PRAGMA table_info(loops)")}
+            assert "archived_at" not in loop_columns
+            assert "ending_state" not in loop_columns
+            job_columns = {row[1] for row in conn.execute("PRAGMA table_info(ai_jobs)")}
+            assert "archived_at" not in job_columns
+            # The rows themselves survive — only the archival/ending columns are dropped.
+            assert conn.execute("SELECT COUNT(*) FROM loops").fetchone()[0] == 1
+            assert conn.execute("SELECT COUNT(*) FROM ai_jobs").fetchone()[0] == 1
+
+        command.upgrade(cfg, "head")
+
+    with sqlite3.connect(db_file) as conn:
+        assert (
+            conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == HEAD_REVISION
+        )
+        loop_columns = {row[1] for row in conn.execute("PRAGMA table_info(loops)")}
+        assert "archived_at" in loop_columns
+        assert "ending_state" in loop_columns
+        job_columns = {row[1] for row in conn.execute("PRAGMA table_info(ai_jobs)")}
+        assert "archived_at" in job_columns
+        # The upgrade cannot recover what the downgrade discarded — a loop or job that existed
+        # through the round trip has its archival/ending columns back as NULL, not restored.
+        assert conn.execute(
+            "SELECT archived_at, ending_state FROM loops WHERE id = 'loop-1'"
+        ).fetchone() == (None, None)
+        assert (
+            conn.execute("SELECT archived_at FROM ai_jobs WHERE id = 'job-1'").fetchone()[0] is None
         )

@@ -1410,3 +1410,84 @@ for a second lifecycle-enum mechanism, only the one ending-value column D17 desc
 Committed and pushed as the work landed (implementation+tests+tasks.md+rebuilt UI bundle together,
 since the panel change's close-out note lived in the same task). Heartbeat refreshed before the push;
 releasing it (backdating ~40 minutes) as the very last step per the driver's own instructions.
+
+## Iteration 18 (2026-08-19T03:1x-03:3x+01:00) — LB1: loop archival migration + model columns
+
+Fresh process, no memory of iteration 17. Reconciled first: `STATE.json` claimed branch
+`autonomous/2026-08-18-panels-loops-and-app`, HEAD `ab37a17` ("Release heartbeat for the next
+firing") — matched `git log`/`git branch --show-current` exactly, clean tree. Note: `STATE.json`'s
+own log-file convention meant the newest-dated file by `ls -t` was actually
+`2026-08-18-panels-loops-and-app-log.md`, not the more recently-*modified*-looking
+`2026-08-18-the-app-feels-alive-log.md` from a wholly different, already-finished run — read the
+wrong one first by filename guess before catching this via `ls -t` and cross-checking against the
+branch name.
+
+Verified live before starting: `GET http://127.0.0.1:8010/health` → `{"status":"ok"}`. Current time
+`2026-08-19T03:14:59+01:00`, comfortably inside the `08:00` stop.
+
+**Read fresh, not from the prior iteration's summary alone:** task B1 (tasks.md ~line 1092), D16/D17
+(design.md ~412-484), the existing `Agent.archived_at`/`Conversation.archived_at` precedent, and
+0077's own migration file in full as the template to copy rather than re-derive.
+
+**Migration.** New `hub/hub/migrations/versions/0078_loop_and_job_archival.py`, `down_revision =
+"0077"`. Copied 0077's `_tables`/`_columns` guard helpers verbatim (no `_indexes` helper needed —
+none of these three columns are indexed, unlike 0077's). Three additive nullable columns:
+`loops.archived_at`, `ai_jobs.archived_at` (both `DateTime(timezone=True)`), `loops.ending_state`
+(`String(16)`).
+
+**Model.** `AIJob.archived_at` added with a comment restating D16's uniform rule (a bare job
+archives exactly like a loop-owning one — no conditional). `Loop.job_id`'s existing
+`ondelete="CASCADE"` (B1.2) got a comment rather than removal: no delete path survives D16, the
+cascade is inert, and dropping it on SQLite would force a table recreate for nothing. `Loop.
+archived_at` and `Loop.ending_state` both added with comments distinguishing D17's two axes
+explicitly — housekeeping (`archived_at`, mirrors `Agent`/`Conversation`) versus what-happened
+(`ending_state`, a governance-countable value, not string-matched prose). B1.4: `ending_state`'s
+comment states the two permitted values verbatim, `"completed"` (queue drained via
+`stop_when_queue_empties`) and `"stopped"` (every other ending path), and explains why a third value
+is deliberately not wanted — D17 rejected a single lifecycle-with-archived-as-terminal design
+precisely so this stays a two-way fact.
+
+**B1.3 and a knock-on caught before it became a silent test-scope bug.** Bumped `HEAD_REVISION` in
+`test_migrations.py` and the literal `"0077"` assertion in `test_project_persistence.py`, both to
+`"0078"`. Then noticed 0077's own downgrade-round-trip test used a *relative* `command.downgrade(cfg,
+"-1")` — with head now at 0078, that call only undoes 0078 and leaves 0077's columns untouched, so
+the test would still pass (columns genuinely absent — 0078's, not 0077's) while silently testing the
+wrong migration's rollback. Changed it to the absolute target `"0076"` so it keeps exercising 0077
+specifically no matter how far head moves later. Added two new tests for 0078 itself, same
+shape as 0077's pair: column-shape assertions (nullable, no backfill default) and a
+downgrade-then-upgrade round trip with all three columns populated beforehand, confirming they come
+back `NULL` rather than merely present.
+
+**Verification.** `pytest hub/tests/test_migrations.py hub/tests/test_project_persistence.py -q`:
+**63 passed, 1 skipped** (up from 51 passed/1 skipped recorded at prep). `ruff check` on the four
+touched files: one `SIM102` (nested `if` in the downgrade function) fixed by combining with `and`,
+matching the rest of the file's style, then clean. `black --check --target-version py311` clean on
+all four files (the bare `black --check` invocation misreports a Python-3.12-formatted-code warning
+on this machine's 3.11 without the explicit target-version flag — a known false positive, not a real
+diff; the targeted invocation is authoritative and found one real reformat, applied). `mypy hub/`
+(run from `hub/`, matching the editable-install path CLAUDE.md documents): **361 errors, 86 files** —
+byte-identical to `.claude/autonomous/mypy-baseline.txt`'s recorded count, confirming this task
+introduced zero new mypy errors despite touching `models.py`. `npx openspec validate --changes
+--strict`: 2/2 still valid after the `tasks.md` edit. No UI files touched (Python/migration/test
+only), so no rebuild was needed or attempted.
+
+Marked B1.1-B1.4 done in `tasks.md` with a full dated note (what was built, the knock-on test fix,
+verification commands and counts).
+
+`current`/`next_action` now point at **LB2** (archival replaces deletion, tasks.md section B2,
+B2.1-B2.6, ~line 1109) — read fresh this iteration to brief the next one precisely: the current
+`DELETE /{job_id}` route (`hub/hub/api/v1/jobs.py:585-622`) must become a refusal naming archiving as
+the alternative rather than silently becoming an archive; a new archive route needs D18's
+always-confirm gate (stronger than the standing `allow_agent_jobs` allowance `_require_agent_job_
+allowance` already checks); a loop's archive path is operator-only, mirroring `spec_lifecycle.
+py:238-242`'s exact refusal shape; B2.3 needs a running-loop refusal keyed off the new `ending_state`
+being NULL; B2.4 needs default-listing exclusion for both jobs and loops; B2.5 wires `ending_state`
+into `scheduler.py`'s actual stop-condition code (not written this iteration — B1 was migration and
+model only, by design); B2.6 is a regression test that an archived loop still answers its history
+queries fully. Flagged explicitly for the next iteration to resolve before touching `mcp_server.py`:
+the queue already lists LB3 as "archive_job on the MCP surface" as its own separate item, so B2's own
+task text (not just design.md) needs a fresh read to confirm whether the MCP tool rename belongs to
+B2 or is reserved for LB3, rather than assuming either way.
+
+Committed and pushed as the work landed. Heartbeat refreshed before the push; releasing it
+(backdating ~40 minutes) as the very last step per the driver's own instructions.

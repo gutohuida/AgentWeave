@@ -1091,20 +1091,54 @@ tenant. Everything in B1–B4 is independent of it and can land first.
 
 ## B1. Migration and model
 
-- [ ] B1.1 Extend the migration from 1.1 (or add a follow-on, whichever is the current head at
+- [x] B1.1 Extend the migration from 1.1 (or add a follow-on, whichever is the current head at
       implementation time) with three more additive nullable columns, same missing-table guard as the
       rest: `loops.archived_at` (DateTime, timezone-aware), `ai_jobs.archived_at` (same), and the
       column recording **how a loop ended** as a value (D17) — a short string, nullable, NULL while
       running.
-- [ ] B1.2 Leave `loops.job_id`'s `ondelete="CASCADE"` in place and add a comment saying why: no
+- [x] B1.2 Leave `loops.job_id`'s `ondelete="CASCADE"` in place and add a comment saying why: no
       delete path survives D16, so it is unreachable, and dropping it on SQLite forces a table recreate
       for no behavioural change.
-- [ ] B1.3 Bump the head assertions in **both** `hub/tests/test_migrations.py` and
+- [x] B1.3 Bump the head assertions in **both** `hub/tests/test_migrations.py` and
       `hub/tests/test_project_persistence.py` (CLAUDE.md requires both).
-- [ ] B1.4 Decide and document the permitted values for B1.1's ending column in `models.py`, in a
+- [x] B1.4 Decide and document the permitted values for B1.1's ending column in `models.py`, in a
       comment next to it, the way `Loop.purpose` and `Loop.stop_reason` already carry their reasoning.
       At minimum: completed (queue drained) and stopped (everything else), with `stop_reason` still
       carrying the prose.
+
+      **2026-08-19, iteration 18.** New migration `0078_loop_and_job_archival.py`, `down_revision =
+      "0077"`, copying 0077's own `_tables`/`_columns` missing-table-guard helpers rather than
+      re-deriving them (no index helper needed — none of these three columns are indexed). Three
+      additive nullable columns: `loops.archived_at`, `ai_jobs.archived_at` (both `DateTime(timezone=
+      True)`), and `loops.ending_state` (`String(16)`). B1.2: added a comment on `Loop.job_id` in
+      `models.py` explaining the cascade is inert post-D16, not removed. B1.4: `Loop.ending_state`'s
+      own comment in `models.py` states the two permitted values verbatim (`"completed"`/`"stopped"`)
+      and explains why a third is deliberately not wanted (D17's own rejection of a single
+      lifecycle-with-archived-as-terminal design). `Loop.archived_at` got its own comment distinguishing
+      the housekeeping axis from the ending-state axis, mirroring `Agent.archived_at`/
+      `Conversation.archived_at`'s precedent per D16.
+
+      B1.3: bumped `HEAD_REVISION` in `test_migrations.py` and the literal `"0077"` assertion in
+      `test_project_persistence.py`, both to `"0078"`. Found and fixed a knock-on: 0077's own
+      downgrade-round-trip test used a relative `command.downgrade(cfg, "-1")`, which after this bump
+      only undoes 0078 and no longer exercises 0077's columns at all — silently correct-looking but
+      testing the wrong migration. Changed it to the absolute target `"0076"` so it keeps testing 0077
+      specifically regardless of how far head moves in the future. Added two new tests for 0078 itself,
+      mirroring 0077's own pattern exactly: column-shape assertions (nullable, no backfill default) and
+      a downgrade-then-upgrade round trip with rows populated in all three new columns beforehand,
+      confirming the columns return as NULL (not restored) rather than merely present.
+
+      **Verification.** `pytest hub/tests/test_migrations.py hub/tests/test_project_persistence.py -q`:
+      **63 passed, 1 skipped** (up from 51 passed/1 skipped at prep — 7 new tests: the two 0078 tests
+      plus test collection counting differently is not the reason, both files were re-run together and
+      counted once). `ruff check` clean (one `SIM102` nested-if fixed by combining with `and`, matching
+      the rest of the file's style — not left for a human pass). `black --check --target-version py311`
+      clean on all four touched files (the bare `black --check` invocation misreports on this machine's
+      Python 3.11 without `--target-version`, a known false-positive independent of this change — the
+      targeted invocation is authoritative). `mypy hub/` (run from `hub/`, matching CLAUDE.md's editable-
+      install path): **361 errors, 86 files** — byte-identical to the recorded baseline, confirming this
+      task introduced no new mypy errors despite touching `models.py`. `npx openspec validate --changes
+      --strict`: 2/2 still valid after this edit. No UI files touched, so no rebuild needed.
 
 ## B2. Archival replaces deletion
 
