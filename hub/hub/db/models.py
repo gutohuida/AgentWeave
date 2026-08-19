@@ -911,6 +911,11 @@ class EventLog(Base):
     project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
     event_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     agent: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    # Design D13 (`2026-08-18-a-loop-writes-its-own-queue`, task A4.1): NULL for every event that
+    # is not about a specific loop — most rows. Set (not derived by re-parsing `data`) on every
+    # loop-scoped event a caller already has a loop id for, so retrieving one loop's history is an
+    # indexed filter, not a scan of unindexed JSON.
+    loop_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     data: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
     severity: Mapped[str] = mapped_column(
         String(10), nullable=False, server_default="info", index=True
@@ -919,7 +924,10 @@ class EventLog(Base):
         DateTime(timezone=True), default=_now, nullable=False
     )
 
-    __table_args__ = (Index("ix_event_logs_project_ts", "project_id", "timestamp"),)
+    __table_args__ = (
+        Index("ix_event_logs_project_ts", "project_id", "timestamp"),
+        Index("ix_event_logs_loop_ts", "loop_id", "timestamp"),
+    )
 
 
 class AgentHeartbeat(Base):

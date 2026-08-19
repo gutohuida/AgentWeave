@@ -36,7 +36,7 @@ ALEMBIC_INI = Path(__file__).parent.parent / "hub" / "alembic.ini"
 # The revision `alembic upgrade head` must land on. Named once so the assertion and its failure
 # message cannot disagree — they did, for two head bumps, telling anyone debugging a failure to go
 # read the wrong migration.
-HEAD_REVISION = "0080"
+HEAD_REVISION = "0081"
 
 
 # ---------------------------------------------------------------------------
@@ -2569,7 +2569,11 @@ def test_migration_0080_downgrade_then_upgrade_round_trips(tmp_path) -> None:
     cfg = Config(str(ALEMBIC_INI))
     cfg.set_main_option("sqlalchemy.url", db_url)
     with patch.object(settings, "database_url", db_url):
-        command.downgrade(cfg, "-1")
+        # Absolute target, not "-1": head has moved past 0080 since this test was written (0081
+        # adds its own column on top), so a relative one-step-back would only undo 0081 and leave
+        # this test asserting on the wrong migration's columns — the same trap 0077's, 0078's and
+        # 0079's own round-trip tests already hit once each, above.
+        command.downgrade(cfg, "0079")
 
         with sqlite3.connect(db_file) as conn:
             loop_columns = {row[1] for row in conn.execute("PRAGMA table_info(loops)")}
@@ -2606,3 +2610,71 @@ def test_migration_0080_downgrade_then_upgrade_round_trips(tmp_path) -> None:
             "pending_edit_at FROM loops WHERE id = 'loop-1'"
         ).fetchone()
         assert row == (None, None, None, None)
+
+
+# ---------------------------------------------------------------------------
+# 0081 — a per-loop history home for event_logs
+# ---------------------------------------------------------------------------
+
+
+def test_migration_0081_adds_event_log_loop_id(tmp_path) -> None:
+    """Design D13 (task A4.1): one nullable column plus its own composite index, no backfill."""
+    db_file = tmp_path / "event_log_loop_id.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    _run_alembic_with(db_url)
+
+    with sqlite3.connect(db_file) as conn:
+        event_columns = {row[1]: row for row in conn.execute("PRAGMA table_info(event_logs)")}
+        assert "loop_id" in event_columns
+        assert event_columns["loop_id"][3] == 0  # notnull
+        assert event_columns["loop_id"][4] is None  # dflt_value — no backfill guess
+
+        index_names = {row[1] for row in conn.execute("PRAGMA index_list(event_logs)")}
+        assert "ix_event_logs_loop_ts" in index_names
+
+
+def test_migration_0081_downgrade_then_upgrade_round_trips(tmp_path) -> None:
+    """Down and back up again, with a row populated in the new column beforehand."""
+    from alembic import command
+    from alembic.config import Config
+
+    db_file = tmp_path / "roundtrip_0081.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    _run_alembic_with(db_url)
+
+    stamp = "2026-01-01T00:00:00Z"
+    with sqlite3.connect(db_file) as conn:
+        conn.execute(
+            "INSERT INTO projects (id, name, created_at) " f"VALUES ('proj-1', 'p', '{stamp}')"
+        )
+        conn.execute(
+            "INSERT INTO event_logs (id, project_id, event_type, loop_id, severity, timestamp) "
+            f"VALUES ('evt-1', 'proj-1', 'loop_archived', 'loop-1', 'info', '{stamp}')"
+        )
+        conn.commit()
+
+    cfg = Config(str(ALEMBIC_INI))
+    cfg.set_main_option("sqlalchemy.url", db_url)
+    with patch.object(settings, "database_url", db_url):
+        command.downgrade(cfg, "-1")
+
+        with sqlite3.connect(db_file) as conn:
+            event_columns = {row[1] for row in conn.execute("PRAGMA table_info(event_logs)")}
+            assert "loop_id" not in event_columns
+            # The row itself survives — only the loop_id column is dropped.
+            assert conn.execute("SELECT COUNT(*) FROM event_logs").fetchone()[0] == 1
+
+        command.upgrade(cfg, "head")
+
+    with sqlite3.connect(db_file) as conn:
+        assert (
+            conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == HEAD_REVISION
+        )
+        event_columns = {row[1] for row in conn.execute("PRAGMA table_info(event_logs)")}
+        assert "loop_id" in event_columns
+        # The upgrade cannot recover what the downgrade discarded.
+        assert (
+            conn.execute("SELECT loop_id FROM event_logs WHERE id = 'evt-1'").fetchone()[0] is None
+        )

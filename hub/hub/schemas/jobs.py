@@ -111,11 +111,17 @@ class LoopSummary(BaseModel):
 
 
 class LoopDetail(LoopSummary):
-    """A loop's own record — everything `LoopSummary` carries, plus the parent job id and its
-    firing history (design D16's guarantee: still fully readable once archived, B2.6)."""
+    """A loop's own record — everything `LoopSummary` carries, plus the parent job id, its firing
+    history (design D16's guarantee: still fully readable once archived, B2.6), and its audit
+    trail."""
 
     job_id: str
     history: List[Dict[str, Any]] = Field(default_factory=list)
+    # Design D13 (task A4.1/A4.2): this loop's own slice of `event_logs` — control changes, staged
+    # and applied edits, and how it stopped — filtered by the indexed `loop_id` column, not derived
+    # by re-parsing every event's JSON `data`. Never includes another loop's events (A4.2's own
+    # isolation requirement).
+    events: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 class LoopControlUpdate(BaseModel):

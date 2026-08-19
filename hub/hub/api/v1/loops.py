@@ -6,9 +6,13 @@ require no conversation id — D20 is the reason this surface exists at all: a l
 starts a fresh conversation (D4), so a conversation-scoped view would be empty in every
 conversation the operator actually sits in. The richer drill-down UI is `B5`/`B6`.
 
+`events` (task A4.1/A4.2) is this loop's own slice of `event_logs` — control changes, staged and
+applied edits, how it stopped — filtered by the indexed `EventLog.loop_id` column added for this,
+never another loop's rows.
+
 **Known gap, not fixed here**: neither route reports whether a firing is currently in progress.
 D13's live-ness helper (`JobRun.status` gaining a "running" value, plus the one shared helper both
-this surface and the loop-edit path are meant to use) is not built yet — that is design change A4,
+this surface and the loop-edit path are meant to use) is not built yet — that is tasks A4.3-A4.5,
 still open. Adding a proxy for it here (e.g. joining `JobRun.conversation_id` to `Run.status`)
 is exactly the shape D19 already rejected once, by name. `history` below still reports each past
 firing's recorded status (`fired`/`failed`) faithfully; it just cannot yet say "running".
@@ -23,7 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...auth import get_project
 from ...db.engine import get_session
-from ...db.models import JobRun, Loop
+from ...db.models import EventLog, JobRun, Loop
 from ...schemas.jobs import LoopControlUpdate, LoopDetail, LoopSummary
 from ...sse import sse_manager
 from ...utils import persist_event
@@ -66,6 +70,14 @@ async def _get_loop_detail(session: AsyncSession, project_id: str, loop_id: str)
     )
     runs = history_result.scalars().all()
 
+    events_result = await session.execute(
+        select(EventLog)
+        .where(EventLog.loop_id == loop.id)
+        .order_by(EventLog.timestamp.desc())
+        .limit(10)
+    )
+    events = events_result.scalars().all()
+
     return LoopDetail(
         **summary.model_dump(),
         job_id=loop.job_id,
@@ -79,6 +91,16 @@ async def _get_loop_detail(session: AsyncSession, project_id: str, loop_id: str)
                 "session_id": run.session_id,
             }
             for run in runs
+        ],
+        events=[
+            {
+                "id": event.id,
+                "event_type": event.event_type,
+                "agent": event.agent,
+                "data": event.data,
+                "timestamp": event.timestamp,
+            }
+            for event in events
         ],
     )
 
@@ -153,7 +175,7 @@ async def archive_loop(
     await session.commit()
 
     await sse_manager.broadcast(project_id, "loop_archived", {"id": loop_id})
-    await persist_event(session, project_id, "loop_archived", {"id": loop_id})
+    await persist_event(session, project_id, "loop_archived", {"id": loop_id}, loop_id=loop_id)
 
     return await _get_loop_detail(session, project_id, loop_id)
 
@@ -196,6 +218,7 @@ async def set_loop_control(
         project_id,
         "loop_control_changed",
         {"id": loop_id, "from": previous, "to": new_value},
+        loop_id=loop_id,
     )
 
     return await _get_loop_detail(session, project_id, loop_id)

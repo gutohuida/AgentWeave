@@ -19,6 +19,15 @@ export interface LoopDetail extends LoopSummary {
     trigger: string
     session_id?: string
   }>
+  /** This loop's own audit trail (design D13, task A4.1/A4.2) — control changes, staged and
+   *  applied edits, how it stopped. Filtered server-side by loop id; never another loop's rows. */
+  events: Array<{
+    id: string
+    event_type: string
+    agent?: string | null
+    data: Record<string, unknown>
+    timestamp: string
+  }>
 }
 
 /** Project-scoped loop listing (design D20, task B4.3) — no conversation id, because a loop

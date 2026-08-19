@@ -1256,15 +1256,106 @@ regression, the same open question as before, now off by one more.
 
 ## A4. Per-loop history and a running firing (design D13)
 
-- [ ] A4.1 A per-loop history home — `EventLog` is indexed by project and agent, not loop, so
+2026-08-19, iteration 26. A4.1 and A4.2 done; A4.3-A4.5 (the running-firing half of D13) deliberately
+left for a following iteration rather than rushed in the same one — see the note below the checklist
+for why the split falls there rather than elsewhere.
+
+- [x] A4.1 A per-loop history home — `EventLog` is indexed by project and agent, not loop, so
       retrieving one loop's history must not mean scanning unindexed JSON.
-- [ ] A4.2 Retrieve one loop's history; assert no event from another loop is returned.
+- [x] A4.2 Retrieve one loop's history; assert no event from another loop is returned.
 - [ ] A4.3 `JobRun` records a firing as in progress while its run executes, distinct from completed
       and failed.
 - [ ] A4.4 **One helper** answers "is a firing active for this loop", used by both the edit path and
       the loop panel in `2026-08-18-one-shell-three-panels`. Do not write it twice.
 - [ ] A4.5 A crashed run must not leave a firing permanently in progress — reconcile on Hub restart
       as `Run.pid`/`last_heartbeat_at` already does.
+
+**A4.1/A4.2, what was built.** `EventLog` (`hub/hub/db/models.py`) gained a nullable `loop_id`
+column plus its own composite index `ix_event_logs_loop_ts` (`loop_id`, `timestamp`) — mirroring
+`project_id`'s own existing `ix_event_logs_project_ts` rather than also adding a redundant single-
+column index (the composite already covers a loop-only lookup as its leftmost prefix; a model with
+`index=True` *and* a composite starting with the same column would create two indexes that overlap
+completely on a fresh `metadata.create_all()`, which is not what `project_id` itself does — checked
+before writing the model). Migration `0081` (`hub/hub/migrations/versions/`), same guarded-for-a-
+missing-table shape every migration since `0071` uses. `persist_event` (`hub/hub/utils.py`) grew an
+explicit `loop_id: Optional[str] = None` keyword, deliberately never derived from `data` inside the
+function itself — a caller states it, or it stays NULL, so a payload shaped differently than
+expected cannot silently leave the column empty while looking populated. Six call sites already
+existed that emit a loop-scoped event and had a loop id in hand: `loop_stopped`,
+`loop_queue_exhausted`, `loop_edit_applied` (`scheduler.py`), `loop_edit_staged` (`jobs.py`),
+`loop_archived`, `loop_control_changed` (`loops.py`) — all six updated to pass it. `job_created` and
+`job_run_failed`/`job_run_skipped` were deliberately left alone: they are job-scoped, not
+inherently loop-scoped (a plain job with no loop fires the same event), and neither carries a loop
+id without an extra query the calling code does not already do — extending `persist_event`'s
+*contract* no further than what task A4.1 actually asked for.
+
+Retrieval: `LoopDetail` (`hub/hub/schemas/jobs.py`) gained an `events` field alongside the existing
+`history` (JobRun firings) — a *different* fact, per D13's own framing (history is "did a firing
+happen and how", events is "what happened to the loop's own definition and lifecycle"). Populated in
+`_get_loop_detail` (`hub/hub/api/v1/loops.py`) with a `WHERE EventLog.loop_id == loop.id` query,
+newest 10 first, mirroring `history`'s own `.limit(10)`. The TypeScript `LoopDetail` type
+(`hub/ui/src/api/loops.ts`) got the matching additive field so a future UI consumer (this change's
+own B6, or the panel change's `LoopTab.tsx`) has it typed already; no component reads it yet — that
+is drill-down UI, out of this task's scope.
+
+Tests: `hub/tests/test_migrations.py` — `test_migration_0081_adds_event_log_loop_id` and
+`test_migration_0081_downgrade_then_upgrade_round_trips` (62 passed total, 1 skipped, after fixing a
+second thing this iteration's own migration exposed — see below). `hub/tests/test_loop_archival.py`
+gained `test_loop_history_is_isolated_from_other_loops` (A4.2's own isolation requirement: two
+loops, one `loop_control_changed` event each plus one *non*-loop-scoped `job_created` event that
+must leak into neither, asserted by id) and an added assertion on the existing archival test that
+the loop's own `loop_archived` action shows up in its own `events`. Broader targeted run —
+`test_project_persistence.py`, `test_scheduler.py`, `test_jobs.py`,
+`test_agent_actions_coordination.py`, `test_agent_actions_governed.py`,
+`test_spec_declared_tasks.py`, `test_tasks.py` — 117 passed, 1 skipped, 0 failed. ruff and black
+clean on every changed file (one black reformat needed on the new migration test, applied). mypy
+`hub/hub/` 364 errors / 86 files — IDENTICAL to the standing baseline, not one new, after fixing a
+`Set[str | None]` inference the new migration's own `_indexes()` helper introduced (`index["name"]`
+is typed `Optional[str]` by the sqlalchemy stubs; filtered with `if index["name"]`, matching how
+`_columns()` in the same file never hit this because `get_columns()`'s `"name"` key is typed
+non-optional). Frontend: `tsc --noEmit` clean, `npm run lint` clean (`--max-warnings 0`), `npx
+vitest run` 1070 passed across 105 files (the two "Error: boom" lines in the output are
+`ErrorBoundary.test.tsx` deliberately throwing — expected, not a failure). UI rebuilt and the bundle
+stamp refreshed (`scripts/refresh_ui_bundle.py`, `--check` confirms match) because `loops.ts`
+changed; `/health` no longer reports `ui_stale`.
+
+**A migration-test trap this iteration re-hit, now fixed for the next one too.** `0080`'s own
+round-trip test used `command.downgrade(cfg, "-1")` — correct while `0080` was head, but "-1" means
+"one step below the database's *current* revision", not "before this migration's own columns
+existed". With `0081` now on top, "-1" from head landed on `0080` itself, so the test's assertion
+that the pending-edit columns were *gone* failed (they were never touched by an `0081`-to-`0080`
+downgrade). This is the exact trap `0079`'s and `0080`'s own docstrings already named for their
+*predecessors* — `0080`'s test simply had not needed the absolute-target fix yet, because nothing
+had been built on top of it until now. Fixed by changing `0080`'s test to `command.downgrade(cfg,
+"0079")`, an absolute target, with a comment naming the trap explicitly so `0081`'s own test (still
+using relative `-1`, correct as long as it stays head) gets the same fix pre-emptively documented
+for whoever adds `0082` on top of it.
+
+**Live smoke test against the trial Hub**, not just the unit suite. Applied migration `0081`
+directly to `hub/data/agentweave.db` (`alembic -c hub/alembic.ini upgrade head`, bash cwd already at
+`<repo>/hub` so the relative ini path resolved), confirmed the real PID via
+`Get-NetTCPConnection -LocalPort 8010` before killing it (was 25076, matching the note left at the
+end of iteration 25 — not stale), relaunched via the documented `Invoke-CimMethod` command, and
+confirmed `/health` returned `{"status":"ok"}` before touching anything live. Created two fresh
+throwaway loops in `proj-5e960453` (`job-282dd88c` "A4 smoke loop", and a second "A4 smoke loop B")
+rather than touching a protected fixture — `POST .../loops/{id}/control` on the first flipped its
+`control` from `operator` to `creator`, `GET .../loops/{id}` immediately showed the resulting
+`loop_control_changed` event in `events` with the loop's own id inside `data`, and the *second*
+loop's own `GET .../loops/{id}` returned `events: []` — confirming isolation live, not just under
+the unit test's own fixtures. Left both fixtures in place as evidence, matching the LB2/LB4/LB5/A3
+precedent already recorded in `decisions_for_user` — `proj-5e960453` now carries 8 jobs, two more
+than A3's own count of 6; `test_job_loop_block.py`'s pre-existing hardcoded-count assumption is now
+off by two more than that, same open question as before, not a new regression.
+
+**Why A4.3-A4.5 are not in this same iteration.** They are a materially different piece of work —
+a new `JobRun.status` value requires touching the *actual firing lifecycle* (not audit logging),
+the shared helper is deliberately required to serve two different call sites in two different
+changes (`scheduler.py`'s edit-staging path here, and `2026-08-18-one-shell-three-panels`'s B6.2-
+B6.4 loop panel, still blocked on exactly this), and A4.5's crash-reconciliation half needs to be
+proven against `run_reconciliation.py`'s existing `reconcile_interrupted_runs()` pattern (read this
+iteration, not yet built against) with its own live-restart smoke test — the same rigor this
+iteration's A4.1/A4.2 got. Splitting the checklist at 4.2/4.3 keeps each landed piece independently
+verified rather than shipping a partially-tested five-task block against the clock before 08:00.
 
 ## A5. Immutability and the identity gap (designs D14, D15)
 

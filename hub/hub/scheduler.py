@@ -301,6 +301,7 @@ async def _emit_loop_edit_applied(session: AsyncSession, payload: dict) -> None:
         "loop_edit_applied",
         payload,
         agent=None if actor in (None, "operator") else actor,
+        loop_id=payload["id"],
     )
     await sse_manager.broadcast(payload["project_id"], "loop_edit_applied", payload)
 
@@ -699,7 +700,12 @@ class JobScheduler:
                     "reason": loop_stop_reason,
                 }
                 await persist_event(
-                    session, job.project_id, "loop_stopped", loop_stopped_payload, agent=job.agent
+                    session,
+                    job.project_id,
+                    "loop_stopped",
+                    loop_stopped_payload,
+                    agent=job.agent,
+                    loop_id=loop.id if loop is not None else None,
                 )
                 await sse_manager.broadcast(job.project_id, "loop_stopped", loop_stopped_payload)
                 if loop is not None and loop_stop_reason == "loop queue is empty":
@@ -720,6 +726,7 @@ class JobScheduler:
                         "loop_queue_exhausted",
                         loop_queue_exhausted_payload,
                         agent=job.agent,
+                        loop_id=loop.id,
                     )
                     await sse_manager.broadcast(
                         job.project_id, "loop_queue_exhausted", loop_queue_exhausted_payload

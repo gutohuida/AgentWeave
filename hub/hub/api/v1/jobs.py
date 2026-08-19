@@ -662,6 +662,7 @@ async def update_job(
             "loop_edit_staged",
             staged_edit_event,
             agent=None if staged_edit_event["actor"] == "operator" else staged_edit_event["actor"],
+            loop_id=staged_edit_event["id"],
         )
         await sse_manager.broadcast(project_id, "loop_edit_staged", staged_edit_event)
 

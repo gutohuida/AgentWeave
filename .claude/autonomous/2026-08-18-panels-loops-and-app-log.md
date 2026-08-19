@@ -2244,3 +2244,74 @@ directly unblocks a task in the other.
 
 Committed and pushed as the work landed. Heartbeat refreshed before the push; releasing it
 (backdating ~40 minutes) as the very last step per the driver's own instructions.
+
+## Iteration 26 (2026-08-19 ~06:30–06:55+01:00) — LA4 (A4.1/A4.2): a per-loop history home
+
+Design D13 states two facts the database cannot currently answer; this iteration built the first
+(the audit-trail half) and deliberately deferred the second (the running-firing half, A4.3-A4.5) to
+keep each piece independently verified rather than shipping a partially-tested five-task block
+against the 08:00 clock. Full account, including every file touched and every number measured, is
+in `openspec/changes/2026-08-18-a-loop-writes-its-own-queue/tasks.md`'s own dated note under `## A4`
+— not duplicated here in full.
+
+**What landed.** `EventLog.loop_id` (nullable, migration `0081`, composite index
+`ix_event_logs_loop_ts` mirroring `project_id`'s own existing composite rather than adding a
+redundant single-column index). `persist_event` gained an explicit `loop_id` keyword — never
+derived from `data`, so a caller states it or it stays NULL. Six existing loop-scoped
+`persist_event` call sites (`loop_stopped`, `loop_queue_exhausted`, `loop_edit_applied`,
+`loop_edit_staged`, `loop_archived`, `loop_control_changed`) updated to pass it; `job_created` and
+the job-run-failure events were deliberately left alone as job-scoped, not loop-scoped, matching
+A4.1's own stated boundary. `LoopDetail` gained an `events` field (distinct from the existing
+`history`, which is JobRun firings, not lifecycle events), populated by an indexed `loop_id` filter
+in `_get_loop_detail`, with the matching TypeScript type added to `hub/ui/src/api/loops.ts` (no
+runtime change — a type-only addition, which is why the rebuilt UI bundle's JS/CSS hashes came out
+byte-identical and only the build stamp changed).
+
+**A migration-test trap re-hit and fixed forward.** `0080`'s own round-trip test used a relative
+`command.downgrade(cfg, "-1")`, correct only while `0080` was head. Adding `0081` on top broke it —
+"-1" from head now lands on `0080` itself, not before its columns existed — the exact trap `0079`'s
+and `0080`'s own docstrings already named for their *predecessors*, now hit for real one migration
+later. Fixed `0080`'s test to an absolute `"0079"` target with a comment naming the trap explicitly,
+and left `0081`'s own new test on relative `-1` (correct today) with the same comment pre-written for
+whoever adds `0082`.
+
+**Verified.** `pytest hub/tests/test_migrations.py` 62 passed, 1 skipped (both new + all existing,
+including the just-fixed 0080 round-trip). `test_project_persistence.py` + `test_loop_archival.py`
+15 passed (new isolation test: two loops, one `loop_control_changed` event each plus a *non*-loop
+`job_created` event that must leak into neither — asserted by id on both sides). Broader targeted
+run (`test_scheduler.py test_jobs.py test_agent_actions_coordination.py
+test_agent_actions_governed.py test_spec_declared_tasks.py test_tasks.py`) 117 passed, 1 skipped, 0
+failed. ruff/black clean on every changed file (one migration-file mypy fix needed: `_indexes()`'s
+`index["name"]` is `Optional[str]` per the sqlalchemy stubs, filtered with `if index["name"]`).
+`mypy hub/hub/` 364 errors / 86 files — identical to the standing baseline, zero new. Frontend:
+`tsc --noEmit` clean, `npm run lint --max-warnings 0` clean, `npx vitest run` 1070 passed across 105
+files (the two "Error: boom" lines are `ErrorBoundary.test.tsx` deliberately throwing — expected).
+`openspec validate --changes --strict` 2/2 valid.
+
+**Live smoke test against the trial Hub, not just the unit suite.** Applied migration `0081`
+directly to `hub/data/agentweave.db`, confirmed the real PID via `Get-NetTCPConnection -LocalPort
+8010` before killing it (25076, matching what iteration 25 left, not stale), relaunched via the
+documented `Invoke-CimMethod` command, confirmed `/health` `{"status":"ok"}` before touching
+anything. Created two fresh throwaway loops in `proj-5e960453` (`job-282dd88c` "A4 smoke loop", and
+a second "A4 smoke loop B") — `POST .../loops/{id}/control` on the first flipped `control` from
+`operator` to `creator`, and `GET .../loops/{id}` immediately showed the resulting
+`loop_control_changed` event in `events` with the loop's own id inside `data`; the *second* loop's
+own `GET .../loops/{id}` returned `events: []`, confirming isolation live. Left both fixtures in
+place as evidence, matching the LB2/LB4/LB5/A3 precedent already in `decisions_for_user` —
+`proj-5e960453` now carries 8 jobs, two more than A3's count of 6; `test_job_loop_block.py`'s
+pre-existing hardcoded-count assumption is off by two more than that, same open question, not a new
+regression. Rebuilt the UI bundle (`npm run build` + `scripts/refresh_ui_bundle.py`, `--check`
+confirms match) because `loops.ts` changed; `/health` no longer reports `ui_stale`.
+
+`tasks.md`'s A4.1-A4.2 ticked with a dated note (this file's own section above, in full). `current`/
+`next_action` now point at **A4.3-A4.5**: `JobRun` gains an "in progress" status value distinct from
+`"fired"`/`"failed"`, one shared helper answering "is a firing active for this loop" used by both
+the edit-staging path (`scheduler.py`) and the loop panel's live indicator in
+`2026-08-18-one-shell-three-panels`'s LB6 (B6.2-B6.4, still blocked on exactly this — the one point
+in the queue where finishing this task in one change directly unblocks a task in the other), and
+A4.5's crash reconciliation on Hub restart, mirroring `run_reconciliation.py`'s existing
+`Run.pid`/`last_heartbeat_at` pattern (read this iteration, not yet built against) with its own live
+smoke test.
+
+Committed and pushed as the work landed. Heartbeat refreshed before the push; releasing it
+(backdating ~40 minutes) as the very last step per the driver's own instructions.

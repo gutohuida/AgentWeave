@@ -8,6 +8,7 @@ from fastapi import HTTPException
 from hub.api.v1.loops import _require_operator
 from hub.db.engine import async_session_factory
 from hub.db.models import AIJob, Loop, Task
+from hub.utils import persist_event
 
 
 async def _make_job(db, *, suffix, agent="loop-archival-agent"):
@@ -115,6 +116,49 @@ async def test_archive_a_stopped_loop_then_it_still_answers_its_own_history(app,
     assert body["archived_at"] is not None
     assert body["job_id"] == job.id
     assert isinstance(body["history"], list)
+    # A4.1/A4.2: the archive action itself is in this loop's own audit trail.
+    assert any(event["event_type"] == "loop_archived" for event in body["events"])
+
+
+@pytest.mark.asyncio
+async def test_loop_history_is_isolated_from_other_loops(app, auth_headers):
+    """Design D13, task A4.2: retrieving one loop's history must not surface another loop's
+    events, even for the same project and the same event_type."""
+    async with async_session_factory() as db:
+        job_a = await _make_job(db, suffix="isolation-a")
+        job_b = await _make_job(db, suffix="isolation-b")
+        loop_a = await _make_loop(db, job_id=job_a.id, purpose="a's own work")
+        loop_b = await _make_loop(db, job_id=job_b.id, purpose="b's own work")
+
+        await persist_event(
+            db,
+            "proj-test",
+            "loop_control_changed",
+            {"id": loop_a.id, "from": "operator", "to": "creator"},
+            loop_id=loop_a.id,
+        )
+        await persist_event(
+            db,
+            "proj-test",
+            "loop_control_changed",
+            {"id": loop_b.id, "from": "operator", "to": "creator"},
+            loop_id=loop_b.id,
+        )
+        # An event about neither loop (agent-scoped, not loop-scoped) must not leak in either.
+        await persist_event(db, "proj-test", "job_created", {"id": job_a.id})
+
+    detail_a = await app.get(f"/api/v1/projects/proj-test/loops/{loop_a.id}", headers=auth_headers)
+    detail_b = await app.get(f"/api/v1/projects/proj-test/loops/{loop_b.id}", headers=auth_headers)
+    assert detail_a.status_code == 200
+    assert detail_b.status_code == 200
+
+    events_a = detail_a.json()["events"]
+    events_b = detail_b.json()["events"]
+
+    assert len(events_a) == 1
+    assert events_a[0]["data"]["id"] == loop_a.id
+    assert len(events_b) == 1
+    assert events_b[0]["data"]["id"] == loop_b.id
 
 
 @pytest.mark.asyncio
