@@ -1,10 +1,12 @@
 """Tests for task endpoints."""
 
+from datetime import datetime, timezone
+
 import pytest
 
 from hub.agent_auth import hash_run_token
 from hub.db.engine import async_session_factory
-from hub.db.models import Run, SpecDocument, Task
+from hub.db.models import Agent, AIJob, Loop, Run, SpecDocument, Task
 
 
 @pytest.mark.asyncio
@@ -342,3 +344,106 @@ async def test_loop_id_scopes_to_exactly_that_loops_tasks_regardless_of_status(a
     assert shared_resp.status_code == 200
     shared_ids = {t["id"] for t in shared_resp.json()}
     assert "task-loop-3" in shared_ids
+
+
+@pytest.mark.asyncio
+async def test_task_loop_id_is_write_once_and_reassignment_leaves_the_task_unchanged(
+    app, auth_headers
+):
+    """A5.1/A5.2 (design D14, `2026-08-18-a-loop-writes-its-own-queue`): `Task.loop_id` is set once,
+    at creation, and never afterwards — a loop's queue history has to be able to answer what work it
+    was ever given, which reassignment would break. Enforced in `update_task_for_actor`, not by a DB
+    constraint SQLite could not later drop.
+    """
+    await _make_task("task-immutable-1", "pending", None, loop_id="loop-original")
+
+    resp = await app.patch(
+        "/api/v1/projects/proj-test/tasks/task-immutable-1",
+        json={"loop_id": "loop-hijacked"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 403
+
+    async with async_session_factory() as session:
+        refreshed = await session.get(Task, "task-immutable-1")
+        assert refreshed.loop_id == "loop-original"
+
+
+@pytest.mark.asyncio
+async def test_d15_a_run_claiming_an_archived_agents_name_inherits_its_loop_authority(app):
+    """Records, does not fix, the D15 gap (design `2026-08-18-a-loop-writes-its-own-queue`):
+    `_authorize_loop_task_creation` (tasks.py) checks who may add a task to a loop's queue by
+    comparing `actor.agent` (a string) to `AIJob.agent` (also a string) — and `actor.agent` is
+    itself just `Run.agent`, never looked up against the `agents` table at all
+    (`agent_auth.py::get_agent_actor`). Whoever the *name* belongs to now, not who currently holds
+    it as a live `Agent` row, controls the loop.
+
+    D15's own text is "a new agent taking an archived agent's name" via the roster — but that
+    literal reproduction turns out to already be closed for the roster specifically: migration
+    `0063_unique_agent_name_per_project` put an unconditional unique index on `(project_id, name)`
+    that does **not** exempt archived rows (confirmed empirically: inserting a second `Agent` with
+    an already-archived name's value raises `sqlite3.IntegrityError`), and nothing in this codebase
+    lets an existing agent be renamed to free a name up either. So the roster cannot literally
+    reproduce D15 today.
+
+    What this test shows instead is the same root cause one layer down, and it does not need a
+    duplicate `Agent` row at all: nothing between a `Run` and the authorization check ever consults
+    the `agents` table, so any `Run` minted with `.agent` set to a name that used to belong to a now
+    -archived agent inherits that name's loop authority just by matching the string — whether or
+    not any `Agent` row, archived or otherwise, currently exists under that name. This is a wider
+    hole than the roster-level one D15 describes, not a narrower one: it does not require the name
+    to have ever been re-registered, only for something to mint a `Run` carrying it.
+
+    D15 states this is not a live vulnerability — the Hub is local, single-operator, and the API
+    key is the real boundary — but it is a real consequence of a name being load-bearing for
+    permission, and this is the flip target for a future change that closes it (by joining the
+    authorization check to a stable `Agent.id` instead of a name). If this assertion ever starts
+    failing with a 403, the gap has been closed; update this test (and D15's "not resolved here")
+    to say so rather than treating the failure as a regression.
+    """
+    async with async_session_factory() as session:
+        original = Agent(id="agent-d15-original", project_id="proj-test", name="reused-loop-name")
+        session.add(original)
+        await session.commit()
+        original.archived_at = datetime.now(timezone.utc)
+        await session.commit()
+
+        job = AIJob(
+            id="job-d15",
+            project_id="proj-test",
+            name="D15 repro job",
+            agent="reused-loop-name",
+            message="hello",
+            cron="0 9 * * *",
+            enabled=True,
+        )
+        session.add(job)
+        await session.commit()
+        loop = Loop(id="loop-d15", project_id="proj-test", job_id=job.id, purpose="D15 repro")
+        session.add(loop)
+        await session.commit()
+
+    token = "aw_run_task-d15-successor-secret"
+    async with async_session_factory() as session:
+        session.add(
+            Run(
+                id="run-d15-successor",
+                project_id="proj-test",
+                agent="reused-loop-name",
+                status="running",
+                turn_depth=0,
+                capability_token_hash=hash_run_token(token),
+            )
+        )
+        await session.commit()
+
+    resp = await app.post(
+        "/api/v1/agent-actions/tasks",
+        json={"title": "Claimed via the reused name", "loop_id": "loop-d15"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 201
+
+    async with async_session_factory() as session:
+        created = await session.get(Task, resp.json()["id"])
+        assert created.loop_id == "loop-d15"

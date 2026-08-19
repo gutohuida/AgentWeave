@@ -693,6 +693,16 @@ async def update_task_for_actor(
     task = await session.get(Task, task_id)
     if task is None or task.project_id != project_id:
         raise HTTPException(status_code=404, detail="Task not found")
+    if body.loop_id is not None:
+        # Task.loop_id is write-once, set only at creation (design D14,
+        # 2026-08-18-a-loop-writes-its-own-queue). A loop's queue history has to be able to answer
+        # what work it was ever given — `stop_when_queue_empties` depends on that history staying
+        # accurate — and reassignment would break it. Checked before any other field is touched, so
+        # a refused update leaves the task genuinely unchanged rather than half-applied.
+        raise HTTPException(
+            status_code=403,
+            detail="A task's loop assignment is set at creation and cannot be changed afterwards.",
+        )
     # Set only when this call performed a transition — `contract`'s report on approval reads off it
     # below. A no-op restatement of the current status returns `None` from `apply_transition`, which
     # carries no advisories the same way it carries no new transition row.

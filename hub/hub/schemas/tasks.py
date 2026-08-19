@@ -128,6 +128,12 @@ class TaskUpdate(BaseModel):
     # change — leaving `blocked` always clears it, since a reason that outlives its block describes
     # something that already arrived.
     blocked_reason: Optional[str] = Field(default=None, max_length=2000)
+    # `Task.loop_id` is write-once (design D14, `2026-08-18-a-loop-writes-its-own-queue`): a loop's
+    # queue history has to be able to answer what work it was ever given, which reassignment would
+    # break. Accepted here only so the service layer (`update_task_for_actor`) has a value to refuse
+    # by name rather than by `extra="forbid"` silently swallowing it — see D14 for why this is
+    # enforced in code and not a DB constraint (SQLite cannot drop one later).
+    loop_id: Optional[str] = Field(default=None, max_length=64)
 
     model_config = {"extra": "forbid"}
 

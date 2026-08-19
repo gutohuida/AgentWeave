@@ -1541,11 +1541,55 @@ real-world case the design's own A4.4 writeup found and deliberately left alone 
 
 ## A5. Immutability and the identity gap (designs D14, D15)
 
-- [ ] A5.1 `Task.loop_id` is write-once, enforced at the service layer, not by a DB constraint.
-- [ ] A5.2 Test that reassigning a task between loops is refused and the task is unchanged.
-- [ ] A5.3 **Record, do not fix, the name-reuse gap** (D15): a new agent taking an archived agent's
+- [x] A5.1 `Task.loop_id` is write-once, enforced at the service layer, not by a DB constraint.
+- [x] A5.2 Test that reassigning a task between loops is refused and the task is unchanged.
+- [x] A5.3 **Record, do not fix, the name-reuse gap** (D15): a new agent taking an archived agent's
       name satisfies every creator check the original did. Add a test that *documents* the current
       behaviour so a future change closing it has something to flip, and reference D15 in its name.
+
+**A5, what was built (2026-08-19, run 2 iteration 3).**
+
+`TaskUpdate` (`hub/hub/schemas/tasks.py`) gained a `loop_id` field it did not have before — needed
+so `update_task_for_actor` has a value to refuse *by name*, rather than relying on
+`extra="forbid"` to reject it silently as an unknown key (which would have made A5.2 test a
+schema-validation test, not a service-layer one). `update_task_for_actor`
+(`hub/hub/api/v1/tasks.py`) refuses any non-`None` `body.loop_id` with 403, checked first, before
+`task` is fetched from `session.get` is touched by anything else — so a refusal leaves the row
+provably unchanged rather than half-applied.
+
+**Proved the refusal was live, not decorative, the same way A4.5 did.** Wrote
+`test_task_loop_id_is_write_once_and_reassignment_leaves_the_task_unchanged` against a version of
+`update_task_for_actor` that had the naive line `if body.loop_id is not None: task.loop_id =
+body.loop_id` instead of the guard — watched it fail (`200 == 403`, the PATCH silently reassigned
+the loop), then replaced the naive line with the 403 guard and watched it pass. Left in place as
+the ordinary regression test.
+
+**A5.3 did not reproduce the design's literal scenario, and says so.** D15's own text is "archive
+agent `arch`, create a new agent also called `arch`." Tried exactly that against the live schema
+first: inserting a second `Agent` row under an already-archived name raises
+`sqlite3.IntegrityError` — `migration 0063_unique_agent_name_per_project` (2026-08-12, predates
+this design) put an *unconditional* unique index on `(project_id, name)` that does not exempt
+archived rows, and nothing in `hub/hub/api/v1/agents.py` lets an existing agent be renamed to free
+a name either. So the roster-level reproduction the design names is already closed, by an earlier,
+unrelated change.
+
+What survives, and is arguably worse: `_authorize_loop_task_creation` and
+`_require_agent_job_allowance` (both `hub/hub/api/v1/jobs.py` / `tasks.py`) never consult the
+`agents` table at all — they compare `actor.agent`, itself just `Run.agent`
+(`agent_auth.py::get_agent_actor`), to `AIJob.agent`, both bare strings. A `Run` minted with
+`.agent` set to a name that used to belong to a now-archived agent inherits that name's loop
+authority with **no** duplicate `Agent` row required, archived or otherwise. Documented this
+correction to D15's own framing in the test itself
+(`test_d15_a_run_claiming_an_archived_agents_name_inherits_its_loop_authority`,
+`hub/tests/test_tasks.py`) rather than silently narrowing what the test proves to fit the design's
+wording.
+
+**Tests.** `hub/tests/test_tasks.py` gained the two above (20 total in the file, all passing).
+`pytest tests/test_tasks.py tests/test_scheduler.py` — 41 passed. `ruff check` clean (one N802
+fix: the D15 test's name needed lowercasing). `black --check` clean. `mypy hub/hub/api/v1/tasks.py
+hub/hub/schemas/tasks.py` — zero errors attributable to either file (the run surfaces pre-existing
+errors elsewhere in the import graph, matching the documented baseline shape, not new ones in the
+two files touched here).
 
 ## A6. Human-only — the operator's judgement
 
