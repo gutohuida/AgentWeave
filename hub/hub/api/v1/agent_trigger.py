@@ -108,6 +108,7 @@ from ...runner_parsing import (
     parse_codex_line,
     read_codex_rollout_accounting,
 )
+from ...scheduler import finalize_job_run_for_conversation
 from ...spec_manifest import SpecPathError, validate_spec_path
 from ...sse import sse_manager
 from ...unasked_question import trailing_question
@@ -1276,6 +1277,9 @@ async def _execute_run(
                     runner=runner,
                     sample=None,
                 )
+            # Design D13, task A4.3 — same as `_execute_run`'s success-path finalize below;
+            # a spawn that never started still ends the firing that queued it.
+            await finalize_job_run_for_conversation(db, conversation_id, "failed")
             returned = await return_run_entries(db, run_id)
             await db.commit()
             await _report_abandoned_entries(db, project_id, agent, run_id)
@@ -1528,6 +1532,11 @@ async def _execute_run(
             # `RESUME_RETRY_LIMIT` the conversation gives up its provider session, so the third
             # attempt binds the very session id the conflict refused, and a misbehaving CLI
             # overwrites the binding this check exists to protect.
+            #
+            # Design D13, task A4.3: if this run's conversation belongs to a job's loop firing,
+            # that firing is no longer "in progress" once the agent's own turn has ended, one
+            # way or the other. A no-op for the common case of a run that was never a firing.
+            await finalize_job_run_for_conversation(db, conversation_id, final_status)
             returned = (
                 await return_run_entries(db, run_id)
                 if final_status == "failed" and binding_conflict is None
@@ -1639,6 +1648,8 @@ async def _execute_run(
                 run.error = str(exc)
                 run.ended_at = datetime.now(timezone.utc)
                 await expire_pending_for_run(db, run_id)
+                # Design D13, task A4.3 — same as `_execute_run`'s other finalize sites.
+                await finalize_job_run_for_conversation(db, conversation_id, "failed")
                 returned = await return_run_entries(db, run_id)
                 await db.commit()
                 await _report_abandoned_entries(db, project_id, agent, run_id)
@@ -1962,6 +1973,8 @@ async def _execute_codex_appserver_run(
                         runner="codex",
                         sample=None,
                     )
+                # Design D13, task A4.3 — see `_execute_run`'s spawn-failure branch.
+                await finalize_job_run_for_conversation(db, conversation_id, "failed")
                 returned = await return_run_entries(db, run_id)
                 await db.commit()
                 await _report_abandoned_entries(db, project_id, agent, run_id)
@@ -2052,6 +2065,9 @@ async def _execute_codex_appserver_run(
             # returns a failed `TurnOutcome` rather than raising, so the pre-spawn `except` above
             # never sees it. A stop arrives as `outcome.status == "interrupted"` → `stopped`, and
             # keeps its input. A binding conflict is excluded for the reason given there.
+            #
+            # See `_execute_run`'s identical call — design D13, task A4.3.
+            await finalize_job_run_for_conversation(db, conversation_id, final_status)
             returned = (
                 await return_run_entries(db, run_id)
                 if final_status == "failed" and binding_conflict is None

@@ -74,11 +74,13 @@ describe('JobCard loop block', () => {
       baseJob({
         loop: {
           id: 'loop-1',
+          label: 'Dependency bumps',
           purpose: 'Keep dependencies current',
           stop_when_queue_empties: true,
           queue: { pending: 1, in_progress: 1 },
           current_task: { id: 'task-1', title: 'Bump lodash', status: 'in_progress' },
           open_questions: 2,
+          firing_active: false,
         },
       }),
     )
@@ -91,6 +93,11 @@ describe('JobCard loop block', () => {
     expect(screen.getByText('Bump lodash (in_progress)')).toBeInTheDocument()
     expect(screen.getByText('2 open questions')).toBeInTheDocument()
     expect(within(screen.getByTestId('job-loop-block')).getByText('Active')).toBeInTheDocument()
+    // Icon.tsx's ICONS map must carry an entry for "all_inclusive" — an unmapped name
+    // renders null, silently dropping the loop glyph next to the "Loop" label.
+    expect(
+      within(screen.getByTestId('job-loop-block')).getByText('Loop').previousElementSibling,
+    ).toBeInstanceOf(SVGElement)
   })
 
   it('shows the stop reason and a Stopped badge once the loop has stopped', async () => {
@@ -100,6 +107,7 @@ describe('JobCard loop block', () => {
       baseJob({
         loop: {
           id: 'loop-1',
+          label: 'Nightly scan job',
           purpose: 'Nightly scan',
           stop_when_queue_empties: true,
           stop_reason: 'queue empty',
@@ -107,6 +115,7 @@ describe('JobCard loop block', () => {
           queue: {},
           current_task: null,
           open_questions: 0,
+          firing_active: false,
         },
       }),
     )
@@ -125,11 +134,13 @@ describe('JobCard loop block', () => {
       baseJob({
         loop: {
           id: 'loop-1',
+          label: 'Bump job',
           purpose: '',
           stop_when_queue_empties: false,
           queue: { in_progress: 1 },
           current_task: { id: 'task-1', title: 'Bump lodash', status: 'in_progress' },
           open_questions: 0,
+          firing_active: false,
         },
       }),
       onOpenTasks,

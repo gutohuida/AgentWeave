@@ -53,10 +53,30 @@ acts, enforced in `spec_lifecycle.transition()` rather than only at the API edge
 | Tool | Purpose |
 |------|---------|
 | `create_job(name, agent, message, cron, session_mode=new)` | Create a scheduled job |
-| `delete_job(job_id)`, `toggle_job(job_id, enabled)`, `run_job(job_id)` | Manage one |
+| `create_loop(name, agent, message, cron, purpose, stop_at, stop_when_queue_empties, spec_document_id, initial_tasks)` | Create a **loop** — recurring work with a stated purpose, a stop condition, and a queue |
+| `toggle_job(job_id, enabled)`, `run_job(job_id)` | Manage one |
+| `archive_job(job_id)` | Archive one — nothing is deleted. Refused if the job has a loop (operator-only) |
 
-All four require the operator to have enabled the project's scheduled-work allowance. A job carrying
-a purpose and an optional stop condition is a **loop**; its queue is the tasks that name it.
+All of these require the operator to have enabled the project's scheduled-work allowance.
+`archive_job` additionally puts every call to the operator and waits for an explicit answer,
+whatever this run's permission posture is — the allowance makes the tool reachable, it is not a
+standing yes.
+
+A job carrying a purpose and a stop condition is a **loop**, and its queue is the tasks that name
+it. Three things about a loop are worth knowing before you create one:
+
+- **It must be able to stop.** `create_loop` is refused outright unless at least one of `stop_at`
+  or `stop_when_queue_empties` is given. A loop that cannot stop is not created.
+- **Every firing starts a new conversation.** A loop refuses `session_mode="resume"`, so there is
+  no resumed session carrying context forward. Continuity is by **checkpoint**: the previous
+  firing's checkpoint (see `submit_checkpoint_notes`) is composed into the next firing's briefing,
+  along with the loop's purpose and the queue item claimed for that firing. With checkpointing off
+  for the project, or with no checkpoint runner configured, every firing starts blank — the Hub
+  says so when the loop is created rather than leaving you to discover it.
+- **Its queue is not open to everyone.** A loop's tasks are written either by materialising the
+  specification document it declares (`spec_document_id`), or directly by its creator or the
+  operator. An agent that is the loop's *executor* but not its creator is refused, and told to use
+  `ask_user` to request the addition instead.
 
 ## Identity
 

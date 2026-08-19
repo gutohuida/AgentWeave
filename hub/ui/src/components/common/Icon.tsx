@@ -1,41 +1,43 @@
 import React from 'react'
+import { BRAND_MARKS, BRAND_PREFIX } from './brandMarks'
 import {
   Activity,
-  AlertCircle,
-  AlertTriangle,
+  CircleAlert,
+  TriangleAlert,
   Archive,
   ArrowDown,
   ArrowLeft,
   BadgeCheck,
-  BarChart3,
+  ChartColumn,
   BookOpen,
   Bot,
   CalendarClock,
   Check,
-  CheckCircle2,
+  CircleCheck,
   ChevronDown,
   ChevronRight,
   ClipboardList,
   Clock,
   Cpu,
   FileText,
-  FilePlus2,
+  FilePlusCorner,
   ArrowUpRight,
   FolderOpen,
   FolderPlus,
   FolderSearch,
   Globe,
-  HelpCircle,
-  Home,
+  CircleQuestionMark,
+  House,
   Hourglass,
+  Infinity as InfinityIcon,
   Info,
   Link2,
   ListChecks,
   ListFilter,
   MessageSquare,
   Moon,
-  MoreHorizontal,
-  MoreVertical,
+  Ellipsis,
+  EllipsisVertical,
   NotebookPen,
   PanelRightClose,
   Pause,
@@ -61,6 +63,23 @@ import {
   Wrench,
   X,
   Zap,
+  // Generic file-type glyphs, used for the types simple-icons has no mark for (PowerShell, Java,
+  // C#, plain text) and as the fallback everywhere else. Real brand marks live in `brandMarks.ts`.
+  Braces,
+  Container,
+  Database,
+  FileCodeCorner,
+  FileCog,
+  FileImage,
+  FileBracesCorner,
+  FileLock,
+  FileTypeCorner,
+  GitBranch,
+  Hash,
+  Package,
+  Palette,
+  ScrollText,
+  Sheet,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -77,37 +96,54 @@ import {
  */
 const ICONS: Record<string, LucideIcon> = {
   add: Plus,
+  all_inclusive: InfinityIcon,
+  // --- file-type glyphs (see fileIcons.ts for the extension -> name mapping) ---
+  file_braces: Braces,
+  file_code: FileCodeCorner,
+  file_config: FileCog,
+  file_container: Container,
+  file_database: Database,
+  file_image: FileImage,
+  file_json: FileBracesCorner,
+  file_lock: FileLock,
+  file_markdown: ScrollText,
+  file_package: Package,
+  file_sheet: Sheet,
+  file_style: Palette,
+  file_type: FileTypeCorner,
+  file_vcs: GitBranch,
+  hash: Hash,
   archive: Archive,
   arrow_downward: ArrowDown,
   arrow_left: ArrowLeft,
   article: FileText,
   badge: BadgeCheck,
-  bar_chart: BarChart3,
+  bar_chart: ChartColumn,
   bolt: Zap,
   build: Wrench,
   chat: MessageSquare,
   check: Check,
-  check_circle: CheckCircle2,
+  check_circle: CircleCheck,
   close: X,
   dark_mode: Moon,
   delete: Trash2,
   description: FileText,
   edit: Pencil,
   edit_note: NotebookPen,
-  error: AlertCircle,
-  error_outline: AlertCircle,
+  error: CircleAlert,
+  error_outline: CircleAlert,
   event_note: CalendarClock,
   expand_more: ChevronDown,
   chevron_right: ChevronRight,
-  file_plus: FilePlus2,
+  file_plus: FilePlusCorner,
   filter_list: ListFilter,
   flight: Plane,
   folder_open: FolderOpen,
   folder_plus: FolderPlus,
   folder_search: FolderSearch,
   group: Users,
-  help: HelpCircle,
-  home: Home,
+  help: CircleQuestionMark,
+  home: House,
   hourglass_top: Hourglass,
   info: Info,
   light_mode: Sun,
@@ -116,8 +152,8 @@ const ICONS: Record<string, LucideIcon> = {
   memory: Cpu,
   menu_book: BookOpen,
   monitoring: Activity,
-  more_horiz: MoreHorizontal,
-  more_vert: MoreVertical,
+  more_horiz: Ellipsis,
+  more_vert: EllipsisVertical,
   move_up: ArrowUpRight,
   pause: Pause,
   play_arrow: Play,
@@ -139,9 +175,10 @@ const ICONS: Record<string, LucideIcon> = {
   terminal: Terminal,
   verified: BadgeCheck,
   verified_user: ShieldCheck,
-  warning: AlertTriangle,
+  warning: TriangleAlert,
   x: X,
 }
+
 
 const warnedNames = new Set<string>()
 
@@ -206,6 +243,12 @@ interface ProviderMarkProps {
   className?: string
 }
 
+/** Every name `Icon` will render. Exported so callers that *compute* a name — `fileIcons.ts` maps
+ *  a filename to one — can assert in a test that every name they can produce exists here. An
+ *  unknown name renders nothing and only warns to the console, which is how `all_inclusive`
+ *  shipped invisible in `JobCard`. */
+export const ICON_NAMES: readonly string[] = Object.keys(ICONS)
+
 /** A provider's brand mark, or a text-initials fallback for a provider this module has no
  * mark for — the "unknown provider falls back to a text label rather than a wrong mark"
  * contract from design.md Decision 3. */
@@ -232,6 +275,39 @@ export function ProviderMark({ provider, label, size = 14, className }: Provider
 }
 
 export function Icon({ name, size = 24, weight = 400, className, style }: IconProps) {
+  /* A `brand:` name renders a simple-icons mark instead of a lucide glyph. Handled here rather
+   * than in a separate component so every existing `<Icon name=…>` call site — the file tree, the
+   * tab strip, a file tab's own header — gains brand marks without being touched, and so there
+   * remains exactly one import site for iconography (the reason PROVIDER_MARKS also lives here).
+   *
+   * Brand marks are solid filled shapes, not stroked line icons, so `weight`/`strokeWidth` has no
+   * meaning for them and is ignored. They fill with `currentColor`, so a caller that sets a colour
+   * still wins; `brandHex` is what supplies the brand's own colour when the caller wants it. */
+  if (name.startsWith(BRAND_PREFIX)) {
+    const mark = BRAND_MARKS[name.slice(BRAND_PREFIX.length)]
+    if (!mark) {
+      if (!warnedNames.has(name)) {
+        warnedNames.add(name)
+        console.warn(`[Icon] no brand mark for "${name}"`)
+      }
+      return null
+    }
+    return (
+      <svg
+        width={size}
+        height={size}
+        viewBox="0 0 24 24"
+        fill="currentColor"
+        className={`shrink-0 select-none${className ? ' ' + className : ''}`}
+        style={style}
+        role="img"
+        aria-label={mark.title}
+      >
+        <path d={mark.path} />
+      </svg>
+    )
+  }
+
   const Glyph = ICONS[name]
 
   if (!Glyph) {

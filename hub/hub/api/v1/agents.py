@@ -21,6 +21,7 @@ from ...agent_status import effective_heartbeat_status, heartbeat_is_stale
 from ...auth import get_project
 from ...checkpoint_policy import CHECKPOINT_MODES, threshold_error
 from ...codex_appserver import APP_SERVER_OPT_OUT_FLAG, uses_app_server
+from ...context_readings import usable_context_reading as _usable_context_reading
 from ...conversations import new_conversation
 from ...db.engine import get_session
 from ...db.models import (
@@ -236,36 +237,6 @@ async def get_agents_launchability(
         }
 
     return {"agents": results}
-
-
-def _usable_context_reading(rows: List[Any]) -> Any:
-    """Pick the reading to report from an agent's `context_warning` rows, newest first.
-
-    Taking the newest row alone is what made Claude agents report nothing for 329 samples: the
-    end-of-turn message reports a context window with no token count, so the last row to arrive
-    routinely carried no usable percentage and hid the complete one behind it.
-
-    The newest row still wins whenever it carries a percentage. Otherwise the newest row **from
-    the same provider session** that does is used — scoped to the session because a compaction or
-    a fresh session resets usage, and reporting a pre-reset percentage as current would be worse
-    than reporting none. An unscoped fallback would do exactly that.
-    """
-    if not rows:
-        return None
-    newest = rows[0]
-    if not isinstance(newest, dict) or newest.get("percent") is not None:
-        return newest
-    session_id = newest.get("session_id")
-    if session_id is None:
-        return newest
-    for row in rows[1:]:
-        if (
-            isinstance(row, dict)
-            and row.get("percent") is not None
-            and row.get("session_id") == session_id
-        ):
-            return row
-    return newest
 
 
 @router.get("", response_model=List[AgentSummary])
@@ -960,7 +931,17 @@ def _tool_surface_lines(*, has_peers: bool = True) -> List[str]:
         "- `request_agent(name, template, task)` — governed; subject to the project agent budget.",
         f"- `create_job(name, agent, message, cron, session_mode=new)` — session_mode is one of "
         f"{values(JobSessionMode)}. Requires the operator's scheduled-work allowance.",
-        "- `delete_job(job_id)`, `toggle_job(job_id, enabled)`, `run_job(job_id)` — same allowance.",
+        "- `toggle_job(job_id, enabled)`, `run_job(job_id)` — same allowance.",
+        "- `archive_job(job_id)` — same allowance for the capability, but always puts this exact "
+        "call to the operator and waits for an explicit answer, whatever this run's permission "
+        "posture is. The allowance alone is not enough — it is what makes the call reachable, not "
+        "a standing yes. Refused if the job has a loop: a loop is archived by the operator only.",
+        '- `create_loop(name, agent, message, cron, purpose="", stop_at=None, '
+        "stop_when_queue_empties=False, spec_document_id=None, initial_tasks=None)` — a job that "
+        "also queues its own work, each firing claiming the queue's current task. Refused with no "
+        "HTTP call made unless at least one of `stop_at` or `stop_when_queue_empties` is given: a "
+        "loop that cannot stop is not created. `initial_tasks` seeds the queue at creation, each "
+        "entry the same shape `create_task` takes. Same allowance as `create_job`.",
         "",
         (
             "Address a peer by its exact name from the roster above. There is no inbox tool: "

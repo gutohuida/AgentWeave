@@ -218,6 +218,7 @@ def create_task(
     requirement_ids: Optional[List[str]] = None,
     spec_document: Optional[str] = None,
     acceptance_criteria: Optional[List[str]] = None,
+    loop_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Create a task attributed to the bound agent.
 
@@ -234,6 +235,8 @@ def create_task(
         spec_document: The document path whose identifiers to resolve against. Only needed when
             more than one document in the project declares the same identifier.
         acceptance_criteria: Optional list of acceptance criteria.
+        loop_id: Add this task directly to a loop's queue. Only the loop's own agent, before it
+            has fired, may do this — send_message to the loop's agent otherwise.
     """
     return _hub_request(
         "POST",
@@ -247,6 +250,7 @@ def create_task(
             "requirement_ids": requirement_ids or [],
             "spec_document": spec_document,
             "acceptance_criteria": acceptance_criteria or [],
+            "loop_id": loop_id,
         },
     )
 
@@ -530,9 +534,88 @@ def create_job(
 
 
 @mcp.tool()
-def delete_job(job_id: str) -> Dict[str, Any]:
-    """Delete recurring work only when the operator enabled the allowance."""
-    return _job_effect("DELETE", f"/jobs/{job_id}")
+def create_loop(
+    name: str,
+    agent: str,
+    message: str,
+    cron: str,
+    purpose: str = "",
+    stop_at: Optional[str] = None,
+    stop_when_queue_empties: bool = False,
+    spec_document_id: Optional[str] = None,
+    initial_tasks: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    """Create a loop: recurring work with a stated purpose and a stop condition.
+
+    Continuity across firings is by checkpoint (see submit_checkpoint_notes), never by a
+    resumed session — every firing starts fresh. Refused outright with no stop condition: a
+    loop that cannot stop is not created.
+
+    Args:
+        name: Job name.
+        agent: Exact name of the registered agent the loop triggers.
+        message: The message delivered to that agent on each firing.
+        cron: Cron expression for the schedule.
+        purpose: What this loop exists to do — carried into every firing's briefing.
+        stop_at: ISO-8601 timestamp after which the loop stops firing. At least one of
+            stop_at or stop_when_queue_empties is required.
+        stop_when_queue_empties: Stop once this loop's queue has no open task left.
+        spec_document_id: A specification document this loop decomposes. Tasks materialised
+            from that document, once it is approved, are added to this loop's queue
+            automatically.
+        initial_tasks: Tasks to seed the queue with, created in this same call. Each entry is
+            a dict with "title" required and the same optional fields create_task accepts:
+            description, assignee, priority, requirements, requirement_ids, spec_document,
+            acceptance_criteria.
+    """
+    if stop_at is None and not stop_when_queue_empties:
+        raise HubAPIError(
+            400,
+            "a loop needs a stop condition: supply stop_at or stop_when_queue_empties=True",
+            "POST",
+            "/jobs",
+        )
+    return _job_effect(
+        "POST",
+        "/jobs",
+        {
+            "name": name,
+            "agent": agent,
+            "message": message,
+            "cron": cron,
+            "purpose": purpose,
+            "stop_at": stop_at,
+            "stop_when_queue_empties": stop_when_queue_empties,
+            "spec_document_id": spec_document_id,
+            "initial_tasks": initial_tasks,
+        },
+    )
+
+
+@mcp.tool()
+def archive_job(job_id: str) -> Dict[str, Any]:
+    """Archive recurring work. Nothing is deleted; the job simply stops running.
+
+    Every call puts this exact request to the operator and waits for an explicit answer,
+    regardless of this run's permission posture (design D18) — the standing scheduled-work
+    allowance (`project.allow_agent_jobs`) grants the *capability* to reach this tool at all,
+    it does not supply the *direction* to use it on this job, right now. An `auto` posture
+    would otherwise wave every call through unattended, which is the opposite of what
+    "explicit direction from the operator" means. This is the first tool on this surface with
+    an always-confirm rule — do not treat it as a precedent for any other tool.
+
+    Refused if the job has a loop: a loop is archived by the operator only, never an agent
+    (mirrors `create_loop`'s "continuity is by checkpoint, not resume" rule).
+    """
+    decision = _ask_operator("archive_job", {"job_id": job_id}, tool_use_id=f"archive-{job_id}")
+    if not decision["allow"]:
+        raise HubAPIError(
+            403,
+            f"archiving this job was not approved: {decision['reason']}",
+            "POST",
+            f"/jobs/{job_id}/archive",
+        )
+    return _job_effect("POST", f"/jobs/{job_id}/archive")
 
 
 @mcp.tool()

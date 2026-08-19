@@ -7,6 +7,8 @@ import {
   useUnarchiveConversation,
   type AgentConversation,
 } from '@/api/agentChat'
+import { Icon } from '@/components/common/Icon'
+import { loopTabId, usePanelTabsStore } from '@/store/panelTabsStore'
 import { RowMenu, type RowMenuItem } from './RowMenu'
 
 /** What each attention state looks like at rest.
@@ -32,6 +34,10 @@ interface ConversationRowProps {
   agentColor?: string
   /** Shown in the recency view, where the agent is not implied by the row's position. */
   agentName?: string
+  /** Set false inside a `LoopFiringGroup`, whose own row already names the loop once for every
+   *  firing beneath it. Repeating it per row would spend the width the title needs to say the one
+   *  thing that differs between them. */
+  showLoopMarker?: boolean
   testId: string
 }
 
@@ -42,11 +48,14 @@ export function ConversationRow({
   onOpen,
   agentColor,
   agentName,
+  showLoopMarker = true,
   testId,
 }: ConversationRowProps) {
   const attention = ATTENTION[conversation.attention]
   const label = conversationLabel(conversation)
   const archived = conversation.lifecycle === 'archived'
+  // Held as a const so the null check below narrows inside the click handler too.
+  const loop = (showLoopMarker ? conversation.loop : null) ?? null
 
   const [renaming, setRenaming] = useState(false)
   const [draft, setDraft] = useState(label)
@@ -55,6 +64,7 @@ export function ConversationRow({
   const rename = useRenameConversation()
   const toArchive = useArchiveConversation()
   const toUnarchive = useUnarchiveConversation()
+  const openTab = usePanelTabsStore((state) => state.openTab)
 
   useEffect(() => {
     if (renaming) inputRef.current?.select()
@@ -175,6 +185,38 @@ export function ConversationRow({
                 role="img"
               />
             )}
+          </button>
+        )}
+        {!renaming && loop && (
+          /* A sibling of the row button, not a child of it: nesting one button inside another is
+           * invalid, and this one has its own destination. It opens the loop's existing drill-down
+           * tab rather than introducing a second place loop history lives — the rejected
+           * alternative was a whole extra level in this rail (design D2: never give "open on the
+           * right" two meanings).
+           *
+           * Deliberately not `.row-action`: that class hides at rest and reveals on hover, which is
+           * right for an action and wrong for this. Which loop a thread came from is the fact that
+           * tells it apart from one the operator typed, so it has to be legible while scanning. */
+          <button
+            type="button"
+            /* `min-w-0` and a proportional cap rather than `shrink-0` and a fixed width: the rail
+             * is narrow, and a fixed 96px marker truncated real conversation titles to "taste…"
+             * — which loses the thing the row is primarily for to the thing that qualifies it.
+             * The icon never shrinks, so a firing stays identifiable even when the name is cut;
+             * the full name is on the tooltip and the accessible name either way. */
+            className="flex min-w-0 items-center gap-0.5 rounded px-1 py-0.5 text-[10px]"
+            data-testid={`${testId}-loop`}
+            data-loop-id={loop.id}
+            style={{ color: 'var(--text-3)', maxWidth: '40%' }}
+            title={`Fired by the loop “${loop.label}” — open it`}
+            aria-label={`Open loop ${loop.label}`}
+            onClick={(event) => {
+              event.stopPropagation()
+              openTab(projectId, loopTabId(loop.id))
+            }}
+          >
+            <Icon name="sync" size={11} className="shrink-0" aria-hidden="true" />
+            <span className="truncate">{loop.label}</span>
           </button>
         )}
         {!renaming && (

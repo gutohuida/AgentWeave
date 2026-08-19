@@ -251,7 +251,6 @@ export function SpecDocumentPanel({
           className="flex shrink-0 flex-col gap-1.5 px-3 py-2 text-xs"
           style={{
             background: 'color-mix(in srgb, var(--amber) 8%, transparent)',
-            borderBottom: '1px solid var(--border)',
             color: 'var(--text-2)',
           }}
         >
@@ -290,7 +289,7 @@ export function SpecDocumentPanel({
           aria-live="polite"
           data-testid="spec-nav-status"
           className="flex shrink-0 items-center gap-2 px-3 py-1.5 text-xs"
-          style={{ background: 'var(--surface-2)', borderBottom: '1px solid var(--border)', color: 'var(--text-2)' }}
+          style={{ background: 'var(--surface-2)', color: 'var(--text-2)' }}
         >
           <Icon name="info" size={14} />
           <span className="flex-1">{navStatus}</span>

@@ -99,6 +99,11 @@ vi.mock('@/api/modelCatalog', async (importOriginal) => {
   return { ...actual, useModelCatalog: () => ({ data: MODEL_CATALOG_FIXTURE }) }
 })
 
+vi.mock('@/api/accounting', () => ({
+  useAccounting: () => ({ data: undefined }),
+  useConversationAccounting: () => ({ data: undefined }),
+}))
+
 const fetchMock = vi.fn()
 ;(globalThis as unknown as { fetch: ReturnType<typeof vi.fn> }).fetch = fetchMock
 

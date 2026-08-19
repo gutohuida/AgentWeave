@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { getJson, patchJson, postJson } from './client'
 import { useConfigStore } from '@/store/configStore'
 import { onSseReconnect, useSSE, SSEEvent } from '@/hooks/useSSE'
+import { hubDate } from '@/lib/hubTime'
 
 export interface AgentSummary {
   name: string
@@ -422,7 +423,7 @@ export function useAgentOutput(name: string | null) {
       if (newFromServer.length > 0 || !linesCache.has(cacheKey)) {
         const merged = [...(linesCache.get(cacheKey) || []), ...newFromServer]
         // Sort by timestamp to ensure correct order
-        merged.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+        merged.sort((a, b) => hubDate(a.timestamp).getTime() - hubDate(b.timestamp).getTime())
         linesCache.set(cacheKey, merged)
         // Trigger re-render by invalidating the custom query key
         queryClient.invalidateQueries({ queryKey: ['project', projectId, 'agents', name, 'lines'] })
@@ -483,7 +484,7 @@ export function useAgentOutput(name: string | null) {
           const uniqueNew = newLines.filter(l => !existingIds.has(l.id))
           if (uniqueNew.length > 0) {
             const merged = [...(linesCache.get(cacheKey) || []), ...uniqueNew]
-            merged.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+            merged.sort((a, b) => hubDate(a.timestamp).getTime() - hubDate(b.timestamp).getTime())
             linesCache.set(cacheKey, merged)
             queryClient.invalidateQueries({ queryKey: ['project', projectId, 'agents', name, 'lines'] })
           }

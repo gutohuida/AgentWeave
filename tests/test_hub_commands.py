@@ -102,7 +102,12 @@ class TestHubStartCommand:
             result = cmd_hub_start(args)
             assert result == 0
             mock_native.assert_called_once_with(
-                port=args.port, detach=True, app=False, cwd=Path.cwd(), profile=args.profile
+                port=args.port,
+                detach=True,
+                app=False,
+                cwd=Path.cwd(),
+                profile=args.profile,
+                desktop_shortcut=args.desktop_shortcut,
             )
 
     def test_hub_start_docker_flag_no_docker(self, capsys):
@@ -163,7 +168,12 @@ class TestHubStartCommand:
             result = cmd_hub_start(args)
             assert result == 0
             mock_native.assert_called_once_with(
-                port=args.port, detach=True, app=True, cwd=Path.cwd(), profile=args.profile
+                port=args.port,
+                detach=True,
+                app=True,
+                cwd=Path.cwd(),
+                profile=args.profile,
+                desktop_shortcut=args.desktop_shortcut,
             )
 
     def test_hub_start_docker_already_running_opens_app(self, capsys):
@@ -555,9 +565,18 @@ class TestNativeStartProjectLifecycle:
                     return_value=(env_path, None, False),
                 ):
                     with patch("agentweave.cli._hub_run_migrations", return_value=True):
-                        with patch("threading.Thread") as mock_thread:
-                            with patch("uvicorn.run"):
-                                _hub_native_start(port=8000, detach=False, app=True, cwd=tmp_path)
+                        # Stubbed because it is not what this test is about, and because
+                        # it shells out to PowerShell: since the shortcut stopped being
+                        # gated on `is_first_run`, a real attempt here spawns subprocess
+                        # reader threads and the Thread assertion below counts those too.
+                        with patch(
+                            "agentweave.cli._maybe_create_desktop_shortcut", return_value=False
+                        ):  # noqa: SIM117
+                            with patch("threading.Thread") as mock_thread:
+                                with patch("uvicorn.run"):
+                                    _hub_native_start(
+                                        port=8000, detach=False, app=True, cwd=tmp_path
+                                    )
         mock_thread.assert_called_once()
         _, kwargs = mock_thread.call_args
         assert kwargs["target"].__name__ == "_wait_and_open_app"

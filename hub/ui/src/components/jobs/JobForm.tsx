@@ -68,6 +68,9 @@ export function JobForm({ onSubmit, onCancel, isPending }: JobFormProps) {
       ...(loopEnabled
         ? {
             purpose: purpose.trim(),
+            /* Deliberately `new Date`, not `hubDate`: `stopAt` is what the operator typed into a
+             * `datetime-local` input, which is wall-clock time in *their* zone, not a Hub
+             * timestamp. Reading it as UTC would move the stop condition by the machine's offset. */
             ...(stopAt ? { stop_at: new Date(stopAt).toISOString() } : {}),
             stop_when_queue_empties: stopWhenQueueEmpties,
           }

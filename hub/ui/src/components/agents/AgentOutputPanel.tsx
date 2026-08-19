@@ -29,6 +29,7 @@ import {
   useCheckpoints,
 } from '@/api/checkpoints'
 import { ApiError } from '@/api/client'
+import { useAccounting, useConversationAccounting } from '@/api/accounting'
 import { useConfigStore } from '@/store/configStore'
 import { AgentTimeline } from './AgentTimeline'
 import { BannerStack, type ConversationBanner } from './BannerStack'
@@ -71,6 +72,17 @@ interface AgentOutputPanelProps {
    *  same name for why this is distinct from `onOpenSpecPicker`. */
   onOpenExistingSpec?: () => void
   specBusy?: boolean
+  /** Forwarded to `Composer` verbatim — see its prop of the same name (task 5.4,
+   *  `2026-08-18-one-shell-three-panels`). */
+  insertPathRequest?: { path: string; requestId: number } | null
+  /** Opens or hides the panel shell independently of any attached document (task B5,
+   *  `2026-08-18-a-loop-writes-its-own-queue`) — the only way to reach a document-free tenant
+   *  like the `loops` index from a bare conversation. Omitted, no toggle renders — every caller
+   *  that hosts a shell passes it; `NewConversationSurface`, which has no shell at all, does not. */
+  onTogglePanel?: () => void
+  /** Whether the shell is currently open, for the toggle's pressed state. Meaningless without
+   *  `onTogglePanel`. */
+  panelOpen?: boolean
 }
 
 /* Both prompts that used to live here are gone, and nothing replaces them.
@@ -127,6 +139,9 @@ export function AgentOutputPanel({
   onStopExploring,
   onOpenExistingSpec,
   specBusy = false,
+  insertPathRequest = null,
+  onTogglePanel,
+  panelOpen = false,
 }: AgentOutputPanelProps) {
   // `lines` is no longer read here. Its only consumer was the effect that watched the output
   // stream for a completed run in order to call a handoff "ready" — the exact inference this
@@ -295,6 +310,8 @@ export function AgentOutputPanel({
     ? { [PERMISSION_MODE_CONTROL]: targetAgentRow.default_permission_mode }
     : EMPTY_CONTROLS
   const { data: timelineEvents = [] } = useAgentTimeline(agent.name)
+  const { data: accounting } = useAccounting()
+  const { data: conversationUsage } = useConversationAccounting(currentConversationId ?? null)
   const { data: queueStatus } = useQueueStatus(agent.name)
   /** Undelivered entries addressed to the conversation on screen. A checkpoint handed to a
    *  successor is exactly this, which is why the Continue control keys on it rather than on
@@ -812,7 +829,35 @@ export function AgentOutputPanel({
           )}
           {agent.status}
         </span>
+        {/* The conversation's own running total — distinct from the per-turn figure beside each
+            "Worked for Xs" line, and from the project-wide total in the Budgets panel. Waits for
+            at least one measured turn so a brand-new or all-unavailable conversation shows
+            nothing rather than a misleading "0 tokens". */}
+        {conversationUsage && conversationUsage.measured_turns > 0 && (
+          <span
+            data-testid="conversation-token-total"
+            className="shrink-0"
+            style={{ fontSize: 11, color: 'var(--text-3)' }}
+            title="Total tokens used across this conversation"
+          >
+            {conversationUsage.total_tokens?.toLocaleString()} tokens
+          </span>
+        )}
         <div className="min-w-0 flex-1" />
+        {onTogglePanel && (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="shrink-0"
+            data-testid="conversation-toggle-panel"
+            onClick={onTogglePanel}
+            aria-pressed={panelOpen}
+            aria-label={panelOpen ? 'Hide panel' : 'Show panel'}
+            title={panelOpen ? 'Hide panel' : 'Show panel'}
+          >
+            <Icon name="right_panel_close" size={16} />
+          </Button>
+        )}
         {onOpenAgentSettings && (
           <Button
             variant="ghost"
@@ -827,7 +872,7 @@ export function AgentOutputPanel({
           </Button>
         )}
         <ConversationControls
-          agent={agent}
+          contextUsage={currentConversation?.context_usage}
           isRunning={isRunning}
           isStopping={isStopping}
           onStop={handleStop}
@@ -865,6 +910,7 @@ export function AgentOutputPanel({
             onDeliverNow={handleDeliverNow}
             onWithdraw={handleWithdraw}
             foldAllSignal={foldAllSignal}
+            recentTurns={accounting?.recent_turns}
           />
         )}
         <div aria-hidden="true" data-testid="conversation-tail-spacer" style={{ height: tailSpacer }} />
@@ -996,6 +1042,7 @@ export function AgentOutputPanel({
               onOpenExistingSpec={onOpenExistingSpec}
               specBusy={specBusy}
               specDocumentLabel={specDocumentLabel}
+              insertPathRequest={insertPathRequest}
             />
           </div>
         </div>

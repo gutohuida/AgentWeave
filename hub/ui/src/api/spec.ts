@@ -21,6 +21,10 @@ export interface SpecEntry {
    *  is a phase transition and does not relocate the file, so a document can be `archived` here
    *  while its path still sits outside `spec/changes/archive/` — the tree has to check both. */
   phase?: string | null
+  /** The durable id the panel shell keys a `spec:` tab by (design D4, `2026-08-18-one-shell-three-panels`),
+   *  present only for documents the Hub tracks a record for — `null` for a document discovery
+   *  found on disk that was never created through the Hub. */
+  document_id?: string | null
 }
 
 export interface SpecDocument {

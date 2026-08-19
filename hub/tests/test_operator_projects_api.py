@@ -312,10 +312,15 @@ async def test_project_settings_update_is_validated_and_atomic(app, auth_headers
         # tokens on titles.
         "conversation_title_mode": "truncate",
         "conversation_title_runner_id": None,
-        # Checkpointing is off until somebody turns it on, for the same reason titles default to
-        # truncation: a settings save must not start spending tokens, and here it must not start
-        # cutting conversations over either.
-        "checkpoint_mode": "off",
+        # A new project starts at "offered", changed 2026-08-19. The rule this line has always
+        # encoded is unchanged and still holds: a settings save must not start spending tokens,
+        # and must not start cutting conversations over. "offered" does neither — it only makes
+        # the option reachable, and `CheckpointPolicy.automatic` is what acts unasked. What "off"
+        # additionally bought was invisibility: a loop's continuity between firings *is* its
+        # checkpoint, so a fresh project's loops silently had no memory (human-only check 13.2).
+        # An existing project is untouched — `server_default` stays "off" and no migration
+        # rewrites it, which is the upgrade-safety half of the original reasoning.
+        "checkpoint_mode": "offered",
         "checkpoint_threshold_mode": None,
         "checkpoint_threshold_value": None,
         "checkpoint_notes_value": None,

@@ -292,6 +292,7 @@ export default function App() {
       <ConversationView
         agent={selectedAgent}
         conversationId={resolvedConversationId}
+        projectId={destination.projectId}
         document={destination.document}
         onSelectConversation={(conversationId) => {
           if (destination.conversationId !== conversationId) {

@@ -1,4 +1,5 @@
 import type { TimelineEntry } from '@/api/agentChat'
+import type { TurnUsage } from '@/api/accounting'
 
 /** design.md's "typed timeline, not uniform bubbles" principle: every entry
  * belongs to exactly one of three presentation categories. */
@@ -165,6 +166,22 @@ export function runDurationsByRunId(
     durations[runId] = Math.round((end - start) / 1000)
   }
   return durations
+}
+
+/**
+ * run_id -> total token count, from the accounting API's `recent_turns` (see
+ * hub/hub/api/v1/accounting.py and Q7 Gap 5's exploration finding — per-turn figures already
+ * exist in the right shape, this is a pure display read of them). An 'unavailable' turn or a
+ * null total is omitted rather than shown as zero: the runner genuinely reported nothing, which
+ * is a different fact than "used no tokens."
+ */
+export function tokensByRunId(recentTurns: TurnUsage[]): Record<string, number> {
+  const tokens: Record<string, number> = {}
+  for (const turn of recentTurns) {
+    if (turn.status !== 'measured' || turn.total_tokens === null) continue
+    tokens[turn.run_id] = turn.total_tokens
+  }
+  return tokens
 }
 
 export function runStatusByRunId(

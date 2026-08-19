@@ -15,7 +15,9 @@ from ...auth import get_project
 from ...db.engine import get_session
 from ...db.models import (
     AgentHeartbeat,
+    AIJob,
     EvidenceReview,
+    Loop,
     RequirementEvidence,
     RunDivergence,
     SpecDocument,
@@ -281,12 +283,97 @@ async def _latest_heartbeats_by_agent(
     return heartbeats
 
 
+async def _authorize_loop_task_creation(
+    session: AsyncSession, project_id: str, loop_id: str, actor: Actor, task_body: TaskCreate
+) -> None:
+    """Who may add a task directly to a loop's queue (`2026-08-18-a-loop-writes-its-own-queue`,
+    design D1/D7/D8/D10/D12).
+
+    D8 collapses "creator" into `Loop`'s own `AIJob.agent` — there is no separate creator field,
+    deliberately, so the operator is always exempt and every other caller is measured against that
+    one string.
+
+    D10 generalises D7's "first fire" boundary into a consequence of `Loop.control` (task A1.4):
+    control defaults to the operator, so a self-created loop whose control was never delegated
+    still needs the operator once it has fired — the same outcome D7 stated directly. Before the
+    first fire, the creator's own call is indistinguishable from `create_loop` accepting its
+    initial queue (design D2's "definition window") and is let through regardless of delegation,
+    exactly as it always was. Once delegated (`POST /loops/{id}/control`), the creator decides for
+    itself at any point, `run_count` included — D10's "the creator can decide for himself".
+
+    D12 (task A3.1): a loop that has already ended refuses EVERY caller, the operator included —
+    unlike the checks below, which exempt the operator, this is not "who may extend the queue" but
+    "does the queue still exist to extend". `Loop.ending_state` is the definitive stopped signal
+    (set once, at the same site as `stop_reason`/`stopped_at`, only by the loop's own termination
+    path — an operator `toggle_job` pause leaves all three `None`, deliberately: D6 rejected a
+    third "paused" state, so a merely-disabled job is not "stopped" in this design's vocabulary).
+    The refusal echoes the submitted task back (A3.2) so the caller can resubmit it as one of a new
+    loop's `initial_tasks` — D12 explicitly rejects reviving the stopped loop itself, so nothing is
+    created automatically here.
+    """
+    loop = await session.get(Loop, loop_id)
+    if loop is None or loop.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Loop not found")
+    if loop.ending_state is not None:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "message": (
+                    f"This loop stopped ({loop.stop_reason or loop.ending_state}) at "
+                    f"{loop.stopped_at.isoformat() if loop.stopped_at else 'an unknown time'} "
+                    "and its queue is closed. It will not be revived — create a new loop and "
+                    "pass this task as one of its initial_tasks instead."
+                ),
+                "code": "loop_stopped",
+                "ending_state": loop.ending_state,
+                "stop_reason": loop.stop_reason,
+                "stopped_at": loop.stopped_at.isoformat() if loop.stopped_at else None,
+                "offered_task": {
+                    "title": task_body.title,
+                    "description": task_body.description,
+                    "priority": task_body.priority,
+                    "assignee": task_body.assignee,
+                    "requirements": task_body.requirements,
+                    "requirement_ids": task_body.requirement_ids,
+                    "spec_document": task_body.spec_document,
+                    "acceptance_criteria": task_body.acceptance_criteria,
+                    "deliverables": task_body.deliverables,
+                    "notes": task_body.notes,
+                },
+            },
+        )
+    if actor.is_operator:
+        return
+    job = await session.get(AIJob, loop.job_id)
+    if job is None or actor.agent != job.agent:
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "Only this loop's creator, or the operator, may add tasks to its queue "
+                "directly. Use send_message to ask the creator to add it instead."
+            ),
+        )
+    delegated_to_creator = loop.control == "creator"
+    if delegated_to_creator:
+        return
+    if job.run_count > 0:
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "This loop has already fired at least once — adding directly to its own queue "
+                "now needs operator approval. Use ask_user to ask the operator to add it, "
+                "naming the task and why this loop needs it."
+            ),
+        )
+
+
 async def create_task_for_actor(
     body: TaskCreate,
     *,
     project_id: str,
     assigner: Optional[str],
     created_by_run_id: Optional[str],
+    actor: Actor,
     session: AsyncSession,
 ) -> TaskResponse:
     # Honor a client-supplied id when present so the MCP `create_task` tool
@@ -297,6 +384,9 @@ async def create_task_for_actor(
     # transitions can reach it. This is the single `Task(` construction site, so one guard covers
     # both the operator route and the agent plane.
     guard_entry_status(body.status)
+
+    if body.loop_id is not None:
+        await _authorize_loop_task_creation(session, project_id, body.loop_id, actor, body)
 
     # Resolved before the task exists. A create that stored the task and then refused its
     # requirements would leave work on the board whose author believes it is linked.
@@ -339,6 +429,7 @@ async def create_task_for_actor(
         notes=body.notes,
         created_by_run_id=created_by_run_id,
         spec_document_id=spec_document_id,
+        loop_id=body.loop_id,
     )
     session.add(task)
     try:
@@ -399,6 +490,7 @@ async def create_task(
         project_id=project_id,
         assigner=body.assigner,
         created_by_run_id=None,
+        actor=operator(),
         session=session,
     )
 
@@ -602,6 +694,16 @@ async def update_task_for_actor(
     task = await session.get(Task, task_id)
     if task is None or task.project_id != project_id:
         raise HTTPException(status_code=404, detail="Task not found")
+    if body.loop_id is not None:
+        # Task.loop_id is write-once, set only at creation (design D14,
+        # 2026-08-18-a-loop-writes-its-own-queue). A loop's queue history has to be able to answer
+        # what work it was ever given — `stop_when_queue_empties` depends on that history staying
+        # accurate — and reassignment would break it. Checked before any other field is touched, so
+        # a refused update leaves the task genuinely unchanged rather than half-applied.
+        raise HTTPException(
+            status_code=403,
+            detail="A task's loop assignment is set at creation and cannot be changed afterwards.",
+        )
     # Set only when this call performed a transition — `contract`'s report on approval reads off it
     # below. A no-op restatement of the current status returns `None` from `apply_transition`, which
     # carries no advisories the same way it carries no new transition row.

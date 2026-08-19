@@ -21,7 +21,7 @@ from .api.v1 import v1_router
 from .api.v1.agent_trigger import terminate_all_active_runs
 from .config import settings
 from .db.engine import init_db
-from .run_reconciliation import reconcile_interrupted_runs
+from .run_reconciliation import reconcile_interrupted_runs, reconcile_stale_job_runs
 from .run_task_binding import TaskBindingError
 from .scheduler import init_scheduler, shutdown_scheduler
 from .subprocess_windows import no_console_kwargs
@@ -282,6 +282,7 @@ async def lifespan(app: FastAPI):
     await init_db()
     instance_identity.load_or_create()
     await reconcile_interrupted_runs()
+    await reconcile_stale_job_runs()
     await init_scheduler()
     warning = _ui_staleness_warning()
     if warning:

@@ -12,6 +12,7 @@ let recordedEntries: TimelineEntry[] = []
 let sseConnectionState: 'closed' | 'connecting' | 'open' | 'reconnecting' = 'open'
 let roster: AgentSummary[] = []
 let launchability: Record<string, { present: boolean; authorized: boolean; runnable: boolean; reason?: string }> = {}
+let conversationUsage: { total_tokens: number | null; measured_turns: number } | undefined = undefined
 
 vi.mock('@/api/agents', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/agents')>()
@@ -83,6 +84,11 @@ vi.mock('@/api/modelCatalog', async (importOriginal) => {
   return { ...actual, useModelCatalog: () => ({ data: undefined }) }
 })
 
+vi.mock('@/api/accounting', () => ({
+  useAccounting: () => ({ data: undefined }),
+  useConversationAccounting: () => ({ data: conversationUsage }),
+}))
+
 vi.mock('@/api/charters', () => ({
   useCharters: () => ({ data: [], isLoading: false }),
   useBindAgentCharter: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
@@ -132,6 +138,7 @@ describe('conversation controls — the resting header', () => {
       claude: { present: true, authorized: true, runnable: true },
     }
     sseConnectionState = 'open'
+    conversationUsage = undefined
     fetchMock.mockReset()
     useConfigStore.setState({
       apiKey: 'aw_live_TESTKEY',
@@ -241,20 +248,115 @@ describe('conversation controls — context usage placement', () => {
     expect(screen.queryByTestId('context-usage')).not.toBeInTheDocument()
   })
 
-  it('shows the usage indicator once a context-usage event has been reported', async () => {
+  it('shows the usage indicator once this conversation has reported one', async () => {
+    conversations = [
+      {
+        ...conversation,
+        context_usage: {
+          status: 'measured',
+          source: 'test',
+          context_tokens: 4000,
+          limit_tokens: 10000,
+          observed_at: 0,
+        },
+      },
+    ]
+    render(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)
+    await waitFor(() => expect(screen.getByTestId('session-continuity')).toHaveTextContent('A conversation'))
+    expect(screen.getByTestId('context-usage')).toBeInTheDocument()
+  })
+
+  it('does not show another conversation’s reading, even via the agent', async () => {
+    // The bug this replaced: `agent.context_usage` is one reading per agent — the newest across
+    // every thread it owns — so this header showed whichever conversation last reported. Measured
+    // on the trial Hub 2026-08-19: agent `verifier` had three conversations at 18.56%, 16.6% and
+    // 15.9%, and all three composers showed 15.9%.
     const agentWithUsage: AgentSummary = {
       ...idleAgent,
       context_usage: {
         status: 'measured',
         source: 'test',
-        context_tokens: 4000,
+        context_tokens: 9000,
         limit_tokens: 10000,
         observed_at: 0,
       },
     }
+    // This conversation has produced no reading of its own.
+    conversations = [conversation]
     render(<AgentOutputPanel agent={agentWithUsage} conversationId="conv-old" />)
+
     await waitFor(() => expect(screen.getByTestId('session-continuity')).toHaveTextContent('A conversation'))
-    expect(screen.getByTestId('context-usage')).toBeInTheDocument()
+    expect(screen.queryByTestId('context-usage')).not.toBeInTheDocument()
+  })
+
+  it('follows the conversation being viewed, not the newest one', async () => {
+    conversations = [
+      {
+        ...conversation,
+        context_usage: {
+          status: 'measured',
+          source: 'test',
+          context_tokens: 1000,
+          limit_tokens: 10000,
+          observed_at: 0,
+        },
+      },
+      {
+        ...conversation,
+        id: 'conv-second',
+        title: 'Another conversation',
+        context_usage: {
+          status: 'measured',
+          source: 'test',
+          context_tokens: 9000,
+          limit_tokens: 10000,
+          observed_at: 99,
+        },
+      },
+    ]
+
+    const { rerender } = render(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)
+    await waitFor(() => expect(screen.getByTestId('context-usage')).toHaveTextContent('10%'))
+
+    rerender(<AgentOutputPanel agent={idleAgent} conversationId="conv-second" />)
+    await waitFor(() => expect(screen.getByTestId('context-usage')).toHaveTextContent('90%'))
+  })
+})
+
+describe('conversation controls — whole-conversation token total', () => {
+  beforeEach(() => {
+    outputLines = []
+    conversations = [conversation]
+    recordedEntries = []
+    roster = [idleAgent]
+    launchability = { claude: { present: true, authorized: true, runnable: true } }
+    fetchMock.mockReset()
+    useConfigStore.setState({
+      apiKey: 'aw_live_TESTKEY',
+      hubUrl: 'http://hub.test',
+      selectedProjectId: 'proj-test',
+      isConfigured: true,
+      bootstrapState: 'ready',
+    })
+  })
+
+  it('renders nothing while the rollup has not loaded or has no measured turns', async () => {
+    conversationUsage = undefined
+    render(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)
+    await waitFor(() => expect(screen.getByTestId('session-continuity')).toHaveTextContent('A conversation'))
+    expect(screen.queryByTestId('conversation-token-total')).not.toBeInTheDocument()
+
+    conversationUsage = { total_tokens: null, measured_turns: 0 }
+    const { rerender } = render(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)
+    rerender(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)
+    expect(screen.queryByTestId('conversation-token-total')).not.toBeInTheDocument()
+  })
+
+  it('shows the running total once the conversation has at least one measured turn', async () => {
+    conversationUsage = { total_tokens: 42_300, measured_turns: 3 }
+    render(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)
+    await waitFor(() => expect(screen.getByTestId('session-continuity')).toHaveTextContent('A conversation'))
+    expect(screen.getByTestId('conversation-token-total')).toHaveTextContent('42,300 tokens')
   })
 })
 

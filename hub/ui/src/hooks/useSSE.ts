@@ -39,6 +39,12 @@ const SSE_EVENT_TYPES = [
   'job_updated',
   'job_deleted',
   'job_fired',
+  'loop_stopped',
+  'loop_queue_exhausted',
+  'loop_archived',
+  'loop_control_changed',
+  'loop_edit_staged',
+  'loop_edit_applied',
   'run_started',
   'run_completed',
   'run_failed',
@@ -425,6 +431,12 @@ export function useSSE(onEvent?: SSEListener) {
         case 'task_updated':
           queryClient.invalidateQueries({ queryKey: ['project', pid, 'tasks'] })
           queryClient.invalidateQueries({ queryKey: ['project', pid, 'status'] })
+          // Neither payload carries `loop_id` (`tasks.py` broadcasts only `id`/`title`/`status`),
+          // and `Task.loop_id` is write-once (design D14) so there is no reassignment to track —
+          // but a claimed/completed/queued task changes its loop's queue counts and current item,
+          // so the loops list/detail refetch here rather than staying stale until something else
+          // invalidates them.
+          queryClient.invalidateQueries({ queryKey: ['project', pid, 'loops'] })
           break
         case 'queue_entry_abandoned': {
           // The Hub stopped trying to deliver something. The queue card is where that shows, and
@@ -457,6 +469,13 @@ export function useSSE(onEvent?: SSEListener) {
         case 'run_failed':
         case 'run_stopped':
         case 'run_interrupted':
+          if (event.type !== 'run_started') {
+            // A terminal run status is the moment a loop firing's own JobRun leaves
+            // "in_progress" (design D13, task A4.3: `finalize_job_run_for_conversation` runs
+            // before this broadcasts) — the loops list/detail's `firing_active` would otherwise
+            // stay stuck true until something else happened to refetch it.
+            queryClient.invalidateQueries({ queryKey: ['project', pid, 'loops'] })
+          }
           // Run status is folded into the agents list response (agents.py's
           // agents_with_active_run), and a Hub-triggered run never posts a
           // heartbeat — without this, the running/idle badge would never
@@ -497,6 +516,32 @@ export function useSSE(onEvent?: SSEListener) {
           const d = event.data as { id?: string }
           if (d?.id) {
             queryClient.invalidateQueries({ queryKey: ['project', pid, 'jobs', d.id] })
+          }
+          if (event.type === 'job_fired') {
+            // A firing becoming "in_progress" (design D13, task A4.3) is committed before this
+            // broadcasts (`scheduler.py`), so the loops list/detail's `firing_active` is already
+            // true by the time a listener refetches.
+            queryClient.invalidateQueries({ queryKey: ['project', pid, 'loops'] })
+          }
+          break
+        }
+        // Task B6.4 (`2026-08-18-a-loop-writes-its-own-queue`): `loop_queue_exhausted` (design D6)
+        // is a loop event's first consumer here — none of the six were reaching a listener before
+        // this task, because they were absent from `SSE_EVENT_TYPES` above and silently dropped.
+        // `loop_stopped`/`loop_queue_exhausted` key their loop id as `loop_id`; the other four
+        // (staged/applied edits, control changes, archival) key it as `id` — both are read below
+        // rather than assumed to be one or the other.
+        case 'loop_stopped':
+        case 'loop_queue_exhausted':
+        case 'loop_archived':
+        case 'loop_control_changed':
+        case 'loop_edit_staged':
+        case 'loop_edit_applied': {
+          queryClient.invalidateQueries({ queryKey: ['project', pid, 'loops'] })
+          const d = event.data as { loop_id?: string; id?: string }
+          const loopId = d?.loop_id ?? d?.id
+          if (loopId) {
+            queryClient.invalidateQueries({ queryKey: ['project', pid, 'loops', loopId] })
           }
           break
         }

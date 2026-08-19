@@ -36,6 +36,7 @@ from .checkpoints import (
     compute_envelope,
     create_checkpoint,
     latest_checkpoint,
+    loop_for_conversation,
     runs_to_cover,
 )
 from .db.models import (
@@ -444,7 +445,8 @@ async def generate_checkpoint(
     observed producing nothing while reporting success.
     """
     anchor = await latest_checkpoint(db, conversation.id)
-    envelope = await compute_envelope(db, conversation, worktree=worktree, anchor=anchor)
+    loop = await loop_for_conversation(db, conversation.id)
+    envelope = await compute_envelope(db, conversation, worktree=worktree, anchor=anchor, loop=loop)
     transcript = await _transcript_since(db, conversation, anchor)
     covered_runs = await runs_to_cover(db, conversation.id, anchor)
 
@@ -492,6 +494,7 @@ async def generate_checkpoint(
         runner=cli,
         model=model,
         visibility=visibility,
+        loop=loop,
     )
 
     # Citations are attached whether or not a body was written: they point at what exists in

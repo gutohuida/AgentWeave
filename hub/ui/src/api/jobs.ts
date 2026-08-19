@@ -13,20 +13,58 @@ export interface JobRun {
   error_summary?: string
 }
 
+/**
+ * An edit staged against a loop and waiting for the next firing to apply it (design D11).
+ *
+ * Reported separately from the loop's live fields rather than merged into them, because a reader
+ * of the live fields must not be shown a value that is not yet in force. Only the keys actually
+ * staged appear — an absent `purpose` means "this edit did not touch the purpose", never "the
+ * purpose is being cleared".
+ */
+export interface LoopPendingEdit {
+  staged_by?: string | null
+  staged_at: string
+  purpose?: string
+  stop_at?: string
+  stop_when_queue_empties?: boolean
+}
+
 /** A job's loop state, present only when the job opted into being a loop (design D6). */
 export interface LoopSummary {
   /** The `Loop` row's own id — what `GET /tasks?loop_id=` actually scopes by, distinct from the
    *  job's id. */
   id: string
+  /** The loop's job's name (design D20/B4.2) — what a picker shows; `LoopSummary` carried no name
+   *  of its own before B4. */
+  label: string
+  /** Which agent runs each firing — the loop's job's `agent`. Distinct from `control`, which says
+   *  who may extend the queue rather than who works it. Optional because the server schema
+   *  defaults it to an empty string, so "present but empty" is a real state the UI must render
+   *  past rather than trust. */
+  agent?: string
   purpose: string
   stop_at?: string
   stop_when_queue_empties: boolean
   stop_reason?: string
   stopped_at?: string
+  /** What happened ("completed"/"stopped"), null while still running (design D17). */
+  ending_state?: 'completed' | 'stopped' | null
+  /** When an operator archived this loop; null while it is listed by default (design D16). */
+  archived_at?: string | null
   /** status -> count of this loop's non-fetched-yet-terminal tasks, keyed by `Task.status`. */
   queue: Record<string, number>
   current_task?: { id: string; title: string; status: string } | null
   open_questions: number
+  /** Who may extend this queue (design D10). Null means the current default, the operator —
+   *  returned unresolved by the Hub, so it is left unresolved here too. */
+  control?: string | null
+  /** Set only while an edit is staged and waiting for the next firing. Null the rest of the
+   *  time, which is most of the time. */
+  pending_edit?: LoopPendingEdit | null
+  /** Is a firing of this loop's job in progress right now (design D13, task A4.4) — the one
+   *  shared fact both the edit-staging response and the loop panel read, computed once
+   *  server-side from `JobRun.status == "in_progress"`. */
+  firing_active: boolean
 }
 
 export interface Job {
@@ -44,6 +82,8 @@ export interface Job {
   next_run?: string
   run_count: number
   last_session_id?: string
+  /** Design D16: null means live and listed by default; set only by `POST /jobs/{id}/archive`. */
+  archived_at?: string | null
   history?: JobRun[]
   loop?: LoopSummary | null
 }

@@ -295,6 +295,196 @@ async def test_a_failure_never_blocks_the_approval(app, auth_headers, author, mo
     assert response.json()["tasks_created"] == []
 
 
+async def _declaring_loop(session, *, document_id, suffix="dec"):
+    """A loop that names *document_id* as its source (design D1). Mirrors `_make_job`/`_make_loop`
+    in `test_scheduler.py` rather than inventing a new fixture shape."""
+    from hub.db.models import AIJob, Loop
+
+    job = AIJob(
+        id=f"job-loop-{suffix}",
+        project_id="proj-test",
+        name=f"Loop job {suffix}",
+        agent="author",
+        message="go",
+        cron="0 9 * * *",
+        session_mode="new",
+        enabled=True,
+    )
+    session.add(job)
+    await session.flush()
+    loop = Loop(
+        id=f"loop-{suffix}",
+        project_id="proj-test",
+        job_id=job.id,
+        purpose="decompose the document",
+        spec_document_id=document_id,
+    )
+    session.add(loop)
+    await session.flush()
+    return loop
+
+
+@pytest.mark.asyncio
+async def test_a_document_with_a_declaring_loop_stamps_its_tasks_with_the_loop(
+    app, auth_headers, author
+):
+    """The loop that declared this document as its source owns every task it produces (design D1)."""
+    await make_document(app, auth_headers, author)
+
+    from sqlalchemy import select
+
+    from hub.db.models import SpecDocument
+
+    async with async_session_factory() as session:
+        document = (
+            (await session.execute(select(SpecDocument).where(SpecDocument.path == PATH)))
+            .scalars()
+            .first()
+        )
+        loop = await _declaring_loop(session, document_id=document.id)
+        await session.commit()
+        loop_id = loop.id
+
+    response = await approve(app, auth_headers)
+    assert len(response.json()["tasks_created"]) == 2
+
+    on_the_loop = await app.get(TASKS, params={"loop_id": loop_id}, headers=auth_headers)
+    assert on_the_loop.status_code == 200, on_the_loop.text
+    assert len(on_the_loop.json()) == 2
+
+
+@pytest.mark.asyncio
+async def test_create_loop_declares_a_document_that_later_materialises_into_its_queue(
+    app, auth_headers, author
+):
+    """Integration across section 3 (`spec_tasks.materialise` stamps `loop_id`) and section 11
+    (`create_loop`, `mcp_server.py`, declares `spec_document_id` at creation via the widened
+    `/agent-actions/jobs` route — design D1/D2): a loop created through the agent-facing route
+    still owns the tasks a later approval of that document produces, exactly like a loop built
+    directly against the model in `_declaring_loop` above."""
+    await make_document(app, auth_headers, author)
+
+    from sqlalchemy import select
+
+    from hub.db.models import SpecDocument
+
+    async with async_session_factory() as session:
+        document = (
+            (await session.execute(select(SpecDocument).where(SpecDocument.path == PATH)))
+            .scalars()
+            .first()
+        )
+        document_id = document.id
+
+    settings = await app.patch(
+        "/api/v1/projects/proj-test/queue/settings",
+        headers=auth_headers,
+        json={
+            "hop_budget": 8,
+            "turn_delivery_cap": 10,
+            "agent_budget": 8,
+            "allow_agent_jobs": True,
+        },
+    )
+    assert settings.status_code == 200
+
+    created = await app.post(
+        "/api/v1/agent-actions/jobs",
+        headers=author,
+        json={
+            "name": "decomposition loop",
+            "agent": "author",
+            "message": "decompose the document",
+            "cron": "0 9 * * *",
+            "stop_when_queue_empties": True,
+            "spec_document_id": document_id,
+        },
+    )
+    assert created.status_code == 201, created.text
+    loop_id = created.json()["loop"]["id"]
+
+    response = await approve(app, auth_headers)
+    assert len(response.json()["tasks_created"]) == 2
+
+    on_the_loop = await app.get(TASKS, params={"loop_id": loop_id}, headers=auth_headers)
+    assert on_the_loop.status_code == 200, on_the_loop.text
+    assert len(on_the_loop.json()) == 2
+
+
+@pytest.mark.asyncio
+async def test_a_document_with_no_declaring_loop_stamps_nothing(app, auth_headers, author):
+    """Unchanged from before this change: no declaring loop means `loop_id` stays `None`."""
+    await make_document(app, auth_headers, author)
+    await approve(app, auth_headers)
+
+    from sqlalchemy import select
+
+    from hub.db.models import Task
+
+    async with async_session_factory() as session:
+        loop_ids = (
+            (await session.execute(select(Task.loop_id).where(Task.project_id == "proj-test")))
+            .scalars()
+            .all()
+        )
+    assert len(loop_ids) == 2
+    assert all(value is None for value in loop_ids)
+
+
+@pytest.mark.asyncio
+async def test_re_approving_stamps_the_loop_only_on_newly_created_tasks(app, auth_headers, author):
+    """Re-approving a revised document stamps `loop_id` on what is new — an existing task's
+    `loop_id` is never retroactively changed, matching the "only what's new" guarantee
+    `spec_task_key`/`spec_document_id` already carry (`models.py:632-634`)."""
+    await make_document(app, auth_headers, author)
+    await approve(app, auth_headers)
+
+    from sqlalchemy import select
+
+    from hub.db.models import SpecDocument, Task
+
+    async with async_session_factory() as session:
+        document = (
+            (await session.execute(select(SpecDocument).where(SpecDocument.path == PATH)))
+            .scalars()
+            .first()
+        )
+        loop = await _declaring_loop(session, document_id=document.id, suffix="late")
+        await session.commit()
+        loop_id = loop.id
+
+    # Reopen, revise with one new declared task, approve again — the loop now names this document,
+    # but only *after* the first two tasks already exist.
+    reopened = await app.post(
+        f"{BASE}/documents/phase",
+        params={"path": PATH, "to": "exploring"},
+        json={"reason": "one more thing"},
+        headers=auth_headers,
+    )
+    assert reopened.status_code == 200, reopened.text
+    await submit(
+        app,
+        author,
+        tasks=[
+            *DECLARED,
+            {"key": "build-export", "description": "Build the export.", "requirements": ["beta"]},
+        ],
+    )
+    response = await approve(app, auth_headers)
+    assert len(response.json()["tasks_created"]) == 1
+
+    async with async_session_factory() as session:
+        rows = (
+            await session.execute(
+                select(Task.spec_task_key, Task.loop_id).where(Task.project_id == "proj-test")
+            )
+        ).all()
+    by_key = dict(rows)
+    assert by_key["build-listing"] is None
+    assert by_key["build-recording"] is None
+    assert by_key["build-export"] == loop_id
+
+
 @pytest.mark.asyncio
 async def test_a_declared_title_is_what_the_board_shows(app, auth_headers, author):
     """The decomposition approval produces was already good; the names were not.

@@ -96,11 +96,24 @@ async def list_specs(
     # tree above cannot see that: it only knows a path, not what the Hub's own record says about it.
     # Without this, an archived document reads as an ordinary current one everywhere the tree is
     # drawn, which is the defect the operator actually reported.
-    phases = {
-        document.path: document.phase
+    #
+    # `id` rides along the same lookup for the same reason `phase` does: the panel shell keys a
+    # `spec:` tab by document id where one exists (design D4, `2026-08-18-one-shell-three-panels`),
+    # so it can survive a rename the tab strip is open across. A document discovery found on disk
+    # but never created through the Hub (no `spec_documents` row) has no id — the UI falls back to
+    # keying that tab by path, which is the only identity such a document has ever had.
+    tracked = {
+        document.path: document
         for document in await spec_lifecycle.list_documents(session, project_id)
     }
-    specs = [{**entry, "phase": phases.get(entry["path"])} for entry in state.specs]
+    specs = [
+        {
+            **entry,
+            "phase": tracked[entry["path"]].phase if entry["path"] in tracked else None,
+            "document_id": tracked[entry["path"]].id if entry["path"] in tracked else None,
+        }
+        for entry in state.specs
+    ]
 
     return {
         "specs": specs,

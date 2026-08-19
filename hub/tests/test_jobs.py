@@ -210,8 +210,8 @@ async def test_pause_and_resume_job(app, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_delete_job(app, auth_headers):
-    """Test deleting a job."""
+async def test_delete_job_refuses_and_archive_replaces_it(app, auth_headers):
+    """Design D16 (B2.1/B2.2): nothing is deletable — a job archives instead."""
     create_resp = await app.post(
         "/api/v1/projects/proj-test/jobs",
         json={
@@ -224,13 +224,39 @@ async def test_delete_job(app, auth_headers):
     )
     job_id = create_resp.json()["id"]
 
-    # Delete the job
+    # DELETE refuses, naming archiving as the alternative (B2.1) — nothing is removed.
     resp = await app.delete(f"/api/v1/projects/proj-test/jobs/{job_id}", headers=auth_headers)
-    assert resp.status_code == 204
+    assert resp.status_code == 400
+    assert "archiv" in resp.json()["detail"].lower()
 
-    # Verify it's gone
     get_resp = await app.get(f"/api/v1/projects/proj-test/jobs/{job_id}", headers=auth_headers)
-    assert get_resp.status_code == 404
+    assert get_resp.status_code == 200
+
+    # Archiving is the real alternative (B2.2): the job survives, but drops out of the default
+    # list (B2.4) while remaining fully readable by id (D16's guarantee).
+    archived = await app.post(
+        f"/api/v1/projects/proj-test/jobs/{job_id}/archive", headers=auth_headers
+    )
+    assert archived.status_code == 200, archived.text
+    assert archived.json()["archived_at"] is not None
+
+    still_there = await app.get(f"/api/v1/projects/proj-test/jobs/{job_id}", headers=auth_headers)
+    assert still_there.status_code == 200
+    assert still_there.json()["archived_at"] is not None
+
+    default_list = await app.get("/api/v1/projects/proj-test/jobs", headers=auth_headers)
+    assert job_id not in {j["id"] for j in default_list.json()}
+
+    with_archived = await app.get(
+        "/api/v1/projects/proj-test/jobs?include_archived=true", headers=auth_headers
+    )
+    assert job_id in {j["id"] for j in with_archived.json()}
+
+    # Archiving an already-archived job is refused, not a silent no-op.
+    twice = await app.post(
+        f"/api/v1/projects/proj-test/jobs/{job_id}/archive", headers=auth_headers
+    )
+    assert twice.status_code == 400
 
 
 @pytest.mark.asyncio
@@ -456,6 +482,7 @@ async def test_creating_with_purpose_alone_opts_into_a_loop(app, auth_headers):
     assert resp.status_code == 201
     loop = resp.json()["loop"]
     assert loop is not None
+    assert loop["label"] == "Loop Job"
     assert loop["purpose"] == "Nightly dependency audit"
     assert loop["stop_when_queue_empties"] is False
     assert loop["queue"] == {}
@@ -515,8 +542,11 @@ async def test_patch_opts_a_plain_job_into_a_loop_for_the_first_time(app, auth_h
 
 
 @pytest.mark.asyncio
-async def test_patch_updates_an_existing_loop(app, auth_headers):
-    """PATCH supplying a loop field on a job with an existing loop updates it in place."""
+async def test_patch_stages_an_edit_to_an_existing_loop_rather_than_applying_it(app, auth_headers):
+    """Design D11 (task A2.1/A2.4): PATCHing purpose/stop_at/stop_when_queue_empties onto a job
+    with an existing loop is always accepted, but never applied on the spot — it lands in
+    `pending_edit`, distinct from the still-unchanged live `purpose`, and is applied only at the
+    loop's next firing (`test_scheduler.py`'s own firing-boundary tests exercise that half)."""
     create_resp = await app.post(
         "/api/v1/projects/proj-test/jobs",
         json={
@@ -536,4 +566,368 @@ async def test_patch_updates_an_existing_loop(app, auth_headers):
         headers=auth_headers,
     )
     assert resp.status_code == 200
-    assert resp.json()["loop"]["purpose"] == "Revised purpose"
+    loop = resp.json()["loop"]
+    # The live field is untouched — a firing in flight (or the next one to fire, before it starts)
+    # must keep reading the definition it already has.
+    assert loop["purpose"] == "Initial purpose"
+    assert loop["pending_edit"]["purpose"] == "Revised purpose"
+    assert loop["pending_edit"]["staged_by"] == "operator"
+    assert loop["pending_edit"]["staged_at"] is not None
+
+
+@pytest.mark.asyncio
+async def test_patch_staging_an_edit_records_actor_and_time(app, auth_headers):
+    """Design D11 (task A2.5): each staged edit is recorded against the loop with actor and time —
+    mirrors `loop_control_changed`'s own persist_event/broadcast pair (A1)."""
+    from sqlalchemy import select
+
+    from hub.db.engine import async_session_factory
+    from hub.db.models import EventLog
+
+    create_resp = await app.post(
+        "/api/v1/projects/proj-test/jobs",
+        json={
+            "name": "Loop For Edit Event",
+            "agent": "kimi",
+            "message": "Test",
+            "cron": "0 9 * * *",
+            "purpose": "Original",
+        },
+        headers=auth_headers,
+    )
+    loop_id = create_resp.json()["loop"]["id"]
+    job_id = create_resp.json()["id"]
+
+    resp = await app.patch(
+        f"/api/v1/projects/proj-test/jobs/{job_id}",
+        json={"purpose": "Edited by operator"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+
+    async with async_session_factory() as session:
+        events = (
+            (
+                await session.execute(
+                    select(EventLog).where(EventLog.event_type == "loop_edit_staged")
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert len(events) == 1
+        event = events[0]
+        assert event.data["id"] == loop_id
+        assert event.data["actor"] == "operator"
+        assert event.agent is None
+        assert event.data["changes"] == {"purpose": "Edited by operator"}
+
+
+@pytest.mark.asyncio
+async def test_resume_on_a_plain_job_is_unchanged_by_patch(app, auth_headers):
+    """PATCHing `session_mode=resume` onto a job with no `Loop` row still succeeds, unchanged
+    (and still broken per `known_debts` — `AIJob.last_session_id`'s write path is out of scope
+    for design D4, which only refuses `resume` for a loop's job)."""
+    create_resp = await app.post(
+        "/api/v1/projects/proj-test/jobs",
+        json={
+            "name": "Plain Job For Resume Patch",
+            "agent": "kimi",
+            "message": "Test",
+            "cron": "0 9 * * *",
+        },
+        headers=auth_headers,
+    )
+    job_id = create_resp.json()["id"]
+
+    resp = await app.patch(
+        f"/api/v1/projects/proj-test/jobs/{job_id}",
+        json={"session_mode": "resume"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["session_mode"] == "resume"
+    assert resp.json()["loop"] is None
+
+
+@pytest.mark.asyncio
+async def test_create_job_with_resume_and_loop_opt_in_is_refused(app, auth_headers):
+    """Design D4: `session_mode=resume` combined with a loop-opting field in the same POST is
+    refused, naming why, rather than silently creating a resumable loop."""
+    resp = await app.post(
+        "/api/v1/projects/proj-test/jobs",
+        json={
+            "name": "Resume Loop At Creation",
+            "agent": "kimi",
+            "message": "Keep going",
+            "cron": "0 9 * * *",
+            "session_mode": "resume",
+            "purpose": "Nightly dependency audit",
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 400
+    detail = resp.json()["detail"].lower()
+    assert "loop" in detail
+    assert "checkpoint" in detail
+
+    list_resp = await app.get("/api/v1/projects/proj-test/jobs", headers=auth_headers)
+    assert all(j["name"] != "Resume Loop At Creation" for j in list_resp.json())
+
+
+@pytest.mark.asyncio
+async def test_patch_resume_onto_an_existing_loop_job_is_refused(app, auth_headers):
+    """Design D4: PATCHing `session_mode=resume` onto a job that already has a `Loop` row is
+    refused — the loop was created in an earlier request, so no loop fields need to accompany
+    this one for the refusal to fire."""
+    create_resp = await app.post(
+        "/api/v1/projects/proj-test/jobs",
+        json={
+            "name": "Already A Loop",
+            "agent": "kimi",
+            "message": "Keep going",
+            "cron": "0 9 * * *",
+            "purpose": "Nightly dependency audit",
+        },
+        headers=auth_headers,
+    )
+    job_id = create_resp.json()["id"]
+
+    resp = await app.patch(
+        f"/api/v1/projects/proj-test/jobs/{job_id}",
+        json={"session_mode": "resume"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 400
+    detail = resp.json()["detail"].lower()
+    assert "loop" in detail
+    assert "checkpoint" in detail
+
+    get_resp = await app.get(f"/api/v1/projects/proj-test/jobs/{job_id}", headers=auth_headers)
+    assert get_resp.json()["session_mode"] == "new"
+
+
+@pytest.mark.asyncio
+async def test_patch_resume_and_loop_opt_in_together_is_refused(app, auth_headers):
+    """Design D4's "given, in the same request" case: a plain job PATCHed with `session_mode`
+    resume AND a loop-opting field together is refused — the request would opt it into a loop
+    and set resume in one step, and neither must land."""
+    create_resp = await app.post(
+        "/api/v1/projects/proj-test/jobs",
+        json={
+            "name": "Opts Into A Loop And Resume",
+            "agent": "kimi",
+            "message": "Test",
+            "cron": "0 9 * * *",
+        },
+        headers=auth_headers,
+    )
+    job_id = create_resp.json()["id"]
+    assert create_resp.json()["loop"] is None
+
+    resp = await app.patch(
+        f"/api/v1/projects/proj-test/jobs/{job_id}",
+        json={"session_mode": "resume", "purpose": "Nightly dependency audit"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 400
+    detail = resp.json()["detail"].lower()
+    assert "loop" in detail
+    assert "checkpoint" in detail
+
+    get_resp = await app.get(f"/api/v1/projects/proj-test/jobs/{job_id}", headers=auth_headers)
+    assert get_resp.json()["loop"] is None
+    assert get_resp.json()["session_mode"] == "new"
+
+
+@pytest.mark.asyncio
+async def test_declaring_a_source_document_on_loop_creation_round_trips(app, auth_headers):
+    """Task 4.2(a): a loop created with `spec_document_id` persists it on the `Loop` row."""
+    from sqlalchemy import select
+
+    from hub.db.engine import async_session_factory
+    from hub.db.models import Loop
+
+    resp = await app.post(
+        "/api/v1/projects/proj-test/jobs",
+        json={
+            "name": "Declares A Document",
+            "agent": "kimi",
+            "message": "Work the queue",
+            "cron": "0 9 * * *",
+            "purpose": "Drive doc-declare-1's tasks",
+            "spec_document_id": "doc-declare-1",
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201
+
+    async with async_session_factory() as session:
+        result = await session.execute(
+            select(Loop).where(Loop.project_id == "proj-test", Loop.job_id == resp.json()["id"])
+        )
+        loop = result.scalar_one()
+        assert loop.spec_document_id == "doc-declare-1"
+
+
+@pytest.mark.asyncio
+async def test_a_second_loop_declaring_the_same_document_is_refused(app, auth_headers):
+    """Task 4.2(b): a document already claimed by one loop 409s for a second, naming the first."""
+    first_resp = await app.post(
+        "/api/v1/projects/proj-test/jobs",
+        json={
+            "name": "First Claimant",
+            "agent": "kimi",
+            "message": "Work the queue",
+            "cron": "0 9 * * *",
+            "purpose": "Drive doc-declare-2's tasks",
+            "spec_document_id": "doc-declare-2",
+        },
+        headers=auth_headers,
+    )
+    assert first_resp.status_code == 201
+    first_loop_id = first_resp.json()["loop"]["id"]
+
+    second_resp = await app.post(
+        "/api/v1/projects/proj-test/jobs",
+        json={
+            "name": "Second Claimant",
+            "agent": "kimi",
+            "message": "Work the queue",
+            "cron": "0 9 * * *",
+            "purpose": "Also wants doc-declare-2",
+            "spec_document_id": "doc-declare-2",
+        },
+        headers=auth_headers,
+    )
+    assert second_resp.status_code == 409
+    assert first_loop_id in second_resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_a_loop_can_still_be_created_with_no_source_document(app, auth_headers):
+    """Task 4.2(c): `spec_document_id` stays optional, unchanged from `many-named-loops`."""
+    from sqlalchemy import select
+
+    from hub.db.engine import async_session_factory
+    from hub.db.models import Loop
+
+    resp = await app.post(
+        "/api/v1/projects/proj-test/jobs",
+        json={
+            "name": "No Document",
+            "agent": "kimi",
+            "message": "Work the queue",
+            "cron": "0 9 * * *",
+            "purpose": "No document declared",
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201
+
+    async with async_session_factory() as session:
+        result = await session.execute(
+            select(Loop).where(Loop.project_id == "proj-test", Loop.job_id == resp.json()["id"])
+        )
+        loop = result.scalar_one()
+        assert loop.spec_document_id is None
+
+
+@pytest.mark.asyncio
+async def test_patch_declares_a_source_document_on_an_existing_loop(app, auth_headers):
+    """`JobUpdate.spec_document_id` (task 4.1) lets an existing loop declare one after creation."""
+    from sqlalchemy import select
+
+    from hub.db.engine import async_session_factory
+    from hub.db.models import Loop
+
+    create_resp = await app.post(
+        "/api/v1/projects/proj-test/jobs",
+        json={
+            "name": "Declares Later",
+            "agent": "kimi",
+            "message": "Test",
+            "cron": "0 9 * * *",
+            "purpose": "Undeclared for now",
+        },
+        headers=auth_headers,
+    )
+    job_id = create_resp.json()["id"]
+
+    resp = await app.patch(
+        f"/api/v1/projects/proj-test/jobs/{job_id}",
+        json={"spec_document_id": "doc-declare-later"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+
+    async with async_session_factory() as session:
+        result = await session.execute(
+            select(Loop).where(Loop.project_id == "proj-test", Loop.job_id == job_id)
+        )
+        loop = result.scalar_one()
+        assert loop.spec_document_id == "doc-declare-later"
+
+
+@pytest.mark.asyncio
+async def test_patch_declaring_a_claimed_document_is_refused(app, auth_headers):
+    """PATCH mirrors create_job's 409 (task 4.1): the update path checks conflicts too."""
+    holder_resp = await app.post(
+        "/api/v1/projects/proj-test/jobs",
+        json={
+            "name": "Holder",
+            "agent": "kimi",
+            "message": "Test",
+            "cron": "0 9 * * *",
+            "purpose": "Holds doc-declare-3",
+            "spec_document_id": "doc-declare-3",
+        },
+        headers=auth_headers,
+    )
+    holder_loop_id = holder_resp.json()["loop"]["id"]
+
+    challenger_resp = await app.post(
+        "/api/v1/projects/proj-test/jobs",
+        json={
+            "name": "Challenger",
+            "agent": "kimi",
+            "message": "Test",
+            "cron": "0 9 * * *",
+            "purpose": "Wants doc-declare-3 too",
+        },
+        headers=auth_headers,
+    )
+    challenger_id = challenger_resp.json()["id"]
+
+    resp = await app.patch(
+        f"/api/v1/projects/proj-test/jobs/{challenger_id}",
+        json={"spec_document_id": "doc-declare-3"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 409
+    assert holder_loop_id in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_patch_re_declaring_your_own_document_is_not_a_conflict(app, auth_headers):
+    """A no-op re-declare of a loop's own document must not 409 against itself."""
+    create_resp = await app.post(
+        "/api/v1/projects/proj-test/jobs",
+        json={
+            "name": "Re-declares Its Own",
+            "agent": "kimi",
+            "message": "Test",
+            "cron": "0 9 * * *",
+            "purpose": "Holds doc-declare-4",
+            "spec_document_id": "doc-declare-4",
+        },
+        headers=auth_headers,
+    )
+    job_id = create_resp.json()["id"]
+
+    resp = await app.patch(
+        f"/api/v1/projects/proj-test/jobs/{job_id}",
+        json={"spec_document_id": "doc-declare-4"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200

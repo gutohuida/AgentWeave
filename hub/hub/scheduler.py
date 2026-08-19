@@ -9,9 +9,11 @@ import re
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from .checkpoint_generation import render_checkpoint
+from .checkpoints import latest_checkpoint_for_loop
 from .conversations import (
     conversation_for_provider_session,
     inherit_runtime_overrides,
@@ -19,9 +21,11 @@ from .conversations import (
     new_conversation,
 )
 from .db.engine import async_session_factory
-from .db.models import Agent, AIJob, JobRun, Loop, Task
+from .db.models import Agent, AIJob, Checkpoint, JobRun, Loop, Message, Question, Run, Task
 from .run_task_binding import TERMINAL_FOR_BINDING
 from .sse import sse_manager
+from .task_transition_service import apply_transition
+from .task_transitions import operator
 from .utils import persist_event, short_id
 
 logger = logging.getLogger(__name__)
@@ -101,6 +105,335 @@ async def _loop_stop_reason(session: AsyncSession, job: AIJob) -> Optional[str]:
             if ever_count:
                 return "loop queue is empty"
     return None
+
+
+_LOOP_PENDING_REQUEST_REASON_CHARS = 300
+
+
+async def _pending_loop_request(
+    session: AsyncSession, job: AIJob, loop: Loop, exclude_run_id: str
+) -> Optional[dict]:
+    """What the loop's executor was waiting on when its queue drained (design D6).
+
+    A loop job never resumes a conversation — task 8.1 refuses `session_mode="resume"` for one,
+    for the entire lifetime of the job, not just at creation — so every firing, including the one
+    that just discovered the empty queue, gets a brand-new, still-empty `Conversation`
+    (`_do_fire_job` creates it before `_loop_stop_reason` runs, unconditionally). An unanswered
+    `Question` this firing's OWN conversation could hold is therefore always none; "the firing's
+    conversation" D6 names has to mean the most recent EARLIER firing's conversation — the one an
+    `ask_user` call would actually have been asked in, if one was ever asked and never answered.
+    Found via the most recent prior `JobRun` for this job that recorded one, excluding this firing
+    itself (`exclude_run_id`).
+
+    Checked before the `Message` case: an unanswered `ask_user` is a hard block on the run that
+    asked it, closer to "the thing this loop was actually waiting on" than mail sitting unread in
+    an inbox nobody has to check. D6 does not state a tiebreak when both exist.
+    """
+    prior_run_result = await session.execute(
+        select(JobRun.conversation_id)
+        .where(
+            JobRun.job_id == job.id,
+            JobRun.id != exclude_run_id,
+            JobRun.conversation_id.is_not(None),
+        )
+        .order_by(JobRun.fired_at.desc())
+        .limit(1)
+    )
+    prior_conversation_id = prior_run_result.scalar_one_or_none()
+    if prior_conversation_id is not None:
+        question_result = await session.execute(
+            select(Question)
+            .where(
+                Question.conversation_id == prior_conversation_id,
+                Question.answered == False,  # noqa: E712
+            )
+            .order_by(Question.created_at.desc())
+        )
+        question = question_result.scalars().first()
+        if question is not None:
+            reason = question.question
+            if len(reason) > _LOOP_PENDING_REQUEST_REASON_CHARS:
+                reason = reason[:_LOOP_PENDING_REQUEST_REASON_CHARS]
+            return {
+                "kind": "question",
+                # A `Question` has no recipient field of its own — it is addressed to whichever
+                # human is watching the operator UI, not to a named agent, so `to` stays null.
+                "to": None,
+                "reason": reason,
+                "created_at": question.created_at.isoformat(),
+            }
+
+    # "addressed to the creator" is the Message model's own `recipient` field — the thing that
+    # actually decides whose inbox it lands in — not a conversation match; only the Question half
+    # of D6's sentence carries the "in the firing's conversation" qualifier grammatically.
+    creator_agent: Optional[str] = None
+    if loop.created_by_run_id:
+        # Same `created_by_run_id` -> `Run.agent` resolution `questions.py`'s
+        # `_asking_run_has_ended` already uses for a different row's creator — cited as precedent
+        # rather than a second pattern.
+        creator_run = await session.get(Run, loop.created_by_run_id)
+        if creator_run is not None:
+            creator_agent = creator_run.agent
+    if creator_agent is not None:
+        message_result = await session.execute(
+            select(Message)
+            .where(
+                Message.sender == job.agent,
+                Message.recipient == creator_agent,
+                Message.read == False,  # noqa: E712
+            )
+            .order_by(Message.timestamp.desc())
+        )
+        message = message_result.scalars().first()
+        if message is not None:
+            reason = message.subject or message.content
+            if len(reason) > _LOOP_PENDING_REQUEST_REASON_CHARS:
+                reason = reason[:_LOOP_PENDING_REQUEST_REASON_CHARS]
+            return {
+                "kind": "message",
+                "to": message.recipient,
+                "reason": reason,
+                "created_at": message.timestamp.isoformat(),
+            }
+
+    return None
+
+
+def _loop_queue_order() -> tuple:
+    """How a loop's queue is ordered when picking the current item (design D3).
+
+    An active task, most recently touched, beats an untouched pending one; among pending tasks the
+    **oldest** wins. Shared with `api/v1/jobs.py`'s `_batch_loop_summaries` so the board and the
+    firing cannot disagree about which item is current — they are the two halves of human-only
+    check 13.1, and a shared helper is the only way that check means anything.
+
+    `Task.updated` is deliberately scoped to non-pending rows. It used to apply to every candidate,
+    which silently inverted the pending order: two untouched pending tasks have `updated` values as
+    far apart as their creation times, so `updated.desc()` picked the *newest* and the
+    `created_at.asc()` tiebreak below was never reached. Found on 2026-08-19 by driving 13.1
+    against a live agent — the queue claimed BRAVO (newer) while ALPHA (older) sat pending.
+
+    The unit test did not catch it because it inserted both tasks in one transaction with only
+    `created_at` set, so their `updated` values tied exactly and the tiebreak did apply. Production
+    creates tasks in separate requests, where they never tie. Both derivations shared the flaw, so
+    the board and the firing agreed on the wrong task — two consistent wrong answers read as a
+    match, which is how it survived review.
+    """
+    return (
+        (Task.status != "pending").desc(),
+        case((Task.status != "pending", Task.updated), else_=None).desc(),
+        Task.created_at.asc(),
+    )
+
+
+#: The statuses a loop's queue item can be in and still be the thing a firing works on.
+#: Shared with `_batch_loop_summaries` (`api/v1/jobs.py`) so the board and the firing cannot
+#: disagree about which item is current -- see `_loop_queue_order` for what happened the last time
+#: they did.
+#:
+#: `assigned` is in this set as of 2026-08-19, by operator decision, and its absence was a
+#: deadlock rather than an oversight. A firing claims a task by moving it `pending -> assigned`;
+#: reaching `in_progress` needs the agent to call `update_task` itself, which it may simply not do.
+#: With `assigned` excluded here, that task became invisible to every later firing -- while
+#: `_loop_stop_reason` still counted it as open, because `TERMINAL_FOR_BINDING` is only
+#: `("approved", "rejected")`. So the loop could neither claim it nor stop because of it, and fired
+#: forever doing nothing. Demonstrated live on the trial Hub (`loop-33deddaf`: three firings,
+#: nothing claimed, `stopped_at` still null) before this changed.
+#:
+#: The accepted cost is the mirror image: a task the agent genuinely cannot start is now re-claimed
+#: every firing, so the loop repeats one item instead of spinning on none. That is the more visible
+#: and more fixable of the two failures, which is why it was chosen.
+CLAIMABLE_LOOP_TASK_STATUSES: tuple = ("in_progress", "blocked", "assigned", "pending")
+
+
+async def _claim_loop_task(session: AsyncSession, loop: Loop) -> Optional[Task]:
+    """The queue item this firing works on (design D3): resume the loop's existing active task
+    (`in_progress`, `blocked`, or `assigned`) if one exists, else claim the oldest `pending` one.
+
+    Shares both its candidate set (`CLAIMABLE_LOOP_TASK_STATUSES`) and its ordering
+    (`_loop_queue_order`) with `_batch_loop_summaries`'s "current item" derivation, so the board
+    and the firing answer the same question the same way -- they are the two halves of human-only
+    check 13.1, and it only means anything if they cannot drift.
+    """
+    result = await session.execute(
+        select(Task)
+        .where(Task.loop_id == loop.id, Task.status.in_(CLAIMABLE_LOOP_TASK_STATUSES))
+        .order_by(*_loop_queue_order())
+        .limit(1)
+    )
+    return result.scalars().first()
+
+
+async def finalize_job_run_for_conversation(
+    session: AsyncSession, conversation_id: Optional[str], final_status: str
+) -> None:
+    """Flip a firing's `JobRun` out of "in progress" once its `Run` has ended (design D13,
+    task A4.3). `conversation_id` is the only correlation `JobRun` and `Run` share — there is
+    no direct foreign key (see `models.py`'s own comment on `JobRun.conversation_id`).
+
+    Most runs are not job firings at all (a message or a delegation starts a `Run` too), so
+    finding no matching row here is the common case, not an error. At most one `JobRun` should
+    be "in_progress" for a given `conversation_id` at a time — a session-resuming job's earlier
+    firings already reached a terminal status before this one was created — but the query still
+    orders newest-first and takes one row rather than assuming that invariant holds.
+    """
+    if conversation_id is None:
+        return
+    result = await session.execute(
+        select(JobRun)
+        .where(JobRun.conversation_id == conversation_id, JobRun.status == "in_progress")
+        .order_by(JobRun.fired_at.desc())
+    )
+    job_run = result.scalars().first()
+    if job_run is not None:
+        job_run.status = final_status
+
+
+# Consumer-side cap on a rendered checkpoint's contribution to a briefing (design D5). A
+# checkpoint body is already a bounded generator-side summary
+# (`checkpoint_generation._TRANSCRIPT_CHAR_LIMIT`), so this budget is far smaller: 4,000
+# characters comfortably fits one well-formed checkpoint in full, with room left for the claimed
+# task and queue summary around it, and only ever truncates the pathological case (a checkpoint
+# that failed to stay terse), never the common one.
+_LOOP_BRIEFING_CHECKPOINT_CHARS = 4_000
+
+
+def _stage_pending_loop_edit(loop: Loop) -> Optional[dict]:
+    """Move a staged edit (design D11, task A2.2) from `loop`'s pending_* columns onto its live
+    fields, in memory only — no commit, no event. Returns the audit payload for
+    `_emit_loop_edit_applied` below, or `None` if nothing was staged.
+
+    Applied once, at the very top of `_do_fire_job`'s handling of *loop* — before
+    `_loop_stop_reason` and before `_compose_loop_briefing` are ever consulted, so both see the
+    loop's current definition rather than one waiting on the firing after next. Deliberately does
+    not commit or persist an event itself: `_do_fire_job` is about to mutate `run`'s status too,
+    and a premature commit here would write that row to the database mid-update (transiently
+    "fired" before a stop check turns it "skipped" moments later) — the caller commits everything
+    together once its own branch knows the firing's final outcome, then calls
+    `_emit_loop_edit_applied`.
+
+    A firing already under way when the edit was staged (task A2.3) is unaffected by construction:
+    `_do_fire_job` loads and applies pending edits exactly once, at the start of its own firing —
+    nothing re-reads `loop.purpose`/`loop.stop_at`/`loop.stop_when_queue_empties` mid-turn, so a
+    `PATCH` landing while an agent is still working on this firing only ever affects the *next*
+    one.
+    """
+    if loop.pending_edit_at is None:
+        return None
+
+    changes: dict[str, Any] = {}
+    if loop.pending_purpose is not None:
+        changes["purpose"] = {"from": loop.purpose, "to": loop.pending_purpose}
+        loop.purpose = loop.pending_purpose
+    if loop.pending_stop_at is not None:
+        changes["stop_at"] = {
+            "from": loop.stop_at.isoformat() if loop.stop_at else None,
+            "to": loop.pending_stop_at.isoformat(),
+        }
+        loop.stop_at = loop.pending_stop_at
+    if loop.pending_stop_when_queue_empties is not None:
+        changes["stop_when_queue_empties"] = {
+            "from": loop.stop_when_queue_empties,
+            "to": loop.pending_stop_when_queue_empties,
+        }
+        loop.stop_when_queue_empties = loop.pending_stop_when_queue_empties
+
+    actor = loop.pending_edit_actor
+    staged_at = loop.pending_edit_at
+
+    loop.pending_purpose = None
+    loop.pending_stop_at = None
+    loop.pending_stop_when_queue_empties = None
+    loop.pending_edit_actor = None
+    loop.pending_edit_at = None
+
+    return {
+        "id": loop.id,
+        "project_id": loop.project_id,
+        "actor": actor,
+        "staged_at": staged_at.isoformat() if staged_at else None,
+        "changes": changes,
+    }
+
+
+async def _emit_loop_edit_applied(session: AsyncSession, payload: dict) -> None:
+    """Persist and broadcast the audit event (task A2.5) for a pending edit
+    `_stage_pending_loop_edit` already applied in memory. Called only after the caller's own
+    commit has landed `run`'s final status, so this never forces an early, partial commit."""
+    actor = payload["actor"]
+    await persist_event(
+        session,
+        payload["project_id"],
+        "loop_edit_applied",
+        payload,
+        agent=None if actor in (None, "operator") else actor,
+        loop_id=payload["id"],
+    )
+    await sse_manager.broadcast(payload["project_id"], "loop_edit_applied", payload)
+
+
+async def _compose_loop_briefing(
+    session: AsyncSession,
+    loop: Loop,
+    claimed_task: Optional[Task],
+    prior_checkpoint: Optional[Checkpoint],
+) -> str:
+    """The context a loop firing gets ahead of the operator's own message (design D5): purpose,
+    the claimed queue item, the prior firing's checkpoint if one exists, and a one-line queue
+    summary — in that order. A prefix, never a replacement: `_do_fire_job` puts `job.message`
+    after this unchanged, so the operator's own message template still reads exactly as authored.
+    """
+    lines: list[str] = ["# Loop briefing", ""]
+
+    if loop.purpose:
+        lines.append(f"Purpose: {loop.purpose}")
+        lines.append("")
+
+    if claimed_task is not None:
+        lines.append(f"## Current task: {claimed_task.title}")
+        lines.append("")
+        if claimed_task.description:
+            lines.append(claimed_task.description)
+            lines.append("")
+        criteria = claimed_task.acceptance_criteria or []
+        if criteria:
+            lines.append("Acceptance criteria:")
+            lines.extend(f"- {criterion}" for criterion in criteria)
+            lines.append("")
+
+    if prior_checkpoint is not None:
+        # Reuses the same rendering a human reader gets (`render_checkpoint`) rather than
+        # inventing a second serialisation of the same data (design D5). Truncated from the end
+        # on overflow — re-ordering `render_checkpoint`'s own section order to drop the oldest
+        # content first would only matter for the rare pathological case this cap exists to
+        # bound, not worth the complexity for it.
+        rendered = render_checkpoint(prior_checkpoint)
+        if len(rendered) > _LOOP_BRIEFING_CHECKPOINT_CHARS:
+            rendered = rendered[:_LOOP_BRIEFING_CHECKPOINT_CHARS]
+        lines.append("## Prior checkpoint")
+        lines.append("")
+        lines.append(rendered)
+        lines.append("")
+
+    # Same per-status group-by `_batch_loop_summaries` already computes (`api/v1/jobs.py:136-143`)
+    # recomputed directly here rather than imported — L6's own precedent already rejected an
+    # api-layer-to-scheduler cross-import for a similarly small query. Bucketed into open/done
+    # using the same `TERMINAL_FOR_BINDING` split `_loop_stop_reason` above already uses to decide
+    # whether this loop's queue is empty, rather than a second, differently-drawn line.
+    counts_result = await session.execute(
+        select(Task.status, func.count()).where(Task.loop_id == loop.id).group_by(Task.status)
+    )
+    open_count = 0
+    done_count = 0
+    for task_status, count in counts_result.all():
+        if task_status in TERMINAL_FOR_BINDING:
+            done_count += count
+        else:
+            open_count += count
+    lines.append(f"Queue: {open_count} open, {done_count} done")
+    lines.append("")
+
+    return "\n".join(lines)
 
 
 # Singleton scheduler instance
@@ -387,17 +720,32 @@ class JobScheduler:
                 logger.info(f"Job {job.id} fire skipped: {skip_reason}")
                 return False
 
+            loop_result = await session.execute(select(Loop).where(Loop.job_id == job.id))
+            loop = loop_result.scalars().first()
+            # Design D11 (task A2.2): stage-apply any pending edit in memory before the stop check
+            # below and before the briefing is composed further down — both must see this loop's
+            # current definition, not one still waiting on the firing after next. The audit event
+            # is emitted only after this branch's own commit lands `run`'s final status (below),
+            # not here — see `_stage_pending_loop_edit`'s own comment for why.
+            pending_edit_payload = _stage_pending_loop_edit(loop) if loop is not None else None
+
             loop_stop_reason = await _loop_stop_reason(session, job)
             if loop_stop_reason:
                 run.status = "skipped"
                 run.error_summary = loop_stop_reason
-                loop_result = await session.execute(select(Loop).where(Loop.job_id == job.id))
-                loop = loop_result.scalars().first()
                 if loop is not None:
                     loop.stop_reason = loop_stop_reason
                     loop.stopped_at = fired_at
+                    # D17/B2.5: the same string `_loop_stop_reason` returns for a drained queue,
+                    # already the trigger for `loop_queue_exhausted` below — the one place this
+                    # value is known, so it is set here rather than re-derived by a reader later.
+                    loop.ending_state = (
+                        "completed" if loop_stop_reason == "loop queue is empty" else "stopped"
+                    )
                 job.enabled = False
                 await session.commit()
+                if pending_edit_payload is not None:
+                    await _emit_loop_edit_applied(session, pending_edit_payload)
                 await persist_event(
                     session,
                     job.project_id,
@@ -418,9 +766,37 @@ class JobScheduler:
                     "reason": loop_stop_reason,
                 }
                 await persist_event(
-                    session, job.project_id, "loop_stopped", loop_stopped_payload, agent=job.agent
+                    session,
+                    job.project_id,
+                    "loop_stopped",
+                    loop_stopped_payload,
+                    agent=job.agent,
+                    loop_id=loop.id if loop is not None else None,
                 )
                 await sse_manager.broadcast(job.project_id, "loop_stopped", loop_stopped_payload)
+                if loop is not None and loop_stop_reason == "loop queue is empty":
+                    # A second, independent event (design D6) — "the queue is empty" and "was a
+                    # request in flight when it emptied" are two facts a reader should not have to
+                    # parse out of one payload. `loop_stopped` above is unchanged by this branch.
+                    pending_request = await _pending_loop_request(
+                        session, job, loop, exclude_run_id=run_id
+                    )
+                    loop_queue_exhausted_payload = {
+                        "job_id": job.id,
+                        "loop_id": loop.id,
+                        "pending_request": pending_request,
+                    }
+                    await persist_event(
+                        session,
+                        job.project_id,
+                        "loop_queue_exhausted",
+                        loop_queue_exhausted_payload,
+                        agent=job.agent,
+                        loop_id=loop.id,
+                    )
+                    await sse_manager.broadcast(
+                        job.project_id, "loop_queue_exhausted", loop_queue_exhausted_payload
+                    )
                 # Remove from the live scheduler so it does not fire again next cron tick only to be
                 # skipped again — the same call `remove_job` already makes for a job an operator
                 # disables by hand.
@@ -428,18 +804,45 @@ class JobScheduler:
                 logger.info(f"Job {job.id} loop stopped: {loop_stop_reason}")
                 return False
 
+            content = job.message
+            if loop is not None:
+                claimed_task = await _claim_loop_task(session, loop)
+                if claimed_task is not None:
+                    # Only a `pending` task is *entered*; `assigned`/`in_progress`/`blocked` are
+                    # being resumed, so their status stays untouched (design D3). `assigned` became
+                    # reachable here on 2026-08-19 — see CLAIMABLE_LOOP_TASK_STATUSES — which is
+                    # exactly the resume case this branch already guarded for.
+                    if claimed_task.status == "pending":
+                        await apply_transition(session, claimed_task, "assigned", operator())
+                    claimed_task.assignee = job.agent
+                prior_checkpoint = await latest_checkpoint_for_loop(session, loop.id)
+                briefing = await _compose_loop_briefing(
+                    session, loop, claimed_task, prior_checkpoint
+                )
+                content = f"{briefing}\n{job.message}"
+
             entry = new_entry(
                 project_id=job.project_id,
                 agent=job.agent,
                 origin_type="job",
-                content=job.message,
+                content=content,
                 hop_depth=0,
                 session_mode=job.session_mode,
                 session_id=resume_session_id,
                 conversation_id=conversation.id,
             )
             session.add(entry)
+            # The firing genuinely becomes "in progress" here, not at `JobRun` creation above —
+            # `status="fired"` there only means "successfully enqueued"; every early-return
+            # above this point (skip, loop-stopped) overwrites it with `"skipped"` first, so
+            # only a firing that actually reaches a queued entry ever becomes "in_progress"
+            # (design D13, task A4.3). `finalize_job_run_for_conversation` flips it to a
+            # terminal status once the agent's own `Run` ends (`agent_trigger.py`).
+            run.status = "in_progress"
             await session.commit()
+
+            if pending_edit_payload is not None:
+                await _emit_loop_edit_applied(session, pending_edit_payload)
 
             queue_payload = {
                 "entry_id": entry.id,

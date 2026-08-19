@@ -23,6 +23,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...auth import get_project
+from ...context_readings import usable_context_reading
 from ...conversations import (
     archivable,
     archive,
@@ -35,8 +36,12 @@ from ...db.engine import get_session
 from ...db.models import (
     CONVERSATION_TITLE_MAX_LENGTH,
     AgentOutput,
+    AIJob,
     Conversation,
+    EventLog,
     InboundQueueEntry,
+    JobRun,
+    Loop,
     Message,
     Project,
 )
@@ -75,6 +80,20 @@ class TimelineEntry(BaseModel):
 ConversationAttention = Literal["running", "waiting", "idle"]
 
 
+class ConversationLoop(BaseModel):
+    """Which loop's firing created this conversation, for the row that lists it.
+
+    A loop firing starts a *new* conversation every time (task 8.1 refuses `session_mode="resume"`
+    for a loop), so an agent's conversation list fills with threads nobody typed and nothing
+    distinguishes them from the ones somebody did. `label` is the loop's job name — the same
+    pairing `LoopSummary.label` already uses, so a marker here and the loops index name the same
+    loop the same way.
+    """
+
+    id: str
+    label: str
+
+
 class ConversationResponse(BaseModel):
     id: str
     agent: str
@@ -85,6 +104,21 @@ class ConversationResponse(BaseModel):
     title: Optional[str] = None
     title_set_by_operator: bool = False
     origin: str = "operator"
+    # Set only when a *loop* firing created this conversation. `origin == "job"` alone cannot
+    # say so — a plain scheduled job has the same origin and no loop — so this is null there,
+    # and the row shows no loop marker.
+    loop: Optional[ConversationLoop] = None
+    # How full *this* conversation's context is — not its agent's.
+    #
+    # `AgentSummary.context_usage` reports one reading per agent, the newest across all of that
+    # agent's threads. The composer is conversation-scoped, so reading the agent's value showed
+    # whichever conversation last reported, in every conversation. Measured on the trial Hub
+    # 2026-08-19: agent `verifier` had three conversations reading 18.56%, 16.6% and 15.9%, and
+    # all three composers showed 15.9%.
+    #
+    # Null when this conversation has produced no reading yet. Deliberately not falling back to
+    # the agent's — that fallback is the bug.
+    context_usage: Optional[Dict[str, Any]] = None
     # Whether this conversation needs the operator, without opening it. "waiting" outranks
     # "running" — a run blocked on a question is running, but stopping for the operator is the
     # part they have to see.
@@ -206,16 +240,97 @@ async def _queued_entries_for(
     ]
 
 
+async def _loops_by_conversation(
+    session: AsyncSession, conversation_ids: List[str]
+) -> Dict[str, ConversationLoop]:
+    """Which loop, if any, fired each of these conversations — one query for the whole page.
+
+    Batched rather than per row, following `_batch_loop_summaries`: the conversation list is the
+    navigation rail, so a per-row query would be one round trip per thread on every render.
+
+    The join to `Loop` is inner on purpose. `JobRun.conversation_id -> AIJob -> Loop` yields a row
+    only where a loop actually exists, so a plain scheduled job — same `origin == "job"`, no
+    `Loop` — falls out with nothing and its conversation gets no marker. That distinction is the
+    whole reason this cannot be derived from `origin`.
+    """
+    if not conversation_ids:
+        return {}
+    result = await session.execute(
+        select(JobRun.conversation_id, Loop.id, AIJob.name, JobRun.fired_at)
+        .join(AIJob, AIJob.id == JobRun.job_id)
+        .join(Loop, Loop.job_id == AIJob.id)
+        .where(JobRun.conversation_id.in_(conversation_ids))
+        # A resume-mode job fires repeatedly onto one conversation, and two jobs can in principle
+        # reach the same thread. Newest firing first, then first-write-wins below, so the marker
+        # is deterministic rather than whatever the database happened to return first.
+        .order_by(JobRun.fired_at.desc())
+    )
+    loops: Dict[str, ConversationLoop] = {}
+    for conversation_id, loop_id, job_name, _fired_at in result.all():
+        if conversation_id not in loops:
+            loops[conversation_id] = ConversationLoop(id=loop_id, label=job_name)
+    return loops
+
+
+async def _context_by_conversation(
+    session: AsyncSession, project_id: str, conversation_ids: List[str]
+) -> Dict[str, Any]:
+    """The context reading belonging to each of these conversations — one query for the page.
+
+    `context_warning` rows carry `data["conversation_id"]`, resolved when the reading is recorded
+    (`output_recording.record_context_usage`). Nothing read it back per conversation until now: the
+    agent roster groups the same rows by agent alone, which is a correct answer to a different
+    question and the wrong one for a conversation-scoped surface.
+
+    Filtered in Python rather than by a JSON path predicate in SQL, because `EventLog.data` is a
+    plain JSON column and SQLite's JSON operators are not uniformly available across the versions
+    this ships against. The row set is already bounded to one project's readings for the
+    conversations on the page.
+    """
+    if not conversation_ids:
+        return {}
+    wanted = set(conversation_ids)
+    result = await session.execute(
+        select(EventLog)
+        .where(
+            EventLog.project_id == project_id,
+            EventLog.event_type == "context_warning",
+        )
+        .order_by(EventLog.timestamp.desc())
+    )
+    rows_by_conversation: Dict[str, List[Any]] = {}
+    for event in result.scalars().all():
+        data = event.data
+        if not isinstance(data, dict):
+            continue
+        conversation_id = data.get("conversation_id")
+        if conversation_id in wanted:
+            rows_by_conversation.setdefault(conversation_id, []).append(data)
+    return {
+        conversation_id: usable_context_reading(rows)
+        for conversation_id, rows in rows_by_conversation.items()
+    }
+
+
 async def _to_response(
     session: AsyncSession, conversations: List[Conversation]
 ) -> List[ConversationResponse]:
     """Serialise conversations with their attention state, one query for the whole page."""
     await backfill_titles(session, conversations)
-    attention = await conversation_attention(session, [row.id for row in conversations])
+    conversation_ids = [row.id for row in conversations]
+    attention = await conversation_attention(session, conversation_ids)
+    loops = await _loops_by_conversation(session, conversation_ids)
+    context = (
+        await _context_by_conversation(session, conversations[0].project_id, conversation_ids)
+        if conversations
+        else {}
+    )
     responses = []
     for row in conversations:
         response = ConversationResponse.model_validate(row, from_attributes=True)
         response.attention = attention.get(row.id, "idle")  # type: ignore[assignment]
+        response.loop = loops.get(row.id)
+        response.context_usage = context.get(row.id)
         responses.append(response)
     return responses
 

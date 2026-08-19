@@ -12,11 +12,19 @@ agrees on real rows. That is what these drive.
 **Why the assertions are page-wide rather than per-card.** `JobCard`'s root carries no
 testid, and the loop block renders *outside* the header div, so the nearest ancestor
 holding the expand button does not contain it. Scoping by DOM traversal would be brittle
-in exactly the way that produces a test which passes for the wrong reason. With three
-jobs in the fixture project and exactly one of them plain, "expand all, expect two loop
-blocks" proves the same claim and cannot pass vacuously — which the earlier per-card
-version did, reporting a green "plain job has no loop block" on a page that rendered no
-loop blocks at all.
+in exactly the way that produces a test which passes for the wrong reason. With a mix of
+loop and non-loop jobs in the fixture project, "expand all, expect one loop block per job
+that has a loop" proves the same claim and cannot pass vacuously — which the earlier
+per-card version did, reporting a green "plain job has no loop block" on a page that
+rendered no loop blocks at all.
+
+**Job count is derived from the API, not hardcoded.** The fixture project started with
+three taste-pass jobs (one plain, two with a loop) but has since grown smoke-test loops
+left deliberately as evidence (`LB2`, `LB4`, `A4`, `LA3`, ...; see
+`.claude/autonomous/STATE.json`'s C2b entry) — a literal `3` here would rot every time a
+future run adds another. `job_counts` fetches the live job list and counts how many have a
+`loop` object at all, so this stays a real regression check on "loop blocks render only for
+jobs that have a loop" instead of a number someone has to remember to bump.
 
 Task 8.2 — "does the loop block read as an extension, not a second concept?" — is pure
 taste and is deliberately absent from this file.
@@ -24,6 +32,7 @@ taste and is deliberately absent from this file.
 
 from __future__ import annotations
 
+import pytest
 from playwright.sync_api import Page, expect
 
 PLAIN_JOB = "taste-pass plain job (no loop)"
@@ -33,7 +42,20 @@ NEVER_FILLED_JOB = "taste-pass never-filled loop"
 LOOP_BLOCK = '[data-testid="job-loop-block"]'
 
 
-def _expand_every_card(page: Page) -> int:
+@pytest.fixture
+def job_counts(api, project_id: str) -> dict[str, int]:
+    """How many jobs the project has, and how many of those carry a `loop` object — read live
+    rather than assumed, so the fixture project can grow smoke-test jobs without rotting these
+    tests (see the module docstring)."""
+    status, jobs = api("GET", f"/api/v1/projects/{project_id}/jobs")
+    assert status == 200, jobs
+    return {
+        "total": len(jobs),
+        "with_loop": sum(1 for job in jobs if job.get("loop") is not None),
+    }
+
+
+def _expand_every_card(page: Page, expected_total: int) -> int:
     """Expand every collapsed job card; return how many were expanded.
 
     Waits for a fixture job's name before touching anything. The tab strip's
@@ -48,7 +70,7 @@ def _expand_every_card(page: Page) -> int:
     """
     page.get_by_text(PLAIN_JOB, exact=True).wait_for(timeout=20_000)
     toggles = page.get_by_label("Expand job details")
-    expect(toggles).to_have_count(3)
+    expect(toggles).to_have_count(expected_total)
     count = toggles.count()
     # Iterate backwards: clicking re-labels the button to "Collapse job details", which
     # shrinks the matched set and would shift the indices of anything after it.
@@ -58,34 +80,39 @@ def _expand_every_card(page: Page) -> int:
     return count
 
 
-def test_jobs_page_shows_all_three_fixture_jobs(goto) -> None:
-    """The premise of 8.1: a *mix* of loop and non-loop jobs is on screen."""
+def test_jobs_page_shows_the_three_taste_pass_fixture_jobs(goto) -> None:
+    """The premise of 8.1: a *mix* of loop and non-loop jobs is on screen. Other jobs (smoke-test
+    loops left as evidence by earlier runs) may also be present — this only asserts these three."""
     page = goto("jobs")
     for name in (PLAIN_JOB, LOOP_JOB, NEVER_FILLED_JOB):
         expect(page.get_by_text(name, exact=True)).to_be_visible()
 
 
-def test_loop_blocks_render_only_for_jobs_that_have_a_loop(goto) -> None:
+def test_loop_blocks_render_only_for_jobs_that_have_a_loop(
+    goto, job_counts: dict[str, int]
+) -> None:
     """8.1's assertion, stated so it cannot pass vacuously.
 
-    Three jobs, two with a `loop` object and one with `loop: null`. Expanding all three
-    must produce exactly two loop blocks. A count of 3 means 4.2's "at least one field"
-    gate is creating `Loop` rows unconditionally; a count of 0 means the block stopped
-    rendering entirely, which the previous formulation would have scored as a pass.
+    Expanding every job card must produce exactly one loop block per job that carries a `loop`
+    object. A count equal to the total job count means 4.2's "at least one field" gate is
+    creating `Loop` rows unconditionally; a count of 0 means the block stopped rendering
+    entirely, which the previous formulation would have scored as a pass.
     """
     page = goto("jobs")
-    expanded = _expand_every_card(page)
-    assert expanded == 3, f"expected 3 collapsed job cards to expand, found {expanded}"
-    expect(page.locator(LOOP_BLOCK)).to_have_count(2)
+    expanded = _expand_every_card(page, job_counts["total"])
+    assert (
+        expanded == job_counts["total"]
+    ), f"expected {job_counts['total']} collapsed job cards to expand, found {expanded}"
+    expect(page.locator(LOOP_BLOCK)).to_have_count(job_counts["with_loop"])
 
 
-def test_each_loop_block_names_its_own_purpose(goto) -> None:
-    """Both loops' purposes reach the page; the plain job contributes none."""
+def test_each_loop_block_names_its_own_purpose(goto, job_counts: dict[str, int]) -> None:
+    """Both taste-pass loops' purposes reach the page; the plain job contributes none."""
     page = goto("jobs")
-    _expand_every_card(page)
+    _expand_every_card(page, job_counts["total"])
     blocks = page.locator(LOOP_BLOCK)
-    expect(blocks).to_have_count(2)
-    rendered = " ".join(blocks.nth(i).inner_text() for i in range(2))
+    expect(blocks).to_have_count(job_counts["with_loop"])
+    rendered = " ".join(blocks.nth(i).inner_text() for i in range(job_counts["with_loop"]))
     assert "drain the taste-pass demo queue" in rendered
     assert "never had a task queued" in rendered
     assert PLAIN_JOB not in rendered

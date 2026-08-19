@@ -116,6 +116,23 @@ async def test_the_specs_tree_reports_phase_for_a_document_that_never_moved(
 
 
 @pytest.mark.asyncio
+async def test_the_specs_tree_carries_the_document_id_the_panel_shell_keys_tabs_by(
+    app, auth_headers, run_headers, tmp_path
+):
+    """The panel shell (`2026-08-18-one-shell-three-panels`, design D4) keys a `spec:` tab by
+    document id so it survives a rename — `/project/specs` has to carry that id for every document
+    the Hub actually tracks, the same way it already carries `phase`. A document discovery found on
+    disk with no `spec_documents` row (never created through the Hub) reports `document_id: null`;
+    the UI's own fallback to path-keying for that case is exercised in `hub/ui`, not here."""
+    await _approved_document(app, auth_headers, run_headers)
+
+    listed = await app.get(f"{BASE}/specs", headers=auth_headers)
+    entry = next(s for s in listed.json()["specs"] if s["path"] == PATH)
+    assert entry["document_id"]
+    assert isinstance(entry["document_id"], str)
+
+
+@pytest.mark.asyncio
 async def test_archiving_does_not_touch_tasks(app, auth_headers, run_headers, tmp_path):
     await _approved_document(app, auth_headers, run_headers)
     tasks_before = await app.get("/api/v1/projects/proj-test/tasks", headers=auth_headers)

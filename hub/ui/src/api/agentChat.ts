@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import type { ContextUsage } from './agents'
 import { ApiError, deleteJson, getJson, patchJson, postJson } from './client'
 import { useConfigStore } from '@/store/configStore'
 import { useSSE } from '@/hooks/useSSE'
@@ -51,6 +52,13 @@ export type ConversationAttention = 'running' | 'waiting' | 'idle'
  *  accepted by the Hub with no producer yet. */
 export type ConversationOrigin = 'operator' | 'peer' | 'handoff' | 'spec' | 'job'
 
+/** Which loop's firing created this conversation. `label` is the loop's job name, the same
+ *  pairing the loops index uses, so one loop is named one way wherever it appears. */
+export interface ConversationLoop {
+  id: string
+  label: string
+}
+
 export interface AgentConversation {
   id: string
   agent: string
@@ -61,6 +69,27 @@ export interface AgentConversation {
   title: string | null
   title_set_by_operator: boolean
   origin: ConversationOrigin
+  /**
+   * Set only when a loop firing created this thread; null otherwise.
+   *
+   * `origin === 'job'` cannot stand in for it — a plain scheduled job carries the same origin and
+   * has no loop. Optional so a Hub predating the field degrades to "no marker" rather than to a
+   * crash.
+   */
+  loop?: ConversationLoop | null
+  /**
+   * How full *this* conversation's context is — not its agent's.
+   *
+   * `AgentSummary.context_usage` is one reading per agent, the newest across all of that agent's
+   * threads. The composer is conversation-scoped, so reading the agent's value showed whichever
+   * conversation last reported, in every conversation: measured on the trial Hub 2026-08-19,
+   * agent `verifier` had three conversations at 18.56%, 16.6% and 15.9%, and all three composers
+   * showed 15.9%.
+   *
+   * Null when this conversation has produced no reading yet — deliberately without falling back
+   * to the agent's, since that fallback is the bug.
+   */
+  context_usage?: ContextUsage | null
   attention: ConversationAttention
   /** Where this conversation stands with its checkpoint threshold. `due` warns; `dismissed`
    *  does not warn again while there is still room to keep working, because re-asking an

@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .db.models import Project, TurnUsage
+from .db.models import Project, Run, TurnUsage
 from .runner_events import AccountingSample
 from .utils import short_id
 
@@ -182,6 +182,24 @@ async def accounting_snapshot(
         "preferred_display": preferred_display,
         "recent_turns": recent_turns,
     }
+
+
+async def conversation_usage(
+    db: AsyncSession, project_id: str, conversation_id: str
+) -> Dict[str, Any]:
+    """Aggregate usage across every run in one conversation.
+
+    Unlike `accounting_snapshot`'s `recent_turns`, this is not capped at the last N rows — a
+    conversation's own turns can fall out of the project-wide recent window long before the
+    conversation is done, so the rollup shown for it has to be a real aggregate, not a slice.
+    """
+    result = await db.execute(
+        select(*_aggregate_columns())
+        .select_from(TurnUsage)
+        .join(Run, Run.id == TurnUsage.run_id)
+        .where(TurnUsage.project_id == project_id, Run.conversation_id == conversation_id)
+    )
+    return _summary_from_row(result.one())
 
 
 async def project_budget_state(db: AsyncSession, project_id: str) -> Dict[str, Any]:

@@ -4,6 +4,7 @@ import { useQuestions } from '@/api/questions'
 import { AnswerForm } from './AnswerForm'
 import { EmptyState } from '@/components/common/EmptyState'
 import { Badge } from '@/components/common/Badge'
+import { hubDate } from '@/lib/hubTime'
 
 export function QuestionsPanel() {
   const { data: unanswered, isLoading } = useQuestions(false)
@@ -38,7 +39,7 @@ export function QuestionsPanel() {
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-[13px] font-medium" style={{ color: 'var(--red)' }}>{q.from_agent}</span>
                   <span className="text-[11px]" style={{ color: 'var(--text-3)', opacity: 0.7 }}>
-                    {formatDistanceToNow(new Date(q.created_at), { addSuffix: true })}
+                    {formatDistanceToNow(hubDate(q.created_at), { addSuffix: true })}
                   </span>
                 </div>
                 <p className="text-sm" style={{ color: 'var(--text)' }}>{q.question}</p>
@@ -63,7 +64,7 @@ export function QuestionsPanel() {
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-[13px] font-medium" style={{ color: 'var(--text)' }}>{q.from_agent}</span>
                   <span className="text-[11px]" style={{ color: 'var(--text-3)', opacity: 0.7 }}>
-                    {formatDistanceToNow(new Date(q.created_at), { addSuffix: true })}
+                    {formatDistanceToNow(hubDate(q.created_at), { addSuffix: true })}
                   </span>
                 </div>
                 <p className="text-sm" style={{ color: 'var(--text)' }}>{q.question}</p>

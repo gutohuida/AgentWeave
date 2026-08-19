@@ -4,7 +4,8 @@ Capability routers are added here phase-by-phase. Keeping a distinct namespace m
 impossible to accidentally apply the project-key dependency to an agent operation.
 """
 
-from typing import Any, List, Optional
+from datetime import datetime
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field, field_validator
@@ -30,7 +31,7 @@ from ...sse import sse_manager
 from ...task_transitions import ENTRY_STATUSES, run_actor
 from ...utils import persist_event, short_id
 from .agents import AgentRequest, request_agent
-from .jobs import create_job, delete_job, run_job, update_job
+from .jobs import archive_job, create_job, delete_job, run_job, update_job
 from .messages import create_message_for_actor
 from .questions import ask_question_for_actor
 from .tasks import (
@@ -87,6 +88,9 @@ class AgentTaskCreate(BaseModel):
     acceptance_criteria: Optional[List[Any]] = None
     deliverables: Optional[List[Any]] = None
     notes: Optional[Any] = None
+    # Adds this task directly to a loop's queue — gated in `create_task_for_actor` against the
+    # loop's own `AIJob.agent`, or the operator (design D1/D7).
+    loop_id: Optional[str] = Field(default=None, max_length=64)
 
     model_config = {"extra": "forbid"}
 
@@ -162,6 +166,15 @@ class AgentJobCreate(BaseModel):
     cron: str = Field(max_length=128)
     session_mode: str = Field(default="new", max_length=64)
     enabled: bool = True
+    # Mirrors `JobCreate`'s loop-opt-in fields (`2026-08-18-a-loop-writes-its-own-queue` design
+    # D2). `create_governed_job` builds `JobCreate(**body.model_dump(), source="hub")` from this
+    # schema, so a field present there but not here silently drops on the agent path — this is
+    # what `create_loop` (MCP-only, `mcp_server.py`) posts through.
+    purpose: Optional[str] = Field(default=None, max_length=4000)
+    stop_at: Optional[datetime] = None
+    stop_when_queue_empties: bool = False
+    spec_document_id: Optional[str] = Field(default=None, max_length=64)
+    initial_tasks: Optional[List[Dict[str, Any]]] = None
 
     model_config = {"extra": "forbid"}
 
@@ -210,6 +223,7 @@ async def create_shared_task(
         project_id=actor.project_id,
         assigner=actor.agent,
         created_by_run_id=actor.run_id,
+        actor=run_actor(actor.run_id, actor.agent),
         session=session,
     )
 
@@ -523,6 +537,21 @@ async def delete_governed_job(
     session: AsyncSession = Depends(get_session),
 ):
     return await delete_job(
+        job_id,
+        project=(actor.project_id, actor.project_id),
+        session=session,
+        agent_identity=actor.agent,
+        run_identity=actor.run_id,
+    )
+
+
+@router.post("/jobs/{job_id}/archive", response_model=JobResponse)
+async def archive_governed_job(
+    job_id: str,
+    actor: AgentActor = Depends(get_agent_actor),
+    session: AsyncSession = Depends(get_session),
+):
+    return await archive_job(
         job_id,
         project=(actor.project_id, actor.project_id),
         session=session,

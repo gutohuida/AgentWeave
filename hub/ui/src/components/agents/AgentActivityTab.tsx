@@ -4,6 +4,7 @@ import { formatDistanceToNow } from 'date-fns'
 import { Icon } from '@/components/common/Icon'
 import { streamActivityEvents } from '@/components/stream/streamModel'
 import { tint } from '@/lib/colorTint'
+import { hubDate } from '@/lib/hubTime'
 
 interface AgentActivityTabProps {
   agent: AgentSummary
@@ -45,7 +46,7 @@ export function AgentActivityTab({ agent }: AgentActivityTabProps) {
     }))
 
     const combined = [...logItems, ...eventItems]
-    combined.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+    combined.sort((a, b) => hubDate(a.timestamp).getTime() - hubDate(b.timestamp).getTime())
     return combined
   }, [outputLines, timelineEvents])
 
@@ -124,7 +125,7 @@ export function AgentActivityTab({ agent }: AgentActivityTabProps) {
 }
 
 function ActivityRow({ item }: { item: ActivityItem }) {
-  const timeAgo = formatDistanceToNow(new Date(item.timestamp), { addSuffix: true })
+  const timeAgo = formatDistanceToNow(hubDate(item.timestamp), { addSuffix: true })
 
   if (item.type === 'event') {
     const eventColor =

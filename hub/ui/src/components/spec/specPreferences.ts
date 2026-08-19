@@ -9,6 +9,8 @@
 // read them — whether a document is open is now part of the destination, and the Library/History
 // control was deleted along with the navigator column.
 
+import type { TabKind } from '@/store/panelTabsStore'
+
 const STORAGE_KEY = 'aw.spec.presentation.v1'
 
 export interface SpecPreferences {
@@ -32,6 +34,45 @@ export const CONVERSATION_DEFAULT_WIDTH = 480
 /** What the document panel needs before it stops being worth showing as a column. Below
  *  `CONVERSATION_MIN_WIDTH + SPEC_DOC_MIN_WIDTH` the panel becomes an overlay instead. */
 export const SPEC_DOC_MIN_WIDTH = 360
+
+/**
+ * What the `files`/`file:` tabs need before they stop being worth showing as a column (task 5.5,
+ * `2026-08-18-one-shell-three-panels`). Measured, not chosen, against the real shell
+ * (`.claude/autonomous/scratch/measure_files_tab_width.py`, run against the trial Hub at
+ * `2026-08-19T02:4x+01:00`): the binding constraint is `FileTab`'s header row — the filename,
+ * "Insert into composer", and the close control, none of which can shrink further — which first
+ * clips at 248px. `FilesIndexTab`'s search box and tree stayed clean all the way to 200px, so the
+ * header decides it for both kinds. 260 keeps a 12px margin above the measured 248px breakpoint
+ * for font-metric variance across environments, the same margin `CONVERSATION_MIN_WIDTH`'s own
+ * comment describes measuring against.
+ */
+export const FILE_TAB_MIN_WIDTH = 260
+
+/**
+ * What the *visible panel tab* needs before it stops being worth showing as a column, by kind.
+ *
+ * A single lookup rather than a second constant, so the breakpoint and the pane's own `minWidth`
+ * read from the same source and cannot drift apart — the mistake the three-column workspace made
+ * once, when its threshold and its layout were written down in two places. `specs` has no measured
+ * minimum of its own yet, so it still falls back to the document minimum as a safe, if temporary,
+ * floor — a list is never wider than the document that lists it. `loops`/`loop` (task B5/B6,
+ * `2026-08-18-a-loop-writes-its-own-queue`) are unmeasured for the same reason and share the same
+ * temporary floor — neither task asked for a measurement the way panel tasks 5.5/6.1 explicitly
+ * did, so none is guessed here. `null` covers "no tab is visible yet".
+ */
+export function minWidthForTabKind(kind: TabKind | null): number {
+  switch (kind) {
+    case 'file':
+    case 'files':
+      return FILE_TAB_MIN_WIDTH
+    case 'spec':
+    case 'specs':
+    case 'loop':
+    case 'loops':
+    case null:
+      return SPEC_DOC_MIN_WIDTH
+  }
+}
 
 /** A sanity bound on the *stored* value, not a design decision: the real ceiling is whatever the
  *  measurement leaves once the document has its minimum, and it is applied at render time. This

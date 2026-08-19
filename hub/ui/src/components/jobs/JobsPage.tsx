@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Icon } from '@/components/common/Icon'
 import { EmptyState } from '@/components/common/EmptyState'
 import { Button } from '@/components/ui/button'
+import { tint } from '@/lib/colorTint'
 import { JobCard } from './JobCard'
 import { JobForm } from './JobForm'
 import {
@@ -14,6 +15,18 @@ import {
   JobCreate,
 } from '@/api/jobs'
 
+// D16: `DELETE` now always refuses (a job archives instead) — mirrors `ChartersPage`'s own
+// `errorDetail`, the existing pattern here for turning a thrown `ApiError` into readable text.
+function errorDetail(error: unknown): string {
+  if (!(error instanceof Error)) return 'Could not delete job'
+  try {
+    const parsed = JSON.parse(error.message) as { detail?: string }
+    return parsed.detail ?? error.message
+  } catch {
+    return error.message
+  }
+}
+
 interface JobsPageProps {
   /** A loop's queue/current-item link, clicked: switch to the Tasks tab filtered to it. */
   onOpenTasks?: (taskIds: string[]) => void
@@ -23,6 +36,7 @@ export function JobsPage({ onOpenTasks }: JobsPageProps) {
   const { data: jobs, isLoading } = useJobs()
   const [showForm, setShowForm] = useState(false)
   const [filter, setFilter] = useState<'all' | 'active' | 'paused'>('all')
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   const runJob = useRunJob()
   const pauseJob = usePauseJob()
@@ -31,6 +45,13 @@ export function JobsPage({ onOpenTasks }: JobsPageProps) {
   const createJob = useCreateJob()
 
   const isPending = runJob.isPending || pauseJob.isPending || resumeJob.isPending || deleteJob.isPending || createJob.isPending
+
+  const handleDelete = (id: string) => {
+    setDeleteError(null)
+    deleteJob.mutate(id, {
+      onError: (error: unknown) => setDeleteError(errorDetail(error)),
+    })
+  }
 
   const filteredJobs = jobs?.filter((job) => {
     if (filter === 'active') return job.enabled
@@ -72,6 +93,16 @@ export function JobsPage({ onOpenTasks }: JobsPageProps) {
           New Job
         </Button>
       </div>
+
+      {deleteError && (
+        <div
+          role="alert"
+          className="mx-4 mt-3 rounded-md px-3 py-2 text-xs"
+          style={{ background: tint('var(--red)'), color: 'var(--red)' }}
+        >
+          {deleteError}
+        </div>
+      )}
 
       {/* Filter tabs */}
       <div className="flex items-center gap-1 px-4 py-2" style={{ borderBottom: '1px solid var(--border)' }}>
@@ -121,7 +152,7 @@ export function JobsPage({ onOpenTasks }: JobsPageProps) {
                 onRun={runJob.mutate}
                 onPause={pauseJob.mutate}
                 onResume={resumeJob.mutate}
-                onDelete={deleteJob.mutate}
+                onDelete={handleDelete}
                 isPending={isPending}
                 onOpenTasks={onOpenTasks}
               />

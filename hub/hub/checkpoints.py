@@ -18,9 +18,19 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import worktrees
-from .db.models import Checkpoint, Conversation, PermissionRequest, Question, Run, Task
+from .db.models import (
+    Checkpoint,
+    Conversation,
+    JobRun,
+    Loop,
+    PermissionRequest,
+    Question,
+    Run,
+    Task,
+)
 from .utils import short_id
 
 logger = logging.getLogger(__name__)
@@ -34,6 +44,15 @@ TASK_SCOPE_NOTE = (
     "These are every task assigned to this agent across the project. Tasks carry no "
     "conversation, so this list is identical for all of this agent's concurrent conversations "
     "and is not specific to this one."
+)
+
+# Task 7.3. The loop-scoped counterpart to TASK_SCOPE_NOTE, same "explicit scope hides nothing"
+# reasoning: a loop firing's queue is its whole task list, in every status, not just the live
+# ones — a checkpoint that quietly dropped a rejected or approved task would misstate the queue
+# the next firing is briefed on.
+LOOP_TASK_SCOPE_NOTE = (
+    "These are every task belonging to this loop, in every status. This is the loop's whole "
+    "queue, not just what is currently active."
 )
 
 # Questions still owed an answer when the checkpoint was taken.
@@ -76,6 +95,50 @@ async def latest_checkpoint(db, conversation_id: str) -> Optional[Checkpoint]:
         .scalars()
         .first()
     )
+
+
+async def latest_checkpoint_for_loop(db: AsyncSession, loop_id: str) -> Optional[Checkpoint]:
+    """The checkpoint a loop's next firing briefs from — its most recent across EVERY
+    conversation it has ever fired into, not just the one about to run.
+
+    Mirrors `latest_checkpoint`'s shape exactly (task 7.2, design D4 item 2): every firing
+    creates a new conversation (`scheduler.py:338`), so continuity for a loop has to be found by
+    `Checkpoint.loop_id`, never by `conversation_id` — a same-conversation query would only ever
+    find None, since a loop's *next* firing is, by construction, a conversation that does not
+    exist yet.
+    """
+    return (
+        (
+            await db.execute(
+                select(Checkpoint)
+                .where(Checkpoint.loop_id == loop_id)
+                .order_by(Checkpoint.created_at.desc(), Checkpoint.id.desc())
+                .limit(1)
+            )
+        )
+        .scalars()
+        .first()
+    )
+
+
+async def loop_for_conversation(db: AsyncSession, conversation_id: str) -> Optional[Loop]:
+    """The `Loop` a conversation was fired into, or None for a conversation that is not a loop
+    firing at all (a directly-run conversation, or a plain job's).
+
+    Task 7.1's join, `JobRun.conversation_id` -> `job_id` -> `Loop.job_id`, the same one
+    `2026-08-18-many-named-loops` D7 already uses in `_batch_loop_summaries`
+    (`api/v1/jobs.py:98`). Derived once here so a caller needing it for both `compute_envelope`
+    and `create_checkpoint` (`generate_checkpoint`, `checkpoint_generation.py`) does it a single
+    time rather than re-querying per call.
+    """
+    job_id = (
+        await db.execute(
+            select(JobRun.job_id).where(JobRun.conversation_id == conversation_id).limit(1)
+        )
+    ).scalar_one_or_none()
+    if job_id is None:
+        return None
+    return (await db.execute(select(Loop).where(Loop.job_id == job_id))).scalars().first()
 
 
 async def runs_to_cover(db, conversation_id: str, anchor: Optional[Checkpoint]) -> List[Run]:
@@ -169,6 +232,35 @@ async def _tasks_for(db, project_id: str, agent: str) -> Dict[str, Any]:
     }
 
 
+async def _tasks_for_loop(db: AsyncSession, loop_id: str) -> Dict[str, Any]:
+    """Task 7.3. Every status, unlike `_tasks_for`'s `_LIVE_TASK_STATUSES` filter — a loop's
+    queue includes what it has already finished, rejected or approved, and a briefing that
+    silently dropped those would misstate the queue the next firing is picking up from."""
+    rows = list(
+        (
+            await db.execute(
+                select(Task).where(Task.loop_id == loop_id).order_by(Task.updated.desc(), Task.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return {
+        "scope": "loop",
+        "note": LOOP_TASK_SCOPE_NOTE,
+        "items": [
+            {
+                "id": task.id,
+                "title": task.title,
+                "status": task.status,
+                "priority": task.priority,
+                "assigner": task.assigner,
+            }
+            for task in rows
+        ],
+    }
+
+
 async def _open_questions_for(db, conversation_id: str) -> List[Dict[str, Any]]:
     rows = list(
         (
@@ -227,12 +319,23 @@ async def compute_envelope(
     *,
     worktree: Optional[Path] = None,
     anchor: Optional[Checkpoint] = None,
+    loop: Optional[Loop] = None,
 ) -> CheckpointEnvelope:
-    """Everything a checkpoint knows without asking anybody."""
+    """Everything a checkpoint knows without asking anybody.
+
+    Task 7.3. `loop`, when supplied, means this conversation is a firing of that loop: `tasks`
+    becomes the loop's whole queue (`_tasks_for_loop`) instead of the agent-wide list
+    (`_tasks_for`). The caller (`generate_checkpoint`) is the one that decides whether a loop
+    applies, via `loop_for_conversation` — this function does not re-derive it.
+    """
     runs = await runs_to_cover(db, conversation.id, anchor)
     return CheckpointEnvelope(
         files_changed=_files_from_runs(runs, worktree),
-        tasks=await _tasks_for(db, conversation.project_id, conversation.agent),
+        tasks=(
+            await _tasks_for_loop(db, loop.id)
+            if loop is not None
+            else await _tasks_for(db, conversation.project_id, conversation.agent)
+        ),
         open_questions=await _open_questions_for(db, conversation.id),
         permission_decisions=await _permission_decisions_for(db, conversation.id),
         # An inherited `{"permission_mode": "manual"}` is what failed run-9058966b. A successor
@@ -271,6 +374,7 @@ async def create_checkpoint(
     runner: Optional[str] = None,
     model: Optional[str] = None,
     visibility: str = "private",
+    loop: Optional[Loop] = None,
 ) -> Checkpoint:
     """Persist a checkpoint. The envelope is written whether or not a body exists.
 
@@ -278,6 +382,13 @@ async def create_checkpoint(
     it. A checkpoint with no body is `unwritten` — it still carries the computed half, which is
     the verifiable half — and `unwritten` is never presented as something to resume from, which
     the `ck_checkpoints_ready_has_a_body` constraint enforces at the schema level.
+
+    Task 7.1. `loop`, when supplied, stamps `Checkpoint.loop_id` — the column
+    `latest_checkpoint_for_loop` reads to find a loop's continuity across the new conversation
+    every firing creates (design D4 item 1). Not derived here from `conversation`: the caller
+    already has it (or knows it does not apply) from `loop_for_conversation`, and deriving it
+    twice per checkpoint would be the same redundant join `loop_for_conversation`'s own docstring
+    argues against.
     """
     checkpoint_id = f"ckpt-{short_id()}"
     # Whitespace is not a body. Collapsing blank to NULL keeps "cleared" and "never written" one
@@ -300,6 +411,7 @@ async def create_checkpoint(
         worker_invocation_id=worker_invocation_id,
         runner=runner,
         model=model,
+        loop_id=loop.id if loop else None,
         files_changed=envelope.files_changed,
         tasks=envelope.tasks,
         open_questions=envelope.open_questions,

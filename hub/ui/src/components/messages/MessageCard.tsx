@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { formatDistanceToNow } from 'date-fns'
 import { Icon } from '@/components/common/Icon'
 import { useMarkRead } from '@/api/messages'
+import { hubDate } from '@/lib/hubTime'
 
 interface MessageCardProps {
   message: {
@@ -61,7 +62,7 @@ export function MessageCard({ message }: MessageCardProps) {
               {message.to}
             </span>
             <span className="text-[11px] shrink-0" style={{ color: 'var(--text-3)', opacity: 0.7 }}>
-              {formatDistanceToNow(new Date(message.timestamp), { addSuffix: true })}
+              {formatDistanceToNow(hubDate(message.timestamp), { addSuffix: true })}
             </span>
           </div>
 

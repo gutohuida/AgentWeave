@@ -8,13 +8,21 @@ import { getBufferedEvents } from '@/hooks/useSSE'
 import { QuestionInterruptCard } from '@/components/questions/QuestionInterruptCard'
 import { ContextUsageIndicator } from '@/components/context/ContextUsageIndicator'
 import { AccountingPanel } from '@/components/accounting/AccountingPanel'
+import { getStatusConfig } from '@/lib/agentStatusConfig'
+import { hubDate } from '@/lib/hubTime'
 
 interface OverviewPageProps {
   onNavigate: (page: string) => void
 }
 
 function AgentHealthCard({ agent, onClick }: { agent: AgentSummary; onClick: () => void }) {
-  const statusColor = agent.status === 'running' ? 'var(--green)' : agent.status === 'waiting' ? 'var(--amber)' : 'var(--text-3)'
+  // Deliberately not <StatusDot /> — this card uses a static 8x8 dot with a glow
+  // shadow instead of StatusDot's animate-ping halo (see lib/agentStatus.tsx).
+  // The color itself still comes from the shared STATUS_CONFIG so a `stalled`
+  // agent (running but heartbeat-dead — see hub/agent_status.py) reads as the
+  // same amber-and-urgent as `waiting`, not the same gray as a merely idle one.
+  const statusCfg = getStatusConfig(agent.status)
+  const statusColor = statusCfg.dotColor
 
   return (
     <button
@@ -38,7 +46,7 @@ function AgentHealthCard({ agent, onClick }: { agent: AgentSummary; onClick: () 
             width: 8,
             height: 8,
             background: statusColor,
-            boxShadow: agent.status === 'running' ? `0 0 0 2px ${statusColor}40` : undefined,
+            boxShadow: statusCfg.pulse ? `0 0 0 2px ${statusColor}40` : undefined,
           }}
         />
         <span className="font-medium text-sm truncate" style={{ color: 'var(--text)' }}>
@@ -57,7 +65,7 @@ function AgentHealthCard({ agent, onClick }: { agent: AgentSummary; onClick: () 
       {/* Last seen + preview */}
       {agent.last_seen && (
         <p style={{ fontSize: 11, color: 'var(--text-3)' }}>
-          {formatDistanceToNow(new Date(agent.last_seen), { addSuffix: true })}
+          {formatDistanceToNow(hubDate(agent.last_seen), { addSuffix: true })}
         </p>
       )}
       {agent.latest_status_msg && (
@@ -247,7 +255,7 @@ export function OverviewPage({ onNavigate }: OverviewPageProps) {
                   {agentName && <span className="font-medium" style={{ color: 'var(--text)' }}>{String(agentName)}</span>}
                   <span className="truncate max-w-[160px]">{evt.type.replace(/_/g, ' ')}</span>
                   <span style={{ color: 'var(--text-3)' }}>
-                    {formatDistanceToNow(new Date(evt.timestamp), { addSuffix: true })}
+                    {formatDistanceToNow(hubDate(evt.timestamp), { addSuffix: true })}
                   </span>
                 </div>
               )

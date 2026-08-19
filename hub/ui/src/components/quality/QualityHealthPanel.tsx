@@ -3,6 +3,7 @@ import { useSessionSync, QualityConfig } from '@/api/status'
 import { EmptyState } from '@/components/common/EmptyState'
 import { Icon } from '@/components/common/Icon'
 import { SettingsSection } from '@/components/environment/SettingsSection'
+import { hubDate } from '@/lib/hubTime'
 
 function SettingBadge({ label, value }: { label: string; value: string }) {
   return (
@@ -17,7 +18,7 @@ function SettingBadge({ label, value }: { label: string; value: string }) {
 }
 
 function minutesAgo(isoTs: string): number {
-  return Math.floor((Date.now() - new Date(isoTs).getTime()) / 60_000)
+  return Math.floor((Date.now() - hubDate(isoTs).getTime()) / 60_000)
 }
 
 export function QualityHealthPanel() {

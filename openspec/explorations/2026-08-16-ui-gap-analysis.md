@@ -215,6 +215,74 @@ conversation — this may already partially cover this gap. Flagged as needing a
 `Composer.tsx`/`ComposerModelControls.tsx` against what Cline actually exposes before this is a real
 finding rather than a maybe.
 
+## Addendum, 2026-08-19, checked directly (a read, not a build) — most of this list is now stale
+
+Re-read against the current tree while scoping a FREE queue item (autonomous run 2, iteration 9).
+Five of the seven gaps below turned out to already be implemented — some evidently built during run
+1 (2026-08-16/17, before this doc's own findings were written or shortly after, with no line back to
+this document), one during run 2 itself. Anyone using this document to pick unclaimed work should
+read this section first, not the per-gap text above, which is left unedited as the historical record
+of what was true on 2026-08-16.
+
+- **Gap 1 (markdown rendering) — DONE.** `hub/ui/src/components/agents/MarkdownMessage.tsx` (git-
+  dated 2026-08-16), imported into `AgentTimeline.tsx` and rendered for agent output and both peer-
+  message directions (`AgentTimeline.tsx:783,815,868`). `react-markdown` is in `package.json`.
+- **Gap 2 (tool-call icon + diff view) — DONE, both halves.** `AgentTimeline.tsx:558`'s
+  `toolVisual()` maps a tool name to an `Icon` + label (part a). `ToolEditDiff.tsx` renders a real
+  diff for edit-shaped tool payloads, with `editDiffStat()` producing the collapsed row's
+  `+added −removed` counts (part b) — `WorkRow` (`AgentTimeline.tsx:593-676`) uses both.
+- **Gap 3 (command palette) — DONE.** `cmdk` is a real dependency (`package.json`), and
+  `CommandPalette.tsx` (git-dated 2026-08-17) is wired into `App.tsx:526`, with its own test file.
+- **Gap 5 (per-turn cost/token display) — DONE for the per-turn half**, per this run's own APP2
+  (iteration 6): `AgentTimelineModel.ts`'s `tokensByRunId()` + `useAccounting()` threaded into
+  `AgentOutputPanel.tsx`. The per-*conversation* rollup this gap's own 2026-08-16 addendum described
+  (`TurnUsage.run_id` joined to `Run.conversation_id`, grouped) was NOT built — that half is still a
+  real, open, small backend-plus-UI gap.
+- **Gap 6 (cross-agent "all runs at a glance") — SUBSTANTIALLY DONE**, per this run's iteration 8:
+  `OverviewPage.tsx`'s `AgentHealthCard` grid already is this view (project-scoped, SSE-live via
+  `useAgents()`), and its one real defect (stalled agents rendering identically to idle ones) was
+  fixed that iteration. Whether a *dedicated*, Cursor-Mission-Control-style route is still wanted —
+  and whether it should be cross-project rather than project-scoped like every other page — is an
+  open design question, not evidenced as needed; see the run's `decisions_for_user`.
+- **Gap 7 (spend-limit / autonomy dial in the composer) — checked directly, partially covered.**
+  `hub/hub/model_catalog.py`'s `permission_mode` control (the composer's Permissions pill) already
+  offers `manual`, `acceptEdits` (default), and `bypassPermissions` ("Full access") per run — a real,
+  in-surface autonomy dial, which is most of what Cline's "YOLO mode" comparison was gesturing at.
+  What's still genuinely absent: a **spend limit at run/turn grain** — `AccountingPanel`'s budget
+  (Section 1 above) is project-scoped only, confirmed by Gap 5's own addendum, and there is no
+  Cline-style "Lazy Teammate Mode" analog (auto-continue past repetitive confirmations). Downgraded
+  from "maybe, needs a closer read" to a real, smaller, two-part remaining gap.
+- **Gap 4 (persistent chat-surfaced plan/todo) — genuinely still open**, unchanged from the
+  2026-08-16 text. The one item on this list actually untouched by either run so far.
+
+Net: the only gaps with real, unclaimed scope left are Gap 4 (as originally sized — the biggest item
+on the list) and the two narrowed remainders of Gaps 5 and 7 (per-conversation cost rollup; per-run
+spend limit). Everything else this document originally flagged is built and live.
+
+## Addendum, 2026-08-19 (later), FREE iteration 10 — Gap 5's per-conversation rollup built
+
+The per-conversation half of Gap 5, named above as still open, is now done. `usage_accounting.py`
+gained `conversation_usage()`, joining `TurnUsage` to `Run` on `run_id` to aggregate every turn
+whose `Run.conversation_id` matches — deliberately not capped like `accounting_snapshot`'s
+`recent_turns` (limit 50 across the whole project), since a conversation's own turns fall out of
+that window long before the conversation is done. Exposed at
+`GET /api/v1/projects/{project_id}/accounting/conversations/{conversation_id}`. The UI reads it via
+a new `useConversationAccounting()` hook and shows a small "N,NNN tokens" badge in
+`AgentOutputPanel`'s conversation header, next to the status chip, once the open conversation has at
+least one measured turn (`AgentOutputPanel.tsx:836`).
+
+Live-verified against real multi-turn usage on the trial Hub (not just the component test's
+fixture): `proj-b44fac0c`'s conv-aa40eb38 ("Capital of France") has 3 measured turns; the API
+returns `total_tokens: 119182` and the rendered badge reads "119,182 tokens" — a genuine rollup a
+single `recent_turns` row could not have shown. `proj-5e960453` (this repo's own registration) still
+has zero measured turns, so the badge is unverified live *there*, same caveat APP2 recorded for the
+per-turn display.
+
+Gap 7's remaining half — a spend limit at run/turn grain, not just project-wide — was NOT attempted
+this iteration; it needs enforcement (pausing a run mid-budget), a materially different and riskier
+shape than this additive, read-only rollup. Gap 4 (persistent plan/todo) remains the only fully
+untouched item on the list.
+
 ## 3. What this exploration deliberately does not do
 
 - No proposal, design, or tasks — per Q7's own `detail`, survey first.

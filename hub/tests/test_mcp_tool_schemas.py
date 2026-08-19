@@ -109,6 +109,29 @@ def test_the_agent_is_never_offered_the_waiting_status():
     assert STATUS_BLOCKED in _TASK_STATUSES, "but it is still a real status the operator can set"
 
 
+# ---------------------------------------------------------------------------
+# create_loop
+# ---------------------------------------------------------------------------
+
+
+def test_create_loop_offers_exactly_the_fields_the_route_it_posts_to_accepts():
+    """`create_loop` calls the same `/agent-actions/jobs` route `create_job` does (design D2,
+    `2026-08-18-a-loop-writes-its-own-queue`), widened with the loop-opt-in and `initial_tasks`
+    fields. A field on one schema but not the other silently drops the caller's intent — this is
+    `mcp_server.py`'s "restated from the Hub's validators" pattern (CLAUDE.md), applied to the
+    whole parameter set rather than to one enum.
+
+    `session_mode` and `enabled` are deliberately absent from `create_loop`: a loop's continuity
+    is always by checkpoint (design D4), never a resumed session, and a loop the caller could
+    create disabled would be indistinguishable from one that silently never fires.
+    """
+    from hub.api.v1.agent_actions import AgentJobCreate
+
+    offered = set(_schemas()["create_loop"]["properties"])
+    accepted = set(AgentJobCreate.model_fields) - {"session_mode", "enabled"}
+    assert offered == accepted
+
+
 class TestReadableDetail:
     """A rejection an agent can act on, rather than a stringified list of Pydantic dicts."""
 

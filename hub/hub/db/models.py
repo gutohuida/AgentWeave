@@ -102,10 +102,24 @@ class Project(Base):
     )
 
     # --- Checkpointing ---
-    # "off" | "offered" | "automatic". Off by default: a project should not start spending tokens
-    # on generation, or cutting conversations over, because it was upgraded.
+    # "off" | "offered" | "automatic".
+    #
+    # A **new** project starts at "offered"; the column default stays "off" so nothing changes for
+    # a project that already exists. The original reasoning — "a project should not start spending
+    # tokens on generation, or cutting conversations over, because it was upgraded" — is about
+    # upgrade safety, and it still holds: `server_default` is what an existing row kept, and no
+    # migration rewrites it.
+    #
+    # "offered" spends nothing on its own. `CheckpointPolicy.enabled` is
+    # `mode in ("offered", "automatic")` while only `automatic` acts unasked, so the token
+    # argument protects "automatic" and never reached "offered".
+    #
+    # Starting at "off" made the whole mechanism invisible: a loop's continuity between firings
+    # *is* its checkpoint (design D5, tasks 7.1-7.3, 9.1), so a fresh project's loops silently had
+    # no memory at all, and finding that out took three firings and a database query
+    # (human-only check 13.2, 2026-08-19).
     checkpoint_mode: Mapped[str] = mapped_column(
-        String(16), default="off", server_default="off", nullable=False
+        String(16), default="offered", server_default="off", nullable=False
     )
     # One mode plus one value, never two nullable value columns — "150 000 tokens" and "50%" are
     # the same setting expressed differently, and two columns make "both set" representable.
@@ -911,6 +925,11 @@ class EventLog(Base):
     project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
     event_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     agent: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    # Design D13 (`2026-08-18-a-loop-writes-its-own-queue`, task A4.1): NULL for every event that
+    # is not about a specific loop — most rows. Set (not derived by re-parsing `data`) on every
+    # loop-scoped event a caller already has a loop id for, so retrieving one loop's history is an
+    # indexed filter, not a scan of unindexed JSON.
+    loop_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     data: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
     severity: Mapped[str] = mapped_column(
         String(10), nullable=False, server_default="info", index=True
@@ -919,7 +938,10 @@ class EventLog(Base):
         DateTime(timezone=True), default=_now, nullable=False
     )
 
-    __table_args__ = (Index("ix_event_logs_project_ts", "project_id", "timestamp"),)
+    __table_args__ = (
+        Index("ix_event_logs_project_ts", "project_id", "timestamp"),
+        Index("ix_event_logs_loop_ts", "loop_id", "timestamp"),
+    )
 
 
 class AgentHeartbeat(Base):
@@ -1152,6 +1174,11 @@ class AIJob(Base):
     )  # "local" or "hub" - tracks origin for sync logic
     created_by_run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     updated_by_run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    # D16: a plain job with no loop is archivable, never deletable — the same uniform rule as
+    # `Loop.archived_at` below, not a conditional one that only applies once a loop exists.
+    # NULL means live; `DELETE /api/v1/jobs/{job_id}` refuses outright rather than reinterpreting
+    # itself as an archive (B2.1) — this column is written only by the archive route.
+    archived_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     project: Mapped["Project"] = relationship(back_populates="jobs")
     runs: Mapped[List["JobRun"]] = relationship(back_populates="job", cascade="all, delete-orphan")
@@ -1177,7 +1204,16 @@ class JobRun(Base):
     )
     status: Mapped[str] = mapped_column(
         String(16), default="fired", nullable=False
-    )  # "fired" or "failed"
+    )  # "fired" (enqueued, transient) | "in_progress" (queued entry now feeding a live agent
+    # turn) | "completed" | "failed" | "stopped" | "skipped". No CHECK constraint (SQLite, and
+    # nothing here has ever added one for this column) — the set is enforced in code, not the
+    # schema. "in_progress"/"completed"/"stopped" added by design D13, task A4.3
+    # (`scheduler.py::_do_fire_job` sets "in_progress"; `scheduler.py::
+    # finalize_job_run_for_conversation`, called from `agent_trigger.py`'s two finalize sites,
+    # sets the terminal value once the agent's own `Run` ends). A row written before this
+    # existed can be stuck at "fired" forever if its `Run` had already ended — that is a
+    # pre-existing row, not a bug in this change; A4.5 will reconcile a firing genuinely
+    # crash-interrupted mid-flight, not backfill history.
     trigger: Mapped[str] = mapped_column(
         String(16), default="scheduled", nullable=False
     )  # "scheduled" or "manual"
@@ -1205,6 +1241,10 @@ class Loop(Base):
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
+    # `ondelete="CASCADE"` predates D16 (nothing is deletable — see `archived_at` below) and stays
+    # unreachable rather than removed: no code path deletes an `AIJob` that owns a `Loop` anymore
+    # (B2.1 refuses the delete route outright), so the cascade never fires, and dropping it would
+    # force SQLite to recreate the table for a behavioural change nothing exercises.
     job_id: Mapped[str] = mapped_column(
         String(64), ForeignKey("ai_jobs.id", ondelete="CASCADE"), unique=True, nullable=False
     )
@@ -1230,12 +1270,73 @@ class Loop(Base):
     )
     created_by_run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     updated_by_run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # Which document this loop draws its queue from, if any. `unique=True, index=True` — same shape
+    # as `Run.capability_token_hash` above — one loop per document, matching `job_id`'s own
+    # uniqueness reasoning above, so two loops cannot silently race to claim the same decomposition.
+    # Deliberately not a ForeignKey, the identical SQLite-irreversibility reasoning
+    # `Task.spec_document_id`/`Task.loop_id` already state (`models.py:636-647`).
+    spec_document_id: Mapped[Optional[str]] = mapped_column(
+        String(64), unique=True, index=True, nullable=True
+    )
+    # D17: housekeeping visibility, not lifecycle — a loop archives only after it has ended
+    # (B2.3 refuses archiving a running loop), and archiving destroys nothing, so this is
+    # orthogonal to `ending_state` below rather than a terminal value of the same axis. Mirrors
+    # `Agent.archived_at`/`Conversation.archived_at`. NULL means visible in default listings.
+    archived_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # D17: what happened, not housekeeping — the value a governance surface can count and filter
+    # on ("4 complete · 1 stopped early · 2 running", B5.3) without string-matching `stop_reason`,
+    # which stays exactly as free-text as it is today and keeps carrying the human explanation.
+    # NULL while the loop is still running (`AIJob.enabled` is still the sole firing gate, D17).
+    # Permitted values, deliberately only these two: "completed" (the queue drained on its own —
+    # `stop_when_queue_empties`) and "stopped" (everything else that ends a loop: `stop_at`
+    # elapsing, an operator stop, or any other path `scheduler.py`'s stop-condition check takes).
+    # A third value is not wanted here — D17 rejected a single lifecycle-with-archived-as-terminal
+    # design precisely so this column can stay a two-way fact instead of growing to answer
+    # questions `archived_at` and `stop_reason` already answer between them.
+    ending_state: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    # Design D10 (addendum, `2026-08-18-a-loop-writes-its-own-queue`, task A1.1): who decides
+    # whether this loop's queue may be extended. NULL means the current default — the operator —
+    # exactly the reasoning `Agent.default_permission_mode` above already states: a row storing
+    # today's default would keep saying it after the default moved. The only other permitted value
+    # is "creator", set by `POST /loops/{id}/control` (operator-only — delegation is the
+    # operator's decision to make, not the creator agent's to take). Resolve at the point of use
+    # (`_authorize_loop_task_creation`, `tasks.py`), never write "operator" into this column.
+    control: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+
+    # Design D11 (addendum, task A2.1): an edit to a loop's definition is always accepted and
+    # staged here, never applied on the spot — a firing already under way keeps the definition it
+    # was briefed with. Applied by `scheduler._apply_pending_loop_edit` at the loop's next firing,
+    # before that firing's briefing is composed. NULL means "no change staged to this field",
+    # mirroring `JobUpdate`'s own untouched-vs-explicit convention for the live columns above, so
+    # an edit that only touches `purpose` leaves `stop_at`/`stop_when_queue_empties` alone.
+    pending_purpose: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    pending_stop_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    pending_stop_when_queue_empties: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+    # Task A2.5: who staged the pending edit and when — the agent name, or the literal string
+    # "operator" (never NULL for an operator edit; NULL here means "no pending edit", the same
+    # role `pending_edit_at` plays below, so "operator" cannot collapse into "unset").
+    pending_edit_actor: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # The sentinel for "is there a pending edit at all" — non-NULL iff at least one of the three
+    # pending_* fields above is set (an edit always touches at least one, mirroring
+    # `_loop_opts_in`'s own "at least one field" rule for loop creation).
+    pending_edit_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     __table_args__ = (Index("ix_loops_project", "project_id"),)
 
 
 class AgentJobDeletion(Base):
-    """Durable attribution tombstone for an agent-deleted scheduled job."""
+    """Durable attribution tombstone for an agent-deleted scheduled job.
+
+    Historical only as of design D16 (B2.1): `DELETE /api/v1/jobs/{job_id}` refuses outright
+    instead of deleting, so no new row is written here — an archived job's attribution lives on
+    `AIJob.updated_by_run_id` instead, since the row itself survives. Kept, not dropped: rows
+    written before this change are still real history, and a project's cascade-delete still needs
+    somewhere to clean them up from.
+    """
 
     __tablename__ = "agent_job_deletions"
 
@@ -1367,6 +1468,12 @@ class Checkpoint(Base):
     conversation_id: Mapped[str] = mapped_column(
         String(64), ForeignKey("conversations.id"), nullable=False, index=True
     )
+    # Which loop this checkpoint belongs to, if the conversation it summarises was a loop firing.
+    # Same "deliberately not a ForeignKey" reasoning as every other loop-adjacent column
+    # (`models.py:636-647`). Stamped by `create_checkpoint`, not derived at read time (design D4) —
+    # every firing creates a new conversation, so deriving this via a join would be a four-table
+    # walk on every read instead of one indexed column.
+    loop_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     agent: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     trigger: Mapped[str] = mapped_column(String(32), nullable=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False)

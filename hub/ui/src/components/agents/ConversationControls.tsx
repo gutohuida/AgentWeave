@@ -1,5 +1,5 @@
 import { Icon } from '@/components/common/Icon'
-import { AgentSummary } from '@/api/agents'
+import type { AgentConversation } from '@/api/agentChat'
 import { Button } from '@/components/ui/button'
 import { ContextUsageIndicator } from '@/components/context/ContextUsageIndicator'
 
@@ -9,7 +9,15 @@ import { ContextUsageIndicator } from '@/components/context/ContextUsageIndicato
 export type HandoffState = 'idle' | 'preparing'
 
 interface ConversationControlsProps {
-  agent: AgentSummary
+  /**
+   * The open conversation's own context reading, passed in rather than taken from `agent`.
+   *
+   * `agent.context_usage` is one reading per agent — the newest across every thread it owns — so
+   * this header showed whichever conversation last reported, whichever one you were actually in.
+   * Explicit prop rather than reaching into the conversation here, so the scope of the number is
+   * decided at the call site where the current conversation is known.
+   */
+  contextUsage: AgentConversation['context_usage']
   isRunning: boolean
   isStopping: boolean
   onStop: () => void
@@ -46,7 +54,7 @@ function handoffReason(
  * forget about the handoff."*
  */
 export function ConversationControls({
-  agent,
+  contextUsage,
   isRunning,
   isStopping,
   onStop,
@@ -75,7 +83,7 @@ export function ConversationControls({
       {/* Not `compact`: the compact form is a 2px bar with no number, which answers "is it
           filling up" and nothing else. The conversation header is where an operator decides
           whether to checkpoint, so it shows the count, the window and the percentage. */}
-      <ContextUsageIndicator value={agent.context_usage} />
+      <ContextUsageIndicator value={contextUsage} />
 
       {isRunning && (
         <Button variant="destructive" size="xs" className="shrink-0" onClick={onStop} disabled={isStopping} title="Terminate the in-progress run">

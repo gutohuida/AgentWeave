@@ -50,6 +50,10 @@ class TaskCreate(BaseModel):
     # Which document's identifiers to resolve against. Identifiers are minted per document, so a
     # bare `FR-8` is ambiguous where two documents declare one; this is how a caller says which.
     spec_document: Optional[str] = Field(default=None, max_length=255)
+    # Adds this task directly to a loop's queue (design D1, `2026-08-18-a-loop-writes-its-own-
+    # queue`). Gated in `create_task_for_actor`: only the loop's own `AIJob.agent`, or the
+    # operator, may supply this — never trusted from the field alone.
+    loop_id: Optional[str] = Field(default=None, max_length=64)
     acceptance_criteria: Optional[List[Any]] = None
     deliverables: Optional[List[Any]] = None
     notes: Optional[Any] = None
@@ -124,6 +128,12 @@ class TaskUpdate(BaseModel):
     # change — leaving `blocked` always clears it, since a reason that outlives its block describes
     # something that already arrived.
     blocked_reason: Optional[str] = Field(default=None, max_length=2000)
+    # `Task.loop_id` is write-once (design D14, `2026-08-18-a-loop-writes-its-own-queue`): a loop's
+    # queue history has to be able to answer what work it was ever given, which reassignment would
+    # break. Accepted here only so the service layer (`update_task_for_actor`) has a value to refuse
+    # by name rather than by `extra="forbid"` silently swallowing it — see D14 for why this is
+    # enforced in code and not a DB constraint (SQLite cannot drop one later).
+    loop_id: Optional[str] = Field(default=None, max_length=64)
 
     model_config = {"extra": "forbid"}
 

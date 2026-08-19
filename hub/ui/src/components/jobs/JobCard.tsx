@@ -5,6 +5,7 @@ import { Badge } from '@/components/common/Badge'
 import { Button } from '@/components/ui/button'
 import { Job, JobRun } from '@/api/jobs'
 import { useTasks } from '@/api/tasks'
+import { hubDate } from '@/lib/hubTime'
 
 interface JobCardProps {
   job: Job
@@ -67,7 +68,7 @@ function RunHistory({ runs }: { runs?: JobRun[] }) {
             </span>
           </div>
           <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>
-            {formatDistanceToNow(new Date(run.fired_at), { addSuffix: true })}
+            {formatDistanceToNow(hubDate(run.fired_at), { addSuffix: true })}
           </span>
           {(run.status === 'failed' || run.status === 'skipped') && run.error_summary && (
             <span
@@ -237,12 +238,12 @@ export function JobCard({ job, onRun, onPause, onResume, onDelete, isPending, on
         <div className="mt-2 space-y-1">
           {job.next_run && job.enabled && (
             <p className="text-[11px]" style={{ color: 'var(--blue)' }}>
-              Next: {formatDistanceToNow(new Date(job.next_run), { addSuffix: true })}
+              Next: {formatDistanceToNow(hubDate(job.next_run), { addSuffix: true })}
             </p>
           )}
           {job.last_run && (
             <p className="text-[11px]" style={{ color: 'var(--text-3)', opacity: 0.6 }}>
-              Last: {formatDistanceToNow(new Date(job.last_run), { addSuffix: true })}
+              Last: {formatDistanceToNow(hubDate(job.last_run), { addSuffix: true })}
             </p>
           )}
         </div>

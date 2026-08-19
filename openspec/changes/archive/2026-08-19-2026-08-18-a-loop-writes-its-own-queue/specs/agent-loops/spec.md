@@ -250,6 +250,12 @@ report an edit that is pending separately from the definition currently in force
 can tell what is staged from what is live. Each edit SHALL be recorded against the loop with the
 actor responsible and the time it occurred.
 
+Reporting the two separately is not sufficient on its own. Where a loop is presented to the operator,
+a pending edit SHALL be shown, each value SHALL state in words when it applies, and a loop with no
+pending edit SHALL show nothing — the absence of an indicator is itself the statement that the
+definition on screen is the one in force. A field the edit did not touch MUST NOT be presented as
+changing.
+
 #### Scenario: An edit during a firing does not disturb that firing
 
 - **GIVEN** a loop with a firing in progress
@@ -269,6 +275,28 @@ actor responsible and the time it occurred.
 - **WHEN** the loop is inspected
 - **THEN** the pending edit is reported as pending
 - **AND** the definition currently in force is reported separately
+
+#### Scenario: The operator is shown which definition is in force
+
+- **GIVEN** a loop with an accepted edit that has not yet been applied
+- **WHEN** the operator opens that loop
+- **THEN** each staged value is shown beside the value it will replace
+- **AND** each of the two states in words when it applies, rather than by position or colour alone
+- **AND** a field the edit did not touch is not shown as changing
+
+#### Scenario: A running firing is said to keep the live definition
+
+- **GIVEN** a loop with a pending edit and a firing already in progress
+- **WHEN** the operator opens that loop
+- **THEN** it states that the running firing keeps the definition currently in force
+- **AND** that the edit reaches the firing after it
+
+#### Scenario: A loop with no pending edit shows no indicator
+
+- **GIVEN** a loop with no staged edit
+- **WHEN** the operator opens it
+- **THEN** no pending-edit indicator is shown
+- **AND** the definition shown is the one in force, unqualified
 
 ### Requirement: A task offered to a stopped loop is refused and offered to a successor
 
@@ -425,3 +453,106 @@ firings each occupy a conversation of their own and none of them is the loop.
 - **GIVEN** a project with archived and unarchived loops
 - **WHEN** the operator lists the project's loops without asking for archived ones
 - **THEN** only the unarchived loops are returned
+
+### Requirement: A conversation a loop firing created names the loop that created it
+
+A conversation created by a loop firing SHALL name the loop that created it, wherever conversations
+are listed, by the same label the loop is listed under elsewhere. A loop firing starts a conversation
+of its own, so without this an agent's conversations accumulate threads the operator never began and
+cannot tell apart from the ones they did.
+
+The naming SHALL distinguish a loop firing from a plain scheduled job. A conversation created by a
+job that has no loop SHALL carry no loop and be marked as none, since both are created the same way
+and are otherwise indistinguishable.
+
+Naming a loop SHALL lead to that loop's existing record rather than to a second place its history is
+kept.
+
+#### Scenario: A firing's conversation names its loop
+
+- **GIVEN** a loop that has fired
+- **WHEN** the operator lists the conversations of the agent that ran it
+- **THEN** the conversation the firing created names that loop
+- **AND** the name shown is the one the loop is listed under elsewhere
+
+#### Scenario: A plain scheduled job's conversation names no loop
+
+- **GIVEN** a scheduled job with no loop, which has fired
+- **WHEN** the operator lists the conversations of the agent that ran it
+- **THEN** that conversation carries no loop
+- **AND** it is not marked as belonging to one
+
+#### Scenario: An operator-started conversation names no loop
+
+- **WHEN** the operator lists conversations they started themselves
+- **THEN** none of them names a loop
+
+#### Scenario: Naming a loop leads to that loop's record
+
+- **GIVEN** a conversation that names a loop
+- **WHEN** the operator follows that name
+- **THEN** the loop's existing record opens
+- **AND** no second copy of its firing history is presented
+
+### Requirement: A time shown for a loop is the instant it happened
+
+A time SHALL be shown to the operator as the instant it happened, independently of where the
+operator's machine is. Every time the Hub records is an instant in UTC — when an edit was staged,
+when a firing happened, when a loop stopped — and where the operator reads one, it is that instant
+they must be reading.
+
+A time the Hub reports without stating its zone SHALL be read as UTC, since that is what it is. A
+time that does state its zone SHALL be read as stated and MUST NOT be overridden.
+
+#### Scenario: A time is read as the instant it happened, not as local time
+
+- **GIVEN** an operator whose machine is not on UTC
+- **WHEN** they open a loop moments after staging an edit
+- **THEN** the edit is shown as having been staged moments ago
+
+#### Scenario: A time that states its zone is respected
+
+- **GIVEN** a time reported with an explicit zone
+- **WHEN** it is shown to the operator
+- **THEN** it is presented as the instant that zone makes it, not shifted again
+
+### Requirement: Consecutive firings of one loop occupy one row
+
+Where conversations are listed, a run of consecutive conversations created by the same loop SHALL be
+presentable as a single row, expandable to the firings it stands for. A loop left running fills the
+list with threads the operator never began; naming each one is not sufficient once there are enough
+of them.
+
+Collapsing SHALL NOT reorder the list. Only *consecutive* conversations may be collapsed together,
+so that a conversation which fell between two firings keeps its place between them.
+
+Collapsing SHALL NOT hide that a firing needs the operator: a run containing a conversation waiting
+for them SHALL say so without being expanded. A run containing the conversation currently open SHALL
+present it.
+
+#### Scenario: A run of firings is one row
+
+- **GIVEN** several consecutive conversations created by the same loop
+- **WHEN** the operator lists them
+- **THEN** they occupy a single row naming the loop and stating how many there are
+- **AND** expanding it presents each firing
+
+#### Scenario: A conversation between two runs keeps its place
+
+- **GIVEN** a loop's firings, then a conversation the operator started, then more of that loop's
+  firings
+- **WHEN** the operator lists them
+- **THEN** the conversation they started still falls between the two runs
+- **AND** the runs are not joined across it
+
+#### Scenario: A waiting firing is visible without expanding
+
+- **GIVEN** a collapsed run containing a firing that stopped for the operator
+- **WHEN** the operator looks at the list
+- **THEN** the row says a firing is waiting for them
+
+#### Scenario: The conversation being read is not hidden by collapsing
+
+- **GIVEN** a run containing the conversation the operator currently has open
+- **WHEN** the list is presented
+- **THEN** that conversation is presented rather than collapsed out of view

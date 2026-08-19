@@ -5,7 +5,7 @@ from sqlalchemy import select
 
 from hub.agent_auth import hash_run_token
 from hub.db.engine import async_session_factory
-from hub.db.models import Message, Question, Run, Task
+from hub.db.models import AIJob, Loop, Message, Question, Run, Task
 
 
 async def _active_run(run_id: str, agent: str) -> tuple[dict[str, str], str]:
@@ -145,6 +145,367 @@ async def test_agent_task_crud_retains_create_and_latest_update_runs(app):
         assert task.created_by_run_id == "run-task-create"
         assert task.updated_by_run_id == "run-task-update"
         assert task.assigner == "creator"
+
+
+async def _loop_with_agent(session, *, suffix, agent, run_count=0, control=None):
+    """A loop whose queue-write authorization (design D1/D7/D10,
+    `2026-08-18-a-loop-writes-its-own-queue`) turns on `AIJob.agent`, `run_count`, and `control`.
+    Mirrors `_declaring_loop` (test_spec_declared_tasks.py) and `_make_job`/`_make_loop`
+    (test_scheduler.py) rather than inventing a fourth fixture shape."""
+    job = AIJob(
+        id=f"job-loop-{suffix}",
+        project_id="proj-test",
+        name=f"Loop job {suffix}",
+        agent=agent,
+        message="go",
+        cron="0 9 * * *",
+        session_mode="new",
+        enabled=True,
+        run_count=run_count,
+    )
+    session.add(job)
+    await session.flush()
+    loop = Loop(
+        id=f"loop-{suffix}",
+        project_id="proj-test",
+        job_id=job.id,
+        purpose="authorship gate fixture",
+        control=control,
+    )
+    session.add(loop)
+    await session.flush()
+    return loop
+
+
+async def _set_run_count(loop_id: str, run_count: int) -> None:
+    async with async_session_factory() as session:
+        loop = await session.get(Loop, loop_id)
+        job = await session.get(AIJob, loop.job_id)
+        job.run_count = run_count
+        await session.commit()
+
+
+@pytest.mark.asyncio
+async def test_loop_operator_adds_regardless_of_a_distinct_executors_fire_count(app, auth_headers):
+    """Design D7: 'a loop with a distinct creator keeps D1's unconditional creator-privilege
+    rule' -- and D8 collapses 'creator' into `AIJob.agent`, leaving no field this data model can
+    use to express a creator distinct from both the executor and the operator. The only caller
+    that can ever be 'distinct' from a loop's own agent and still succeed is the operator, so
+    that is what this exercises: the operator adding to a loop whose agent is someone else,
+    before AND after that loop has fired -- neither call is gated by run_count.
+    """
+    async with async_session_factory() as session:
+        loop = await _loop_with_agent(session, suffix="distinct", agent="executor-a")
+        await session.commit()
+        loop_id = loop.id
+
+    before_fire = await app.post(
+        "/api/v1/projects/proj-test/tasks",
+        headers=auth_headers,
+        json={"title": "distinct-before-fire", "loop_id": loop_id},
+    )
+    assert before_fire.status_code == 201, before_fire.text
+
+    await _set_run_count(loop_id, 1)
+
+    after_fire = await app.post(
+        "/api/v1/projects/proj-test/tasks",
+        headers=auth_headers,
+        json={"title": "distinct-after-fire", "loop_id": loop_id},
+    )
+    assert after_fire.status_code == 201, after_fire.text
+
+
+@pytest.mark.asyncio
+async def test_loop_operator_is_exempt_from_the_self_created_fire_gate(app, auth_headers):
+    """The operator bypasses D7's extra gate too -- even on a loop whose own agent would be
+    refused for the same call (test_loop_self_created_agent_gated_after_first_fire, below)."""
+    async with async_session_factory() as session:
+        loop = await _loop_with_agent(session, suffix="operator-bypass", agent="self-agent")
+        await session.commit()
+        loop_id = loop.id
+
+    await _set_run_count(loop_id, 1)
+
+    response = await app.post(
+        "/api/v1/projects/proj-test/tasks",
+        headers=auth_headers,
+        json={"title": "operator-bypasses-self-gate", "loop_id": loop_id},
+    )
+    assert response.status_code == 201, response.text
+
+
+@pytest.mark.asyncio
+async def test_loop_non_creator_non_operator_is_refused_and_told_to_send_message(app):
+    async with async_session_factory() as session:
+        loop = await _loop_with_agent(session, suffix="bystander", agent="executor-a")
+        await session.commit()
+        loop_id = loop.id
+
+    bystander_headers, _ = await _active_run("run-loop-bystander", "bystander")
+    response = await app.post(
+        "/api/v1/agent-actions/tasks",
+        headers=bystander_headers,
+        json={"title": "not yours to add", "loop_id": loop_id},
+    )
+    assert response.status_code == 403
+    assert "send_message" in response.json()["detail"]
+
+    async with async_session_factory() as session:
+        remaining = (
+            (await session.execute(select(Task).where(Task.loop_id == loop_id))).scalars().all()
+        )
+        assert remaining == []
+
+
+@pytest.mark.asyncio
+async def test_loop_self_created_agent_gated_after_first_fire(app):
+    """Design D7's boundary: before the loop's first fire, its own agent may still extend its
+    queue (indistinguishable from `create_loop`'s own initial queue); after, it needs the
+    operator."""
+    async with async_session_factory() as session:
+        loop = await _loop_with_agent(session, suffix="self-fire-gate", agent="self-agent")
+        await session.commit()
+        loop_id = loop.id
+
+    self_headers, _ = await _active_run("run-loop-self", "self-agent")
+
+    before_fire = await app.post(
+        "/api/v1/agent-actions/tasks",
+        headers=self_headers,
+        json={"title": "self-before-fire", "loop_id": loop_id},
+    )
+    assert before_fire.status_code == 201, before_fire.text
+
+    await _set_run_count(loop_id, 1)
+
+    after_fire = await app.post(
+        "/api/v1/agent-actions/tasks",
+        headers=self_headers,
+        json={"title": "self-after-fire", "loop_id": loop_id},
+    )
+    assert after_fire.status_code == 403
+    detail = after_fire.json()["detail"]
+    assert "operator" in detail.lower()
+    # The refusal must name the way FORWARD, not just the wall. Driving 13.4 against a real agent
+    # on 2026-08-19 showed it read the old wording, restated it, and stopped: it was told approval
+    # was required and given no mechanism to request one, so no question ever reached the operator.
+    # Its two sibling refusals in this file already name their route ("use send_message to ask the
+    # creator"); this one named none.
+    assert "ask_user" in detail, f"the refusal names no route out: {detail!r}"
+
+    async with async_session_factory() as session:
+        created = (
+            (await session.execute(select(Task).where(Task.loop_id == loop_id))).scalars().all()
+        )
+        assert [task.title for task in created] == ["self-before-fire"]
+
+
+@pytest.mark.asyncio
+async def test_loop_explicit_operator_control_matches_the_unset_default(app):
+    """Design D10 (task A1.4): the generalisation is proven, not asserted — a loop whose
+    `control` is explicitly `"operator"` must reach the exact same outcome as one where it was
+    never set (`test_loop_self_created_agent_gated_after_first_fire`, above), because NULL means
+    the current default rather than "nothing decided yet"."""
+    async with async_session_factory() as session:
+        loop = await _loop_with_agent(
+            session, suffix="explicit-operator", agent="self-agent-explicit", control=None
+        )
+        await session.commit()
+        loop_id = loop.id
+
+    self_headers, _ = await _active_run("run-loop-self-explicit", "self-agent-explicit")
+
+    before_fire = await app.post(
+        "/api/v1/agent-actions/tasks",
+        headers=self_headers,
+        json={"title": "explicit-before-fire", "loop_id": loop_id},
+    )
+    assert before_fire.status_code == 201, before_fire.text
+
+    await _set_run_count(loop_id, 1)
+
+    after_fire = await app.post(
+        "/api/v1/agent-actions/tasks",
+        headers=self_headers,
+        json={"title": "explicit-after-fire", "loop_id": loop_id},
+    )
+    assert after_fire.status_code == 403
+    assert "operator" in after_fire.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_loop_delegated_control_lets_the_creator_decide_after_first_fire(app):
+    """Design D10: once control is delegated to the creator agent, D7's first-fire boundary no
+    longer applies — the creator decides for itself, `run_count` included."""
+    async with async_session_factory() as session:
+        loop = await _loop_with_agent(
+            session, suffix="delegated", agent="self-agent-delegated", control="creator"
+        )
+        await session.commit()
+        loop_id = loop.id
+
+    await _set_run_count(loop_id, 1)
+
+    self_headers, _ = await _active_run("run-loop-delegated", "self-agent-delegated")
+    response = await app.post(
+        "/api/v1/agent-actions/tasks",
+        headers=self_headers,
+        json={"title": "delegated-after-fire", "loop_id": loop_id},
+    )
+    assert response.status_code == 201, response.text
+
+
+@pytest.mark.asyncio
+async def test_loop_control_delegation_and_take_back_via_the_operator_route(app, auth_headers):
+    """Design D10 (tasks A1.2/A1.3/A1.5): only the operator may delegate or take back control —
+    a run-bearer credential does not even satisfy `get_project`'s own operator-only auth (the
+    `aw_run_` prefix fails `_operator_from_credential` before this route's own belt-and-suspenders
+    `_require_operator` header check is ever reached) — and each change is recorded with actor and
+    time (`EventLog`, `agent=None` meaning the operator, matching `loop_archived`'s own precedent).
+    """
+    async with async_session_factory() as session:
+        loop = await _loop_with_agent(session, suffix="delegate-route", agent="creator-agent")
+        await session.commit()
+        loop_id = loop.id
+
+    _, run_token = await _active_run("run-loop-nonop", "creator-agent")
+    refused = await app.post(
+        f"/api/v1/projects/proj-test/loops/{loop_id}/control",
+        headers={"Authorization": f"Bearer {run_token}"},
+        json={"control": "creator"},
+    )
+    assert refused.status_code == 401
+
+    async with async_session_factory() as session:
+        unchanged = await session.get(Loop, loop_id)
+        assert unchanged.control is None
+
+    delegated = await app.post(
+        f"/api/v1/projects/proj-test/loops/{loop_id}/control",
+        headers=auth_headers,
+        json={"control": "creator"},
+    )
+    assert delegated.status_code == 200, delegated.text
+    assert delegated.json()["control"] == "creator"
+
+    taken_back = await app.post(
+        f"/api/v1/projects/proj-test/loops/{loop_id}/control",
+        headers=auth_headers,
+        json={"control": "operator"},
+    )
+    assert taken_back.status_code == 200, taken_back.text
+    # Taking control back stores NULL, not the literal string "operator" — the same
+    # never-a-stored-copy-of-the-default rule `Loop.control`'s own comment states.
+    assert taken_back.json()["control"] is None
+
+    from hub.db.models import EventLog
+
+    async with async_session_factory() as session:
+        events = (
+            (
+                await session.execute(
+                    select(EventLog)
+                    .where(EventLog.event_type == "loop_control_changed")
+                    .order_by(EventLog.timestamp)
+                )
+            )
+            .scalars()
+            .all()
+        )
+    assert len(events) == 2
+    assert events[0].data == {"id": loop_id, "from": "operator", "to": "creator"}
+    assert events[1].data == {"id": loop_id, "from": "creator", "to": "operator"}
+    assert all(event.agent is None for event in events)
+    assert all(event.timestamp is not None for event in events)
+
+
+@pytest.mark.asyncio
+async def test_loop_control_rejects_an_unknown_value(app, auth_headers):
+    async with async_session_factory() as session:
+        loop = await _loop_with_agent(session, suffix="bad-control", agent="creator-agent")
+        await session.commit()
+        loop_id = loop.id
+
+    response = await app.post(
+        f"/api/v1/projects/proj-test/loops/{loop_id}/control",
+        headers=auth_headers,
+        json={"control": "nobody"},
+    )
+    assert response.status_code == 422
+
+
+async def _end_loop(loop_id: str, *, ending_state: str, stop_reason: str) -> None:
+    from datetime import datetime, timezone
+
+    async with async_session_factory() as session:
+        loop = await session.get(Loop, loop_id)
+        loop.ending_state = ending_state
+        loop.stop_reason = stop_reason
+        loop.stopped_at = datetime(2026, 8, 19, 3, 0, tzinfo=timezone.utc)
+        await session.commit()
+
+
+@pytest.mark.asyncio
+async def test_loop_stopped_refuses_every_caller_including_the_operator(app, auth_headers):
+    """Design D12 (task A3.1): once `ending_state` is set, the queue is closed to everyone —
+    including the operator, who is exempt from every OTHER gate in
+    `_authorize_loop_task_creation` but not this one, because this is not "who may extend the
+    queue" but "does the queue still exist to extend"."""
+    async with async_session_factory() as session:
+        loop = await _loop_with_agent(session, suffix="stopped", agent="creator-agent")
+        await session.commit()
+        loop_id = loop.id
+
+    await _end_loop(loop_id, ending_state="stopped", stop_reason="loop queue is empty")
+
+    creator_headers, _ = await _active_run("run-loop-stopped-creator", "creator-agent")
+    from_creator = await app.post(
+        "/api/v1/agent-actions/tasks",
+        headers=creator_headers,
+        json={"title": "late task from creator", "loop_id": loop_id},
+    )
+    assert from_creator.status_code == 403, from_creator.text
+    detail = from_creator.json()["detail"]
+    assert detail["code"] == "loop_stopped"
+    assert detail["ending_state"] == "stopped"
+    assert detail["stop_reason"] == "loop queue is empty"
+    assert detail["stopped_at"].startswith("2026-08-19T03:00:00")
+    assert detail["offered_task"]["title"] == "late task from creator"
+
+    from_operator = await app.post(
+        "/api/v1/projects/proj-test/tasks",
+        headers=auth_headers,
+        json={"title": "late task from operator", "loop_id": loop_id},
+    )
+    assert from_operator.status_code == 403, from_operator.text
+    assert from_operator.json()["detail"]["code"] == "loop_stopped"
+
+    async with async_session_factory() as session:
+        created = (
+            (await session.execute(select(Task).where(Task.loop_id == loop_id))).scalars().all()
+        )
+        assert created == []
+
+
+@pytest.mark.asyncio
+async def test_loop_merely_disabled_is_not_stopped(app, auth_headers):
+    """Design D6 rejected a third 'paused' state — an operator disabling the job via the
+    existing `toggle_job` path leaves `ending_state`/`stop_reason`/`stopped_at` all `None`, so it
+    must not trip A3.1's refusal. Only the loop's own termination path does that."""
+    async with async_session_factory() as session:
+        loop = await _loop_with_agent(session, suffix="paused", agent="creator-agent")
+        job = await session.get(AIJob, loop.job_id)
+        job.enabled = False
+        await session.commit()
+        loop_id = loop.id
+
+    response = await app.post(
+        "/api/v1/projects/proj-test/tasks",
+        headers=auth_headers,
+        json={"title": "task while merely paused", "loop_id": loop_id},
+    )
+    assert response.status_code == 201, response.text
 
 
 @pytest.mark.asyncio

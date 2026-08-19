@@ -4,7 +4,9 @@ import type { ProjectAgentSummary } from '@/api/projects'
 import { Icon } from '@/components/common/Icon'
 import { Button } from '@/components/ui/button'
 import { agentColorVars } from '@/lib/agentColors'
+import { capRows, groupConsecutiveFirings } from '@/lib/loopGrouping'
 import { ConversationRow } from './ConversationRow'
+import { LoopFiringGroup } from './LoopFiringGroup'
 import { RowMenu, type RowMenuItem } from './RowMenu'
 
 /** How many of an agent's conversations the tree shows before the rest go behind an expander.
@@ -81,8 +83,13 @@ export function AgentTree({
         const expanded = expandedAgents[agent.name] ?? false
         const conversations = byAgent.get(agent.name) ?? []
         const expandedAll = showAll[agent.name] ?? false
-        const visible = expandedAll ? conversations : conversations.slice(0, CONVERSATION_DISPLAY_CAP)
-        const hidden = conversations.length - visible.length
+        // Grouped before capping, so the cap can never fall inside a run of firings and split it.
+        // With no loops among an agent's conversations this is the identity, and the cap behaves
+        // exactly as it did before grouping existed.
+        const rows = groupConsecutiveFirings(conversations)
+        const capped = capRows(rows, expandedAll ? rows.length : CONVERSATION_DISPLAY_CAP)
+        const visible = capped.visible
+        const hidden = capped.hiddenConversations
         // Waiting anywhere beneath a collapsed agent still has to be visible, or collapsing the
         // agent hides the thing the attention state exists to surface.
         const needsAttention = conversations.some((c) => c.attention === 'waiting')
@@ -172,16 +179,34 @@ export function AgentTree({
 
             {expanded && (
               <div className="ml-7 flex flex-col gap-0.5" data-testid={`agent-conversations-${projectId}-${agent.name}`}>
-                {visible.map((conversation) => (
-                  <ConversationRow
-                    key={conversation.id}
-                    projectId={projectId}
-                    conversation={conversation}
-                    active={activeProject && activeConversation === conversation.id}
-                    onOpen={() => onOpenConversation?.(projectId, agent.name, conversation.id)}
-                    testId={`rail-conversation-${conversation.id}`}
-                  />
-                ))}
+                {visible.map((row) =>
+                  row.kind === 'loopGroup' ? (
+                    <LoopFiringGroup
+                      key={`group-${row.conversations[0].id}`}
+                      projectId={projectId}
+                      loopId={row.loopId}
+                      label={row.label}
+                      conversations={row.conversations}
+                      activeConversation={activeProject ? activeConversation : null}
+                      onOpen={(conversation) =>
+                        onOpenConversation?.(projectId, agent.name, conversation.id)
+                      }
+                      rowTestId={(conversation) => `rail-conversation-${conversation.id}`}
+                      testId={`rail-loop-group-${row.conversations[0].id}`}
+                    />
+                  ) : (
+                    <ConversationRow
+                      key={row.conversation.id}
+                      projectId={projectId}
+                      conversation={row.conversation}
+                      active={activeProject && activeConversation === row.conversation.id}
+                      onOpen={() =>
+                        onOpenConversation?.(projectId, agent.name, row.conversation.id)
+                      }
+                      testId={`rail-conversation-${row.conversation.id}`}
+                    />
+                  ),
+                )}
                 {(hidden > 0 || expandedAll) && (
                   <button
                     type="button"
