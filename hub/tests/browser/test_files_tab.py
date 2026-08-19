@@ -87,16 +87,28 @@ def test_the_files_tab_opens_from_the_plus_affordance(page: Page, hub_url: str) 
     expect(page.get_by_test_id("files-index-tab")).to_be_visible()
 
 
-def test_an_empty_workspace_states_it_rather_than_an_empty_box(page: Page, hub_url: str) -> None:
-    """This fixture project's real listing is empty (module docstring) — live coverage that the
-    files tree says so, the same "a folder view that hides drift lies" principle `SpecTree`
-    already follows, applied to an empty result rather than a suppressed one."""
+def test_a_search_with_no_matches_states_it_rather_than_an_empty_box(
+    page: Page, hub_url: str
+) -> None:
+    """An empty *result* says so rather than showing an empty box — the same "a folder view that
+    hides drift lies" principle `SpecTree` follows, applied to a result with nothing in it.
+
+    This used to assert the *workspace-is-empty* arm instead, against a fixture project that
+    happened to contain no files. That coupled it to mutable fixture state: the moment the project
+    gained files (2026-08-19, seeding a workspace to exercise file icons and highlighting) it
+    broke, and it could never have coexisted with the four tests below that require a populated
+    tree. The workspace arm moved to `filesIndexTab.test.tsx`, where it is a pure function of the
+    paths prop; the search arm stays here because it is drivable whatever the fixture holds.
+    """
     _open(page, hub_url)
 
     page.get_by_test_id("panel-tab-add").click()
     page.get_by_role("menuitem", name="Files").click()
+    expect(page.get_by_test_id("files-index-tab")).to_be_visible()
 
-    expect(page.get_by_text("No files in this workspace yet.")).to_be_visible()
+    page.get_by_label("Search files").fill("zzz-no-such-path-zzz")
+
+    expect(page.get_by_text("No matching files.")).to_be_visible()
 
 
 def test_selecting_a_file_from_the_tree_opens_it_and_closes_the_tree_tab(

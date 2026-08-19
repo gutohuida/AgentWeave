@@ -36,6 +36,18 @@ describe('FilesIndexTab — the files tab (task 5.1, 2026-08-18-one-shell-three-
     expect(screen.queryByTestId('files-search-result-README.md')).not.toBeInTheDocument()
   })
 
+  it('reports an empty workspace rather than an empty box', () => {
+    /* Moved here from the browser suite on 2026-08-19. It used to assert this live, against a
+     * fixture project that happened to have no files — so it broke the moment that project gained
+     * any, and it could not coexist with the four tests that need a populated workspace. The
+     * message is a pure function of the paths prop, so it belongs at this level; the *search* arm
+     * of the same principle stays live in `test_files_tab.py`, where it is drivable whatever the
+     * fixture holds. */
+    render(<FilesIndexTab paths={[]} isLoading={false} currentPath={null} onSelect={vi.fn()} />)
+
+    expect(screen.getByText('No files in this workspace yet.')).toBeInTheDocument()
+  })
+
   it('reports no matches rather than an empty box', async () => {
     const user = userEvent.setup()
     render(<FilesIndexTab paths={PATHS} isLoading={false} currentPath={null} onSelect={vi.fn()} />)
