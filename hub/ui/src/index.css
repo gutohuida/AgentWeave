@@ -410,11 +410,16 @@
   .row-item:active {
     background: var(--row-active);
   }
-  /* Marked, not filled: the open row is identified by a leading accent bar and
-     heavier label text, not a resting background fill — the fill is reserved for
-     hover/press alone (2026-08-04-hub-charcoal-visual-refresh). */
+  /* Marked, not filled: the open row is identified by heavier label text and a brighter
+     colour, not a resting background fill — the fill is reserved for hover/press alone
+     (2026-08-04-hub-charcoal-visual-refresh).
+
+     The leading accent bar (`border-left-color: var(--rail-marker)`) is REMOVED for now at the
+     operator's request, 2026-08-19, to see how selection reads without it. The 2px transparent
+     left edge above is deliberately kept reserved, so restoring the bar is a one-line change and
+     nothing shifts either way. `--rail-marker` itself is left defined in the palette for the same
+     reason. */
   .row-item[data-active="true"] {
-    border-left-color: var(--rail-marker);
     color: var(--text);
     font-weight: 550;
   }

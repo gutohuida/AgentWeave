@@ -128,6 +128,19 @@ export function LoopsIndexTab({
                   </p>
                 )}
                 <div className="flex flex-wrap items-center gap-1.5">
+                  {/* Who is actually running this loop. The index listed a label and a purpose but
+                      never said whose loop it was, so "what is running right now" could not be
+                      answered by agent (operator, 2026-08-19). */}
+                  {loop.agent && (
+                    <span
+                      className="inline-flex items-center gap-1"
+                      style={{ fontSize: 11, color: 'var(--text-2)' }}
+                      data-testid={`loops-index-agent-${loop.id}`}
+                    >
+                      <Icon name="smart_toy" size={11} style={{ color: 'var(--text-3)' }} />
+                      {loop.agent}
+                    </span>
+                  )}
                   <span style={{ fontSize: 11, color: 'var(--text-3)' }}>Queue: {totalQueued}</span>
                   {loop.open_questions > 0 && (
                     <Badge variant="warning">

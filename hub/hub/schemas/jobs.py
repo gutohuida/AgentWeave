@@ -86,6 +86,11 @@ class LoopSummary(BaseModel):
     # job's name — `LoopSummary` carried no name of its own before this, so a picker (B5) had
     # nothing to show for a loop except its id.
     label: str
+    # Who runs each firing of this loop — its job's `agent`. The index listed a label and a purpose
+    # but never said whose loop it was, so "what is running right now" could not be answered by
+    # agent (operator, 2026-08-19). Sourced from the job in the same query as `label`, not a second
+    # fetch. Distinct from `control`, which says who may EXTEND the queue, not who works it.
+    agent: str = ""
     purpose: str
     stop_at: Optional[datetime] = None
     stop_when_queue_empties: bool

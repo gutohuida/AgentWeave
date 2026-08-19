@@ -2210,11 +2210,11 @@ tenant. Everything in B1–B4 is independent of it and can land first.
 
 ## B7. Human-only — the operator's judgement
 
-- [ ] B7.1 **Does the loops index answer "what is running right now" at a glance**, without opening a
+- [x] B7.1 **Does the loops index answer "what is running right now" at a glance**, without opening a
       drill-down? That is the whole reason it stays open when a drill-down is opened.
 - [ ] B7.2 **Does a refused delete read as the product protecting history, or as it being obstinate?**
       B2.1's message is the entire experience of D16 for anyone who meets it.
-- [ ] B7.3 **Is "complete" visibly different from "stopped early"** at a glance, or do they read as the
+- [x] B7.3 **Is "complete" visibly different from "stopped early"** at a glance, or do they read as the
       same grey badge? If they read the same, B1.1's value bought nothing a sentence did not.
 - [x] B7.4 **Does `archive_job`'s always-ask feel like protection or like nagging** after the fifth
       time? D18 set a precedent; this is where it gets tested against real use.

@@ -140,12 +140,17 @@ async def _batch_loop_summaries(
     # B4.2 (design D20): the label the operator recognises a loop by is its job's name — batched
     # here, alongside the other per-loop facts this function already computes, rather than making
     # every caller fetch its own job a second time.
+    # `agent` comes along in the same query: the loops index showed a label and a purpose but
+    # never said *whose* loop it is, so the operator could not tell who was running what
+    # (operator, 2026-08-19: "Looking at the loop page I don't know who owns each loop").
     job_names_result = await session.execute(
-        select(AIJob.id, AIJob.name).where(AIJob.id.in_(job_ids))
+        select(AIJob.id, AIJob.name, AIJob.agent).where(AIJob.id.in_(job_ids))
     )
     job_name_by_id: Dict[str, str] = {}
-    for job_id, job_name in job_names_result.all():
+    job_agent_by_id: Dict[str, str] = {}
+    for job_id, job_name, job_agent in job_names_result.all():
         job_name_by_id[job_id] = job_name
+        job_agent_by_id[job_id] = job_agent
 
     queue_counts: Dict[str, Dict[str, int]] = {}
     counts_result = await session.execute(
@@ -220,6 +225,7 @@ async def _batch_loop_summaries(
         summaries[job_id] = LoopSummary(
             id=loop.id,
             label=job_name_by_id.get(job_id, ""),
+            agent=job_agent_by_id.get(job_id, ""),
             purpose=loop.purpose,
             stop_at=loop.stop_at,
             stop_when_queue_empties=loop.stop_when_queue_empties,
@@ -369,6 +375,7 @@ async def create_job(
         loop_summary = LoopSummary(
             id=loop.id,
             label=job.name,
+            agent=job.agent,
             purpose=loop.purpose,
             stop_at=loop.stop_at,
             stop_when_queue_empties=loop.stop_when_queue_empties,

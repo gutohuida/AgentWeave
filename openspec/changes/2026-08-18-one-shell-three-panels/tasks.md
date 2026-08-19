@@ -506,11 +506,11 @@ Proves the whole shell without a loop or a file endpoint existing.
 
 - [x] 7.1 **Does the plus affordance read as "add a tab" rather than "settings"?** It is the only entry
       point to everything the shell can do.
-- [ ] 7.2 **Does closing a spec tab feel safe** — is it obvious the document is still attached and
+- [x] 7.2 **Does closing a spec tab feel safe** — is it obvious the document is still attached and
       nothing was lost? D9's whole value rests on this reading correctly.
 - [x] 7.3 **Does opening a file eating the tree tab feel right or feel like a bug?** T3 does it; that
       is evidence, not proof, and this is the one borrowed behaviour most likely to surprise.
-- [ ] 7.4 **At the narrowest window you actually use, is the shell usable or merely present?**
+- [x] 7.4 **At the narrowest window you actually use, is the shell usable or merely present?**
       Especially the file tree plus a preview.
 - [x] 7.5 **After a week, does per-project tab memory help or does it restore stale clutter?**
 

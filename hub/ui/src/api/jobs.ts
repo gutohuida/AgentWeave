@@ -21,6 +21,11 @@ export interface LoopSummary {
   /** The loop's job's name (design D20/B4.2) — what a picker shows; `LoopSummary` carried no name
    *  of its own before B4. */
   label: string
+  /** Which agent runs each firing — the loop's job's `agent`. Distinct from `control`, which says
+   *  who may extend the queue rather than who works it. Optional because the server schema
+   *  defaults it to an empty string, so "present but empty" is a real state the UI must render
+   *  past rather than trust. */
+  agent?: string
   purpose: string
   stop_at?: string
   stop_when_queue_empties: boolean
