@@ -515,3 +515,44 @@ time that does state its zone SHALL be read as stated and MUST NOT be overridden
 - **GIVEN** a time reported with an explicit zone
 - **WHEN** it is shown to the operator
 - **THEN** it is presented as the instant that zone makes it, not shifted again
+
+### Requirement: Consecutive firings of one loop occupy one row
+
+Where conversations are listed, a run of consecutive conversations created by the same loop SHALL be
+presentable as a single row, expandable to the firings it stands for. A loop left running fills the
+list with threads the operator never began; naming each one is not sufficient once there are enough
+of them.
+
+Collapsing SHALL NOT reorder the list. Only *consecutive* conversations may be collapsed together,
+so that a conversation which fell between two firings keeps its place between them.
+
+Collapsing SHALL NOT hide that a firing needs the operator: a run containing a conversation waiting
+for them SHALL say so without being expanded. A run containing the conversation currently open SHALL
+present it.
+
+#### Scenario: A run of firings is one row
+
+- **GIVEN** several consecutive conversations created by the same loop
+- **WHEN** the operator lists them
+- **THEN** they occupy a single row naming the loop and stating how many there are
+- **AND** expanding it presents each firing
+
+#### Scenario: A conversation between two runs keeps its place
+
+- **GIVEN** a loop's firings, then a conversation the operator started, then more of that loop's
+  firings
+- **WHEN** the operator lists them
+- **THEN** the conversation they started still falls between the two runs
+- **AND** the runs are not joined across it
+
+#### Scenario: A waiting firing is visible without expanding
+
+- **GIVEN** a collapsed run containing a firing that stopped for the operator
+- **WHEN** the operator looks at the list
+- **THEN** the row says a firing is waiting for them
+
+#### Scenario: The conversation being read is not hidden by collapsing
+
+- **GIVEN** a run containing the conversation the operator currently has open
+- **WHEN** the list is presented
+- **THEN** that conversation is presented rather than collapsed out of view

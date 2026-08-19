@@ -34,6 +34,10 @@ interface ConversationRowProps {
   agentColor?: string
   /** Shown in the recency view, where the agent is not implied by the row's position. */
   agentName?: string
+  /** Set false inside a `LoopFiringGroup`, whose own row already names the loop once for every
+   *  firing beneath it. Repeating it per row would spend the width the title needs to say the one
+   *  thing that differs between them. */
+  showLoopMarker?: boolean
   testId: string
 }
 
@@ -44,13 +48,14 @@ export function ConversationRow({
   onOpen,
   agentColor,
   agentName,
+  showLoopMarker = true,
   testId,
 }: ConversationRowProps) {
   const attention = ATTENTION[conversation.attention]
   const label = conversationLabel(conversation)
   const archived = conversation.lifecycle === 'archived'
   // Held as a const so the null check below narrows inside the click handler too.
-  const loop = conversation.loop ?? null
+  const loop = (showLoopMarker ? conversation.loop : null) ?? null
 
   const [renaming, setRenaming] = useState(false)
   const [draft, setDraft] = useState(label)

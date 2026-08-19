@@ -60,7 +60,7 @@ function conversation(overrides: Partial<AgentConversation> = {}): AgentConversa
   }
 }
 
-function renderRail() {
+function renderRail(overrides: Partial<React.ComponentProps<typeof Sidebar>> = {}) {
   const props: React.ComponentProps<typeof Sidebar> = {
     activePage: 'overview',
     activeAgent: null,
@@ -70,6 +70,7 @@ function renderRail() {
     onOpenEnvironment: vi.fn(),
     onAddAgent: vi.fn(),
     onAddProject: vi.fn(),
+    ...overrides,
   }
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return {

@@ -2411,8 +2411,32 @@ rather than on judgement. **A fourth item was proposed and explicitly dropped** 
       boundary** instead is the better fix and is left open as the operator's call; this task does
       not attempt it and does not pretend the rest is fixed.
 
-- [ ] B9.5 **Grouping consecutive firings of one loop** into a single expandable row in `AgentTree`
-      and `RecencyView`. Deliberately not started: the operator's instruction was to do this last and
-      only after living with B9.2's marker, since grouping may turn out to be unnecessary once a
-      firing is merely *identifiable*. Same reasoning as B9.2's rejected rail level — solve flooding
-      in the existing list, never with a new hierarchy.
+- [x] B9.5 **Grouping consecutive firings of one loop** into a single expandable row in `AgentTree`
+      and `RecencyView`. Sequenced last on the operator's instruction — grouping might have proved
+      unnecessary once a firing was merely *identifiable* — and built when they said to continue.
+      Solved in the existing list, never with a new hierarchy, the same reasoning that rejected
+      B9.2's rail level.
+
+      **Consecutive, never global** (`hub/ui/src/lib/loopGrouping.ts`). A run is broken by any
+      conversation that is not this loop's. Grouping every firing of a loop wherever it appears
+      would reorder the list, and in a list sorted by recency the order *is* the information: a
+      firing that happened between two things the operator did belongs between them. So a loop that
+      fired, was interrupted, and fired again yields two groups — correctly.
+
+      **A run of one stays a plain row.** Collapsing a single firing hides a conversation behind a
+      click and saves no space; B9.2's marker already says which loop it came from.
+
+      **Grouped before capped.** The display caps now bound *rows* rather than conversations, so a
+      cap can never fall inside a run and split it — but "Show N more" still counts conversations,
+      because a collapsed run of five standing behind "Show 1 more" would be a lie. With no loops in
+      a list the grouping is the identity and both caps behave exactly as before.
+
+      Two things collapsing must not hide, both already rules in this rail: a firing **waiting for
+      the operator** raises the state onto the group row (the argument `AgentTree` already makes for
+      a collapsed agent), and a group **holding the conversation being read opens itself**, so
+      opening a firing never makes it vanish.
+
+      Verified live against the trial Hub's 271 real conversations: runs of 2 and 3 collapsed with
+      their counts, plain-job conversations stayed interleaved in recency order, and the expander
+      went from "Show 256 more" to "Show 250 more" — 15 rows now standing for 21 conversations.
+      Capture: `testbed/scratch/shots/marker-02-recency.png`.

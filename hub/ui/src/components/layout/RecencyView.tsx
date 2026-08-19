@@ -3,7 +3,9 @@ import { useProjectConversations } from '@/api/agentChat'
 import type { ProjectAgentSummary } from '@/api/projects'
 import { Icon } from '@/components/common/Icon'
 import { agentColorVars } from '@/lib/agentColors'
+import { capRows, groupConsecutiveFirings } from '@/lib/loopGrouping'
 import { ConversationRow } from './ConversationRow'
+import { LoopFiringGroup } from './LoopFiringGroup'
 
 /** How many of a project's conversations the recency view shows before the rest go behind an
  *  expander.
@@ -52,23 +54,46 @@ export function RecencyView({
   const conversations = open.data?.conversations ?? []
   const archivedCount = open.data?.archived_count ?? 0
   const archivedRows = archived.data?.conversations ?? []
-  const visible = showAll ? conversations : conversations.slice(0, RECENCY_DISPLAY_CAP)
-  const hidden = conversations.length - visible.length
+  // Grouped before capping, so the cap can never fall inside a run and split it. With no loops in
+  // the list this is the identity, and the cap behaves exactly as it did before grouping existed.
+  const rows = groupConsecutiveFirings(conversations)
+  const { visible, hiddenConversations } = capRows(rows, showAll ? rows.length : RECENCY_DISPLAY_CAP)
+  const hidden = hiddenConversations
 
   return (
     <div className="ml-7 flex flex-col gap-0.5" data-testid={`rail-recency-${projectId}`}>
-      {visible.map((conversation) => (
-        <ConversationRow
-          key={conversation.id}
-          projectId={projectId}
-          conversation={conversation}
-          active={activeProject && activeConversation === conversation.id}
-          onOpen={() => onOpenConversation?.(projectId, conversation.agent, conversation.id)}
-          agentColor={colorFor(conversation.agent)}
-          agentName={conversation.agent}
-          testId={`recency-conversation-${conversation.id}`}
-        />
-      ))}
+      {visible.map((row) =>
+        row.kind === 'loopGroup' ? (
+          <LoopFiringGroup
+            key={`group-${row.conversations[0].id}`}
+            projectId={projectId}
+            loopId={row.loopId}
+            label={row.label}
+            conversations={row.conversations}
+            activeConversation={activeProject ? activeConversation : null}
+            onOpen={(conversation) =>
+              onOpenConversation?.(projectId, conversation.agent, conversation.id)
+            }
+            rowTestId={(conversation) => `recency-conversation-${conversation.id}`}
+            testId={`recency-loop-group-${row.conversations[0].id}`}
+            agentColor={colorFor(row.conversations[0].agent)}
+            agentName={row.conversations[0].agent}
+          />
+        ) : (
+          <ConversationRow
+            key={row.conversation.id}
+            projectId={projectId}
+            conversation={row.conversation}
+            active={activeProject && activeConversation === row.conversation.id}
+            onOpen={() =>
+              onOpenConversation?.(projectId, row.conversation.agent, row.conversation.id)
+            }
+            agentColor={colorFor(row.conversation.agent)}
+            agentName={row.conversation.agent}
+            testId={`recency-conversation-${row.conversation.id}`}
+          />
+        ),
+      )}
 
       {/* Rendered whenever anything is hidden *or* the list is already expanded — without the
           second half there is no way back, which is the defect the operator found in the tree's
