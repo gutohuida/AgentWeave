@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { TimelineEntry } from '@/api/agentChat'
+import type { TurnUsage } from '@/api/accounting'
 import {
   entryCategory,
   findPairedResult,
@@ -7,6 +8,7 @@ import {
   isSuccessCompletionEntry,
   reduceTurnBlocks,
   runStatusByRunId,
+  tokensByRunId,
 } from '@/lib/agentTimelineModel'
 
 function entry(overrides: Partial<TimelineEntry>): TimelineEntry {
@@ -16,6 +18,27 @@ function entry(overrides: Partial<TimelineEntry>): TimelineEntry {
     content: 'hello',
     timestamp: '2026-08-02T00:00:00Z',
     delivery_state: 'delivered',
+    ...overrides,
+  }
+}
+
+function turnUsage(overrides: Partial<TurnUsage>): TurnUsage {
+  return {
+    id: 'tu-1',
+    run_id: 'run-1',
+    agent: 'claude',
+    status: 'measured',
+    runner: 'claude',
+    model: 'claude-sonnet-5',
+    input_tokens: 100,
+    output_tokens: 200,
+    total_tokens: 300,
+    cache_read_tokens: null,
+    cache_write_tokens: null,
+    reasoning_tokens: null,
+    api_equivalent_usd_micros: null,
+    allowance: null,
+    observed_at: '2026-08-02T00:00:00Z',
     ...overrides,
   }
 }
@@ -167,6 +190,33 @@ describe('reduceTurnBlocks (2026-08-04-hub-charcoal-visual-refresh)', () => {
     const blocks = reduceTurnBlocks(entries)
     const workBlockIds = blocks.filter((b) => b.kind === 'work').map((b) => b.id)
     expect(new Set(workBlockIds).size).toBe(workBlockIds.length)
+  })
+})
+
+describe('tokensByRunId', () => {
+  it('maps a measured turn to its total token count', () => {
+    const result = tokensByRunId([turnUsage({ run_id: 'run-1', total_tokens: 4200 })])
+    expect(result['run-1']).toBe(4200)
+  })
+
+  it('omits an unavailable turn rather than showing 0 tokens', () => {
+    const result = tokensByRunId([
+      turnUsage({ run_id: 'run-1', status: 'unavailable', total_tokens: null }),
+    ])
+    expect(result['run-1']).toBeUndefined()
+  })
+
+  it('omits a measured turn with no total (partial usage payload)', () => {
+    const result = tokensByRunId([turnUsage({ run_id: 'run-1', total_tokens: null })])
+    expect(result['run-1']).toBeUndefined()
+  })
+
+  it('keys by run_id, not turn id, so multiple entries for the same run resolve to one figure', () => {
+    const result = tokensByRunId([
+      turnUsage({ id: 'tu-1', run_id: 'run-1', total_tokens: 100 }),
+      turnUsage({ id: 'tu-2', run_id: 'run-2', total_tokens: 250 }),
+    ])
+    expect(result).toEqual({ 'run-1': 100, 'run-2': 250 })
   })
 })
 

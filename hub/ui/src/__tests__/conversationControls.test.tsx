@@ -83,6 +83,8 @@ vi.mock('@/api/modelCatalog', async (importOriginal) => {
   return { ...actual, useModelCatalog: () => ({ data: undefined }) }
 })
 
+vi.mock('@/api/accounting', () => ({ useAccounting: () => ({ data: undefined }) }))
+
 vi.mock('@/api/charters', () => ({
   useCharters: () => ({ data: [], isLoading: false }),
   useBindAgentCharter: () => ({ mutate: vi.fn(), isPending: false, isError: false }),

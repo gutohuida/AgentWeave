@@ -8,6 +8,7 @@ import { formatElapsedSeconds, useElapsedSeconds } from '@/hooks/useElapsedSecon
 import type { AgentSummary, AgentTimelineEvent } from '@/api/agents'
 import type { TimelineEntry } from '@/api/agentChat'
 import type { QueueStatus } from '@/api/queue'
+import type { TurnUsage } from '@/api/accounting'
 import { agentColorVars } from '@/lib/agentColors'
 import {
   entryCategory,
@@ -17,6 +18,7 @@ import {
   reduceTurnBlocks,
   runDurationsByRunId,
   runStatusByRunId,
+  tokensByRunId,
   type RunLifecycleStatus,
   type TimelineTurn,
 } from '@/lib/agentTimelineModel'
@@ -32,6 +34,10 @@ interface AgentTimelineProps {
   onWithdraw?: (entryId: string) => void
   /** Bump to fold every turn — driven by the header's "Fold all turns" button. */
   foldAllSignal?: number
+  /** The project's recent measured turns (accounting API) — matched to a rendered turn by
+   *  `run_id` to show what it cost beside "Worked for Xs". Absent (not just empty) while
+   *  accounting hasn't loaded yet, so no turn briefly claims "0 tokens". */
+  recentTurns?: TurnUsage[]
 }
 
 /** Every lifecycle status that means "this run is over", whatever the outcome. `started` is
@@ -61,6 +67,7 @@ export function AgentTimeline({
   onDeliverNow,
   onWithdraw,
   foldAllSignal,
+  recentTurns,
 }: AgentTimelineProps) {
   const colorByName: ColorLookup = useMemo(() => {
     const map = new Map<string, number | null | undefined>()
@@ -71,6 +78,7 @@ export function AgentTimeline({
   const { turns, pending } = useMemo(() => groupIntoTurns(entries), [entries])
   const statusByRun = useMemo(() => runStatusByRunId(timelineEvents), [timelineEvents])
   const durationByRun = useMemo(() => runDurationsByRunId(timelineEvents), [timelineEvents])
+  const tokensByRun = useMemo(() => tokensByRunId(recentTurns ?? []), [recentTurns])
 
   // `isRunning` is `agent.status === 'running'` — a POLLED roster field, so it stays true for a
   // beat after the run has actually ended. The response text and the run's terminal lifecycle
@@ -204,6 +212,7 @@ export function AgentTimeline({
               agentName={agent.name}
               colorByName={colorByName}
               durationSeconds={turn.runId ? durationByRun[turn.runId] : undefined}
+              tokenCount={turn.runId ? tokensByRun[turn.runId] : undefined}
             />
             {terminalLabel && (
               <div
@@ -316,6 +325,7 @@ function TurnBody({
   agentName,
   colorByName,
   durationSeconds,
+  tokenCount,
 }: {
   turn: TimelineTurn
   turnKey: string
@@ -323,6 +333,8 @@ function TurnBody({
   colorByName: ColorLookup
   /** Whole-run duration for a finished turn; undefined while running or if unknown. */
   durationSeconds?: number
+  /** Total tokens this turn measured, from the accounting API; undefined if unmeasured. */
+  tokenCount?: number
 }) {
   // Walked in execution order — a block is never hoisted ahead of the text that
   // preceded it (2026-08-04-hub-charcoal-visual-refresh).
@@ -344,15 +356,24 @@ function TurnBody({
         // Operator, 2026-08-18: "After answering it could just look like worked for Xs and then
         // the response underneath." Unlike the "Completed" message this replaces, it says
         // something — and it sits where the eye already is rather than down in the composer.
+        // The token count rides the same line (Q7 Gap 5) rather than a second one — both are
+        // "what this turn cost", and a turn with a duration but no measured usage (or vice
+        // versa) still reads as one fact, not a half-empty second line.
+        const statLine = [
+          durationSeconds !== undefined ? `Worked for ${formatElapsedSeconds(durationSeconds)}` : null,
+          tokenCount !== undefined ? `${tokenCount.toLocaleString()} tokens` : null,
+        ]
+          .filter((part): part is string => part !== null)
+          .join(' · ')
         const durationLine =
-          durationSeconds !== undefined && blockId === firstAgentBlockId ? (
+          statLine && blockId === firstAgentBlockId ? (
             <div
               key={`worked-${blockId}`}
               className="text-[11px]"
               style={{ color: 'var(--text-3)' }}
               data-testid="turn-worked-for"
             >
-              Worked for {formatElapsedSeconds(durationSeconds)}
+              {statLine}
             </div>
           ) : null
 

@@ -69,6 +69,7 @@ vi.mock('@/api/workspace', () => ({
 vi.mock('@/api/runners', () => ({
   useRunners: () => ({ data: [] }),
 }))
+vi.mock('@/api/accounting', () => ({ useAccounting: () => ({ data: undefined }) }))
 
 vi.mock('@/api/modelCatalog', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/modelCatalog')>()

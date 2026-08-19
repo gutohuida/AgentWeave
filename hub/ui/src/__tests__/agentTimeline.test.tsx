@@ -147,6 +147,54 @@ describe('AgentTimeline', () => {
     expect(onWithdraw).toHaveBeenCalledWith('q2')
   })
 
+  it('shows the turn\'s measured token count beside "Worked for" (Q7 Gap 5)', () => {
+    render(
+      <AgentTimeline
+        agent={agent}
+        entries={[entry({ id: 'a-tok', kind: 'agent_output', output_kind: 'text', run_id: 'run-done' })]}
+        roster={[agent]}
+        timelineEvents={[{ id: 'ev1', event_type: 'run_completed', timestamp: '2026-08-02T00:00:10Z', summary: '', data: { run_id: 'run-done' } }]}
+        isRunning={false}
+        recentTurns={[{
+          id: 'tu-1',
+          run_id: 'run-done',
+          agent: 'claude',
+          status: 'measured',
+          runner: 'claude',
+          model: 'claude-sonnet-5',
+          input_tokens: 1000,
+          output_tokens: 234,
+          total_tokens: 1234,
+          cache_read_tokens: null,
+          cache_write_tokens: null,
+          reasoning_tokens: null,
+          api_equivalent_usd_micros: null,
+          allowance: null,
+          observed_at: '2026-08-02T00:00:10Z',
+        }]}
+      />,
+    )
+    expect(screen.getByTestId('turn-worked-for')).toHaveTextContent('1,234 tokens')
+  })
+
+  it('omits the token stat entirely when the turn has no measured usage yet', () => {
+    render(
+      <AgentTimeline
+        agent={agent}
+        entries={[entry({ id: 'a-notok', kind: 'agent_output', output_kind: 'text', run_id: 'run-done2' })]}
+        roster={[agent]}
+        timelineEvents={[
+          { id: 'ev0', event_type: 'run_started', timestamp: '2026-08-02T00:00:00Z', summary: '', data: { run_id: 'run-done2' } },
+          { id: 'ev1', event_type: 'run_completed', timestamp: '2026-08-02T00:00:10Z', summary: '', data: { run_id: 'run-done2' } },
+        ]}
+        isRunning={false}
+      />,
+    )
+    const stat = screen.getByTestId('turn-worked-for')
+    expect(stat).toHaveTextContent('Worked for')
+    expect(stat).not.toHaveTextContent('tokens')
+  })
+
   it('renders a stopped turn as deliberately stopped, not an error', () => {
     render(
       <AgentTimeline

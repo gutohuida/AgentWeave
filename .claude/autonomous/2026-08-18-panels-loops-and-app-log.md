@@ -2990,3 +2990,106 @@ not re-run (out of scope — nothing under `hub/` changed).
 Queue: APP1 closed. Next: APP2 (further app-experience improvements — undesigned, same "propose or
 judge contained" call to make) or FREE.
 
+---
+
+## Run 2, iteration 6 — APP2: per-turn token count beside "Worked for Xs" (Q7 Gap 5)
+
+Fresh process, no memory of iterations 1-5. Verified state first: branch and `git log` matched
+`STATE.json` exactly (HEAD `816f367`, a heartbeat-release commit), tree clean.
+
+**Scoping APP2.** `next_action` pointed at both 2026-08-16 exploration docs. Read
+`desktop-app-global-state.md` first, since APP2's own framing ("app-experience gaps deferred out
+of the window change") points there most directly. Its two concrete, mechanical findings —
+`config.py`'s relative `database_url` default and `docker-compose.yml`'s missing `name:` key —
+turned out to be **already fixed**, both before this run even started (`git log` on the two files:
+commit `44a1ae5`, "A3 section 1: fix config.py's database_url default (D1)", and `7cd6184`, "R3:
+make the documented Docker install work" — the `one-hub-and-a-window-of-its-own` change, already
+archived at `openspec/changes/archive/2026-08-18-2026-08-16-one-hub-and-a-window-of-its-own/`).
+Read that archived proposal's Non-Goals next: every remaining item there is either forbidden by
+this run's own limits (Tauri/PyTauri needs a Rust toolchain), materially bigger than one iteration
+(code signing, Linux GTK/Qt packaging), or a new-dependency question the proposal deliberately left
+open rather than decided (`platformdirs`). None of those is a "small, contained, verifiable slice"
+by APP1's own sizing discipline.
+
+Read `ui-gap-analysis.md` next — also named in `next_action`, and explicitly in scope per the
+operator's own framing quoted at that document's top ("go beyond compare T3 and other tools...
+is there any functionality in the most popular harnesses we lack?"). Gap 5 (no per-turn cost/token
+display) carries its own addendum, checked directly against `hub/hub/api/v1/accounting.py` on
+2026-08-16: `TurnUsage` rows are already shaped exactly right — one row per `run_id`, with
+`total_tokens` — so a per-turn display is "purely a UI read of data that already exists in the
+right shape... the cheapest possible version of this gap," explicitly cheaper than the per-
+conversation variant (which needs a new backend join). Confirmed still true by reading
+`hub/ui/src/api/accounting.ts`'s `TurnUsage` interface and `AgentTimeline.tsx`/
+`agentTimelineModel.ts` directly: turns are already grouped by `runId`
+(`TimelineTurn.runId`, `groupIntoTurns`), and a near-identical precedent already exists —
+`runDurationsByRunId` builds a `run_id -> duration` map from a different data source and feeds
+`TurnBody`'s "Worked for Xs" line. Grepped `AgentTimeline.tsx`/`AgentOutputPanel.tsx` for
+`recent_turns`/`TurnUsage`: zero hits — not implemented. Picked this over Gap 3 (command palette,
+needs a new `cmdk` dependency) and Gap 1/2 (markdown rendering, diff view — both real but
+meaningfully bigger, cross-cutting changes) specifically because it required no new dependency and
+reused an established pattern.
+
+**What was built.** `agentTimelineModel.ts`: `tokensByRunId(recentTurns: TurnUsage[])` — a pure
+function mirroring `runDurationsByRunId`'s shape, mapping `run_id -> total_tokens` for turns whose
+`status === 'measured'` and whose `total_tokens` is non-null (an `unavailable` turn or a null total
+is omitted, not shown as 0 — the runner genuinely reported nothing, a different fact from "used no
+tokens"). `AgentTimeline.tsx`: a new optional `recentTurns` prop, threaded into a `tokensByRun`
+memo, passed down to `TurnBody` as `tokenCount`. The existing "Worked for Xs" line
+(`data-testid="turn-worked-for"`) now joins duration and token count on one line —
+`"Worked for 12s · 1,234 tokens"` — via a small `statLine` array-filter-join, rather than adding a
+second line: both facts answer "what did this turn cost," and a turn with one fact but not the
+other (duration known, tokens still unmeasured, or vice versa) still reads as one coherent
+statement instead of a line with a gap in it. `AgentOutputPanel.tsx`: calls `useAccounting()`
+(project-scoped, already gated on `isConfigured && !!projectId` same as every other hook here) and
+passes `accounting?.recent_turns` through.
+
+**Tests.** `agentTimelineModel.test.ts`: four new cases for `tokensByRunId` — a measured turn maps
+correctly, an `unavailable` turn is omitted, a measured turn with a null total is omitted, and
+multiple runs resolve independently. `agentTimeline.test.tsx`: two new component-level cases —
+passing a `recentTurns` fixture renders `"1,234 tokens"` inside the stat line, and omitting
+`recentTurns` renders the duration alone with no `"tokens"` substring. Both render the real
+component with real prop shapes (Testing Library), not a snapshot.
+
+**The find that cost the most time this iteration.** Adding the unconditional `useAccounting()`
+call to `AgentOutputPanel` broke 7 existing test files with `Error: No QueryClient set, use
+QueryClientProvider to set one` — `agentHandoff.test.tsx`, `agentRunningComposer.test.tsx`,
+`batchedQuestionComposer.test.tsx`, `composerPermissionDefault.test.tsx`,
+`conversationControls.test.tsx`, `conversationDestination.test.tsx`, `handoffPlacement.test.tsx`.
+Each of these tests every other API hook `AgentOutputPanel` calls via `vi.mock('@/api/...')`
+returning static data — sidestepping React Query entirely rather than wrapping the tree in a real
+`QueryClientProvider` — and `@/api/accounting` was the one module none of them had a stub for, so
+my new call fell through to the real `useQuery` with no client to attach to. Fixed by adding
+`vi.mock('@/api/accounting', () => ({ useAccounting: () => ({ data: undefined }) }))` beside each
+file's existing `@/api/runners` mock — same pattern, same shape. Caught by running the FULL vitest
+suite rather than just the two files this change directly touches; the first background full run
+(before the fix) reported `7 failed | 99 passed`, `41 failed | 1044 passed` — recorded here as the
+reason "run the whole suite, not just the changed files" earns its keep, again.
+
+**Full verification.** `npx vitest run` (hub/ui): 106/106 files, 1085/1085 tests passed (was
+1070/105 baseline; +15, some from run 1's later iterations already landed on this branch, +6 from
+this iteration). `npx tsc --noEmit`: clean. `npm run lint`: clean, 0 warnings. `npm run build` +
+`py -3.11 scripts/refresh_ui_bundle.py` (source staged first, per CLAUDE.md) +
+`refresh_ui_bundle.py --check`: bundle confirmed current. `/health` on the trial Hub: no `ui_stale`
+(static assets served from disk, no restart needed for a UI-only change). Then, because a mocked
+component test proves the wiring but not the real app, ran the **full Playwright browser suite**
+against the trial Hub: `54 passed in 30.69s` (was 53 at the last full-suite baseline — one more
+than recorded, unexplained, not investigated: not a regression, everything passed). No Python
+files touched this iteration, so `hub/tests/` was not re-run — nothing under `hub/hub/` or
+`src/agentweave/` changed.
+
+**What was NOT live-verified, and why.** The token count's actual on-screen appearance (as opposed
+to the wiring that produces it) was not confirmed against a real measured turn in a browser:
+`GET /api/v1/projects/proj-5e960453/accounting` returns `"recent_turns": []` — this trial project
+has never had a real Claude/Codex run complete with runner-reported usage. Producing one live would
+mean triggering a real paid run against a real runner, disproportionate for a small, additive UI
+display change whose data contract is independently confirmed (the accounting API's own tests, unaffected
+here) and whose consumption is proven by a real-DOM component test with a realistic `TurnUsage`
+fixture. Recorded rather than glossed over, per this run's "every claim is measured or labelled
+unverified" standard.
+
+Queue: APP2 closed via a scoped choice from the UI-gap exploration (Q7 Gap 5), not the desktop-app
+one (Q6's own remaining items were all already fixed, forbidden by limits, or bigger than one
+iteration). Next: FREE, or further ui-gap-analysis items (Gap 6 "all runs at a glance" and Gap 3
+"command palette" are the next-cheapest per that document's own cost ranking) if the operator wants
+this run to keep pulling from that list.
+
