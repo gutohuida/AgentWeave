@@ -1,22 +1,17 @@
 {
   "purpose": "Overnight run of 2026-08-19/20, prepared interactively before the operator went to bed. The theme the operator named, in their own words: 'I should be able to open any agentweave project from any agentweave app that I want.' Tonight's session began as a support call — the operator could not add this repo to their own Hub — and the diagnosis found three distinct defects, two of them confirmed live. Items 1 and 2 are those defects. Items 3-6 are carried debt from handoff 0060 and tonight's commit. This is a NEW branch off master, not a continuation of the 2026-08-18 run.",
-
   "branch": "autonomous/2026-08-19-project-portability",
   "parent_branch": "master",
-  "parent_sha": "75c7685",
-  "parent_note": "75c7685 is tonight's interactive commit (the Add-project error-handling fixes), made on master with the operator's explicit approval. It is already pushed-worthy but NOT pushed. The loop branches from it. Everything the loop does is a diff against 75c7685.",
-
-  "started_at": "2026-08-19T23:25:00+01:00",
+  "parent_sha": "afb63f5",
+  "parent_note": "afb63f5 is the prepared-brief commit on master. It sits on top of 75c7685, tonight's interactive fix to the Add-project dialog. Neither is pushed. Everything this run does is a diff against afb63f5.",
+  "started_at": "2026-08-19T23:26:19+01:00",
   "stop_at": "2026-08-20T08:00:00+01:00",
   "stop_when_queue_empties": false,
   "run": 1,
   "iteration": 0,
   "session_stopped": false,
-
   "prepared_by": "Interactive session 2026-08-19T22:55-23:25+01:00, via /autonomous-prep. Both headline defects were reproduced or traced to a named line before being queued — item 1 by reading the render path end to end, item 2 by exercising the live API against two databases. Runway verified rather than assumed: playwright present, `pytest tests/test_project_lifecycle.py tests/test_project_persistence.py` 17 passed, vitest 1152 passed, tsc clean, working tree clean.",
-
   "operator_intent_verbatim": "Open any agentweave project with any agentweave app. Also: 'I think I clicked to create an agent in one project but it was actually creating into another project. Something weird there.'",
-
   "limits": [
     "Do NOT restart, stop, or reconfigure the Hub processes on ports 8000 (PID 28492) or 8010 (PID 26700). The operator is using both. A restart kills runs in flight and is the single thing most likely to make the morning worse than the evening.",
     "Do NOT touch hub/data/agentweave.db, ~/.agentweave/hub/, or ~/.agentweave/hub/.env. The .env edit discussed tonight is DEFERRED to the operator — it is outside the repo.",
@@ -27,7 +22,6 @@
     "Commit hub/ui/src and hub/hub/static/ui TOGETHER, and only via `python scripts/refresh_ui_bundle.py` after `npm run build` (make is not on PATH in Git Bash here). Only that script writes the build stamp.",
     "Never mark a task complete on the strength of a plan existing. Only real, verified implementation closes a task."
   ],
-
   "pre_authorised": [
     {
       "situation": "Item 2: what the operator sees when a folder is adopted from another database",
@@ -50,7 +44,6 @@
       "cost_if_wrong": "A draft PR the operator closes."
     }
   ],
-
   "queue": [
     {
       "id": "P1",
@@ -114,10 +107,8 @@
       "note": "The pinning is the same disease as P2 — identity that should travel, hard-coded to one place. Worth saying so in the commit message."
     }
   ],
-
   "current": "P1",
   "next_action": "Cut branch autonomous/2026-08-19-project-portability from master at 75c7685. Then start P1: open hub/ui/src/App.tsx and read lines 466-525 — the onAddAgent handler at 474 and the AgentCreateDialog render at 516-524. The bug is that agentCreateProjectId never reaches the dialog. Per the operator's decision, make the rail's add-agent action select the clicked project first, reusing the existing open-project path (App.tsx:121 already calls setSelectedProject) rather than adding a second ad-hoc setter. Then confirm all three of the dialog's hooks — useCreateAgent (api/agents.ts:318), useCharters, useProviderLaunchability — resolve to the clicked project. Write the vitest test FIRST if practical, and mutation-check it either way: revert the fix, watch the test fail by name, restore.",
-
   "decisions_for_user": [
     {
       "id": "D-env",
@@ -150,7 +141,6 @@
       "raised_by": "prep"
     }
   ],
-
   "runway_verified_at_prep": {
     "working_tree": "clean at 75c7685",
     "vitest": "1152 passed / 115 files",
@@ -159,5 +149,8 @@
     "playwright": "present",
     "openspec_changes_in_flight": "none — `ls openspec/changes/ | grep -v archive` is empty",
     "not_run_at_prep": "Full hub/tests/ suite and eslint were NOT run tonight. The loop should establish its own baseline early so it can tell inherited breakage from its own."
-  }
+  },
+  "last_heartbeat": "2026-08-19T23:26:19+01:00",
+  "log_file": ".claude/autonomous/2026-08-19-project-portability-log.md",
+  "driver": "Windows Scheduled Task 'AgentWeaveAutonomousSession' -> .claude/skills/autonomous-session/scripts/run-iteration.ps1 -> headless `claude -p`. Each firing is a fresh process; all continuity is STATE.json + the log. Session-bound drivers (ScheduleWakeup, CronCreate) are NOT used - the 2026-08-15 run asked for nine hours and got forty minutes because the session went away."
 }
