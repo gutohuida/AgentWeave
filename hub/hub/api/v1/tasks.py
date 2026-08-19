@@ -287,13 +287,19 @@ async def _authorize_loop_task_creation(
     session: AsyncSession, project_id: str, loop_id: str, actor: Actor
 ) -> None:
     """Who may add a task directly to a loop's queue (`2026-08-18-a-loop-writes-its-own-queue`,
-    design D1/D7/D8).
+    design D1/D7/D8/D10).
 
     D8 collapses "creator" into `Loop`'s own `AIJob.agent` — there is no separate creator field,
     deliberately, so the operator is always exempt and every other caller is measured against that
-    one string. D7 layers an extra gate on top for that same agent once its loop has fired at
-    least once: authoring a queue before the first fire is indistinguishable from `create_loop`
-    itself accepting one, but adding to it after the loop is running needs the operator.
+    one string.
+
+    D10 generalises D7's "first fire" boundary into a consequence of `Loop.control` (task A1.4):
+    control defaults to the operator, so a self-created loop whose control was never delegated
+    still needs the operator once it has fired — the same outcome D7 stated directly. Before the
+    first fire, the creator's own call is indistinguishable from `create_loop` accepting its
+    initial queue (design D2's "definition window") and is let through regardless of delegation,
+    exactly as it always was. Once delegated (`POST /loops/{id}/control`), the creator decides for
+    itself at any point, `run_count` included — D10's "the creator can decide for himself".
     """
     loop = await session.get(Loop, loop_id)
     if loop is None or loop.project_id != project_id:
@@ -309,6 +315,9 @@ async def _authorize_loop_task_creation(
                 "directly. Use send_message to ask the creator to add it instead."
             ),
         )
+    delegated_to_creator = loop.control == "creator"
+    if delegated_to_creator:
+        return
     if job.run_count > 0:
         raise HTTPException(
             status_code=403,

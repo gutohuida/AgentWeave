@@ -20,7 +20,6 @@ not have (it carries zero loops). Read from, never mutated.
 
 from __future__ import annotations
 
-import pytest
 from playwright.sync_api import Page, expect
 
 PROJECT_ID = "proj-5e960453"
@@ -97,7 +96,9 @@ def test_loops_index_lists_real_loops_with_counts_by_ending_state(page: Page, hu
     expect(row).to_contain_text("Queue: 1")
 
 
-def test_selecting_a_loop_opens_the_drill_down_and_the_index_stays_open(page: Page, hub_url: str) -> None:
+def test_selecting_a_loop_opens_the_drill_down_and_the_index_stays_open(
+    page: Page, hub_url: str
+) -> None:
     """Task B5.2: unlike the files tree, which `openTab` closes on selection (design D8),
     opening a loop's drill-down leaves the index tab in the strip — a governance glance, not a
     launcher."""
@@ -123,7 +124,9 @@ def test_loop_drill_down_shows_the_claimed_item_and_queue(page: Page, hub_url: s
     expect(page.get_by_test_id("loop-tab")).to_contain_text("assigned: 1")
 
 
-def test_archived_loops_are_hidden_by_default_and_reachable_behind_the_filter(page: Page, hub_url: str) -> None:
+def test_archived_loops_are_hidden_by_default_and_reachable_behind_the_filter(
+    page: Page, hub_url: str
+) -> None:
     """Task B5.4: the same `include_archived` shape `list_jobs` already has, exposed as a
     checkbox rather than guessed at."""
     _open_loops_tab(page, hub_url)

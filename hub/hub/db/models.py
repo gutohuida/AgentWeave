@@ -1263,6 +1263,14 @@ class Loop(Base):
     # design precisely so this column can stay a two-way fact instead of growing to answer
     # questions `archived_at` and `stop_reason` already answer between them.
     ending_state: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    # Design D10 (addendum, `2026-08-18-a-loop-writes-its-own-queue`, task A1.1): who decides
+    # whether this loop's queue may be extended. NULL means the current default — the operator —
+    # exactly the reasoning `Agent.default_permission_mode` above already states: a row storing
+    # today's default would keep saying it after the default moved. The only other permitted value
+    # is "creator", set by `POST /loops/{id}/control` (operator-only — delegation is the
+    # operator's decision to make, not the creator agent's to take). Resolve at the point of use
+    # (`_authorize_loop_task_creation`, `tasks.py`), never write "operator" into this column.
+    control: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
 
     __table_args__ = (Index("ix_loops_project", "project_id"),)
 

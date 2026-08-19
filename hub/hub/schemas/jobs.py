@@ -98,6 +98,10 @@ class LoopSummary(BaseModel):
     queue: Dict[str, int] = Field(default_factory=dict)  # status -> count
     current_task: Optional[Dict[str, str]] = None  # {"id", "title", "status"}
     open_questions: int = 0
+    # Design D10 (task A1.1): who decides whether this queue may be extended. NULL means the
+    # current default (the operator) — returned as-is, never resolved to "operator" here, mirroring
+    # `Agent.default_permission_mode`'s own serialization (`agents.py:1858`).
+    control: Optional[str] = None
 
 
 class LoopDetail(LoopSummary):
@@ -106,6 +110,22 @@ class LoopDetail(LoopSummary):
 
     job_id: str
     history: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class LoopControlUpdate(BaseModel):
+    """Delegate a loop's control to its creator agent, or take it back to the operator
+    (design D10, task A1.2). Only these two values exist — see `Loop.control`'s own comment."""
+
+    control: str = Field(max_length=32)
+
+    model_config = {"extra": "forbid"}
+
+    @field_validator("control")
+    @classmethod
+    def validate_control(cls, v: str) -> str:
+        if v not in ("operator", "creator"):
+            raise ValueError("control must be 'operator' or 'creator'")
+        return v
 
 
 class JobResponse(BaseModel):

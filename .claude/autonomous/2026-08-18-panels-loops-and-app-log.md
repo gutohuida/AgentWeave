@@ -1937,3 +1937,120 @@ enough reason to jump the queue.
 
 Committed and pushed as the work landed. Heartbeat refreshed before the push; releasing it
 (backdating ~40 minutes) as the very last step per the driver's own instructions.
+
+---
+
+## Iteration 23 (2026-08-19 ~05:15–05:30+01:00) — LA1 done: control as a per-loop setting (D10)
+
+Branch and `git log` matched `STATE.json` exactly at start (`37506c3` = "Release heartbeat for the
+next firing", `iteration: 22`, clean tree). `current`/`next_action` pointed at LB6, but LB6's own
+note said only B6.2-B6.4 remain, explicitly blocked on A4/LA4, and directed the next iteration to
+follow the queue's own stated order — LA1 next, not LB6's blocked remainder and not a jump straight
+to LA4. Took LA1: "Loop A1: control as a per-loop setting (design D10)", tasks A1.1-A1.5.
+
+Spawned an Explore agent first to survey the ground: the `Loop` model, the
+`Agent.default_permission_mode` "NULL means the current default" precedent A1.1 explicitly cites,
+the migration head (`0078`) and its guard pattern, where loop creation and D7's authorization gate
+actually live, and the existing D7 test suite's fixture shapes. That report is what let this
+iteration move straight to implementation rather than re-deriving all of it live.
+
+**A1.1.** `Loop.control: Optional[str]` (`hub/hub/db/models.py`), migration `0079`
+(`hub/hub/migrations/versions/0079_loop_control.py`) — same missing-table-guard shape as
+`0077`/`0078`. NULL means the operator, mirroring `Agent.default_permission_mode`'s own comment
+almost verbatim: a row storing today's default would keep saying it after the default moved. The
+only other stored value is the literal string `"creator"` — there are only ever two controllers per
+D10's spec text, not an open vocabulary.
+
+**A1.2/A1.3.** New `POST /projects/{id}/loops/{loop_id}/control` (`hub/hub/api/v1/loops.py`),
+built as a sibling to `archive_loop` — same `_require_operator` check (a run-bearer credential
+never reaches it at all; `get_project`'s own operator-only auth rejects it first with 401, verified
+live below rather than assumed from the docstring's claim). Body is `LoopControlUpdate`
+(`hub/hub/schemas/jobs.py`), validated to exactly `"operator"`/`"creator"` — anything else is a 422
+from Pydantic, not a 400 hand-rolled later. Taking control back stores NULL, not the literal string
+`"operator"` — the delegation route enforces the same "no stored copy of the default" rule A1.1's
+column comment states, so a loop that was delegated and then taken back reads identically to one
+nobody ever touched. `LoopSummary`/`LoopDetail` gained `control: Optional[str] = None`, returned
+raw (not resolved) — `_batch_loop_summaries` now sets it from `loop.control`. No frontend change:
+the TS `LoopSummary` interface is hand-authored and structurally typed, so an additive optional
+backend field needs nothing on the UI side, and nothing in B5/B6 reads it yet.
+
+**A1.4, the reconciliation.** This was the part worth thinking through rather than mechanically
+replacing. The existing D7 gate in `_authorize_loop_task_creation` (`hub/hub/api/v1/tasks.py`) read
+`if job.run_count > 0: refuse`. Design D10's own prose ("D7's first-fire boundary... must now fall
+out of the default... not out of a separate role-identity check") could be read as "delete the
+`run_count` check entirely and gate everything on `control`" — but that would break `create_job`'s
+own initial-queue seeding (`jobs.py:349-363`), which relies on exactly this gate being satisfied
+"for free" because a job it just created always has `run_count == 0`, and — read via the actual D7
+tests already in the suite — the self-created agent's queue-write **before** the first fire must
+still succeed with no delegation at all (`test_loop_self_created_agent_gated_after_first_fire`
+asserts this directly, unmodified, and still passes). So the reconciliation implemented here is
+additive, not a replacement: a `loop.control == "creator"` check short-circuits *before* the
+existing `run_count` gate. An undelegated loop (`control` still NULL, the default) behaves
+identically to before this task — proven, not asserted, by
+`test_loop_explicit_operator_control_matches_the_unset_default`, which builds a loop with
+`control="operator"` set explicitly and asserts it reaches the exact same before/after-first-fire
+outcome the NULL-control test already reaches. `test_loop_delegated_control_lets_the_creator_decide_after_first_fire`
+proves the new behaviour: a fired-once, delegated loop's creator can still add.
+
+**A1.5.** Each control change is recorded via `persist_event("loop_control_changed", {id, from,
+to})`, `agent=None` (meaning the operator — the route is operator-only, so there is no agent to
+name), matching `loop_archived`'s own precedent in the same file rather than inventing a second
+shape. `test_loop_control_delegation_and_take_back_via_the_operator_route` asserts both `EventLog`
+rows exist with the right `from`/`to` pairs, `agent is None`, and `timestamp is not None`.
+
+**Verification.** `hub/tests/test_agent_actions_coordination.py`: 27 passed (6 new — the four D7
+reconciliation/route tests above plus an unknown-control-value-rejected 422 test — and all four
+*original* D7 tests unmodified and still green). Migration `0079`'s own two tests
+(`test_migration_0079_adds_control_column`, `test_migration_0079_downgrade_then_upgrade_round_trips`)
+pass; full `hub/tests/test_migrations.py`: 58 passed, 1 skipped. `0078`'s own round-trip test needed
+a fix along the way — `command.downgrade(cfg, "-1")` had gone stale now that `0079` sits on top of
+`0078` (same trap `0077`'s own test comment already named when `0078` landed on top of *it* — a
+recurring one-migration-later trap, not a one-off, worth remembering for whoever writes `0080`),
+fixed by making the target absolute (`"0077"`) rather than relative. `HEAD_REVISION` bumped to
+`"0079"` in `test_migrations.py` and `test_project_persistence.py`. `test_project_persistence.py`,
+`test_loop_archival.py`, `test_jobs.py`, `test_scheduler.py`, `test_spec_declared_tasks.py`: all
+still pass (169 passed, 2 skipped combined). `ruff check` clean across `src/`/`hub/`/`tests/` — also
+fixed a one-line pre-existing unused-import lint in `test_loops_index.py` (iteration 22's own file,
+a drive-by, not otherwise touched this iteration). `black --check` clean, 392 files (black
+reformatted `test_migrations.py` and `test_loops_index.py` once during the session; re-ran their
+tests afterward to confirm the reformat changed nothing behavioral). `mypy hub/hub/`: compared
+against a `git stash` of this iteration's own diff rather than the stale prep-time baseline file —
+22 iterations of prior B-series work had already drifted the true count upward (e.g. "AIJob has no
+attribute loop" from `job.loop = ...` dynamic-attribute assignments elsewhere in `jobs.py` that
+predate this task entirely) — **364 errors in both the stashed and the current tree, identical**:
+this task introduces zero new mypy errors. `npx openspec validate --changes --strict`: 2/2 still
+valid.
+
+**Full `hub/tests/` suite**, backgrounded (12 minutes): **2426 passed, 65 skipped, 1 xpassed, 0
+failed**. This does not include `hub/tests/browser` (Playwright, opt-in). Separately re-ran
+`test_job_loop_block.py` live to check whether iteration 22's recorded fixture-count drift (2 of 4
+tests failing — expects 3 jobs in `proj-5e960453`, actual is 5, from LB2/LB4's own smoke-test jobs
+deliberately left as evidence) still holds: it does, unchanged, same assertion. Not fixed here,
+same reasoning as iteration 22 — fixing means undoing that "leave it as evidence" precedent or
+loosening a hardcoded count, a judgment call outside this task's scope.
+
+**Live smoke test against the trial Hub itself**, not just pytest — this task changed Python and a
+migration, so a restart was required to mean anything. The PID iteration 1 recorded (`22720`) was
+already dead; found the real one via `Get-NetTCPConnection -LocalPort 8010` (`26644`), stopped it,
+applied migration `0079` directly to `hub/data/agentweave.db` (`alembic -c hub/alembic.ini upgrade
+head` with `DATABASE_URL` pointed at the Windows-form path — confirmed `0078 -> 0079` ran clean),
+then relaunched via the documented `Invoke-CimMethod` command. `GET .../loops` on `proj-5e960453`
+confirmed every existing loop now serializes `control: null` (the migration didn't backfill
+anything it shouldn't). `POST .../loops/loop-f1eab23e/control` exercised all four paths live:
+delegate → `control: "creator"`; take back → `control: null` (not the string); an invalid body →
+422; no `Authorization` header → 401. Restored to `null` afterward — non-destructive. Re-ran
+`hub/tests/browser/test_loops_index.py` (B5's own live surface) against the restarted Hub to
+confirm the restart and migration caused no regression there: 5 passed.
+
+Updated `tasks.md`'s top summary line and ticked A1.1-A1.5 with a dated note (this file's own
+section above, "A1. Control as a per-loop setting").
+
+`current`/`next_action` now point at **LA2**: "Loop A2: editing, staged and visible (design D11)".
+Design D11 (an edit is always accepted, staged as pending, and applied only at the next firing —
+never immediately, never refused mid-run) will likely want its own schema decision (a pending-edit
+side table or column set) distinct from A1's single mutable field, since A1's control takes effect
+instantly and A2's edits explicitly must not. Left for LA2 to decide after reading D11 fresh, not
+guessed at here.
+
+Committed and pushed as the work landed. Heartbeat refreshed before the push; releasing it
+(backdating ~40 minutes) as the very last step per the driver's own instructions.

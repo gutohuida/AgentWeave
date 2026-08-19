@@ -2,8 +2,9 @@
 
 Sections 1-12 are implemented and verified (dated notes below). From the archival addendum, B1
 through B5 are also implemented and verified, plus B6.1/B6.5/B6.6 (the drill-down's static
-content); B6.2-B6.4 (live "running now") and A1 onward are still a spec only, unchecked —
-CLAUDE.md: "Never mark a task complete on the strength of a plan existing."
+content); B6.2-B6.4 (live "running now") are still open, blocked on A4/LA4. A1 (control as a
+per-loop setting) is now implemented and verified too (dated note below); A2 onward remain a spec
+only, unchecked — CLAUDE.md: "Never mark a task complete on the strength of a plan existing."
 
 ## 1. Migration
 
@@ -1007,18 +1008,71 @@ A6 is human-only.
 
 ## A1. Control as a per-loop setting (design D10)
 
-- [ ] A1.1 `loops.control` VARCHAR(32) nullable in the migration — **NULL means the current default**,
+- [x] A1.1 `loops.control` VARCHAR(32) nullable in the migration — **NULL means the current default**,
       never a stored copy of it, carrying `Agent.default_permission_mode`'s reasoning
       (`models.py:196`). Guard the migration step for a missing table.
-- [ ] A1.2 Default the controller to the operator; delegation to the creator agent and back, after
+- [x] A1.2 Default the controller to the operator; delegation to the creator agent and back, after
       creation.
-- [ ] A1.3 Route an extension request by controller: operator-controlled relays and changes nothing
+- [x] A1.3 Route an extension request by controller: operator-controlled relays and changes nothing
       until the operator decides; delegated lets the creator decide.
-- [ ] A1.4 **Reconcile with D7.** D7's first-fire boundary for self-created loops must now fall out
+- [x] A1.4 **Reconcile with D7.** D7's first-fire boundary for self-created loops must now fall out
       of the default (control is the operator's, so nothing was delegated), not out of a separate
       role-identity check. Assert both routes reach the same outcome for a self-created loop, so the
       generalisation is proven rather than asserted.
-- [ ] A1.5 Record each change of control against the loop with actor and time.
+- [x] A1.5 Record each change of control against the loop with actor and time.
+
+**Done, iteration 23 (2026-08-19).** `loops.control` (migration `0079`, VARCHAR(32), nullable) —
+NULL means the operator, mirroring `Agent.default_permission_mode`'s own "never a stored copy of
+the default" reasoning; the only other stored value is `"creator"`. `POST
+/projects/{id}/loops/{loop_id}/control` (`hub/hub/api/v1/loops.py`) is the delegation route:
+operator-only (`_require_operator`, the same check `archive_loop` already uses — a run-bearer
+credential fails `get_project`'s own operator-only auth before this route's header check is even
+reached, verified live in the new test below, not assumed), body validated to exactly
+`"operator"`/`"creator"` (`LoopControlUpdate`, `hub/hub/schemas/jobs.py`), and `"operator"` is
+stored as NULL rather than the literal string — taking control back reads identically to a loop
+nobody ever delegated. Each change is recorded via `persist_event("loop_control_changed", {id,
+from, to})`, `agent=None` (meaning the operator), matching `loop_archived`'s own precedent — proven
+in `test_loop_control_delegation_and_take_back_via_the_operator_route`, which asserts both the
+`EventLog` rows and that `agent is None`/`timestamp is not None` on each.
+
+**A1.4's reconciliation**, in `_authorize_loop_task_creation` (`hub/hub/api/v1/tasks.py`): the old
+`job.run_count > 0` gate — D7's literal rule — now sits *after* a `loop.control == "creator"`
+short-circuit rather than being replaced outright. Explicit delegation lets the creator add at any
+point regardless of fire count (D10: "the creator can decide for himself"); an undelegated loop
+(`control` NULL) falls through to exactly D7's original check, so a self-created loop with control
+never touched behaves identically to before this task. **Proven, not asserted**, per A1.4's own
+text: `test_loop_explicit_operator_control_matches_the_unset_default` constructs a loop with
+`control="operator"` explicitly and asserts it reaches the *exact same* before/after-first-fire
+outcome as `test_loop_self_created_agent_gated_after_first_fire` (unchanged, still passing) reaches
+with `control=None` — the generalisation holds for the explicit case, not only the default one.
+`test_loop_delegated_control_lets_the_creator_decide_after_first_fire` proves the new behaviour:
+delegated control lets a fired-once loop's creator add anyway. All four of the original D7 tests in
+`test_agent_actions_coordination.py` (operator-adds-regardless, operator-exempt, non-creator-403,
+self-created-gated-after-first-fire) still pass unmodified.
+
+`LoopSummary`/`LoopDetail` gained `control: Optional[str] = None`, returned as-is (never resolved
+to `"operator"` in the schema — resolution happens only at the point of use, same as
+`Agent.default_permission_mode`'s own serialization). `_batch_loop_summaries` now sets it from
+`loop.control`.
+
+**Verified**: `pytest hub/tests/test_agent_actions_coordination.py` — 27 passed (6 new: the four
+control-route/reconciliation tests above, plus an unknown-value-rejected 422 test). Migration
+`0079` — its own `test_migration_0079_adds_control_column` and
+`test_migration_0079_downgrade_then_upgrade_round_trips` pass; `hub/tests/test_migrations.py` full
+suite still 58 passed/1 skipped (0078's own round-trip test needed one fix: its `command.downgrade`
+target had to move from the now-stale relative `"-1"` to the absolute `"0077"`, the exact trap
+`0077`'s own test comment already named for `0078` — the same drift recurring one migration later,
+fixed the same way). `HEAD_REVISION` bumped to `"0079"` in `test_migrations.py` and
+`test_project_persistence.py`. `hub/tests/test_project_persistence.py`,
+`hub/tests/test_loop_archival.py`, `hub/tests/test_jobs.py`, `hub/tests/test_scheduler.py`,
+`hub/tests/test_spec_declared_tasks.py` all still pass (169 passed, 2 skipped combined). `ruff
+check` clean (src/ hub/ tests/ — also fixed one pre-existing unused-import lint in
+`test_loops_index.py`, iteration 22's own file, out of this task's scope but a one-line drive-by).
+`black --check` clean, 392 files. `mypy hub/hub/` — compared against a `git stash` of this
+iteration's own diff (not the stale prep-time baseline, since 22 iterations of prior B-series work
+already drifted it upward): **364 errors in both the stashed and the current tree**, exactly
+identical — this task introduces zero new mypy errors. No UI touched (A1 is backend-only; nothing
+in B5/B6's frontend reads `control` yet).
 
 ## A2. Editing, staged and visible (design D11)
 

@@ -147,10 +147,10 @@ async def test_agent_task_crud_retains_create_and_latest_update_runs(app):
         assert task.assigner == "creator"
 
 
-async def _loop_with_agent(session, *, suffix, agent, run_count=0):
-    """A loop whose queue-write authorization (design D1/D7,
-    `2026-08-18-a-loop-writes-its-own-queue`) turns on `AIJob.agent` and `run_count`. Mirrors
-    `_declaring_loop` (test_spec_declared_tasks.py) and `_make_job`/`_make_loop`
+async def _loop_with_agent(session, *, suffix, agent, run_count=0, control=None):
+    """A loop whose queue-write authorization (design D1/D7/D10,
+    `2026-08-18-a-loop-writes-its-own-queue`) turns on `AIJob.agent`, `run_count`, and `control`.
+    Mirrors `_declaring_loop` (test_spec_declared_tasks.py) and `_make_job`/`_make_loop`
     (test_scheduler.py) rather than inventing a fourth fixture shape."""
     job = AIJob(
         id=f"job-loop-{suffix}",
@@ -170,6 +170,7 @@ async def _loop_with_agent(session, *, suffix, agent, run_count=0):
         project_id="proj-test",
         job_id=job.id,
         purpose="authorship gate fixture",
+        control=control,
     )
     session.add(loop)
     await session.flush()
@@ -291,6 +292,140 @@ async def test_loop_self_created_agent_gated_after_first_fire(app):
             (await session.execute(select(Task).where(Task.loop_id == loop_id))).scalars().all()
         )
         assert [task.title for task in created] == ["self-before-fire"]
+
+
+@pytest.mark.asyncio
+async def test_loop_explicit_operator_control_matches_the_unset_default(app):
+    """Design D10 (task A1.4): the generalisation is proven, not asserted — a loop whose
+    `control` is explicitly `"operator"` must reach the exact same outcome as one where it was
+    never set (`test_loop_self_created_agent_gated_after_first_fire`, above), because NULL means
+    the current default rather than "nothing decided yet"."""
+    async with async_session_factory() as session:
+        loop = await _loop_with_agent(
+            session, suffix="explicit-operator", agent="self-agent-explicit", control=None
+        )
+        await session.commit()
+        loop_id = loop.id
+
+    self_headers, _ = await _active_run("run-loop-self-explicit", "self-agent-explicit")
+
+    before_fire = await app.post(
+        "/api/v1/agent-actions/tasks",
+        headers=self_headers,
+        json={"title": "explicit-before-fire", "loop_id": loop_id},
+    )
+    assert before_fire.status_code == 201, before_fire.text
+
+    await _set_run_count(loop_id, 1)
+
+    after_fire = await app.post(
+        "/api/v1/agent-actions/tasks",
+        headers=self_headers,
+        json={"title": "explicit-after-fire", "loop_id": loop_id},
+    )
+    assert after_fire.status_code == 403
+    assert "operator" in after_fire.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_loop_delegated_control_lets_the_creator_decide_after_first_fire(app):
+    """Design D10: once control is delegated to the creator agent, D7's first-fire boundary no
+    longer applies — the creator decides for itself, `run_count` included."""
+    async with async_session_factory() as session:
+        loop = await _loop_with_agent(
+            session, suffix="delegated", agent="self-agent-delegated", control="creator"
+        )
+        await session.commit()
+        loop_id = loop.id
+
+    await _set_run_count(loop_id, 1)
+
+    self_headers, _ = await _active_run("run-loop-delegated", "self-agent-delegated")
+    response = await app.post(
+        "/api/v1/agent-actions/tasks",
+        headers=self_headers,
+        json={"title": "delegated-after-fire", "loop_id": loop_id},
+    )
+    assert response.status_code == 201, response.text
+
+
+@pytest.mark.asyncio
+async def test_loop_control_delegation_and_take_back_via_the_operator_route(app, auth_headers):
+    """Design D10 (tasks A1.2/A1.3/A1.5): only the operator may delegate or take back control —
+    a run-bearer credential does not even satisfy `get_project`'s own operator-only auth (the
+    `aw_run_` prefix fails `_operator_from_credential` before this route's own belt-and-suspenders
+    `_require_operator` header check is ever reached) — and each change is recorded with actor and
+    time (`EventLog`, `agent=None` meaning the operator, matching `loop_archived`'s own precedent).
+    """
+    async with async_session_factory() as session:
+        loop = await _loop_with_agent(session, suffix="delegate-route", agent="creator-agent")
+        await session.commit()
+        loop_id = loop.id
+
+    _, run_token = await _active_run("run-loop-nonop", "creator-agent")
+    refused = await app.post(
+        f"/api/v1/projects/proj-test/loops/{loop_id}/control",
+        headers={"Authorization": f"Bearer {run_token}"},
+        json={"control": "creator"},
+    )
+    assert refused.status_code == 401
+
+    async with async_session_factory() as session:
+        unchanged = await session.get(Loop, loop_id)
+        assert unchanged.control is None
+
+    delegated = await app.post(
+        f"/api/v1/projects/proj-test/loops/{loop_id}/control",
+        headers=auth_headers,
+        json={"control": "creator"},
+    )
+    assert delegated.status_code == 200, delegated.text
+    assert delegated.json()["control"] == "creator"
+
+    taken_back = await app.post(
+        f"/api/v1/projects/proj-test/loops/{loop_id}/control",
+        headers=auth_headers,
+        json={"control": "operator"},
+    )
+    assert taken_back.status_code == 200, taken_back.text
+    # Taking control back stores NULL, not the literal string "operator" — the same
+    # never-a-stored-copy-of-the-default rule `Loop.control`'s own comment states.
+    assert taken_back.json()["control"] is None
+
+    from hub.db.models import EventLog
+
+    async with async_session_factory() as session:
+        events = (
+            (
+                await session.execute(
+                    select(EventLog)
+                    .where(EventLog.event_type == "loop_control_changed")
+                    .order_by(EventLog.timestamp)
+                )
+            )
+            .scalars()
+            .all()
+        )
+    assert len(events) == 2
+    assert events[0].data == {"id": loop_id, "from": "operator", "to": "creator"}
+    assert events[1].data == {"id": loop_id, "from": "creator", "to": "operator"}
+    assert all(event.agent is None for event in events)
+    assert all(event.timestamp is not None for event in events)
+
+
+@pytest.mark.asyncio
+async def test_loop_control_rejects_an_unknown_value(app, auth_headers):
+    async with async_session_factory() as session:
+        loop = await _loop_with_agent(session, suffix="bad-control", agent="creator-agent")
+        await session.commit()
+        loop_id = loop.id
+
+    response = await app.post(
+        f"/api/v1/projects/proj-test/loops/{loop_id}/control",
+        headers=auth_headers,
+        json={"control": "nobody"},
+    )
+    assert response.status_code == 422
 
 
 @pytest.mark.asyncio

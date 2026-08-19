@@ -215,6 +215,7 @@ async def _batch_loop_summaries(
             queue=queue_counts.get(loop.id, {}),
             current_task=current_task_by_loop.get(loop.id),
             open_questions=open_questions_by_job.get(job_id, 0),
+            control=loop.control,
         )
     return summaries
 

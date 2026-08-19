@@ -24,7 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...auth import get_project
 from ...db.engine import get_session
 from ...db.models import JobRun, Loop
-from ...schemas.jobs import LoopDetail, LoopSummary
+from ...schemas.jobs import LoopControlUpdate, LoopDetail, LoopSummary
 from ...sse import sse_manager
 from ...utils import persist_event
 from .jobs import _batch_loop_summaries
@@ -154,5 +154,48 @@ async def archive_loop(
 
     await sse_manager.broadcast(project_id, "loop_archived", {"id": loop_id})
     await persist_event(session, project_id, "loop_archived", {"id": loop_id})
+
+    return await _get_loop_detail(session, project_id, loop_id)
+
+
+@router.post("/{loop_id}/control", response_model=LoopDetail)
+async def set_loop_control(
+    loop_id: str,
+    body: LoopControlUpdate,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+    agent_identity: Optional[str] = Header(default=None, alias="X-AgentWeave-Agent"),
+    run_identity: Optional[str] = Header(default=None, alias="X-AgentWeave-Run"),
+) -> LoopDetail:
+    """Delegate this loop's control to its creator agent, or take it back to the operator
+    (design D10, task A1.2/A1.3). Operator-only (A1.2's own text: "the operator can leave the
+    control to the agent" — the decision to delegate is never the creator agent's to make for
+    itself), mirroring `archive_loop`'s `_require_operator` above.
+
+    `body.control == "creator"` is stored as-is (delegated). `body.control == "operator"`
+    stores NULL, not the literal string — the same "never a stored copy of the default" rule
+    `Loop.control`'s own comment states, so a delegation that is later taken back reads
+    identically to a loop nobody ever delegated.
+    """
+    _require_operator(agent_identity, run_identity)
+    project_id, _ = project
+    loop = await session.get(Loop, loop_id)
+    if loop is None or loop.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Loop not found")
+
+    previous = loop.control or "operator"
+    loop.control = "creator" if body.control == "creator" else None
+    await session.commit()
+
+    new_value = loop.control or "operator"
+    await sse_manager.broadcast(
+        project_id, "loop_control_changed", {"id": loop_id, "from": previous, "to": new_value}
+    )
+    await persist_event(
+        session,
+        project_id,
+        "loop_control_changed",
+        {"id": loop_id, "from": previous, "to": new_value},
+    )
 
     return await _get_loop_detail(session, project_id, loop_id)
