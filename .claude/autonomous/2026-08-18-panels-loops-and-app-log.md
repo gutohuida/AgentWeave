@@ -3208,3 +3208,48 @@ stays open — Gap 3 (command palette, needs the new `cmdk` dependency) is the n
 candidate per `ui-gap-analysis.md` if the operator wants this run to keep pulling from that list;
 otherwise a fresh cold full-suite run is the fallback.
 
+
+---
+
+## Run 2, iteration 9 — FREE: the ui-gap-analysis.md record itself was stale
+
+`next_action` pointed at Gap 3 (command palette) as the next FREE candidate, flagging its `cmdk`
+dependency as something to surface explicitly before adding. Went to add it and found `cmdk`
+already in `hub/ui/package.json` and `CommandPalette.tsx` already wired into `App.tsx:526`,
+git-dated 2026-08-17 — built during run 1, with no line back to this exploration doc and no mention
+in either run's queue or decisions. This is the exact shape iteration 8 hit for Gap 6 (already
+built, doc said missing), so rather than re-discover each remaining gap piecemeal across future
+iterations, checked the whole list in one pass.
+
+**Result: five of seven gaps are done.** Gap 1 (markdown rendering — `MarkdownMessage.tsx`, wired
+into `AgentTimeline.tsx`'s three message branches), Gap 2 (tool-call icon + diff view —
+`toolVisual()` and `ToolEditDiff.tsx`, both live in `WorkRow`), Gap 3 (command palette, above), and
+Gap 5's per-turn half (this run's own APP2, iteration 6) are fully built. Gap 6 is substantially
+done per iteration 8. Checked Gap 7 (spend-limit/autonomy dial) directly rather than leaving it a
+"maybe": `hub/hub/model_catalog.py`'s `permission_mode` control already offers `manual`,
+`acceptEdits` (default), and `bypassPermissions` ("Full access") per run — a real in-composer
+autonomy dial, covering most of what the gap described. What's still actually missing, across the
+whole list: Gap 4 (persistent chat-surfaced plan/todo — unchanged, the biggest item), Gap 5's
+per-*conversation* rollup (vs. the per-turn display that now exists), and Gap 7's per-run spend
+limit specifically (`AccountingPanel`'s budget stays project-scoped).
+
+**Action taken.** Not a build — a correction. Added a dated addendum to
+`openspec/explorations/2026-08-16-ui-gap-analysis.md`, following the same pattern the document
+already used for its own 2026-08-16 Gap 5 addendum: leave the original per-gap text as the
+historical record, add a clearly dated section stating what's since changed and why, with file
+references. The alternative — silently editing the "no markdown dependency at all" line to reflect
+today's reality — would have erased the evidence trail; the addendum pattern doesn't.
+
+**Verification.** This is a documentation-only change; no source file was touched. Rather than
+assert the "DONE" claims from grep alone, ran the three most relevant vitest files
+(`markdownMessage.test.tsx`, `commandPalette.test.tsx`, `overviewPage.test.tsx`): 14/14 passed,
+confirming the components these claims rest on are not just present but currently exercised and
+green. The 11-minute hub pytest suite and the browser suite were not re-run — nothing they cover
+changed.
+
+Committed as `a5855a3`. `stop_at` is 13:00; roughly 1h30 of runway remains as of this iteration's
+close. Real remaining scope, smallest to largest: Gap 7's per-run spend limit (small, additive to
+the existing `permission_mode` control point), Gap 5's per-conversation rollup (small backend join
+plus a UI read), Gap 4's persistent plan/todo (flagged in the source document as architecturally the
+most expensive item on the list — worth an openspec-propose, not a same-iteration slice). A fresh
+cold full-suite run remains the fallback if none of those fit in the runway left.
