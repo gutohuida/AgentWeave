@@ -6,6 +6,100 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
+## [1.1.0] - 2026-08-19
+
+Two capabilities, and three bugs found by driving the product rather than reading it.
+
+### One shell beside a conversation
+
+Specification documents, the workspace file tree and the loops index each used to mean something
+different by "open on the right". They are one surface now, with one set of rules.
+
+- **A tab strip you control.** The plus affordance offers whatever is not already open. An index tab
+  launches a keyed detail tab for the item picked in it — a document tab is keyed by document id, so
+  it survives a rename rather than dangling.
+- **Opening a file replaces the file tree.** The tree is a launcher, and in a narrow column a tab
+  spent on the thing that only got you here is a tab wasted. The loops index deliberately does not
+  behave that way: it is a governance glance, not navigation, and stays open beside a drill-down.
+- **Tab configuration is per project; width is one global preference.** Persisted state is versioned
+  and reconciled against what still exists, and never restores an empty shell.
+- **File reading is bounded.** The content endpoint's allowlist matches the workspace listing
+  exactly, refuses oversized files rather than truncating them, and distinguishes binary content
+  before trying to render it.
+- The strip and the plus affordance are fully keyboard operable.
+
+### A loop writes its own queue
+
+A recurring job with a stated purpose and a stop condition is a **loop**, and a loop now carries
+work rather than just firing a message.
+
+- **Its queue is the tasks that name it**, written by exactly two mechanisms and no other: a
+  specification document it declares as its source, or its creator adding one directly. An agent
+  that is the loop's executor but not its creator is refused and told to use `ask_user` instead.
+- **A firing claims its current item before the turn begins**, deterministically, rather than
+  leaving the choice to the agent's judgement — and resumes an item a previous firing left
+  unfinished instead of stranding it.
+- **Continuity is by checkpoint, not by resumed session.** A loop refuses `session_mode="resume"`,
+  so every firing opens a new conversation and the previous firing's checkpoint is composed into the
+  next firing's briefing, bounded. A project that cannot produce a checkpoint is told so when the
+  loop is created, rather than leaving it to be discovered several firings later.
+- **Edits stage and apply at the next firing, never during one.** The loop panel shows each staged
+  value beside the one still in force, labelled in words, and says explicitly that a firing already
+  running keeps the definition it was briefed with.
+- **Loops and jobs are archivable, never deletable**, so the record of what ran survives. A running
+  loop cannot be archived at all, and how a loop ended is a distinct value rather than only a
+  written reason.
+- **Control over queue extension is per loop and delegable**, defaulting to the operator.
+- New MCP tool: `create_loop`. Refused outright without a stop condition — a loop that cannot stop
+  is not created.
+
+### Loop activity stays legible
+
+Because every firing opens a new conversation, an active loop would otherwise bury the threads you
+started. Measured on a real project: one agent, 20 conversations, 11 of them firings across 5 loops,
+interleaved by recency with the 9 that were typed, and nothing on the row telling them apart.
+
+- A conversation created by a firing **names the loop it came from** and links to that loop's
+  existing record. A plain scheduled job's conversation shows nothing, which is a distinction the
+  conversation's origin alone cannot make.
+- **Consecutive firings of one loop collapse into one expandable row.** Grouping is strictly
+  consecutive, so it never reorders a list sorted by recency. A firing waiting for you still says so
+  on the collapsed row, and the row opens itself if it holds the conversation you are reading.
+
+### Fixed
+
+- **Every relative time in the app was stale by the machine's UTC offset.** SQLite stores no
+  timezone, so datetimes came back naive and JavaScript read them as local time. An edit staged
+  seconds earlier rendered as "about 1 hour ago". Fixed at all 27 call sites, with a guard test so
+  the next component to render a timestamp cannot quietly reintroduce it.
+- **The context fill showed the wrong conversation.** An agent's context reading is one number
+  across every thread it owns, and the conversation header was reading it — so every conversation
+  showed whichever had reported most recently. Measured on real data: three conversations at 18.56%,
+  16.6% and 15.9% all displayed 15.9%.
+- **A refusal named a process with no mechanism behind it.** An agent told that adding to its own
+  loop's queue "needs operator approval" had no way to request it, and the operator never learned
+  anything was wanted. The message now names `ask_user` as the route out.
+- A firing interrupted by a crash could leave a loop reporting itself as still firing; it now
+  reconciles on restart.
+
+### Changed
+
+- **New projects start with checkpointing `offered`** rather than `off`. Existing projects are
+  untouched. Note that a checkpoint runner still has to be chosen before a checkpoint can actually
+  be produced — the mode defaults, the runner does not.
+- **`agentweave-ai` now requires `agentweave-hub>=1.1.0`.** The floor had been left at `1.0.0` since
+  it was introduced, which the release process describes as tracking the current version.
+- Brand marks (`simple-icons`) are used for runners and file types where one is actually published,
+  and only at a colour that clears a contrast floor against both light and dark backgrounds.
+
+### Not in this release
+
+- The Hub still serialises naive datetimes; the timestamp fix is consumer-side only. Correcting it
+  at the serialisation boundary would remove the class of bug rather than its instances.
+- An agent's request to extend a loop it does not control is not routed to the operator as a
+  one-click accept — it now knows to ask, which is not the same thing.
+
+---
 ## [1.0.1] - 2026-08-17
 
 Legibility, found by driving the product rather than reading it.
