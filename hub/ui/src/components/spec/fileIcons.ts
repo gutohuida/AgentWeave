@@ -11,10 +11,12 @@
  * same reason the file endpoint detects binary content by NUL byte rather than by extension
  * (design D7).
  *
- * Lucide carries no brand marks, so there is no literal Docker whale or Python logo available.
- * `file_container` for Docker and shape-based glyphs elsewhere are the closest honest mapping
- * inside the one icon system CLAUDE.md allows.
+ * An `icon` of `brand:<key>` is a real brand mark from simple-icons (a Docker whale, a Python
+ * logo); anything else is a lucide shape. Brand marks exist only where one is actually published —
+ * PowerShell, Java and C# have been withdrawn from simple-icons over trademark objections, so
+ * `.ps1`, `.java` and `.cs` keep a generic glyph rather than borrowing a near-enough logo.
  */
+import { brandHex } from '@/components/common/brandMarks'
 
 export interface FileKind {
   /** A name in `Icon`'s map. */
@@ -32,93 +34,93 @@ const DEFAULT_KIND: FileKind = { icon: 'description', colour: 'var(--text-3)', l
 
 /** Matched against the lowercased whole filename, before any extension rule. */
 const BY_FILENAME: Record<string, FileKind> = {
-  dockerfile: { icon: 'file_container', colour: 'var(--blue)', language: 'dockerfile' },
-  'docker-compose.yml': { icon: 'file_container', colour: 'var(--blue)', language: 'yaml' },
-  'docker-compose.yaml': { icon: 'file_container', colour: 'var(--blue)', language: 'yaml' },
-  '.dockerignore': { icon: 'file_container', colour: 'var(--blue)', language: null },
+  dockerfile: { icon: 'brand:docker', colour: 'var(--blue)', language: 'dockerfile' },
+  'docker-compose.yml': { icon: 'brand:docker', colour: 'var(--blue)', language: 'yaml' },
+  'docker-compose.yaml': { icon: 'brand:docker', colour: 'var(--blue)', language: 'yaml' },
+  '.dockerignore': { icon: 'brand:docker', colour: 'var(--blue)', language: null },
   makefile: { icon: 'file_config', colour: 'var(--amber)', language: 'makefile' },
   'cmakelists.txt': { icon: 'file_config', colour: 'var(--amber)', language: null },
-  '.gitignore': { icon: 'file_vcs', colour: 'var(--amber)', language: null },
-  '.gitattributes': { icon: 'file_vcs', colour: 'var(--amber)', language: null },
-  '.gitmodules': { icon: 'file_vcs', colour: 'var(--amber)', language: null },
+  '.gitignore': { icon: 'brand:git', colour: 'var(--amber)', language: null },
+  '.gitattributes': { icon: 'brand:git', colour: 'var(--amber)', language: null },
+  '.gitmodules': { icon: 'brand:git', colour: 'var(--amber)', language: null },
   '.env': { icon: 'file_lock', colour: 'var(--text-3)', language: 'ini' },
   '.env.example': { icon: 'file_lock', colour: 'var(--text-3)', language: 'ini' },
-  'package.json': { icon: 'file_package', colour: 'var(--red)', language: 'json' },
-  'package-lock.json': { icon: 'file_lock', colour: 'var(--text-3)', language: 'json' },
-  'pyproject.toml': { icon: 'file_package', colour: 'var(--red)', language: 'ini' },
+  'package.json': { icon: 'brand:npm', colour: 'var(--red)', language: 'json' },
+  'package-lock.json': { icon: 'brand:npm', colour: 'var(--text-3)', language: 'json' },
+  'pyproject.toml': { icon: 'brand:toml', colour: 'var(--red)', language: 'ini' },
   'requirements.txt': { icon: 'file_package', colour: 'var(--red)', language: null },
-  'cargo.toml': { icon: 'file_package', colour: 'var(--red)', language: 'ini' },
+  'cargo.toml': { icon: 'brand:toml', colour: 'var(--red)', language: 'ini' },
   'go.mod': { icon: 'file_package', colour: 'var(--red)', language: null },
   'go.sum': { icon: 'file_lock', colour: 'var(--text-3)', language: null },
-  'yarn.lock': { icon: 'file_lock', colour: 'var(--text-3)', language: null },
-  'pnpm-lock.yaml': { icon: 'file_lock', colour: 'var(--text-3)', language: 'yaml' },
+  'yarn.lock': { icon: 'brand:npm', colour: 'var(--text-3)', language: null },
+  'pnpm-lock.yaml': { icon: 'brand:npm', colour: 'var(--text-3)', language: 'yaml' },
   'license': { icon: 'description', colour: 'var(--text-3)', language: null },
-  'readme.md': { icon: 'file_markdown', colour: 'var(--purple)', language: 'markdown' },
+  'readme.md': { icon: 'brand:markdown', colour: 'var(--purple)', language: 'markdown' },
 }
 
 /** Matched against the lowercased extension, without the dot. */
 const BY_EXTENSION: Record<string, FileKind> = {
   // Web / TypeScript
-  ts: { icon: 'file_type', colour: 'var(--blue)', language: 'typescript' },
-  tsx: { icon: 'file_type', colour: 'var(--blue)', language: 'typescript' },
-  mts: { icon: 'file_type', colour: 'var(--blue)', language: 'typescript' },
-  cts: { icon: 'file_type', colour: 'var(--blue)', language: 'typescript' },
-  js: { icon: 'file_code', colour: 'var(--green)', language: 'javascript' },
-  jsx: { icon: 'file_code', colour: 'var(--green)', language: 'javascript' },
-  mjs: { icon: 'file_code', colour: 'var(--green)', language: 'javascript' },
-  cjs: { icon: 'file_code', colour: 'var(--green)', language: 'javascript' },
+  ts: { icon: 'brand:typescript', colour: 'var(--blue)', language: 'typescript' },
+  tsx: { icon: 'brand:typescript', colour: 'var(--blue)', language: 'typescript' },
+  mts: { icon: 'brand:typescript', colour: 'var(--blue)', language: 'typescript' },
+  cts: { icon: 'brand:typescript', colour: 'var(--blue)', language: 'typescript' },
+  js: { icon: 'brand:javascript', colour: 'var(--green)', language: 'javascript' },
+  jsx: { icon: 'brand:javascript', colour: 'var(--green)', language: 'javascript' },
+  mjs: { icon: 'brand:javascript', colour: 'var(--green)', language: 'javascript' },
+  cjs: { icon: 'brand:javascript', colour: 'var(--green)', language: 'javascript' },
   // Languages
-  py: { icon: 'file_code', colour: 'var(--green)', language: 'python' },
-  pyi: { icon: 'file_code', colour: 'var(--green)', language: 'python' },
-  rs: { icon: 'file_code', colour: 'var(--green)', language: 'rust' },
-  go: { icon: 'file_code', colour: 'var(--green)', language: 'go' },
-  rb: { icon: 'file_code', colour: 'var(--green)', language: 'ruby' },
+  py: { icon: 'brand:python', colour: 'var(--green)', language: 'python' },
+  pyi: { icon: 'brand:python', colour: 'var(--green)', language: 'python' },
+  rs: { icon: 'brand:rust', colour: 'var(--green)', language: 'rust' },
+  go: { icon: 'brand:go', colour: 'var(--green)', language: 'go' },
+  rb: { icon: 'brand:ruby', colour: 'var(--green)', language: 'ruby' },
   java: { icon: 'file_code', colour: 'var(--green)', language: 'java' },
-  kt: { icon: 'file_code', colour: 'var(--green)', language: 'kotlin' },
-  swift: { icon: 'file_code', colour: 'var(--green)', language: 'swift' },
-  c: { icon: 'file_code', colour: 'var(--green)', language: 'c' },
-  h: { icon: 'file_code', colour: 'var(--green)', language: 'c' },
-  cpp: { icon: 'file_code', colour: 'var(--green)', language: 'cpp' },
-  cc: { icon: 'file_code', colour: 'var(--green)', language: 'cpp' },
-  hpp: { icon: 'file_code', colour: 'var(--green)', language: 'cpp' },
+  kt: { icon: 'brand:kotlin', colour: 'var(--green)', language: 'kotlin' },
+  swift: { icon: 'brand:swift', colour: 'var(--green)', language: 'swift' },
+  c: { icon: 'brand:c', colour: 'var(--green)', language: 'c' },
+  h: { icon: 'brand:c', colour: 'var(--green)', language: 'c' },
+  cpp: { icon: 'brand:cplusplus', colour: 'var(--green)', language: 'cpp' },
+  cc: { icon: 'brand:cplusplus', colour: 'var(--green)', language: 'cpp' },
+  hpp: { icon: 'brand:cplusplus', colour: 'var(--green)', language: 'cpp' },
   cs: { icon: 'file_code', colour: 'var(--green)', language: 'csharp' },
-  php: { icon: 'file_code', colour: 'var(--green)', language: 'php' },
-  lua: { icon: 'file_code', colour: 'var(--green)', language: 'lua' },
+  php: { icon: 'brand:php', colour: 'var(--green)', language: 'php' },
+  lua: { icon: 'brand:lua', colour: 'var(--green)', language: 'lua' },
   // Shells
-  sh: { icon: 'terminal', colour: 'var(--green)', language: 'bash' },
-  bash: { icon: 'terminal', colour: 'var(--green)', language: 'bash' },
-  zsh: { icon: 'terminal', colour: 'var(--green)', language: 'bash' },
-  fish: { icon: 'terminal', colour: 'var(--green)', language: 'bash' },
+  sh: { icon: 'brand:gnubash', colour: 'var(--green)', language: 'bash' },
+  bash: { icon: 'brand:gnubash', colour: 'var(--green)', language: 'bash' },
+  zsh: { icon: 'brand:gnubash', colour: 'var(--green)', language: 'bash' },
+  fish: { icon: 'brand:gnubash', colour: 'var(--green)', language: 'bash' },
   ps1: { icon: 'terminal', colour: 'var(--green)', language: 'powershell' },
   psm1: { icon: 'terminal', colour: 'var(--green)', language: 'powershell' },
   bat: { icon: 'terminal', colour: 'var(--green)', language: 'dos' },
   cmd: { icon: 'terminal', colour: 'var(--green)', language: 'dos' },
   // Data / config
-  json: { icon: 'file_json', colour: 'var(--amber)', language: 'json' },
-  jsonc: { icon: 'file_json', colour: 'var(--amber)', language: 'json' },
-  yml: { icon: 'file_config', colour: 'var(--amber)', language: 'yaml' },
-  yaml: { icon: 'file_config', colour: 'var(--amber)', language: 'yaml' },
-  toml: { icon: 'file_config', colour: 'var(--amber)', language: 'ini' },
+  json: { icon: 'brand:json', colour: 'var(--amber)', language: 'json' },
+  jsonc: { icon: 'brand:json', colour: 'var(--amber)', language: 'json' },
+  yml: { icon: 'brand:yaml', colour: 'var(--amber)', language: 'yaml' },
+  yaml: { icon: 'brand:yaml', colour: 'var(--amber)', language: 'yaml' },
+  toml: { icon: 'brand:toml', colour: 'var(--amber)', language: 'ini' },
   ini: { icon: 'file_config', colour: 'var(--amber)', language: 'ini' },
   cfg: { icon: 'file_config', colour: 'var(--amber)', language: 'ini' },
   conf: { icon: 'file_config', colour: 'var(--amber)', language: 'ini' },
   properties: { icon: 'file_config', colour: 'var(--amber)', language: 'ini' },
-  xml: { icon: 'file_braces', colour: 'var(--purple)', language: 'xml' },
+  xml: { icon: 'brand:xml', colour: 'var(--purple)', language: 'xml' },
   csv: { icon: 'file_sheet', colour: 'var(--green)', language: null },
   tsv: { icon: 'file_sheet', colour: 'var(--green)', language: null },
-  sql: { icon: 'file_database', colour: 'var(--blue)', language: 'sql' },
-  db: { icon: 'file_database', colour: 'var(--blue)', language: null },
-  sqlite: { icon: 'file_database', colour: 'var(--blue)', language: null },
+  sql: { icon: 'brand:sqlite', colour: 'var(--blue)', language: 'sql' },
+  db: { icon: 'brand:sqlite', colour: 'var(--blue)', language: null },
+  sqlite: { icon: 'brand:sqlite', colour: 'var(--blue)', language: null },
   // Markup / styles
-  md: { icon: 'file_markdown', colour: 'var(--purple)', language: 'markdown' },
-  markdown: { icon: 'file_markdown', colour: 'var(--purple)', language: 'markdown' },
-  mdx: { icon: 'file_markdown', colour: 'var(--purple)', language: 'markdown' },
+  md: { icon: 'brand:markdown', colour: 'var(--purple)', language: 'markdown' },
+  markdown: { icon: 'brand:markdown', colour: 'var(--purple)', language: 'markdown' },
+  mdx: { icon: 'brand:markdown', colour: 'var(--purple)', language: 'markdown' },
   rst: { icon: 'file_markdown', colour: 'var(--purple)', language: null },
-  html: { icon: 'file_braces', colour: 'var(--purple)', language: 'xml' },
-  htm: { icon: 'file_braces', colour: 'var(--purple)', language: 'xml' },
-  css: { icon: 'file_style', colour: 'var(--purple)', language: 'css' },
-  scss: { icon: 'file_style', colour: 'var(--purple)', language: 'css' },
-  less: { icon: 'file_style', colour: 'var(--purple)', language: 'css' },
+  html: { icon: 'brand:html5', colour: 'var(--purple)', language: 'xml' },
+  htm: { icon: 'brand:html5', colour: 'var(--purple)', language: 'xml' },
+  css: { icon: 'brand:css', colour: 'var(--purple)', language: 'css' },
+  scss: { icon: 'brand:css', colour: 'var(--purple)', language: 'css' },
+  less: { icon: 'brand:css', colour: 'var(--purple)', language: 'css' },
   // Images and other binaries the viewer will refuse anyway — the icon still tells the truth in
   // the tree, which is where it matters.
   png: { icon: 'file_image', colour: 'var(--purple)', language: null },
@@ -157,8 +159,17 @@ export function fileIconFor(path: string): string {
   return fileKindFor(path).icon
 }
 
+/**
+ * What colour to draw the glyph.
+ *
+ * A brand mark wears its **own** colour — Docker blue, Python's blue-and-yellow reduced to one
+ * tone, Rust's near-black — because a brand colour is a fixed property of the mark and the whole
+ * point of showing one. It deliberately does not follow light/dark; the palette token on the same
+ * entry is the fallback for when a mark is missing, and for the lucide shapes that have no brand.
+ */
 export function fileColourFor(path: string): string {
-  return fileKindFor(path).colour
+  const kind = fileKindFor(path)
+  return brandHex(kind.icon) ?? kind.colour
 }
 
 export function fileLanguageFor(path: string): string | null {

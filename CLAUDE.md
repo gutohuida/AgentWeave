@@ -443,7 +443,23 @@ pending → assigned → in_progress → completed → under_review → approved
 5. Use the `Icon` component — it wraps `lucide-react` SVGs. The Material Symbols webfont was
    removed (it loaded `display=block` from a CDN and held every icon invisible until the request
    completed). The `name` API was kept so call sites did not change. **Do not reintroduce a second
-   icon system.**
+   icon *font*, and do not add a third icon source without the operator deciding it.**
+
+   **`simple-icons` is a sanctioned exception, decided by the operator 2026-08-19.** lucide
+   deliberately carries no brand marks, and neither do Heroicons, Phosphor or Tabler — so a
+   Dockerfile that looks like Docker is unobtainable from any UI icon set at any version. Brand
+   marks live in `hub/ui/src/components/common/brandMarks.ts` and are reached through the same
+   `Icon` component via a `brand:<key>` name, so there is still one call surface. The original
+   rule's *reasoning* was a webfont that blocked paint on a CDN request; these are bundled path
+   strings, so that failure mode is absent. Tree-shaking is load-bearing: importing 24 marks by
+   name costs ~15 kB gzip, the full 3,453 would be megabytes — never `import * from 'simple-icons'`.
+
+   Two rules that came out of shipping it: a brand mark is used **only where one is actually
+   published** (PowerShell, Java and C# were withdrawn upstream over trademark objections, so those
+   keep a generic lucide glyph rather than borrowing a near-enough logo), and a brand's own colour
+   is used **only when it clears a contrast floor against both backgrounds** — Markdown, JSON and
+   Rust are officially `#000000` and were invisible in dark mode for one build. `brandHex` computes
+   this and returns null to fall back to a palette token; the shape still carries the identity.
 
 ## When Compacting
 

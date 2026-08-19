@@ -1,4 +1,5 @@
 import React from 'react'
+import { BRAND_MARKS, BRAND_PREFIX } from './brandMarks'
 import {
   Activity,
   CircleAlert,
@@ -62,10 +63,8 @@ import {
   Wrench,
   X,
   Zap,
-  // File-type glyphs for the files tab's tree and tabs. Lucide dropped brand marks, so there is
-  // no literal Docker whale or Python logo to use — `Container` and the generic code/config
-  // shapes below are the closest honest equivalents, and staying inside lucide is what keeps
-  // CLAUDE.md's "one icon system" rule true.
+  // Generic file-type glyphs, used for the types simple-icons has no mark for (PowerShell, Java,
+  // C#, plain text) and as the fallback everywhere else. Real brand marks live in `brandMarks.ts`.
   Braces,
   Container,
   Database,
@@ -180,6 +179,7 @@ const ICONS: Record<string, LucideIcon> = {
   x: X,
 }
 
+
 const warnedNames = new Set<string>()
 
 interface IconProps {
@@ -275,6 +275,39 @@ export function ProviderMark({ provider, label, size = 14, className }: Provider
 }
 
 export function Icon({ name, size = 24, weight = 400, className, style }: IconProps) {
+  /* A `brand:` name renders a simple-icons mark instead of a lucide glyph. Handled here rather
+   * than in a separate component so every existing `<Icon name=…>` call site — the file tree, the
+   * tab strip, a file tab's own header — gains brand marks without being touched, and so there
+   * remains exactly one import site for iconography (the reason PROVIDER_MARKS also lives here).
+   *
+   * Brand marks are solid filled shapes, not stroked line icons, so `weight`/`strokeWidth` has no
+   * meaning for them and is ignored. They fill with `currentColor`, so a caller that sets a colour
+   * still wins; `brandHex` is what supplies the brand's own colour when the caller wants it. */
+  if (name.startsWith(BRAND_PREFIX)) {
+    const mark = BRAND_MARKS[name.slice(BRAND_PREFIX.length)]
+    if (!mark) {
+      if (!warnedNames.has(name)) {
+        warnedNames.add(name)
+        console.warn(`[Icon] no brand mark for "${name}"`)
+      }
+      return null
+    }
+    return (
+      <svg
+        width={size}
+        height={size}
+        viewBox="0 0 24 24"
+        fill="currentColor"
+        className={`shrink-0 select-none${className ? ' ' + className : ''}`}
+        style={style}
+        role="img"
+        aria-label={mark.title}
+      >
+        <path d={mark.path} />
+      </svg>
+    )
+  }
+
   const Glyph = ICONS[name]
 
   if (!Glyph) {
