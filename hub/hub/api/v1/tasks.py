@@ -361,7 +361,8 @@ async def _authorize_loop_task_creation(
             status_code=403,
             detail=(
                 "This loop has already fired at least once — adding directly to its own queue "
-                "now needs operator approval."
+                "now needs operator approval. Use ask_user to ask the operator to add it, "
+                "naming the task and why this loop needs it."
             ),
         )
 

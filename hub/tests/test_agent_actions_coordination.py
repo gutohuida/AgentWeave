@@ -285,7 +285,14 @@ async def test_loop_self_created_agent_gated_after_first_fire(app):
         json={"title": "self-after-fire", "loop_id": loop_id},
     )
     assert after_fire.status_code == 403
-    assert "operator" in after_fire.json()["detail"].lower()
+    detail = after_fire.json()["detail"]
+    assert "operator" in detail.lower()
+    # The refusal must name the way FORWARD, not just the wall. Driving 13.4 against a real agent
+    # on 2026-08-19 showed it read the old wording, restated it, and stopped: it was told approval
+    # was required and given no mechanism to request one, so no question ever reached the operator.
+    # Its two sibling refusals in this file already name their route ("use send_message to ask the
+    # creator"); this one named none.
+    assert "ask_user" in detail, f"the refusal names no route out: {detail!r}"
 
     async with async_session_factory() as session:
         created = (

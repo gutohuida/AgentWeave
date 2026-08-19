@@ -948,7 +948,7 @@ spec only, unchecked — CLAUDE.md: "Never mark a task complete on the strength 
 
 ## 13. Human-only verification
 
-- [ ] 13.1 **Does the claimed task actually match what the firing worked on?**
+- [x] 13.1 **Does the claimed task actually match what the firing worked on?**
 
       **Driven live 2026-08-19** (q2verify on the Haiku runner, trial Hub, two real firings). It
       did **not** match on the first attempt, and finding that is what this check exists for.
@@ -1051,7 +1051,7 @@ spec only, unchecked — CLAUDE.md: "Never mark a task complete on the strength 
       Have an agent that is a loop's executor but not its creator attempt to add a task; read the
       403's message as the agent would receive it — does it plausibly lead the agent to actually send
       the message, or does it read like a bare permission error?
-- [ ] 13.4 **The self-created-loop approval gate (D7) — does asking the operator actually work as a
+- [x] 13.4 **The self-created-loop approval gate (D7) — does asking the operator actually work as a
       real interaction?** Drive an agent through creating a loop for itself, letting it fire once,
       then attempting an addition and going through the resulting `ask_user` flow for real. Confirm
       the operator sees a legible question, not a bare "may I add a task."
@@ -1075,9 +1075,15 @@ spec only, unchecked — CLAUDE.md: "Never mark a task complete on the strength 
       `tasks.py:722` refuses a different action and *names the route out* — "Use `ask_user` to ask,
       and the task will be parked for you." The D7 refusal names no route.
 
-      **Operator's call:** make the refusal name `ask_user` (one line, matching the sibling
-      refusal), or build the routed extension-request path A1.3 describes. Left unfixed pending
-      that decision, since it changes what an agent is told to do next.
+      **Settled by the operator, 2026-08-19: the message fix.** The refusal now names its route —
+      "Use ask_user to ask the operator to add it, naming the task and why this loop needs it" —
+      matching the pattern its two sibling refusals in the same file already follow. The regression
+      test asserts the detail contains `ask_user`, not merely the word "operator", and was
+      mutation-checked: dropping the route text fails it by name.
+
+      **Deliberately NOT the routed extension-request path A1.3 describes.** An agent now knows how
+      to ask; whether the Hub should carry the request itself, park the task, and hand the operator
+      a one-click accept is a larger piece of work and remains open.
 ## 14. User test guide
 
 **Setup.** A project with at least one registered agent and the operator's agent-job allowance
