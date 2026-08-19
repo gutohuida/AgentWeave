@@ -167,7 +167,7 @@ async def _batch_loop_summaries(
     # human-only check 13.1 asks. `Task.updated` is scoped to non-pending rows there — see that
     # helper for the bug the scoping fixes. Imported inside the function, matching this module's
     # existing convention for `...scheduler` (get_scheduler does the same at three call sites).
-    from ...scheduler import _loop_queue_order
+    from ...scheduler import CLAIMABLE_LOOP_TASK_STATUSES, _loop_queue_order
 
     candidates_result = await session.execute(
         select(Task)
@@ -177,7 +177,7 @@ async def _batch_loop_summaries(
             # `task_transitions.py`'s `ENTRY_STATUSES` both already treat it as such) — D3's claim
             # sets exactly this status, so without it a freshly claimed task vanished from
             # `current_task` the moment a firing picked it up.
-            Task.status.in_(("in_progress", "blocked", "pending", "assigned")),
+            Task.status.in_(CLAIMABLE_LOOP_TASK_STATUSES),
         )
         .order_by(Task.loop_id, *_loop_queue_order())
     )

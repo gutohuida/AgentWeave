@@ -614,6 +614,94 @@ async def test_loop_fire_resumes_an_active_task_instead_of_claiming_another(
 
 
 @pytest.mark.asyncio
+async def test_loop_fire_resumes_an_assigned_task_rather_than_stranding_it(
+    app, auth_headers, bind_runner
+):
+    """13.1a, settled by the operator 2026-08-19: a firing resumes a claimed-but-unstarted task.
+
+    A firing claims by moving `pending -> assigned`; reaching `in_progress` needs the agent to
+    call `update_task` itself, which it may never do. While `assigned` was excluded from the claim
+    candidates, that task became invisible to every later firing -- and `_loop_stop_reason` still
+    counted it as open, since `TERMINAL_FOR_BINDING` is only `("approved", "rejected")`. The loop
+    could then neither claim it nor stop because of it. Demonstrated live on the trial Hub
+    (`loop-33deddaf`: three firings, nothing claimed, `stopped_at` still null).
+
+    So: the older `assigned` task is resumed, its status is NOT re-entered, and the newer pending
+    task is left alone.
+    """
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {"loop-agent-resume-assigned": {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    await bind_runner("loop-agent-resume-assigned", cli="claude")
+
+    fake_session = MagicMock()
+    fake_session.pid = 4466
+    fake_session.read.side_effect = [
+        '{"type":"result","subtype":"success","is_error":false,"session_id":"sess-resume"}\n',
+        "",
+    ]
+    fake_session.wait.return_value = 0
+
+    now = datetime.now(timezone.utc)
+    async with async_session_factory() as db:
+        job = await _make_job(db, suffix="resume-assigned", agent="loop-agent-resume-assigned")
+        loop = await _make_loop(db, job_id=job.id, purpose="resume rather than strand")
+        db.add(
+            Task(
+                id="task-resume-assigned",
+                project_id="proj-test",
+                title="claimed but never started",
+                status="assigned",
+                assignee="loop-agent-resume-assigned",
+                loop_id=loop.id,
+                created_at=now - timedelta(minutes=5),
+                updated=now - timedelta(minutes=5),
+            )
+        )
+        db.add(
+            Task(
+                id="task-resume-untouched",
+                project_id="proj-test",
+                title="newer, still pending",
+                status="pending",
+                loop_id=loop.id,
+                created_at=now,
+                updated=now,
+            )
+        )
+        await db.commit()
+
+    with patch(  # noqa: SIM117
+        "hub.api.v1.agent_trigger.PtySession.spawn", MagicMock(return_value=fake_session)
+    ):
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            scheduler = JobScheduler()
+            async with async_session_factory() as db:
+                fresh_job = await db.get(AIJob, job.id)
+                success = await scheduler._fire_job_internal(
+                    fresh_job, trigger="scheduled", session=db
+                )
+
+            for task in list(agent_trigger._background_runs):
+                await task
+
+    assert success is True
+
+    async with async_session_factory() as db:
+        resumed = await db.get(Task, "task-resume-assigned")
+        untouched = await db.get(Task, "task-resume-untouched")
+        # Resumed, not re-entered: an already-active task keeps its status (design D3).
+        assert resumed.status == "assigned"
+        assert resumed.assignee == "loop-agent-resume-assigned"
+        # And the pending one is NOT claimed alongside it -- that skipping is what stranded work.
+        assert untouched.status == "pending"
+        assert untouched.assignee is None
+
+
+@pytest.mark.asyncio
 async def test_loop_fire_with_empty_queue_claims_nothing_and_does_not_error(
     app, auth_headers, bind_runner
 ):

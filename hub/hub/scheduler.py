@@ -226,20 +226,38 @@ def _loop_queue_order() -> tuple:
     )
 
 
-async def _claim_loop_task(session: AsyncSession, loop: Loop) -> Optional[Task]:
-    """The queue item this firing works on (design D3): resume the loop's existing
-    `in_progress`/`blocked` task if one exists, else claim the oldest `pending` one.
+#: The statuses a loop's queue item can be in and still be the thing a firing works on.
+#: Shared with `_batch_loop_summaries` (`api/v1/jobs.py`) so the board and the firing cannot
+#: disagree about which item is current -- see `_loop_queue_order` for what happened the last time
+#: they did.
+#:
+#: `assigned` is in this set as of 2026-08-19, by operator decision, and its absence was a
+#: deadlock rather than an oversight. A firing claims a task by moving it `pending -> assigned`;
+#: reaching `in_progress` needs the agent to call `update_task` itself, which it may simply not do.
+#: With `assigned` excluded here, that task became invisible to every later firing -- while
+#: `_loop_stop_reason` still counted it as open, because `TERMINAL_FOR_BINDING` is only
+#: `("approved", "rejected")`. So the loop could neither claim it nor stop because of it, and fired
+#: forever doing nothing. Demonstrated live on the trial Hub (`loop-33deddaf`: three firings,
+#: nothing claimed, `stopped_at` still null) before this changed.
+#:
+#: The accepted cost is the mirror image: a task the agent genuinely cannot start is now re-claimed
+#: every firing, so the loop repeats one item instead of spinning on none. That is the more visible
+#: and more fixable of the two failures, which is why it was chosen.
+CLAIMABLE_LOOP_TASK_STATUSES: tuple = ("in_progress", "blocked", "assigned", "pending")
 
-    Deliberately mirrors `_batch_loop_summaries`'s "current item" derivation
-    (`api/v1/jobs.py`, design D7 of `many-named-loops`) rather than re-deriving the ordering:
-    same candidate statuses, same priority (an active task, most recently touched, beats an
-    untouched pending one; pending ties break oldest-first). Not factored into a shared
-    function — the two call sites differ in shape (one loop here vs. a batch of loops there),
-    and importing across the api/scheduler layering for three lines was not worth it.
+
+async def _claim_loop_task(session: AsyncSession, loop: Loop) -> Optional[Task]:
+    """The queue item this firing works on (design D3): resume the loop's existing active task
+    (`in_progress`, `blocked`, or `assigned`) if one exists, else claim the oldest `pending` one.
+
+    Shares both its candidate set (`CLAIMABLE_LOOP_TASK_STATUSES`) and its ordering
+    (`_loop_queue_order`) with `_batch_loop_summaries`'s "current item" derivation, so the board
+    and the firing answer the same question the same way -- they are the two halves of human-only
+    check 13.1, and it only means anything if they cannot drift.
     """
     result = await session.execute(
         select(Task)
-        .where(Task.loop_id == loop.id, Task.status.in_(("in_progress", "blocked", "pending")))
+        .where(Task.loop_id == loop.id, Task.status.in_(CLAIMABLE_LOOP_TASK_STATUSES))
         .order_by(*_loop_queue_order())
         .limit(1)
     )
@@ -790,10 +808,10 @@ class JobScheduler:
             if loop is not None:
                 claimed_task = await _claim_loop_task(session, loop)
                 if claimed_task is not None:
-                    # `pending` is the only entry status `_claim_loop_task` can return (its
-                    # candidate set mirrors `_batch_loop_summaries`, which never includes
-                    # `assigned`) — an already-active task is being resumed, not entered, so its
-                    # status stays untouched (design D3).
+                    # Only a `pending` task is *entered*; `assigned`/`in_progress`/`blocked` are
+                    # being resumed, so their status stays untouched (design D3). `assigned` became
+                    # reachable here on 2026-08-19 — see CLAIMABLE_LOOP_TASK_STATUSES — which is
+                    # exactly the resume case this branch already guarded for.
                     if claimed_task.status == "pending":
                         await apply_transition(session, claimed_task, "assigned", operator())
                     claimed_task.assignee = job.agent

@@ -972,7 +972,7 @@ spec only, unchecked — CLAUDE.md: "Never mark a task complete on the strength 
 
       *Still open, for the operator to settle (see 13.1a below).*
 
-- [ ] 13.1a **Should a firing resume an `assigned` task, or skip it?** Found while driving 13.1;
+- [x] 13.1a **Should a firing resume an `assigned` task, or skip it?** Found while driving 13.1;
       a behavioural question, not a defect to fix unilaterally.
 
       `_claim_loop_task`'s candidate set is `("in_progress", "blocked", "pending")` and its own
@@ -1004,7 +1004,19 @@ spec only, unchecked — CLAUDE.md: "Never mark a task complete on the strength 
       That failure mode argues strongly for including `assigned` in the claim query rather than
       leaving it out — but the alternative risk is the mirror image: a task the agent cannot start
       would then be re-claimed every firing, so the loop livelocks on one item instead of spinning
-      on none. Whichever way it goes, the two functions must agree about what `assigned` means. Taste and correctness
+      on none. Whichever way it goes, the two functions must agree about what `assigned` means.
+
+      **Settled by the operator, 2026-08-19: include it.** `assigned` joins
+      `CLAIMABLE_LOOP_TASK_STATUSES`, now a single constant shared by `_claim_loop_task` and
+      `_batch_loop_summaries` alongside `_loop_queue_order`, so the two can no longer drift on
+      either the candidate set or the ordering. The accepted cost — an unstartable task being
+      re-claimed every firing — is recorded next to the constant, because it is the more visible
+      and more fixable of the two failures rather than a free win.
+
+      Verified on the same live loop that demonstrated the deadlock (`loop-33deddaf`, queue
+      `{assigned: 2}` unchanged): the firing *before* the fix produced a briefing with no current
+      task at all, the firing *after* it produced `## Current task: BRAVO`. Regression test
+      mutation-checked — reverting the constant fails it by name. Taste and correctness
       both — drive one real loop through two firings against a live agent (not a mock), read the
       second firing's transcript, and confirm the task it references is the one the board shows as
       claimed for that firing. This is the one place this change's whole premise (a firing knows its
