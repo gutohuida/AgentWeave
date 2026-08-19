@@ -6,7 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from hub.db.engine import async_session_factory
 from hub.db.models import Project, Run, TurnUsage
 from hub.runner_events import AccountingSample
-from hub.usage_accounting import record_turn_usage
+from hub.usage_accounting import conversation_usage, record_turn_usage
 
 
 @pytest.mark.asyncio
@@ -124,3 +124,71 @@ async def test_record_turn_usage_is_idempotent_and_preserves_runner_telemetry(ap
         assert first.total_tokens == 120
         assert first.api_equivalent_usd_micros == 12_500
         assert first.allowance == {"five_hour": {"remaining_percent": 72}}
+
+
+@pytest.mark.asyncio
+async def test_conversation_usage_sums_only_that_conversations_runs(app) -> None:
+    async with async_session_factory() as session:
+        project = Project(id="proj-conv-usage", name="ConvUsage")
+        session.add(project)
+        session.add_all(
+            [
+                Run(
+                    id="run-conv-a1",
+                    project_id=project.id,
+                    agent="claude",
+                    conversation_id="conv-a",
+                ),
+                Run(
+                    id="run-conv-a2",
+                    project_id=project.id,
+                    agent="claude",
+                    conversation_id="conv-a",
+                ),
+                Run(
+                    id="run-conv-b1",
+                    project_id=project.id,
+                    agent="claude",
+                    conversation_id="conv-b",
+                ),
+            ]
+        )
+        await session.flush()
+        session.add_all(
+            [
+                TurnUsage(
+                    id="usage-conv-a1",
+                    run_id="run-conv-a1",
+                    project_id=project.id,
+                    agent="claude",
+                    status="measured",
+                    total_tokens=100,
+                ),
+                TurnUsage(
+                    id="usage-conv-a2",
+                    run_id="run-conv-a2",
+                    project_id=project.id,
+                    agent="claude",
+                    status="measured",
+                    total_tokens=50,
+                ),
+                TurnUsage(
+                    id="usage-conv-b1",
+                    run_id="run-conv-b1",
+                    project_id=project.id,
+                    agent="claude",
+                    status="measured",
+                    total_tokens=999,
+                ),
+            ]
+        )
+        await session.commit()
+
+        summary = await conversation_usage(session, project.id, "conv-a")
+        assert summary["total_tokens"] == 150
+        assert summary["measured_turns"] == 2
+        assert summary["unavailable_turns"] == 0
+
+        empty = await conversation_usage(session, project.id, "conv-nonexistent")
+        assert empty["total_tokens"] is None
+        assert empty["measured_turns"] == 0

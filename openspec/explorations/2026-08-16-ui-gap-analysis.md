@@ -259,6 +259,30 @@ Net: the only gaps with real, unclaimed scope left are Gap 4 (as originally size
 on the list) and the two narrowed remainders of Gaps 5 and 7 (per-conversation cost rollup; per-run
 spend limit). Everything else this document originally flagged is built and live.
 
+## Addendum, 2026-08-19 (later), FREE iteration 10 — Gap 5's per-conversation rollup built
+
+The per-conversation half of Gap 5, named above as still open, is now done. `usage_accounting.py`
+gained `conversation_usage()`, joining `TurnUsage` to `Run` on `run_id` to aggregate every turn
+whose `Run.conversation_id` matches — deliberately not capped like `accounting_snapshot`'s
+`recent_turns` (limit 50 across the whole project), since a conversation's own turns fall out of
+that window long before the conversation is done. Exposed at
+`GET /api/v1/projects/{project_id}/accounting/conversations/{conversation_id}`. The UI reads it via
+a new `useConversationAccounting()` hook and shows a small "N,NNN tokens" badge in
+`AgentOutputPanel`'s conversation header, next to the status chip, once the open conversation has at
+least one measured turn (`AgentOutputPanel.tsx:836`).
+
+Live-verified against real multi-turn usage on the trial Hub (not just the component test's
+fixture): `proj-b44fac0c`'s conv-aa40eb38 ("Capital of France") has 3 measured turns; the API
+returns `total_tokens: 119182` and the rendered badge reads "119,182 tokens" — a genuine rollup a
+single `recent_turns` row could not have shown. `proj-5e960453` (this repo's own registration) still
+has zero measured turns, so the badge is unverified live *there*, same caveat APP2 recorded for the
+per-turn display.
+
+Gap 7's remaining half — a spend limit at run/turn grain, not just project-wide — was NOT attempted
+this iteration; it needs enforcement (pausing a run mid-budget), a materially different and riskier
+shape than this additive, read-only rollup. Gap 4 (persistent plan/todo) remains the only fully
+untouched item on the list.
+
 ## 3. What this exploration deliberately does not do
 
 - No proposal, design, or tasks — per Q7's own `detail`, survey first.

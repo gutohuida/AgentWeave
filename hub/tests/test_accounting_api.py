@@ -202,8 +202,80 @@ async def test_budget_patch_accepts_positive_or_null_and_rejects_nonpositive(
 
 
 @pytest.mark.asyncio
+async def test_conversation_accounting_sums_that_conversation_and_ignores_the_project_cap(
+    app, auth_headers
+) -> None:
+    async with async_session_factory() as session:
+        project = await session.get(Project, "proj-test")
+        assert project is not None
+        # More rows than `accounting_snapshot`'s `recent_limit` default (50) — a conversation
+        # rollup has to be a real aggregate, not a slice of the project-wide recent window.
+        for index in range(60):
+            run_id = f"run-conv-many-{index}"
+            session.add(
+                Run(id=run_id, project_id=project.id, agent="claude", conversation_id="conv-many")
+            )
+            session.add(
+                TurnUsage(
+                    id=f"usage-conv-many-{index}",
+                    run_id=run_id,
+                    project_id=project.id,
+                    agent="claude",
+                    status="measured",
+                    total_tokens=10,
+                )
+            )
+        session.add(
+            Run(
+                id="run-conv-other",
+                project_id=project.id,
+                agent="claude",
+                conversation_id="conv-other",
+            )
+        )
+        session.add(
+            TurnUsage(
+                id="usage-conv-other",
+                run_id="run-conv-other",
+                project_id=project.id,
+                agent="claude",
+                status="measured",
+                total_tokens=777,
+            )
+        )
+        await session.commit()
+
+    response = await app.get(
+        "/api/v1/projects/proj-test/accounting/conversations/conv-many", headers=auth_headers
+    )
+    assert response.status_code == 200
+    assert response.json() == {
+        "input_tokens": None,
+        "output_tokens": None,
+        "total_tokens": 600,
+        "measured_turns": 60,
+        "unavailable_turns": 0,
+        "api_equivalent_usd_micros": None,
+    }
+
+
+@pytest.mark.asyncio
+async def test_conversation_accounting_unknown_conversation_is_zero_not_404(
+    app, auth_headers
+) -> None:
+    response = await app.get(
+        "/api/v1/projects/proj-test/accounting/conversations/conv-nonexistent", headers=auth_headers
+    )
+    assert response.status_code == 200
+    assert response.json()["measured_turns"] == 0
+
+
+@pytest.mark.asyncio
 async def test_accounting_routes_require_auth(app) -> None:
     assert (await app.get("/api/v1/projects/proj-test/accounting")).status_code == 401
     assert (
         await app.patch("/api/v1/projects/proj-test/accounting/budget", json={"token_budget": 10})
+    ).status_code == 401
+    assert (
+        await app.get("/api/v1/projects/proj-test/accounting/conversations/conv-many")
     ).status_code == 401

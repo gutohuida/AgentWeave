@@ -11,7 +11,7 @@ from ...auth import get_project
 from ...db.engine import get_session
 from ...db.models import InboundQueueEntry, Project
 from ...sse import sse_manager
-from ...usage_accounting import accounting_snapshot, budget_state
+from ...usage_accounting import accounting_snapshot, budget_state, conversation_usage
 from ...utils import persist_event
 
 router = APIRouter(prefix="/accounting", tags=["accounting"])
@@ -28,6 +28,16 @@ async def get_accounting(
 ):
     project_id, _ = project
     return await accounting_snapshot(session, project_id)
+
+
+@router.get("/conversations/{conversation_id}")
+async def get_conversation_accounting(
+    conversation_id: str,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    project_id, _ = project
+    return await conversation_usage(session, project_id, conversation_id)
 
 
 @router.patch("/budget")

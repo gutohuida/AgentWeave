@@ -63,6 +63,20 @@ export function useAccounting() {
   })
 }
 
+/** The whole-conversation rollup — not capped like `AccountingSnapshot.recent_turns`, which
+ *  only holds the project's most recent 50 turns across every conversation and agent. */
+export function useConversationAccounting(conversationId: string | null) {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  return useQuery<UsageSummary>({
+    queryKey: ['project', projectId, 'accounting', 'conversation', conversationId],
+    queryFn: () =>
+      getJson<UsageSummary>(
+        `/api/v1/projects/${projectId}/accounting/conversations/${conversationId}`,
+      ),
+    enabled: isConfigured && !!projectId && !!conversationId,
+  })
+}
+
 export function useUpdateTokenBudget() {
   const queryClient = useQueryClient()
   const { selectedProjectId: projectId } = useConfigStore()

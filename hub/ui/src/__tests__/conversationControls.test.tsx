@@ -12,6 +12,7 @@ let recordedEntries: TimelineEntry[] = []
 let sseConnectionState: 'closed' | 'connecting' | 'open' | 'reconnecting' = 'open'
 let roster: AgentSummary[] = []
 let launchability: Record<string, { present: boolean; authorized: boolean; runnable: boolean; reason?: string }> = {}
+let conversationUsage: { total_tokens: number | null; measured_turns: number } | undefined = undefined
 
 vi.mock('@/api/agents', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/agents')>()
@@ -83,7 +84,10 @@ vi.mock('@/api/modelCatalog', async (importOriginal) => {
   return { ...actual, useModelCatalog: () => ({ data: undefined }) }
 })
 
-vi.mock('@/api/accounting', () => ({ useAccounting: () => ({ data: undefined }) }))
+vi.mock('@/api/accounting', () => ({
+  useAccounting: () => ({ data: undefined }),
+  useConversationAccounting: () => ({ data: conversationUsage }),
+}))
 
 vi.mock('@/api/charters', () => ({
   useCharters: () => ({ data: [], isLoading: false }),
@@ -134,6 +138,7 @@ describe('conversation controls — the resting header', () => {
       claude: { present: true, authorized: true, runnable: true },
     }
     sseConnectionState = 'open'
+    conversationUsage = undefined
     fetchMock.mockReset()
     useConfigStore.setState({
       apiKey: 'aw_live_TESTKEY',
@@ -257,6 +262,43 @@ describe('conversation controls — context usage placement', () => {
     render(<AgentOutputPanel agent={agentWithUsage} conversationId="conv-old" />)
     await waitFor(() => expect(screen.getByTestId('session-continuity')).toHaveTextContent('A conversation'))
     expect(screen.getByTestId('context-usage')).toBeInTheDocument()
+  })
+})
+
+describe('conversation controls — whole-conversation token total', () => {
+  beforeEach(() => {
+    outputLines = []
+    conversations = [conversation]
+    recordedEntries = []
+    roster = [idleAgent]
+    launchability = { claude: { present: true, authorized: true, runnable: true } }
+    fetchMock.mockReset()
+    useConfigStore.setState({
+      apiKey: 'aw_live_TESTKEY',
+      hubUrl: 'http://hub.test',
+      selectedProjectId: 'proj-test',
+      isConfigured: true,
+      bootstrapState: 'ready',
+    })
+  })
+
+  it('renders nothing while the rollup has not loaded or has no measured turns', async () => {
+    conversationUsage = undefined
+    render(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)
+    await waitFor(() => expect(screen.getByTestId('session-continuity')).toHaveTextContent('A conversation'))
+    expect(screen.queryByTestId('conversation-token-total')).not.toBeInTheDocument()
+
+    conversationUsage = { total_tokens: null, measured_turns: 0 }
+    const { rerender } = render(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)
+    rerender(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)
+    expect(screen.queryByTestId('conversation-token-total')).not.toBeInTheDocument()
+  })
+
+  it('shows the running total once the conversation has at least one measured turn', async () => {
+    conversationUsage = { total_tokens: 42_300, measured_turns: 3 }
+    render(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)
+    await waitFor(() => expect(screen.getByTestId('session-continuity')).toHaveTextContent('A conversation'))
+    expect(screen.getByTestId('conversation-token-total')).toHaveTextContent('42,300 tokens')
   })
 })
 

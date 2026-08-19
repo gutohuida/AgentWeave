@@ -29,7 +29,7 @@ import {
   useCheckpoints,
 } from '@/api/checkpoints'
 import { ApiError } from '@/api/client'
-import { useAccounting } from '@/api/accounting'
+import { useAccounting, useConversationAccounting } from '@/api/accounting'
 import { useConfigStore } from '@/store/configStore'
 import { AgentTimeline } from './AgentTimeline'
 import { BannerStack, type ConversationBanner } from './BannerStack'
@@ -311,6 +311,7 @@ export function AgentOutputPanel({
     : EMPTY_CONTROLS
   const { data: timelineEvents = [] } = useAgentTimeline(agent.name)
   const { data: accounting } = useAccounting()
+  const { data: conversationUsage } = useConversationAccounting(currentConversationId ?? null)
   const { data: queueStatus } = useQueueStatus(agent.name)
   /** Undelivered entries addressed to the conversation on screen. A checkpoint handed to a
    *  successor is exactly this, which is why the Continue control keys on it rather than on
@@ -828,6 +829,20 @@ export function AgentOutputPanel({
           )}
           {agent.status}
         </span>
+        {/* The conversation's own running total — distinct from the per-turn figure beside each
+            "Worked for Xs" line, and from the project-wide total in the Budgets panel. Waits for
+            at least one measured turn so a brand-new or all-unavailable conversation shows
+            nothing rather than a misleading "0 tokens". */}
+        {conversationUsage && conversationUsage.measured_turns > 0 && (
+          <span
+            data-testid="conversation-token-total"
+            className="shrink-0"
+            style={{ fontSize: 11, color: 'var(--text-3)' }}
+            title="Total tokens used across this conversation"
+          >
+            {conversationUsage.total_tokens?.toLocaleString()} tokens
+          </span>
+        )}
         <div className="min-w-0 flex-1" />
         {onTogglePanel && (
           <Button
