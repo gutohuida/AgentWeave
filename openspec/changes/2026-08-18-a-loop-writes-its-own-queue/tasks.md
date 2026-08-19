@@ -990,7 +990,21 @@ spec only, unchecked — CLAUDE.md: "Never mark a task complete on the strength 
       6.1 says "select the queue's existing active/non-terminal task if one exists", and D21 says
       `assigned` is a live status, which together argue the scheduler should include it. But doing
       so changes when a loop resumes versus advances, so it is the operator's call rather than a
-      silent fix. Taste and correctness
+      silent fix.
+
+      **The consequence is worse than a stranded task, and was demonstrated live on 2026-08-19.**
+      `_loop_stop_reason` counts a queue as empty using `TERMINAL_FOR_BINDING`, which is only
+      `("approved", "rejected")` — so an `assigned` task counts as **open**. The two functions
+      therefore deadlock: the claim query cannot see `assigned`, and the stop condition will not
+      fire while one exists. `loop-33deddaf` on the trial Hub has `queue: {"assigned": 2}` and
+      `stop_when_queue_empties: true`; it has now fired three times, claimed nothing new each time,
+      and still reports `stopped_at: null` / `ending_state: null`. It will fire on its cron forever,
+      doing nothing, and can never satisfy its own stop condition.
+
+      That failure mode argues strongly for including `assigned` in the claim query rather than
+      leaving it out — but the alternative risk is the mirror image: a task the agent cannot start
+      would then be re-claimed every firing, so the loop livelocks on one item instead of spinning
+      on none. Whichever way it goes, the two functions must agree about what `assigned` means. Taste and correctness
       both — drive one real loop through two firings against a live agent (not a mock), read the
       second firing's transcript, and confirm the task it references is the one the board shows as
       claimed for that firing. This is the one place this change's whole premise (a firing knows its
@@ -1639,7 +1653,13 @@ two files touched here).
       Not whether both are shown, but whether it is obvious which is in force right now.
 - [ ] A6.2 **Is the refusal of a late task helpful or merely correct?** Does it read as the product
       helping, or as it saying no?
-- [ ] A6.3 **Is delegating control discoverable without being easy to do by accident?**
+- [x] A6.3 **Is delegating control discoverable without being easy to do by accident?**
+      **Not applicable for now — operator decision, 2026-08-19.** Delegation exists only as
+      `POST /projects/{id}/loops/{loop_id}/control`; there is no operator-facing affordance, so
+      there is nothing to judge for discoverability. The operator's call was "only the endpoint
+      for now is enough". A1.2's behaviour is implemented and tested at the API layer; this
+      check becomes live again if a UI control is ever added, and should be reopened then rather
+      than treated as permanently settled.
 - [x] A6.4 **Does a loop's history read as a story or as a log?** It is the governance surface; if it
       cannot be skimmed it will not be read.
 
