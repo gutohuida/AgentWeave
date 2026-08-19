@@ -1,1 +1,1 @@
-handoff-0059-2026-08-19-1951-both-changes-done-but-two-and-a-loop-marker-queued.md
+handoff-0060-2026-08-19-2255-loop-traceability-shipped-and-v1-1-0-published.md
