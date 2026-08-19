@@ -77,17 +77,30 @@ class ProjectLifecycleService:
         marker = _read_marker(canonical.path)
         if marker is not None:
             marked_project = await self.session.get(Project, marker["project_id"])
-            if marked_project is not None and not register_copy_as_new:
-                await self._guard_relocation(marked_project, canonical)
-                _observe(marked_project, canonical)
-                await self.session.commit()
-                seed_repo_excludes(canonical.path)
-                return marked_project
-            if not register_copy_as_new:
-                raise ProjectIdentityConflict(
-                    "marked directory is a copied or orphaned project identity; "
-                    "register the copy explicitly as new"
+            if marked_project is not None:
+                if not register_copy_as_new:
+                    await self._guard_relocation(marked_project, canonical)
+                    _observe(marked_project, canonical)
+                    await self.session.commit()
+                    seed_repo_excludes(canonical.path)
+                    return marked_project
+            elif not register_copy_as_new:
+                project = Project(
+                    id=marker["project_id"],
+                    name=name or canonical.path.name,
+                    charters_seeded=False,
                 )
+                self.session.add(project)
+                await self._seed_new_project(project)
+                _observe(project, canonical)
+                await self._write_marker_and_commit(project, canonical.path)
+                seed_repo_excludes(canonical.path)
+                logger.info(
+                    "project_adopted project_id=%s path=%s",
+                    project.id,
+                    canonical.path,
+                )
+                return project
 
         project = None
         if marker is None and _allow_legacy_binding:

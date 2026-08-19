@@ -98,6 +98,67 @@ async def test_copied_marker_conflicts_until_explicitly_registered_as_new(app, t
 
 
 @pytest.mark.asyncio
+async def test_orphaned_marker_is_adopted_under_its_own_id(app, tmp_path) -> None:
+    """A marker naming a project id this database has never seen (case 3) must be
+    adopted under that same id rather than refused, and seeded like a new project.
+    """
+    directory = tmp_path / "orphan"
+    directory.mkdir()
+    orphan_id = "proj-orphanedid01"
+    marker_path = directory / PROJECT_MARKER_PATH
+    marker_path.parent.mkdir(parents=True)
+    marker_path.write_text(json.dumps({"version": 1, "project_id": orphan_id}), encoding="utf-8")
+
+    async with async_session_factory() as session:
+        adopted = await ProjectLifecycleService(session).open_existing(directory)
+
+    assert adopted.id == orphan_id
+    assert adopted.charters_seeded is True
+    assert _marker(directory)["project_id"] == orphan_id
+
+    async with async_session_factory() as session:
+        stored = await session.get(Project, orphan_id)
+        runner_count = await session.scalar(
+            select(func.count()).select_from(Runner).where(Runner.project_id == orphan_id)
+        )
+        charter_count = await session.scalar(
+            select(func.count()).select_from(Charter).where(Charter.project_id == orphan_id)
+        )
+    assert stored is not None
+    assert stored.working_directory == str(directory.resolve())
+    assert runner_count == 2
+    assert charter_count and charter_count > 0
+
+
+@pytest.mark.asyncio
+async def test_deleted_project_directory_is_adopted_back_under_the_same_id(app, tmp_path) -> None:
+    """`delete()` never touches the filesystem, so the marker survives. Reopening the
+    same directory afterward must restore the original id rather than being refused.
+    """
+    directory = tmp_path / "delete-then-reopen"
+    directory.mkdir()
+
+    async with async_session_factory() as session:
+        service = ProjectLifecycleService(session)
+        project = await service.open_existing(directory)
+        original_id = project.id
+        await service.delete(original_id)
+
+    async with async_session_factory() as session:
+        assert await session.get(Project, original_id) is None
+
+    async with async_session_factory() as session:
+        reopened = await ProjectLifecycleService(session).open_existing(directory)
+
+    assert reopened.id == original_id
+    async with async_session_factory() as session:
+        runner_count = await session.scalar(
+            select(func.count()).select_from(Runner).where(Runner.project_id == original_id)
+        )
+    assert runner_count == 2
+
+
+@pytest.mark.asyncio
 async def test_active_run_blocks_relocation(app, tmp_path) -> None:
     original = tmp_path / "original"
     relocated = tmp_path / "relocated"

@@ -109,3 +109,84 @@ the no-restart limit.
 **Driver verified live.** The scheduled task fired at 23:28:03 and stood down with
 `Heartbeat is 1.7 min old (grace 25) - a live session holds the branch`. The interlock works; the
 2026-08-15 failure mode (a session-bound scheduler dying with the session) does not apply here.
+
+## Iteration 2 — P2, adopt an orphaned project marker (2026-08-19T23:53+01:00)
+
+**Done, verified, committed.** This is the item the operator named as the point of the night:
+"I should be able to open any agentweave project from any agentweave app that I want."
+
+**Openspec first, per the queue item and STATE.json's `pre_authorised`.** Ran
+`/openspec-propose` against capability `local-project-workspace` (the queue text said
+`local-multi-project-workspace`; that capability does not exist — `openspec/specs/` only has
+`local-project-workspace`, the one archived from `2026-08-03-local-multi-project-workspace`. Used
+the real name.). `openspec new change` rejects a name starting with a digit, so the change is
+`openspec/changes/portable-project-identity/` rather than a date-prefixed name — consistent with
+this repo's existing archived changes, whose date prefixes are applied by the archive step, not
+present at proposal time.
+
+Wrote `proposal.md`, `design.md`, and a delta `specs/local-project-workspace/spec.md` that adds
+two scenarios to "Projects have stable directory-backed identity" — orphaned-marker adoption, and
+delete-then-reopen — and narrows the existing "A marker was copied" scenario's WHEN clause to
+state explicitly that it fires only when the opening database already holds a row for the marker's
+id (case 2). `npx openspec validate --changes --strict` passed before any implementation code was
+touched, as the brief required.
+
+**Design decision worth flagging for review:** adoption is recorded with a `logger.info` line
+(`event="project_adopted"`, id, path) rather than a new table or column. The codebase's own
+observability pattern for this kind of thing is stdlib `logging` (`CLAUDE.md` "Logging" section);
+no project-lifecycle event table exists today, and one new code path did not seem to justify
+starting one. If the operator wants adoption surfaced in the UI later (e.g. a project badge), that
+needs a real schema decision and is out of scope here — recorded as an Open Question in design.md.
+
+**Implementation.** `hub/hub/project_lifecycle.py` `open_existing`: the marker-present branch now
+has three shapes instead of two-and-a-raise:
+- `marked_project is not None`, not `register_copy_as_new` → unchanged (guard, observe, return).
+- `marked_project is not None`, `register_copy_as_new` → unchanged (falls through to the
+  brand-new-id path below, exactly as before).
+- `marked_project is None`, not `register_copy_as_new` → **new**: construct `Project(id=marker
+  ["project_id"], ...)`, seed via the existing `_seed_new_project`, observe, write marker, commit,
+  log, return. This is case 3 — the only branch this change touches.
+- `marked_project is None`, `register_copy_as_new` → unchanged (falls through to the same
+  brand-new-id path; register-copy-as-new never had a reason to look at the orphan's id).
+
+Traced all four combinations against the pre-change code before writing the fix, specifically to
+confirm the register-copy-as-new behaviour for a marker whose project *is* absent (a combination
+the old code handled but no test exercised) is unchanged by the refactor.
+
+**Tests, mutation-checked.** Two new tests in `hub/tests/test_project_lifecycle.py`:
+`test_orphaned_marker_is_adopted_under_its_own_id` (writes a marker naming a fabricated id no row
+exists for, opens it, asserts the returned AND the re-queried project both carry that id, with
+runners and charters seeded) and `test_deleted_project_directory_is_adopted_back_under_the_same_id`
+(open, delete, reopen the same directory, assert the id survives and reseeding happened). Reverted
+`project_lifecycle.py` via `git stash` and reran: both new tests failed with the old
+`ProjectIdentityConflict`, the other 10 tests in the file untouched — the correct signature.
+Restored and reran green. The existing case-2 guard test,
+`test_copied_marker_conflicts_until_explicitly_registered_as_new`, was run unedited and stayed
+green — it doubles as task 3.2's "case 2 still refused" coverage, so no near-duplicate test was
+added; recorded in `tasks.md` instead.
+
+**Measured:** `pytest hub/tests/test_project_lifecycle.py hub/tests/test_project_persistence.py -v`
+via the Python 3.11 interpreter at `C:\Users\huida\AppData\Local\Programs\Python\Python311\
+python.exe` (the plain `python` on this shell's PATH lacks `pytest_asyncio` — the driver's own
+prior runs must have used a different interpreter than the shell default; worth a decisions-for-
+user note if it recurs) — **19 passed** (17 before, +2 new). `ruff check` clean on both changed
+files. `black --check` initially flagged one line in the new test (over the line-length limit);
+reformatted and reconfirmed clean. `npx openspec validate --changes --strict` — 1 passed / 0 failed
+— reran after implementation, not just before.
+
+**Not done, and why.** `tasks.md` sections 1-4 are all checked, each with what was actually
+verified noted inline rather than left as a bare checkbox — no task was marked complete on the
+strength of a plan existing. Not run: the full `hub/tests/` suite, `mypy`, `eslint`/`tsc` (this
+iteration touched no TypeScript), and no browser check — P2 has no UI surface of its own; the
+Add-project dialog that calls `open_existing` was already exercised and fixed in `75c7685`, and
+retesting it live is blocked tonight by the no-Hub-restart limit exactly as it was for P1.
+
+**What a reviewer should distrust.** The adoption log line is unverified beyond "the call site is
+reached" — no test asserts on log output or its format, since nothing downstream parses it yet.
+The `orphan_id` fixture (`"proj-orphanedid01"`) is a hand-typed string, not one `short_id()` would
+produce; harmless for what the test checks (id equality, row existence) but worth knowing if a
+future test wants to assert format validity too.
+
+**Next.** `current` set to `P3` — tests for the two things committed interactively before this run
+began (`apiErrorCode`, the `register_copy_as_new` UI affordance). No blockers carried forward from
+P2 beyond the Open Question already in `design.md`.

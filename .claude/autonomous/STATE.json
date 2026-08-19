@@ -8,7 +8,7 @@
   "stop_at": "2026-08-20T08:00:00+01:00",
   "stop_when_queue_empties": false,
   "run": 1,
-  "iteration": 1,
+  "iteration": 2,
   "session_stopped": false,
   "prepared_by": "Interactive session 2026-08-19T22:55-23:25+01:00, via /autonomous-prep. Both headline defects were reproduced or traced to a named line before being queued — item 1 by reading the render path end to end, item 2 by exercising the live API against two databases. Runway verified rather than assumed: playwright present, `pytest tests/test_project_lifecycle.py tests/test_project_persistence.py` 17 passed, vitest 1152 passed, tsc clean, working tree clean.",
   "operator_intent_verbatim": "Open any agentweave project with any agentweave app. Also: 'I think I clicked to create an agent in one project but it was actually creating into another project. Something weird there.'",
@@ -62,7 +62,7 @@
     {
       "id": "P2",
       "title": "Open any AgentWeave project from any AgentWeave app — adopt an orphaned marker instead of refusing",
-      "status": "pending",
+      "status": "done",
       "severity": "high — this is the item the operator named as the point of the night",
       "system": "openspec — this is a behaviour change to a specified capability, so it gets a proper change with a spec delta and a design rationale. The operator chose this explicitly over fixing it directly.",
       "evidence": "hub/hub/project_lifecycle.py open_existing has three cases. Case 1 (existing_by_path, lines 67-75) opens. Case 2 (marker names a project THIS database has, lines 78-85) runs _guard_relocation and opens or correctly refuses a copy. Case 3 (marker names a project this database does NOT have, lines 86-90) refuses with 'marked directory is a copied or orphaned project identity'. Case 3 is the defect.",
@@ -70,7 +70,8 @@
       "also_fixes": "Delete-then-re-add. ProjectLifecycleService.delete (project_lifecycle.py:156-167) is explicitly documented never to touch the filesystem (design D4), so the marker survives a delete naming an id the database just dropped. Re-adding the same folder hits case 3 and is refused. With adoption it works AND restores the same project id. Do not change D4 to fix this — adoption is the fix.",
       "do": "Propose the change (/openspec-propose), write the spec delta against local-multi-project-workspace with the rejection reason for the current behaviour recorded, then implement: case 3 creates the project row with the MARKER'S id, seeds it as _seed_new_project does (runners + starter charters), records an adoption event, and opens.",
       "verify": "New tests: (a) an orphaned marker is adopted and the project keeps its original id; (b) delete-then-reopen returns the same id; (c) two directories carrying the same marker — the second is still refused by _guard_relocation. Existing test_copied_marker_conflicts_until_explicitly_registered_as_new (hub/tests/test_project_lifecycle.py:75) must stay green untouched — it exercises case 2, not case 3, and is the proof the copy guard survived.",
-      "note": "Case 3 appears to have no test of its own today. Confirm that while implementing; if true, say so in the change's design as part of why the behaviour went unquestioned."
+      "note": "Case 3 appears to have no test of its own today. Confirm that while implementing; if true, say so in the change's design as part of why the behaviour went unquestioned.",
+      "outcome": "Confirmed: case 3 had no test before this change. Proposed and validated openspec change at openspec/changes/portable-project-identity/ (capability is local-project-workspace, not local-multi-project-workspace as this item's title implied -- that capability name does not exist). Implemented in hub/hub/project_lifecycle.py open_existing: marked_project is None + not register_copy_as_new now constructs the Project row with the marker's own id, seeds it via the existing _seed_new_project, observes/writes-marker/commits, logs an adoption event, and returns -- instead of raising ProjectIdentityConflict. Two new mutation-checked tests in hub/tests/test_project_lifecycle.py (test_orphaned_marker_is_adopted_under_its_own_id, test_deleted_project_directory_is_adopted_back_under_the_same_id). All 19 tests in test_project_lifecycle.py + test_project_persistence.py pass; the existing case-2 copy-guard test is untouched and green. ruff and black clean. openspec validate --changes --strict passes. Not verified live in a browser (blocked by the no-Hub-restart limit, same as P1)."
     },
     {
       "id": "P3",
@@ -108,8 +109,8 @@
       "note": "The pinning is the same disease as P2 — identity that should travel, hard-coded to one place. Worth saying so in the commit message."
     }
   ],
-  "current": "P2",
-  "next_action": "Start P2 - the item the operator named as the point of the night. This is an OPENSPEC change, not a direct fix. Step 1: run /openspec-propose for a change named 2026-08-20-portable-project-identity against the local-multi-project-workspace capability. The proposal must state the behaviour change (hub/hub/project_lifecycle.py open_existing case 3, lines 86-90: a marker naming a project THIS database does not have is currently refused as 'copied or orphaned'; it should ADOPT that project id and open) AND record why the current refusal was reasonable when written and why it is not now - real copy detection lives in _guard_relocation (lines 190-208, case 2) and is untouched by this. Do NOT implement before the proposal and spec delta exist and `npx openspec validate --changes --strict` passes. Then implement: create the project row with the marker's id, seed it as _seed_new_project does (runners + starter charters), record an adoption event, open. Tests owed: (a) orphaned marker adopted, id preserved; (b) delete-then-reopen returns the SAME id; (c) two directories with one marker - second still refused. hub/tests/test_project_lifecycle.py:75 must stay green UNTOUCHED - it is the proof the copy guard survived.",
+  "current": "P3",
+  "next_action": "Start P3 - tests for tonight's committed UI fixes (commit 75c7685, before this branch existed). Two things need coverage of their own: (a) apiErrorCode (hub/ui/src/api/client.ts) - test it against the same response shapes taskIntegration.test.ts already covers for readableApiError (string detail, object detail with code+message, pydantic array, unparseable), asserting it returns null rather than throwing on each non-matching shape; (b) the register_copy_as_new affordance in hub/ui/src/components/projects/ProjectManagerModal.tsx - test that the modal renders the register-copy-as-new button ONLY when the API error code is project_identity_conflict, and that clicking it re-submits the open-project request with register_copy_as_new: true. data-testid=\"register-copy-as-new\" already exists on the button. Run tsc --noEmit, vitest, and eslint src --max-warnings=0 after; rebuild and refresh the UI bundle via scripts/refresh_ui_bundle.py per CLAUDE.md if hub/ui/src changed, and commit hub/ui/src + hub/hub/static/ui together.",
   "decisions_for_user": [
     {
       "id": "D-env",
@@ -151,9 +152,9 @@
     "openspec_changes_in_flight": "none — `ls openspec/changes/ | grep -v archive` is empty",
     "not_run_at_prep": "Full hub/tests/ suite and eslint were NOT run tonight. The loop should establish its own baseline early so it can tell inherited breakage from its own."
   },
-  "last_heartbeat": "2026-08-19T22:52:52+01:00",
+  "last_heartbeat": "2026-08-19T23:54:27+01:00",
   "log_file": ".claude/autonomous/2026-08-19-project-portability-log.md",
   "driver": "Windows Scheduled Task 'AgentWeaveAutonomousSession' -> .claude/skills/autonomous-session/scripts/run-iteration.ps1 -> headless `claude -p`. Each firing is a fresh process; all continuity is STATE.json + the log. Session-bound drivers (ScheduleWakeup, CronCreate) are NOT used - the 2026-08-15 run asked for nine hours and got forty minutes because the session went away.",
-  "heartbeat_note": "Deliberately stale. The interactive session that ran iteration 1 has finished and released the branch, so the next scheduled firing takes over instead of standing down against a heartbeat nobody is refreshing.",
+  "heartbeat_note": "Live as of this timestamp - iteration 2 is in progress in this process.",
   "draft_pr": "https://github.com/gutohuida/AgentWeave/pull/7"
 }
