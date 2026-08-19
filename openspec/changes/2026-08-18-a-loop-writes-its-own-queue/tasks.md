@@ -1,8 +1,9 @@
 # Tasks — A loop writes its own queue
 
 Sections 1-12 are implemented and verified (dated notes below). From the archival addendum, B1
-through B4 are also implemented and verified; B5 onward (the panel tabs) and A1 onward are still a
-spec only, unchecked — CLAUDE.md: "Never mark a task complete on the strength of a plan existing."
+through B5 are also implemented and verified, plus B6.1/B6.5/B6.6 (the drill-down's static
+content); B6.2-B6.4 (live "running now") and A1 onward are still a spec only, unchecked —
+CLAUDE.md: "Never mark a task complete on the strength of a plan existing."
 
 ## 1. Migration
 
@@ -1424,18 +1425,92 @@ tenant. Everything in B1–B4 is independent of it and can land first.
 
 ## B5. The loops index tab
 
-- [ ] B5.1 A `loops` index panel listing the project's loops: label, purpose, running/complete/stopped,
+- [x] B5.1 A `loops` index panel listing the project's loops: label, purpose, running/complete/stopped,
       queue counts, open questions. Registered in the shell as a singleton index tab.
-- [ ] B5.2 Clicking a loop opens a `loop:<loop_id>` drill-down tab. The index **stays open** — unlike
+- [x] B5.2 Clicking a loop opens a `loop:<loop_id>` drill-down tab. The index **stays open** — unlike
       the files tree, which the shell's own design has a file replace (see the panel change). The
       distinction is deliberate: the index is a governance glance, not a launcher.
-- [ ] B5.3 Counts by ending state (*"4 complete · 1 stopped early · 2 running"*) computed from B1.1's
+- [x] B5.3 Counts by ending state (*"4 complete · 1 stopped early · 2 running"*) computed from B1.1's
       value, never by matching `stop_reason` text.
-- [ ] B5.4 Archived loops are out of the index by default, reachable behind an explicit filter.
+- [x] B5.4 Archived loops are out of the index by default, reachable behind an explicit filter.
+
+      **2026-08-19, iteration 22.** Read D20 fresh, and the panel change's `design.md` D1-D12,
+      before writing anything, per the prior iteration's own brief.
+
+      **A precondition first, not asked for by B5's own text but required to test it live**:
+      `ConversationView.tsx`'s panel mounted only when a specification document was attached
+      (`document ? <PanelShell/> : null`) — the gap iteration 16 recorded in `decisions_for_user`
+      without fixing, warning explicitly that `loops` must not inherit it. Fixed by introducing
+      `shellVisible = documentOpen || shellIsOpen`, where `shellIsOpen` reads the store's own
+      `ProjectPanelState.isOpen` (already correct — `openTab`/`closeTab` already set it right, it
+      was simply never consulted for the *mount* decision) and a new header toggle
+      (`conversation-toggle-panel`, `AgentOutputPanel`) calls `setShellOpen` directly. Every
+      layout gate that used to read `documentOpen` (column width, overlay-vs-column, the
+      resizer, the drawer) now reads `shellVisible`; `documentOpen` itself survives only for
+      document-specific UI (the attached title, the close-document button). One behavior had to
+      be preserved explicitly rather than falling out for free: `onStopExploring` used to close
+      the shell as a side effect of `document ? ... : null` going false on detach
+      (`test_the_composers_own_close_control_also_closes_the_shell`) — since `shellIsOpen` does
+      not reset itself on detach, `onStopExploring` now also calls `setShellOpen(projectId,
+      false)` explicitly so that test's existing, deliberate behavior is unchanged.
+
+      **B5.1/B5.3/B5.4.** `LoopsIndexTab.tsx` — reads `GET /projects/{id}/loops` via a new
+      `useLoops` hook (`hub/ui/src/api/loops.ts`), fetched once with `include_archived=true` (a
+      superset) so `describePanelTab` can resolve a label for an already-open `loop:` tab even
+      while the index's own "Show archived" checkbox is filtering it out of the list view —
+      avoids two racing queries for the same data. `endingBucket()` reads `ending_state` only
+      (`'completed' | 'stopped' | null`→running), never `stop_reason` — asserted live in
+      `test_loops_index_lists_real_loops_with_counts_by_ending_state` against
+      `loop-f1eab23e`, a real fixture loop that carries a `stop_reason` while `ending_state` is
+      still `null`, which would misreport as stopped if the summary read the wrong field.
+      Registered as a singleton index tab the same way `specs`/`files` are — one entry in
+      `IndexTabId`, no per-instance key.
+
+      **B5.2.** `panelTabsStore.openTab` gained no closing rule for `loops`/`loop:` the way it
+      has one for `files`/`file:` (design D8) — selecting a loop opens (or refocuses) its
+      `loop:<id>` tab and leaves `loops` exactly where it was. Verified live
+      (`test_selecting_a_loop_opens_the_drill_down_and_the_index_stays_open`): after clicking a
+      row, both `panel-tab-loops` and the new `panel-tab-loop:<id>` are present in the strip.
+
+      **Store surface added**, `panelTabsStore.ts`: `IndexTabId` gained `'loops'`, `TabId` gained
+      `LoopTabId = \`loop:${string}\``, `TabKind` gained `'loops'`/`'loop'`, plus
+      `loopTabId`/`loopId`/`isLoopTabId` mirroring the existing spec/file helpers. `minWidthForTabKind`
+      (`specPreferences.ts`) gained explicit `'loop'`/`'loops'` cases falling back to
+      `SPEC_DOC_MIN_WIDTH` — unmeasured, same footing as `specs`, since neither B5 nor B6 asked
+      for a measurement the way panel tasks 5.5/6.1 explicitly did.
+
+      **`LoopSummary` gained `label` on the frontend type** (`hub/ui/src/api/jobs.ts`) to match
+      what B4.2 already put on the wire — it was read nowhere before this task. Three existing
+      `jobCard.test.tsx` fixtures needed a `label` field added once the field became required;
+      caught by `tsc --noEmit`, not discovered at runtime.
+
+      **Verification.** `npx tsc --noEmit`, `npm run lint` (`--max-warnings 0`): both clean.
+      `npx vitest run`: **1070 passed** (105 files) — up from the prep session's 1014, the
+      difference being this task's own new assertions (`panelTabsStore.test.ts` gained loop-kind
+      and D8-asymmetry-for-loops cases). One pre-existing test needed a fixture fix, not a
+      behavior fix: `panelTabsStore.test.ts`'s "survives malformed persisted state" test used
+      `'loops'` itself as an example of a tab id *outside* the literal union — now that it is
+      inside the union, the fixture was swapped to `'jobs'`, still genuinely invalid, so the test
+      still exercises what it claims to. `npm run build` clean; `py -3.11
+      scripts/refresh_ui_bundle.py` then `--check` — bundle matches source, new files staged
+      before running it (the untracked-file trap this run's own environment notes call out).
+      No Python touched, so no Hub restart was needed — static assets are read from disk per
+      request.
+
+      **Live, via Playwright against the trial Hub** (`hub/tests/browser/test_loops_index.py`,
+      5 new tests, all passing): reused `proj-5e960453`'s own `claude-1` agent and its real
+      conversations rather than `proj-b44fac0c` (`test_panel_shell.py`'s usual fixture project,
+      which — checked before assuming — carries zero loops) or fabricated data. Loop fixtures
+      are LB1-LB4's own smoke-test artifacts, left in place exactly as those iterations described
+      them: `loop-8e86eb9f` (a real `assigned` current item, proving B4.1 live again from a
+      different angle) and `loop-d57671ec` (the one loop LB2/LB3 archived, proving B5.4's filter
+      against a real `archived_at`). `pytest tests/browser -v`: **51 passed**, plus 2 pre-existing
+      failures in `test_job_loop_block.py` unrelated to this task or this run's changes —
+      recorded below, not fixed here.
 
 ## B6. The loop drill-down tab
 
-- [ ] B6.1 A `loop:<loop_id>` panel: purpose, stop condition, ending state and reason, queue counts by
+- [x] B6.1 A `loop:<loop_id>` panel: purpose, stop condition, ending state and reason, queue counts by
       status, the claimed item, open questions, and the firing history.
 - [ ] B6.2 The active-now indicator consumes **D13's helper** — the same one the loop's own machinery
       uses. Do not add a second join over `JobRun.conversation_id`/`Run.status` (D19).
@@ -1444,10 +1519,49 @@ tenant. Everything in B1–B4 is independent of it and can land first.
       JS-driven one needs its own `matchMedia` check.
 - [ ] B6.4 Live updates via `useSSE` plus React Query invalidation on the relevant events, including
       `loop_queue_exhausted` from D6 — this is that event's first consumer.
-- [ ] B6.5 A loop that has ended still renders completely. The tab is the governance record; it is most
+- [x] B6.5 A loop that has ended still renders completely. The tab is the governance record; it is most
       valuable *after* the loop finished.
-- [ ] B6.6 Audit the `Icon` map before assuming a loop/queue/claimed-item icon exists. `Icon` only —
+- [x] B6.6 Audit the `Icon` map before assuming a loop/queue/claimed-item icon exists. `Icon` only —
       CLAUDE.md forbids a second icon system.
+
+      **2026-08-19, iteration 22.** B6.1/B6.5/B6.6 built alongside B5 rather than left as a stub
+      B5.2 opens into — the data (`LoopDetail`, unchanged since B4.3) was already complete enough
+      to render properly, and a drill-down that only shows a placeholder is harder to verify
+      live than one that shows everything the API can state. `LoopTab.tsx`: purpose, stop
+      condition (formats `stop_at`/`stop_when_queue_empties`/neither into one sentence rather
+      than three separate fields), an ending-state badge with the stop reason folded in, queue
+      counts by status, the claimed item, open questions, and firing history (`LoopDetail.history`,
+      newest 10, from B2). Nothing here gates on the loop having ended or not — B6.5 is true by
+      construction, not by a special case: the same fields render whether `ending_state` is set
+      or `null`, verified live against both an ended loop (`loop-d57671ec`) and a running one
+      (`loop-8e86eb9f`) in `test_loops_index.py`.
+
+      **B6.2-B6.4 deliberately not built.** All three need design D13's helper
+      (`JobRun.status` gaining a `"running"` value) which does not exist yet — the same gap
+      B4.3's own module docstring in `loops.py` already recorded for this exact data, and design
+      D19 already named and rejected the shortcut (a second join over
+      `JobRun.conversation_id`/`Run.status`) once. Recorded again here, in `LoopTab.tsx`'s own
+      module docstring, rather than worked around a second time. **Consequence for whoever
+      builds A4/LA4**: once D13's helper exists, `LoopTab` needs an active-now indicator with its
+      own `matchMedia`-guarded motion (B6.3) and `useSSE`-driven invalidation, including
+      `loop_queue_exhausted` (B6.4) — neither is wired today, so `LoopTab` currently only updates
+      on remount/refetch, not live.
+
+      **B6.6.** Audited before use, per this task's own instruction: `all_inclusive` — the icon
+      `JobCard.tsx`'s own `LoopBlock` already uses for a loop (`hub/ui/src/components/jobs/
+      JobCard.tsx:121`) — **is not in `Icon.tsx`'s `ICONS` map** and silently renders nothing
+      (`Icon` warns once via `console.warn` and returns `null` for an unknown name; not a crash,
+      just an invisible glyph). Pre-existing, not introduced by this task, and out of this task's
+      scope to fix — recorded in `decisions_for_user` instead. `LoopTab`/`LoopsIndexTab` use
+      `sync` (`RotateCw`), which is in the map, confirmed by rendering live rather than assumed.
+
+      **A known gap found live, not fabricated to test for.** `LoopTab`'s "Stop condition" line
+      reads `stop_at`/`stop_when_queue_empties` — for `loop-8e86eb9f` (`stop_at: null,
+      stop_when_queue_empties: true`) it correctly renders "when the queue empties"; no fixture
+      loop in this project has `stop_at` set, so that branch is exercised by `tsc`'s type
+      checking and the vitest-level reasoning above but not by a live Playwright assertion this
+      iteration. Worth a fixture with a real `stop_at` if a future iteration wants that exact
+      branch under live coverage.
 
 ## B7. Human-only — the operator's judgement
 

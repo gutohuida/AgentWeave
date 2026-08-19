@@ -1841,3 +1841,99 @@ inherit that same reachability bug.
 
 Committed and pushed as the work landed. Heartbeat refreshed before the push; releasing it
 (backdating ~40 minutes) as the very last step per the driver's own instructions.
+
+---
+
+## Entry 22 — 2026-08-19T04:45+01:00 — LB5 done: the loops index and drill-down tabs, live
+
+**LB5 done**, plus B6.1/B6.5/B6.6 of LB6 built alongside it
+(`openspec/changes/2026-08-18-a-loop-writes-its-own-queue/tasks.md`, sections B5 and B6). Read
+D20 (design.md) and the panel change's D1-D12 fresh before writing anything, per iteration 21's
+own brief.
+
+**The precondition, fixed first.** `ConversationView.tsx` mounted the panel shell only when a
+spec document was attached (`document ? <PanelShell/> : null`) — the exact gap iteration 16
+recorded in `decisions_for_user` without fixing, with an explicit warning that a `loops` tab must
+not repeat it. It would have: with no fix, there is no `+` affordance to reach `loops` (or, it
+turns out, `files`/`specs` either) from a bare conversation. Fixed by introducing `shellVisible =
+documentOpen || shellIsOpen`, reading the panel store's own `isOpen` bit (already correct —
+`openTab`/`closeTab` already set it right, it was simply never consulted for the mount decision)
+and a new header toggle (`conversation-toggle-panel`, `AgentOutputPanel.tsx`, `aria-pressed`).
+Every layout gate that used to read `documentOpen` now reads `shellVisible`; `documentOpen` itself
+survives for document-specific UI only (the attached title, the close-document button).
+`onStopExploring` needed one explicit addition (`setShellOpen(projectId, false)`) so the existing,
+deliberate "detaching the document also closes the shell" behavior
+(`test_the_composers_own_close_control_also_closes_the_shell`) kept working now that `shellIsOpen`
+no longer resets itself for free on detach. This is a real behavior change inside the *panel*
+change's own shell, made to satisfy a *loop*-change task — recorded in `decisions_for_user` in
+case the operator wants it reviewed as its own thing.
+
+**B5.1/B5.3/B5.4.** New `LoopsIndexTab.tsx`, reading `GET /projects/{id}/loops` via a new
+`useLoops`/`useLoop` pair (`hub/ui/src/api/loops.ts`) against B4.3's already-complete backend — no
+Python touched this iteration. Fetched once with `include_archived=true` (a superset) so
+`describePanelTab` can label an already-open `loop:` tab even while the index's own "Show
+archived" checkbox filters it out of the list. `endingBucket()` reads `ending_state` only, never
+`stop_reason` — proven live against `loop-f1eab23e`, a real fixture loop with a `stop_reason` set
+but `ending_state: null` (still running), which would have misreported as stopped had the wrong
+field been read. Registered as a singleton index tab the same way `specs`/`files` are.
+
+**B5.2.** `panelTabsStore.openTab` gained no closing rule for `loops`/`loop:` — selecting a loop
+opens its drill-down and leaves the index exactly where it was, unlike the files tree's D8
+replace-on-click. Verified live: after selecting a loop, both `panel-tab-loops` and the new
+`panel-tab-loop:<id>` sit in the strip together.
+
+**Store surface.** `panelTabsStore.ts`: `IndexTabId` gained `'loops'`, `TabId` gained `LoopTabId`,
+`TabKind` gained `'loops'`/`'loop'`, plus `loopTabId`/`loopId`/`isLoopTabId` mirroring the existing
+helpers. `specPreferences.ts`'s `minWidthForTabKind` gained explicit loop cases (falls back to
+`SPEC_DOC_MIN_WIDTH`, unmeasured — same footing as `specs`, since neither B5 nor B6 asked for a
+measurement the way panel tasks 5.5/6.1 explicitly did). `jobs.ts`'s frontend `LoopSummary`
+interface gained the `label` field the backend has carried since B4.2 but nothing on the frontend
+read; three `jobCard.test.tsx` fixtures needed `label` added once the field became required,
+caught by `tsc`, not discovered at runtime.
+
+**B6.1/B6.5/B6.6, built alongside B5 rather than left as a stub.** New `LoopTab.tsx`: purpose,
+stop condition (one sentence from `stop_at`/`stop_when_queue_empties`), an ending-state badge with
+the stop reason folded in, queue counts by status, the claimed item, open questions, and firing
+history — nothing here gates on the loop having ended, so B6.5 is true by construction, verified
+live against both an ended loop (`loop-d57671ec`) and a running one (`loop-8e86eb9f`). **B6.6's
+audit caught a pre-existing bug**: `JobCard.tsx`'s own loop indicator uses `Icon name="all_inclusive"`,
+which is not in `Icon.tsx`'s map and silently renders nothing — recorded in `decisions_for_user`,
+not fixed (out of this task's scope). `LoopTab`/`LoopsIndexTab` use `sync` instead, confirmed
+present. **B6.2-B6.4 deliberately not built** — all three need design D13's helper (`JobRun.status`
+gaining a `"running"` value), still open as A4/LA4; a substitute join was already named and
+rejected by D19 once, not repeated. Recorded again in `LoopTab.tsx`'s own module docstring.
+
+**Verification.** `tsc --noEmit` and `eslint --max-warnings 0`: both clean. `npx vitest run`:
+**1070 passed** across 105 files (up from 1014 at prep — this task's own new assertions in
+`panelTabsStore.test.ts`, covering the loop tab-kind and the B5.2 D8-asymmetry). One pre-existing
+test fixture needed updating, not a behavior fix: the "survives malformed persisted state" test
+used `'loops'` itself as an example of an id *outside* the literal union; swapped to `'jobs'`,
+still genuinely invalid. `npm run build` clean; new files staged before `py -3.11
+scripts/refresh_ui_bundle.py` (the untracked-file trap this run's own environment notes call out);
+`--check` confirms the bundle matches source. No Python changed, so no Hub restart was needed —
+static assets are read from disk per request.
+
+**Live, via Playwright against the trial Hub** (`hub/tests/browser/test_loops_index.py`, 5 new
+tests, all passing). Used `proj-5e960453`'s own `claude-1` agent and its real conversations rather
+than `proj-b44fac0c` (`test_panel_shell.py`'s usual fixture, checked first and confirmed to carry
+zero loops) or fabricated data — the loop fixtures are LB1-LB4's own smoke-test artifacts, read
+here exactly as those iterations left them. Full `hub/tests/browser` suite: **51 passed**, plus 2
+pre-existing failures in `test_job_loop_block.py` — confirmed via a direct `GET .../jobs` call that
+these are data drift (the fixture project has 5 jobs now, not the 3 the test hardcodes, because
+LB2's and LB4's own smoke-test jobs are still live exactly as those iterations left them), not
+caused by this iteration's changes. Recorded in `decisions_for_user`, not fixed — fixing means
+either undoing LB2/LB4's own "leave it as evidence" precedent or loosening a test's assertion, both
+judgment calls. `npx openspec validate --changes --strict`: 2/2 still valid.
+
+Updated `tasks.md`'s top summary line: "B1 through B5 are also implemented and verified, plus
+B6.1/B6.5/B6.6 ... B6.2-B6.4 ... and A1 onward are still a spec only."
+
+`current`/`next_action` now point at **LB6**, which is only *partially* open: B6.2-B6.4 (the
+live "running now" indicator, its motion, and SSE-driven updates) remain, explicitly blocked on
+design change A4 / queue item LA4 (`JobRun.status` gaining a `"running"` value). The queue's own
+stated order still puts LA1-LA3 ahead of LA4 — followed rather than reshuffled, per this run's own
+pre-authorised guidance, unless a future iteration judges LB6's explicit dependency on A4 a strong
+enough reason to jump the queue.
+
+Committed and pushed as the work landed. Heartbeat refreshed before the push; releasing it
+(backdating ~40 minutes) as the very last step per the driver's own instructions.

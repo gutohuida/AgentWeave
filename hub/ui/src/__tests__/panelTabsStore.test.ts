@@ -4,6 +4,9 @@ import {
   selectProjectPanel,
   specTabId,
   fileTabId,
+  loopTabId,
+  loopId,
+  isLoopTabId,
   tabKind,
   migratePanelTabs,
   PANEL_TABS_VERSION,
@@ -39,13 +42,22 @@ describe('panelTabsStore — tab identity', () => {
   it('derives kind from id for every kind in the union', () => {
     expect(tabKind('specs')).toBe('specs')
     expect(tabKind('files')).toBe('files')
+    expect(tabKind('loops')).toBe('loops')
     expect(tabKind(specTabId('doc-7'))).toBe('spec')
     expect(tabKind(fileTabId('src/main.py'))).toBe('file')
+    expect(tabKind(loopTabId('loop-9'))).toBe('loop')
   })
 
   it('keys a spec tab by document id and a file tab by path (design D4)', () => {
     expect(specTabId('doc-7')).toBe('spec:doc-7')
     expect(fileTabId('src/a b/c.ts')).toBe('file:src/a b/c.ts')
+  })
+
+  it('keys a loop tab by the Loop row id (task B5, "a loop writes its own queue")', () => {
+    expect(loopTabId('loop-9')).toBe('loop:loop-9')
+    expect(loopId(loopTabId('loop-9'))).toBe('loop-9')
+    expect(isLoopTabId(loopTabId('loop-9'))).toBe(true)
+    expect(isLoopTabId('specs')).toBe(false)
   })
 })
 
@@ -139,6 +151,15 @@ describe('panelTabsStore — open, close, activate, reorder', () => {
     store.openTab(P1, 'files')
 
     expect(tabIds()).toEqual([fileTabId('src/a.ts'), 'files'])
+  })
+
+  it('opening a loop drill-down does not close the loops index — a governance glance, not a launcher (task B5.2)', () => {
+    const store = usePanelTabsStore.getState()
+    store.openTab(P1, 'loops')
+    store.openTab(P1, loopTabId('loop-1'))
+
+    expect(tabIds()).toEqual(['loops', loopTabId('loop-1')])
+    expect(panel().activeTabId).toBe(loopTabId('loop-1'))
   })
 
   it('reorders by index and ignores out-of-range indices', () => {
@@ -277,7 +298,7 @@ describe('panelTabsStore — migration', () => {
       version: PANEL_TABS_VERSION,
       projects: {
         [P1]: {
-          tabs: [{ id: 'loops' }, { id: 'spec:' }, { id: 42 }, { id: 'specs' }],
+          tabs: [{ id: 'jobs' }, { id: 'spec:' }, { id: 42 }, { id: 'specs' }],
           activeTabId: 'specs',
           isOpen: true,
         },

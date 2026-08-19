@@ -18,6 +18,9 @@ export interface LoopSummary {
   /** The `Loop` row's own id — what `GET /tasks?loop_id=` actually scopes by, distinct from the
    *  job's id. */
   id: string
+  /** The loop's job's name (design D20/B4.2) — what a picker shows; `LoopSummary` carried no name
+   *  of its own before B4. */
+  label: string
   purpose: string
   stop_at?: string
   stop_when_queue_empties: boolean

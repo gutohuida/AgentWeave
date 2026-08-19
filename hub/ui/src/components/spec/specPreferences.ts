@@ -55,8 +55,10 @@ export const FILE_TAB_MIN_WIDTH = 260
  * read from the same source and cannot drift apart — the mistake the three-column workspace made
  * once, when its threshold and its layout were written down in two places. `specs` has no measured
  * minimum of its own yet, so it still falls back to the document minimum as a safe, if temporary,
- * floor — a list is never wider than the document that lists it. `null` covers "no tab is visible
- * yet".
+ * floor — a list is never wider than the document that lists it. `loops`/`loop` (task B5/B6,
+ * `2026-08-18-a-loop-writes-its-own-queue`) are unmeasured for the same reason and share the same
+ * temporary floor — neither task asked for a measurement the way panel tasks 5.5/6.1 explicitly
+ * did, so none is guessed here. `null` covers "no tab is visible yet".
  */
 export function minWidthForTabKind(kind: TabKind | null): number {
   switch (kind) {
@@ -65,6 +67,8 @@ export function minWidthForTabKind(kind: TabKind | null): number {
       return FILE_TAB_MIN_WIDTH
     case 'spec':
     case 'specs':
+    case 'loop':
+    case 'loops':
     case null:
       return SPEC_DOC_MIN_WIDTH
   }

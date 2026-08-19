@@ -74,6 +74,7 @@ describe('JobCard loop block', () => {
       baseJob({
         loop: {
           id: 'loop-1',
+          label: 'Dependency bumps',
           purpose: 'Keep dependencies current',
           stop_when_queue_empties: true,
           queue: { pending: 1, in_progress: 1 },
@@ -100,6 +101,7 @@ describe('JobCard loop block', () => {
       baseJob({
         loop: {
           id: 'loop-1',
+          label: 'Nightly scan job',
           purpose: 'Nightly scan',
           stop_when_queue_empties: true,
           stop_reason: 'queue empty',
@@ -125,6 +127,7 @@ describe('JobCard loop block', () => {
       baseJob({
         loop: {
           id: 'loop-1',
+          label: 'Bump job',
           purpose: '',
           stop_when_queue_empties: false,
           queue: { in_progress: 1 },

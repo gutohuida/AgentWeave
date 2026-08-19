@@ -28,17 +28,20 @@ export const PANEL_TABS_STORAGE_KEY = STORAGE_KEY
 // Index kinds take a fixed id, detail kinds a keyed one (design D3). The union is literal and
 // exhaustively type-checkable; kinds are never constructed at runtime from external input.
 
-export type IndexTabId = 'specs' | 'files'
+export type IndexTabId = 'specs' | 'files' | 'loops'
 export type SpecTabId = `spec:${string}`
 export type FileTabId = `file:${string}`
-export type TabId = IndexTabId | SpecTabId | FileTabId
+export type LoopTabId = `loop:${string}`
+export type TabId = IndexTabId | SpecTabId | FileTabId | LoopTabId
 
-export type TabKind = 'specs' | 'files' | 'spec' | 'file'
+export type TabKind = 'specs' | 'files' | 'loops' | 'spec' | 'file' | 'loop'
 
 /** Derived from the id rather than stored beside it, so the two cannot disagree. */
 export function tabKind(id: TabId): TabKind {
-  if (id === 'specs' || id === 'files') return id
-  return id.startsWith('spec:') ? 'spec' : 'file'
+  if (id === 'specs' || id === 'files' || id === 'loops') return id
+  if (id.startsWith('spec:')) return 'spec'
+  if (id.startsWith('loop:')) return 'loop'
+  return 'file'
 }
 
 /** A specification document's tab is keyed by document id, which survives rename — `rename_spec_document`
@@ -53,12 +56,23 @@ export function fileTabId(relativePath: string): FileTabId {
   return `file:${relativePath}`
 }
 
+/** A loop's tab is keyed by the `Loop` row's own id (design B4.3's `id`, distinct from the job
+ *  id) — the same id `GET /projects/{project_id}/loops/{loop_id}` reads by, so it never dangles
+ *  across a rename the way a path-keyed tab would (there is nothing to rename). */
+export function loopTabId(loopId: string): LoopTabId {
+  return `loop:${loopId}`
+}
+
 export function specDocumentId(id: SpecTabId): string {
   return id.slice('spec:'.length)
 }
 
 export function filePath(id: FileTabId): string {
   return id.slice('file:'.length)
+}
+
+export function loopId(id: LoopTabId): string {
+  return id.slice('loop:'.length)
 }
 
 export function isSpecTabId(id: TabId): id is SpecTabId {
@@ -69,11 +83,16 @@ export function isFileTabId(id: TabId): id is FileTabId {
   return id.startsWith('file:')
 }
 
+export function isLoopTabId(id: TabId): id is LoopTabId {
+  return id.startsWith('loop:')
+}
+
 function isTabId(value: unknown): value is TabId {
   if (typeof value !== 'string') return false
-  if (value === 'specs' || value === 'files') return true
+  if (value === 'specs' || value === 'files' || value === 'loops') return true
   if (value.startsWith('spec:')) return value.length > 'spec:'.length
   if (value.startsWith('file:')) return value.length > 'file:'.length
+  if (value.startsWith('loop:')) return value.length > 'loop:'.length
   return false
 }
 

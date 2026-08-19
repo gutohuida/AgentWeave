@@ -74,6 +74,14 @@ interface AgentOutputPanelProps {
   /** Forwarded to `Composer` verbatim — see its prop of the same name (task 5.4,
    *  `2026-08-18-one-shell-three-panels`). */
   insertPathRequest?: { path: string; requestId: number } | null
+  /** Opens or hides the panel shell independently of any attached document (task B5,
+   *  `2026-08-18-a-loop-writes-its-own-queue`) — the only way to reach a document-free tenant
+   *  like the `loops` index from a bare conversation. Omitted, no toggle renders — every caller
+   *  that hosts a shell passes it; `NewConversationSurface`, which has no shell at all, does not. */
+  onTogglePanel?: () => void
+  /** Whether the shell is currently open, for the toggle's pressed state. Meaningless without
+   *  `onTogglePanel`. */
+  panelOpen?: boolean
 }
 
 /* Both prompts that used to live here are gone, and nothing replaces them.
@@ -131,6 +139,8 @@ export function AgentOutputPanel({
   onOpenExistingSpec,
   specBusy = false,
   insertPathRequest = null,
+  onTogglePanel,
+  panelOpen = false,
 }: AgentOutputPanelProps) {
   // `lines` is no longer read here. Its only consumer was the effect that watched the output
   // stream for a completed run in order to call a handoff "ready" — the exact inference this
@@ -817,6 +827,20 @@ export function AgentOutputPanel({
           {agent.status}
         </span>
         <div className="min-w-0 flex-1" />
+        {onTogglePanel && (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="shrink-0"
+            data-testid="conversation-toggle-panel"
+            onClick={onTogglePanel}
+            aria-pressed={panelOpen}
+            aria-label={panelOpen ? 'Hide panel' : 'Show panel'}
+            title={panelOpen ? 'Hide panel' : 'Show panel'}
+          >
+            <Icon name="right_panel_close" size={16} />
+          </Button>
+        )}
         {onOpenAgentSettings && (
           <Button
             variant="ghost"
