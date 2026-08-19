@@ -17,6 +17,7 @@ from .inbound_queue import router as inbound_queue_router
 from .instructions import router as instructions_router
 from .jobs import router as jobs_router
 from .logs import router as logs_router
+from .loops import router as loops_router
 from .messages import router as messages_router
 from .model_catalog import router as model_catalog_router
 from .native_dialog import router as native_dialog_router
@@ -55,6 +56,7 @@ project_resources_router.include_router(agent_chat_router)
 project_resources_router.include_router(project_conversations_router)
 project_resources_router.include_router(session_sync_router)
 project_resources_router.include_router(jobs_router)
+project_resources_router.include_router(loops_router)
 project_resources_router.include_router(instructions_router)
 project_resources_router.include_router(spec_router)
 project_resources_router.include_router(logs_router)

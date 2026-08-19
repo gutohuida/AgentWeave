@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...auth import get_project
 from ...db.engine import get_session
-from ...db.models import AgentJobDeletion, AIJob, JobRun, Loop, Project, Question, Run, Task
+from ...db.models import AIJob, JobRun, Loop, Project, Question, Run, Task
 from ...schemas.jobs import JobCreate, JobResponse, JobRunResponse, JobUpdate, LoopSummary
 from ...schemas.tasks import TaskCreate
 from ...sse import sse_manager
@@ -192,6 +192,8 @@ async def _batch_loop_summaries(
             stop_when_queue_empties=loop.stop_when_queue_empties,
             stop_reason=loop.stop_reason,
             stopped_at=loop.stopped_at,
+            ending_state=loop.ending_state,
+            archived_at=loop.archived_at,
             queue=queue_counts.get(loop.id, {}),
             current_task=current_task_by_loop.get(loop.id),
             open_questions=open_questions_by_job.get(job_id, 0),
@@ -367,14 +369,19 @@ async def create_job(
 @router.get("", response_model=List[JobResponse])
 async def list_jobs(
     agent: Optional[str] = Query(None),
+    include_archived: bool = Query(False),
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ):
-    """List all jobs, optionally filtered by agent."""
+    """List jobs, optionally filtered by agent. Archived jobs (design D16) are excluded unless
+    `include_archived=true` (B2.4) — nothing is deleted, so a caller that wants them can always
+    ask."""
     project_id, _ = project
     q = select(AIJob).where(AIJob.project_id == project_id)
     if agent:
         q = q.where(AIJob.agent == agent)
+    if not include_archived:
+        q = q.where(AIJob.archived_at.is_(None))
     q = q.order_by(AIJob.created_at)
     result = await session.execute(q)
     jobs = result.scalars().all()
@@ -420,6 +427,7 @@ async def get_job(
         "next_run": job.next_run,
         "run_count": job.run_count,
         "last_session_id": job.last_session_id,
+        "archived_at": job.archived_at,
         "loop": loop_summaries.get(job_id),
         "history": [
             {
@@ -497,6 +505,12 @@ async def update_job(
             loop.stop_when_queue_empties = body.stop_when_queue_empties
         if body.stop_reason is not None:
             loop.stop_reason = body.stop_reason
+            # B2.5/D17: an operator stating why this loop stopped is itself "an operator stop" —
+            # the one ending path `scheduler.py`'s own stop-condition check cannot see, since it
+            # never fires from there. Only set when nothing has recorded an ending yet: editing
+            # the prose after the fact must not overwrite a governance fact already recorded.
+            if loop.ending_state is None:
+                loop.ending_state = "stopped"
         loop.updated_by_run_id = run_identity
 
     # Design D4: a loop's continuity is by checkpoint, not by resumed session. Checked before
@@ -582,7 +596,7 @@ async def update_job(
     return job
 
 
-@router.delete("/{job_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{job_id}")
 async def delete_job(
     job_id: str,
     project: Tuple[str, str] = Depends(get_project),
@@ -590,46 +604,65 @@ async def delete_job(
     agent_identity: Optional[str] = Header(default=None, alias="X-AgentWeave-Agent"),
     run_identity: Optional[str] = Header(default=None, alias="X-AgentWeave-Run"),
 ):
-    """Delete a job and its history."""
+    """Refuse outright (design D16, B2.1). Nothing is deletable — a job archives instead.
+
+    A caller that asked to destroy data is told plainly that it did not happen, rather than
+    having the request silently reinterpreted as an archive: that would leave a caller who
+    genuinely meant "gone forever" believing something happened that did not.
+    """
+    del agent_identity, run_identity  # signature parity with the other job routes only
+    project_id, _ = project
+    job = await session.get(AIJob, job_id)
+    if job is None or job.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Job not found")
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="jobs are archived, not deleted — archive this job instead; nothing was removed",
+    )
+
+
+@router.post("/{job_id}/archive", response_model=JobResponse)
+async def archive_job(
+    job_id: str,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+    agent_identity: Optional[str] = Header(default=None, alias="X-AgentWeave-Agent"),
+    run_identity: Optional[str] = Header(default=None, alias="X-AgentWeave-Run"),
+):
+    """Archive a job (design D16/D18). Hides it from default listings; deletes nothing.
+
+    Governed the same way as every other agent-originated job mutation
+    (`_require_agent_job_allowance`) — the standing `allow_agent_jobs` project setting is the
+    capability gate here. D18's *always ask, independent of the run's permission posture* rule is
+    enforced one layer up, at the MCP tool (`archive_job` in `mcp_server.py`, B3.2) — this route
+    is the mechanism the tool calls once that has already happened, not the policy itself.
+
+    Deliberately does not require the job's `Loop` (if any) to have ended first — that rule
+    (B2.3) is specific to archiving the *loop*, reachable only through `POST /loops/{id}/archive`
+    below, which no agent credential can authenticate against at all. Archiving a bare job whose
+    loop is still running would still hide that loop from the default job listing; flagged as an
+    open question for the operator rather than resolved here (see the change's own log).
+    """
     project_id, _ = project
     await _require_agent_job_allowance(session, project_id, agent_identity, run_identity)
     job = await session.get(AIJob, job_id)
     if job is None or job.project_id != project_id:
         raise HTTPException(status_code=404, detail="Job not found")
+    if job.archived_at is not None:
+        raise HTTPException(status_code=400, detail="job is already archived")
 
-    if run_identity and agent_identity:
-        session.add(
-            AgentJobDeletion(
-                id=f"job-delete-{short_id()}",
-                job_id=job.id,
-                project_id=project_id,
-                agent=agent_identity,
-                run_id=run_identity,
-            )
-        )
+    job.archived_at = datetime.now(timezone.utc)
+    job.updated_by_run_id = run_identity
 
-    # Remove from scheduler first
-    try:
-        from ...scheduler import get_scheduler
-
-        scheduler = get_scheduler()
-        if scheduler:
-            await scheduler.remove_job(job_id)
-    except Exception:
-        pass
-
-    await session.delete(job)
     await session.commit()
+    await session.refresh(job)
 
-    await sse_manager.broadcast(project_id, "job_deleted", {"id": job_id})
-    await persist_event(
-        session,
-        project_id,
-        "job_deleted",
-        {"id": job_id},
-    )
+    await sse_manager.broadcast(project_id, "job_archived", {"id": job_id})
+    await persist_event(session, project_id, "job_archived", {"id": job_id}, agent=agent_identity)
 
-    return None
+    loop_summaries = await _batch_loop_summaries(session, [job_id])
+    job.loop = loop_summaries.get(job_id)
+    return job
 
 
 @router.get("/{job_id}/history", response_model=List[JobRunResponse])

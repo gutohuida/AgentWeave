@@ -23,6 +23,10 @@ export interface LoopSummary {
   stop_when_queue_empties: boolean
   stop_reason?: string
   stopped_at?: string
+  /** What happened ("completed"/"stopped"), null while still running (design D17). */
+  ending_state?: 'completed' | 'stopped' | null
+  /** When an operator archived this loop; null while it is listed by default (design D16). */
+  archived_at?: string | null
   /** status -> count of this loop's non-fetched-yet-terminal tasks, keyed by `Task.status`. */
   queue: Record<string, number>
   current_task?: { id: string; title: string; status: string } | null
@@ -44,6 +48,8 @@ export interface Job {
   next_run?: string
   run_count: number
   last_session_id?: string
+  /** Design D16: null means live and listed by default; set only by `POST /jobs/{id}/archive`. */
+  archived_at?: string | null
   history?: JobRun[]
   loop?: LoopSummary | null
 }

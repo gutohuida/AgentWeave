@@ -589,6 +589,12 @@ class JobScheduler:
                 if loop is not None:
                     loop.stop_reason = loop_stop_reason
                     loop.stopped_at = fired_at
+                    # D17/B2.5: the same string `_loop_stop_reason` returns for a drained queue,
+                    # already the trigger for `loop_queue_exhausted` below — the one place this
+                    # value is known, so it is set here rather than re-derived by a reader later.
+                    loop.ending_state = (
+                        "completed" if loop_stop_reason == "loop queue is empty" else "stopped"
+                    )
                 job.enabled = False
                 await session.commit()
                 await persist_event(

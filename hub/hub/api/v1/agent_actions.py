@@ -31,7 +31,7 @@ from ...sse import sse_manager
 from ...task_transitions import ENTRY_STATUSES, run_actor
 from ...utils import persist_event, short_id
 from .agents import AgentRequest, request_agent
-from .jobs import create_job, delete_job, run_job, update_job
+from .jobs import archive_job, create_job, delete_job, run_job, update_job
 from .messages import create_message_for_actor
 from .questions import ask_question_for_actor
 from .tasks import (
@@ -537,6 +537,21 @@ async def delete_governed_job(
     session: AsyncSession = Depends(get_session),
 ):
     return await delete_job(
+        job_id,
+        project=(actor.project_id, actor.project_id),
+        session=session,
+        agent_identity=actor.agent,
+        run_identity=actor.run_id,
+    )
+
+
+@router.post("/jobs/{job_id}/archive", response_model=JobResponse)
+async def archive_governed_job(
+    job_id: str,
+    actor: AgentActor = Depends(get_agent_actor),
+    session: AsyncSession = Depends(get_session),
+):
+    return await archive_job(
         job_id,
         project=(actor.project_id, actor.project_id),
         session=session,

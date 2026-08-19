@@ -7,7 +7,6 @@ from hub.agent_auth import hash_run_token
 from hub.db.engine import async_session_factory
 from hub.db.models import (
     Agent,
-    AgentJobDeletion,
     AIJob,
     JobRun,
     Loop,
@@ -130,14 +129,19 @@ async def test_agent_job_operations_require_allowance_and_retain_run(app, auth_h
         ).scalar_one()
         assert job_run.requested_by_run_id == "run-job-owner"
 
+    # D16 (B2.1): an agent's DELETE is refused exactly like the operator's — nothing is deletable.
     deleted = await app.delete(f"/api/v1/agent-actions/jobs/{job_id}", headers=headers)
-    assert deleted.status_code == 204
+    assert deleted.status_code == 400
+
+    # Archiving is the real alternative (B2.2), governed by the same allowance as every other
+    # agent-originated job mutation, and it retains the archiving run's attribution.
+    archived = await app.post(f"/api/v1/agent-actions/jobs/{job_id}/archive", headers=headers)
+    assert archived.status_code == 200, archived.text
+    assert archived.json()["archived_at"] is not None
     async with async_session_factory() as session:
-        audit = (
-            await session.execute(select(AgentJobDeletion).where(AgentJobDeletion.job_id == job_id))
-        ).scalar_one()
-        assert audit.run_id == "run-job-owner"
-        assert audit.agent == "lead"
+        job = await session.get(AIJob, job_id)
+        assert job.archived_at is not None
+        assert job.updated_by_run_id == "run-job-owner"
 
 
 async def _allow_agent_jobs(app, auth_headers):

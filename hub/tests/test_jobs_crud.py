@@ -325,8 +325,8 @@ async def test_run_job_success(app, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_delete_job_returns_204(app, auth_headers):
-    """DELETE /jobs/{id} returns 204 No Content."""
+async def test_delete_job_refuses(app, auth_headers):
+    """DELETE /jobs/{id} refuses outright (design D16, B2.1) — nothing is deletable."""
     create = await app.post(
         "/api/v1/projects/proj-test/jobs",
         json={
@@ -339,16 +339,16 @@ async def test_delete_job_returns_204(app, auth_headers):
     )
     job_id = create.json()["id"]
     resp = await app.delete(f"/api/v1/projects/proj-test/jobs/{job_id}", headers=auth_headers)
-    assert resp.status_code == 204
+    assert resp.status_code == 400
 
 
 @pytest.mark.asyncio
-async def test_get_after_delete_returns_404(app, auth_headers):
-    """A deleted job returns 404 on subsequent GET."""
+async def test_get_after_delete_attempt_still_200(app, auth_headers):
+    """A job DELETE refused still exists on a subsequent GET (B2.1)."""
     create = await app.post(
         "/api/v1/projects/proj-test/jobs",
         json={
-            "name": "Gone",
+            "name": "Still Here",
             "agent": "kimi",
             "message": "x",
             "cron": "0 9 * * *",
@@ -358,16 +358,16 @@ async def test_get_after_delete_returns_404(app, auth_headers):
     job_id = create.json()["id"]
     await app.delete(f"/api/v1/projects/proj-test/jobs/{job_id}", headers=auth_headers)
     resp = await app.get(f"/api/v1/projects/proj-test/jobs/{job_id}", headers=auth_headers)
-    assert resp.status_code == 404
+    assert resp.status_code == 200
 
 
 @pytest.mark.asyncio
-async def test_deleted_job_not_in_list(app, auth_headers):
-    """A deleted job does not appear in the list response."""
+async def test_archived_job_not_in_default_list(app, auth_headers):
+    """An archived job does not appear in the default list response (B2.4)."""
     create = await app.post(
         "/api/v1/projects/proj-test/jobs",
         json={
-            "name": "Will Vanish",
+            "name": "Will Archive",
             "agent": "kimi",
             "message": "x",
             "cron": "0 9 * * *",
@@ -375,7 +375,10 @@ async def test_deleted_job_not_in_list(app, auth_headers):
         headers=auth_headers,
     )
     job_id = create.json()["id"]
-    await app.delete(f"/api/v1/projects/proj-test/jobs/{job_id}", headers=auth_headers)
+    archived = await app.post(
+        f"/api/v1/projects/proj-test/jobs/{job_id}/archive", headers=auth_headers
+    )
+    assert archived.status_code == 200, archived.text
     resp = await app.get("/api/v1/projects/proj-test/jobs", headers=auth_headers)
     ids = {j["id"] for j in resp.json()}
     assert job_id not in ids

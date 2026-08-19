@@ -225,6 +225,9 @@ async def test_loop_with_past_stop_at_skips_the_fire_and_disables_the_job():
         assert loop.stop_reason is not None
         assert "stop time" in loop.stop_reason
         assert loop.stopped_at is not None
+        # B2.5/D17: `stop_at` elapsing is a "stopped" ending, never "completed" — only a drained
+        # queue is.
+        assert loop.ending_state == "stopped"
 
         run = (await db.execute(select(JobRun).where(JobRun.job_id == job.id))).scalar_one()
         assert run.status == "skipped"
@@ -272,6 +275,9 @@ async def test_loop_with_stop_when_queue_empties_and_a_drained_queue_stops():
         assert refreshed_job.enabled is False
         loop = (await db.execute(select(Loop).where(Loop.job_id == job.id))).scalar_one()
         assert "queue is empty" in loop.stop_reason
+        # B2.5/D17: a drained queue is "completed", the one ending distinct from every other
+        # "stopped" path.
+        assert loop.ending_state == "completed"
 
 
 @pytest.mark.asyncio

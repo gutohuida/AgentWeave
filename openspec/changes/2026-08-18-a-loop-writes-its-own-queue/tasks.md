@@ -1,8 +1,9 @@
 # Tasks — A loop writes its own queue
 
-Sections 1-12 are implemented and verified (dated notes below); everything from the addendum (A1
-onward) and P4 onward is still a spec only, unchecked — CLAUDE.md: "Never mark a task complete on the
-strength of a plan existing."
+Sections 1-12 are implemented and verified (dated notes below). From the archival addendum, B1 and
+B2 are also implemented and verified; B3 onward (the MCP surface, the summary fields, the panel
+tabs) and A1 onward are still a spec only, unchecked — CLAUDE.md: "Never mark a task complete on
+the strength of a plan existing."
 
 ## 1. Migration
 
@@ -1142,20 +1143,112 @@ tenant. Everything in B1–B4 is independent of it and can land first.
 
 ## B2. Archival replaces deletion
 
-- [ ] B2.1 `DELETE /api/v1/jobs/{job_id}` refuses with a stated reason naming archiving as the
+- [x] B2.1 `DELETE /api/v1/jobs/{job_id}` refuses with a stated reason naming archiving as the
       alternative. Do not silently reinterpret a delete as an archive — a caller that asked to destroy
       data should be told it did not happen.
-- [ ] B2.2 Archive route for a job, and for a loop. A loop's is **operator-only** — refuse any request
+- [x] B2.2 Archive route for a job, and for a loop. A loop's is **operator-only** — refuse any request
       carrying agent attribution, mirroring `spec_lifecycle.py:241`'s own rule for documents.
-- [ ] B2.3 Refuse to archive a loop that is neither complete nor stopped (D17), stating that it must
+- [x] B2.3 Refuse to archive a loop that is neither complete nor stopped (D17), stating that it must
       end first. Test that an enabled, firing loop cannot be archived.
-- [ ] B2.4 Archived loops and jobs are excluded from default listings and included when explicitly
+- [x] B2.4 Archived loops and jobs are excluded from default listings and included when explicitly
       asked for. Nothing is removed from the database.
-- [ ] B2.5 Set the ending value from B1.1 where the loop actually ends: `scheduler.py`'s stop-condition
+- [x] B2.5 Set the ending value from B1.1 where the loop actually ends: `scheduler.py`'s stop-condition
       path sets *completed* when the queue drained, *stopped* for `stop_at` and for an operator stop.
       `stop_reason`'s existing prose is unchanged and keeps its current wording.
-- [ ] B2.6 Regression test: a loop archived after stopping still returns its purpose, queue history,
+- [x] B2.6 Regression test: a loop archived after stopping still returns its purpose, queue history,
       firings, and stop reason. This is the D16 guarantee and the one most likely to rot.
+
+      **2026-08-19, iteration 19.** Read B2's own task text and D16-D18 fresh before writing any code
+      (not just the prior iteration's summary), which settled the one open boundary question the prior
+      iteration flagged: B2 is REST-layer only — the MCP tool rename (`delete_job` → `archive_job`,
+      D18's always-ask rule) is B3's, not touched here.
+
+      **B2.1.** `hub/hub/api/v1/jobs.py`'s `DELETE /{job_id}` now always 404s for a missing job, else
+      400s with a stated reason naming archiving as the alternative — never deletes. The dead
+      `AgentJobDeletion` insertion (nothing to attribute once nothing is deleted) was removed from the
+      route; the model itself is kept, both because rows written before this change are real history
+      and because `test_project_delete_api.py` still exercises the table directly for a project's
+      cascade-delete. Its docstring now states it is historical-only going forward.
+
+      **B2.2.** Two new routes, both additive: `POST /jobs/{job_id}/archive` in `jobs.py` (mirrors
+      `create_job`/`update_job`/`delete_job`'s existing shape — a plain async function taking
+      `project`/`session`/`agent_identity`/`run_identity`, reused directly by
+      `agent_actions.py::archive_governed_job` the same way `delete_governed_job` reuses `delete_job`),
+      governed by the same `_require_agent_job_allowance` gate as every other job mutation. And a new
+      file, `hub/hub/api/v1/loops.py` (`GET /loops/{loop_id}`, `POST /loops/{loop_id}/archive`),
+      registered in `api/v1/__init__.py` under `project_resources_router` alongside `jobs_router`
+      (`/api/v1/projects/{project_id}/loops/...`). The loop route is operator-only two ways at once:
+      structurally, its `get_project` auth dependency requires an `aw_live_` operator credential no
+      run token can satisfy, and explicitly, a `_require_operator` check (mirroring
+      `spec_lifecycle.py:239-243`'s `actor.kind != "operator"` pattern) refuses any request carrying
+      agent attribution — kept even though unreachable today, the same reason `spec_lifecycle.py`
+      checks at the function itself rather than trusting only its callers. No `agent_actions.py`
+      wrapper exists for the loop route at all — D18 says archiving a loop is "not reachable by an
+      agent at all," which is stronger than "reachable but refused."
+
+      **B2.3.** `archive_loop` refuses with 400 when `Loop.ending_state is None` ("this loop is still
+      running; it must stop or complete before it can be archived"), before checking `archived_at`.
+      Tested directly: an enabled, never-stopped loop's archive attempt 400s and leaves
+      `archived_at` untouched.
+
+      **B2.4.** `list_jobs` gained `include_archived: bool = Query(False)` and filters
+      `AIJob.archived_at.is_(None)` by default; `get_job`/`GET /loops/{id}` are deliberately NOT
+      filtered — fetching one specific resource by id is not a listing, and D16's own guarantee
+      requires an archived row to stay fully readable. **Scoped down from the literal task text**: no
+      project-wide `GET /loops` listing route was added. Nothing today lists loops as first-class rows
+      at all (the only existing loop surface is `job.loop`, a facet of the job resource, not a
+      listing of loops) — that surface is `B4.3`/`B5`'s own explicit scope ("Project-scoped list and
+      detail endpoints for loops... Detail returns queue, current item, firing history, and whether a
+      firing is in progress" — depends on D13's live-ness helper, not built yet). Building a
+      placeholder list route now risked a shape B4.3/B5 would immediately have to redo or contradict.
+      Recorded as a genuine scope decision, not a silent skip.
+
+      **B2.5.** `scheduler.py`'s existing stop-condition block (`loop.stop_reason =
+      loop_stop_reason; loop.stopped_at = fired_at`) now also sets `loop.ending_state =
+      "completed" if loop_stop_reason == "loop queue is empty" else "stopped"` — reusing the exact
+      string check already used one branch below for the `loop_queue_exhausted` event, so the value
+      is set at the one place that already knows it, not re-derived by a reader. **"An operator
+      stop" interpreted**: the codebase has no dedicated "stop this loop" operator action today (the
+      UI's Pause button only PATCHes `enabled: false`) — the only existing field an operator can use
+      to record why they stopped a loop is `JobUpdate.stop_reason` via `PATCH .../jobs/{id}`. Made
+      that PATCH path also set `loop.ending_state = "stopped"`, guarded on `ending_state is None` so a
+      later edit to the prose cannot overwrite a governance fact the scheduler already recorded.
+      Flagged for the operator in the change's log rather than assumed silently, since this is an
+      interpretation of ambiguous task text, not a literal instruction.
+
+      **B2.6.** `hub/tests/test_loop_archival.py` (new file) covers the full lifecycle: archiving a
+      running loop refuses (B2.3); archiving a stopped loop succeeds, archiving it twice refuses;
+      before AND after archiving, `GET /loops/{id}` returns purpose, `stop_reason`, `ending_state`,
+      `job_id`, and firing history unchanged — the D16 guarantee this task exists to protect. Also a
+      direct unit test of `_require_operator`'s four argument combinations, since its HTTP path is
+      structurally unreachable by an agent and would otherwise have no coverage of its own.
+
+      **A design question surfaced, not resolved here** (recorded in this iteration's log and
+      `decisions_for_user`): `archive_job`'s route does not require a job's `Loop` (if any) to have
+      ended first — only `archive_loop` does. An agent or operator can archive a bare job whose loop
+      is still actively firing, which hides that loop from the default job listing (`job.loop` is
+      only visible through `list_jobs`/`get_job`) while it keeps running unattended — arguably the
+      same governance failure D17 states as the reason a *running* loop cannot itself be archived.
+      Not fixed unilaterally: D17's text is explicitly loop-scoped ("A loop that is running SHALL NOT
+      be archivable"), never extended to a job that owns one, and B2's own task text does not ask for
+      it either. Belongs to the operator to decide, not invented here.
+
+      **Verification.** `pytest hub/tests/test_loop_archival.py hub/tests/test_jobs.py
+      hub/tests/test_jobs_crud.py hub/tests/test_scheduler.py hub/tests/test_agent_actions_governed.py
+      hub/tests/test_mcp_server.py hub/tests/test_agents_self_registered.py
+      hub/tests/test_project_delete_api.py -q`: **131 passed, 3 skipped**. `ruff check` and
+      `black --check --target-version py311` both clean on every touched file (one reformat applied to
+      `loops.py` and `test_jobs.py`, then re-verified clean). `mypy hub/` (from `hub/`): **364 errors,
+      86 files** — up from the 361/86 baseline by exactly 3, all three additional instances of two
+      error *categories* already present dozens of times in this same file/its siblings (a route
+      handler with no return-type annotation — every other job/agent-action route already has this;
+      `AIJob` has no attribute `"loop"` — the same dynamic-attribute pattern `create_job`/`list_jobs`/
+      `update_job` already use 3x), not a new defect category. `get_loop`/`archive_loop` in the new
+      `loops.py` file DO carry explicit, correct return-type annotations (`-> LoopDetail`) precisely
+      because that file had no existing convention to match and the annotation is true there (unlike
+      `jobs.py`'s routes, which return an ORM object a `-> JobResponse` annotation would misstate).
+      `npx openspec validate --changes --strict`: 2/2 still valid after this edit. No UI files
+      touched, so no rebuild needed.
 
 ## B3. `archive_job` on the MCP surface
 

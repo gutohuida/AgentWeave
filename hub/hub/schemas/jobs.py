@@ -87,9 +87,21 @@ class LoopSummary(BaseModel):
     stop_when_queue_empties: bool
     stop_reason: Optional[str] = None
     stopped_at: Optional[datetime] = None
+    # D17: the two axes B1 added — what happened ("completed"/"stopped", or None while running)
+    # and housekeeping (when the operator archived it, or None if still listed by default).
+    ending_state: Optional[str] = None
+    archived_at: Optional[datetime] = None
     queue: Dict[str, int] = Field(default_factory=dict)  # status -> count
     current_task: Optional[Dict[str, str]] = None  # {"id", "title", "status"}
     open_questions: int = 0
+
+
+class LoopDetail(LoopSummary):
+    """A loop's own record — everything `LoopSummary` carries, plus the parent job id and its
+    firing history (design D16's guarantee: still fully readable once archived, B2.6)."""
+
+    job_id: str
+    history: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 class JobResponse(BaseModel):
@@ -107,6 +119,8 @@ class JobResponse(BaseModel):
     run_count: int
     last_session_id: Optional[str] = Field(default=None, max_length=128)
     source: str = Field(default="hub", max_length=64)  # "local" or "hub"
+    # D16: NULL means live and listed by default; set only by `POST /jobs/{id}/archive`.
+    archived_at: Optional[datetime] = None
     history: Optional[List[Dict[str, Any]]] = None  # Included in get_job only
     loop: Optional[LoopSummary] = None
 

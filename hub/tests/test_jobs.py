@@ -210,8 +210,8 @@ async def test_pause_and_resume_job(app, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_delete_job(app, auth_headers):
-    """Test deleting a job."""
+async def test_delete_job_refuses_and_archive_replaces_it(app, auth_headers):
+    """Design D16 (B2.1/B2.2): nothing is deletable — a job archives instead."""
     create_resp = await app.post(
         "/api/v1/projects/proj-test/jobs",
         json={
@@ -224,13 +224,39 @@ async def test_delete_job(app, auth_headers):
     )
     job_id = create_resp.json()["id"]
 
-    # Delete the job
+    # DELETE refuses, naming archiving as the alternative (B2.1) — nothing is removed.
     resp = await app.delete(f"/api/v1/projects/proj-test/jobs/{job_id}", headers=auth_headers)
-    assert resp.status_code == 204
+    assert resp.status_code == 400
+    assert "archiv" in resp.json()["detail"].lower()
 
-    # Verify it's gone
     get_resp = await app.get(f"/api/v1/projects/proj-test/jobs/{job_id}", headers=auth_headers)
-    assert get_resp.status_code == 404
+    assert get_resp.status_code == 200
+
+    # Archiving is the real alternative (B2.2): the job survives, but drops out of the default
+    # list (B2.4) while remaining fully readable by id (D16's guarantee).
+    archived = await app.post(
+        f"/api/v1/projects/proj-test/jobs/{job_id}/archive", headers=auth_headers
+    )
+    assert archived.status_code == 200, archived.text
+    assert archived.json()["archived_at"] is not None
+
+    still_there = await app.get(f"/api/v1/projects/proj-test/jobs/{job_id}", headers=auth_headers)
+    assert still_there.status_code == 200
+    assert still_there.json()["archived_at"] is not None
+
+    default_list = await app.get("/api/v1/projects/proj-test/jobs", headers=auth_headers)
+    assert job_id not in {j["id"] for j in default_list.json()}
+
+    with_archived = await app.get(
+        "/api/v1/projects/proj-test/jobs?include_archived=true", headers=auth_headers
+    )
+    assert job_id in {j["id"] for j in with_archived.json()}
+
+    # Archiving an already-archived job is refused, not a silent no-op.
+    twice = await app.post(
+        f"/api/v1/projects/proj-test/jobs/{job_id}/archive", headers=auth_headers
+    )
+    assert twice.status_code == 400
 
 
 @pytest.mark.asyncio

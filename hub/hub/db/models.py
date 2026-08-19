@@ -1268,7 +1268,14 @@ class Loop(Base):
 
 
 class AgentJobDeletion(Base):
-    """Durable attribution tombstone for an agent-deleted scheduled job."""
+    """Durable attribution tombstone for an agent-deleted scheduled job.
+
+    Historical only as of design D16 (B2.1): `DELETE /api/v1/jobs/{job_id}` refuses outright
+    instead of deleting, so no new row is written here — an archived job's attribution lives on
+    `AIJob.updated_by_run_id` instead, since the row itself survives. Kept, not dropped: rows
+    written before this change are still real history, and a project's cascade-delete still needs
+    somewhere to clean them up from.
+    """
 
     __tablename__ = "agent_job_deletions"
 
