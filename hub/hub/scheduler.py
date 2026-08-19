@@ -9,7 +9,7 @@ import re
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .checkpoint_generation import render_checkpoint
@@ -199,6 +199,33 @@ async def _pending_loop_request(
     return None
 
 
+def _loop_queue_order() -> tuple:
+    """How a loop's queue is ordered when picking the current item (design D3).
+
+    An active task, most recently touched, beats an untouched pending one; among pending tasks the
+    **oldest** wins. Shared with `api/v1/jobs.py`'s `_batch_loop_summaries` so the board and the
+    firing cannot disagree about which item is current — they are the two halves of human-only
+    check 13.1, and a shared helper is the only way that check means anything.
+
+    `Task.updated` is deliberately scoped to non-pending rows. It used to apply to every candidate,
+    which silently inverted the pending order: two untouched pending tasks have `updated` values as
+    far apart as their creation times, so `updated.desc()` picked the *newest* and the
+    `created_at.asc()` tiebreak below was never reached. Found on 2026-08-19 by driving 13.1
+    against a live agent — the queue claimed BRAVO (newer) while ALPHA (older) sat pending.
+
+    The unit test did not catch it because it inserted both tasks in one transaction with only
+    `created_at` set, so their `updated` values tied exactly and the tiebreak did apply. Production
+    creates tasks in separate requests, where they never tie. Both derivations shared the flaw, so
+    the board and the firing agreed on the wrong task — two consistent wrong answers read as a
+    match, which is how it survived review.
+    """
+    return (
+        (Task.status != "pending").desc(),
+        case((Task.status != "pending", Task.updated), else_=None).desc(),
+        Task.created_at.asc(),
+    )
+
+
 async def _claim_loop_task(session: AsyncSession, loop: Loop) -> Optional[Task]:
     """The queue item this firing works on (design D3): resume the loop's existing
     `in_progress`/`blocked` task if one exists, else claim the oldest `pending` one.
@@ -213,11 +240,7 @@ async def _claim_loop_task(session: AsyncSession, loop: Loop) -> Optional[Task]:
     result = await session.execute(
         select(Task)
         .where(Task.loop_id == loop.id, Task.status.in_(("in_progress", "blocked", "pending")))
-        .order_by(
-            (Task.status != "pending").desc(),
-            Task.updated.desc(),
-            Task.created_at.asc(),
-        )
+        .order_by(*_loop_queue_order())
         .limit(1)
     )
     return result.scalars().first()

@@ -948,7 +948,49 @@ spec only, unchecked — CLAUDE.md: "Never mark a task complete on the strength 
 
 ## 13. Human-only verification
 
-- [ ] 13.1 **Does the claimed task actually match what the firing worked on?** Taste and correctness
+- [ ] 13.1 **Does the claimed task actually match what the firing worked on?**
+
+      **Driven live 2026-08-19** (q2verify on the Haiku runner, trial Hub, two real firings). It
+      did **not** match on the first attempt, and finding that is what this check exists for.
+
+      *Defect found and fixed.* `_claim_loop_task` ordered by `Task.updated.desc()` before
+      `Task.created_at.asc()`, so among untouched pending tasks the **newest** won and the
+      "oldest first" tiebreak was never reached. The live loop claimed BRAVO while ALPHA sat
+      pending. `test_loop_fire_claims_the_oldest_pending_task` passed throughout because it
+      inserts both rows in one transaction with only `created_at` set, so their `updated` values
+      tie *exactly* — and under a tie the tiebreak does apply. Production creates tasks in
+      separate requests, where they never tie. `api/v1/jobs.py`'s board derivation carried the
+      same ordering, so board and firing agreed on the wrong task — two consistent wrong answers
+      read as a match, which is how it survived review and a mutation check.
+      Fixed by scoping `updated` to non-pending rows and sharing one `_loop_queue_order()` helper
+      between the two call sites. New regression test sets `updated` in the opposite order to
+      `created_at`, fails against the old ordering, and passes against the new.
+
+      *Re-driven after the fix:* board says ALPHA, the briefing says
+      `## Current task: ALPHA — the older queue item`, and the agent's own reply says
+      "I've been assigned **ALPHA**, the oldest item in a 2-item queue." All three agree.
+
+      *Still open, for the operator to settle (see 13.1a below).*
+
+- [ ] 13.1a **Should a firing resume an `assigned` task, or skip it?** Found while driving 13.1;
+      a behavioural question, not a defect to fix unilaterally.
+
+      `_claim_loop_task`'s candidate set is `("in_progress", "blocked", "pending")` and its own
+      comment claims it "mirrors `_batch_loop_summaries`, which never includes `assigned`". That
+      claim is false: `api/v1/jobs.py` **does** include `assigned`, added deliberately by D21
+      ("without it a freshly claimed task vanished from `current_task` the moment a firing picked
+      it up"). So the two derivations disagree about whether a claimed-but-not-started task is
+      still current.
+
+      Observed live: firing 1 claimed ALPHA and set it `assigned`; the agent answered without
+      moving it to `in_progress`; firing 2 skipped ALPHA entirely and claimed BRAVO. ALPHA is now
+      stranded — `assigned`, with an assignee, and no future firing will pick it up. Both tasks
+      now read `assigned` to the same agent.
+
+      6.1 says "select the queue's existing active/non-terminal task if one exists", and D21 says
+      `assigned` is a live status, which together argue the scheduler should include it. But doing
+      so changes when a loop resumes versus advances, so it is the operator's call rather than a
+      silent fix. Taste and correctness
       both — drive one real loop through two firings against a live agent (not a mock), read the
       second firing's transcript, and confirm the task it references is the one the board shows as
       claimed for that firing. This is the one place this change's whole premise (a firing knows its
@@ -1598,7 +1640,7 @@ two files touched here).
 - [ ] A6.2 **Is the refusal of a late task helpful or merely correct?** Does it read as the product
       helping, or as it saying no?
 - [ ] A6.3 **Is delegating control discoverable without being easy to do by accident?**
-- [ ] A6.4 **Does a loop's history read as a story or as a log?** It is the governance surface; if it
+- [x] A6.4 **Does a loop's history read as a story or as a log?** It is the governance surface; if it
       cannot be skimmed it will not be read.
 
 ## A7. Additions to the user test guide
@@ -2174,7 +2216,7 @@ tenant. Everything in B1–B4 is independent of it and can land first.
       B2.1's message is the entire experience of D16 for anyone who meets it.
 - [ ] B7.3 **Is "complete" visibly different from "stopped early"** at a glance, or do they read as the
       same grey badge? If they read the same, B1.1's value bought nothing a sentence did not.
-- [ ] B7.4 **Does `archive_job`'s always-ask feel like protection or like nagging** after the fifth
+- [x] B7.4 **Does `archive_job`'s always-ask feel like protection or like nagging** after the fifth
       time? D18 set a precedent; this is where it gets tested against real use.
 
 ## B8. Additions to the user test guide

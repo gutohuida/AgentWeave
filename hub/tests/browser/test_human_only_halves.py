@@ -136,8 +136,7 @@ def test_the_shell_stays_within_its_own_bounds_at_every_width(
     # Never wider than the window, and never hanging off either edge.
     assert box["x"] >= -1, f"shell starts off-screen at {width}px (x={box['x']})"
     assert box["x"] + box["width"] <= width + 1, (
-        f"shell overflows the viewport at {width}px: "
-        f"x={box['x']} + w={box['width']} > {width}"
+        f"shell overflows the viewport at {width}px: " f"x={box['x']} + w={box['width']} > {width}"
     )
 
     # No horizontal scrollbar on the document — the classic symptom of a pane that does not fit.
@@ -244,6 +243,7 @@ def test_complete_and_stopped_early_are_not_the_same_badge(page: Page, hub_url: 
     assert stop_text, f"no status badge found on the stopped loop row ({STOPPED_LOOP})"
 
     assert done_text != stop_text, "the two ending states render the same words"
-    assert (done_fg, done_bg) != (stop_fg, stop_bg), (
-        "the two ending states render in identical colours — they would read as the same badge"
-    )
+    assert (done_fg, done_bg) != (
+        stop_fg,
+        stop_bg,
+    ), "the two ending states render in identical colours — they would read as the same badge"

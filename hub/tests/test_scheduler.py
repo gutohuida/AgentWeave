@@ -458,6 +458,91 @@ async def test_loop_fire_claims_the_oldest_pending_task(app, auth_headers, bind_
 
 
 @pytest.mark.asyncio
+async def test_loop_fire_claims_the_oldest_even_when_updated_differs(
+    app, auth_headers, bind_runner
+):
+    """Regression, found live on 2026-08-19 by driving human-only check 13.1 against a real agent.
+
+    `test_loop_fire_claims_the_oldest_pending_task` above sets only `created_at` and inserts both
+    rows in one transaction, so their `updated` values tie *exactly* — and under a tie the
+    `created_at` tiebreak decides, so it passed. Production creates tasks in separate requests,
+    where `updated` differs by however far apart they were created, and the old
+    `Task.updated.desc()` key then picked the **newest** pending task before `created_at` was ever
+    consulted. The live loop claimed BRAVO while ALPHA sat pending.
+
+    This test sets `updated` explicitly and in the *opposite* order to `created_at`, so it fails
+    against the old ordering and can only pass if `updated` is scoped to non-pending rows.
+    """
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {"loop-agent-claim-updated": {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    await bind_runner("loop-agent-claim-updated", cli="claude")
+
+    fake_session = MagicMock()
+    fake_session.pid = 4455
+    fake_session.read.side_effect = [
+        '{"type":"result","subtype":"success","is_error":false,"session_id":"sess-claim-upd"}\n',
+        "",
+    ]
+    fake_session.wait.return_value = 0
+
+    now = datetime.now(timezone.utc)
+    async with async_session_factory() as db:
+        job = await _make_job(db, suffix="claim-updated", agent="loop-agent-claim-updated")
+        loop = await _make_loop(db, job_id=job.id, purpose="claim the oldest despite updated")
+        db.add(
+            Task(
+                id="task-upd-older",
+                project_id="proj-test",
+                title="older",
+                status="pending",
+                loop_id=loop.id,
+                created_at=now - timedelta(minutes=5),
+                updated=now - timedelta(minutes=5),
+            )
+        )
+        db.add(
+            Task(
+                id="task-upd-newer",
+                project_id="proj-test",
+                title="newer",
+                status="pending",
+                loop_id=loop.id,
+                created_at=now,
+                updated=now,
+            )
+        )
+        await db.commit()
+
+    with patch(  # noqa: SIM117
+        "hub.api.v1.agent_trigger.PtySession.spawn", MagicMock(return_value=fake_session)
+    ):
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            scheduler = JobScheduler()
+            async with async_session_factory() as db:
+                fresh_job = await db.get(AIJob, job.id)
+                success = await scheduler._fire_job_internal(
+                    fresh_job, trigger="scheduled", session=db
+                )
+
+            for task in list(agent_trigger._background_runs):
+                await task
+
+    assert success is True
+
+    async with async_session_factory() as db:
+        older = await db.get(Task, "task-upd-older")
+        newer = await db.get(Task, "task-upd-newer")
+        assert older.status == "assigned", "the OLDER pending task must be claimed"
+        assert older.assignee == "loop-agent-claim-updated"
+        assert newer.status == "pending", "the newer pending task must be left alone"
+        assert newer.assignee is None
+
+
+@pytest.mark.asyncio
 async def test_loop_fire_resumes_an_active_task_instead_of_claiming_another(
     app, auth_headers, bind_runner
 ):

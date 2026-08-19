@@ -157,6 +157,13 @@ async def _batch_loop_summaries(
         queue_counts.setdefault(loop_id, {})[task_status] = count
 
     current_task_by_loop: Dict[str, Dict[str, str]] = {}
+    # Same ordering the firing itself uses, imported rather than restated: the board and the
+    # firing must never disagree about which queue item is current, which is exactly what
+    # human-only check 13.1 asks. `Task.updated` is scoped to non-pending rows there — see that
+    # helper for the bug the scoping fixes. Imported inside the function, matching this module's
+    # existing convention for `...scheduler` (get_scheduler does the same at three call sites).
+    from ...scheduler import _loop_queue_order
+
     candidates_result = await session.execute(
         select(Task)
         .where(
@@ -167,12 +174,7 @@ async def _batch_loop_summaries(
             # `current_task` the moment a firing picked it up.
             Task.status.in_(("in_progress", "blocked", "pending", "assigned")),
         )
-        .order_by(
-            Task.loop_id,
-            (Task.status != "pending").desc(),
-            Task.updated.desc(),
-            Task.created_at.asc(),
-        )
+        .order_by(Task.loop_id, *_loop_queue_order())
     )
     for task in candidates_result.scalars().all():
         if task.loop_id not in current_task_by_loop:
