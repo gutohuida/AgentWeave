@@ -3350,3 +3350,40 @@ carries five unresolved, genuinely-operator-scope items forward unchanged — no
 iteration, as none are agent-decidable.
 
 No commit needed beyond this log entry and the STATE.json update — closing the run.
+
+
+---
+
+## Run 2, iteration 12 — Session close: stop_at reached, no new work started
+
+This firing woke at 12:40:25 (driver.log), 20 minutes after iteration 11's push, on schedule per
+the heartbeat-release/grace-period pattern. `stop_at` is 13:00:00+01:00; at the point this iteration
+began reading state, only ~19 minutes of runway remained.
+
+**Checked before deciding anything:** `git status` — clean, nothing changed since iteration 11's
+`5d27135`. `git log` — matches STATE.json's claimed HEAD exactly. Trial Hub `/health` — `{"status":
+"ok"}`. Draft PR #5 — still `OPEN`/`MERGEABLE`, untouched (no merge, per the standing no-unattended-
+merge limit). Since the tree is byte-identical to what iteration 11 already verified 15 minutes
+earlier (2449/12/1 hub pytest, 1089/1089 vitest, 54/54 browser), a repeat full-suite pass would
+re-confirm the same unchanged code for zero new information — not a good use of the ~19 minutes
+left, and iteration 11 had already made that call once with more runway to spare.
+
+**Decision: close run 2 here rather than let the loop keep firing.** Every queue item is `done`;
+the two openspec changes' agent-verifiable tasks are complete; the five `decisions_for_user` items
+are the only open threads and none are agent-decidable — they need the operator, not another
+iteration reading the same file. Continuing to release the heartbeat every ~15 minutes would just
+spend a firing rediscovering "nothing changed, nothing to decide" until an interactive session
+picks this up. Set `session_stopped: true` in STATE.json so the next cron firing (if any arrives
+before an interactive session takes over) recognizes the run as concluded rather than repeating
+this same no-op read-and-check cycle.
+
+**What is true at close, unchanged from iteration 11 and re-confirmed live just now:** both openspec
+changes' agent-verifiable tasks complete (panel 32/37, loop 76/95 — remaining boxes are all
+human-only); C1-C5 fixed with mutation-checked tests; A4.5/A5.1-5.3/B6.2-6.4 built and
+live-verified; APP1/APP2 built and verified; draft PR #5 open, CI green, unmerged; trial Hub alive
+and healthy. Nothing regressed, nothing new was found, no code changed this iteration.
+
+Committing this log entry plus the `session_stopped: true` STATE.json update now. Per this
+driver's standing "verify on resume" discipline, whoever picks this up next — operator or a fresh
+run — should still re-verify live rather than trust this file, but there is no indication anything
+here has gone stale in the 15-20 minutes since it was last checked.
