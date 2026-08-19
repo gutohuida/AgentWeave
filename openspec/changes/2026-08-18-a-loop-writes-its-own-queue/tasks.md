@@ -1,8 +1,8 @@
 # Tasks — A loop writes its own queue
 
-Sections 1-11 are implemented and verified (dated notes below); everything from section 12 onward is
-still a spec only, unchecked — CLAUDE.md: "Never mark a task complete on the strength of a plan
-existing."
+Sections 1-12 are implemented and verified (dated notes below); everything from the addendum (A1
+onward) and P4 onward is still a spec only, unchecked — CLAUDE.md: "Never mark a task complete on the
+strength of a plan existing."
 
 ## 1. Migration
 
@@ -851,17 +851,97 @@ existing."
 
 ## 12. Full-suite verification — agent-verifiable
 
-- [ ] 12.1 `py -3.11 -m pytest hub/tests -q` — full suite green, including every new test above.
-- [ ] 12.2 `py -3.11 -m mypy hub/hub/` (or the project's equivalent hub type-check command) clean.
-- [ ] 12.3 `npx openspec validate --changes --strict` passes with this change included (already
+- [x] 12.1 `py -3.11 -m pytest hub/tests -q` — full suite green, including every new test above.
+- [x] 12.2 `py -3.11 -m mypy hub/hub/` (or the project's equivalent hub type-check command) clean.
+- [x] 12.3 `npx openspec validate --changes --strict` passes with this change included (already
       confirmed for the spec text itself; re-run after implementation in case a later edit to this
       file drifted from the delta).
-- [ ] 12.4 Mutation-check design D3's claim logic: temporarily revert the deterministic-selection
+- [x] 12.4 Mutation-check design D3's claim logic: temporarily revert the deterministic-selection
       change to "always claim the newest task" and confirm the new test in 6.3 fails by name — the
       same mutation-testing discipline `Q2`'s merge-500 fix already applied this session.
-- [ ] 12.5 Mutation-check design D8's identity check (5.2): temporarily remove the string-equality
+- [x] 12.5 Mutation-check design D8's identity check (5.2): temporarily remove the string-equality
       comparison (accept any caller) and confirm the new test in 5.4 (non-creator refusal) fails by
       name.
+
+      **2026-08-19, iteration 14.** This section is the first time the full suite has actually run to
+      completion since prep — `verified_green_at_prep`'s `hub_pytest` entry was still literally "NOT
+      VERIFIED", and the two immediately preceding iterations both started a background full run and
+      then ended their turn without waiting for it, which drops the process (confirmed: no orphaned
+      pytest survived either exit, `Get-Process` came back empty) rather than carrying it forward —
+      that is why 12.1 stalled for two firings. This iteration ran it in the foreground instead (a
+      `run_in_background` Bash task polled to completion within the same turn via a bounded
+      `until`-loop), refreshing `last_heartbeat` and pushing an interim commit before each ~12-minute
+      wait so the driver would not reclaim the branch mid-run again.
+
+      **12.1, first pass — a real regression, not a flake.** 1 failed, 2387 passed, 52 skipped, 1
+      xpassed. The failure: `test_tool_surface_matches_server.py::
+      test_every_served_tool_is_described_or_deliberately_excluded`. L11's `create_loop` (iteration
+      13) was never added to `_tool_surface_lines` or `UNDESCRIBED_TOOLS` — iteration 13's own
+      targeted verification runs never touched this file, so the gap was invisible until the full
+      suite actually ran. This is exactly the failure mode the test's own docstring names: an agent
+      told to call a tool its own surface omits concludes it does not have the tool, and stops.
+      Fixed by adding a `create_loop` line to `_tool_surface_lines` (`hub/hub/api/v1/agents.py`,
+      beside `create_job`/`delete_job`/`toggle_job`/`run_job`) describing the full signature, the
+      no-stop-condition refusal, and `initial_tasks`' shape. All 7 tests in
+      `test_tool_surface_matches_server.py` pass after the fix; black reformatted the new lines'
+      quote style, ruff clean. Also carried forward and verified in this section (found by a prior
+      iteration mid-run, not yet committed): `hub/tests/browser/conftest.py`'s
+      `pytest_collection_modifyitems` iterated the *whole session's* collected items and skip-marked
+      every one the moment the conftest was merely importable, not just the browser package's own
+      items — invisible in CI (no Playwright there, so `importorskip` aborts before the hook
+      registers) but locally it silently skipped roughly 2,440 non-browser tests too whenever
+      `AW_HUB_URL` was unset. Scoped the skip to items under this conftest's own directory; this is
+      what let 12.1 collect and run the real suite at all instead of a false green of "all skipped."
+
+      **12.1, second pass — clean.** `2388 passed, 52 skipped, 1 xpassed` (0 failed) in 687.80s. The
+      1 xpassed is `test_agent_trigger_overrides.py`'s documented pre-existing timing-dependent
+      flake (a concurrent-poller race against `_execute_run`'s finalize COMMIT, marked `xfail` with
+      its own "un-xfail once the..." note) — unrelated to this change, not touched, and its status
+      (xpass rather than the CI baseline's xfail) is exactly the kind of timing variance the test's
+      own comment already documents as expected.
+
+      **12.2.** `py -3.11 -m mypy hub/hub/` (repo-root cwd, matching the baseline capture's own
+      invocation): **361 errors in 86 files** — identical to `.claude/autonomous/mypy-baseline.txt`'s
+      total. One genuine delta surfaced and was fixed rather than merely annotated: the new
+      migration `0077_loop_declares_source_and_checkpoint_loop.py` (section 1, iteration 1) didn't
+      exist at baseline-capture time, and its `_tables`/`_columns`/`_indexes` helpers had an
+      unannotated `conn` parameter — the same convention `0075`/`0076` already use unfixed, but
+      because mypy does not check the bodies of untyped functions by default, this file's `conn`
+      being untyped was silently hiding real errors that only 0075/0076's pre-existing baseline
+      entries happen not to have. Annotated `conn: sa.engine.Connection` on all three helpers (cheap,
+      in a file this change itself authored, so in scope unlike the pre-authorized 361); that alone
+      surfaced one further real error in `_indexes`' comprehension (`get_indexes()`'s `name` field is
+      `Optional[str]`, not `str`), fixed with a `None`-filter. Migration tests re-run after
+      (`test_migrations.py`, 54 passed, 1 skipped) confirm no behavioural change. Net result: this
+      change contributes zero new mypy errors, literally — not the pre-authorized fallback of "no
+      new errors vs. baseline" with a caveat, an actual matching total. The pre-authorization for
+      12.2 (rescoping away from repo-wide mypy-clean, since 361 pre-existing errors across 86 other
+      files are out of scope for this change) still stands and was not needed beyond this one file.
+
+      **12.3.** `npx openspec validate --changes --strict` — 2/2, unchanged since iteration 13.
+
+      **12.4 (D3 mutation check).** Target: `_claim_loop_task`'s ordering
+      (`hub/hub/scheduler.py:216-221`), confirmed fresh — `.order_by((Task.status != "pending")
+      .desc(), Task.updated.desc(), Task.created_at.asc()).limit(1)`. Mutated `Task.created_at.asc()`
+      to `.desc()` (line 219) — flips the pending-tie tiebreak to newest-first, i.e. "always claim
+      the newest task" among untouched candidates. `py -3.11 -m pytest hub/tests/test_scheduler.py::
+      test_loop_fire_claims_the_oldest_pending_task -v` failed by name as expected (`assert
+      older.status == "assigned"` → got `"pending"`, the newer task claimed instead). Reverted
+      immediately; re-ran the same test green (`1 passed`), and `git diff --stat
+      hub/hub/scheduler.py` confirmed no residual diff before moving on.
+
+      **12.5 (D8 mutation check).** Target: `_authorize_loop_task_creation`
+      (`hub/hub/api/v1/tasks.py:286-311`), confirmed fresh. Mutated line 304's `if job is None or
+      actor.agent != job.agent:` to `if job is None or False:` — accepts any caller regardless of
+      identity. `py -3.11 -m pytest hub/tests/test_agent_actions_coordination.py::
+      test_loop_non_creator_non_operator_is_refused_and_told_to_send_message -v` failed by name as
+      expected (`assert response.status_code == 403` → got `201 Created`, the bystander's task was
+      created). Reverted immediately; re-ran the same test green (`1 passed`), and `git diff --stat
+      hub/hub/api/v1/tasks.py` confirmed no residual diff.
+
+      With section 12 done, the `2026-08-18-a-loop-writes-its-own-queue` change's main body
+      (sections 1-12) is complete and independently full-suite verified. The addendum (A1-A5) and
+      the panel change's P4-P6 remain open, per the operator's "work on both specs" interleaving.
 
 ## 13. Human-only verification
 

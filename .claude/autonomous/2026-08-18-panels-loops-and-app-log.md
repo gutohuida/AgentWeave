@@ -1117,3 +1117,83 @@ temporary edits, reverted immediately after confirming the named test fails — 
 Committed, pushed. `current`/`next_action` now point at **L12** (full-suite verification + mutation
 checks, tasks 12.1-12.5) — the queue's next item, and the last item in the loop-writes-its-own-queue
 change before P4 (panel work) resumes.
+
+## Entry 14 — iteration 14: L12 closes the loop change, and two prior-iteration stalls diagnosed (2026-08-19T01:44-02:12+01:00)
+
+Fresh process. Branch and `git log` matched STATE.json exactly on read — HEAD at the release-heartbeat
+commit following entry 13. `git status` was NOT clean, though: an uncommitted fix to
+`hub/tests/browser/conftest.py` sat in the tree. `driver.log` explained it — two iterations had run
+between entry 13 and this one (00:59-01:12 pushed L11; a third at 01:14-01:23 found the conftest bug
+and started a background full-suite run without committing; a fourth at 01:29-01:34 explicitly said "I'll
+pause here and wait for the background poller" and exited without doing anything). Checked
+`Get-Process`/`Get-CimInstance` for an orphaned pytest process from either background attempt: none —
+only the trial Hub (PID 22568) and this session's own MCP process were running. **The background job
+does not survive the process exiting between iterations.** Both of those firings burned a full cycle
+each waiting for something that was already gone the moment they ended their turn, which is exactly why
+L12 stalled for three heartbeats after L11 landed clean.
+
+**Fix for the pattern, not just the symptom.** Rather than repeat it, ran the full suite via
+`run_in_background: true` and then **blocked on it within this same turn** using a bounded foreground
+`until`-loop (`grep` the log for a pytest summary line every 10s, up to ~9 minutes per poll, chained
+across calls) instead of ending the turn and trusting a cross-iteration notification. Refreshed
+`last_heartbeat` and pushed an interim commit before each wait, so the driver would not reclaim the
+branch mid-run the way it reclaimed the previous two firings (both had gone heartbeat-stale by the time
+the next one picked up).
+
+**12.1, first pass.** 1 failed, 2387 passed, 52 skipped, 1 xpassed, in 752.13s — the FIRST time the full
+suite has actually completed since prep (not iteration 1: its `verified_green_at_prep.hub_pytest` entry
+was still literally "NOT VERIFIED"). The failure was real, not inherited: `create_loop` (L11, iteration
+13) was never added to `_tool_surface_lines` in `hub/hub/api/v1/agents.py`, so
+`test_tool_surface_matches_server.py`'s coverage test failed — iteration 13's own targeted test files
+never touched that one. Fixed by describing `create_loop`'s full signature, the no-stop-condition
+refusal, and `initial_tasks`' shape, in the same style as the neighbouring `create_job` line. 7/7 pass
+after. Also committed the carried-forward conftest.py fix once confirmed by the run itself: it had been
+skip-marking the whole session's collected tests (not just the browser package's) whenever `AW_HUB_URL`
+was unset, silently dropping roughly 2,440 non-browser tests locally on every prior "green" claim this
+run made — invisible in CI, which has no Playwright and never reaches the buggy hook at all.
+
+**12.1, second pass, clean.** 2388 passed, 52 skipped, 1 xpassed, 0 failed, in 687.80s. The xpassed is
+`test_agent_trigger_overrides.py`'s own documented pre-existing timing flake (concurrent-poller race
+against a finalize `COMMIT`), unrelated to this change and already marked `xfail` with its own
+"un-xfail once the..." note — not investigated further, per the note's own framing that this is expected
+variance.
+
+**12.2.** Full `mypy hub/hub/` (repo-root cwd, matching how the baseline was captured): 361 errors in 86
+files, matching `.claude/autonomous/mypy-baseline.txt`'s total exactly. One genuine delta was found and
+FIXED rather than merely rescoped away: migration `0077` (section 1, iteration 1) didn't exist at
+baseline-capture time, and its three helper functions had an unannotated `conn` parameter — matching
+`0075`/`0076`'s own unfixed convention, but because mypy skips body-checking untyped functions by
+default, this hid a real error (`get_indexes()`'s `name` field is `Optional[str]`, not `str`) that
+`0075`/`0076` happen not to trip over. Annotated `conn: sa.engine.Connection` on all three, added a
+`None`-filter to `_indexes`, re-ran `test_migrations.py` (54 passed, 1 skipped) to confirm no
+behavioural change. The pre-authorisation for 12.2 (rescope away from repo-wide mypy-clean) still stands
+for the 361 pre-existing errors; it just was not needed for the one file this change itself introduced.
+
+**12.3.** `npx openspec validate --changes --strict` — 2/2, unchanged.
+
+**12.4 (D3 mutation check).** `hub/hub/scheduler.py:219`, `Task.created_at.asc()` → `.desc()`.
+`test_loop_fire_claims_the_oldest_pending_task` failed by name exactly as predicted (claimed the newer
+task, asserted `"assigned"` got `"pending"`). Reverted; re-ran green; `git diff --stat` confirmed no
+residual diff.
+
+**12.5 (D8 mutation check).** `hub/hub/api/v1/tasks.py:304`, `actor.agent != job.agent` → `False`.
+`test_loop_non_creator_non_operator_is_refused_and_told_to_send_message` failed by name exactly as
+predicted (403 expected, got 201 — the bystander's task was created). Reverted; re-ran green; `git diff
+--stat` confirmed no residual diff.
+
+Marked 12.1-12.5 done in `tasks.md` with a full dated note (commands, line numbers, both mutation
+results) and updated the file's top summary line to "Sections 1-12 are implemented and verified;
+everything from the addendum (A1 onward) and P4 onward is still a spec only." The
+`2026-08-18-a-loop-writes-its-own-queue` change's main body is now complete and independently
+full-suite-verified — every section from here forward (A1-A5) is addendum, not the change's spine.
+
+Committed in three pieces as the work landed rather than one batch at the end (the conftest fix +
+heartbeat refresh; the tool-surface fix + heartbeat refresh; this entry's tasks.md/STATE.json close-out),
+each pushed immediately — the interim pushes are what kept the heartbeat from going stale across the two
+~12-minute suite runs. `current`/`next_action` now point at **P4** (panel: `GET
+/api/v1/workspace/file` endpoint, tasks 4.1-4.5, `openspec/changes/2026-08-18-one-shell-three-panels/
+tasks.md`), returning to the panel change per the operator's "work on both specs" interleaving. Design
+D7 (already read fresh this iteration, design.md:123-150) is summarised in `next_action` in enough
+detail to start immediately: allowlist by membership of `list_workspace_paths`'s own output (not a
+second independent check), size bound from `aw_max_body_size`, NUL-byte-in-first-8000-bytes binary
+detection, Docker-mode parity with `workspace.py`'s existing `/paths` route.
