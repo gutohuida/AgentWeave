@@ -8,9 +8,9 @@
   "stop_at": "2026-08-19T13:00:00+01:00",
   "stop_when_queue_empties": false,
   "run": 2,
-  "iteration": 10,
+  "iteration": 11,
   "session_stopped": false,
-  "last_heartbeat": "2026-08-19T11:19:22+01:00",
+  "last_heartbeat": "2026-08-19T12:24:22+01:00",
   "prepared_by": "Interactive review session 2026-08-19T07:58-08:40+01:00. Run 1's claims were re-verified rather than trusted: every suite re-run, the browser suite's failures reproduced and diagnosed to a named line, and CI's absence confirmed via `gh run list`.",
 
   "what_run_1_achieved": {
@@ -46,7 +46,7 @@
     {"id": "FREE", "title": "Free choice: outstanding fixes, findings, whatever is most needed", "status": "open"}
   ],
   "current": "FREE",
-  "next_action": "Iteration 10 found the working tree ALREADY containing Gap 5's per-conversation token rollup, complete and uncommitted, from a prior process that died before committing (same shape as run 2 iteration 3's LA5 discovery). Independently verified rather than trusted: read every diff line, re-ran the two affected backend test files (11 passed) and the seven affected vitest files (43 passed), tsc clean, eslint clean, ruff+black clean, UI bundle stamp verified current, AND live-verified both ends against the trial Hub (GET .../accounting/conversations/conv-aa40eb38 -> total_tokens 119182, matching exactly; testbed/scratch/diag_conversation_token_total.py's rendered badge reads '119,182 tokens' on a real page load). Committed as bb37544. Remaining real scope, unchanged from iteration 9: Gap 7's per-run spend limit (needs enforcement — pausing a run mid-budget — a materially riskier shape than the additive read-only rollup just built) and Gap 4's persistent chat-surfaced plan/todo (flagged by the source doc itself as the architecturally biggest item, an openspec-propose candidate, not a same-iteration slice). Given ~1h of runway left before stop_at 13:00, and that this iteration touched files several other suites depend on (accounting.py, AgentOutputPanel.tsx) while only running the directly-affected test files, next_action is: run a FRESH FULL SUITE pass — hub pytest (background it, ~11min, `py -3.11 -m pytest tests/ -q --ignore=tests/browser` from hub/), vitest full run, and the browser suite (~2m47s) — to catch any drift since the review's 08:32 baseline (2440 passed/12 skipped/1 xpassed) before stop_at. This is verification work, not a new FREE item; if it comes back clean, record that and let the run close cleanly rather than starting something new this close to the deadline.",
+  "next_action": "Iteration 11 ran the fresh full-suite pass iteration 10 called for, cold, with ~50 minutes of runway left: hub pytest 2449 passed/12 skipped/1 xpassed (802s, vs. the 08:32 baseline of 2440/12/1 — +9 passed, zero failures, zero regressions), vitest 1089/1089 (32s, 107 files), browser suite 54/54 (31s, single clean run, no order-dependence). No code changes were needed — nothing was found broken. This closes run 2's entire queue: every item (C1-C5, A45, LA5, B6X, APP1, APP2, FREE x3) is done, both openspec changes' agent-verifiable tasks are complete, and the run is ending clean rather than starting new scope this close to stop_at 13:00, per this iteration's own next_action and the operator's original brief ('same branch same everything just with what's left'). THE NEXT SESSION (run 3 or an interactive one) should start by re-verifying this run's own claims live rather than trusting this file, per this repo's standing 'verify on resume' discipline — then decide, with the operator, on the five items in decisions_for_user below, since none of them are agent-decidable. If the operator wants further unattended work, the smallest real remaining engineering items are Gap 7 (per-run spend limit enforcement, ui-gap-analysis.md) and Gap 4 (persistent chat-surfaced plan/todo, the same doc's largest item, openspec-propose first). The draft PR #5 stays open and unmerged per the standing no-unattended-merge limit.",
 
   "pre_authorised": [
     {
@@ -118,6 +118,11 @@
       "situation": "FREE, iteration 10: the working tree was already dirty at turn start with a complete, uncommitted implementation of Gap 5's per-conversation token rollup — no matching log entry, presumably a prior process that died before committing.",
       "decision": "Same discipline as LA5 (run 2 iteration 3): did not discard or blind-trust it. Read every diff line, then independently ran the affected backend and frontend test suites, tsc, eslint, ruff, black, the UI bundle stamp check, and — going further than LA5 did — live-verified both the API and the rendered DOM against the trial Hub using a diagnostic script the same prior process had already left in testbed/scratch, confirming the exact numbers the diff's own drafted addendum claimed. Committed only after every check passed independently.",
       "cost_if_wrong": "Low — additive, read-only, fully covered by tests re-run independently, and live-verified end to end before commit."
+    },
+    {
+      "situation": "Iteration 11: next_action called for a cold full-suite re-run with ~50 minutes of runway left, and it came back entirely clean (hub pytest 2449/12/1, vitest 1089/1089, browser 54/54 — no regressions vs. the 08:32 baseline).",
+      "decision": "Did not start a new FREE item this close to stop_at (13:00). stop_when_queue_empties is false, but the queue is not merely empty — every remaining real item (Gap 4, Gap 7) either needs an openspec-propose cycle or operator input per decisions_for_user, neither of which fits safely in the ~30 minutes left, and iteration 10's own next_action explicitly said to close cleanly if verification came back green. Recorded the clean result and ended the run rather than manufacturing scope.",
+      "cost_if_wrong": "None — no code changed this iteration; purely verification."
     }
   ],
 

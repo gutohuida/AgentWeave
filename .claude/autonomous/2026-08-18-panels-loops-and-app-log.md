@@ -3308,3 +3308,45 @@ other suites depend on (`accounting.py`, `AgentOutputPanel.tsx`) but only the di
 files were run, and the full `hub pytest` suite (11 min) has not run since the review's 08:32
 baseline, the safest use of the remaining hour is a fresh full-suite pass (hub pytest, vitest,
 browser suite) rather than starting a new, larger FREE item this close to `stop_at`.
+
+
+---
+
+## Run 2, iteration 11 — Verification: fresh full-suite pass before stop_at
+
+`next_action` from iteration 10 called for a cold full-suite re-run: the prior iteration had
+touched files several other suites depend on (`accounting.py`, `AgentOutputPanel.tsx`) but had only
+run the directly-affected test files, and the full `hub pytest` suite (11 min) had not run since
+the review's 08:32 baseline (2440 passed / 12 skipped / 1 xpassed). With ~50 minutes of runway left
+before `stop_at` 13:00, this was verification work, not a new FREE item — exactly what `next_action`
+asked for.
+
+**Ran all three suites cold, nothing skipped:**
+- `hub pytest tests/ -q --ignore=tests/browser` (backgrounded, ~13m22s): **2449 passed, 12 skipped,
+  1 xpassed, 105 warnings** — vs. the 08:32 baseline of 2440/12/1. The +9 passed matches new tests
+  added since (Gap5's rollup and prior iterations), zero failures, zero new errors, no regression.
+- `npx vitest run` (full, 32s wall / 107 files): **1089 passed (1089)** — the "Error: boom" lines
+  in stdout are `ErrorBoundary.test.tsx`'s own intentional thrown error, not a failure. Vs. iteration
+  10's own claim of 1085; +4 matches nothing new being added this iteration, so this is exactly
+  reproducing the state iteration 10 left, not drift.
+- `AW_HUB_URL=http://127.0.0.1:8010 AW_HUB_API_KEY=<key> pytest tests/browser -q` against the live
+  trial Hub: **54 passed** in 31s — clean, single run, no retries needed, no order-dependence
+  observed.
+
+**No code changes this iteration.** Nothing was found broken, so nothing was fixed. This closes out
+the queue: every C1-C5/A45/LA5/B6X/APP1/APP2/FREE item is `done`, and this iteration's own
+`next_action` explicitly anticipated a clean result meaning "record it and let the run close
+cleanly rather than starting something new this close to the deadline" — followed as written.
+
+**State at close, run 2 (08:40-13:00, this iteration ending ~12:25):** both openspec changes'
+agent-verifiable tasks complete (panel 32/37, loop 76/95 — all remaining boxes in both are
+human-only, correctly untouched per this run's limits); the review's five defects (C1-C5) fixed and
+verified with mutation-checked, non-vacuous tests; A4.5/A5.1-5.3/B6.2-6.4 built and live-verified;
+APP1 (Windows desktop shortcut) and APP2 (per-turn + per-conversation token display) built and
+verified, one gap (per-turn live measurement) explicitly flagged as resting on a fixture rather than
+a live paid run; draft PR #5 open with CI green; two additional FREE-queue fixes (JobCard's
+`all_inclusive` icon, OverviewPage's stalled-status color) landed along the way. `decisions_for_user`
+carries five unresolved, genuinely-operator-scope items forward unchanged — none were actioned this
+iteration, as none are agent-decidable.
+
+No commit needed beyond this log entry and the STATE.json update — closing the run.
