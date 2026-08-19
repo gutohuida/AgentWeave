@@ -1,6 +1,6 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { PanelShell, type PanelTabDescriptor } from '@/components/spec/PanelShell'
 import { usePanelTabsStore, type TabId } from '@/store/panelTabsStore'
 
@@ -105,6 +105,43 @@ describe('PanelShell', () => {
     await user.click(screen.getByTestId('panel-tab-close-specs'))
 
     expect(await screen.findByTestId('panel-empty-state')).toBeInTheDocument()
+  })
+
+  describe('task 6.1 — the newly active tab scrolls into view', () => {
+    it('scrolls the tab into view when it becomes active by click', async () => {
+      usePanelTabsStore.getState().openTab(PROJECT, 'specs')
+      usePanelTabsStore.getState().openTab(PROJECT, 'files')
+      usePanelTabsStore.getState().activateTab(PROJECT, 'specs')
+      const scrollSpy = vi.spyOn(Element.prototype, 'scrollIntoView').mockImplementation(() => {})
+      const user = userEvent.setup()
+      renderShell()
+
+      await user.click(screen.getByRole('tab', { name: 'Files' }))
+
+      expect(scrollSpy).toHaveBeenCalledWith({ block: 'nearest', inline: 'nearest' })
+      // Called on the tab that is now active, not some other element in the strip.
+      const lastInstance = scrollSpy.mock.instances[scrollSpy.mock.instances.length - 1]
+      expect(lastInstance).toBe(screen.getByRole('tab', { name: 'Files' }))
+      scrollSpy.mockRestore()
+    })
+
+    it('scrolls the tab into view when activation moves via arrow keys, not just on open', async () => {
+      usePanelTabsStore.getState().openTab(PROJECT, 'specs')
+      usePanelTabsStore.getState().openTab(PROJECT, 'files')
+      usePanelTabsStore.getState().activateTab(PROJECT, 'specs')
+      const scrollSpy = vi.spyOn(Element.prototype, 'scrollIntoView').mockImplementation(() => {})
+      const user = userEvent.setup()
+      renderShell()
+      scrollSpy.mockClear()
+      screen.getByRole('tab', { name: 'Specs' }).focus()
+
+      await user.keyboard('{ArrowRight}')
+
+      await waitFor(() => expect(scrollSpy).toHaveBeenCalled())
+      const lastInstance = scrollSpy.mock.instances[scrollSpy.mock.instances.length - 1]
+      expect(lastInstance).toBe(screen.getByRole('tab', { name: 'Files' }))
+      scrollSpy.mockRestore()
+    })
   })
 
   describe('keyboard — ARIA tablist, sequential focus, arrow keys, Enter/Space', () => {

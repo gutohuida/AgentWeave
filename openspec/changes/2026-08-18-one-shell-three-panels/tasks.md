@@ -1,7 +1,8 @@
 # Tasks — One shell, many tabs
 
-Nothing in this file has been started. Every box is unchecked because this change is a spec only —
-CLAUDE.md: "Never mark a task complete on the strength of a plan existing."
+Sections 1-6 are implemented and verified (dated notes under each task). Section 7 is the
+operator's own judgement (CLAUDE.md: agent runs do not tick human-only sections) and section 8 is
+the user test guide — both still open.
 
 **Rewritten 2026-08-18** alongside the proposal, design and specs. The loop panel's tasks are gone —
 they live in `2026-08-18-a-loop-writes-its-own-queue` (B5, B6), which owns the data they display.
@@ -449,9 +450,57 @@ Proves the whole shell without a loop or a file endpoint existing.
 
 ## 6. Strip overflow
 
-- [ ] 6.1 Decide overflow behaviour once real tabs exist and more are open than fit. T3 does one native
+- [x] 6.1 Decide overflow behaviour once real tabs exist and more are open than fit. T3 does one native
       `scrollIntoView` for the newly active tab and nothing else; start there and only add if it
       measurably fails. Record what was chosen and why.
+
+      **2026-08-19.** Read D12 fresh (design.md:202-206: "T3 does one native `scrollIntoView` for
+      the newly active tab and nothing else... start there and only add if it measurably fails")
+      and studied `testbed/scratch/t3ref/src/components/RightPanelTabs.tsx:376-379` for the
+      pattern (reference only, not copied — T3's version queries a `data-active-tab` attribute via
+      `querySelector`; this shell already keeps a `TabId -> HTMLButtonElement` ref map for keyboard
+      focus movement, so the equivalent lookup reuses that map instead of adding a second way to
+      find a tab element).
+
+      **Chosen: exactly T3's answer, nothing more.** `PanelShell.tsx` gained one `useEffect`
+      keyed on `panel.activeTabId` that calls `tabButtons.current.get(activeTabId)
+      ?.scrollIntoView({ block: 'nearest', inline: 'nearest' })`. The strip was already
+      `overflow-x-auto` (task 2's own markup), so horizontal scrolling already worked when tabs
+      exceeded the visible width — what was missing was the *newly active* tab being brought into
+      view automatically, e.g. after `ArrowRight`/`ArrowLeft` moves activation past the edge, or
+      opening a tab from the plus menu while the strip is already scrolled. The effect fires on
+      every activation change regardless of cause (click, arrow key, or opening a new tab), which
+      matches T3's `[props.activeSurfaceId]` dependency exactly — one behaviour, not
+      one-per-trigger. Did not add anything beyond this: no manual overflow indicators, no
+      "scroll left/right" chevrons, no tab reordering or pinning. Nothing in manual exercise of
+      the live shell (many tabs open, narrow window, keyboard-only navigation past the visible
+      edge) showed the plain `scrollIntoView` failing to bring the target tab into view, so per
+      D12's own instruction there is nothing to add.
+
+      **Verification.** `hub/ui/src/__tests__/panelShell.test.tsx` gained a new
+      `describe('task 6.1 — the newly active tab scrolls into view')` block (2 tests): scrolling
+      on click-activation, and scrolling on arrow-key-driven activation (not just tab-open),
+      spying on `Element.prototype.scrollIntoView` (already stubbed as a no-op globally in
+      `__tests__/setup.ts` for jsdom, which doesn't implement it) and asserting both the call args
+      (`{block:'nearest', inline:'nearest'}`) and that it fired on the now-active tab's own button
+      element specifically, not some other element in the strip. Full vitest suite: 1066 passed
+      (up from the 1064 baseline after P5), 0 skipped. `tsc --noEmit` and
+      `eslint --max-warnings 0 src` both clean. UI rebuilt (`npm run build`), files staged before
+      `refresh_ui_bundle.py` (both already tracked, so the untracked-file trap did not apply this
+      time), stamp verified with `--check`. Live: `hub/tests/browser/test_panel_shell.py`, 8/8
+      passed; full `hub/tests/browser` suite, 48/48 passed. Manually confirmed both a full pass
+      without my change (via `git stash`/rebuild/retest) and with it that the same test
+      (`test_the_specs_index_tab_opens_from_the_plus_affordance`) flakes independently of this
+      change — different tests failed across separate runs of the untouched baseline, and the
+      failure mode (a plus-menu click's `aria-selected` not flipping) has no relationship to a
+      `scrollIntoView` effect; recorded as pre-existing infra flakiness, not a regression. No
+      Python under `hub/hub/` changed this task, so `mypy hub/hub/`'s 361-error baseline was not
+      re-checked (unaffected by construction). `ruff`/`black` not applicable — no Python files
+      touched.
+
+      **The panel change's agent-verifiable work is now complete.** Sections 1-6 are all done;
+      only section 7 (7.1-7.5, the operator's own judgement) remains, and this run does not tick
+      those per the standing limit.
 
 ## 7. Human-only — the operator's judgement
 

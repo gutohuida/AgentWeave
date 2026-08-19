@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import { Icon } from '@/components/common/Icon'
 import { RowMenu, type RowMenuItem } from '@/components/layout/RowMenu'
 import {
@@ -60,6 +60,15 @@ export function PanelShell({ projectId, availableTabs, describeTab, renderTabCon
     if (el) tabButtons.current.set(id, el)
     else tabButtons.current.delete(id)
   }
+
+  // Task 6.1 (design D12): T3's plain answer for strip overflow — scroll the newly active tab
+  // into view and nothing else. The strip is already `overflow-x-auto`, so this only matters once
+  // enough tabs are open that one sits outside the visible scroll region. Runs on every activation,
+  // not just ones caused by opening a tab, so keyboard arrow-key navigation off-strip is covered too.
+  useEffect(() => {
+    if (!panel.activeTabId) return
+    tabButtons.current.get(panel.activeTabId)?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+  }, [panel.activeTabId])
 
   function moveFocus(index: number) {
     const target = panel.tabs[index]
