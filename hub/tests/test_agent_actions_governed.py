@@ -235,6 +235,45 @@ async def test_create_loop_via_agent_actions_with_initial_tasks_seeds_the_queue(
 
 
 @pytest.mark.asyncio
+async def test_archive_job_via_agent_actions_refuses_when_the_job_has_a_loop(app, auth_headers):
+    """B3.3: a loop is archived by the operator only (mirrors B2.2's operator-only loop rule) —
+    an agent's own governed archive route must not be a back door around that, even though the
+    same route happily archives a bare job (see
+    `test_agent_job_operations_require_allowance_and_retain_run` above). The operator's own path
+    through this same route is unaffected."""
+    headers = await _actor(run_id="run-loop-archive")
+    await _allow_agent_jobs(app, auth_headers)
+
+    created = await app.post(
+        "/api/v1/agent-actions/jobs",
+        headers=headers,
+        json={
+            "name": "loop to protect",
+            "agent": "lead",
+            "message": "work the queue",
+            "cron": "0 2 * * *",
+            "stop_when_queue_empties": True,
+        },
+    )
+    assert created.status_code == 201, created.text
+    job_id = created.json()["id"]
+
+    refused = await app.post(f"/api/v1/agent-actions/jobs/{job_id}/archive", headers=headers)
+    assert refused.status_code == 400
+    assert "operator only" in refused.json()["detail"]
+
+    async with async_session_factory() as session:
+        job = await session.get(AIJob, job_id)
+        assert job.archived_at is None
+
+    # The operator's own path through the same route is not subject to this restriction.
+    operator_archived = await app.post(
+        f"/api/v1/projects/proj-test/jobs/{job_id}/archive", headers=auth_headers
+    )
+    assert operator_archived.status_code == 200, operator_archived.text
+
+
+@pytest.mark.asyncio
 async def test_create_loop_via_agent_actions_rejects_an_invalid_initial_task(app, auth_headers):
     """A malformed entry is refused (422) rather than silently dropped or stored half-shaped."""
     headers = await _actor(run_id="run-loop-bad-task")

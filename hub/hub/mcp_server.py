@@ -593,9 +593,29 @@ def create_loop(
 
 
 @mcp.tool()
-def delete_job(job_id: str) -> Dict[str, Any]:
-    """Delete recurring work only when the operator enabled the allowance."""
-    return _job_effect("DELETE", f"/jobs/{job_id}")
+def archive_job(job_id: str) -> Dict[str, Any]:
+    """Archive recurring work. Nothing is deleted; the job simply stops running.
+
+    Every call puts this exact request to the operator and waits for an explicit answer,
+    regardless of this run's permission posture (design D18) — the standing scheduled-work
+    allowance (`project.allow_agent_jobs`) grants the *capability* to reach this tool at all,
+    it does not supply the *direction* to use it on this job, right now. An `auto` posture
+    would otherwise wave every call through unattended, which is the opposite of what
+    "explicit direction from the operator" means. This is the first tool on this surface with
+    an always-confirm rule — do not treat it as a precedent for any other tool.
+
+    Refused if the job has a loop: a loop is archived by the operator only, never an agent
+    (mirrors `create_loop`'s "continuity is by checkpoint, not resume" rule).
+    """
+    decision = _ask_operator("archive_job", {"job_id": job_id}, tool_use_id=f"archive-{job_id}")
+    if not decision["allow"]:
+        raise HubAPIError(
+            403,
+            f"archiving this job was not approved: {decision['reason']}",
+            "POST",
+            f"/jobs/{job_id}/archive",
+        )
+    return _job_effect("POST", f"/jobs/{job_id}/archive")
 
 
 @mcp.tool()

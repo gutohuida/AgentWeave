@@ -1252,15 +1252,92 @@ tenant. Everything in B1–B4 is independent of it and can land first.
 
 ## B3. `archive_job` on the MCP surface
 
-- [ ] B3.1 Replace `delete_job` with `archive_job` in `hub/hub/mcp_server.py`. Remember the file is
+- [x] B3.1 Replace `delete_job` with `archive_job` in `hub/hub/mcp_server.py`. Remember the file is
       spawned standalone and may import only stdlib + fastmcp; anything it needs from the Hub is
       restated there, with the existing test asserting the two agree.
-- [ ] B3.2 `archive_job` produces an operator approval decision on **every** call, independent of the
+- [x] B3.2 `archive_job` produces an operator approval decision on **every** call, independent of the
       run's permission posture (D18) — the standing `project.allow_agent_jobs` allowance grants the
       capability, not the direction. Test both postures.
-- [ ] B3.3 `archive_job` refuses when the job has a loop, since a loop is operator-only (B2.2).
-- [ ] B3.4 Update the tool-surface count and description in `CLAUDE.md` if the totals move, and update
+- [x] B3.3 `archive_job` refuses when the job has a loop, since a loop is operator-only (B2.2).
+- [x] B3.4 Update the tool-surface count and description in `CLAUDE.md` if the totals move, and update
       whatever test asserts the tool list matches the tools.
+
+      **2026-08-19, iteration 20.** Read B3's task text and D18 fresh (design.md ~486-510) before
+      writing anything, plus `mcp_server.py`'s own "Permission approval" section (~613 onward) — the
+      thing that section already does (`approve_tool_call` → `_decide`/`_ask_operator`, keyed on
+      `AW_PERMISSION_POSTURE`) turned out NOT to be reusable outright: `_decide` (the path every
+      `mcp__agentweave__*` tool call takes under an `auto`/unset posture) allows the Hub's own tools
+      unconditionally at line 683-684, and even under `operator` posture `approve_tool_call` itself
+      still auto-allows them at line 831-832, before ever asking anyone. So the *existing* posture
+      machinery would never have asked the operator about `archive_job` under any posture — it isn't
+      a gate this tool can lean on, it is precisely the gate D18 says is not enough. `archive_job`
+      therefore calls `_ask_operator` directly, itself, unconditionally, before the archive route —
+      the first tool on this surface to do that rather than only being *decided by* that function
+      from inside `approve_tool_call`.
+
+      **B3.1/B3.2.** `archive_job(job_id)` replaces `delete_job` in `mcp_server.py`: it opens a
+      `POST /permission-requests` card (`tool_name="archive_job"`, `tool_input={"job_id": ...}`,
+      `tool_use_id=f"archive-{job_id}"` for a readable audit trail), blocks on `_ask_operator`'s
+      existing poll/timeout loop exactly the way it already works, and only then calls
+      `POST /jobs/{job_id}/archive` through the ordinary governed route. A denial (explicit "denied"
+      or a timeout) raises `HubAPIError(403, ...)` naming the reason, and the archive route is never
+      reached — verified by asserting the mocked call list stops at length 2 (the ask, not a third
+      call). No `_report_decision` call: that function reports a *harness* permission-prompt decision
+      to `/permission-decisions` (a different endpoint, for a different flow — Claude's own
+      `--permission-prompt-tool`), whereas `_ask_operator`'s own request/poll/decide round trip
+      already records the answer by construction; calling both would be two answers to one question.
+
+      **B3.3 — placed at the REST layer, explicitly, per the task's own permission to do so.**
+      `jobs.py::archive_job` already had no governed `GET /jobs/{id}` route an agent could call to
+      check for a loop before asking — the agent-actions surface exposes create/update/delete/archive/
+      run for jobs but no read at all. Building a new governed read route purely so the MCP tool could
+      pre-check felt like real scope creep for four bullet points; the REST route already receives
+      `agent_identity`/`run_identity` and already has DB session access, so the check lives there
+      instead: `agent_identity is not None or run_identity is not None` (the exact condition
+      `_require_agent_job_allowance` uses one function above to recognise "this is an agent call", not
+      a second phrasing of the same idea) gates a `select(Loop).where(Loop.job_id == job_id)` lookup,
+      400ing with "this job has a loop; loops are archived by the operator only" if one exists. The
+      operator's own path through the identical route (`POST /api/v1/projects/{id}/jobs/{id}/archive`,
+      no agent headers) is untouched — consistent with B2.3's existing precedent that the operator is
+      not the one D16/D18 exist to restrain. One accepted consequence, not fixed here: because the
+      loop check happens at the REST layer and the operator-ask happens one layer up in the MCP tool,
+      an agent that calls `archive_job` on a job it does not know has a loop is asked-then-refused
+      rather than refused-before-asking — the operator sees and answers a card for an action that then
+      400s anyway. No governed read route exists to avoid that without adding one, and B3's task text
+      does not ask for one; recorded here rather than silently building a fifth governed job route to
+      route around it.
+
+      **B3.4.** `hub/hub/api/v1/agents.py`'s agent-context tool description (`## Your tools`) now
+      describes `archive_job` in place of `delete_job` — its own line, not folded into
+      `toggle_job`/`run_job`'s "same allowance" sentence, since its actual rule is different (always
+      asks, refuses on a loop). `test_agents_self_registered.py::test_get_agent_context_describes_
+      the_tool_surface` now asserts `"archive_job"` rather than `"delete_job"`. The tool *count* does
+      not move — this is a rename, not an addition — so `CLAUDE.md`'s "21 @mcp.tool(), 20
+      agent-callable" line is unchanged and was left alone. `docs/reference/mcp-tools.md`'s scheduled
+      work table updated the same way. Found and fixed as a direct consequence, not speculative scope:
+      `src/agentweave/mcp/server.py` (the CLI-side compatibility re-export — "no tools of its own",
+      just imports the canonical Hub surface) imported `delete_job` by name in both its try/except
+      branches and its `__all__`; left alone, `import agentweave.mcp.server` would have raised
+      `ImportError` the moment anything imported it, since the name it asked for no longer exists in
+      `hub.mcp_server`. Updated both branches and `__all__` to `archive_job`.
+
+      **Verification.** `pytest hub/tests/test_mcp_server.py hub/tests/test_agent_actions_governed.py
+      hub/tests/test_agents_self_registered.py hub/tests/test_jobs.py hub/tests/test_jobs_crud.py
+      hub/tests/test_loop_archival.py hub/tests/test_mcp_tool_schemas.py -q`: **133 passed, 3
+      skipped** (109 + 24 across two invocations, no failures). `pytest tests/test_mcp_server.py -q`
+      (the CLI-side compatibility-shim test, a different file with the same name under the repo
+      root): **3 passed** — confirms the `src/agentweave/mcp/server.py` fix actually resolves the
+      import rather than just looking plausible. New tests: three in `test_mcp_server.py` cover B3.2
+      end-to-end against the mocked Hub transport (asks first, then archives; asks under `None`/
+      `"auto"`/`"operator"` posture alike; a denial never reaches the archive call), one in
+      `test_agent_actions_governed.py` covers B3.3 against the real ASGI app and a real DB (a
+      loop-owning job's agent-path archive 400s and leaves `archived_at` unset; the operator's own
+      path on the identical job succeeds). `ruff check` and `black --check --target-version py311`
+      clean on all seven touched Python files. `mypy hub/` (from `hub/`): **364 errors, 86 files** —
+      unchanged from B2's count, since this section touched no new untyped surface (the loop check
+      added to `archive_job` uses the same `select(...)` pattern already present elsewhere in the
+      same function). `npx openspec validate --changes --strict`: 2/2 still valid after this edit. No
+      UI files touched, so no rebuild needed.
 
 ## B4. The loop summary tells the truth
 

@@ -637,11 +637,17 @@ async def archive_job(
     enforced one layer up, at the MCP tool (`archive_job` in `mcp_server.py`, B3.2) — this route
     is the mechanism the tool calls once that has already happened, not the policy itself.
 
-    Deliberately does not require the job's `Loop` (if any) to have ended first — that rule
-    (B2.3) is specific to archiving the *loop*, reachable only through `POST /loops/{id}/archive`
-    below, which no agent credential can authenticate against at all. Archiving a bare job whose
-    loop is still running would still hide that loop from the default job listing; flagged as an
-    open question for the operator rather than resolved here (see the change's own log).
+    B3.3: a job with a `Loop` is refused here, for an agent caller only. D18's own text is
+    explicit that "archive_job's agent path therefore only ever targets a job with no loop" —
+    an agent cannot reach `POST /loops/{id}/archive` at all (no agent credential authenticates
+    against it), so without this check an agent could archive the *job* a running loop owns and
+    hide that loop from the default listing while it keeps firing. `agent_identity`/`run_identity`
+    both absent is how `_require_agent_job_allowance` itself recognises an operator call (it
+    returns immediately in that case, a few lines above) — mirrored here rather than restated
+    differently, so the two checks agree on what "an agent is calling" means. The operator's own
+    path through this same route is intentionally NOT restricted this way and does not require the
+    loop to have ended first either (that rule, B2.3, is specific to archiving the *loop* itself) —
+    an open question recorded in the change's own log, not resolved here.
     """
     project_id, _ = project
     await _require_agent_job_allowance(session, project_id, agent_identity, run_identity)
@@ -650,6 +656,13 @@ async def archive_job(
         raise HTTPException(status_code=404, detail="Job not found")
     if job.archived_at is not None:
         raise HTTPException(status_code=400, detail="job is already archived")
+    if agent_identity is not None or run_identity is not None:
+        loop_result = await session.execute(select(Loop).where(Loop.job_id == job_id))
+        if loop_result.scalar_one_or_none() is not None:
+            raise HTTPException(
+                status_code=400,
+                detail="this job has a loop; loops are archived by the operator only",
+            )
 
     job.archived_at = datetime.now(timezone.utc)
     job.updated_by_run_id = run_identity

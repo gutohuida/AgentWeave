@@ -225,7 +225,7 @@ async def test_get_agent_context_describes_the_tool_surface(app, auth_headers):
         "get_answer",
         "request_agent",
         "create_job",
-        "delete_job",
+        "archive_job",
         "toggle_job",
         "run_job",
     ):

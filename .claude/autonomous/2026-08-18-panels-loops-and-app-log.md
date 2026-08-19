@@ -1646,3 +1646,105 @@ the context — that assertion needs to become `"archive_job"`).
 
 Committed and pushed as the work landed. Heartbeat refreshed before the push; releasing it
 (backdating ~40 minutes) as the very last step per the driver's own instructions.
+
+---
+
+## Entry 20 — 2026-08-19T04:11+01:00 — LB3: `archive_job` on the MCP surface, D18's always-ask rule
+
+**LB3 done** (`openspec/changes/2026-08-18-a-loop-writes-its-own-queue/tasks.md`, section B3,
+tasks B3.1-B3.4). Read B3's own task text and D18 fresh (design.md ~486-510), plus
+`mcp_server.py`'s "Permission approval" section (~613 onward), before writing anything — the prior
+iteration's brief was explicit that this needed reading, not assuming.
+
+**The key finding that shaped the whole design.** The existing posture machinery
+(`approve_tool_call` → `_decide`/`_ask_operator`, keyed on `AW_PERMISSION_POSTURE`) cannot be
+reused to satisfy D18 at all: `_decide` (the path every `mcp__agentweave__*` call takes under an
+`auto`/unset posture) allows the Hub's own tools unconditionally, and even under `operator`
+posture `approve_tool_call` *itself* still auto-allows them before ever asking anyone — see lines
+683-684 and 831-832. So the mechanism that exists today would never have put `archive_job` in
+front of the operator under any posture; it is exactly the gate D18 says is not enough, not
+something to lean on. `archive_job` therefore calls `_ask_operator` directly and unconditionally,
+itself, before the archive route — the first tool on this surface to do that from inside its own
+body rather than only being decided *by* that function via `approve_tool_call`.
+
+**B3.1/B3.2.** `archive_job(job_id)` replaces `delete_job` in `hub/hub/mcp_server.py`: opens a
+`POST /permission-requests` card, blocks on `_ask_operator`'s existing poll/timeout loop, and only
+then calls `POST /jobs/{job_id}/archive`. A denial raises `HubAPIError(403, ...)` naming the
+reason; the archive route is never reached on a denial. No `_report_decision` call —
+that reports a *harness* permission-prompt decision to a different endpoint
+(`/permission-decisions`, for Claude's own `--permission-prompt-tool` flow); `_ask_operator`'s own
+round trip already records the answer, so calling both would be two answers to one question.
+
+**B3.3 — deliberately placed at the REST layer, which the task text explicitly permits.** There is
+no governed `GET /jobs/{id}` route an agent can call at all (agent-actions exposes create/update/
+delete/archive/run for jobs, never read), so the MCP tool has no way to check for a loop before
+asking the operator without a new endpoint — building one purely for this felt like real scope
+creep for four bullet points. Instead `jobs.py::archive_job` (which already receives
+`agent_identity`/`run_identity` and has DB session access) gates a `select(Loop).where(Loop.job_id
+== job_id)` lookup on `agent_identity is not None or run_identity is not None` — the exact
+condition `_require_agent_job_allowance` uses one function above to mean "an agent is calling",
+not a second phrasing of the same idea — and 400s naming the operator-only rule if a loop exists.
+The operator's own path through the identical route is untouched. **One accepted consequence, not
+fixed**: because the loop check is at the REST layer and the ask is one layer up in the MCP tool,
+an agent that calls `archive_job` on a job it doesn't know has a loop gets asked-then-refused
+rather than refused-before-asking — the operator answers a card for something that then 400s
+anyway. Recorded rather than solved by adding a fifth governed job route.
+
+**B3.4.** `hub/hub/api/v1/agents.py`'s agent-context tool description now names `archive_job`
+in its own line (not folded into `toggle_job`/`run_job`'s "same allowance" sentence — its actual
+rule differs: always asks, refuses on a loop). `test_agents_self_registered.py` and
+`docs/reference/mcp-tools.md` updated to match. The tool *count* doesn't move (a rename, not an
+addition), so `CLAUDE.md`'s "21 @mcp.tool(), 20 agent-callable" line was left alone. **Found and
+fixed as a direct consequence**: `src/agentweave/mcp/server.py` (the CLI-side compatibility
+re-export) imported `delete_job` by name in both try/except branches and `__all__` — left alone,
+`import agentweave.mcp.server` would `ImportError` immediately, since the name no longer exists in
+`hub.mcp_server`. Fixed in both branches; verified by actually importing the module standalone,
+not just reasoning about it.
+
+**Verification.** `pytest hub/tests/test_mcp_server.py hub/tests/test_agent_actions_governed.py
+hub/tests/test_agents_self_registered.py hub/tests/test_jobs.py hub/tests/test_jobs_crud.py
+hub/tests/test_loop_archival.py hub/tests/test_mcp_tool_schemas.py -q`: **133 passed, 3 skipped**.
+`pytest tests/test_mcp_server.py -q` (the CLI-side shim test, different file, same name, repo
+root): **3 passed** — confirms the compatibility-shim fix actually resolves the import, not just
+looks plausible. New tests: three in `hub/tests/test_mcp_server.py` cover B3.2 against the mocked
+Hub transport (asks first then archives; asks under `None`/`"auto"`/`"operator"` posture alike; a
+denial never reaches the archive call), one in `hub/tests/test_agent_actions_governed.py` covers
+B3.3 against the real ASGI app and a real DB (loop-owning job's agent-path archive 400s and leaves
+`archived_at` unset; the operator's own path on the identical job succeeds). `ruff check` and
+`black --check --target-version py311` clean on all seven touched Python files. `mypy hub/`: **364
+errors, 86 files** — unchanged from B2's count, no new untyped surface. `npx openspec validate
+--changes --strict`: 2/2 still valid. Standalone-import check (`python -c "from hub.mcp_server
+import archive_job"` from outside the repo, mirroring how a spawned agent process loads this
+module): imports cleanly, `archive_job` present, `delete_job` gone — the file's own
+stdlib-plus-fastmcp-only constraint still holds. Restarted the trial Hub (Python changed) after
+confirming the stale PID (6616, listening on 8010) was actually the one to kill via
+`Get-NetTCPConnection -LocalPort 8010`, not guessed; `/health` → ok post-restart. **Live smoke test
+against `proj-5e960453`** on the freshly-restarted Hub, operator credential only (the agent-path
+half is already covered by the real-DB test above and minting a genuine run token requires an
+actual spawned agent run, which this smoke test intentionally did not stand up): created a
+throwaway job with a loop via the operator API, archived it via the operator route, confirmed
+`HTTP 200` and `archived_at` set, confirmed `GET .../jobs/{id}?include_archived=true` still returns
+the full record with `loop` intact afterward. Left in place as inert historical evidence, matching
+the pattern already established for LB2's own smoke-test artifacts in this project.
+
+No UI files touched this iteration, so no rebuild was needed.
+
+`current`/`next_action` now point at **LB4** ("the loop summary tells the truth",
+`openspec/changes/2026-08-18-a-loop-writes-its-own-queue/tasks.md` section B4, tasks B4.1-B4.3,
+~line 1330 after this edit). B4.1 is one clause (`_batch_loop_summaries`'s `current_task`
+candidates query in `jobs.py` gains `"assigned"` alongside its existing statuses — D21). B4.2 adds
+a label field to `LoopSummary`, sourced from the loop's own job rather than a second fetch (read
+D20 for exactly which value "the label the operator recognises a loop by" means before guessing —
+it is a design decision recorded under that name, not restated here). B4.3 is the section's real
+work: project-scoped list and detail endpoints for loops requiring **no conversation id** — this is
+the first time loops become directly listable at all (B2's own note above records that a `GET
+/loops` listing was deliberately NOT built during B2.4, exactly because it was B4.3/B5's scope).
+Detail must return queue, current item, firing history, and whether a firing is in progress via
+**D13's helper** (not a second join over `JobRun.conversation_id`/`Run.status` — D19 is explicit
+this was already rejected once, by a different firing, and re-decided the same way). Read D13, D19,
+D20, D21 fresh before coding B4 — do not assume the prior LB3 iteration's summary substitutes for
+reading the design doc's own words. After B4, the queue continues to LB5 (the loops index tab,
+which requires B4's endpoints and the panel shell) per the interleaving.
+
+Committed and pushed as the work landed. Heartbeat refreshed before the push; releasing it
+(backdating ~40 minutes) as the very last step per the driver's own instructions.

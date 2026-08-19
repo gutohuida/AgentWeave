@@ -53,10 +53,13 @@ acts, enforced in `spec_lifecycle.transition()` rather than only at the API edge
 | Tool | Purpose |
 |------|---------|
 | `create_job(name, agent, message, cron, session_mode=new)` | Create a scheduled job |
-| `delete_job(job_id)`, `toggle_job(job_id, enabled)`, `run_job(job_id)` | Manage one |
+| `toggle_job(job_id, enabled)`, `run_job(job_id)` | Manage one |
+| `archive_job(job_id)` | Archive one — nothing is deleted. Refused if the job has a loop (operator-only) |
 
-All four require the operator to have enabled the project's scheduled-work allowance. A job carrying
-a purpose and an optional stop condition is a **loop**; its queue is the tasks that name it.
+All four require the operator to have enabled the project's scheduled-work allowance. `archive_job`
+additionally puts every call to the operator and waits for an explicit answer, whatever this run's
+permission posture is — the allowance makes the tool reachable, it is not a standing yes. A job
+carrying a purpose and an optional stop condition is a **loop**; its queue is the tasks that name it.
 
 ## Identity
 

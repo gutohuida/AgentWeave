@@ -196,12 +196,6 @@ def test_request_agent_uses_bound_run_without_requester_field(hub):
             "/api/v1/agent-actions/jobs/job-1/run",
             None,
         ),
-        (
-            lambda module: module.delete_job("job-1"),
-            "DELETE",
-            "/api/v1/agent-actions/jobs/job-1",
-            None,
-        ),
     ],
 )
 def test_job_mutations_reach_only_governed_api(call, method, path, body, hub):
@@ -213,6 +207,83 @@ def test_job_mutations_reach_only_governed_api(call, method, path, body, hub):
     assert calls[0].method == method
     assert calls[0].full_url.endswith(path)
     assert _body(calls[0]) == body
+
+
+def test_archive_job_asks_the_operator_before_reaching_the_archive_route(hub, monkeypatch):
+    """D18/B3.2: `archive_job` puts the request to the operator itself — via `_ask_operator`,
+    the same mechanism `approve_tool_call` uses for a `manual`-posture harness prompt — before
+    ever calling the governed archive route. This is deliberately NOT the ordinary
+    `_job_effect`/governed-API pattern the other job tools use (see the parametrize above),
+    because none of those reach the operator at all unless the run's own permission posture
+    already routes through `approve_tool_call` — an `auto` posture would skip that entirely."""
+    from hub import mcp_server
+    from hub.mcp_server import archive_job
+
+    monkeypatch.setattr(mcp_server, "OPERATOR_POLL_SECONDS", 0.01)
+    calls, responses = hub
+    responses.extend(
+        [
+            b'{"id":"perm-1","status":"pending"}',
+            b'{"id":"perm-1","status":"allowed"}',
+            b'{"ok":true}',
+        ]
+    )
+    assert archive_job("job-1") == {"ok": True}
+
+    assert calls[0].method == "POST"
+    assert calls[0].full_url.endswith("/api/v1/agent-actions/permission-requests")
+    assert _body(calls[0]) == {
+        "tool_name": "archive_job",
+        "tool_use_id": "archive-job-1",
+        "tool_input": {"job_id": "job-1"},
+    }
+    assert calls[1].method == "GET"
+    assert calls[1].full_url.endswith("/api/v1/agent-actions/permission-requests/perm-1")
+    assert calls[2].method == "POST"
+    assert calls[2].full_url.endswith("/api/v1/agent-actions/jobs/job-1/archive")
+
+
+@pytest.mark.parametrize("posture", [None, "auto", "operator"])
+def test_archive_job_asks_the_operator_under_every_posture(hub, monkeypatch, posture):
+    """D18's whole point: the standing `allow_agent_jobs` allowance is not enough alone, and
+    this must not silently degrade to `_decide`'s blanket 'the Hub's own tools' allow just
+    because the run's posture happens to be `auto` or unset."""
+    from hub import mcp_server
+    from hub.mcp_server import archive_job
+
+    monkeypatch.setattr(mcp_server, "OPERATOR_POLL_SECONDS", 0.01)
+    if posture is None:
+        monkeypatch.delenv("AW_PERMISSION_POSTURE", raising=False)
+    else:
+        monkeypatch.setenv("AW_PERMISSION_POSTURE", posture)
+    calls, responses = hub
+    responses.extend(
+        [
+            b'{"id":"perm-1","status":"pending"}',
+            b'{"id":"perm-1","status":"allowed"}',
+            b'{"ok":true}',
+        ]
+    )
+    archive_job("job-1")
+    assert calls[0].full_url.endswith("/permission-requests")
+
+
+def test_archive_job_denied_by_the_operator_never_reaches_the_archive_route(hub, monkeypatch):
+    from hub import mcp_server
+    from hub.mcp_server import HubAPIError, archive_job
+
+    monkeypatch.setattr(mcp_server, "OPERATOR_POLL_SECONDS", 0.01)
+    calls, responses = hub
+    responses.extend(
+        [
+            b'{"id":"perm-1","status":"pending"}',
+            b'{"id":"perm-1","status":"denied"}',
+        ]
+    )
+    with pytest.raises(HubAPIError, match="not approved"):
+        archive_job("job-1")
+    # Only the operator ask happened -- a denial must never fall through to archiving anyway.
+    assert len(calls) == 2
 
 
 def test_create_loop_refuses_with_no_stop_condition_before_any_hub_call(hub):

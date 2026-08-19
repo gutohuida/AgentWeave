@@ -960,7 +960,11 @@ def _tool_surface_lines(*, has_peers: bool = True) -> List[str]:
         "- `request_agent(name, template, task)` — governed; subject to the project agent budget.",
         f"- `create_job(name, agent, message, cron, session_mode=new)` — session_mode is one of "
         f"{values(JobSessionMode)}. Requires the operator's scheduled-work allowance.",
-        "- `delete_job(job_id)`, `toggle_job(job_id, enabled)`, `run_job(job_id)` — same allowance.",
+        "- `toggle_job(job_id, enabled)`, `run_job(job_id)` — same allowance.",
+        "- `archive_job(job_id)` — same allowance for the capability, but always puts this exact "
+        "call to the operator and waits for an explicit answer, whatever this run's permission "
+        "posture is. The allowance alone is not enough — it is what makes the call reachable, not "
+        "a standing yes. Refused if the job has a loop: a loop is archived by the operator only.",
         '- `create_loop(name, agent, message, cron, purpose="", stop_at=None, '
         "stop_when_queue_empties=False, spec_document_id=None, initial_tasks=None)` — a job that "
         "also queues its own work, each firing claiming the queue's current task. Refused with no "

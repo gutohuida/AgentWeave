@@ -8,10 +8,10 @@ ordinary ``agentweave`` commands until a Hub starts and injects that surface.
 
 try:
     from hub.mcp_server import (  # type: ignore[import-not-found]
+        archive_job,
         ask_user,
         create_job,
         create_task,
-        delete_job,
         get_answer,
         get_task,
         list_tasks,
@@ -26,10 +26,10 @@ try:
 except ImportError:
     # Repository-root imports see ``hub`` as the outer namespace package.
     from hub.hub.mcp_server import (  # type: ignore[import-not-found,no-redef]
+        archive_job,
         ask_user,
         create_job,
         create_task,
-        delete_job,
         get_answer,
         get_task,
         list_tasks,
@@ -43,10 +43,10 @@ except ImportError:
     )
 
 __all__ = [
+    "archive_job",
     "ask_user",
     "create_job",
     "create_task",
-    "delete_job",
     "get_answer",
     "get_task",
     "list_tasks",
