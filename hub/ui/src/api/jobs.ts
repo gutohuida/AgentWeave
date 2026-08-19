@@ -34,6 +34,10 @@ export interface LoopSummary {
   queue: Record<string, number>
   current_task?: { id: string; title: string; status: string } | null
   open_questions: number
+  /** Is a firing of this loop's job in progress right now (design D13, task A4.4) — the one
+   *  shared fact both the edit-staging response and the loop panel read, computed once
+   *  server-side from `JobRun.status == "in_progress"`. */
+  firing_active: boolean
 }
 
 export interface Job {

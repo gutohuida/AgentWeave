@@ -10,12 +10,17 @@ conversation the operator actually sits in. The richer drill-down UI is `B5`/`B6
 applied edits, how it stopped — filtered by the indexed `EventLog.loop_id` column added for this,
 never another loop's rows.
 
-**Known gap, not fixed here**: neither route reports whether a firing is currently in progress.
-D13's live-ness helper (`JobRun.status` gaining a "running" value, plus the one shared helper both
-this surface and the loop-edit path are meant to use) is not built yet — that is tasks A4.3-A4.5,
-still open. Adding a proxy for it here (e.g. joining `JobRun.conversation_id` to `Run.status`)
-is exactly the shape D19 already rejected once, by name. `history` below still reports each past
-firing's recorded status (`fired`/`failed`) faithfully; it just cannot yet say "running".
+`firing_active` (task A4.4) answers "is a firing in progress right now" — computed once, in
+`_batch_loop_summaries` (`jobs.py`), from `JobRun.status == "in_progress"` (task A4.3). Both routes
+here get it for free through that shared function; the loop-edit response (`POST /jobs/{job_id}`)
+gets the same fact from the same query, so no second implementation can drift from this one.
+`history` still separately reports each past firing's recorded status (`fired`/`failed`/…)
+faithfully — `firing_active` is the live fact `history` alone could not state.
+
+**Still open (task A4.5)**: a crashed run does not yet get its `JobRun` reconciled out of
+`"in_progress"` on Hub restart, the way `run_reconciliation.py` already does for `Run.pid`/
+`last_heartbeat_at`. Until that lands, a Hub crash mid-firing can leave `firing_active` stuck
+`True` for a loop that is not actually running.
 """
 
 from datetime import datetime, timezone

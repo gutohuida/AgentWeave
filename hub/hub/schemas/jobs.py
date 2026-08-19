@@ -108,6 +108,12 @@ class LoopSummary(BaseModel):
     # keys among "purpose"/"stop_at"/"stop_when_queue_empties" that were actually staged appear,
     # alongside "staged_by" and "staged_at".
     pending_edit: Optional[Dict[str, Any]] = None
+    # Design D13 (task A4.4): is a firing of this loop's job in progress right now (`JobRun.status
+    # == "in_progress"`, task A4.3). The ONE shared answer to "is a firing active for this loop" —
+    # every caller of `_batch_loop_summaries` gets it, so the edit-staging response (`POST
+    # /jobs/{job_id}`) and the loop panel (`GET /loops`, `GET /loops/{loop_id}`) read the same
+    # fact computed the same way, never two independent queries drifting apart.
+    firing_active: bool = False
 
 
 class LoopDetail(LoopSummary):

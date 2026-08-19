@@ -2408,3 +2408,69 @@ the restart-only check this iteration's own Python-only, no-UI scope justified.
 
 Committed and pushed as the work landed. Heartbeat refreshed before the push; releasing it
 (backdating ~40 minutes) as the very last step per the driver's own instructions.
+
+## Iteration 28 (2026-08-19 ~07:29–07:37+01:00) — A4.4: the one shared "is a firing active" helper
+
+Fresh process, no memory of iteration 27. Verified branch (`autonomous/2026-08-18-panels-loops-and-
+app`) and `git log` matched `STATE.json` exactly before starting. Read time first: the run stops at
+08:00, and this iteration started at 07:29 — roughly 30 minutes of runway, under iteration 27's own
+threshold for "prefer a smaller, fully-verifiable unit… over a rushed partial implementation." Chose
+A4.4 alone (A4.5 explicitly deferred by iteration 27's own `next_action`, and confirmed here too —
+see below) and worked it end to end rather than starting both A4.4 and A4.5 against the clock.
+
+**What was built**, in full, is recorded in `openspec/changes/2026-08-18-a-loop-writes-its-own-
+queue/tasks.md`'s own "A4.4, what was built" note (~line 1467 after this iteration's insert) — this
+entry summarises. `_batch_loop_summaries` (`hub/hub/api/v1/jobs.py`) was already the ONE function
+every loop-block caller in the repo funnels through (`list_jobs`, `get_job`, the edit-staging
+response, `list_loops`, `_get_loop_detail`) — confirmed by grepping every call site before writing
+anything, exactly what the task's own "do not write it twice" instruction demanded. A4.4's helper is
+a sixth fixed query added to that same function (design D7's "never one query per job" shape
+preserved): `SELECT DISTINCT job_id FROM job_runs WHERE job_id IN (:job_ids) AND status =
+'in_progress'`. `LoopSummary` (`hub/hub/schemas/jobs.py`, inherited by `LoopDetail`) gained a plain
+`firing_active: bool` field; the TypeScript `LoopSummary` (`hub/ui/src/api/jobs.ts`) got the matching
+required field, additive/typed-but-unconsumed like A4.1/A4.2's `events` before it. `loops.py`'s
+module docstring — the "Known gap, not fixed here" paragraph iteration 27 itself pointed at — is
+rewritten to describe what now exists and to name A4.5 as the one remaining gap.
+
+**A real finding, not a fabricated one, surfaced by the live smoke test.** Restarted the trial Hub
+(real PID via `Get-NetTCPConnection`, confirmed live via `Get-Process` before killing it — was 5328,
+started 07:13, not stale) to pick up the Python changes; `/health` returned ok on the first attempt
+this time (no path-segment trap this iteration). `GET /projects/proj-5e960453/loops` against the
+live Hub then showed `loop-8e86eb9f` ("taste-pass never-filled loop") genuinely `"firing_active":
+true` — its `history` has TWO consecutive firings (06:30, 06:15) both stuck at `"in_progress"`,
+never finalized. Not a bug in this iteration's code: this is precisely the crash-recovery gap A4.5
+exists to close, made visible for the first time because `firing_active` is the first thing that
+ever surfaced it. Left the row untouched — it is now a ready-made live fixture for A4.5's own smoke
+test, more useful intact than cleaned up by hand.
+
+**Verified, not assumed.** New test
+`test_loop_archival.py::test_firing_active_reflects_an_in_progress_job_run` — two loops, one
+`JobRun` at `"in_progress"` and a DIFFERENT one at `"fired"` (proving exact-status matching, not
+"any row"), asserted through both `GET /loops` and `GET /loops/{id}`. `pytest
+test_loop_archival.py` — 9 passed (1 new). Broader targeted run (`test_jobs.py test_jobs_crud.py
+test_scheduler.py test_agent_trigger.py`) — 116 passed, 3 skipped, 0 failed. `ruff check`/`black
+--check` clean. `mypy` on the three touched files: only pre-existing errors in transitively-imported,
+unrelated files surfaced — nothing new at the changed lines; NOT a full-repo baseline diff this time
+(time budget), flagged here rather than silently treated as equivalent to prior iterations' fuller
+check. Frontend: `tsc --noEmit` caught three `JobCard.test.tsx` fixtures missing the now-required
+`firing_active` field — fixed, then clean; `eslint --max-warnings 0` clean; `vitest run
+jobCard.test.tsx` 4 passed. UI rebuilt, bundle stamp refreshed, `--check` confirms match. `openspec
+validate --changes --strict`: 2/2.
+
+**Why A4.5 is not in this iteration.** Same reasoning iteration 27 gave for not doing A4.4 alongside
+A4.3: a materially different piece of work (reading and mirroring `run_reconciliation.py`'s
+`Run.pid`/`last_heartbeat_at` pattern for `JobRun`, plus its own live-restart-mid-firing smoke test)
+against roughly 20 minutes of remaining runway once A4.4 itself was verified — better landed clean
+next iteration than rushed now. The stale `loop-8e86eb9f` row found live above means the next
+iteration has a real fixture to prove reconciliation against from the first minute, not one it needs
+to construct.
+
+`tasks.md`'s A4.4 ticked with the dated note above. `current`/`next_action` now point at **A4.5**:
+read `run_reconciliation.py`'s `reconcile_interrupted_runs()` and its call site in `main.py`'s
+lifespan first, mirror the same shape for `JobRun.status == "in_progress"` rather than inventing a
+second reconciliation path, and use `loop-8e86eb9f`/`job-0b490274` on the live trial Hub as a ready-
+made stale-row fixture for the smoke test rather than building one from scratch. A5 (immutability +
+D15 record-only) and A6/A7 (human-only/test-guide) remain queued after.
+
+Committed and pushed as the work landed. Heartbeat refreshed before the push; releasing it
+(backdating ~40 minutes) as the very last step per the driver's own instructions.

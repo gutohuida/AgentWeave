@@ -80,6 +80,7 @@ describe('JobCard loop block', () => {
           queue: { pending: 1, in_progress: 1 },
           current_task: { id: 'task-1', title: 'Bump lodash', status: 'in_progress' },
           open_questions: 2,
+          firing_active: false,
         },
       }),
     )
@@ -109,6 +110,7 @@ describe('JobCard loop block', () => {
           queue: {},
           current_task: null,
           open_questions: 0,
+          firing_active: false,
         },
       }),
     )
@@ -133,6 +135,7 @@ describe('JobCard loop block', () => {
           queue: { in_progress: 1 },
           current_task: { id: 'task-1', title: 'Bump lodash', status: 'in_progress' },
           open_questions: 0,
+          firing_active: false,
         },
       }),
       onOpenTasks,

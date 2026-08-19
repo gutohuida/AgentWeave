@@ -1256,15 +1256,16 @@ regression, the same open question as before, now off by one more.
 
 ## A4. Per-loop history and a running firing (design D13)
 
-2026-08-19, iteration 26. A4.1 and A4.2 done. 2026-08-19, iteration 27: A4.3 done; A4.4/A4.5
-deliberately left for a following iteration — see the note below the checklist for why.
+2026-08-19, iteration 26. A4.1 and A4.2 done. 2026-08-19, iteration 27: A4.3 done. 2026-08-19,
+iteration 28: A4.4 done; A4.5 deliberately left for a following iteration — see the notes below
+the checklist for why.
 
 - [x] A4.1 A per-loop history home — `EventLog` is indexed by project and agent, not loop, so
       retrieving one loop's history must not mean scanning unindexed JSON.
 - [x] A4.2 Retrieve one loop's history; assert no event from another loop is returned.
 - [x] A4.3 `JobRun` records a firing as in progress while its run executes, distinct from completed
       and failed.
-- [ ] A4.4 **One helper** answers "is a firing active for this loop", used by both the edit path and
+- [x] A4.4 **One helper** answers "is a firing active for this loop", used by both the edit path and
       the loop panel in `2026-08-18-one-shell-three-panels`. Do not write it twice.
 - [ ] A4.5 A crashed run must not leave a firing permanently in progress — reconcile on Hub restart
       as `Run.pid`/`last_heartbeat_at` already does.
@@ -1450,6 +1451,62 @@ reconciliation needs `run_reconciliation.py`'s existing `Run.pid`/`last_heartbea
 and mirrored, with its own live-restart-mid-firing smoke test — a different kind of proof than the
 restart-only check this task's own Python-only, no-UI scope justified. Splitting here for the same
 reason iteration 26 split at 4.2/4.3: each landed piece independently verified.
+
+**A4.4, what was built (2026-08-19, iteration 28, under the run's own clock — started ~07:29, stop
+at 08:00, so scoped deliberately small).** `_batch_loop_summaries` (`hub/hub/api/v1/jobs.py`) is
+already the ONE function every loop-block caller in this repo funnels through — `list_jobs`,
+`get_job`, the `POST /jobs/{job_id}` edit-staging response, `list_loops`, and `_get_loop_detail`
+(B5/B6's drill-down) all call it, none re-derive the loop block themselves (confirmed by grepping
+every call site before writing anything, per this task's own "do not write it twice" instruction).
+So A4.4's helper is a sixth fixed query added to that same function (still batched, still no
+per-loop N+1, matching D7's existing five-query shape), not a new module: `SELECT DISTINCT job_id
+FROM job_runs WHERE job_id IN (:job_ids) AND status = 'in_progress'`, and `LoopSummary` (inherited
+by `LoopDetail`) gained a plain `firing_active: bool` field populated from that set. No FK exists
+from `JobRun` to `Loop`, only `job_id` (`Loop.job_id` is unique) — the join is the batch's own
+`job_ids` list, the same shape `open_questions_by_job` a few lines above it already uses. The
+`loops.py` module docstring's own "Known gap, not fixed here" paragraph is rewritten to describe
+what now exists and to name A4.5 as the one thing still missing. TypeScript `LoopSummary`
+(`hub/ui/src/api/jobs.ts`) got the matching required field — no UI component reads it yet (same
+"typed but not consumed" precedent A4.1/A4.2 set for `events`); three existing `JobCard.test.tsx`
+loop fixtures needed `firing_active: false` added or `tsc --noEmit` failed on the now-required
+field — caught by running `tsc` before committing, not assumed clean.
+
+**Tests.** New `hub/tests/test_loop_archival.py::test_firing_active_reflects_an_in_progress_job_run`
+— two loops, one `JobRun` at `"in_progress"` and one at `"fired"` (deliberately not `"in_progress"`,
+proving the check is exact-status, not "any row exists"), asserted true/false through both
+`GET /loops/{id}` and `GET /loops` (list and detail both go through the same batch function, so
+both needed asserting, not just one). `pytest hub/tests/test_loop_archival.py` — 9 passed (1 new).
+Broader targeted run — `test_jobs.py test_jobs_crud.py test_scheduler.py test_agent_trigger.py` —
+116 passed, 3 skipped (pre-existing), 0 failed. `ruff check`/`black --check` clean on every touched
+file. `mypy` on the three touched Python files surfaced only pre-existing errors in unrelated,
+transitively-imported files (`agent_actions.py`, and two lines in `jobs.py` well away from this
+edit); nothing new at or near the changed lines — a full-repo baseline diff was NOT run this
+iteration (time), so this is a targeted check, not the file-by-file baseline comparison prior
+iterations did. Frontend: `tsc --noEmit` clean (after the fixture fix above), `eslint --max-warnings
+0` clean on the two touched files, `vitest run src/__tests__/jobCard.test.tsx` — 4 passed. UI
+rebuilt and the bundle stamp refreshed (`jobs.ts` and the test fixture changed); `--check` confirms
+match.
+
+**Live smoke test against the trial Hub, and a genuine finding, not a fabricated one.** Found the
+real PID via `Get-NetTCPConnection -LocalPort 8010` (`5328`, `Get-Process` confirmed it was live,
+started 07:13 — not stale), restarted via the documented `Invoke-CimMethod` command, `/health`
+returned `{"status":"ok"}`. Then `GET /projects/proj-5e960453/loops` against the live Hub, not just
+the unit fixtures: 7 loops, and `loop-8e86eb9f` ("taste-pass never-filled loop", `job-0b490274`)
+came back `"firing_active": true` for real — its own `history` shows TWO consecutive firings
+(`run-ca41390c` at 06:30, `run-0beb62d8` at 06:15) both still `"in_progress"`, never finalized. This
+is not a bug in this task's own code: it is exactly the pre-existing crash-recovery gap A4.5 exists
+to close (a firing that never reached a terminal `Run` status leaves its `JobRun` stuck), now
+visible for the first time because `firing_active` is the first thing that ever surfaced it. Left
+the row as-is — reconciling it is A4.5's job, not A4.4's, and the live evidence is more useful to
+the next iteration intact than cleaned up by hand.
+
+**Why A4.5 is still not in this iteration.** Clock: this iteration started with roughly 30 minutes
+of runway before the run's own 08:00 stop time, which `next_action` from iteration 27 explicitly
+said should bias toward "one small, fully-verifiable unit… over a rushed partial implementation."
+A4.5 needs `run_reconciliation.py`'s existing `Run.pid`/`last_heartbeat_at` pattern read and
+mirrored for `JobRun`, plus its own live-restart-mid-firing smoke test — a materially different,
+independently-sized piece of work, and the stale `loop-8e86eb9f` row found live above is now a ready-
+made fixture for proving it, rather than needing one built from scratch.
 
 ## A5. Immutability and the identity gap (designs D14, D15)
 

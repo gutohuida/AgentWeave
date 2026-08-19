@@ -7,7 +7,7 @@ from fastapi import HTTPException
 
 from hub.api.v1.loops import _require_operator
 from hub.db.engine import async_session_factory
-from hub.db.models import AIJob, Loop, Task
+from hub.db.models import AIJob, JobRun, Loop, Task
 from hub.utils import persist_event
 
 
@@ -159,6 +159,51 @@ async def test_loop_history_is_isolated_from_other_loops(app, auth_headers):
     assert events_a[0]["data"]["id"] == loop_a.id
     assert len(events_b) == 1
     assert events_b[0]["data"]["id"] == loop_b.id
+
+
+@pytest.mark.asyncio
+async def test_firing_active_reflects_an_in_progress_job_run(app, auth_headers):
+    """Design D13, task A4.4: `firing_active` is true only while a `JobRun` for this loop's job
+    is `"in_progress"` — not for `"fired"` (merely enqueued) or a terminal status, and not for
+    another loop's job entirely."""
+    async with async_session_factory() as db:
+        job_a = await _make_job(db, suffix="firing-a")
+        job_b = await _make_job(db, suffix="firing-b")
+        loop_a = await _make_loop(db, job_id=job_a.id, purpose="a is firing")
+        loop_b = await _make_loop(db, job_id=job_b.id, purpose="b is idle")
+
+        db.add(
+            JobRun(
+                id="run-firing-a-1",
+                job_id=job_a.id,
+                project_id="proj-test",
+                status="in_progress",
+                trigger="scheduled",
+            )
+        )
+        db.add(
+            JobRun(
+                id="run-firing-b-1",
+                job_id=job_b.id,
+                project_id="proj-test",
+                status="fired",
+                trigger="scheduled",
+            )
+        )
+        await db.commit()
+
+    detail_a = await app.get(f"/api/v1/projects/proj-test/loops/{loop_a.id}", headers=auth_headers)
+    detail_b = await app.get(f"/api/v1/projects/proj-test/loops/{loop_b.id}", headers=auth_headers)
+    assert detail_a.status_code == 200
+    assert detail_b.status_code == 200
+    assert detail_a.json()["firing_active"] is True
+    assert detail_b.json()["firing_active"] is False
+
+    listing = await app.get("/api/v1/projects/proj-test/loops", headers=auth_headers)
+    assert listing.status_code == 200
+    by_id = {row["id"]: row for row in listing.json()}
+    assert by_id[loop_a.id]["firing_active"] is True
+    assert by_id[loop_b.id]["firing_active"] is False
 
 
 @pytest.mark.asyncio

@@ -126,7 +126,7 @@ async def _check_spec_document_conflict(
 async def _batch_loop_summaries(
     session: AsyncSession, job_ids: List[str]
 ) -> Dict[str, LoopSummary]:
-    """Compute every job's `loop` block in five fixed queries, never one query per job (design D7)."""
+    """Compute every job's `loop` block in six fixed queries, never one query per job (design D7)."""
     if not job_ids:
         return {}
 
@@ -200,6 +200,19 @@ async def _batch_loop_summaries(
     for job_id, count in questions_result.all():
         open_questions_by_job[job_id] = count
 
+    # Task A4.4 (design D13): "is a firing active for this loop" — the ONE shared query every
+    # caller of this function gets for free. `JobRun` has no FK to `Loop`, only `job_id`
+    # (`Loop.job_id` is unique), so a plain membership check against the batch's own `job_ids`
+    # is the correct join, not a second per-loop query.
+    firing_active_jobs: set = set()
+    firing_result = await session.execute(
+        select(JobRun.job_id)
+        .where(JobRun.job_id.in_(job_ids), JobRun.status == "in_progress")
+        .distinct()
+    )
+    for (job_id,) in firing_result.all():
+        firing_active_jobs.add(job_id)
+
     summaries: Dict[str, LoopSummary] = {}
     for job_id, loop in loop_by_job.items():
         summaries[job_id] = LoopSummary(
@@ -217,6 +230,7 @@ async def _batch_loop_summaries(
             open_questions=open_questions_by_job.get(job_id, 0),
             control=loop.control,
             pending_edit=_pending_loop_edit(loop),
+            firing_active=job_id in firing_active_jobs,
         )
     return summaries
 
