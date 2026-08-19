@@ -164,6 +164,69 @@ describe('S3 — useSSE auth: Authorization header, no ?token= in URL', () => {
     await waitFor(() => expect(seen).toEqual(expect.arrayContaining(types)))
   })
 
+  it(
+    'dispatches loop_stopped/loop_queue_exhausted/loop_archived/loop_control_changed/' +
+      'loop_edit_staged/loop_edit_applied (task B6.4, 2026-08-18-a-loop-writes-its-own-queue — ' +
+      'previously dropped, since none were in SSE_EVENT_TYPES)',
+    async () => {
+      const types = [
+        'loop_stopped',
+        'loop_queue_exhausted',
+        'loop_archived',
+        'loop_control_changed',
+        'loop_edit_staged',
+        'loop_edit_applied',
+      ]
+      const frames = types
+        .map((type) => `event: ${type}\ndata: {"loop_id":"loop-1"}\n\n`)
+        .join('')
+      fetchSpy.mockResolvedValue(makeSSEResponse([frames]))
+
+      const seen: string[] = []
+      function Probe() {
+        useSSE((e) => {
+          seen.push(e.type)
+        })
+        return null
+      }
+      render(withQueryClient(<Probe />))
+
+      await waitFor(() => expect(seen).toEqual(expect.arrayContaining(types)))
+    }
+  )
+
+  it('invalidates the loops list and this loop_id on each of the six loop_* events, and on job_fired/a terminal run event', async () => {
+    const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query')
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const invalidateSpy = vi.spyOn(client, 'invalidateQueries')
+
+    const frames = [
+      'event: loop_queue_exhausted\ndata: {"project_id":"proj-1","loop_id":"loop-1"}\n\n',
+      'event: loop_archived\ndata: {"project_id":"proj-1","id":"loop-2"}\n\n',
+      'event: job_fired\ndata: {"project_id":"proj-1","id":"job-1"}\n\n',
+      'event: run_completed\ndata: {"project_id":"proj-1","agent":"claude","run_id":"run-1"}\n\n',
+    ].join('')
+    fetchSpy.mockResolvedValue(makeSSEResponse([frames]))
+
+    function Probe() {
+      useSSE()
+      return null
+    }
+    render(
+      <QueryClientProvider client={client}>
+        <Probe />
+      </QueryClientProvider>
+    )
+
+    await waitFor(() =>
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['project', 'proj-1', 'loops', 'loop-1'] })
+    )
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['project', 'proj-1', 'loops', 'loop-2'] })
+    // job_fired and a terminal run event invalidate the list even with no loop id in their own
+    // payload — a firing's own job/run events don't name the loop, only the job/run.
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['project', 'proj-1', 'loops'] })
+  })
+
   it('dispatches permission_denied, so a refused agent is visible rather than silent', async () => {
     // Not in SSE_EVENT_TYPES means dropped client-side before any handler runs, and the
     // operator never learns the agent hit a wall.

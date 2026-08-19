@@ -22,13 +22,16 @@ function EndingSummary({ endingState, stopReason }: { endingState?: string | nul
  * (design D16: readable regardless of `archived_at`, so an ended loop still renders completely —
  * task B6.5, the record is most valuable *after* the loop finished).
  *
- * **Deliberately not built here** (open queue items LA4/B6.2-B6.4 in
- * `openspec/changes/2026-08-18-a-loop-writes-its-own-queue/tasks.md`): an active-now indicator,
- * its motion, and SSE-driven live updates. All three depend on design D13's helper
- * (`JobRun.status` gaining a "running" value) which does not exist yet — B4.3's own module
- * docstring in `hub/hub/api/v1/loops.py` already records the same gap for this exact data. A
- * substitute join here would repeat the mistake design D19 already named and rejected once. This
- * tab renders everything the API can state today and nothing it cannot.
+ * **B6.2 the active-now indicator** reads `loop.firing_active` (design D13/D19's shared helper,
+ * `_batch_loop_summaries` in `hub/hub/api/v1/jobs.py`) — no second join is added here, matching
+ * D19's rejection of exactly that. **B6.3** its motion is Tailwind's `animate-pulse` (a CSS
+ * animation), the same class `LogsView`/`AgentTimeline`/`AgentOutputPanel` already use for a live
+ * dot — it inherits `index.css`'s blanket `prefers-reduced-motion: reduce` rule for free, so no
+ * component-level `matchMedia` check is needed. **B6.4** live updates are SSE-driven: `useSSE.ts`'s
+ * central switch invalidates this tab's `useLoop` query on the loop's own six event types (staged/
+ * applied edits, control changes, stop, exhaustion, archival — `loop_queue_exhausted`'s first
+ * consumer) plus `job_fired` and the terminal `run_*` events that flip `firing_active`, so this
+ * component itself stays a plain read of React Query state and does not subscribe directly.
  */
 export function LoopTab({ loopId, onClose }: LoopTabProps) {
   const { data: loop, isLoading, isError } = useLoop(loopId)
@@ -69,6 +72,16 @@ export function LoopTab({ loopId, onClose }: LoopTabProps) {
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
         <EndingSummary endingState={loop.ending_state} stopReason={loop.stop_reason} />
         {loop.archived_at && <Badge variant="secondary">Archived</Badge>}
+        {loop.firing_active && (
+          <span data-testid="loop-tab-firing-active">
+            <Badge variant="success" pill>
+              <span className="inline-flex items-center gap-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-current animate-pulse" />
+                Running now
+              </span>
+            </Badge>
+          </span>
+        )}
       </div>
 
       {loop.purpose && (

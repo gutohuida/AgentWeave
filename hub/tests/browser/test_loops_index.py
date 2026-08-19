@@ -126,6 +126,24 @@ def test_loop_drill_down_shows_the_claimed_item_and_queue(page: Page, hub_url: s
     expect(page.get_by_test_id("loop-tab")).to_contain_text("assigned: 1")
 
 
+def test_loop_drill_down_shows_the_active_now_indicator_when_a_firing_is_in_progress(
+    page: Page, hub_url: str
+) -> None:
+    """Task B6.2/B6.3 (`2026-08-18-a-loop-writes-its-own-queue`): the drill-down's "Running now"
+    indicator reads `firing_active` straight off the API's own shared helper (design D13/D19) — no
+    fabricated fixture needed. `loop-8e86eb9f`'s job has no runner bound (`claude-1`), so its
+    firings never produce a `Run` to finalize against and its `JobRun` sits `"in_progress"` between
+    Hub restarts (the exact live behaviour A4.5's own writeup describes) — real, currently-true
+    state, not staged for this test. Confirmed via `GET /projects/{id}/loops` immediately before
+    writing this test: `loop-8e86eb9f`'s `firing_active` was `true`."""
+    _open_loops_tab(page, hub_url)
+    page.get_by_test_id(f"loops-index-row-{CURRENT_ITEM_LOOP_ID}").click()
+
+    indicator = page.get_by_test_id("loop-tab-firing-active")
+    expect(indicator).to_be_visible()
+    expect(indicator).to_contain_text("Running now")
+
+
 def test_archived_loops_are_hidden_by_default_and_reachable_behind_the_filter(
     page: Page, hub_url: str
 ) -> None:

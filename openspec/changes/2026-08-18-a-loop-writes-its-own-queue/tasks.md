@@ -1,11 +1,11 @@
 # Tasks — A loop writes its own queue
 
 Sections 1-12 are implemented and verified (dated notes below). From the archival addendum, B1
-through B5 are also implemented and verified, plus B6.1/B6.5/B6.6 (the drill-down's static
-content); B6.2-B6.4 (live "running now") are still open, blocked on A4/LA4. A1 (control as a
-per-loop setting) and A2 (editing, staged and visible) are now implemented and verified too (dated
-notes below); A3 onward remain a spec only, unchecked — CLAUDE.md: "Never mark a task complete on
-the strength of a plan existing."
+through B6 are all implemented and verified — B6.2-B6.4's earlier "blocked on A4/LA4" note no
+longer applied by the time this run reached it (A4/A4.5 had already landed, and D13's helper
+already existed); see B6's own dated writeup. A1 (control as a per-loop setting) and A2 (editing,
+staged and visible) are now implemented and verified too (dated notes below); A3 onward remain a
+spec only, unchecked — CLAUDE.md: "Never mark a task complete on the strength of a plan existing."
 
 ## 1. Migration
 
@@ -2048,13 +2048,80 @@ tenant. Everything in B1–B4 is independent of it and can land first.
 
 - [x] B6.1 A `loop:<loop_id>` panel: purpose, stop condition, ending state and reason, queue counts by
       status, the claimed item, open questions, and the firing history.
-- [ ] B6.2 The active-now indicator consumes **D13's helper** — the same one the loop's own machinery
+- [x] B6.2 The active-now indicator consumes **D13's helper** — the same one the loop's own machinery
       uses. Do not add a second join over `JobRun.conversation_id`/`Run.status` (D19).
-- [ ] B6.3 Motion only on the active-now indicator; queue counts and ending state update without a
+- [x] B6.3 Motion only on the active-now indicator; queue counts and ending state update without a
       transition. A CSS-driven animation inherits `index.css`'s existing blanket reduced-motion rule; a
       JS-driven one needs its own `matchMedia` check.
-- [ ] B6.4 Live updates via `useSSE` plus React Query invalidation on the relevant events, including
+- [x] B6.4 Live updates via `useSSE` plus React Query invalidation on the relevant events, including
       `loop_queue_exhausted` from D6 — this is that event's first consumer.
+
+      **B6.2-B6.4, what was built (2026-08-19, run 2 iteration 4).** The blocker iteration 22's
+      writeup recorded — "all three need D13's helper... which does not exist yet" — turned out to
+      already be resolved by the time this iteration read the code: `JobRun.status` gained
+      `"in_progress"` under design D13/task A4.3, and `_batch_loop_summaries`
+      (`hub/hub/api/v1/jobs.py`) already computed `firing_active` from it for both `LoopSummary`
+      and (since `LoopDetail extends LoopSummary`) the drill-down. A4.5, closed earlier this run,
+      closed the one gap loops.py's own module docstring still flagged as open (a crash leaving
+      `firing_active` stuck true). So B6.2's data need was already satisfied; only the frontend
+      was outstanding.
+
+      **B6.2.** `LoopTab.tsx` renders a `loop-tab-firing-active` badge, reading `loop.firing_active`
+      directly off `useLoop`'s existing query — no second join, per D19.
+
+      **B6.3.** Its motion is Tailwind's `animate-pulse` class on the badge's dot, the same class
+      `LogsView`/`AgentTimeline`/`AgentOutputPanel` already use for a live indicator elsewhere in
+      this codebase. A CSS animation class inherits `index.css`'s blanket `@media
+      (prefers-reduced-motion: reduce)` rule (`*, *::before, *::after { animation-duration: 0.01ms
+      !important; ... }`) automatically, so no component-level `matchMedia` check was needed or
+      added.
+
+      **B6.4, and a real gap found on the way.** `useSSE.ts`'s `SSE_EVENT_TYPES` allowlist —
+      client-side; the backend already broadcasts every event type unfiltered over the one SSE
+      connection — was missing all six loop event types (`loop_stopped`, `loop_queue_exhausted`,
+      `loop_archived`, `loop_control_changed`, `loop_edit_staged`, `loop_edit_applied`). Every one
+      of them was being silently dropped before any consumer, including this task's own new one,
+      could ever see it — the same class of gap the `job_created`/`job_updated`/`job_deleted`/
+      `job_fired` entries above them in the same list were added to fix previously. Added all six.
+      Wired into `useSSE.ts`'s existing central invalidation switch (the same one `job_fired`
+      already used) rather than a second per-component subscription: the six loop events invalidate
+      `['project', pid, 'loops']` plus, when the payload names a loop (`loop_id` for
+      `loop_stopped`/`loop_queue_exhausted`, `id` for the other four — read both, not assumed),
+      `['project', pid, 'loops', loopId]`. `job_fired` (a firing becoming `"in_progress"`) and the
+      four terminal `run_*` events (a firing leaving it, per `finalize_job_run_for_conversation`
+      running before those broadcast) also invalidate the loops list, since neither payload names a
+      loop directly and over-invalidating a small, cheap query is the safer failure mode. `task_
+      created`/`task_updated` do the same, since a claimed/completed task changes its loop's queue
+      counts and current item and neither payload carries `loop_id` either (`Task.loop_id` is
+      write-once per A5.1, so there is no reassignment to chase, only a status change to react to).
+      `LoopTab` itself stays a plain read of `useLoop`'s React Query state — it does not subscribe
+      to SSE directly, matching every other panel tab's own pattern.
+
+      **Tests, mutation-checked both ends.** `hub/ui/src/__tests__/loopTab.test.tsx` (new): the
+      badge is absent when `firing_active` is false, present with its `animate-pulse` dot when
+      true, and coexists with the (independent) ending-state badge. Mutation-checked by forcing the
+      render condition to `false && loop.firing_active` — 2 of 3 tests failed by name, restored, all
+      3 passed. `hub/ui/src/__tests__/useSSE.test.tsx` gained a dispatch test for the six
+      previously-dropped event types plus an invalidation test asserting the specific query keys
+      via a `QueryClient` spy. Mutation-checked by forcing the derived `loopId` to `null` — the
+      loop-id-specific assertion failed by name (`toHaveBeenCalledWith(['project','proj-1','loops',
+      'loop-1'])` never happened), restored, passed. `tsc --noEmit` caught a genuine `TS7029`
+      (fallthrough case in switch) from an early draft that chained `run_completed`/`failed`/
+      `stopped`/`interrupted` into `run_started` via a bare fallthrough comment — ESLint's
+      `no-fallthrough` accepted it, TypeScript's stricter check did not; rewritten as a single
+      combined case with an `if (event.type !== 'run_started')` guard instead, no behaviour change.
+
+      **Live-verified against the trial Hub, not just mocked.** `GET
+      /projects/proj-5e960453/loops` showed `loop-8e86eb9f`'s `firing_active: true` at the time of
+      writing — a real, currently-true fact, not a fabricated fixture: its job's agent (`claude-1`)
+      has no runner bound, so its firings never produce a `Run` to finalize against and the
+      `JobRun` sits `"in_progress"` between Hub restarts, exactly the live behaviour A4.5's own
+      writeup already described. Added
+      `test_loop_drill_down_shows_the_active_now_indicator_when_a_firing_is_in_progress` to
+      `hub/tests/browser/test_loops_index.py` against this real state — passed. Full frontend
+      suite: `vitest` 1079/1079 (was 1074; +5 new), `tsc --noEmit` clean, `eslint --max-warnings 0`
+      clean. Full browser suite: 54/54 (was 53; +1). UI bundle rebuilt and re-stamped
+      (`refresh_ui_bundle.py --check` passes).
 - [x] B6.5 A loop that has ended still renders completely. The tab is the governance record; it is most
       valuable *after* the loop finished.
 - [x] B6.6 Audit the `Icon` map before assuming a loop/queue/claimed-item icon exists. `Icon` only —
