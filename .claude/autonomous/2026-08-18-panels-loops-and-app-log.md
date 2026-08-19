@@ -2808,3 +2808,106 @@ A4.5 ticked `[x]` in `openspec/changes/2026-08-18-a-loop-writes-its-own-queue/ta
 
 Queue: A45 closed. Next: LA5 (A5.1-A5.3 — write-once `Task.loop_id`, refusal test, and record
 (don't fix) the D15 name-reuse gap).
+
+## Run 2, iteration 3: LA5 found already done, uncommitted — verified and committed (2026-08-19, ~09:20-09:27+01:00)
+
+Started this iteration by reading STATE.json per protocol and found `git status` already showing
+four modified files (`hub/hub/api/v1/tasks.py`, `hub/hub/schemas/tasks.py`,
+`hub/tests/test_tasks.py`, this change's `tasks.md`) with no matching log entry — the exact shape of
+LA5's own scope, apparently written by a prior process that ended before it could commit. Treated
+this the same as any other unverified claim: read every diff line by line rather than trusting the
+working tree, then re-ran the evidence myself before committing anything.
+
+**What was there.** `TaskUpdate` gained a `loop_id` field; `update_task_for_actor` refuses any
+non-`None` reassignment with 403, checked before the row is touched. Two new tests in
+`test_tasks.py`: a write-once refusal test (mutation-checked in its own docstring — against the
+naive unguarded assignment it failed 200 == 403, restored, passed), and a D15 test that correctly
+declines to reproduce the design's literal wording (a roster-level name reuse, closed by migration
+0063's unconditional unique index) and instead demonstrates the wider surviving gap:
+`_authorize_loop_task_creation` never consults the `agents` table at all, so any `Run` minted with
+`.agent` set to a reused name inherits that name's loop authority. `tasks.md` already carried a full
+"what was built" writeup in this run's own convention.
+
+**Re-verified rather than trusted.** `pytest tests/test_tasks.py tests/test_scheduler.py` — 41
+passed. `ruff check`/`black --check` on the three touched files — clean. `mypy
+hub/api/v1/tasks.py hub/schemas/tasks.py` — zero errors attributable to either file (292 errors
+surfaced are all pre-existing, in `agent_actions.py` and elsewhere in the import graph). `npx
+openspec validate --changes --strict` — 2/2. Everything checked out, so committed as this
+iteration's own work rather than discarded or redone.
+
+Queue: LA5 closed. Next: B6X.
+
+## Run 2, iteration 4: B6.2-B6.4 — the loop drill-down's live active-now indicator (2026-08-19, ~09:27-09:39+01:00)
+
+Read `openspec/changes/2026-08-18-a-loop-writes-its-own-queue/tasks.md`'s B6.2-B6.4 entries before
+starting and found the blocker iteration 22 recorded — "All three need design D13's helper
+(`JobRun.status` gaining a running value) which does not exist yet" — was stale. `JobRun.status`
+already had `in_progress` (design D13, task A4.3), and `_batch_loop_summaries`
+(`hub/hub/api/v1/jobs.py`) already computed `firing_active` from it for both `LoopSummary` and, via
+`LoopDetail extends LoopSummary`, the drill-down itself. A4.5, closed earlier this run, closed the
+one gap `loops.py`'s own module docstring still named as open (a crash leaving `firing_active`
+stuck true). So the backend was already fully ready; only the frontend was outstanding.
+
+**B6.2.** `LoopTab.tsx` renders a `loop-tab-firing-active` badge reading `loop.firing_active`
+straight off the existing `useLoop` query — no second join, per D19's own rejection of that shape.
+
+**B6.3.** Its motion is Tailwind's `animate-pulse` class, the same one `LogsView`/`AgentTimeline`/
+`AgentOutputPanel` already use for a live dot elsewhere in this codebase. A CSS animation class
+inherits `index.css`'s blanket reduced-motion rule automatically (`animation-duration: 0.01ms
+!important` etc.), so no component-level `matchMedia` check was needed.
+
+**B6.4, and a real gap found on the way.** `useSSE.ts`'s `SSE_EVENT_TYPES` — a client-side allowlist;
+the backend already broadcasts every event type unfiltered over the one SSE connection — was missing
+all six loop event types (`loop_stopped`, `loop_queue_exhausted`, `loop_archived`,
+`loop_control_changed`, `loop_edit_staged`, `loop_edit_applied`). Every one was being silently
+dropped before any consumer, including this task's own, could see it — the exact same class of gap
+the `job_created`/`job_updated`/`job_deleted`/`job_fired` entries immediately above them in the same
+list were added to fix previously (per that test's own name, "previously dropped"). Added all six,
+and wired them into `useSSE.ts`'s existing central invalidation switch — the same one `job_fired`
+already used — rather than a new per-component subscription: the six loop events invalidate
+`['project', pid, 'loops']` plus, when the payload names a loop (`loop_id` for
+`loop_stopped`/`loop_queue_exhausted`, `id` for the other four — both read, neither assumed),
+`['project', pid, 'loops', loopId]`. `job_fired` and the four terminal `run_*` events also invalidate
+the loops list (neither payload names a loop directly, and over-invalidating a small, cheap query is
+the safer failure mode), and so do `task_created`/`task_updated` (a claimed/completed task changes
+its loop's queue counts and current item; `Task.loop_id` is write-once per A5.1, so there is no
+reassignment to chase, only a status change to react to). `LoopTab` itself stays a plain reader of
+`useLoop`'s React Query state — it does not subscribe to SSE directly, matching every other panel
+tab's own convention.
+
+**Tests, mutation-checked both ends.** `hub/ui/src/__tests__/loopTab.test.tsx` (new, 3 tests): the
+badge is absent when `firing_active` is false, present with its `animate-pulse` dot when true, and
+coexists with the independent ending-state badge. Mutation-checked by forcing the render condition
+to `false && loop.firing_active` — 2 of 3 tests failed by name (`getByTestId` threw), restored, all
+3 passed. `useSSE.test.tsx` gained a dispatch test for the six previously-dropped types plus an
+invalidation test asserting the exact query keys via a `QueryClient` spy. Mutation-checked by
+forcing the derived `loopId` to `null` — the loop-id-specific `toHaveBeenCalledWith` assertion
+failed by name, restored, passed. `tsc --noEmit` caught a genuine TS7029 (fallthrough case in
+switch) an early draft introduced by chaining `run_completed`/`failed`/`stopped`/`interrupted` into
+`run_started` via a bare fallthrough comment — ESLint's `no-fallthrough` accepted the comment,
+TypeScript's stricter check did not. Rewritten as a single combined case with an explicit
+`if (event.type !== 'run_started')` guard; no behaviour change, `tsc` clean after.
+
+**Live-verified against the trial Hub, not only mocked.** `GET /projects/proj-5e960453/loops` showed
+`loop-8e86eb9f`'s `firing_active: true` at the time of writing — genuinely true, not staged: its
+job's agent (`claude-1`) has no runner bound, so its firings never produce a `Run` to finalize
+against and the `JobRun` sits `in_progress` between Hub restarts, exactly the live behaviour A4.5's
+own writeup already described. Added
+`test_loop_drill_down_shows_the_active_now_indicator_when_a_firing_is_in_progress` to
+`hub/tests/browser/test_loops_index.py` against this real state rather than a fabricated fixture —
+passed.
+
+**Full verification.** `vitest` 1079/1079 (was 1074; +5 new tests), `tsc --noEmit` clean, `eslint
+--max-warnings 0` clean. Full `hub/tests/browser` suite: 54/54 (was 53; +1 new). UI rebuilt
+(`npm run build`) and re-stamped (`refresh_ui_bundle.py`, `--check` confirms current). No backend
+Python source changed this iteration (only the one new browser test), so the ~11-minute
+`hub/tests/` suite was not required to catch a regression from this diff; kicked off in the
+background anyway as a final safety net before ending the iteration.
+
+`tasks.md` B6.2/B6.3/B6.4 ticked `[x]`, with the writeup above. `npx openspec validate --changes
+--strict` — 2/2.
+
+Queue: B6X closed — every agent-verifiable task in both `2026-08-18-a-loop-writes-its-own-queue`
+and `2026-08-18-one-shell-three-panels` is now done (only human-only sections and A6.x/B7.x remain
+open, correctly untouched). Next: APP1 (desktop icon/shortcut — `src/agentweave/assets/icon.ico`
+already exists, confirmed present; scope not yet designed).
