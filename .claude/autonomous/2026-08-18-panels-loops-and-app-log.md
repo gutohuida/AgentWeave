@@ -2761,3 +2761,50 @@ check` — clean. `black` — one file reformatted (`test_job_loop_block.py`), t
 all `hub/ui/src`, `hub/hub/static/ui` (rebuilt bundle), and three `hub/tests/browser/*.py` files.
 
 Queue: C4, C1, C2a, C2b, C3, C5 all closed this iteration. Next: A4.5.
+
+## Run 2, iteration 2: A4.5 — crash reconciliation for a stuck JobRun (2026-08-19, ~08:55-09:03+01:00)
+
+Implemented `reconcile_stale_job_runs()` in `hub/hub/run_reconciliation.py`, mirroring
+`reconcile_interrupted_runs()`'s shape: selects every `JobRun` still `"in_progress"`, resolves its
+correlated `Run` via `conversation_id` (the same correlation `finalize_job_run_for_conversation`
+uses on the normal end-of-turn path, run in the other direction), and reconciles to `"failed"` with
+an `error_summary` unless that `Run` is genuinely `"running"`. Wired into `main.py`'s `lifespan()`
+directly after `reconcile_interrupted_runs()` in the same startup pass, so a `Run` this restart just
+found dead is already `"interrupted"` by the time the new pass reads `Run.status` — no need to
+re-derive `pid_alive()` twice.
+
+**The live fixture was broader than the design's own wording anticipated.** `job-0b490274`'s stuck
+`JobRun` rows (grown to 8 by this point — the job kept firing every 15 minutes since iteration 28,
+`run_count` climbing) never had a `Run` row at all: `claude-1`'s `runner_id` is `NULL`, so
+`schedule_agent` had nothing to spawn, and the firing queued its entry but never got as far as
+creating a `Run`. That's not literally "a crashed run," but it is exactly as permanently stuck, so
+the function treats "no `Run` row exists for this conversation" the same as "the `Run` row exists
+and isn't running" rather than only handling the narrower crash-mid-flight case the task title
+names. Written up inline in `run_reconciliation.py`'s own docstring and in `tasks.md`'s A4.5
+writeup, not silently widened without a trace.
+
+**Tests, mutation-checked.** Four new tests in `hub/tests/test_run_reconciliation.py`:
+no-Run-at-all, dead-Run (proves the two reconciliation passes compose in one startup, not just each
+alone), live-Run-untouched (negative case), and idempotency. Mutation-checked by forcing the
+function to `continue` unconditionally — watched the two positive-case tests fail by name with the
+exact expected-vs-actual mismatch, reverted, watched all 8 pass again. `pytest
+tests/test_run_reconciliation.py tests/test_scheduler.py tests/test_lifespan_shutdown.py
+tests/test_loop_archival.py tests/test_migrations.py` — 101 passed, 1 skipped (pre-existing).
+`ruff check`/`black --check` clean. `mypy hub/hub/run_reconciliation.py` — zero errors, not in the
+baseline file before or after (genuinely clean, not just "no new" against a dirty baseline).
+
+**Live-restart smoke test against the trial Hub, not just unit fixtures.** Before restart:
+`GET /projects/proj-5e960453/jobs` showed `loop-8e86eb9f`'s `firing_active: true`; the sqlite file
+directly confirmed 8 `job_runs` rows for `job-0b490274` at `"in_progress"` with no matching `runs`
+row. Found the live pid via `Get-NetTCPConnection -LocalPort 8010` (not assumed stale), stopped it,
+restarted via the documented `Invoke-CimMethod` command, `/health` returned ok. After restart:
+`firing_active` reads `false`; all 8 rows (a 9th had fired in between and was also caught) now read
+`status="failed"`, `error_summary="Reconciled on Hub start: no live run behind this firing"`. This
+closes the exact gap A4.4's own writeup found live and deliberately left for this task.
+
+A4.5 ticked `[x]` in `openspec/changes/2026-08-18-a-loop-writes-its-own-queue/tasks.md`, with a
+"what was built" section matching this run's existing convention. `npx openspec validate --changes
+--strict` — 2/2. No UI touched this iteration (backend-only change), so no rebuild/stamp needed.
+
+Queue: A45 closed. Next: LA5 (A5.1-A5.3 — write-once `Task.loop_id`, refusal test, and record
+(don't fix) the D15 name-reuse gap).

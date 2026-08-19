@@ -1257,8 +1257,7 @@ regression, the same open question as before, now off by one more.
 ## A4. Per-loop history and a running firing (design D13)
 
 2026-08-19, iteration 26. A4.1 and A4.2 done. 2026-08-19, iteration 27: A4.3 done. 2026-08-19,
-iteration 28: A4.4 done; A4.5 deliberately left for a following iteration — see the notes below
-the checklist for why.
+iteration 28: A4.4 done. 2026-08-19, run 2 iteration 2: A4.5 done.
 
 - [x] A4.1 A per-loop history home — `EventLog` is indexed by project and agent, not loop, so
       retrieving one loop's history must not mean scanning unindexed JSON.
@@ -1267,7 +1266,7 @@ the checklist for why.
       and failed.
 - [x] A4.4 **One helper** answers "is a firing active for this loop", used by both the edit path and
       the loop panel in `2026-08-18-one-shell-three-panels`. Do not write it twice.
-- [ ] A4.5 A crashed run must not leave a firing permanently in progress — reconcile on Hub restart
+- [x] A4.5 A crashed run must not leave a firing permanently in progress — reconcile on Hub restart
       as `Run.pid`/`last_heartbeat_at` already does.
 
 **A4.1/A4.2, what was built.** `EventLog` (`hub/hub/db/models.py`) gained a nullable `loop_id`
@@ -1500,13 +1499,45 @@ visible for the first time because `firing_active` is the first thing that ever 
 the row as-is — reconciling it is A4.5's job, not A4.4's, and the live evidence is more useful to
 the next iteration intact than cleaned up by hand.
 
-**Why A4.5 is still not in this iteration.** Clock: this iteration started with roughly 30 minutes
-of runway before the run's own 08:00 stop time, which `next_action` from iteration 27 explicitly
-said should bias toward "one small, fully-verifiable unit… over a rushed partial implementation."
-A4.5 needs `run_reconciliation.py`'s existing `Run.pid`/`last_heartbeat_at` pattern read and
-mirrored for `JobRun`, plus its own live-restart-mid-firing smoke test — a materially different,
-independently-sized piece of work, and the stale `loop-8e86eb9f` row found live above is now a ready-
-made fixture for proving it, rather than needing one built from scratch.
+**A4.5, what was built (2026-08-19, run 2 iteration 2).** `reconcile_stale_job_runs()`
+(`hub/hub/run_reconciliation.py`) mirrors `reconcile_interrupted_runs()`'s shape rather than
+extending it in place: selects every `JobRun` still `"in_progress"`, resolves its correlated `Run`
+by `conversation_id` (the same correlation `finalize_job_run_for_conversation` uses on the normal
+end-of-turn path, just run in the other direction), and reconciles to `"failed"` with an
+`error_summary` unless that `Run` is genuinely `"running"`. Wired into `main.py`'s `lifespan()`
+directly after `reconcile_interrupted_runs()`, same startup pass, so a `Run` this restart just found
+dead is already `"interrupted"` by the time the new pass reads it — no need to re-derive
+`pid_alive()` a second time.
+
+The live fixture turned out broader than the design anticipated: `job-0b490274`'s stuck `JobRun`
+rows (8 of them by the time this ran, `run_count` had kept climbing every 15 minutes since iteration
+28) never had a `Run` row at all — `claude-1`'s `runner_id` is `NULL`, so `schedule_agent` had
+nothing to spawn. That is not "a crashed run" in the literal sense the task title uses, but it is
+exactly as stuck, so the function treats "no `Run` row exists" the same as "the `Run` row exists and
+is not running" rather than only handling the narrower case. Documented inline rather than silently
+widening scope.
+
+**Tests.** `hub/tests/test_run_reconciliation.py` gained four: `test_stale_job_run_with_no_run_at_all_becomes_failed`,
+`test_stale_job_run_with_a_dead_run_becomes_failed` (proves the two reconciliation passes compose in
+one startup, not just each in isolation), `test_job_run_with_a_live_run_is_left_in_progress` (the
+negative case), `test_reconciling_stale_job_runs_twice_is_idempotent`. Mutation-checked: forced the
+function to always `continue` (skip every row), watched the two positive-case tests fail by name
+with the exact expected-vs-actual mismatch, reverted, watched all 8 pass. `pytest
+tests/test_run_reconciliation.py tests/test_scheduler.py tests/test_lifespan_shutdown.py
+tests/test_loop_archival.py tests/test_migrations.py` — 101 passed, 1 skipped (pre-existing), 0
+failed. `ruff check`/`black --check` clean (black reformatted the new function's docstring line
+length once, then clean). `mypy hub/hub/run_reconciliation.py`: zero errors, not in the baseline
+file at all before or after — genuinely clean, not just "no new" against a dirty baseline.
+
+**Live-restart smoke test against the trial Hub — the harder proof.** Confirmed via
+`GET /projects/proj-5e960453/jobs` before restarting: `loop-8e86eb9f`'s `firing_active` was `true`,
+8 `job_runs` rows for `job-0b490274` stuck `"in_progress"`, none with a matching `runs` row (checked
+directly against `hub/data/agentweave.db`). Restarted the Hub via the documented `Invoke-CimMethod`
+command (stopped the prior live pid first — `Get-NetTCPConnection -LocalPort 8010` found it, not
+assumed). `/health` returned ok. Re-queried: `firing_active` now `false`, and all 8 `job_runs` rows
+(a 9th had fired between the two checks — also caught) now read `status="failed"`,
+`error_summary="Reconciled on Hub start: no live run behind this firing"`. This is the exact
+real-world case the design's own A4.4 writeup found and deliberately left alone for A4.5 to close.
 
 ## A5. Immutability and the identity gap (designs D14, D15)
 

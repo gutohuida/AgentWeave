@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 
 from .db.engine import async_session_factory
-from .db.models import Run
+from .db.models import JobRun, Run
 from .inbound_queue import abandoned_for_run, return_run_entries
 from .permission_requests import expire_pending_for_run
 from .pty_runner import pid_alive
@@ -96,4 +96,48 @@ async def reconcile_interrupted_runs() -> int:
 
         for project_id, agent in agents_to_schedule:
             await schedule_agent(project_id, agent)
+    return reconciled
+
+
+async def reconcile_stale_job_runs() -> int:
+    """Mark every `JobRun` row still `"in_progress"` whose firing has no live `Run` behind
+    it as `"failed"` (task A4.5, design D13).
+
+    `JobRun` and `Run` share no foreign key, only `conversation_id`
+    (`db/models.py`'s own comment on `JobRun.conversation_id`), the same correlation
+    `scheduler.py::finalize_job_run_for_conversation` uses on the normal end-of-turn path —
+    this is that same correlation, run in the other direction (from a stuck `JobRun` to its
+    `Run`) for the firings a crash meant that path never reached. Call this AFTER
+    `reconcile_interrupted_runs()` in the same startup pass: a `Run` this restart just found
+    dead has already been flipped to `"interrupted"` by the time this reads `Run.status`, so
+    a plain `!= "running"` check is enough without re-deriving `pid_alive` here too.
+
+    A `JobRun` can reach `"in_progress"` with no `Run` row ever created at all — not just one
+    whose `Run` died — when the firing queued its entry but nothing ever spawned a process for
+    it (an agent with no runner bound is the live example this was diagnosed against on the
+    trial Hub: `job-0b490274`, agent `claude-1`, `runner_id` NULL). That firing is exactly as
+    stuck as a crashed one and gets the same treatment here, not a narrower one.
+    """
+    reconciled = 0
+    async with async_session_factory() as db:
+        result = await db.execute(select(JobRun).where(JobRun.status == "in_progress"))
+        for job_run in result.scalars().all():
+            run = None
+            if job_run.conversation_id is not None:
+                run_result = await db.execute(
+                    select(Run).where(Run.conversation_id == job_run.conversation_id)
+                )
+                run = run_result.scalars().first()
+            if run is not None and run.status == "running":
+                continue
+
+            job_run.status = "failed"
+            job_run.error_summary = "Reconciled on Hub start: no live run behind this firing"
+            reconciled += 1
+
+        if reconciled:
+            await db.commit()
+
+    if reconciled:
+        logger.warning("Reconciled %d stale job run(s) to status=failed on Hub start", reconciled)
     return reconciled
