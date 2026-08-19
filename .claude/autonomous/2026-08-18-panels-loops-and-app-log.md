@@ -3093,3 +3093,47 @@ iteration). Next: FREE, or further ui-gap-analysis items (Gap 6 "all runs at a g
 "command palette" are the next-cheapest per that document's own cost ranking) if the operator wants
 this run to keep pulling from that list.
 
+---
+
+## Run 2, iteration 7 — FREE: JobCard's silently-dropped loop icon
+
+Picked the cheapest of `next_action`'s FREE candidates: `JobCard.tsx:121` renders
+`<Icon name="all_inclusive" .../>` next to the "Loop" label in the job-loop-block header, but
+`Icon.tsx`'s `ICONS` map had no entry for `"all_inclusive"` — `Icon`'s documented contract for an
+unknown name is to render `null` and warn once to the console, so the loop glyph was silently
+absent for every job that has a loop. Named as a pre-existing, un-queued finding in run 2's
+`decisions_for_user` since the morning review; this iteration actioned it rather than leaving it
+sitting as a note.
+
+**Fix.** Mapped `all_inclusive` to `lucide-react`'s `Infinity` glyph in `Icon.tsx`, imported as
+`Infinity as InfinityIcon` — a bare `Infinity` import triggers eslint's
+`no-shadow-restricted-names` (it shadows the global `Infinity`), caught by `npm run lint` on the
+first attempt and fixed by aliasing.
+
+**Test, mutation-checked per this run's standing discipline.** Added one assertion to the existing
+`jobCard.test.tsx` case `'renders purpose, queue counts, current item and open questions when
+job.loop is set'`: the DOM node immediately before the "Loop" text label must be an `SVGElement`.
+Proved it non-vacuous the required way — temporarily removed the `all_inclusive` map entry, ran
+just that test, watched it fail by name (`expected null to be an instance of SVGElement`), then
+restored the entry and watched it pass.
+
+**Full verification.** `npx vitest run` (hub/ui): 106/106 files, 1085/1085 passed (assertion added
+to an existing test, no new test count). `npx tsc --noEmit`: clean. `npm run lint`: clean, 0
+warnings. UI rebuilt (`npm run build` + `py -3.11 scripts/refresh_ui_bundle.py`, source staged
+first) and `--check`-verified current. `hub/tests/browser/test_job_loop_block.py`: 4/4 passed
+against the trial Hub (unchanged behaviour for the block's existing assertions — none of them
+checked the icon before this fix). No Python files touched, so `hub/tests/` (the 11-minute suite)
+was not re-run.
+
+**Live-verified, not just test-proved.** A throwaway Playwright script
+(`testbed/scratch/diag_icon_check.py`, gitignored from this repo per its own README) opened the
+trial Hub, navigated to `proj-5e960453`'s Jobs tab, expanded the real "LA3 smoke loop" job
+(`job-6c6037bb`), and screenshotted the loop block: a blue infinity glyph now sits immediately left
+of "Loop", matching design — confirmed by eye against the screenshot, not just `svg count: 1`.
+
+Committed as `f7bbb2e`. Queue's FREE item remains open — this was one instance of "whatever is most
+needed" picked from `next_action`'s list, not the whole list. Next candidates unchanged from
+iteration 6's note: Gap 6 (agent grid view) or Gap 3 (command palette, needs a new `cmdk`
+dependency — flag the trade-off) from `ui-gap-analysis.md`, or a fresh cold run of the full test
+suites to catch drift. `stop_at` is 13:00; roughly two hours of runway remain.
+
