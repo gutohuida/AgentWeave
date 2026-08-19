@@ -162,6 +162,55 @@ describe('panelTabsStore — open, close, activate, reorder', () => {
     expect(panel().activeTabId).toBe(loopTabId('loop-1'))
   })
 
+  it('replaceTabId re-keys a tab in place without disturbing activeTabId (C1)', () => {
+    const store = usePanelTabsStore.getState()
+    store.openTab(P1, fileTabId('src/a.ts'))
+    store.openTab(P1, specTabId('doc-fallback-path'))
+    store.openTab(P1, specTabId('doc-2'))
+    store.activateTab(P1, specTabId('doc-fallback-path'))
+    // Operator has since moved focus away from the tab that is about to be re-keyed.
+    store.activateTab(P1, fileTabId('src/a.ts'))
+
+    store.replaceTabId(P1, specTabId('doc-fallback-path'), specTabId('doc-1'))
+
+    // Strip position preserved (still second), id updated, and — the point of this test —
+    // the operator's own choice of active tab is NOT overridden by the re-key.
+    expect(tabIds()).toEqual([fileTabId('src/a.ts'), specTabId('doc-1'), specTabId('doc-2')])
+    expect(panel().activeTabId).toBe(fileTabId('src/a.ts'))
+  })
+
+  it('replaceTabId keeps the re-keyed tab active when it was already the active one', () => {
+    const store = usePanelTabsStore.getState()
+    store.openTab(P1, specTabId('doc-fallback-path'))
+    expect(panel().activeTabId).toBe(specTabId('doc-fallback-path'))
+
+    store.replaceTabId(P1, specTabId('doc-fallback-path'), specTabId('doc-1'))
+
+    expect(panel().activeTabId).toBe(specTabId('doc-1'))
+    expect(tabIds()).toEqual([specTabId('doc-1')])
+  })
+
+  it('replaceTabId is a no-op when previousId is not open', () => {
+    const store = usePanelTabsStore.getState()
+    store.openTab(P1, 'specs')
+
+    store.replaceTabId(P1, specTabId('doc-gone'), specTabId('doc-1'))
+
+    expect(tabIds()).toEqual(['specs'])
+  })
+
+  it('replaceTabId folds into an existing nextId tab rather than duplicating it', () => {
+    const store = usePanelTabsStore.getState()
+    store.openTab(P1, specTabId('doc-fallback-path'))
+    store.openTab(P1, specTabId('doc-1'))
+    store.activateTab(P1, specTabId('doc-fallback-path'))
+
+    store.replaceTabId(P1, specTabId('doc-fallback-path'), specTabId('doc-1'))
+
+    expect(tabIds()).toEqual([specTabId('doc-1')])
+    expect(panel().activeTabId).toBe(specTabId('doc-1'))
+  })
+
   it('reorders by index and ignores out-of-range indices', () => {
     const store = usePanelTabsStore.getState()
     store.openTab(P1, 'specs')

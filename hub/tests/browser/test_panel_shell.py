@@ -164,15 +164,35 @@ def test_opening_a_document_from_a_bare_conversation_mounts_the_shell(
     assert "document=" in page.url
 
 
-def test_the_specs_index_tab_opens_from_the_plus_affordance(page: Page, hub_url: str) -> None:
+def test_the_specs_index_tab_opens_from_the_plus_affordance(
+    page: Page, hub_url: str, spec_tab_id: str
+) -> None:
     """Section 3, task 3.1: the specs index — content the Ctrl+K dialog already showed, re-hosted
-    as a tab — is reachable from the shell's own plus menu, not just the keyboard shortcut."""
+    as a tab — is reachable from the shell's own plus menu, not just the keyboard shortcut.
+
+    Clicks the plus affordance immediately after `_open`, the same as a real operator would, and
+    only THEN waits for the document's own tab to reach its steady-state key (`spec_tab_id`) —
+    i.e. for the workspace inventory fetch, in flight or not, to finish resolving — before
+    asserting `panel-tab-specs`. This used to pass vacuously: `expect().to_have_attribute`
+    auto-retries and can catch the brief instant right after the click but *before* that
+    still-in-flight inventory fetch resolves — which, before C1's fix (`replaceTabId` in
+    `panelTabsStore.ts`), re-keyed the document tab via `openTab`, forcing it back into focus and
+    flipping `panel-tab-specs` to `aria-selected=false` a moment later. The suite reported the
+    symptom one test later (the next test would then fail against a vanished specs tree), never
+    here, because nothing here looked again after the click.
+    """
     _open(page, hub_url)
 
     page.get_by_test_id("panel-tab-add").click()
     page.get_by_role("menuitem", name="Specs").click()
 
-    expect(page.get_by_test_id("panel-tab-specs")).to_have_attribute("aria-selected", "true")
+    # Let the document tab's re-key resolve (whether it was already resolved or still in flight)
+    # BEFORE asserting on the specs tab — so the assertion below measures steady state, not a
+    # transient window an auto-retrying `expect()` could catch and move on from.
+    expect(page.get_by_test_id(f"panel-tab-{spec_tab_id}")).to_be_visible()
+
+    specs_tab = page.get_by_test_id("panel-tab-specs")
+    expect(specs_tab).to_have_attribute("aria-selected", "true")
     expect(page.get_by_test_id("spec-document-browser")).to_be_visible()
 
 

@@ -83,11 +83,13 @@ def test_loops_index_lists_real_loops_with_counts_by_ending_state(page: Page, hu
     instead, that loop would misreport as stopped."""
     _open_loops_tab(page, hub_url)
 
+    # `expect(...).to_contain_text` retries until the loops query resolves. A raw `.text_content()`
+    # read right after `to_be_visible()` can catch the tab's own pre-fetch "No loops" default —
+    # the tab mounts, and the summary renders, before `GET /projects/{id}/loops` has returned.
     summary = page.get_by_test_id("loops-index-summary")
-    expect(summary).to_be_visible()
-    assert "running" in (summary.text_content() or ""), (
-        "at least one of this project's fixture loops has no ending_state and must count as "
-        "running, regardless of whether it also carries a stop_reason"
+    expect(summary).to_contain_text(
+        "running",
+        timeout=10_000,
     )
 
     row = page.get_by_test_id(f"loops-index-row-{CURRENT_ITEM_LOOP_ID}")

@@ -153,6 +153,7 @@ export function ConversationView({
 
   const openTab = usePanelTabsStore((state) => state.openTab)
   const closeTab = usePanelTabsStore((state) => state.closeTab)
+  const replaceTabId = usePanelTabsStore((state) => state.replaceTabId)
   const setShellOpen = usePanelTabsStore((state) => state.setShellOpen)
   const panelActiveTabId = usePanelTabsStore(
     (state) => selectProjectPanel(state, projectId).activeTabId,
@@ -186,15 +187,23 @@ export function ConversationView({
    * Keyed off the previous *computed key*, not the previous `document` path, so a rename (which
    * keeps the id, so `attachedTabKey` does not change) never re-opens the tab.
    *
-   * One case does still close the previous key's tab: the one-time upgrade from a path-keyed
-   * fallback to the real id once the inventory loads. That is not a change of *document* — the key
-   * changed under the same attachment, because `attachedNode` above went from "not found yet" to
-   * "found" — and leaving the stale, path-keyed tab open would silently duplicate the id-keyed one
-   * this same effect just opened (caught live: `hub/tests/browser/test_panel_shell.py`, against a
-   * fixture document that already carries a Hub id on load, where the duplicate was two tabs for
-   * the same document, one of them a dangling fallback identity nothing ever closed). Told apart
-   * from a genuine attach change — where the previous tab must survive — by resolving both keys
-   * back to a path: the same path means the same document, only re-keyed. */
+   * One case does still re-key the previous tab rather than opening a new one: the one-time
+   * upgrade from a path-keyed fallback to the real id once the inventory loads. That is not a
+   * change of *document* — the key changed under the same attachment, because `attachedNode` above
+   * went from "not found yet" to "found" — and leaving the stale, path-keyed tab open would
+   * silently duplicate the id-keyed one this same effect would otherwise open (caught live:
+   * `hub/tests/browser/test_panel_shell.py`, against a fixture document that already carries a Hub
+   * id on load, where the duplicate was two tabs for the same document, one of them a dangling
+   * fallback identity nothing ever closed). Told apart from a genuine attach change — where the
+   * previous tab must survive — by resolving both keys back to a path: the same path means the
+   * same document, only re-keyed.
+   *
+   * A re-key uses `replaceTabId`, not `closeTab` + `openTab`: that pair forces activation via
+   * `openTab`, which steals the active tab back from whatever the operator has since selected —
+   * reproduced live via `testbed/scratch/diag_panel_shell.py` (open the shell with a document
+   * attached, click plus -> Specs, and the late inventory resolve flips focus straight back to the
+   * document). `replaceTabId` preserves both strip position and `activeTabId`, unless the tab being
+   * re-keyed was itself the active one, in which case it stays active under its new key. */
   const previousAttachedTabKeyRef = useRef<string | null>(null)
   useEffect(() => {
     const previous = previousAttachedTabKeyRef.current
@@ -205,10 +214,11 @@ export function ConversationView({
       attachedTabKey &&
       resolveTabPath(inventory, previous) === resolveTabPath(inventory, attachedTabKey)
     ) {
-      closeTab(projectId, specTabId(previous))
+      replaceTabId(projectId, specTabId(previous), specTabId(attachedTabKey))
+      return
     }
     if (attachedTabKey) openTab(projectId, specTabId(attachedTabKey))
-  }, [projectId, attachedTabKey, inventory, openTab, closeTab])
+  }, [projectId, attachedTabKey, inventory, openTab, replaceTabId])
 
   const documentOpen = document !== null
   // What actually governs whether the shell mounts: either a document is attached (the only case

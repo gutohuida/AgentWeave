@@ -278,6 +278,15 @@ interface PanelTabsState {
    *  same item. Opening always makes the tab visible and the shell open. */
   openTab: (projectId: string, id: TabId) => void
   closeTab: (projectId: string, id: TabId) => void
+  /** Swaps a tab's id in place — strip position untouched, and `activeTabId` untouched UNLESS the
+   *  tab being re-keyed was already the active one (in which case it stays active, under its new
+   *  key). For the one case that needs it: a document tab keyed by path before the workspace
+   *  inventory resolves, re-keyed to the Hub document id once it does (see the effect in
+   *  `ConversationView.tsx`). Deliberately NOT `closeTab` + `openTab` — that pair forces
+   *  activation, which steals focus from whatever tab the operator has since selected. A no-op if
+   *  `previousId` is not open; if `nextId` is already open too, the stale `previousId` tab is
+   *  dropped and folded into the existing `nextId` tab rather than producing a duplicate. */
+  replaceTabId: (projectId: string, previousId: TabId, nextId: TabId) => void
   activateTab: (projectId: string, id: TabId) => void
   /** Moves the tab at `fromIndex` to `toIndex`. Out-of-range indices are a no-op. */
   reorderTab: (projectId: string, fromIndex: number, toIndex: number) => void
@@ -350,6 +359,25 @@ export const usePanelTabsStore = create<PanelTabsState>()((set, get) => {
           tabs,
           activeTabId:
             panel.activeTabId === id ? promoteAfterRemoval(tabs, index) : panel.activeTabId,
+          isOpen: panel.isOpen,
+        }
+      }),
+
+    replaceTabId: (projectId, previousId, nextId) =>
+      update(projectId, (panel) => {
+        const index = panel.tabs.findIndex((tab) => tab.id === previousId)
+        if (index === -1) return panel
+        const activeTabId = panel.activeTabId === previousId ? nextId : panel.activeTabId
+        if (panel.tabs.some((tab) => tab.id === nextId)) {
+          return {
+            tabs: panel.tabs.filter((tab) => tab.id !== previousId),
+            activeTabId,
+            isOpen: panel.isOpen,
+          }
+        }
+        return {
+          tabs: panel.tabs.map((tab) => (tab.id === previousId ? { ...tab, id: nextId } : tab)),
+          activeTabId,
           isOpen: panel.isOpen,
         }
       }),
