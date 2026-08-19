@@ -2474,3 +2474,98 @@ D15 record-only) and A6/A7 (human-only/test-guide) remain queued after.
 
 Committed and pushed as the work landed. Heartbeat refreshed before the push; releasing it
 (backdating ~40 minutes) as the very last step per the driver's own instructions.
+
+## Iteration 29 — session end (stop time reached)
+
+Fresh process, no memory of prior iterations. Read `STATE.json` and this log's last entry (iteration
+28, above) first. Verified branch and history against the state file's claims before touching
+anything: `git branch --show-current` = `autonomous/2026-08-18-panels-loops-and-app` (matches),
+`git log --oneline -5` matches the two-commit-per-iteration pattern (`Iteration 28: A4.4 …` then
+`Release heartbeat for the next firing` at `d7395c1`/`1864079`), tree clean. No reconciliation
+needed.
+
+**Time check, per the skill's own Step 4.2 ("Check the stop time. Past it, write a final entry and
+stop.") and iteration 28's explicit hand-off note.** `Get-Date -Format 'yyyy-MM-ddTHH:mm:sszzz'`
+(PowerShell, per the driver's own timestamp-source rule) read **2026-08-19T07:44:48+01:00**.
+`stop_at` is `2026-08-19T08:00:00+01:00` — about 15 minutes of runway. Iteration 28's own
+`next_action` was explicit that A4.5 (mirroring `run_reconciliation.py`'s crash-recovery shape for
+`JobRun`, plus a live-restart-mid-firing smoke test against the real stale fixture) is "a materially
+different piece of work" than A4.3/A4.4 and should not be started with under ~20 minutes left. 15 is
+less than that bar, and A4.5 is exactly the kind of task where a rushed, half-verified version is
+worse than none — a reconciliation routine that silently does the wrong thing on restart is a bad
+thing to leave for the operator to trust untested. So this iteration does **no new implementation**
+and instead closes the run per Step 6 of the skill.
+
+**What changed across the whole run (started 2026-08-18T21:25:24+01:00, this entry
+2026-08-19T07:44:48+01:00 — roughly 10h20m of wall clock, 28 prior iterations plus this closing
+one).** 63 commits between the parent (`8d52a93`, itself one commit ahead of `master`) and `HEAD`.
+Both openspec changes in the queue were driven hard, matching the operator's "work on both, don't
+spend the whole night on one" instruction:
+
+- **`2026-08-18-one-shell-three-panels`** — sections 1–6 done (component skeleton, tab strip,
+  keyboard, the re-hosted conversation panel, specs as the shell's first tenant, the
+  `GET /api/v1/workspace/file` endpoint, the files tab with a *measured* (not guessed) minimum
+  width, and the tab-strip overflow decision). Playwright coverage (PW1) landed and was run against
+  the live trial Hub, not just mocked. Sections 7.1–7.5 are explicitly human-only per the state
+  file's limits and were correctly left untouched.
+- **`2026-08-18-a-loop-writes-its-own-queue`** — L1, L3–L12 done (migration + model, spec
+  materialisation stamping `loop_id`, source-document declaration with 409-on-conflict, creator
+  authorship gate, claiming the current queue item, loop-scoped checkpoints, the briefing, refusing
+  resume for a loop's job, empty-queue telemetry, the `create_loop` MCP tool, and full-suite
+  verification). The B-track (archival) LB1–LB5 done; **LB6 partially done** (B6.1/B6.5/B6.6 landed,
+  B6.2–B6.4's live active-now indicator was blocked on A4.4 until this run's own iteration 28, and
+  was not picked back up before the clock ran out — see "what's open" below). The A-track (D10–D13)
+  LA1–LA3 done; **LA4 partially done** (A4.1–A4.4 landed across iterations 26–28: `loop_id` on
+  `EventLog`, the `events` field on `LoopDetail`, `JobRun` genuinely reaching `"in_progress"`, and
+  the shared `firing_active` helper); **A4.5 (crash reconciliation) and LA5 (write-once `loop_id` +
+  D15 record-only) remain open, queued first for the next run.**
+- **APP1/APP2 (desktop icon, app experience) and FREE were never reached.** The operator's queue was
+  ordered both-specs-first, app-experience-only-after; the specs were not fully finished (A4.5, LA5,
+  and LB6's B6.2–B6.4 remain), so per the state file's own `pre_authorised` entries and the
+  operator's stated ordering, APP1 correctly stayed unstarted rather than being started early.
+
+**What was proven, with evidence, this run as a whole** (see each iteration's own entry for detail
+per-task): every landed task has a paired automated test that failed first against the old behaviour
+where applicable, targeted and broader pytest runs green, `ruff`/`black` clean throughout, `mypy`
+tracked against the 361-error/86-file baseline with zero new errors on every iteration that touched
+Python, `tsc --noEmit`/`eslint --max-warnings 0`/`vitest` clean on every frontend-touching iteration,
+the UI bundle stamp kept in sync, `openspec validate --changes --strict` 2/2 valid on every
+iteration, and repeated live smoke tests against the trial Hub on :8010 (restarted, PID verified via
+`Get-NetTCPConnection`, `/health` polled) rather than trusting the suite alone. Playwright ran
+against the live Hub, not a mock, satisfying the operator's explicit testing instruction.
+
+**What is open, for the next run to pick up immediately** — `STATE.json`'s `next_action` field
+already carries the detailed pointer (kept verbatim, not rewritten, since nothing changed this
+iteration): **A4.5** first — read `hub/hub/run_reconciliation.py`'s `reconcile_interrupted_runs()`
+and its call site in `main.py`'s lifespan, mirror the same shape for `JobRun.status ==
+"in_progress"`, and use the live fixture already sitting on the trial Hub
+(`loop-8e86eb9f`/`job-0b490274` in `proj-5e960453`, two `JobRun` rows stuck `"in_progress"` since
+06:15/06:30 today — found live during iteration 28, deliberately left untouched as a ready-made
+stale-row fixture) rather than constructing one from scratch. Then **LA5** (write-once `loop_id`,
+D15 name-gap recorded not fixed), then **LB6's B6.2–B6.4** (now unblocked by A4.4's `firing_active`
+field), then **A6/A7** (human-only/test-guide — do not tick, human judgement only), then **APP1/APP2
+and FREE** once both specs are genuinely done.
+
+**What to distrust.** Nothing new this iteration — no code was touched. Carrying forward
+unchanged from iteration 28: the live stale-`JobRun` fixture is real and intentional, not
+contamination; mypy's "no new errors" check on iteration 28 was against the three touched files
+only, not a full-repo baseline diff (time budget) — worth a fuller check the first time Python is
+touched again. All seven `decisions_for_user` entries accumulated across the run (draft PR to
+master for CI signal only, the conservative reading of "clear all projects", mypy 12.2 rescoped,
+D15/naming still open, the ConversationView mount-condition fix folded into LB5, the missing
+`all_inclusive` icon, the hardcoded job-count test fixture drift) remain exactly as `STATE.json`
+already states them — re-read there, not restated here.
+
+**How far this run actually got, plainly stated:** it was authorised to run until 08:00; it is
+ending at 07:44:48, roughly 15 minutes early, deliberately, rather than starting a task (A4.5) that
+could not be finished and verified with real rigor in that window. Of the two openspec changes in
+flight, the panel shell change's agent-verifiable work is essentially complete; the loop change has
+three tasks left (A4.5, LA5, LB6 B6.2–B6.4) plus its human-only sections. The app-experience work the
+operator asked for second (desktop icon named explicitly, further polish, then free choice) was not
+reached at all — 63 commits went entirely into the two specs, matching the operator's own priority
+order.
+
+Session ends here. `session_stopped` set to `true` in `STATE.json`. Not releasing the heartbeat
+this time — the driver's backdating step exists to keep a *live* loop from idling a cycle against
+its own stale heartbeat, and doing that here would just cause the driver to immediately re-invoke a
+session whose stop time has passed. Tree left clean, everything pushed.
