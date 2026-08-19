@@ -1748,3 +1748,96 @@ which requires B4's endpoints and the panel shell) per the interleaving.
 
 Committed and pushed as the work landed. Heartbeat refreshed before the push; releasing it
 (backdating ~40 minutes) as the very last step per the driver's own instructions.
+
+---
+
+## Entry 21 — 2026-08-19T04:24+01:00 — LB4: the loop summary tells the truth
+
+**LB4 done** (`openspec/changes/2026-08-18-a-loop-writes-its-own-queue/tasks.md`, section B4,
+tasks B4.1-B4.3). Read D13, D19, D20, D21 fresh in `design.md` before writing anything, per the
+prior iteration's own brief.
+
+**B4.1.** `_batch_loop_summaries`'s `current_task` candidates query (`jobs.py`) gained `"assigned"`
+beside its existing three statuses — D21's fix, one clause. Confirmed **live**, not just by the new
+test: `proj-5e960453`'s pre-existing `loop-8e86eb9f` ("taste-pass never-filled loop") came back with
+a non-null `current_task` (`status: "assigned"`) on the very first `GET .../loops` call after the
+fix, against data this iteration did not create — real evidence the gap D21 described was real, not
+theoretical.
+
+**B4.2.** `LoopSummary` gained `label: str`, the value D20 says a picker needs and `LoopSummary`
+never had. Built inside `_batch_loop_summaries` itself via one more batched query — the function's
+own docstring now says "five fixed queries" instead of "four"; D7's actual principle (no query per
+job) still holds, the literal count was never the point. `create_job`'s own separate inline
+`LoopSummary(...)` construction (a loop's first moment of existence, before any batch query would
+find it) sets `label=job.name` directly, since `job` is already in scope there — no query needed at
+all for that path.
+
+**B4.3 — built, with one piece of the task text's own scope knowingly deferred.**
+`hub/hub/api/v1/loops.py` gained `GET /projects/{project_id}/loops`: project-scoped, no conversation
+id (D20's entire reason for existing), `include_archived` mirroring `list_jobs`, ordered by
+`Loop.created_at`. It starts from `Loop` rather than `AIJob` — a project-wide loop listing has no
+job list to piggyback on the way `list_jobs` does — then reuses `_batch_loop_summaries` with the
+resulting job ids, the same batching every other job/loop route already relies on. The detail route
+(`GET .../loops/{loop_id}`) already existed from B2 and already returned queue, current item, and
+firing history; this task only changed what it inherits through B4.1/B4.2.
+
+**The deferred piece**, documented in `loops.py`'s own module docstring and the tasks.md note:
+neither route says whether a firing is *currently* in progress. D13's helper (`JobRun.status`
+gaining a `"running"` value, one function both this surface and the loop-edit path are meant to
+share) does not exist — that is design change A4 / this run's queue item LA4, still open and queued
+**after** B5/B6 even though B4.3's own task text names it as this task's dependency. Building a
+substitute (joining `JobRun.conversation_id` to `Run.status == "running"`) would be the exact shape
+D19 already named and rejected once, by a different firing, for exactly this reason: "a
+`JobRun.status` that cannot state its own value is a defect regardless of who reads it." Recorded
+rather than faked. **Flagged for whoever builds B6.2**: the drill-down's active-now indicator cannot
+be built correctly until A4/LA4 lands first.
+
+**A test bug caught before it hid a real one.** The new project-scoping test initially built its
+"different project" fixture loop via this file's own `_make_loop` helper — which hardcodes
+`project_id="proj-test"` regardless of the job's actual project, a fact easy to miss since every
+other test in the file wants exactly that default. The test passed for the wrong reason on the first
+attempt (both loops ended up in `proj-test`, so scoping was never actually exercised) — caught by
+asserting the other project's label was *absent* from the list and watching that assertion fail.
+Fixed by constructing that one `Loop` row directly with `project_id="proj-other"` instead of going
+through the helper.
+
+**Verification.** New tests in `hub/tests/test_loop_archival.py`:
+`test_assigned_task_is_seen_as_the_current_task` (B4.1, real ASGI app + DB, a loop with a single
+`assigned` task and nothing else) and `test_list_loops_is_project_scoped_and_excludes_archived_by_
+default` (B4.3/B5.1/B5.4). `test_jobs.py::test_creating_with_purpose_alone_opts_into_a_loop` gained
+a `label` assertion. `pytest hub/tests/test_jobs.py hub/tests/test_jobs_crud.py
+hub/tests/test_loop_archival.py hub/tests/test_scheduler.py hub/tests/test_mcp_server.py
+hub/tests/test_agents_self_registered.py hub/tests/test_agent_actions_governed.py -q`: **129 passed,
+3 skipped**. `ruff check` and `black --check --target-version py311` clean on all five touched
+Python files. `mypy hub/` (from `hub/`): **364 errors, 86 files** — unchanged from B3's baseline; the
+first attempt at the batched name lookup (`dict(job_names_result.all())`) added two new errors
+(`var-annotated`, and `arg-type` because mypy does not treat SQLAlchemy's `Row` as a plain tuple even
+though it unpacks fine at runtime) — fixed with an explicit `for job_id, job_name in ...` loop rather
+than left as new debt, verified back down to the exact baseline count, not just "close enough."
+`npx openspec validate --changes --strict`: 2/2 still valid.
+
+Restarted the trial Hub (Python changed) after confirming the actual listening PID via
+`Get-NetTCPConnection -LocalPort 8010` rather than guessing; `/health` → ok post-restart. **Live
+smoke test against `proj-5e960453`**: `GET .../loops` returned all three of the project's existing
+loops, each now carrying a `label`, plus the B4.1 evidence described above; a fourth loop was then
+created via `POST .../jobs` and both its list row and its `GET .../loops/{id}` detail row carried
+the correct label. Left in place as inert historical evidence, matching LB2/LB3's own precedent. No
+UI files touched, so no rebuild was needed.
+
+Updated `tasks.md`'s top summary line: "B1 through B4 are also implemented and verified; B5 onward
+... are still a spec only."
+
+`current`/`next_action` now point at **LB5** ("the loops index tab",
+`openspec/changes/2026-08-18-a-loop-writes-its-own-queue/tasks.md` section B5, tasks B5.1-B5.4).
+This is UI work requiring the panel shell from P2b/P3 (already built) and MUST be verified with
+Playwright against the live Hub per the operator's explicit instruction, not just vitest. B5.2's
+navigation opens a `loop:<loop_id>` drill-down tab that is properly B6's own scope — a minimal stub
+is fine if B6 isn't tackled in the same iteration, but the index-stays-open behaviour (deliberately
+different from the files tree's replace-on-click pattern, per the task text's own "the index is a
+governance glance, not a launcher" reasoning) must not be silently dropped in favour of copying the
+files-tab pattern by habit. Also worth checking on arrival: the files-tab-only-mounts-with-a-
+document gap already recorded in `decisions_for_user` (iteration 16) — a loops index tab should not
+inherit that same reachability bug.
+
+Committed and pushed as the work landed. Heartbeat refreshed before the push; releasing it
+(backdating ~40 minutes) as the very last step per the driver's own instructions.

@@ -126,7 +126,7 @@ async def _check_spec_document_conflict(
 async def _batch_loop_summaries(
     session: AsyncSession, job_ids: List[str]
 ) -> Dict[str, LoopSummary]:
-    """Compute every job's `loop` block in four fixed queries, never one query per job (design D7)."""
+    """Compute every job's `loop` block in five fixed queries, never one query per job (design D7)."""
     if not job_ids:
         return {}
 
@@ -136,6 +136,16 @@ async def _batch_loop_summaries(
         return {}
     loop_by_job = {loop.job_id: loop for loop in loops}
     loop_ids = [loop.id for loop in loops]
+
+    # B4.2 (design D20): the label the operator recognises a loop by is its job's name — batched
+    # here, alongside the other per-loop facts this function already computes, rather than making
+    # every caller fetch its own job a second time.
+    job_names_result = await session.execute(
+        select(AIJob.id, AIJob.name).where(AIJob.id.in_(job_ids))
+    )
+    job_name_by_id: Dict[str, str] = {}
+    for job_id, job_name in job_names_result.all():
+        job_name_by_id[job_id] = job_name
 
     queue_counts: Dict[str, Dict[str, int]] = {}
     counts_result = await session.execute(
@@ -149,7 +159,14 @@ async def _batch_loop_summaries(
     current_task_by_loop: Dict[str, Dict[str, str]] = {}
     candidates_result = await session.execute(
         select(Task)
-        .where(Task.loop_id.in_(loop_ids), Task.status.in_(("in_progress", "blocked", "pending")))
+        .where(
+            Task.loop_id.in_(loop_ids),
+            # D21: "assigned" is a live status too (`checkpoints.py`'s `_LIVE_TASK_STATUSES`,
+            # `task_transitions.py`'s `ENTRY_STATUSES` both already treat it as such) — D3's claim
+            # sets exactly this status, so without it a freshly claimed task vanished from
+            # `current_task` the moment a firing picked it up.
+            Task.status.in_(("in_progress", "blocked", "pending", "assigned")),
+        )
         .order_by(
             Task.loop_id,
             (Task.status != "pending").desc(),
@@ -187,6 +204,7 @@ async def _batch_loop_summaries(
     for job_id, loop in loop_by_job.items():
         summaries[job_id] = LoopSummary(
             id=loop.id,
+            label=job_name_by_id.get(job_id, ""),
             purpose=loop.purpose,
             stop_at=loop.stop_at,
             stop_when_queue_empties=loop.stop_when_queue_empties,
@@ -312,6 +330,7 @@ async def create_job(
             ) from e
         loop_summary = LoopSummary(
             id=loop.id,
+            label=job.name,
             purpose=loop.purpose,
             stop_at=loop.stop_at,
             stop_when_queue_empties=loop.stop_when_queue_empties,

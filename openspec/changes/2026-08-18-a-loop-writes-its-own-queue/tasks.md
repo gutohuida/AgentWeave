@@ -1,9 +1,8 @@
 # Tasks — A loop writes its own queue
 
-Sections 1-12 are implemented and verified (dated notes below). From the archival addendum, B1 and
-B2 are also implemented and verified; B3 onward (the MCP surface, the summary fields, the panel
-tabs) and A1 onward are still a spec only, unchecked — CLAUDE.md: "Never mark a task complete on
-the strength of a plan existing."
+Sections 1-12 are implemented and verified (dated notes below). From the archival addendum, B1
+through B4 are also implemented and verified; B5 onward (the panel tabs) and A1 onward are still a
+spec only, unchecked — CLAUDE.md: "Never mark a task complete on the strength of a plan existing."
 
 ## 1. Migration
 
@@ -1341,14 +1340,87 @@ tenant. Everything in B1–B4 is independent of it and can land first.
 
 ## B4. The loop summary tells the truth
 
-- [ ] B4.1 Add `"assigned"` to `_batch_loop_summaries`'s `current_task` candidates query
+- [x] B4.1 Add `"assigned"` to `_batch_loop_summaries`'s `current_task` candidates query
       (`jobs.py:122-124`) — D21. One clause. Test with a task in `assigned` and nothing else.
-- [ ] B4.2 `LoopSummary` gains the label the operator recognises a loop by (D20), sourced from the
+- [x] B4.2 `LoopSummary` gains the label the operator recognises a loop by (D20), sourced from the
       loop's job rather than requiring a second fetch, plus the ending value from B1.1 and whether it
       is archived.
-- [ ] B4.3 Project-scoped list and detail endpoints for loops that require **no conversation id** —
+- [x] B4.3 Project-scoped list and detail endpoints for loops that require **no conversation id** —
       the reason D20 exists. Detail returns queue, current item, firing history (D13) and whether a
       firing is in progress (D13's helper, not a second join — D19).
+
+      **2026-08-19, iteration 21.** Read D13, D19, D20, D21 fresh (design.md) before writing anything,
+      per the prior iteration's own brief.
+
+      **B4.1.** `_batch_loop_summaries`'s candidates `Task.status.in_(...)` (`jobs.py`) gained
+      `"assigned"` beside its existing three — D3's claim sets exactly this status, so a task lost to
+      `current_task` the moment a firing picked it up. Confirmed live against `proj-5e960453`'s own
+      pre-existing fixture data (`loop-8e86eb9f`, "taste-pass never-filled loop"), not just the new
+      test: that loop's `current_task` came back non-null with `status: "assigned"` on the very first
+      list-loops call after the fix, from data this iteration did not create.
+
+      **B4.2.** `LoopSummary` gained `label: str`. Sourced inside `_batch_loop_summaries` itself, via
+      one additional batched query (`select(AIJob.id, AIJob.name).where(AIJob.id.in_(job_ids))`,
+      built into a plain `dict[str, str]` with an explicit loop rather than `dict(rows)`, which mypy
+      rejects for a `Sequence[Row[...]]` — not a per-caller second fetch, matching the "sourced from
+      the loop's job rather than requiring a second fetch" instruction; the function's own docstring
+      now says "five fixed queries" rather than "four" (D7's principle — no query per job — still
+      holds; the literal count was never the point). The two direct `LoopSummary(...)` construction
+      sites (`_batch_loop_summaries`'s loop, and `create_job`'s own inline construction for a loop's
+      first moment of existence, before any batch query would find it) both set it; `create_job`'s
+      site uses the `job` object already in scope, so it needed no query at all. `ending_state` and
+      `archived_at` were already on `LoopSummary` from B1/B2 — checked before assuming they needed
+      re-adding, per the brief.
+
+      **B4.3 — built, with one piece of the literal task text knowingly deferred.** `hub/hub/api/v1/
+      loops.py` gained `GET /projects/{project_id}/loops` (`list_loops`): project-scoped, no
+      conversation id, `include_archived` query param mirroring `list_jobs`'s own (B5.4's "archived
+      loops are out of the index by default, reachable behind an explicit filter"), ordered by
+      `Loop.created_at`. It queries `Loop` directly (unlike `list_jobs`, which starts from `AIJob`)
+      because a project-wide loop listing has no job list to piggyback on, then reuses
+      `_batch_loop_summaries` with the resulting job ids — the exact same batching `get_job`/
+      `list_jobs` already rely on, not a second implementation. `GET /projects/{project_id}/loops/
+      {loop_id}` (detail) already existed from B2 and already returns queue, current item, and firing
+      history (`JobRun` rows, newest 10) — untouched by this task beyond inheriting B4.1/B4.2 through
+      the summary it embeds.
+
+      **The deferred piece:** neither route reports whether a firing is *currently* in progress.
+      D13's own helper (`JobRun.status` gaining a `"running"` value, one shared function both this
+      surface and the loop-edit path are meant to call) does not exist yet — that is design change A4,
+      still open in this file's own task list, queued after B4-B6 rather than before them. Building a
+      substitute here (joining `JobRun.conversation_id` to `Run.status == "running"`) is precisely the
+      shape D19 already named and rejected once, by a different firing, for the identical reason: "a
+      `JobRun.status` that cannot state its own value is a defect regardless of who reads it." Adding
+      it as a proxy now would make this iteration the second firing to repeat that same mistake.
+      Recorded here rather than silently narrowed, the same way B2.4 recorded the identical dependency
+      before this task existed to resolve it. **Consequence for B6.2**: the loop drill-down's
+      active-now indicator cannot be built correctly until A4 lands; B5/B6's UI can consume `queue`,
+      `current_task`, `ending_state`, and `history` today, but not a live "firing right now" state.
+
+      **Verification.** New tests in `hub/tests/test_loop_archival.py`:
+      `test_assigned_task_is_seen_as_the_current_task` (B4.1, against the real ASGI app and DB, a
+      loop with a single `assigned` task and nothing else); `test_list_loops_is_project_scoped_and_
+      excludes_archived_by_default` (B4.3/B5.1/B5.4 — two loops in `proj-test`, one archived after the
+      call, one deliberately constructed directly in a second project rather than via this file's own
+      `_make_loop` helper, which hardcodes `project_id="proj-test"` and would not have exercised
+      project scoping at all — caught by a first run of the test actually failing on exactly that
+      gap, not assumed). `test_jobs.py::test_creating_with_purpose_alone_opts_into_a_loop` gained a
+      `label` assertion. `pytest hub/tests/test_jobs.py hub/tests/test_jobs_crud.py
+      hub/tests/test_loop_archival.py hub/tests/test_scheduler.py hub/tests/test_mcp_server.py
+      hub/tests/test_agents_self_registered.py hub/tests/test_agent_actions_governed.py -q`: **129
+      passed, 3 skipped**. `ruff check` and `black --check --target-version py311` clean on all five
+      touched Python files. `mypy hub/` (from `hub/`): **364 errors, 86 files** — unchanged from B3's
+      count; the new batched-name lookup needed an explicit `Dict[str, str]` built with a `for` loop
+      rather than `dict(rows.all())`, which mypy rejects for SQLAlchemy's `Row` type even though it
+      works at runtime — fixed rather than left as a new error, since a one-line fix is not the same
+      kind of debt as the 364 pre-existing ones. `npx openspec validate --changes --strict`: 2/2 still
+      valid. **Live smoke test against `proj-5e960453`** on the freshly Python-restarted trial Hub
+      (confirmed the correct PID via `Get-NetTCPConnection -LocalPort 8010` before killing it):
+      `GET .../loops` returned all three of the project's existing loops plus the label field on
+      each, live evidence for B4.1 described above, then a fourth loop was created via `POST .../jobs`
+      and both its list and detail rows carried the correct `label`. Left in place as inert historical
+      evidence, matching the pattern established by LB2/LB3's own smoke-test artifacts in this
+      project. No UI files touched, so no rebuild was needed.
 
 ## B5. The loops index tab
 

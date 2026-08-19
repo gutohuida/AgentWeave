@@ -7,7 +7,7 @@ from fastapi import HTTPException
 
 from hub.api.v1.loops import _require_operator
 from hub.db.engine import async_session_factory
-from hub.db.models import AIJob, Loop
+from hub.db.models import AIJob, Loop, Task
 
 
 async def _make_job(db, *, suffix, agent="loop-archival-agent"):
@@ -123,6 +123,94 @@ async def test_archive_missing_loop_is_404(app, auth_headers):
         "/api/v1/projects/proj-test/loops/loop-does-not-exist/archive", headers=auth_headers
     )
     assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_assigned_task_is_seen_as_the_current_task(app, auth_headers):
+    """B4.1 (design D21): a task in `assigned` — the status D3's claim sets — was absent from the
+    `current_task` candidates query before this change, so a freshly claimed task vanished from
+    the loop summary the moment a firing picked it up."""
+    async with async_session_factory() as db:
+        job = await _make_job(db, suffix="assigned", agent="loop-assigned-agent")
+        loop = await _make_loop(db, job_id=job.id, purpose="claim and go")
+        db.add(
+            Task(
+                id="task-loop-assigned-1",
+                project_id="proj-test",
+                title="claimed by the firing",
+                status="assigned",
+                loop_id=loop.id,
+            )
+        )
+        await db.commit()
+
+    resp = await app.get(f"/api/v1/projects/proj-test/loops/{loop.id}", headers=auth_headers)
+    assert resp.status_code == 200
+    current = resp.json()["current_task"]
+    assert current is not None
+    assert current["id"] == "task-loop-assigned-1"
+    assert current["status"] == "assigned"
+
+
+@pytest.mark.asyncio
+async def test_list_loops_is_project_scoped_and_excludes_archived_by_default(app, auth_headers):
+    """B4.3/B5.1/B5.4: a project-wide list, no conversation id required (D20), labelled by the
+    loop's job name (B4.2, D20), archived loops hidden unless asked for (D16 — nothing is
+    deleted, so `include_archived=true` can always still see it)."""
+    async with async_session_factory() as db:
+        other_project = AIJob(
+            id="job-archival-other-project",
+            project_id="proj-other",
+            name="Other Project Job",
+            agent="loop-archival-agent",
+            message="hello",
+            cron="0 9 * * *",
+            enabled=True,
+        )
+        db.add(other_project)
+        await db.commit()
+        listed_job = await _make_job(db, suffix="listed")
+        listed_loop = await _make_loop(db, job_id=listed_job.id, purpose="show up in the list")
+        stopped_job = await _make_job(db, suffix="to-archive")
+        stopped_loop = await _make_loop(
+            db,
+            job_id=stopped_job.id,
+            purpose="hidden once archived",
+            stop_reason="done",
+            ending_state="stopped",
+        )
+        # `_make_loop` hardcodes `project_id="proj-test"` (see its definition above), which would
+        # not actually exercise cross-project scoping — build this one directly, in `proj-other`,
+        # matching its job.
+        db.add(
+            Loop(
+                id="loop-archival-other-project",
+                project_id="proj-other",
+                job_id=other_project.id,
+                purpose="a different project's loop",
+            )
+        )
+        await db.commit()
+
+    archive_resp = await app.post(
+        f"/api/v1/projects/proj-test/loops/{stopped_loop.id}/archive", headers=auth_headers
+    )
+    assert archive_resp.status_code == 200, archive_resp.text
+
+    default_list = await app.get("/api/v1/projects/proj-test/loops", headers=auth_headers)
+    assert default_list.status_code == 200
+    default_ids = {row["id"] for row in default_list.json()}
+    assert listed_loop.id in default_ids
+    assert stopped_loop.id not in default_ids
+    listed_row = next(row for row in default_list.json() if row["id"] == listed_loop.id)
+    assert listed_row["label"] == listed_job.name
+
+    full_list = await app.get(
+        "/api/v1/projects/proj-test/loops?include_archived=true", headers=auth_headers
+    )
+    full_ids = {row["id"] for row in full_list.json()}
+    assert stopped_loop.id in full_ids
+    assert not any(row["label"] == "Other Project Job" for row in full_list.json())
 
 
 @pytest.mark.asyncio

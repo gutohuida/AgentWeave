@@ -482,6 +482,7 @@ async def test_creating_with_purpose_alone_opts_into_a_loop(app, auth_headers):
     assert resp.status_code == 201
     loop = resp.json()["loop"]
     assert loop is not None
+    assert loop["label"] == "Loop Job"
     assert loop["purpose"] == "Nightly dependency audit"
     assert loop["stop_when_queue_empties"] is False
     assert loop["queue"] == {}

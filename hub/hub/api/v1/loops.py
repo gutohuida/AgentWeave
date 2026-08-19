@@ -1,22 +1,30 @@
 """Loop endpoints — a `Loop` row's own surface, independent of its parent job.
 
-Deliberately minimal today: a single-loop detail route and its archive action (design D16-D18,
-change `2026-08-18-a-loop-writes-its-own-queue`, tasks B2.2/B2.3/B2.6). A project-wide index and
-a richer drill-down (queue, current item, firing history, live-ness) are `B4.3`/`B5`/`B6` — this
-file is the landing spot those add to, not a re-implementation of them ahead of time.
+A single-loop detail route, a project-wide list, and the archive action (design D16-D18, D20,
+change `2026-08-18-a-loop-writes-its-own-queue`, tasks B2.2/B2.3/B2.6/B4.3). Both list and detail
+require no conversation id — D20 is the reason this surface exists at all: a loop firing always
+starts a fresh conversation (D4), so a conversation-scoped view would be empty in every
+conversation the operator actually sits in. The richer drill-down UI is `B5`/`B6`.
+
+**Known gap, not fixed here**: neither route reports whether a firing is currently in progress.
+D13's live-ness helper (`JobRun.status` gaining a "running" value, plus the one shared helper both
+this surface and the loop-edit path are meant to use) is not built yet — that is design change A4,
+still open. Adding a proxy for it here (e.g. joining `JobRun.conversation_id` to `Run.status`)
+is exactly the shape D19 already rejected once, by name. `history` below still reports each past
+firing's recorded status (`fired`/`failed`) faithfully; it just cannot yet say "running".
 """
 
 from datetime import datetime, timezone
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...auth import get_project
 from ...db.engine import get_session
 from ...db.models import JobRun, Loop
-from ...schemas.jobs import LoopDetail
+from ...schemas.jobs import LoopDetail, LoopSummary
 from ...sse import sse_manager
 from ...utils import persist_event
 from .jobs import _batch_loop_summaries
@@ -73,6 +81,31 @@ async def _get_loop_detail(session: AsyncSession, project_id: str, loop_id: str)
             for run in runs
         ],
     )
+
+
+@router.get("", response_model=List[LoopSummary])
+async def list_loops(
+    include_archived: bool = Query(False),
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+) -> List[LoopSummary]:
+    """Project-scoped list of loops (B4.3/B5.1) — label, purpose, ending state, queue counts,
+    open questions, no conversation id required (D20). Archived loops are excluded by default
+    (B5.4), mirroring `list_jobs`'s own `include_archived`; nothing is deleted (D16), so a caller
+    that wants them can always ask."""
+    project_id, _ = project
+    q = select(Loop).where(Loop.project_id == project_id)
+    if not include_archived:
+        q = q.where(Loop.archived_at.is_(None))
+    q = q.order_by(Loop.created_at)
+    result = await session.execute(q)
+    loops = result.scalars().all()
+    if not loops:
+        return []
+    summaries = await _batch_loop_summaries(session, [loop.job_id for loop in loops])
+    # Every row here came from `Loop` itself, so `_batch_loop_summaries` — keyed by job_id, one
+    # entry per job that actually has a loop — is guaranteed to hold each one.
+    return [summaries[loop.job_id] for loop in loops]
 
 
 @router.get("/{loop_id}", response_model=LoopDetail)

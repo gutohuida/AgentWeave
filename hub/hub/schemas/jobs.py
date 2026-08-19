@@ -82,6 +82,10 @@ class LoopSummary(BaseModel):
     # The `Loop` row's own id — distinct from the job's id `Task.loop_id`/`GET /tasks?loop_id=`
     # actually scope by (design D2). Without it, a caller cannot build that query string at all.
     id: str
+    # B4.2 (design D20): the label the operator recognises a loop by. Sourced from the loop's own
+    # job's name — `LoopSummary` carried no name of its own before this, so a picker (B5) had
+    # nothing to show for a loop except its id.
+    label: str
     purpose: str
     stop_at: Optional[datetime] = None
     stop_when_queue_empties: bool
