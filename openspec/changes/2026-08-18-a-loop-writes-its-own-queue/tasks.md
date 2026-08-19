@@ -1021,7 +1021,30 @@ spec only, unchecked — CLAUDE.md: "Never mark a task complete on the strength 
       second firing's transcript, and confirm the task it references is the one the board shows as
       claimed for that firing. This is the one place this change's whole premise (a firing knows its
       position) is either true or is not, and no unit test proves it end to end.
-- [ ] 13.2 **Does the briefing read as useful context, or as noise the agent ignores?**
+- [x] 13.2 **Does the briefing read as useful context, or as noise the agent ignores?**
+
+      **Passed — operator's decision, 2026-08-19: *"I just want to know if the mechanism works. If
+      it works you can consider it done."*** Scoped by that to the mechanism, not to the prose.
+
+      **Re-verified from the database directly, not from the transcript quotes below.** The three
+      firings of `job-51954f1e` are a genuine controlled comparison — same loop, same claimed task,
+      same agent (`q2verify`), same job message — with the presence of a prior checkpoint as the
+      only variable:
+
+      | firing | briefing delivered | agent's reply |
+      |---|---|---|
+      | 2 (`conv-cb509508`) | no `## Prior checkpoint` section | "I don't have information about what step one accomplished because no prior checkpoint output was provided to me in this firing." |
+      | 3 (`conv-070a6040`) | `## Prior checkpoint` for `ckpt-83a85807`, written in `conv-3aa665d1` | "The prior firing counted to three in one sentence ('One, two, three.') — step one was a smoke test for loop checkpoint persistence." |
+
+      Firing 3's answer quotes content that exists **only** in the checkpoint, and the checkpoint
+      was written in a *different conversation* — which is the whole substitution this design makes
+      (a loop refuses `session_mode="resume"`, so continuity has to be reconstructed as text). The
+      agent's behaviour changes with the briefing's content, so it is read, not skimmed past.
+
+      **What this verdict does not cover, deliberately:** whether 4,000 characters of rendered
+      checkpoint ahead of every message is *well-proportioned*. The cap
+      (`_LOOP_BRIEFING_CHECKPOINT_CHARS`) and D5's composition order were not judged, and remain
+      revisitable against a real long-running loop rather than a three-firing smoke test.
 
       **Driven live 2026-08-19, with a controlled comparison.** Same loop, same task, same agent,
       same wording — the only variable was whether a prior checkpoint existed.
