@@ -1039,6 +1039,23 @@ spec only, unchecked — CLAUDE.md: "Never mark a task complete on the strength 
       9.1 composed it into a `## Prior checkpoint` section. **The operator still owns the verdict**
       on whether it reads as useful — this is evidence for that judgement, not a substitute.
 
+      **Blocked on setup, and a finding about the default (2026-08-19).** Every project on the
+      trial Hub had `checkpoint_mode = off`, so the check could not be run at all: the `offered`
+      default added earlier that day applies to NEW projects only, deliberately, so no existing row
+      was rewritten. A fresh project was created to unblock it — `proj-d0e4027e`
+      ("13.2 briefing check", `testbed/ckpt-13-2`) — and it **did** inherit `checkpoint_mode =
+      'offered'` with no intervention, which is that change working as designed.
+
+      But it came up with `checkpoint_runner_id = NULL`. **"Checkpointing on by default" therefore
+      only gets you halfway**: the mode defaults, the runner does not, and `CheckpointPolicy` needs
+      both before a checkpoint can be generated. The product does say so — `_loop_continuity_warning`
+      fires at loop creation with exactly this reason — but the default is less complete than its
+      name suggests, and that is worth deciding about separately from this check.
+
+      **Still to do before 13.2 can be judged:** bind a checkpoint runner to `proj-d0e4027e`, give
+      it an agent, seed a loop queue, and fire twice. Not done because it spends real model calls
+      and the operator had not chosen to.
+
       **Setup note worth keeping:** none of this happens until a checkpoint runner is configured.
       `POST /conversations/{id}/checkpoint` refuses with a legible 409 ("No checkpoint runner is
       configured for this project…") and `checkpoint_mode` defaults to `off`, so a fresh project
@@ -1711,7 +1728,18 @@ two files touched here).
 
 ## A6. Human-only — the operator's judgement
 
-- [ ] A6.1 **Does "pending versus live" read clearly enough to trust?** Stage an edit during a firing.
+- [x] A6.1 **Does "pending versus live" read clearly enough to trust?** Stage an edit during a firing.
+
+      **Passed — the operator's verdict, 2026-08-19: *"Yes it's clear enough."*** Judged against the
+      live trial Hub with a real staged edit on `loop-57f2f62c` (`A4 smoke loop B`): purpose and
+      stop-condition both staged, both paired with the value in force, each labelled in words.
+
+      One half of the check was *not* exercised and is recorded rather than implied: the fixture was
+      staged while the loop was idle, so the operator judged the "Until then the loop runs on the
+      definition below marked *In force now*" wording, not the `firing_active` variant ("The firing
+      running now keeps the definition below marked *In force now*; the edit reaches the firing
+      after it"). That sentence is covered by a unit test but has not been read by a human on a
+      live run.
 
       **Driven live 2026-08-19 — the mechanism is exactly right, and nothing renders it.** An edit
       staged mid-firing against `loop-45cea44b`:
