@@ -223,6 +223,31 @@ async def _claim_loop_task(session: AsyncSession, loop: Loop) -> Optional[Task]:
     return result.scalars().first()
 
 
+async def finalize_job_run_for_conversation(
+    session: AsyncSession, conversation_id: Optional[str], final_status: str
+) -> None:
+    """Flip a firing's `JobRun` out of "in progress" once its `Run` has ended (design D13,
+    task A4.3). `conversation_id` is the only correlation `JobRun` and `Run` share — there is
+    no direct foreign key (see `models.py`'s own comment on `JobRun.conversation_id`).
+
+    Most runs are not job firings at all (a message or a delegation starts a `Run` too), so
+    finding no matching row here is the common case, not an error. At most one `JobRun` should
+    be "in_progress" for a given `conversation_id` at a time — a session-resuming job's earlier
+    firings already reached a terminal status before this one was created — but the query still
+    orders newest-first and takes one row rather than assuming that invariant holds.
+    """
+    if conversation_id is None:
+        return
+    result = await session.execute(
+        select(JobRun)
+        .where(JobRun.conversation_id == conversation_id, JobRun.status == "in_progress")
+        .order_by(JobRun.fired_at.desc())
+    )
+    job_run = result.scalars().first()
+    if job_run is not None:
+        job_run.status = final_status
+
+
 # Consumer-side cap on a rendered checkpoint's contribution to a briefing (design D5). A
 # checkpoint body is already a bounded generator-side summary
 # (`checkpoint_generation._TRANSCRIPT_CHAR_LIMIT`), so this budget is far smaller: 4,000
@@ -766,6 +791,13 @@ class JobScheduler:
                 conversation_id=conversation.id,
             )
             session.add(entry)
+            # The firing genuinely becomes "in progress" here, not at `JobRun` creation above —
+            # `status="fired"` there only means "successfully enqueued"; every early-return
+            # above this point (skip, loop-stopped) overwrites it with `"skipped"` first, so
+            # only a firing that actually reaches a queued entry ever becomes "in_progress"
+            # (design D13, task A4.3). `finalize_job_run_for_conversation` flips it to a
+            # terminal status once the agent's own `Run` ends (`agent_trigger.py`).
+            run.status = "in_progress"
             await session.commit()
 
             if pending_edit_payload is not None:

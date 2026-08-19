@@ -1256,14 +1256,13 @@ regression, the same open question as before, now off by one more.
 
 ## A4. Per-loop history and a running firing (design D13)
 
-2026-08-19, iteration 26. A4.1 and A4.2 done; A4.3-A4.5 (the running-firing half of D13) deliberately
-left for a following iteration rather than rushed in the same one — see the note below the checklist
-for why the split falls there rather than elsewhere.
+2026-08-19, iteration 26. A4.1 and A4.2 done. 2026-08-19, iteration 27: A4.3 done; A4.4/A4.5
+deliberately left for a following iteration — see the note below the checklist for why.
 
 - [x] A4.1 A per-loop history home — `EventLog` is indexed by project and agent, not loop, so
       retrieving one loop's history must not mean scanning unindexed JSON.
 - [x] A4.2 Retrieve one loop's history; assert no event from another loop is returned.
-- [ ] A4.3 `JobRun` records a firing as in progress while its run executes, distinct from completed
+- [x] A4.3 `JobRun` records a firing as in progress while its run executes, distinct from completed
       and failed.
 - [ ] A4.4 **One helper** answers "is a firing active for this loop", used by both the edit path and
       the loop panel in `2026-08-18-one-shell-three-panels`. Do not write it twice.
@@ -1356,6 +1355,101 @@ proven against `run_reconciliation.py`'s existing `reconcile_interrupted_runs()`
 iteration, not yet built against) with its own live-restart smoke test — the same rigor this
 iteration's A4.1/A4.2 got. Splitting the checklist at 4.2/4.3 keeps each landed piece independently
 verified rather than shipping a partially-tested five-task block against the clock before 08:00.
+
+**A4.3, what was built (2026-08-19, iteration 27).** No migration needed — `JobRun.status`
+(`models.py`) has never had a CHECK constraint (confirmed by grepping every migration touching
+`job_runs` before writing anything), so the new values are a pure code change, not a schema one.
+The column's own comment now documents the full set: `"fired"` (enqueued, transient) →
+`"in_progress"` (a queued entry now feeding a live agent turn) → `"completed"` | `"failed"` |
+`"stopped"` | `"skipped"` (unchanged).
+
+`scheduler.py::_do_fire_job` sets `run.status = "in_progress"` immediately before the entry-queued
+commit, on the one success path that reaches it — every early return above that point (skip,
+loop-stopped) already overwrites `status` with `"skipped"` first, so only a firing that actually
+queues real work for an agent ever becomes `"in_progress"`. Before this task, that same commit left
+`status` at its creation-time default of `"fired"` forever if nothing later failed — `"fired"` was
+silently doing double duty as both "just enqueued" and "turned out fine", which is exactly the fact
+D13 says the database could not state honestly.
+
+New `scheduler.py::finalize_job_run_for_conversation(session, conversation_id, final_status)` —
+the one place that flips a `JobRun` out of `"in_progress"`, correlated the only way `JobRun` and
+`Run` can be: `JobRun.conversation_id`, no foreign key either direction (confirmed by reading both
+models before writing the query, per this task's own instruction not to assume the join). Queries
+for the `"in_progress"` row matching that conversation id, newest-first; no match is the common
+case (most `Run`s are not job firings at all — a message or a delegation starts one too) and is a
+silent no-op, not an error.
+
+Called from **five** sites in `agent_trigger.py`, not the two `next_action` named as landmarks —
+those two (`~1490`/`~2035`, one per runner transport) are where a `Run` that actually executed a
+turn reaches `"completed"`/`"failed"`/`"stopped"`, but grepping every `run.status = ` assignment in
+the file surfaced three more: the `FileNotFoundError` spawn-failure branch and the catch-all
+`except Exception` handler on the exec (Claude) path, and the mirrored `FileNotFoundError`/
+`AppServerError`/`TimeoutError`/`OSError` branch on the codex app-server path. Skipping these would
+have left the single most common failure mode — the CLI binary itself missing or refusing to spawn,
+before any turn ever started — stuck at `"in_progress"` forever, which is worse than the pre-task
+`"fired"` conflation this task exists to fix. All five call the same one function; none re-derive
+the query.
+
+**A live-Hub restart (not a full spawn) was the smoke test — proportionate to a change with no UI
+surface**, matching L6's own precedent in this file ("verified entirely through pytest against the
+scheduler's own logic, with no UI or live-Hub surface to exercise"). Found the real PID via
+`Get-NetTCPConnection -LocalPort 8010` (`9908`), stopped it, relaunched via the documented
+`Invoke-CimMethod` command — the first attempt used a python.exe path missing a path segment and
+produced no listener at all, caught by curling `/health` and getting a connection refusal rather
+than trusted blind; the corrected, fully-qualified path worked and `/health` returned
+`{"status":"ok"}`. This is the test that actually matters for *this* change: a wrong import
+(`agent_trigger.py` now imports `finalize_job_run_for_conversation` from `scheduler.py`, a module
+it did not previously import from) would have crashed the process at startup, not at request time —
+proven clean, not assumed. Did not additionally spawn a real Claude/Codex CLI process end-to-end;
+the mocked round-trip tests below already exercise the identical code path (real `PtySession.spawn`
+call site, patched only at the process-spawn boundary), and a genuine live CLI run risks consuming
+the remaining runway on an external dependency this task does not need to prove.
+
+**A pre-existing frontend gap this task fixes as a side effect, not by intent.**
+`JobCard.tsx`/`LoopTab.tsx` already branch on `run.status === 'completed'` — dead code until now,
+since the backend had never once written that value. `"in_progress"`/`"stopped"` fall through to
+the same generic "scheduled" icon/color every non-terminal status always has; that is a pre-existing
+fallback, not a regression, and giving `"in_progress"` its own live-indicator look is squarely
+A4.4/LB6's job, not this task's.
+
+**Tests.** `hub/tests/test_scheduler.py` gained two: a full round-trip (`PtySession.spawn` mocked to
+raise `FileNotFoundError`, exactly `test_...spawn_failure...` in `test_agent_trigger.py`'s own
+pattern) proving a spawn that never starts still resolves its `JobRun` to `"failed"`, not stuck; and
+a unit-level test against three hand-built `JobRun` rows (a different conversation's own
+`"in_progress"` row, the target `"in_progress"` row, and an already-`"completed"` row sharing the
+target's conversation id) proving `finalize_job_run_for_conversation` touches only the one matching
+row — written because a wrong query (matching on `job_id`/`project_id` instead of `conversation_id`)
+could still pass every full-round-trip test above by accident if only one loop is ever in flight at
+a time in those fixtures. Four pre-existing tests asserted the old `"fired"`-forever behaviour
+directly (`test_fired_job_creates_a_run_via_direct_execution_not_a_message`,
+`test_job_arriving_while_agent_runs_is_queued`,
+`test_loop_with_stop_when_queue_empties_and_a_pending_task_does_not_stop`,
+`test_loop_fire_with_empty_queue_claims_nothing_and_does_not_error` in `test_scheduler.py`, plus
+`test_job_fire_pauses_without_failing_when_workspace_unavailable` in
+`test_project_workspace_unavailable.py`) — each now asserts `"completed"` where the fixture's
+background run actually finished, or `"in_progress"` where the fixture deliberately never lets the
+agent turn run (a busy agent, a paused workspace). These failing first, for the right reason, is the
+non-vacuous proof the wiring changed real behaviour rather than only adding new assertions.
+
+**Verified:** `pytest hub/tests/test_scheduler.py hub/tests/test_agent_trigger.py` — 79 passed (2
+new). Broader targeted run — `test_jobs.py test_jobs_crud.py test_run_task_binding.py
+test_run_divergence.py test_task_transitions.py test_loop_archival.py
+test_agent_actions_coordination.py test_agent_actions_governed.py test_spec_declared_tasks.py
+test_migrations.py test_project_persistence.py test_checkpoint_record.py
+test_runtime_diagnostics.py test_project_workspace_unavailable.py test_project_delete_api.py` — 374
+passed, 4 skipped (pre-existing, unrelated), 0 failed. `ruff
+check`/`black --check` clean on every touched file. `mypy hub/hub/`: 364 errors / 86 files —
+IDENTICAL to the standing baseline (`.claude/autonomous/mypy-baseline.txt`), zero new, confirmed
+file-by-file. No migration, so no `test_migrations.py` HEAD bump. No UI change, so no bundle
+rebuild. `npx openspec validate --changes --strict`: 2/2.
+
+**Why A4.4/A4.5 are still not in this iteration.** A4.4's helper needs a defined "is a firing active
+for this loop" query shape shared with `2026-08-18-one-shell-three-panels`'s LB6 UI, which this
+task's `"in_progress"` value now makes answerable but did not itself design; A4.5's crash
+reconciliation needs `run_reconciliation.py`'s existing `Run.pid`/`last_heartbeat_at` pattern read
+and mirrored, with its own live-restart-mid-firing smoke test — a different kind of proof than the
+restart-only check this task's own Python-only, no-UI scope justified. Splitting here for the same
+reason iteration 26 split at 4.2/4.3: each landed piece independently verified.
 
 ## A5. Immutability and the identity gap (designs D14, D15)
 

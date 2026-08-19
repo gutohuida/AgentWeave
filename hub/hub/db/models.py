@@ -1190,7 +1190,16 @@ class JobRun(Base):
     )
     status: Mapped[str] = mapped_column(
         String(16), default="fired", nullable=False
-    )  # "fired" or "failed"
+    )  # "fired" (enqueued, transient) | "in_progress" (queued entry now feeding a live agent
+    # turn) | "completed" | "failed" | "stopped" | "skipped". No CHECK constraint (SQLite, and
+    # nothing here has ever added one for this column) — the set is enforced in code, not the
+    # schema. "in_progress"/"completed"/"stopped" added by design D13, task A4.3
+    # (`scheduler.py::_do_fire_job` sets "in_progress"; `scheduler.py::
+    # finalize_job_run_for_conversation`, called from `agent_trigger.py`'s two finalize sites,
+    # sets the terminal value once the agent's own `Run` ends). A row written before this
+    # existed can be stuck at "fired" forever if its `Run` had already ended — that is a
+    # pre-existing row, not a bug in this change; A4.5 will reconcile a firing genuinely
+    # crash-interrupted mid-flight, not backfill history.
     trigger: Mapped[str] = mapped_column(
         String(16), default="scheduled", nullable=False
     )  # "scheduled" or "manual"

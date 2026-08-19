@@ -31,7 +31,12 @@ from hub.db.models import (
     Run,
     Task,
 )
-from hub.scheduler import _LOOP_BRIEFING_CHECKPOINT_CHARS, JobScheduler, _loop_stop_reason
+from hub.scheduler import (
+    _LOOP_BRIEFING_CHECKPOINT_CHARS,
+    JobScheduler,
+    _loop_stop_reason,
+    finalize_job_run_for_conversation,
+)
 
 
 async def _make_job(db, *, suffix, agent, session_mode="new"):
@@ -113,7 +118,8 @@ async def test_fired_job_creates_a_run_via_direct_execution_not_a_message(
 
         job_runs = (await db.execute(select(JobRun).where(JobRun.job_id == job.id))).scalars().all()
         assert len(job_runs) == 1
-        assert job_runs[0].status == "fired"
+        # Design D13, task A4.3: the background run above actually completed.
+        assert job_runs[0].status == "completed"
 
 
 @pytest.mark.asyncio
@@ -173,7 +179,10 @@ async def test_job_arriving_while_agent_runs_is_queued(app, auth_headers, bind_r
 
     async with async_session_factory() as db:
         run = (await db.execute(select(JobRun).where(JobRun.job_id == job.id))).scalar_one()
-        assert run.status == "fired"
+        # Design D13, task A4.3: the entry queued successfully, but the busy agent never
+        # actually ran it in this test, so the firing is "in_progress", not yet a terminal
+        # status — nothing here finalizes it, unlike the full round-trip tests below.
+        assert run.status == "in_progress"
         from hub.db.models import InboundQueueEntry
 
         queued = (
@@ -369,7 +378,10 @@ async def test_loop_with_stop_when_queue_empties_and_a_pending_task_does_not_sto
         assert loop_row.stopped_at is None
 
         run = (await db.execute(select(JobRun).where(JobRun.job_id == job.id))).scalar_one()
-        assert run.status == "fired"
+        # Design D13, task A4.3: the background run above actually completed, so
+        # `finalize_job_run_for_conversation` (agent_trigger.py) has already flipped this out
+        # of "in_progress".
+        assert run.status == "completed"
         assert run.conversation_id is not None
 
 
@@ -561,11 +573,100 @@ async def test_loop_fire_with_empty_queue_claims_nothing_and_does_not_error(
 
     async with async_session_factory() as db:
         run = (await db.execute(select(JobRun).where(JobRun.job_id == job.id))).scalar_one()
-        assert run.status == "fired"
+        # Design D13, task A4.3: the background run above actually completed.
+        assert run.status == "completed"
         tasks = (
             (await db.execute(select(Task).where(Task.loop_id == f"loop-{job.id}"))).scalars().all()
         )
         assert tasks == []
+
+
+@pytest.mark.asyncio
+async def test_loop_fire_whose_spawn_fails_leaves_the_job_run_failed_not_stuck_in_progress(
+    app, auth_headers, bind_runner
+):
+    """Design D13, task A4.3: a firing that queues successfully becomes "in_progress"
+    (`scheduler.py::_do_fire_job`), and a spawn that then fails before the agent ever ran must
+    still resolve it to a terminal status, not leave it stuck — `agent_trigger.py`'s early
+    `FileNotFoundError` handler is the one of five `finalize_job_run_for_conversation` call
+    sites most likely to have been missed, since it fires before either of the two "success"
+    call sites (agent_trigger.py's two `run.status = final_status` finalize blocks) ever run."""
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {"loop-agent-spawn-fail": {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    await bind_runner("loop-agent-spawn-fail", cli="claude")
+
+    async with async_session_factory() as db:
+        job = await _make_job(db, suffix="spawn-fail", agent="loop-agent-spawn-fail")
+        await _make_loop(db, job_id=job.id, purpose="spawn never starts")
+
+    with patch(  # noqa: SIM117
+        "hub.api.v1.agent_trigger.PtySession.spawn",
+        MagicMock(side_effect=FileNotFoundError("claude was not found in PATH")),
+    ):
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            scheduler = JobScheduler()
+            async with async_session_factory() as db:
+                fresh_job = await db.get(AIJob, job.id)
+                success = await scheduler._fire_job_internal(
+                    fresh_job, trigger="scheduled", session=db
+                )
+            for task in list(agent_trigger._background_runs):
+                await task
+
+    assert success is True  # the firing itself queued fine; the spawn is what failed
+
+    async with async_session_factory() as db:
+        run = (await db.execute(select(JobRun).where(JobRun.job_id == job.id))).scalar_one()
+        assert run.status == "failed"
+
+
+@pytest.mark.asyncio
+async def test_finalize_job_run_for_conversation_touches_only_the_matching_in_progress_row(app):
+    """Design D13, task A4.3, unit-level: `JobRun` and `Run` share no foreign key —
+    `conversation_id` is the only correlation `finalize_job_run_for_conversation` has to work
+    with — so this proves the query shape directly against hand-built rows rather than only
+    through a full spawn, where a wrong query (matching on job/project instead of conversation)
+    could still pass by accident if only one loop is ever in flight at a time."""
+    async with async_session_factory() as db:
+        job = await _make_job(db, suffix="finalize-unit", agent="agent-finalize-unit")
+        other_conversation_in_progress = JobRun(
+            id="run-other-in-progress",
+            job_id=job.id,
+            project_id="proj-test",
+            status="in_progress",
+            conversation_id="conv-other",
+        )
+        target = JobRun(
+            id="run-target",
+            job_id=job.id,
+            project_id="proj-test",
+            status="in_progress",
+            conversation_id="conv-target",
+        )
+        already_terminal_same_conversation = JobRun(
+            id="run-already-done",
+            job_id=job.id,
+            project_id="proj-test",
+            status="completed",
+            conversation_id="conv-target",
+        )
+        db.add_all([other_conversation_in_progress, target, already_terminal_same_conversation])
+        await db.commit()
+
+        await finalize_job_run_for_conversation(db, "conv-target", "failed")
+        # No matching row (unknown conversation, or None — most `Run`s are not job firings at
+        # all) is a no-op, not an error.
+        await finalize_job_run_for_conversation(db, "conv-does-not-exist", "failed")
+        await finalize_job_run_for_conversation(db, None, "failed")
+        await db.commit()
+
+        assert (await db.get(JobRun, "run-other-in-progress")).status == "in_progress"
+        assert (await db.get(JobRun, "run-target")).status == "failed"
+        assert (await db.get(JobRun, "run-already-done")).status == "completed"
 
 
 async def _make_checkpoint(db, *, checkpoint_id, loop_id, conversation_id, body):

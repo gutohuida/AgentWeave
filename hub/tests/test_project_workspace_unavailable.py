@@ -324,7 +324,9 @@ async def test_job_fire_pauses_without_failing_when_workspace_unavailable(
         job_run = (
             await db.execute(select(JobRun).where(JobRun.job_id == "job-sched-pause"))
         ).scalar_one()
-        assert job_run.status == "fired"
+        # Design D13, task A4.3: the entry queued successfully, so the firing is
+        # "in_progress" — the paused spawn has not yet resolved it to a terminal status.
+        assert job_run.status == "in_progress"
 
         entry = (
             await db.execute(
