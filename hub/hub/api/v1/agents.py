@@ -961,6 +961,12 @@ def _tool_surface_lines(*, has_peers: bool = True) -> List[str]:
         f"- `create_job(name, agent, message, cron, session_mode=new)` — session_mode is one of "
         f"{values(JobSessionMode)}. Requires the operator's scheduled-work allowance.",
         "- `delete_job(job_id)`, `toggle_job(job_id, enabled)`, `run_job(job_id)` — same allowance.",
+        '- `create_loop(name, agent, message, cron, purpose="", stop_at=None, '
+        "stop_when_queue_empties=False, spec_document_id=None, initial_tasks=None)` — a job that "
+        "also queues its own work, each firing claiming the queue's current task. Refused with no "
+        "HTTP call made unless at least one of `stop_at` or `stop_when_queue_empties` is given: a "
+        "loop that cannot stop is not created. `initial_tasks` seeds the queue at creation, each "
+        "entry the same shape `create_task` takes. Same allowance as `create_job`.",
         "",
         (
             "Address a peer by its exact name from the roster above. There is no inbox tool: "
