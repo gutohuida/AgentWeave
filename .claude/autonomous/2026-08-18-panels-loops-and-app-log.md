@@ -2148,3 +2148,99 @@ and decide the exact response shape, not guessed at here.
 
 Committed and pushed as the work landed. Heartbeat refreshed before the push; releasing it
 (backdating ~40 minutes) as the very last step per the driver's own instructions.
+
+## Iteration 25 (2026-08-19 ~06:20–06:30+01:00) — LA3 done: late tasks refused, offered to a new loop (D12)
+
+Branch and `git log` matched STATE.json exactly at the top of this iteration — no reconciliation
+needed. Read design D12 (design.md ~line 345-361) and task A3 (tasks.md ~line 1170-1174) fresh, as
+instructed rather than trusting the prior iteration's paraphrase.
+
+**Implementation.** `_authorize_loop_task_creation` (`hub/hub/api/v1/tasks.py`) gained one new
+check, placed *before* the actor-privilege checks it already had (D1/D7/D8/D10):
+
+```python
+if loop.ending_state is not None:
+    raise HTTPException(status_code=403, detail={...})
+```
+
+Deliberately unconditional — every other check in the function exempts the operator
+(`if actor.is_operator: return`), but this one does not. D12's refusal answers "does the queue
+still exist to extend", not "who may extend it"; the operator has no more standing to revive a
+stopped loop than anyone else, and D12 explicitly rejects reviving it at all regardless of caller.
+
+`Loop.ending_state` is the stopped signal, not `stop_reason`/`stopped_at` alone and specifically not
+`AIJob.enabled`. All three of `ending_state`/`stop_reason`/`stopped_at` are written together, once,
+only by the loop's own termination path (`scheduler.py:665-676`); an operator merely disabling the
+job through the pre-existing `toggle_job` route leaves all three `None`. That is correct, not an
+oversight — design D6 rejected a third "paused" state, so "disabled" and "stopped" are different
+facts here, and A3.1 must not conflate them. Proved this with its own test rather than trusting the
+reasoning: `test_loop_merely_disabled_is_not_stopped` disables a job directly and asserts task
+creation still succeeds, since a wrong implementation gating on `job.enabled` instead would have
+passed every other test in the file (none of them disable a job without also ending its loop).
+
+**A3.2's response shape**, decided by reading D12 fresh rather than guessing: D12 rejects reviving
+the loop and rejects discarding the task, so the refusal carries everything needed to resubmit —
+nothing is created automatically. The 403's `detail` is a dict, matching the `{"message", "code",
+...}` convention already used throughout `spec.py`/`agent_actions.py` rather than inventing a new
+shape: `message`, `code: "loop_stopped"`, `ending_state`, `stop_reason`, `stopped_at`, and
+`offered_task` — every field `TaskCreate` accepts that `initial_tasks` also accepts (`title`,
+`description`, `priority`, `assignee`, `requirements`, `requirement_ids`, `spec_document`,
+`acceptance_criteria`, `deliverables`, `notes`), echoed back verbatim so the caller can literally
+resubmit the dict as one entry of a new `create_loop` call's `initial_tasks`.
+`_authorize_loop_task_creation`'s signature grew a `task_body: TaskCreate` parameter for this
+(previously only `loop_id`); its single call site — confirmed by grep before changing the signature
+— now passes `body` itself.
+
+**Tests.** Two new tests in `hub/tests/test_agent_actions_coordination.py`:
+`test_loop_stopped_refuses_every_caller_including_the_operator` (ends a loop via a new `_end_loop`
+helper that sets all three columns directly, then asserts BOTH the creator agent's own call and the
+operator's own call are refused with the exact `code`/`ending_state`/`stop_reason`/`stopped_at`/
+`offered_task` shape, and that no `Task` row exists afterward) and
+`test_loop_merely_disabled_is_not_stopped` (the D6 distinction above, proven rather than assumed).
+One assertion needed a fix after first running: `stopped_at.isoformat()` on a value SQLite
+round-trips as a naive datetime lacks the `+00:00` a literal aware `datetime(..., tzinfo=timezone
+.utc)` implied — the identical naive-vs-aware trap `_loop_stop_reason`'s own comment already
+documents for `stop_at` — fixed with `.startswith(...)` rather than forcing awareness onto a column
+that does not carry it.
+
+**Verified**: `pytest hub/tests/test_agent_actions_coordination.py` — 29 passed (2 new). Broader
+targeted run — `test_tasks.py test_agent_actions_governed.py test_jobs.py test_scheduler.py
+test_spec_declared_tasks.py` — 88 passed, 1 skipped, 0 failed, no regression. `ruff check`/`black
+--check` on both changed files: clean. `mypy hub/hub/`: 364 errors in 86 files, identical to every
+prior iteration's own measurement, zero new. `npx openspec validate --changes --strict`: 2/2 valid.
+The full `hub/tests/` suite (2400+ tests) was started in the background before this entry was
+written and was still running past the 25-minute mark when this entry was written — confirm it
+first thing next iteration, exactly as iteration 24 asked of this one.
+
+**Live smoke test against the trial Hub.** Restarted first to pick up the Python change — found the
+real PID via `Get-NetTCPConnection -LocalPort 8010` rather than trusting a prior note (`24384`,
+started `06:04`, replaced with `25076` via the documented `Invoke-CimMethod` command). Created a
+fresh throwaway loop in `proj-5e960453` (`job-6c6037bb`/`loop-2913d58b`, agent `la3-smoke-agent`,
+`stop_when_queue_empties=true`) rather than touching a protected fixture. Learned live that
+`stop_when_queue_empties` does not fire on a queue that was simply never filled —
+`_loop_stop_reason`'s own comment: "empty" means *drained*, not *never filled* — so reaching a
+genuinely `ending_state`-set loop through the real firing path would have meant walking a task all
+the way to `approved`/`rejected` first. Since this is a smoke test of the *refusal*, already covered
+thoroughly by the new unit tests, not of `_loop_stop_reason` itself, set the three stop columns
+directly via a small Python `sqlite3` script against `hub/data/agentweave.db` instead — the same
+kind of direct-DB step a prior iteration used to reach a fixture state the live API alone could not
+produce economically. `POST /projects/proj-5e960453/tasks {"title": "...", "loop_id":
+"loop-2913d58b"}` as the **operator** returned exactly the `403`/`loop_stopped` shape the unit test
+asserts, `offered_task.title` echoing the submitted title verbatim; `GET
+/tasks?loop_id=loop-2913d58b` afterward returned `[]`, confirming nothing was created. Left the
+fixture in place as evidence rather than deleting it, matching the LB2/LB4/LB5 precedent already
+recorded in `decisions_for_user` — this is job 6 in the project, one more than the 5
+`test_job_loop_block.py`'s pre-existing hardcoded-count failure already accounts for; not a new
+regression, the same open question as before, now off by one more.
+
+`tasks.md`'s A3.1-A3.2 ticked with a dated note (this file's own section above). `current`/
+`next_action` now point at **LA4**: "Per-loop history + in-progress firing helper (design D13)" —
+two facts the database cannot currently state: a per-loop history home (`EventLog` is indexed by
+project and agent, not loop) and a `JobRun.status` value for a firing *in progress* (today only
+`"fired"`/`"failed"` exist). A4.4 explicitly requires **one** helper shared by both the edit-staging
+path and the loop panel's live indicator in `2026-08-18-one-shell-three-panels`'s LB6, which iteration
+22 left blocked on exactly this — the one point in the queue where finishing a task in one change
+directly unblocks a task in the other.
+
+Committed and pushed as the work landed. Heartbeat refreshed before the push; releasing it
+(backdating ~40 minutes) as the very last step per the driver's own instructions.

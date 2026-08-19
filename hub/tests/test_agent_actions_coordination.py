@@ -428,6 +428,79 @@ async def test_loop_control_rejects_an_unknown_value(app, auth_headers):
     assert response.status_code == 422
 
 
+async def _end_loop(loop_id: str, *, ending_state: str, stop_reason: str) -> None:
+    from datetime import datetime, timezone
+
+    async with async_session_factory() as session:
+        loop = await session.get(Loop, loop_id)
+        loop.ending_state = ending_state
+        loop.stop_reason = stop_reason
+        loop.stopped_at = datetime(2026, 8, 19, 3, 0, tzinfo=timezone.utc)
+        await session.commit()
+
+
+@pytest.mark.asyncio
+async def test_loop_stopped_refuses_every_caller_including_the_operator(app, auth_headers):
+    """Design D12 (task A3.1): once `ending_state` is set, the queue is closed to everyone —
+    including the operator, who is exempt from every OTHER gate in
+    `_authorize_loop_task_creation` but not this one, because this is not "who may extend the
+    queue" but "does the queue still exist to extend"."""
+    async with async_session_factory() as session:
+        loop = await _loop_with_agent(session, suffix="stopped", agent="creator-agent")
+        await session.commit()
+        loop_id = loop.id
+
+    await _end_loop(loop_id, ending_state="stopped", stop_reason="loop queue is empty")
+
+    creator_headers, _ = await _active_run("run-loop-stopped-creator", "creator-agent")
+    from_creator = await app.post(
+        "/api/v1/agent-actions/tasks",
+        headers=creator_headers,
+        json={"title": "late task from creator", "loop_id": loop_id},
+    )
+    assert from_creator.status_code == 403, from_creator.text
+    detail = from_creator.json()["detail"]
+    assert detail["code"] == "loop_stopped"
+    assert detail["ending_state"] == "stopped"
+    assert detail["stop_reason"] == "loop queue is empty"
+    assert detail["stopped_at"].startswith("2026-08-19T03:00:00")
+    assert detail["offered_task"]["title"] == "late task from creator"
+
+    from_operator = await app.post(
+        "/api/v1/projects/proj-test/tasks",
+        headers=auth_headers,
+        json={"title": "late task from operator", "loop_id": loop_id},
+    )
+    assert from_operator.status_code == 403, from_operator.text
+    assert from_operator.json()["detail"]["code"] == "loop_stopped"
+
+    async with async_session_factory() as session:
+        created = (
+            (await session.execute(select(Task).where(Task.loop_id == loop_id))).scalars().all()
+        )
+        assert created == []
+
+
+@pytest.mark.asyncio
+async def test_loop_merely_disabled_is_not_stopped(app, auth_headers):
+    """Design D6 rejected a third 'paused' state — an operator disabling the job via the
+    existing `toggle_job` path leaves `ending_state`/`stop_reason`/`stopped_at` all `None`, so it
+    must not trip A3.1's refusal. Only the loop's own termination path does that."""
+    async with async_session_factory() as session:
+        loop = await _loop_with_agent(session, suffix="paused", agent="creator-agent")
+        job = await session.get(AIJob, loop.job_id)
+        job.enabled = False
+        await session.commit()
+        loop_id = loop.id
+
+    response = await app.post(
+        "/api/v1/projects/proj-test/tasks",
+        headers=auth_headers,
+        json={"title": "task while merely paused", "loop_id": loop_id},
+    )
+    assert response.status_code == 201, response.text
+
+
 @pytest.mark.asyncio
 async def test_agent_can_read_only_its_own_question_answer(app, auth_headers):
     asker_headers, _ = await _active_run("run-question-owner", "asker")
