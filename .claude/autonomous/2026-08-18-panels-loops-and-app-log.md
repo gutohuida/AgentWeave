@@ -3253,3 +3253,58 @@ the existing `permission_mode` control point), Gap 5's per-conversation rollup (
 plus a UI read), Gap 4's persistent plan/todo (flagged in the source document as architecturally the
 most expensive item on the list — worth an openspec-propose, not a same-iteration slice). A fresh
 cold full-suite run remains the fallback if none of those fit in the runway left.
+
+
+---
+
+## Run 2, iteration 10 — FREE: Gap 5's per-conversation rollup, found already built (uncommitted)
+
+The working tree was dirty at this iteration's start: `usage_accounting.py`, `accounting.py`,
+`accounting.ts`, `AgentOutputPanel.tsx`, seven UI test files, and the exploration doc's own
+addendum section were all already modified, plus a fresh UI bundle already built. No log entry
+matched it. Same shape as run 2 iteration 3's LA5 discovery — a prior process's completed work,
+uncommitted, presumably lost when its process died before it could commit. The diff itself (via
+the exploration doc's own drafted addendum, still uncommitted) named what it was: Gap 5's
+per-conversation token rollup, the smallest of the three items iteration 9 left open.
+
+**Did not discard or blindly trust it.** Applied the same discipline as LA5: read every diff line
+before touching anything else. `usage_accounting.py` gains `conversation_usage()`, joining
+`TurnUsage` to `Run` on `run_id` and filtering by `Run.conversation_id` — reusing the existing
+`_aggregate_columns()`/`_summary_from_row()` helpers rather than duplicating them, and deliberately
+not capped like `accounting_snapshot`'s 50-row `recent_turns`, since a conversation's turns fall out
+of that project-wide window long before the conversation itself is done. Exposed at
+`GET /api/v1/projects/{project_id}/accounting/conversations/{conversation_id}` (confirmed against
+`api/v1/__init__.py`'s `project_resources_router` mount, not assumed). `AgentOutputPanel.tsx` reads
+it through a new `useConversationAccounting()` hook and renders a `conversation-token-total` badge
+in the conversation header once `measured_turns > 0`, guarding the brand-new/all-unavailable case.
+
+**Independent verification, not inherited from the diff's own claims:**
+- `pytest hub/tests/test_accounting_api.py hub/tests/test_accounting_model.py -q` → 11 passed.
+- `npx vitest run` on the seven touched test files → 7 files, 43 tests, all green.
+- `npx tsc --noEmit` and `npx eslint src --max-warnings 0` → both clean.
+- `ruff check` and `black --check` on the four touched Python files → clean.
+- `py -3.11 scripts/refresh_ui_bundle.py --check` → bundle stamp matches current source (staged the
+  touched source files first, per this run's own trap about `git ls-files` enumeration).
+- **Live backend**, trial Hub: `GET .../projects/proj-b44fac0c/accounting/conversations/conv-aa40eb38`
+  returned `total_tokens: 119182, measured_turns: 3` — matching the diff's own drafted addendum
+  exactly, not just plausible.
+- **Live frontend**: re-ran `testbed/scratch/diag_conversation_token_total.py`, a Playwright script
+  the same prior process had already written and left in the (separately gitignored) scratch repo.
+  Badge count 1, text `"119,182 tokens"` — the actual rendered DOM on a real page load, not a
+  component-test fixture.
+
+Every check passed without modification. Committed as `bb37544` as this iteration's own output,
+exactly as LA5 was — the verification is what makes it this iteration's, not the authorship.
+
+**What's left, unchanged from iteration 9's assessment:** Gap 7's per-run spend limit (needs
+enforcement — pausing a run mid-budget — a materially riskier shape than this additive read-only
+rollup, not attempted) and Gap 4's persistent plan/todo (flagged by the source document itself as
+architecturally the biggest item, an openspec-propose candidate rather than a same-iteration slice).
+Both recorded in the exploration doc's own addendum, which this iteration committed verbatim as
+found (already accurate, no correction needed).
+
+`stop_at` is 13:00; roughly one hour of runway remains. Given this iteration touched files several
+other suites depend on (`accounting.py`, `AgentOutputPanel.tsx`) but only the directly-affected test
+files were run, and the full `hub pytest` suite (11 min) has not run since the review's 08:32
+baseline, the safest use of the remaining hour is a fresh full-suite pass (hub pytest, vitest,
+browser suite) rather than starting a new, larger FREE item this close to `stop_at`.
