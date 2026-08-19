@@ -2569,3 +2569,87 @@ Session ends here. `session_stopped` set to `true` in `STATE.json`. Not releasin
 this time — the driver's backdating step exists to keep a *live* loop from idling a cycle against
 its own stale heartbeat, and doing that here would just cause the driver to immediately re-invoke a
 session whose stop time has passed. Tree left clean, everything pushed.
+
+---
+
+## Morning review (interactive, 2026-08-19 07:58–08:40) — operator awake
+
+The operator returned at 07:58 and asked for a review plus a fresh trigger to 13:00, same branch.
+This entry is the review. Run 1's claims were **re-verified rather than trusted**.
+
+### The driver was still armed
+
+`stop_at` was 08:00 and the next firing was due at **07:59:34** — inside its window, so a 30th
+iteration would have started while the review was in progress and committed on top of it.
+Unregistered with ~30 seconds to spare. Run 1 had marked `session_stopped: true`, but
+`run-iteration.ps1` never reads that field — it only checks the clock and the heartbeat. Worth
+knowing: **a run that ends early stays armed until its stop time.**
+
+### Re-verified green
+
+| Check | Result |
+|---|---|
+| `hub` pytest (background, 10m56s) | **2440 passed, 12 skipped, 1 xpassed** |
+| `vitest` | **1070 passed / 105 files** |
+| `eslint --max-warnings 0`, `tsc --noEmit` | clean |
+| `ruff`, `black` | clean, 416 files unchanged |
+| `openspec validate --changes --strict` | 2/2 |
+| UI bundle stamp | current **and** the asset served by :8010 matches |
+
+The backend spine of the loop change is genuinely solid. That is the bulk of run 1's output and it
+holds up.
+
+### What run 1 got right
+
+62 commits, 91 files, +15,078/−1,286, 5 migrations, every iteration committed and pushed. It drove
+both changes rather than starving one, exactly as instructed. **It did not tick a single human-only
+task** across four separate human-only sections — the discipline held with nobody watching. It
+correctly never started APP1, because the operator had gated app work behind finishing both specs.
+Its nine recorded decisions are specific and honest, including two genuine design questions it
+declined to settle unilaterally.
+
+### What the review found wrong
+
+**1. A real defect on a task marked `[x]`.** `ConversationView.tsx:199-211` re-keys the attached
+document's tab once `inventory` resolves — the key changes from a path to a `spdoc-` id — and does
+it by calling `openTab`, which **forces activation**. So a late inventory load steals the active tab
+back from whatever the operator has since selected. Reproduced live with a standalone script
+(`testbed/scratch/diag_panel_shell.py`): open the shell with a document attached, click plus →
+Specs, and `panel-tab-specs` ends at `aria-selected=false` while the document's tab is `true`. The
+specs index **flashes and vanishes**. Tasks 3.2/3.3 are ticked; this is the behaviour they claim.
+
+**2. Its test is a false green — the fourth of this class in this repo.**
+`test_the_specs_index_tab_opens_from_the_plus_affordance` *passes*, because Playwright's
+`expect().to_have_attribute` auto-retries and catches the brief window **before** the override
+lands. The very next test then fails on a 30-second timeout, because by the time it clicks, the tree
+is gone. The suite reported the symptom one test later than the cause, which is why run 1 never
+connected them.
+
+**3. The browser suite is red: 8 of 53.** Run 1's own notes account for only 2 (fixture drift, jobs
+3→5). The other 6 were never flagged.
+
+**4. The browser suite is order-dependent and flaky.** Two `test_files_tab` tests pass alone but
+fail in a full run; the failing parametrization of the measured-minimum-width test **changed between
+two consecutive full runs**. `SpecTree` persists collapsed folders to `localStorage` shared across
+tests and never auto-expands — a plausible carrier for exactly this coupling.
+
+**5. CI has never run.** Not once, on any of the 62 commits. The draft PR that run 1's own
+`pre_authorised` entry permitted was never opened, and `ci.yml` triggers only on push-to-master or a
+PR to master. Confirmed by `gh run list --branch` (zero) and `gh pr list` (none). So nothing has been
+checked on Linux, macOS, or Python 3.12.
+
+**6. One test now xpasses**, where CI on master reported `1 xfailed`. Unexamined.
+
+### The honest summary
+
+Run 1 built a lot and built it carefully — but it **verified each piece as it landed and never
+re-ran the whole browser suite at the end**, which is precisely where the six unexplained failures
+were hiding. The pattern to take forward: *per-task verification is not suite verification*, and a
+green assertion under auto-retry is not evidence about a race.
+
+### Run 2's queue
+
+C4 (open the PR, start CI) → C1 (the active-tab steal, with a test proven to fail first) → C2a/C2b
+(the remaining browser failures, real defects separated from fixture drift) → C3 (suite isolation)
+→ C5 (the xpass) → A4.5 → LA5 → B6.2–B6.4 → APP1/APP2 → FREE. Corrections before new work,
+deliberately: finishing the last 7 tasks on top of a red suite would only bury the failures deeper.

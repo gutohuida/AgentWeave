@@ -1,295 +1,138 @@
 {
-  "purpose": "Operator, 2026-08-18 ~21:05, verbatim: 'I want you to work on both specs. The side panel and the loop. Testing of the UI should be done using playwright. If you finish both specs I want you to work on making the app experience for agentweave better. Having a desktop icon would be nice. You can clear all project from the test hub. The autonomous run should go until 8AM. If all of that is done you can decide on whatever you want to work, fixing anything outstanding or whatever we need.' So: implement BOTH openspec changes in flight, verify UI work with Playwright against the live Hub, and only after both are genuinely done move to app experience (desktop icon named explicitly). Section 1 of the panel change already landed interactively before this run started.",
+  "purpose": "SECOND RUN, same branch, continuing 2026-08-18's overnight work. Operator, 2026-08-19 ~08:15, verbatim: 'What I want you to do then is to review the work and create a new trigger to continue the work done here. Same branch same everything just with what's left, what need correction etc. This new one will run up to 13h.' So: fix what the morning review found broken FIRST, then finish the two changes' remaining agent-verifiable tasks, then app experience. The review is in the log entry 'Morning review (interactive, 2026-08-19 08:00-08:40)'.",
   "branch": "autonomous/2026-08-18-panels-loops-and-app",
   "parent_branch": "panel-shell/2026-08-18-tab-store",
   "parent_sha": "8d52a93",
-  "parent_note": "The parent is NOT master. It carries panel section 1 (the tab store), built and pushed interactively at 2026-08-18T21:0x. It is itself one commit ahead of master (024bf72). So the morning's diff against master = section 1 + this run.",
-  "started_at": "2026-08-18T21:25:24+01:00",
-  "stop_at": "2026-08-19T08:00:00+01:00",
+  "parent_note": "Unchanged from run 1. Same branch, same parent — the operator asked for a continuation, not a new branch. HEAD at the start of run 2 is 82644cb (run 1's closing commit).",
+  "started_at": "2026-08-19T08:40:00+01:00",
+  "stop_at": "2026-08-19T13:00:00+01:00",
   "stop_when_queue_empties": false,
-  "iteration": 29,
-  "session_stopped": true,
-  "last_heartbeat": "2026-08-19T07:44:48+01:00",
-  "prepared_by": "/autonomous-prep, interactive session 2026-08-18T20:55-21:30+01:00. Intent was fixed with the operator BEFORE reading the handoff or the git log. Environment was measured, not assumed: browser suite 33 passed against the live Hub, ruff clean, black clean (403 files), openspec 2 changes + 32 specs strict-valid, mypy baselined at 361 pre-existing errors, trial Hub confirmed serving this repo via an editable install.",
-  "operator_intent": {
-    "both_specs": "Work BOTH openspec changes. Do not spend the whole night on one. The queue interleaves them deliberately.",
-    "ui_testing": "Playwright, against the live Hub. Not just vitest.",
-    "then_app_experience": "ONLY after both specs are genuinely done. Desktop icon named explicitly as something they'd like.",
-    "then_free_choice": "After all of that, the run picks its own work — outstanding fixes or whatever is needed.",
-    "stop": "08:00 on 2026-08-19."
+  "run": 2,
+  "iteration": 0,
+  "session_stopped": false,
+  "last_heartbeat": null,
+  "prepared_by": "Interactive review session 2026-08-19T07:58-08:40+01:00. Run 1's claims were re-verified rather than trusted: every suite re-run, the browser suite's failures reproduced and diagnosed to a named line, and CI's absence confirmed via `gh run list`.",
+
+  "what_run_1_achieved": {
+    "commits": 62,
+    "diff_vs_master": "91 files, +15078 / -1286, 5 new migrations",
+    "panel_change": "32/37 done — the 5 open are ALL human-only (7.1-7.5)",
+    "loop_change": "76/95 done — 19 open: 12 human-only (13.x, A6.x, B7.x) and 7 real (A4.5, A5.1-A5.3, B6.2-B6.4)",
+    "verified_green_on_review": "hub pytest 2440 passed / 12 skipped / 1 xpassed (10m56s); vitest 1070 passed / 105 files; eslint clean; tsc clean; ruff clean; black 416 unchanged; openspec strict 2/2; UI bundle stamp current AND actually served",
+    "discipline_held": "Not one human-only task was ticked. APP1/APP2 correctly never started, because the operator gated them behind finishing both specs."
   },
+
+  "what_the_review_found_wrong": [
+    "THE BIG ONE — a real defect sitting on a task marked [x]. ConversationView.tsx:199-211 re-keys the attached document's tab when `inventory` finishes loading (the key changes from a path to a `spdoc-` id) and does it by calling `openTab`, which FORCES ACTIVATION. So a late inventory load steals the active tab back from whatever the operator selected in the meantime. Reproduced live: open the shell with a document attached, click plus -> Specs, and `panel-tab-specs` ends at aria-selected=false while `panel-tab-spec:spdoc-f89d5f6f` is true. The specs index flashes and vanishes. Tasks 3.2/3.3 are ticked; this is the behaviour they claim.",
+    "AND ITS TEST IS A FALSE GREEN. `test_the_specs_index_tab_opens_from_the_plus_affordance` PASSES because Playwright's `expect().to_have_attribute` auto-retries and catches the brief window before the override lands. The very next test then fails, because by the time it clicks, the tree is gone. This is the exact false-green class this repo has hit three times before.",
+    "Browser suite is RED: 8 of 53 in a full run, 7 reproducible in isolation. Run 1's own notes account for only 2.",
+    "Browser suite is ORDER-DEPENDENT AND FLAKY: two `test_files_tab` tests pass alone but fail in a full run, and the failing parametrization of `test_file_tab_header_at_the_measured_minimum_width` changed between two consecutive full runs ([240-True] then [260-False]).",
+    "CI HAS NEVER RUN on any of run 1's 62 commits. The draft PR that run 1's own pre_authorised entry allowed was never opened, and ci.yml only triggers on push-to-master or a PR to master. Confirmed via `gh run list --branch` (zero runs) and `gh pr list` (no PR).",
+    "One test now XPASSES (was `1 xfailed` in CI on master, now `1 xpassed`). Either a known-broken thing started working or the marker is stale; either way it is unexamined."
+  ],
+
   "queue": [
-    {
-      "id": "P2a",
-      "title": "Panel shell: component skeleton, tab strip, keyboard (tasks 2.1, 2.6, 2.7)",
-      "status": "done"
-    },
-    {
-      "id": "P2b",
-      "title": "Panel shell: re-host ConversationView's panel block (tasks 2.2-2.5)",
-      "status": "done"
-    },
-    {
-      "id": "P3",
-      "title": "Panel: specs as the shell's first tenant (tasks 3.1-3.6)",
-      "status": "done"
-    },
-    {
-      "id": "PW1",
-      "title": "Playwright coverage for the shell against the live Hub",
-      "status": "done"
-    },
-    {
-      "id": "L1",
-      "title": "Loop: migration + model (tasks 1.1-1.3, 2.1-2.2)",
-      "status": "done"
-    },
-    {
-      "id": "L3",
-      "title": "Loop: spec materialisation stamps loop_id (tasks 3.1-3.2)",
-      "status": "done"
-    },
-    {
-      "id": "L4",
-      "title": "Loop: declaring a source document, 409 on conflict (tasks 4.1-4.2)",
-      "status": "done"
-    },
-    {
-      "id": "L5",
-      "title": "Loop: creator authorship gate (tasks 5.1-5.4)",
-      "status": "done"
-    },
-    {
-      "id": "L6",
-      "title": "Loop: claiming the current item (tasks 6.1-6.3)",
-      "status": "done"
-    },
-    {
-      "id": "L7",
-      "title": "Loop: loop-scoped checkpoints + envelope (tasks 7.1-7.4)",
-      "status": "done"
-    },
-    {
-      "id": "L9",
-      "title": "Loop: the briefing (tasks 9.1-9.3)",
-      "status": "done"
-    },
-    {
-      "id": "L8",
-      "title": "Loop: refuse resume for a loop's job (tasks 8.1-8.2)",
-      "status": "done"
-    },
-    {
-      "id": "L10",
-      "title": "Loop: empty-queue telemetry event (tasks 10.1-10.2)",
-      "status": "done"
-    },
-    {
-      "id": "L11",
-      "title": "Loop: create_loop MCP tool (tasks 11.1-11.4)",
-      "status": "done"
-    },
-    {
-      "id": "L12",
-      "title": "Loop: full-suite verification + mutation checks (tasks 12.1-12.5)",
-      "status": "done"
-    },
-    {
-      "id": "P4",
-      "title": "Panel: GET /api/v1/workspace/file endpoint (tasks 4.1-4.5)",
-      "status": "done"
-    },
-    {
-      "id": "P5",
-      "title": "Panel: the files tab (tasks 5.1-5.5, incl. MEASURING the min width)",
-      "status": "done"
-    },
-    {
-      "id": "P6",
-      "title": "Panel: strip overflow decision, measured not guessed (task 6.1)",
-      "status": "done"
-    },
-    {
-      "id": "LB1",
-      "title": "Loop B1: archival migration + model columns",
-      "status": "done"
-    },
-    {
-      "id": "LB2",
-      "title": "Loop B2: archival replaces deletion",
-      "status": "done"
-    },
-    {
-      "id": "LB3",
-      "title": "Loop B3: archive_job on the MCP surface",
-      "status": "done"
-    },
-    {
-      "id": "LB4",
-      "title": "Loop B4: the loop summary tells the truth",
-      "status": "done"
-    },
-    {
-      "id": "LB5",
-      "title": "Loop B5: the loops index tab (REQUIRES the shell from P2b/P3)",
-      "status": "done"
-    },
-    {
-      "id": "LB6",
-      "title": "Loop B6: the loop drill-down tab (REQUIRES the shell) — B6.1/B6.5/B6.6 done, B6.2-B6.4 (live active-now indicator) blocked on LA4/D13",
-      "status": "open"
-    },
-    {
-      "id": "LA1",
-      "title": "Loop A1: control as a per-loop setting (D10)",
-      "status": "done"
-    },
-    {
-      "id": "LA2",
-      "title": "Loop A2: editing, staged and visible (D11)",
-      "status": "done"
-    },
-    {
-      "id": "LA3",
-      "title": "Loop A3: late tasks refused, offered to a new loop (D12)",
-      "status": "done"
-    },
-    {
-      "id": "LA4",
-      "title": "Loop A4: per-loop history + in-progress firing helper (D13)",
-      "status": "open"
-    },
-    {
-      "id": "LA5",
-      "title": "Loop A5: write-once loop_id, and RECORD (do not fix) the D15 name gap",
-      "status": "open"
-    },
-    {
-      "id": "APP1",
-      "title": "App experience: a desktop icon/shortcut for AgentWeave",
-      "status": "open"
-    },
-    {
-      "id": "APP2",
-      "title": "App experience: further improvements, operator's second priority",
-      "status": "open"
-    },
-    {
-      "id": "FREE",
-      "title": "Free choice: outstanding fixes, findings, whatever is most needed",
-      "status": "open"
-    }
+    {"id": "C4", "title": "Open the draft PR so CI finally runs on all 62+ commits", "status": "open"},
+    {"id": "C1", "title": "FIX the active-tab steal (ConversationView.tsx:199-211) and de-vacuum its test", "status": "open"},
+    {"id": "C2a", "title": "Fix the remaining real browser failures: test_files_tab (3 in isolation)", "status": "open"},
+    {"id": "C2b", "title": "Fix the fixture-drift failures: test_job_loop_block (2), test_loops_index (1)", "status": "open"},
+    {"id": "C3", "title": "Make the browser suite order-independent — it is currently state-coupled", "status": "open"},
+    {"id": "C5", "title": "Examine the xpassed test; fix or remove the stale xfail marker", "status": "open"},
+    {"id": "A45", "title": "A4.5 crash reconciliation — a crashed run must not leave a firing in progress", "status": "open"},
+    {"id": "LA5", "title": "A5.1-A5.3 write-once loop_id, and RECORD (do not fix) the D15 name gap", "status": "open"},
+    {"id": "B6X", "title": "B6.2-B6.4 the live active-now indicator, SSE updates, reduced motion", "status": "open"},
+    {"id": "APP1", "title": "App experience: a desktop icon/shortcut for AgentWeave", "status": "open"},
+    {"id": "APP2", "title": "App experience: further improvements", "status": "open"},
+    {"id": "FREE", "title": "Free choice: outstanding fixes, findings, whatever is most needed", "status": "open"}
   ],
-  "current": "A4.5",
-  "next_action": "SESSION ENDED (iteration 29, 2026-08-19T07:44:48+01:00, stop_at was 08:00:00 -- stopped ~15 min early deliberately, not past-deadline). No code touched this iteration. Reason: iteration 28's own next_action said not to start A4.5 with under ~20 minutes left, and 15 remained; A4.5 is a crash-reconciliation feature needing a live-restart-mid-firing smoke test, not something to rush. Full closing account in .claude/autonomous/2026-08-18-panels-loops-and-app-log.md's 'Iteration 29 -- session end' entry (what changed across all 63 commits/29 iterations, what was proven, what's open, what to distrust). If a NEW autonomous session or an interactive one picks this up: re-verify operator intent is unchanged before resuming (this file's stop_at has passed or is about to), then start exactly where iteration 28 left off -- A4.5 is next. A4.4 is DONE (iteration 28, dated note in openspec/changes/2026-08-18-a-loop-writes-its-own-queue/tasks.md section '## A4' under 'A4.4, what was built', immediately after the A4.3 note -- read it in full). Full account in .claude/autonomous/2026-08-18-panels-loops-and-app-log.md's own 'Iteration 28' entry. Summary: _batch_loop_summaries (hub/hub/api/v1/jobs.py) is the ONE function every loop-block caller (list_jobs, get_job, the POST /jobs/{job_id} edit-staging response, list_loops, _get_loop_detail) already funnels through -- confirmed by grep before writing anything. A4.4 added a sixth fixed query to that same function (D7's shape preserved): SELECT DISTINCT job_id FROM job_runs WHERE job_id IN (:job_ids) AND status = 'in_progress'. LoopSummary/LoopDetail (hub/hub/schemas/jobs.py) gained firing_active: bool; TypeScript LoopSummary (hub/ui/src/api/jobs.ts) got the matching required field (typed, not yet consumed by any component, same precedent as A4.1/A4.2's events). loops.py's 'Known gap, not fixed here' docstring paragraph rewritten to describe what exists now and name A4.5 as what's left. Tests: new test_firing_active_reflects_an_in_progress_job_run in test_loop_archival.py (9 passed, 1 new); broader targeted run (test_jobs.py test_jobs_crud.py test_scheduler.py test_agent_trigger.py) 116 passed/3 skipped/0 failed; ruff/black clean; mypy on the 3 touched files showed only pre-existing errors in unrelated transitively-imported files (a full-repo baseline diff was NOT run this iteration -- time -- flag this, it is a lighter check than prior iterations did). Frontend: tsc caught 3 JobCard.test.tsx fixtures missing the now-required firing_active field, fixed then clean; eslint clean; vitest jobCard.test.tsx 4 passed. UI rebuilt, bundle stamp refreshed and --check confirms match. openspec validate --changes --strict 2/2.\n\nA REAL FINDING from the live smoke test, not fabricated: restarted the trial Hub (real PID via Get-NetTCPConnection, was 5328, confirmed live via Get-Process before killing -- started 07:13, not stale), /health ok. GET /projects/proj-5e960453/loops then showed loop-8e86eb9f ('taste-pass never-filled loop', job-0b490274) genuinely firing_active:true -- its history has TWO consecutive firings (06:30, 06:15) both stuck at 'in_progress', never finalized. This is not a bug in A4.4's own code -- it is exactly the pre-existing crash-recovery gap A4.5 exists to close, made visible for the first time because firing_active is the first thing that ever surfaced it. Left the row untouched deliberately: it is now a ready-made LIVE fixture for A4.5's own smoke test.\n\nNEXT: A4.5, openspec/changes/2026-08-18-a-loop-writes-its-own-queue/tasks.md (re-check line number after this iteration's insert, was ~1267 before it). Read hub/hub/run_reconciliation.py's reconcile_interrupted_runs() FIRST (it already does exactly this shape for Run.status=='running' rows on Hub startup -- find its call site in main.py's lifespan) and mirror it for JobRun's 'in_progress' value rather than inventing a second reconciliation path. Needs its own live-restart-mid-firing smoke test -- USE loop-8e86eb9f/job-0b490274 on the live trial Hub as the ready-made stale-row fixture (two JobRun rows stuck in_progress since 06:15/06:30 today) rather than constructing one from scratch; confirm reconciliation resolves them (to 'failed' or similar) on the next Hub restart, and that GET .../loops/loop-8e86eb9f then reports firing_active:false. A5 (Task.loop_id write-once + D15 record-only) and A6/A7 (human-only/test-guide) remain queued after. Given the clock (run stops 08:00; iteration 28 ended ~07:38), the NEXT firing should re-check the time budget honestly before starting A4.5 -- if under ~20 minutes remain, prefer ending the session cleanly over a rushed partial reconciliation implementation, matching this iteration's and iteration 27's own precedent.\n\n[Superseded next_action from iteration 27, kept for continuity below.] A4.3 is DONE (iteration 27, dated note in openspec/changes/2026-08-18-a-loop-writes-its-own-queue/tasks.md section '## A4', ~line 1360, headed 'A4.3, what was built' — read it in full, this field only summarises). A4.4 and A4.5 remain OPEN and are NEXT. Full account of iteration 27 in .claude/autonomous/2026-08-18-panels-loops-and-app-log.md's own 'Iteration 27' entry. Summary of what landed: no migration needed (JobRun.status has never had a CHECK constraint, confirmed by grep before writing code) -- pure Python. scheduler.py::_do_fire_job now sets run.status='in_progress' immediately before the entry-queued commit on the one success path that reaches it (every early return above it already overwrites status with 'skipped' first); before this iteration that commit left status at its creation-time default 'fired' forever unless something later failed. New scheduler.py::finalize_job_run_for_conversation(session, conversation_id, final_status) is the one place a JobRun leaves 'in_progress', correlated via JobRun.conversation_id (no FK either direction, confirmed by reading both models). Called from FIVE sites in agent_trigger.py, not just the two next_action's own prior iteration named as landmarks (~1490/~2035, the 'turn genuinely ran and ended' sites) -- grepping every 'run.status = ' assignment surfaced three more: FileNotFoundError spawn-failure branches on both the exec and codex-app-server paths, and the exec path's catch-all except-Exception handler. All five call the same function. Tests: two new in test_scheduler.py (a mocked spawn-failure round-trip proving the JobRun resolves to 'failed' not stuck; a unit-level test against three hand-built JobRun rows proving the helper touches only the one row matching both 'in_progress' AND the target conversation id). Four PRE-EXISTING tests asserted the old 'fired'-forever behaviour directly and failed first (the right way) once the real code changed, then were fixed to assert 'completed' or 'in_progress' as appropriate: test_scheduler.py's test_fired_job_creates_a_run_via_direct_execution_not_a_message, test_job_arriving_while_agent_runs_is_queued, test_loop_with_stop_when_queue_empties_and_a_pending_task_does_not_stop, test_loop_fire_with_empty_queue_claims_nothing_and_does_not_error, and test_project_workspace_unavailable.py's test_job_fire_pauses_without_failing_when_workspace_unavailable. Verified: pytest hub/tests/test_scheduler.py hub/tests/test_agent_trigger.py -- 79 passed (2 new). Broader targeted run (test_jobs.py test_jobs_crud.py test_run_task_binding.py test_run_divergence.py test_task_transitions.py test_loop_archival.py test_agent_actions_coordination.py test_agent_actions_governed.py test_spec_declared_tasks.py test_migrations.py test_project_persistence.py test_checkpoint_record.py test_runtime_diagnostics.py test_project_workspace_unavailable.py test_project_delete_api.py) -- 374 passed, 4 skipped (pre-existing), 0 failed. ruff/black clean (one import-order fix via ruff --fix). mypy hub/hub/ 364 errors/86 files, IDENTICAL to baseline, zero new. No migration so no test_migrations.py HEAD bump; no UI change so no bundle rebuild. openspec validate --changes --strict 2/2 valid. LIVE smoke test: restarted the trial Hub (real PID via Get-NetTCPConnection, was 9908) to prove the new cross-module import (agent_trigger.py now imports from scheduler.py for the first time) does not crash at startup -- first restart attempt used a python.exe path missing a directory segment and produced no listener, caught by curling /health and getting a refusal rather than trusted blind; corrected path relaunched cleanly, /health returned ok. Deliberately did NOT spawn a real Claude/Codex CLI process end-to-end (the mocked tests already exercise the identical code path at the process-spawn boundary, and a genuine live CLI run risked the remaining runway on an external dependency this task did not need to prove) -- this is a live-restart-only smoke test, proportionate to a Python-only, no-UI change, matching L6's own precedent recorded in this file for the same reason. A pre-existing FRONTEND gap this task fixes as a side effect, not by intent: JobCard.tsx/LoopTab.tsx already branch on run.status === 'completed' -- dead code until this iteration, since the backend had never once written that value; 'in_progress'/'stopped' fall through to the same generic fallback every other non-terminal status always used, and giving 'in_progress' its own live-indicator look is squarely A4.4/LB6's job, not this task's -- noted, not built here.\n\nNEXT: A4.4/A4.5, openspec/changes/2026-08-18-a-loop-writes-its-own-queue/tasks.md ~line 1372 before this iteration's insert (re-check after, same as every prior iteration). A4.4: ONE helper answering 'is a firing active for this loop' -- now buildable on top of A4.3's 'in_progress' value (the natural shape is roughly `select(JobRun).where(JobRun.job_id == loop.job_id, JobRun.status == 'in_progress')`, but confirm Loop's actual job_id field name and whether more than one JobRun could legitimately read 'in_progress' for the same job before trusting a bare .first()/.scalar_one() -- read _claim_loop_task and _loop_stop_reason first for the established query style in this file). MUST be the single implementation scheduler.py's own edit-staging path uses AND what 2026-08-18-one-shell-three-panels's LB6 (B6.2-B6.4, blocked on exactly this since iteration 22) reads for its live indicator -- do not write it twice, and update hub/hub/api/v1/loops.py's own docstring (the 'Known gap, not fixed here' paragraph) once it lands. Consider doing LB6's remaining B6.2-B6.4 tasks in the SAME iteration as A4.4 if time allows, since this is the one point in the queue where finishing a task in one change directly unblocks a task in the other. A4.5: read hub/hub/run_reconciliation.py's reconcile_interrupted_runs() FIRST (it already does exactly this shape for Run.status=='running' rows on Hub startup, called from main.py's lifespan -- find that call site) and mirror it for JobRun's new 'in_progress' value rather than inventing a second reconciliation path; needs its own live-restart-mid-firing smoke test (kill the Hub mid-firing or fake a stale in-progress row, restart, confirm it reconciles) the same rigor A4.1-A4.3 got. A5 (immutability + D15 name-gap record-only) and A6/A7 (human-only / test-guide) remain queued after. Given the clock (this run stops at 08:00; iteration 27 ended ~07:2x), the NEXT firing should re-check the time budget honestly before starting A4.4/A4.5 -- if under ~20 minutes remain, prefer a smaller, fully-verifiable unit of work (or none at all, ending the session cleanly) over a rushed partial implementation of either task.\n\n[Superseded next_action from iteration 26, kept for continuity below.] LA4's A4.1/A4.2 are DONE (iteration 26, dated note in openspec/changes/2026-08-18-a-loop-writes-its-own-queue/tasks.md section '## A4', ~line 1257 — read it in full, this field only summarises). A4.3-A4.5 remain OPEN and are NEXT. Full account of iteration 26 in .claude/autonomous/2026-08-18-panels-loops-and-app-log.md's own 'Iteration 26' entry. Summary of what landed: EventLog gained a nullable loop_id column (migration 0081) plus a composite index (loop_id, timestamp) mirroring project_id's own existing composite -- deliberately NOT also a single-column index=True on the model, which would have created a second, redundant index on a fresh metadata.create_all() (checked this before writing the model; project_id itself has no individual index=True either). persist_event (hub/hub/utils.py) gained an explicit loop_id keyword, never derived from data inside the function -- a caller states it or it stays NULL. Six existing loop-scoped persist_event call sites updated to pass it (loop_stopped/loop_queue_exhausted/loop_edit_applied in scheduler.py, loop_edit_staged in jobs.py, loop_archived/loop_control_changed in loops.py); job_created and the job-run-failure events were deliberately left alone as job-scoped, not loop-scoped -- extending the contract no further than A4.1 asked. LoopDetail (hub/hub/schemas/jobs.py) gained an events field, distinct from the existing history (JobRun firings) -- events is the lifecycle/audit trail, populated in _get_loop_detail (hub/hub/api/v1/loops.py) via an indexed loop_id filter, newest 10 first. TypeScript LoopDetail (hub/ui/src/api/loops.ts) got the matching field -- type-only, so the rebuilt UI bundle's JS/CSS hashes came out byte-identical and only the build stamp changed. A migration-test trap was re-hit and fixed forward: 0080's own round-trip test used relative command.downgrade(cfg, '-1'), which broke the instant 0081 landed on top (same trap 0079's and 0080's own docstrings already named for their predecessors) -- fixed to an absolute '0079' target with the trap named in a comment; 0081's own new test is left on relative '-1' (correct while it is head) with the same comment pre-written for whoever adds 0082. Verified: test_migrations.py 62 passed/1 skipped; test_project_persistence.py + test_loop_archival.py 15 passed (new test_loop_history_is_isolated_from_other_loops asserts a job_created event -- non-loop-scoped -- leaks into NEITHER loop's events, not just that two loops don't see each other's); broader targeted run (test_scheduler/test_jobs/test_agent_actions_coordination/test_agent_actions_governed/test_spec_declared_tasks/test_tasks) 117 passed/1 skipped/0 failed; ruff/black clean (one migration-file mypy fix: _indexes()'s index[\"name\"] is Optional[str] per the sqlalchemy stubs, filtered with `if index[\"name\"]`); mypy hub/hub/ 364 errors/86 files, IDENTICAL to the standing baseline, zero new. Frontend: tsc --noEmit clean, npm run lint --max-warnings 0 clean, npx vitest run 1070 passed/105 files. openspec validate --changes --strict 2/2 valid. LIVE smoke test against the trial Hub: restarted it first (real PID confirmed via Get-NetTCPConnection, was 25076 matching what iteration 25 left -- not stale) after applying migration 0081 directly to hub/data/agentweave.db, confirmed /health ok, created two fresh throwaway loops in proj-5e960453 (job-282dd88c 'A4 smoke loop' and a second 'A4 smoke loop B') rather than touching a protected fixture -- POST .../loops/{id}/control on the first flipped control from operator to creator, GET .../loops/{id} immediately showed the resulting loop_control_changed event in events with the loop's own id inside data; the SECOND loop's own GET .../loops/{id} returned events: [], confirming isolation live, not just under the unit test's fixtures. Left both fixtures in place as evidence, matching the LB2/LB4/LB5/A3 precedent already in decisions_for_user -- proj-5e960453 now carries 8 jobs, two more than A3's own count of 6; test_job_loop_block.py's pre-existing hardcoded-count assumption is now off by two more than that, same open question as before, not a new regression. UI bundle rebuilt and stamp refreshed (loops.ts changed); /health no longer reports ui_stale.\n\nNEXT: A4.3-A4.5, openspec/changes/2026-08-18-a-loop-writes-its-own-queue/tasks.md ~line 1266 (re-check after this iteration's insert above it, same as every prior one). A4.3: JobRun.status (hub/hub/db/models.py:1183-1185) is only 'fired'/'failed'/'skipped' today -- add an 'in progress' (or similarly named) value via a new migration (0082), following 0081's own guarded-for-a-missing-table pattern. The hard part is WHERE it transitions: run.status='fired' is set at JobRun creation in scheduler.py:619-628, BEFORE the actual agent run happens (that just means 'successfully enqueued', not 'agent is working') -- read scheduler.py:734-807 (_do_fire_job's tail, where the entry is queued and job_fired is broadcast) to find where the firing genuinely becomes 'in progress', and separately find where a Run's own lifecycle (Run.status, hub/hub/api/v1/agent_trigger.py:572-2022, transitions to 'completed'/'failed' at agent_trigger.py:1486 and 2022) would need to reach back and flip JobRun's status too -- JobRun and Run are linked only via JobRun.conversation_id == Run.conversation_id (no direct FK), confirm this join is the intended correlation before writing it. A4.4: ONE helper (e.g. hub/hub/loop_liveness.py or similar, check for a fitting existing module first) answering 'is a firing active for this loop id' -- MUST be the single implementation scheduler.py's own edit-staging path uses AND what 2026-08-18-one-shell-three-panels' LB6 (B6.2-B6.4, blocked on exactly this since iteration 22) reads for its live indicator; do not write it twice, and update hub/hub/api/v1/loops.py's own docstring (the 'Known gap, not fixed here' paragraph this iteration already edited once) once it lands. A4.5: read hub/hub/run_reconciliation.py's reconcile_interrupted_runs() FIRST (it already does exactly this shape for Run.status=='running' rows on Hub startup, called from main.py's lifespan -- find that call site) and mirror it for JobRun's new in-progress value rather than inventing a second reconciliation path; needs its own live-restart smoke test (kill the Hub mid-firing or fake a stale in-progress row, restart, confirm it reconciles) the same rigor A4.1/A4.2 got this iteration. A5 (immutability + D15 name-gap record-only) and A6/A7 (human-only / test-guide) remain queued after. LB6's remaining B6.2-B6.4 tasks in the OTHER change become unblocked once A4.4's helper exists -- do them in the SAME iteration as A4.4 if time allows, since this is the one point where finishing a task in one change directly enables a task in the other. [Superseded next_action from iteration 25 and earlier, dropped from this field per this run's own precedent -- full content preserved in the committed log file, .claude/autonomous/2026-08-18-panels-loops-and-app-log.md, each iteration's own entry.]",
-  "limits": [
-    "No merging to master unattended — the operator's own words, chosen explicitly tonight. Push the autonomous branch; never merge it.",
-    "Stay on branch autonomous/2026-08-18-panels-loops-and-app. No commits to master or to the parent branch.",
-    "Never mark a task complete on the strength of a plan existing (CLAUDE.md). Only real, verified implementation closes a task.",
-    "Do NOT tick human-only sections: panel 7.1-7.5, loop 13.1-13.4, A6.1-A6.4, B7.1-B7.4. Those are the operator's judgement. The operator said 'they all pass for now' about a DIFFERENT set last session; that does not carry over.",
-    "Do not touch project proj-ff695d96 (aw-loop10) — CLAUDE.md, three handoffs, and an executable guard (FORBIDDEN_PROJECT_IDS in hub/tests/browser/conftest.py).",
-    "Do not delete project proj-5e960453 — it is this repo's registration and the browser suite's DEFAULT_PROJECT_ID fixture.",
-    "Never point the Hub you are editing at this repo as an orchestrator. The trial Hub on :8010 is a separate instance; editing Hub Python code means restarting it, which is fine tonight because no runs are in flight.",
-    "Use openspec, never the aw-* collab skills. Never delegate this repo's work through AgentWeave messaging.",
-    "Stage paths explicitly. Never `git add -A`.",
-    "Always `py -3.11`. Interpreter: C:\\Users\\huida\\AppData\\Local\\Programs\\Python\\Python311\\python.exe",
-    "T3 source under testbed/scratch/t3ref/ is design reference ONLY — study, never copy, never commit.",
-    "Never create .agentweave/, agentweave.yml or spec/ as NEW artefacts at the repo root; the existing ones are the migration's.",
-    "Never commit kimichanges.md or kimiwork.md.",
-    "No force-push, no history rewriting, no release, no publish.",
-    "Every claim is measured or labelled unverified."
-  ],
+  "current": "C4",
+  "next_action": "C4, and it is deliberately first because it is two minutes of work that starts a 7-minute CI cycle running in the background while you do C1. Open a DRAFT pull request from `autonomous/2026-08-18-panels-loops-and-app` to `master` with `gh pr create --draft`. Title it so the operator can find it; body should summarise run 1 (62 commits, both changes driven, hub suite 2440 passed) AND state plainly that the browser suite is currently 8/53 red with fixes in flight, so nobody reads the PR as ready. NEVER mark it ready for review and NEVER merge it — the operator's standing limit is 'no merging to master unattended'. Then confirm CI actually started with `gh run list --branch autonomous/2026-08-18-panels-loops-and-app`. If CI comes back red on something run 1 could not see (a Linux/macOS/py3.12-only failure), insert fixing that at the FRONT of the queue ahead of C1 — a cross-platform break is worth more than a UI polish fix.",
+
   "pre_authorised": [
     {
-      "situation": "Loop task 12.2 asks for `mypy hub/hub/` CLEAN. It is not, and cannot be tonight.",
-      "decision": "There are 361 pre-existing mypy errors across 86 files, baselined this session at .claude/autonomous/mypy-baseline.txt. Scope 12.2 to 'this change introduced NO new mypy errors' — compare the total and the per-file counts against the baseline. Do NOT attempt to fix 361 pre-existing errors. Annotate 12.2 in tasks.md with this reasoning rather than ticking it as if the repo were clean.",
-      "cost_if_wrong": "Low. CI does not gate on mypy (ci.yml has no mypy step). Worst case the operator wants a clean repo later, which is its own change."
+      "situation": "C1's fix: how to re-key the attached tab without stealing focus.",
+      "decision": "The re-key is a REPLACE-IN-PLACE, not an open. Add a store action (or extend the existing one) that swaps a tab's id while preserving both its strip position and — critically — the current `activeTabId` UNLESS the tab being re-keyed was already the active one. Do NOT solve it by removing the effect: it exists for a real reason (a path-keyed tab must become id-keyed once the inventory resolves, or it dangles). Unit-test the store action directly, and mutation-check it: make the action force activation and confirm the new test fails by name.",
+      "cost_if_wrong": "Low — it is contained to the store plus one effect, both well covered."
     },
     {
-      "situation": "The operator said 'You can clear all project from the test hub.' Two of the four projects are protected by standing rules.",
-      "decision": "Interpreted conservatively. Already done in prep: deleted the stray `Agentweave` registration pointing at <repo>/hub, which CLAUDE.md explicitly says to delete if it appears. proj-b44fac0c (Throwaway taste pass) may be deleted if a clean slate helps. proj-5e960453 and proj-ff695d96 are NOT to be deleted — see limits. Create fresh throwaway projects OUTSIDE the repo for fixtures.",
-      "cost_if_wrong": "The operator may have meant literally all four. Deleting aw-loop10 would be irreversible and contradicts three handoffs and a code guard, so the conservative reading is the only safe one while they sleep. Logged in decisions_for_user."
+      "situation": "C1's Playwright test currently passes vacuously via expect() auto-retry.",
+      "decision": "Make it non-vacuous: after clicking Specs, WAIT for the inventory to have settled (or assert the state after a deliberate delay/network-idle) before asserting `aria-selected`. The assertion must fail against today's code. PROVE IT: run the new test against the unfixed code first, watch it fail by name, then fix and watch it pass. Do not accept a test that was green before the fix.",
+      "cost_if_wrong": "None — this is the discipline that was missing."
     },
     {
-      "situation": "CI only runs on push to master or on a pull request to master (.github/workflows/ci.yml). A plain branch push produces NO CI signal, and the standing rule is 'full auto, but only on green CI'.",
-      "decision": "Open ONE DRAFT pull request from autonomous/2026-08-18-panels-loops-and-app to master, early, so every push gets CI. Mark it draft, never mark it ready, never merge it. This is not merging — it is the only way to get the signal the standing rule requires, and it leaves the operator a reviewable PR in the morning.",
-      "cost_if_wrong": "Low and reversible — close the PR. Logged in decisions_for_user in case they object to any PR at all."
+      "situation": "C2b, the fixture drift run 1 flagged as a judgement call: `test_job_loop_block` hardcodes 3 jobs, `proj-5e960453` now has 5 (LB2's and LB4's smoke loops, deliberately left as evidence).",
+      "decision": "DERIVE the expectation from the API rather than hardcoding a number, and do NOT delete the smoke jobs. The test's own name is 'loop blocks render only for jobs that HAVE a loop' — so fetch the jobs, compute how many have a loop, and assert the rendered count matches that. This keeps it a real regression check instead of a number that rots, and it honours LB2/LB4's 'leave it as evidence' precedent. Same principle for `test_loops_index`'s fixture-precondition assertion.",
+      "cost_if_wrong": "Low. If deriving proves impossible for a given assertion, state why in the test and use a hardcoded value with a comment naming what would make it rot."
     },
     {
-      "situation": "Panel tasks 5.5 and 6.1 deliberately refuse to state a number (the files tab's minimum width, and tab-strip overflow behaviour). Design D12 says measure against a real shell.",
-      "decision": "MEASURE both with Playwright against the running Hub once the shell exists, then write the number down beside SPEC_DOC_MIN_WIDTH in hub/ui/src/components/spec/specPreferences.ts with a comment in the same style. Record what was measured and how in the log. Do NOT guess a number and do NOT skip the task.",
-      "cost_if_wrong": "Low — a measured number the operator disagrees with is one constant to change, and the log says how it was derived."
+      "situation": "C3: the browser suite shares Hub DB state and browser localStorage across tests.",
+      "decision": "Do not attempt a full fixture-isolation rewrite in this run — it is bigger than the runway. Do the cheap, high-value half: give each test a fresh browser context (so localStorage, and therefore SpecTree's persisted `aw.spec.treeCollapsed`, cannot leak between tests), and make any test that depends on Hub rows derive them rather than assume them. RECORD what was not isolated. If a full rewrite is needed, write it up as a finding rather than half-doing it.",
+      "cost_if_wrong": "Low, and the log will say what was left."
     },
     {
-      "situation": "An iteration finishes the panel change's agent-verifiable sections while loop work remains, or vice versa.",
-      "decision": "Follow the queue order as written. It already interleaves the two changes so neither is starved — that is the operator's 'work on both specs' made concrete. Do not reorder to finish one change first.",
-      "cost_if_wrong": "Low."
-    },
-    {
-      "situation": "The queue empties before 08:00 (unlikely — 124 tasks remain across both changes).",
-      "decision": "Do NOT stop. Move to APP1/APP2 (desktop icon and app experience), then FREE. The operator explicitly authorised free choice after both specs.",
+      "situation": "The queue empties before 13:00.",
+      "decision": "Continue to APP1 (desktop icon — `src/agentweave/assets/icon.ico` already exists, reuse it) and APP2, then FREE. The operator gated app work behind finishing the specs; with C1-C5 and A45/LA5/B6X done, the agent-verifiable half of both changes IS finished, so APP1 is unlocked.",
       "cost_if_wrong": "None."
     },
     {
-      "situation": "A Hub Python change needs the trial Hub restarted to take effect.",
-      "decision": "Restart it detached (see environment.hub_restart below) so it outlives the firing. No agent runs are in flight tonight, so a restart costs nothing.",
-      "cost_if_wrong": "Low."
+      "situation": "A4.5 needs a stale JobRun fixture.",
+      "decision": "One is already sitting on the trial Hub, left deliberately by run 1: loop-8e86eb9f / job-0b490274 in proj-5e960453, two JobRun rows stuck 'in_progress' since 06:15 and 06:30 on 2026-08-19. Use it rather than constructing one. Verify it is still stuck before relying on it.",
+      "cost_if_wrong": "Low — construct one if it has moved."
     }
   ],
+
   "decisions_for_user": [
-    "Found live during A4.4 (iteration 28), NOT fixed -- it is A4.5's job: loop-8e86eb9f ('taste-pass never-filled loop', job-0b490274) in proj-5e960453 has TWO JobRun rows stuck at status 'in_progress' since 06:15 and 06:30 today, never finalized -- exactly the crash-recovery gap A4.5 exists to close, now visible for the first time because A4.4's new firing_active field is the first thing that ever surfaced it. Left as-is deliberately, as a ready-made live fixture for A4.5's own smoke test. If A4.5 lands before you look, expect this loop to read firing_active:false by the time you check.",
-    "'Clear all projects from the test hub' — I did NOT delete proj-ff695d96 (aw-loop10) or proj-5e960453 (this repo's registration, the browser suite's fixture). CLAUDE.md, three handoffs and an executable code guard all protect aw-loop10, and deletion is irreversible. I deleted only the stray `Agentweave` registration pointing at <repo>/hub, which CLAUDE.md says to delete. If you genuinely meant all four, say so and it takes one command.",
-    "I pre-authorised ONE DRAFT PR to master purely to get CI to run (CI ignores branch pushes). It will never be marked ready or merged. If you did not want any PR created unattended, close it — nothing depends on it.",
-    "Loop task 12.2 ('mypy clean') is not achievable: 361 pre-existing errors in 86 files. I rescoped it to 'no new errors vs the baseline'. Whether you want a separate change to actually clean mypy is your call.",
-    "Still open from handoff 0058, untouched by this run: the D15 name-reuse hole (a new agent taking an archived agent's name inherits its creator privilege); whether an agent should be able to archive a bare job at all; and the two naming explorations (2026-08-18-candidate-names.md, 2026-08-18-does-the-name-still-fit.md) which may be a live question about renaming the product before more UI is built on the current name.",
-    "Found during P5 (iteration 16), FIXED during LB5 (iteration 22): ConversationView.tsx's panel used to mount only when a spec document was attached (`document ? <PanelShell/> : null`), so `panelTabsStore.setShellOpen` — which exists precisely to open the shell independently — was never callable from anywhere. Fixed as part of making the new `loops` index tab reachable at all: the shell now mounts on `documentOpen || shellIsOpen` (the store's own already-correct `isOpen` bit), and a new header button (`conversation-toggle-panel`, aria-pressed, in `AgentOutputPanel`'s conversation header) opens/closes it directly. The files and specs tabs benefit too — all three are now reachable from a bare conversation with no document attached. This is a real UI behavior change to the *panel* change's own shell (`2026-08-18-one-shell-three-panels`), made while implementing a *loop*-change task (LB5) because LB5 could not otherwise be tested live per your Playwright instruction. Flagging in case you'd rather it were attributed/reviewed as its own panel-change task rather than folded into LB5's note.",
-    "Found during LB6 (iteration 22), not fixed — pre-existing, out of scope: `JobCard.tsx`'s `LoopBlock` (`hub/ui/src/components/jobs/JobCard.tsx:121`) renders `<Icon name=\"all_inclusive\" .../>` for a job's loop indicator, but `all_inclusive` is not in `Icon.tsx`'s `ICONS` map — it silently renders nothing (one `console.warn`, no crash). Predates this run. The new `LoopsIndexTab`/`LoopTab` use `sync` instead (confirmed present, rendered live). Worth a one-line fix in `JobCard.tsx` if you want the Jobs page's own loop badge to actually show an icon.",
-    "Found during LB6 (iteration 22), not fixed — pre-existing fixture drift, unrelated to this run's code changes: `hub/tests/browser/test_job_loop_block.py`'s two tests hardcode an expectation of exactly 3 jobs in `proj-5e960453`, but the project now has 5 (LB2's `smoke-test-loop` and LB4's `LB4 Smoke Loop`, both deliberately left in place as historical evidence per those iterations' own precedent). `pytest tests/browser -v` shows these 2 failing (of 53 total) for that reason alone — confirmed via `GET .../jobs` before writing this, not assumed. Either delete the two smoke-test jobs (undoes LB2/LB4's own 'leave it as evidence' precedent) or update the test's hardcoded count to 5 (risks masking a future real regression the same way) — a judgment call, not something to guess at.",
-    "Found during LB2 (iteration 19), a genuine open design question rather than a bug I could fix unilaterally: `POST /jobs/{job_id}/archive` (design D16-D18, `hub/hub/api/v1/jobs.py`) does not require a job's `Loop`, if it has one, to have already ended (`ending_state` set) before the JOB can be archived — only `POST /loops/{loop_id}/archive` enforces that. So an agent or operator can archive a bare job whose loop is still actively firing, which hides that loop from the default job listing (`job.loop` is only visible through `GET /jobs`/`GET /jobs/{id}`) while it keeps running unattended in the background — arguably the exact governance failure D17 states as the reason a *running loop itself* cannot be archived. I did not add this restriction: D17's own text is explicitly scoped to the loop ('A loop that is running SHALL NOT be archivable'), never extended to a job that owns one, and the task text for B2.2 ('Archive route for a job, and for a loop') does not ask for it either. If you want job-archival to refuse while its loop is still running, that's a small follow-up to `archive_job` in `jobs.py` — say so and it's a quick change."
+    "Run 1's nine decisions are preserved in the log's iteration entries and were NOT discarded. The two that are genuine design questions, still unanswered and NOT actioned by this run: (a) `POST /jobs/{job_id}/archive` lets a job be archived while its Loop is still actively firing, hiding a running loop from the default listing — arguably the governance failure D17 exists to prevent, but D17's text is scoped to the loop, so run 1 did not extend it unilaterally; (b) run 1 changed the panel shell's mount condition while implementing a LOOP task (LB5), which you may want attributed to the panel change instead.",
+    "`JobCard.tsx:121` renders `Icon name=\"all_inclusive\"`, which is not in Icon.tsx's ICONS map — it silently renders nothing. Pre-existing, one line. Not queued; say if you want it.",
+    "Still open and untouched by either run: the D15 name-reuse hole (LA5 will RECORD it, not fix it — that is what the task asks for); whether an agent should be able to archive a bare job at all; and the two naming explorations, which may be a live question about renaming the product before more UI is built on the current name.",
+    "'Clear all projects from the test hub' — still interpreted conservatively across both runs. proj-ff695d96 (aw-loop10) and proj-5e960453 were NOT deleted. Say the word if you meant all of them."
   ],
+
+  "limits": [
+    "No merging to master unattended — the operator's standing limit, carried forward from run 1 unchanged. A DRAFT PR is explicitly allowed (C4) and must never be marked ready or merged.",
+    "Stay on branch autonomous/2026-08-18-panels-loops-and-app. Same branch as run 1 — the operator asked for a continuation, not a new branch.",
+    "Never mark a task complete on the strength of a plan existing (CLAUDE.md).",
+    "Do NOT tick human-only sections: panel 7.1-7.5, loop 13.1-13.4, A6.1-A6.4, B7.1-B7.4. Run 1 held this line perfectly; hold it.",
+    "A test that was green BEFORE the fix is not evidence. For every correction in C1-C5, watch the test fail against the old behaviour first, by name.",
+    "Do not touch project proj-ff695d96 (aw-loop10) — CLAUDE.md, three handoffs, and FORBIDDEN_PROJECT_IDS in hub/tests/browser/conftest.py.",
+    "Do not delete project proj-5e960453 — this repo's registration and the browser suite's fixture.",
+    "Use openspec, never the aw-* collab skills. Stage paths explicitly, never `git add -A`. Always `py -3.11`.",
+    "T3 source under testbed/scratch/t3ref/ is design reference ONLY — study, never copy, never commit.",
+    "No force-push, no history rewriting, no release, no publish.",
+    "Every claim is measured or labelled unverified."
+  ],
+
   "environment": {
-    "verified_at": "2026-08-18T21:25+01:00",
-    "trial_hub": "http://127.0.0.1:8010, PID 27192 as of 2026-08-19T07:35+01:00 (restarted iteration 28 to pick up A4.4's Python changes -- no migration needed, pure-Python restart. Found the real prior PID via Get-NetTCPConnection -LocalPort 8010 (5328), confirmed live via Get-Process -- started 07:13, not stale -- before killing it. This relaunch worked on the first attempt, no path trap this time.) Serving hub/data/agentweave.db, still at revision 0081 (unchanged this iteration). /health returns {\"status\":\"ok\"}. Detached -- will NOT restart itself if killed; find the real PID via \"Get-NetTCPConnection -LocalPort 8010\", never trust a PID recorded by a prior iteration without checking \"Get-Process -Id <pid>\" first.",
-    "hub_is_editable_install": "agentweave-hub 1.0.1 is an EDITABLE install pointing at C:\\Users\\huida\\Documents\\projects\\AgentWeave\\hub. So the running Hub serves THIS repo's code. Static assets are read from disk per request, so a UI rebuild is picked up WITHOUT a restart; Python changes DO need a restart.",
-    "api_key": "GET http://127.0.0.1:8010/api/v1/setup/token returns the instance key (local instances only). api_keys in the DB are hashed — do not try to read a key out of the table, that column does not exist.",
-    "ui_rebuild": "cd hub/ui && npm run build, then py -3.11 scripts/refresh_ui_bundle.py from the repo root. IMPORTANT: the stamp fingerprint enumerates via `git ls-files`, so an UNTRACKED new source file is invisible to it — `git add` the new files BEFORE running refresh_ui_bundle.py, or the stamp goes stale the moment you commit. Verify with `py -3.11 scripts/refresh_ui_bundle.py --check`.",
-    "playwright": "Installed and working. Run: cd hub && AW_HUB_URL=http://127.0.0.1:8010 AW_HUB_API_KEY=<key> py -3.11 -m pytest tests/browser -q. Verified 33 passed at 21:10. Without AW_HUB_URL the whole package skips at collection, which is deliberate — never make it a CI gate.",
+    "verified_at": "2026-08-19T08:35+01:00",
+    "trial_hub": "http://127.0.0.1:8010 — alive, /health ok. Restart it detached if a Python change needs picking up (see hub_restart).",
+    "hub_is_editable_install": "agentweave-hub is an EDITABLE install pointing at this repo, so the running Hub serves THIS code. Static assets are read from disk per request — a UI rebuild needs NO restart; Python changes DO.",
+    "api_key": "GET http://127.0.0.1:8010/api/v1/setup/token returns the instance key. api_keys rows are hashed — do not try to read a key out of the table.",
+    "ui_rebuild": "cd hub/ui && npm run build, then py -3.11 scripts/refresh_ui_bundle.py from the repo root. `git add` new source files BEFORE stamping — the fingerprint enumerates via `git ls-files`, so an untracked file is invisible to it. Verify with `--check`.",
+    "playwright": "cd hub && AW_HUB_URL=http://127.0.0.1:8010 AW_HUB_API_KEY=<key> py -3.11 -m pytest tests/browser -q. Full run takes ~2m47s.",
+    "hub_pytest": "py -3.11 -m pytest tests/ -q --ignore=tests/browser from hub/ — takes ~11 minutes, EXCEEDS the 600s foreground cap. Run it in the BACKGROUND. Baseline as of 08:32: 2440 passed, 12 skipped, 1 xpassed.",
     "hub_restart": "Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{CommandLine='cmd.exe /c \"cd /d C:\\Users\\huida\\Documents\\projects\\AgentWeave\\hub && C:\\Users\\huida\\AppData\\Local\\Programs\\Python\\Python311\\python.exe -m uvicorn hub.main:app --host 127.0.0.1 --port 8010 > %TEMP%\\agentweave-hub.log 2>&1\"'}",
-    "projects_on_hub": "proj-5e960453 (AgentWeave, this repo — KEEP), proj-b44fac0c (Throwaway taste pass — disposable), proj-ff695d96 (aw-loop10 — PROTECTED).",
-    "icon_asset_exists": "src/agentweave/assets/icon.ico already exists — APP1 should reuse it rather than generating a new one."
+    "ready_made_reproduction": "testbed/scratch/diag_panel_shell.py — a standalone Playwright script that reproduces C1's active-tab steal in about 20 seconds and prints every panel-* test id with its aria-selected value. Written during the review. testbed/scratch is its own git repo and is gitignored from this one, so it will never be committed here. Use it to confirm the fix rather than re-deriving the reproduction.",
+    "mypy_baseline": ".claude/autonomous/mypy-baseline.txt — 361 errors, 86 files. The bar is 'no NEW errors', never 'clean'."
   },
-  "verified_green_at_prep": {
-    "browser_suite": "33 passed (live Hub, 17.26s)",
-    "ui_vitest": "1014 passed across 101 files",
-    "ui_lint_and_tsc": "eslint clean (--max-warnings 0), tsc --noEmit clean",
-    "ruff": "All checks passed (src/ hub/ tests/)",
-    "black": "403 files unchanged",
-    "openspec": "2 changes strict-valid, 32 specs strict-valid",
-    "hub_pytest": "NOT VERIFIED — CONFIRM THIS IN ITERATION 1 BEFORE TRUSTING IT. A full background run reached 61% with no failures (4 skips) and was then KILLED deliberately at 21:29, because the driver's first firing was seconds away and two concurrent pytest runs are a documented false-green trap here. It did not pass; it was interrupted. Note the branch changes NO Python at all (a new UI store file plus a stamp JSON), so the hub suite result is inherited from master, which CI last measured at 2335 passed, 17 skipped, 1 xfailed. hub/tests/test_migrations.py alone: 51 passed, 1 skipped. hub/tests/test_ui_build_stamp.py + test_ui_staleness.py: 15 passed, 1 skipped. Run it in the BACKGROUND — it exceeded 30 minutes on this machine, far longer than the 7 minutes the skill documents.",
-    "mypy": "361 errors, 86 files — PRE-EXISTING, baselined, not a regression"
-  },
+
   "traps": [
-    "Do NOT run two pytest invocations concurrently in this repo. Doing so during prep produced a spurious 'no tests ran' AND a spurious '2385 skipped' — either of which reads as a green or as inherited breakage. Run one at a time.",
-    "The Bash tool's cwd PERSISTS between calls. A bare `cd hub && ...` after a previous `cd hub` silently resolves wrong. Use absolute paths.",
+    "Do NOT run two pytest invocations concurrently — it produces spurious 'no tests ran' and spurious mass-skips that read as green or as inherited breakage.",
+    "The Bash tool's cwd PERSISTS between calls and drifts silently. Use absolute paths; this cost several wasted commands during the review.",
     "`pytest hub/tests/ tests/` together fails collection. Run them separately.",
-    "The full hub suite exceeds the 600s foreground cap — run it in the background or in file chunks.",
-    "page-jobs / page-tasks / page-spec do NOT exist in the running app — they are mocks in hub/ui/src/__tests__/App-mount.test.tsx. Grepping hub/ui/src without excluding __tests__ reports 104 test ids; production markup has 71.",
-    "Playwright's count() does not auto-wait, and neither do conditional guards. Use expect(...) before acting and assert the post-condition, or you get a false green (this has happened three times here).",
+    "Playwright's `expect().to_have_*` AUTO-RETRIES. Against a race, that makes a broken behaviour pass — this is exactly how C1 hid. When asserting that something STAYS true, wait for the competing async work to settle first, then assert.",
+    "count() does not auto-wait, and neither do conditional guards.",
+    "page-jobs / page-tasks / page-spec do NOT exist in the running app — they are mocks in hub/ui/src/__tests__/App-mount.test.tsx.",
     "PowerShell here-strings (@'...'@) are a syntax error in the Bash tool. Write commit messages to a file and use `git commit -F`.",
-    "Remove-Item with a VARIABLE path is blocked by a guard regardless of its value. Literal paths work.",
-    "$(pwd) in Git Bash yields /c/Users/... which aiosqlite cannot open. Use the Windows path form.",
-    "Launching `agentweave` from a directory containing hub/ silently produces no server (sys.path shadowing). Launch from a neutral cwd.",
-    "Git Bash `date` on this machine prints UTC but labels it +0100 — a heartbeat written from it lands an hour in the future and stalls the driver. Stamp timestamps from PowerShell or Python.",
-    "Keep any .ps1 ASCII-only. PowerShell 5.1 reads a BOM-less UTF-8 file as ANSI and an em dash breaks quoting.",
-    "A writing agent gets an isolated git worktree, so UNTRACKED files in the project directory are invisible to it."
+    "Git Bash `date` prints UTC but labels it +0100 — a heartbeat written from it lands an hour in the future and stalls the driver. Stamp from PowerShell or Python.",
+    "Keep any .ps1 ASCII-only.",
+    "SpecTree persists collapsed folders to localStorage under `aw.spec.treeCollapsed`, SHARED between the Ctrl+K picker and the specs index tab, and it does NOT auto-expand to the current document. A test that leaves a folder collapsed can hide a document row from a later test."
   ],
+
   "read_first": [
-    "openspec/changes/2026-08-18-one-shell-three-panels/tasks.md — section 1 is done and annotated; the 1->2->3 ordering is load-bearing.",
-    "openspec/changes/2026-08-18-one-shell-three-panels/design.md — D1-D12. D6 is a WITHDRAWAL notice, not a decision.",
-    "hub/ui/src/store/panelTabsStore.ts — already built and tested. The shell consumes it; do not re-derive the tab model.",
-    "openspec/changes/2026-08-18-a-loop-writes-its-own-queue/tasks.md and design.md — 95 tasks, D1-D21.",
-    "openspec/explorations/2026-08-18-the-side-panel-with-the-operator.md — the conversation that overturned six unattended decisions; section 0 is the table.",
-    "hub/tests/browser/conftest.py — how the Playwright suite connects, why it is opt-in, and the two hydration traps documented in `goto`.",
-    "hub/ui/src/components/agents/ConversationView.tsx — :34-38 the derived breakpoint, :150-291 the hosting block P2b moves into the shell."
+    ".claude/autonomous/2026-08-18-panels-loops-and-app-log.md — read the LAST entry ('Morning review') first; it is the review the operator asked for and it explains every queue item C1-C5.",
+    "hub/ui/src/components/agents/ConversationView.tsx:199-211 — C1's defect, exactly here.",
+    "hub/ui/src/store/panelTabsStore.ts — where C1's fix belongs (a replace-in-place action).",
+    "hub/tests/browser/test_panel_shell.py — the false-green test, and the one that fails right after it.",
+    "openspec/changes/2026-08-18-one-shell-three-panels/tasks.md and .../2026-08-18-a-loop-writes-its-own-queue/tasks.md — the remaining open boxes."
   ]
 }
