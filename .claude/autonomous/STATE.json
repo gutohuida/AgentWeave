@@ -8,7 +8,7 @@
   "stop_at": "2026-08-20T08:00:00+01:00",
   "stop_when_queue_empties": false,
   "run": 1,
-  "iteration": 3,
+  "iteration": 4,
   "session_stopped": false,
   "prepared_by": "Interactive session 2026-08-19T22:55-23:25+01:00, via /autonomous-prep. Both headline defects were reproduced or traced to a named line before being queued — item 1 by reading the render path end to end, item 2 by exercising the live API against two databases. Runway verified rather than assumed: playwright present, `pytest tests/test_project_lifecycle.py tests/test_project_persistence.py` 17 passed, vitest 1152 passed, tsc clean, working tree clean.",
   "operator_intent_verbatim": "Open any agentweave project with any agentweave app. Also: 'I think I clicked to create an agent in one project but it was actually creating into another project. Something weird there.'",
@@ -85,10 +85,11 @@
     {
       "id": "P4",
       "title": "Fix timestamps at the serialisation boundary",
-      "status": "pending",
-      "evidence": "Handoff 0060 recorded this as 'the better fix' and left it open. The decision is already made — that is what makes it safe to hand to an unattended loop. Read hub/ui/src/lib/hubTime.ts for the current client-side rule and its two exemptions.",
+      "status": "done",
+      "evidence": "Handoff 0060 recorded this as 'the better fix' and left it open. Confirmed live: hub/hub/db/models.py declares every timestamp column DateTime(timezone=True), but SQLite has no timezone storage, so a value written aware comes back naive once actually round-tripped through the DBAPI — three call sites (agent_status.py:22, api/v1/agents.py:528, scheduler.py:83) already carried a manual tzinfo-is-None workaround for their own in-process comparisons, independent confirmation the bug is real.",
       "do": "Move the correction to where the Hub serialises the value rather than where the UI reads it, and retire whatever client-side compensation that makes redundant. Keep the exemptions that are genuinely client-side concerns.",
-      "verify": "Server-side tests on the serialised shape, plus the existing UI timestamp tests still green."
+      "verify": "Server-side tests on the serialised shape, plus the existing UI timestamp tests still green.",
+      "outcome": "Added hub.db.models.UTCDateTime, a TypeDecorator wrapping DateTime(timezone=True) that relabels a naive process_result_value as UTC once, at the ORM boundary. All 77 mapped_column(DateTime(timezone=True)) declarations in models.py now use it, so every Pydantic response field and every raw .isoformat() call downstream (audited by grep across hub/hub) inherits the fix without individual changes — chosen over adding a UTCDateTime Pydantic field type to ~12 schema files because the TypeDecorator also covers the raw isoformat() call sites a schema-only fix could not reach. hub/ui/src/lib/hubTime.ts's hubDate() is now a thin new Date(value) pass-through (the ${value}Z-guessing hasTimezone() heuristic deleted); kept as a named function rather than inlined at its ~15 call sites because hubTime.test.ts's existing sweep test enforces exactly one seam. New hub/tests/test_timestamp_serialization.py (ORM round-trip through a second session, plus a GET against seeded runners) mutation-checked by reverting process_result_value to a no-op — both tests failed by name with the expected 'no UTC offset' message, then restored (note: git checkout -- on the first restore attempt wiped the whole file back to HEAD, not just the mutation; caught immediately via grep -c UTCDateTime and redone from the Edit calls). Measured: hub pytest full suite -n 4 — 2471 passed/75 skipped/1 xpassed in 174s (STATE.json's ~7min/600s-cap note was for the unparallelised run). vitest 1165/118 (-2, the two retired hubDate tests). tsc, eslint, ruff, black all clean. UI bundle rebuilt via scripts/refresh_ui_bundle.py and committed with its source. Not verified live in a browser — same no-restart limit as P1-P3. Open finding for a future iteration: no lint/test sweeps every DateTime(...) declaration in models.py the way hubTime.test.ts sweeps the client, so a future column bypassing UTCDateTime wouldn't be caught automatically."
     },
     {
       "id": "P5",
@@ -110,8 +111,8 @@
       "note": "The pinning is the same disease as P2 — identity that should travel, hard-coded to one place. Worth saying so in the commit message."
     }
   ],
-  "current": "P4",
-  "next_action": "Start P4 - move the timestamp correction from where the UI reads a value to where the Hub serialises it (hub/ui/src/lib/hubTime.ts records the current client-side rule and its two exemptions - read it first; keep whichever exemption(s) are genuinely client-side concerns, retire the rest). Handoff 0060 already made this decision, so implement rather than re-litigate. Find where the Hub currently emits the affected timestamp fields (likely hub/hub/schemas/ and/or the relevant api/v1 module) and correct at serialisation. Verify with server-side tests on the serialised shape plus the existing UI timestamp tests (vitest) still green. Run pytest on the touched hub/tests file(s) directly rather than the full hub/tests/ suite (that takes ~7min and exceeds the 600s command cap per STATE.json limits) - chunk if needed. Update tsc/vitest/eslint only if hub/ui/src changed; rebuild+refresh the UI bundle via scripts/refresh_ui_bundle.py only if non-__tests__ hub/ui/src files changed, and commit hub/ui/src + hub/hub/static/ui together per CLAUDE.md.",
+  "current": "P5",
+  "next_action": "Start P5 - close the D15 name-reuse hole. A new agent taking a previously-archived agent's name currently inherits the archived agent's creator privilege; find where creator privilege over an artifact is granted/checked (task A5.3's area - search for 'creator' privilege checks in hub/hub, likely agent_actions.py or tasks/evidence ownership logic) and confirm the mechanism before changing it. Operator decision already recorded in the P5 queue item: strip the inherited privilege on reuse (do NOT block name reuse - archiving and recreating under the same name is something the operator actually does). Verify with a test that creates an agent, gives it a creator-privileged artifact, archives it, recreates the same name, and asserts the new agent cannot reach the old artifact - mutation-check it (temporarily revert the fix, confirm the new test fails by name, restore). Run the specific touched hub/tests file(s) directly; the full suite now runs in one shot via `pytest hub/tests/ -n 4` in ~174s (proven this iteration, no need to chunk) if a full-suite check is wanted. Only rebuild/refresh the UI bundle if hub/ui/src non-test files changed.",
   "decisions_for_user": [
     {
       "id": "D-env",
@@ -153,9 +154,9 @@
     "openspec_changes_in_flight": "none — `ls openspec/changes/ | grep -v archive` is empty",
     "not_run_at_prep": "Full hub/tests/ suite and eslint were NOT run tonight. The loop should establish its own baseline early so it can tell inherited breakage from its own."
   },
-  "last_heartbeat": "2026-08-19T23:32:19+01:00",
+  "last_heartbeat": "2026-08-20T00:39:15+01:00",
   "log_file": ".claude/autonomous/2026-08-19-project-portability-log.md",
   "driver": "Windows Scheduled Task 'AgentWeaveAutonomousSession' -> .claude/skills/autonomous-session/scripts/run-iteration.ps1 -> headless `claude -p`. Each firing is a fresh process; all continuity is STATE.json + the log. Session-bound drivers (ScheduleWakeup, CronCreate) are NOT used - the 2026-08-15 run asked for nine hours and got forty minutes because the session went away.",
-  "heartbeat_note": "Deliberately stale. The process that ran iteration 3 has finished and released the branch, so the next scheduled firing takes over instead of standing down against a heartbeat nobody is refreshing.",
+  "heartbeat_note": "Live as of iteration 4's commit. Will be set deliberately stale at the very end of this iteration once everything is pushed, releasing the branch for the next firing.",
   "draft_pr": "https://github.com/gutohuida/AgentWeave/pull/7"
 }

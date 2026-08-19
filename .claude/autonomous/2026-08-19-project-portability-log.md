@@ -243,3 +243,80 @@ server response.
 client-side compensation to where the Hub serialises the value. Decision already made in the queue
 item; read the file's current two exemptions before touching anything, since at least one is
 recorded as genuinely client-side.
+
+## Iteration 4 — P4, timestamps corrected at the Hub's serialisation boundary (2026-08-20T00:38+01:00)
+
+**Done, verified, committed.** Moved the naive-datetime fix from the UI's read side
+(`hub/ui/src/lib/hubTime.ts`) to the Hub's DB boundary, per handoff 0060's decision.
+
+**Root cause, confirmed rather than assumed.** Every timestamp column in
+`hub/hub/db/models.py` is declared `DateTime(timezone=True)`, but SQLite has no timezone
+storage — SQLAlchemy round-trips a value written aware as **naive** once it has actually
+gone through the DBAPI. Three separate call sites (`agent_status.py:22`,
+`api/v1/agents.py:528`, `scheduler.py:83`) already carried a manual
+`if x.tzinfo is None: x = x.replace(tzinfo=timezone.utc)` workaround for their own
+in-process comparisons — independent confirmation the bug is real and was already being
+fought piecemeal.
+
+**The fix.** `hub.db.models.UTCDateTime`, a `TypeDecorator` wrapping
+`DateTime(timezone=True)`, relabels a naive `process_result_value` as UTC once, at the
+ORM boundary. Every `mapped_column(DateTime(timezone=True))` in `models.py` (77
+occurrences, mechanically replaced) now uses it — so every Pydantic response schema field
+*and* every raw `.isoformat()` call downstream (session_sync.py, spec.py, tasks.py,
+checkpoints.py, usage_accounting.py, …, audited by grep) inherits the fix without being
+touched individually. This is the "one place, not thirty call sites" version of the fix —
+considered and rejected an alternative that would have added a `UTCDateTime` Pydantic
+field type to each of ~8 schema files and ~4 inline `api/v1` schemas instead; the
+TypeDecorator is strictly more complete (raw `.isoformat()` call sites aren't reachable
+from a Pydantic-only fix) and touches one file.
+
+**Client side.** `hubDate()` is now a thin `new Date(value)` pass-through — the
+`${value}Z`-guessing `hasTimezone()` heuristic is deleted, since the Hub now always
+labels. Kept as a named function (not inlined at its ~15 call sites) specifically because
+`hubTime.test.ts`'s existing sweep test ("every Hub timestamp is parsed through hubDate")
+already enforces a single seam; deleting the function would have meant deleting that
+guard too. Rewrote the two tests that asserted the retired guessing behavior
+(`reads a bare Hub timestamp as UTC`, `does not mistake the date's own hyphens for an
+offset`) since a bare-string contract that hubDate no longer holds isn't something to
+keep testing; kept the aware-passthrough and explicit-offset tests, now trivial but still
+a real regression guard.
+
+**New test, mutation-checked.** `hub/tests/test_timestamp_serialization.py`: (a) an ORM
+round-trip through a **second** session (`async_session_factory()` again, not the one
+that wrote the row — forces a real SQLite read rather than returning the identity map's
+in-memory object) asserts `tzinfo is not None`; (b) `GET /api/v1/projects/proj-test/runners`
+against the default-seeded runners asserts the JSON `created_at`/`updated_at` strings
+carry a UTC offset. Reverted `process_result_value` to a no-op `return value`: both tests
+failed with the exact naive-string assertion error shown in the log (`'...389460' has no
+UTC offset`); restored via re-editing (not `git checkout --`, which the first attempt used
+and which wiped the *entire* file back to HEAD, not just the mutation — caught by
+`grep -c UTCDateTime` immediately after and redone from the `Edit` calls, not from git
+history).
+
+**Measured.** `pytest hub/tests/` full suite, `-n 4`, in one command this time rather than
+chunked (STATE.json's "~7min, exceeds 600s" note was for the un-parallelised run) —
+**2471 passed, 75 skipped, 1 xpassed** in 174s, exit 0. `npx vitest run` —
+**1165 passed / 118 files** (1167 before; −2 is exactly the two retired hubDate tests).
+`tsc --noEmit` clean. `npx eslint src --max-warnings=0` clean. `ruff check hub/hub
+hub/tests` clean. `black` clean (reformatted `models.py` once — `UTCDateTime()` is
+shorter than `DateTime(timezone=True)`, so several wrapped `mapped_column(...)` calls
+collapsed to one line; committed as black left them).
+
+**UI bundle rebuilt and committed with its source** via
+`python scripts/refresh_ui_bundle.py` after `npm run build`, per CLAUDE.md — `hub/hub/static/ui`
+and `hub/ui/src` are in the same commit.
+
+**What a reviewer should distrust.** The `.isoformat()` call-site audit (grep across
+`hub/hub/**/*.py` for `.isoformat()` and manual read of every hit) was thorough but is a
+point-in-time claim, not an enforced invariant — nothing stops a future raw SQL query or
+a new column that bypasses `UTCDateTime` from reintroducing a naive value; there is no
+lint rule or test sweeping *every* `DateTime(...)` declaration the way `hubTime.test.ts`
+sweeps the client. Worth a follow-up if this surfaces again. Not verified live in a
+browser against a running Hub — same no-restart limit as P1/P2/P3.
+
+**Next.** `current` set to `P5` — close the D15 name-reuse hole (a new agent taking an
+archived agent's name inherits the archived agent's creator privilege). Operator decision
+already recorded in STATE.json: strip the inherited privilege on reuse, keep names
+reusable. `verify`: a test that creates an agent, gives it a creator-privileged artifact,
+archives it, recreates the same name, and asserts the new agent cannot reach the old
+artifact.
