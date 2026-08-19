@@ -248,20 +248,78 @@ describe('conversation controls — context usage placement', () => {
     expect(screen.queryByTestId('context-usage')).not.toBeInTheDocument()
   })
 
-  it('shows the usage indicator once a context-usage event has been reported', async () => {
+  it('shows the usage indicator once this conversation has reported one', async () => {
+    conversations = [
+      {
+        ...conversation,
+        context_usage: {
+          status: 'measured',
+          source: 'test',
+          context_tokens: 4000,
+          limit_tokens: 10000,
+          observed_at: 0,
+        },
+      },
+    ]
+    render(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)
+    await waitFor(() => expect(screen.getByTestId('session-continuity')).toHaveTextContent('A conversation'))
+    expect(screen.getByTestId('context-usage')).toBeInTheDocument()
+  })
+
+  it('does not show another conversation’s reading, even via the agent', async () => {
+    // The bug this replaced: `agent.context_usage` is one reading per agent — the newest across
+    // every thread it owns — so this header showed whichever conversation last reported. Measured
+    // on the trial Hub 2026-08-19: agent `verifier` had three conversations at 18.56%, 16.6% and
+    // 15.9%, and all three composers showed 15.9%.
     const agentWithUsage: AgentSummary = {
       ...idleAgent,
       context_usage: {
         status: 'measured',
         source: 'test',
-        context_tokens: 4000,
+        context_tokens: 9000,
         limit_tokens: 10000,
         observed_at: 0,
       },
     }
+    // This conversation has produced no reading of its own.
+    conversations = [conversation]
     render(<AgentOutputPanel agent={agentWithUsage} conversationId="conv-old" />)
+
     await waitFor(() => expect(screen.getByTestId('session-continuity')).toHaveTextContent('A conversation'))
-    expect(screen.getByTestId('context-usage')).toBeInTheDocument()
+    expect(screen.queryByTestId('context-usage')).not.toBeInTheDocument()
+  })
+
+  it('follows the conversation being viewed, not the newest one', async () => {
+    conversations = [
+      {
+        ...conversation,
+        context_usage: {
+          status: 'measured',
+          source: 'test',
+          context_tokens: 1000,
+          limit_tokens: 10000,
+          observed_at: 0,
+        },
+      },
+      {
+        ...conversation,
+        id: 'conv-second',
+        title: 'Another conversation',
+        context_usage: {
+          status: 'measured',
+          source: 'test',
+          context_tokens: 9000,
+          limit_tokens: 10000,
+          observed_at: 99,
+        },
+      },
+    ]
+
+    const { rerender } = render(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)
+    await waitFor(() => expect(screen.getByTestId('context-usage')).toHaveTextContent('10%'))
+
+    rerender(<AgentOutputPanel agent={idleAgent} conversationId="conv-second" />)
+    await waitFor(() => expect(screen.getByTestId('context-usage')).toHaveTextContent('90%'))
   })
 })
 

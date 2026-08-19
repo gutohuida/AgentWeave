@@ -872,7 +872,7 @@ export function AgentOutputPanel({
           </Button>
         )}
         <ConversationControls
-          agent={agent}
+          contextUsage={currentConversation?.context_usage}
           isRunning={isRunning}
           isStopping={isStopping}
           onStop={handleStop}

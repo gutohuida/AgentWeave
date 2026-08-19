@@ -23,6 +23,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...auth import get_project
+from ...context_readings import usable_context_reading
 from ...conversations import (
     archivable,
     archive,
@@ -37,6 +38,7 @@ from ...db.models import (
     AgentOutput,
     AIJob,
     Conversation,
+    EventLog,
     InboundQueueEntry,
     JobRun,
     Loop,
@@ -106,6 +108,17 @@ class ConversationResponse(BaseModel):
     # say so — a plain scheduled job has the same origin and no loop — so this is null there,
     # and the row shows no loop marker.
     loop: Optional[ConversationLoop] = None
+    # How full *this* conversation's context is — not its agent's.
+    #
+    # `AgentSummary.context_usage` reports one reading per agent, the newest across all of that
+    # agent's threads. The composer is conversation-scoped, so reading the agent's value showed
+    # whichever conversation last reported, in every conversation. Measured on the trial Hub
+    # 2026-08-19: agent `verifier` had three conversations reading 18.56%, 16.6% and 15.9%, and
+    # all three composers showed 15.9%.
+    #
+    # Null when this conversation has produced no reading yet. Deliberately not falling back to
+    # the agent's — that fallback is the bug.
+    context_usage: Optional[Dict[str, Any]] = None
     # Whether this conversation needs the operator, without opening it. "waiting" outranks
     # "running" — a run blocked on a question is running, but stopping for the operator is the
     # part they have to see.
@@ -259,6 +272,46 @@ async def _loops_by_conversation(
     return loops
 
 
+async def _context_by_conversation(
+    session: AsyncSession, project_id: str, conversation_ids: List[str]
+) -> Dict[str, Any]:
+    """The context reading belonging to each of these conversations — one query for the page.
+
+    `context_warning` rows carry `data["conversation_id"]`, resolved when the reading is recorded
+    (`output_recording.record_context_usage`). Nothing read it back per conversation until now: the
+    agent roster groups the same rows by agent alone, which is a correct answer to a different
+    question and the wrong one for a conversation-scoped surface.
+
+    Filtered in Python rather than by a JSON path predicate in SQL, because `EventLog.data` is a
+    plain JSON column and SQLite's JSON operators are not uniformly available across the versions
+    this ships against. The row set is already bounded to one project's readings for the
+    conversations on the page.
+    """
+    if not conversation_ids:
+        return {}
+    wanted = set(conversation_ids)
+    result = await session.execute(
+        select(EventLog)
+        .where(
+            EventLog.project_id == project_id,
+            EventLog.event_type == "context_warning",
+        )
+        .order_by(EventLog.timestamp.desc())
+    )
+    rows_by_conversation: Dict[str, List[Any]] = {}
+    for event in result.scalars().all():
+        data = event.data
+        if not isinstance(data, dict):
+            continue
+        conversation_id = data.get("conversation_id")
+        if conversation_id in wanted:
+            rows_by_conversation.setdefault(conversation_id, []).append(data)
+    return {
+        conversation_id: usable_context_reading(rows)
+        for conversation_id, rows in rows_by_conversation.items()
+    }
+
+
 async def _to_response(
     session: AsyncSession, conversations: List[Conversation]
 ) -> List[ConversationResponse]:
@@ -267,11 +320,17 @@ async def _to_response(
     conversation_ids = [row.id for row in conversations]
     attention = await conversation_attention(session, conversation_ids)
     loops = await _loops_by_conversation(session, conversation_ids)
+    context = (
+        await _context_by_conversation(session, conversations[0].project_id, conversation_ids)
+        if conversations
+        else {}
+    )
     responses = []
     for row in conversations:
         response = ConversationResponse.model_validate(row, from_attributes=True)
         response.attention = attention.get(row.id, "idle")  # type: ignore[assignment]
         response.loop = loops.get(row.id)
+        response.context_usage = context.get(row.id)
         responses.append(response)
     return responses
 

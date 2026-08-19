@@ -21,6 +21,7 @@ from ...agent_status import effective_heartbeat_status, heartbeat_is_stale
 from ...auth import get_project
 from ...checkpoint_policy import CHECKPOINT_MODES, threshold_error
 from ...codex_appserver import APP_SERVER_OPT_OUT_FLAG, uses_app_server
+from ...context_readings import usable_context_reading as _usable_context_reading
 from ...conversations import new_conversation
 from ...db.engine import get_session
 from ...db.models import (
@@ -236,36 +237,6 @@ async def get_agents_launchability(
         }
 
     return {"agents": results}
-
-
-def _usable_context_reading(rows: List[Any]) -> Any:
-    """Pick the reading to report from an agent's `context_warning` rows, newest first.
-
-    Taking the newest row alone is what made Claude agents report nothing for 329 samples: the
-    end-of-turn message reports a context window with no token count, so the last row to arrive
-    routinely carried no usable percentage and hid the complete one behind it.
-
-    The newest row still wins whenever it carries a percentage. Otherwise the newest row **from
-    the same provider session** that does is used — scoped to the session because a compaction or
-    a fresh session resets usage, and reporting a pre-reset percentage as current would be worse
-    than reporting none. An unscoped fallback would do exactly that.
-    """
-    if not rows:
-        return None
-    newest = rows[0]
-    if not isinstance(newest, dict) or newest.get("percent") is not None:
-        return newest
-    session_id = newest.get("session_id")
-    if session_id is None:
-        return newest
-    for row in rows[1:]:
-        if (
-            isinstance(row, dict)
-            and row.get("percent") is not None
-            and row.get("session_id") == session_id
-        ):
-            return row
-    return newest
 
 
 @router.get("", response_model=List[AgentSummary])
