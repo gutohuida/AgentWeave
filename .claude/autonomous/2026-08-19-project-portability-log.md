@@ -190,3 +190,56 @@ future test wants to assert format validity too.
 **Next.** `current` set to `P3` — tests for the two things committed interactively before this run
 began (`apiErrorCode`, the `register_copy_as_new` UI affordance). No blockers carried forward from
 P2 beyond the Open Question already in `design.md`.
+
+## Iteration 3 — P3, tests for tonight's committed UI fixes (2026-08-20T00:10+01:00)
+
+**Done, verified, committed.** Both things `75c7685` shipped before this branch existed —
+`apiErrorCode` (`hub/ui/src/api/client.ts`) and the `register_copy_as_new` remedy button in
+`ProjectManagerModal.tsx` — were green under `tsc` and the existing suite but had no test of their
+own. They do now, in two new files.
+
+**`src/__tests__/apiErrorCode.test.ts`** mirrors the shapes `taskIntegration.test.ts` already
+covers for `readableApiError` (string detail, object detail with `code`+`message`, Pydantic array,
+unparseable text), plus the cases specific to a code-matcher: a non-string `code`, an object detail
+with no `code` field, a non-`ApiError` value, and `null`. All of those must return `null` — only
+the one shape carrying a genuine string `code` should return it.
+
+**`src/__tests__/projectManagerIdentityConflict.test.tsx`** follows the existing
+`projectManagerDirectoryPicker.test.tsx` pattern (mock `useOpenProject`/`useCreateProject` with a
+controllable `error`, mount the real modal). Four cases: no button with no error; no button on a
+refusal whose code is not `project_identity_conflict` (the sentence still renders, per
+`readableApiError` — the two are independent); no button in **create** mode even on that exact
+code, since `isIdentityConflict` is gated `!isCreate && ...` and the conflict can only arise when
+*opening* an existing folder; and the button present on the matching code, clicking it resubmits
+via the mocked `mutate` with the typed path plus `register_copy_as_new: true` — asserted on the
+actual call arguments, not inferred.
+
+**Mutation-checked, not merely green — twice.**
+- `apiErrorCode` patched to always `return null` immediately after its signature: exactly
+  `'reads the code out of an object-shaped detail'` failed; the other 7 (all asserting `null`) kept
+  passing, which is the correct signature — a matcher that always says "no code" only breaks the
+  one test expecting a code back.
+- `ProjectManagerModal`'s comparison patched from `'project_identity_conflict'` to `'nope'`:
+  exactly `'offers the remedy on a project_identity_conflict refusal...'` failed (the alert text
+  still rendered, just no button), the other 3 stayed green. Both mutations reverted via
+  `git checkout --` and reconfirmed green before committing.
+
+**Measured:** `tsc --noEmit` clean. `npx vitest run` — **1167 passed / 118 files** (1155/116
+before, +12 tests in +2 files). `npx eslint src --max-warnings=0` clean.
+
+**No UI bundle rebuild.** `hub/hub/main.py`'s `ui_source_fingerprint` explicitly excludes
+`__tests__` from the git-ls-files pathspec it hashes (line 85: `exclude: Sequence[str] =
+("__tests__",)`), so two new files under `src/__tests__/` do not move the fingerprint the stamp
+checks against. Confirmed by reading the function rather than assumed. `hub/hub/static/ui` is
+unchanged and was not touched.
+
+**What a reviewer should distrust.** Both suites still run only in jsdom against mocked mutations
+— no browser check against a live Hub, same limitation as P1 and P2, same reason (no-restart).
+The `'not an identity conflict'` case uses a fabricated `validation_error` code rather than one
+observed from a real refusal; harmless for what it asserts (button absence) but not a captured
+server response.
+
+**Next.** `current` set to `P4` — move the timestamp correction from `hub/ui/src/lib/hubTime.ts`'s
+client-side compensation to where the Hub serialises the value. Decision already made in the queue
+item; read the file's current two exemptions before touching anything, since at least one is
+recorded as genuinely client-side.

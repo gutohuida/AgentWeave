@@ -8,7 +8,7 @@
   "stop_at": "2026-08-20T08:00:00+01:00",
   "stop_when_queue_empties": false,
   "run": 1,
-  "iteration": 2,
+  "iteration": 3,
   "session_stopped": false,
   "prepared_by": "Interactive session 2026-08-19T22:55-23:25+01:00, via /autonomous-prep. Both headline defects were reproduced or traced to a named line before being queued — item 1 by reading the render path end to end, item 2 by exercising the live API against two databases. Runway verified rather than assumed: playwright present, `pytest tests/test_project_lifecycle.py tests/test_project_persistence.py` 17 passed, vitest 1152 passed, tsc clean, working tree clean.",
   "operator_intent_verbatim": "Open any agentweave project with any agentweave app. Also: 'I think I clicked to create an agent in one project but it was actually creating into another project. Something weird there.'",
@@ -76,10 +76,11 @@
     {
       "id": "P3",
       "title": "Tests for tonight's committed UI fixes",
-      "status": "pending",
+      "status": "done",
       "evidence": "Commit 75c7685 added apiErrorCode (hub/ui/src/api/client.ts) and a register_copy_as_new affordance in hub/ui/src/components/projects/ProjectManagerModal.tsx. Both are green under tsc and the existing 1152 vitest tests, but neither has a test OF ITS OWN.",
       "do": "Test apiErrorCode against the shapes readableApiError already has coverage for in hub/ui/src/__tests__/taskIntegration.test.ts (string detail, object detail with code+message, pydantic array, unparseable) and assert it returns null rather than throwing on each non-matching shape. Test that the modal renders the register-copy-as-new button ONLY on a project_identity_conflict code, and that clicking it re-submits with register_copy_as_new true.",
-      "note": "data-testid=\"register-copy-as-new\" already exists on the button for this purpose."
+      "note": "data-testid=\"register-copy-as-new\" already exists on the button for this purpose.",
+      "outcome": "New src/__tests__/apiErrorCode.test.ts (8 tests, mirrors taskIntegration.test.ts's readableApiError shapes plus code-matcher-specific cases) and src/__tests__/projectManagerIdentityConflict.test.tsx (4 tests, follows the projectManagerDirectoryPicker.test.tsx mock pattern; covers no-error, wrong-code, create-mode, and the matching-code click-resubmits-with-register_copy_as_new case). Both mutation-checked: breaking apiErrorCode to always return null fails exactly 1 test by name; breaking the modal's code comparison fails exactly 1 test by name; both reverted and reconfirmed green. tsc clean, vitest 1167 passed / 118 files (+12/+2), eslint clean. No bundle rebuild needed - hub/hub/main.py's ui_source_fingerprint excludes __tests__ from its git-ls-files pathspec, confirmed by reading the function."
     },
     {
       "id": "P4",
@@ -109,8 +110,8 @@
       "note": "The pinning is the same disease as P2 — identity that should travel, hard-coded to one place. Worth saying so in the commit message."
     }
   ],
-  "current": "P3",
-  "next_action": "Start P3 - tests for tonight's committed UI fixes (commit 75c7685, before this branch existed). Two things need coverage of their own: (a) apiErrorCode (hub/ui/src/api/client.ts) - test it against the same response shapes taskIntegration.test.ts already covers for readableApiError (string detail, object detail with code+message, pydantic array, unparseable), asserting it returns null rather than throwing on each non-matching shape; (b) the register_copy_as_new affordance in hub/ui/src/components/projects/ProjectManagerModal.tsx - test that the modal renders the register-copy-as-new button ONLY when the API error code is project_identity_conflict, and that clicking it re-submits the open-project request with register_copy_as_new: true. data-testid=\"register-copy-as-new\" already exists on the button. Run tsc --noEmit, vitest, and eslint src --max-warnings=0 after; rebuild and refresh the UI bundle via scripts/refresh_ui_bundle.py per CLAUDE.md if hub/ui/src changed, and commit hub/ui/src + hub/hub/static/ui together.",
+  "current": "P4",
+  "next_action": "Start P4 - move the timestamp correction from where the UI reads a value to where the Hub serialises it (hub/ui/src/lib/hubTime.ts records the current client-side rule and its two exemptions - read it first; keep whichever exemption(s) are genuinely client-side concerns, retire the rest). Handoff 0060 already made this decision, so implement rather than re-litigate. Find where the Hub currently emits the affected timestamp fields (likely hub/hub/schemas/ and/or the relevant api/v1 module) and correct at serialisation. Verify with server-side tests on the serialised shape plus the existing UI timestamp tests (vitest) still green. Run pytest on the touched hub/tests file(s) directly rather than the full hub/tests/ suite (that takes ~7min and exceeds the 600s command cap per STATE.json limits) - chunk if needed. Update tsc/vitest/eslint only if hub/ui/src changed; rebuild+refresh the UI bundle via scripts/refresh_ui_bundle.py only if non-__tests__ hub/ui/src files changed, and commit hub/ui/src + hub/hub/static/ui together per CLAUDE.md.",
   "decisions_for_user": [
     {
       "id": "D-env",
@@ -152,9 +153,9 @@
     "openspec_changes_in_flight": "none — `ls openspec/changes/ | grep -v archive` is empty",
     "not_run_at_prep": "Full hub/tests/ suite and eslint were NOT run tonight. The loop should establish its own baseline early so it can tell inherited breakage from its own."
   },
-  "last_heartbeat": "2026-08-19T23:14:53+01:00",
+  "last_heartbeat": "2026-08-20T00:10:58+01:00",
   "log_file": ".claude/autonomous/2026-08-19-project-portability-log.md",
   "driver": "Windows Scheduled Task 'AgentWeaveAutonomousSession' -> .claude/skills/autonomous-session/scripts/run-iteration.ps1 -> headless `claude -p`. Each firing is a fresh process; all continuity is STATE.json + the log. Session-bound drivers (ScheduleWakeup, CronCreate) are NOT used - the 2026-08-15 run asked for nine hours and got forty minutes because the session went away.",
-  "heartbeat_note": "Deliberately stale. The process that ran iteration 2 has finished and released the branch, so the next scheduled firing takes over instead of standing down against a heartbeat nobody is refreshing.",
+  "heartbeat_note": "Refreshed while iteration 3 was in progress. Will be set stale again once iteration 3's work is pushed, per the driver protocol.",
   "draft_pr": "https://github.com/gutohuida/AgentWeave/pull/7"
 }
