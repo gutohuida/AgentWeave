@@ -358,16 +358,94 @@ Proves the whole shell without a loop or a file endpoint existing.
 
 ## 5. The files tab
 
-- [ ] 5.1 A `files` tree tab built from `GET /api/v1/workspace/paths`. Reuse or adapt
+- [x] 5.1 A `files` tree tab built from `GET /api/v1/workspace/paths`. Reuse or adapt
       `specNavigation.ts`'s `buildPathTree` (`:320-364`) rather than re-deriving tree building.
-- [ ] 5.2 Selecting a file opens a `file:<path>` tab **and closes the tree tab** (design D8).
-- [ ] 5.3 The file tab renders text content, states binary, and states a refusal for an oversized file
+- [x] 5.2 Selecting a file opens a `file:<path>` tab **and closes the tree tab** (design D8).
+- [x] 5.3 The file tab renders text content, states binary, and states a refusal for an oversized file
       with its size and the bound.
-- [ ] 5.4 "Insert into composer" produces the **same** mention format `composerTrigger.ts`'s `@path`
+- [x] 5.4 "Insert into composer" produces the **same** mention format `composerTrigger.ts`'s `@path`
       trigger already produces. Test the two are byte-identical for the same file.
-- [ ] 5.5 Measure and state the `files` tab's minimum width against the real shell. Design D12 leaves
+- [x] 5.5 Measure and state the `files` tab's minimum width against the real shell. Design D12 leaves
       this deliberately unstated; do not guess it, measure it, then write it down beside
       `SPEC_DOC_MIN_WIDTH` with the same kind of comment.
+
+      **Done 2026-08-19, iteration 15/16.** 5.1: `buildFilePathTree` in `specNavigation.ts`
+      is `buildPathTree`'s directory-grouping algorithm adapted (not re-derived) for
+      `GET /workspace/paths`'s raw string listing — the two differences that keep it a
+      second function rather than a shared call are that a workspace path has no manifest
+      title (the filename is the only label there is) and no `spec/` prefix every entry
+      shares to drop. `FileTree.tsx` renders it the way `SpecTree.tsx` renders
+      `buildPathTree`'s rows, under its own `aw.files.treeCollapsed` storage key so folding
+      a directory here never disturbs the specs tree's folded state. `FilesIndexTab.tsx` is
+      `SpecIndexTab`'s counterpart: tree when nothing is typed, a ranked flat substring
+      match once something is.
+
+      5.2/D8: `panelTabsStore.openTab`'s reducer (already carrying a comment naming this as
+      its own follow-up task) now filters `files` out of the tab list before appending a
+      `file:` tab being opened for the first time — refocusing an *already-open* file tab
+      does not touch `files`, and reopening `files` after a file tab is open does not close
+      the file tab either (the asymmetry is one-directional, matching D8's own wording).
+      Three new `panelTabsStore.test.ts` cases pin this, including the "reopening files
+      after a file is open does not close the file" direction a naive "index gives way to
+      detail" generalization would get wrong.
+
+      5.3: `FileTab.tsx` reads through the new `useWorkspaceFile` hook
+      (`hub/ui/src/api/workspace.ts`) and renders whichever of three states
+      `GET /workspace/file` (task 4) reports — text in a `<pre>`, an explicit binary notice
+      naming the size, or `readableApiError`'s rendering of the 404/413 response body (413's
+      message already names both the file's size and the configured bound, from the
+      endpoint's own text — task 4.3).
+
+      5.4: `composerTrigger.ts` gained `formatMention(kind, value)`, factored out of
+      `acceptTriggerResult` so both call sites produce the mention text from the *same*
+      expression rather than two copies kept in step by hand — byte-identical by
+      construction, not merely by a test asserting it (the test asserts it anyway,
+      `composerTrigger.test.ts`). Wiring the button to a mounted `Composer` needed a real
+      path across three components with no ref or shared state to reuse: `Composer` gained
+      an `insertPathRequest?: {path, requestId} | null` prop (the same counter-keyed "do
+      this again" shape `panelTabsStore`'s own `revealRequestId` already uses, since a plain
+      boolean cannot tell a second insert of the same file apart from the first), consumed
+      by an effect that appends the mention to whatever is already typed. Threaded through
+      `AgentOutputPanel` verbatim and originated in `ConversationView`, which owns the
+      counter. Five new `Composer` tests cover append-vs-replace, the quoting case, and the
+      repeat/new-request-id distinction.
+
+      5.5: measured with `.claude/autonomous/scratch/measure_files_tab_width.py`
+      (gitignored, throwaway) against the live trial Hub — forced the document pane's own
+      CSS width down directly (bypassing the app's current 360px floor, since that floor
+      *is* the number under test) and found where `FileTab`'s header row (filename,
+      "Insert into composer", close) first overflows: 248px. `FilesIndexTab`'s search box
+      and tree stayed clean to 200px, so the header decides it. Recorded as
+      `FILE_TAB_MIN_WIDTH = 260` in `specPreferences.ts` (a 12px margin above the measured
+      248px, the same margin `CONVERSATION_MIN_WIDTH`'s own comment describes measuring
+      against font-metric variance), and `minWidthForTabKind` now returns it for `file`/
+      `files` instead of falling back to `SPEC_DOC_MIN_WIDTH`. `specs` still falls back to
+      the spec document minimum — it was not measured this task, and D12 only named `files`.
+
+      **A pre-existing gap, found but not fixed here (scope discipline, not an oversight).**
+      `ConversationView.tsx`'s `panel` is `document ? <PanelShell/> : null` — the shell,
+      files tab included, is unreachable unless a specification document is already
+      attached to the conversation, even though `panelTabsStore.setShellOpen` exists
+      precisely to let the shell open independently. That coupling predates this task
+      (sections 2b/3) and fixing it is a real, separate change to `ConversationView`'s
+      mount condition, not a files-tab task — recorded in `decisions_for_user` rather than
+      patched in passing.
+
+      **Verification.** `hub/ui/src/__tests__/{fileNavigation,filesIndexTab,fileTab,
+      panelTabsStore,composerTrigger,conversationComposer}.test.ts(x)`: full suite
+      1064 passed (0 skipped), up from the 1014 baseline at prep. `tsc --noEmit` and
+      `eslint --max-warnings 0 src` both clean. Live, against the trial Hub (`ui` rebuilt,
+      `refresh_ui_bundle.py` run, stamp verified with `--check`): new
+      `hub/tests/browser/test_files_tab.py`, 7/7 passed — plus-menu discovery, the empty-
+      workspace statement, a real tree-row click opening a file and closing `files` (D8,
+      live), the 404 refusal live against this fixture project's genuinely empty workspace
+      listing, "Insert into composer" landing in the real composer textarea, and the
+      measured 260px width holding (240px does not, confirming the assertion is anchored to
+      the right element and not vacuous). Full `hub/tests/browser` suite: 48/48 passed
+      (up from the 33-passed baseline). `ruff check` and `black --check` clean on the new
+      test file. Full `hub/tests/` and `tests/` suites NOT re-run this task — no Python
+      source under `hub/hub/` changed (only a new browser test file), so `mypy hub/hub/`'s
+      361-error baseline is unaffected and was not re-checked.
 
 ## 6. Strip overflow
 

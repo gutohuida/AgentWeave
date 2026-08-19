@@ -307,11 +307,14 @@ export const usePanelTabsStore = create<PanelTabsState>()((set, get) => {
             isOpen: true,
           }
         }
-        // Task 5.2 / design D8 adds one asymmetry here: opening a `file:` tab also closes the
-        // `files` tree tab. The loops index deliberately does not behave that way, so it belongs
-        // at the call site or as an explicit rule — not as a general "index gives way to detail".
+        // Design D8's one asymmetry: opening a `file:` tab also closes the `files` tree tab — the
+        // tree is a launcher, and in a narrow column a tab spent on the thing that only got you
+        // here is a tab wasted. The loops index deliberately does not behave that way (a
+        // governance glance, not navigation), so this stays a rule about `file:` tabs specifically
+        // rather than a general "index gives way to detail" applied to every kind.
+        const tabs = isFileTabId(id) ? panel.tabs.filter((tab) => tab.id !== 'files') : panel.tabs
         return {
-          tabs: [...panel.tabs, { id, revealRequestId: 0 }],
+          tabs: [...tabs, { id, revealRequestId: 0 }],
           activeTabId: id,
           isOpen: true,
         }

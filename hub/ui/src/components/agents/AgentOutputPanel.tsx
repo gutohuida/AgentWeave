@@ -71,6 +71,9 @@ interface AgentOutputPanelProps {
    *  same name for why this is distinct from `onOpenSpecPicker`. */
   onOpenExistingSpec?: () => void
   specBusy?: boolean
+  /** Forwarded to `Composer` verbatim — see its prop of the same name (task 5.4,
+   *  `2026-08-18-one-shell-three-panels`). */
+  insertPathRequest?: { path: string; requestId: number } | null
 }
 
 /* Both prompts that used to live here are gone, and nothing replaces them.
@@ -127,6 +130,7 @@ export function AgentOutputPanel({
   onStopExploring,
   onOpenExistingSpec,
   specBusy = false,
+  insertPathRequest = null,
 }: AgentOutputPanelProps) {
   // `lines` is no longer read here. Its only consumer was the effect that watched the output
   // stream for a completed run in order to call a handoff "ready" — the exact inference this
@@ -996,6 +1000,7 @@ export function AgentOutputPanel({
               onOpenExistingSpec={onOpenExistingSpec}
               specBusy={specBusy}
               specDocumentLabel={specDocumentLabel}
+              insertPathRequest={insertPathRequest}
             />
           </div>
         </div>

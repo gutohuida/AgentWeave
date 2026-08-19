@@ -391,3 +391,54 @@ export function buildPathTree(nodes: SpecNode[]): PathTreeRow[] {
 
   return rows
 }
+
+export interface FilePathTreeRow {
+  kind: 'directory' | 'file'
+  /** Full path for a file; the directory prefix (no trailing slash) for a directory. */
+  path: string
+  /** The segment for a directory, the filename for a file. */
+  label: string
+  depth: number
+}
+
+/**
+ * The files tab's tree (task 5.1, `2026-08-18-one-shell-three-panels`): the same
+ * shared-directory grouping `buildPathTree` computes for the specification inventory,
+ * adapted for `GET /workspace/paths`'s raw listing rather than re-derived. Two
+ * differences from `buildPathTree` are why this is a second function and not a shared
+ * call: a workspace path has no manifest title (the filename is the only label there is)
+ * and no `spec/` prefix every entry shares to drop.
+ */
+export function buildFilePathTree(paths: readonly string[]): FilePathTreeRow[] {
+  const sorted = [...paths].sort((a, b) => a.localeCompare(b))
+  const rows: FilePathTreeRow[] = []
+  let previous: string[] = []
+
+  for (const path of sorted) {
+    const segments = path.split('/')
+    const file = segments.pop() as string
+    const directories = segments
+
+    let shared = 0
+    while (
+      shared < directories.length &&
+      shared < previous.length &&
+      directories[shared] === previous[shared]
+    ) {
+      shared += 1
+    }
+    for (let depth = shared; depth < directories.length; depth += 1) {
+      rows.push({
+        kind: 'directory',
+        path: directories.slice(0, depth + 1).join('/'),
+        label: directories[depth],
+        depth,
+      })
+    }
+    previous = directories
+
+    rows.push({ kind: 'file', path, label: file, depth: directories.length })
+  }
+
+  return rows
+}

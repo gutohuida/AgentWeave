@@ -12,11 +12,14 @@ import { Button } from '@/components/ui/button'
 import { Drawer } from '@/components/layout/Drawer'
 import { PaneResizer } from '@/components/layout/PaneResizer'
 import { useWorkspaceWidth } from '@/components/layout/useWorkspaceWidth'
+import { FileTab } from '@/components/spec/FileTab'
+import { FilesIndexTab } from '@/components/spec/FilesIndexTab'
 import { PanelShell, type PanelTabDescriptor } from '@/components/spec/PanelShell'
 import { SpecDocumentPanel } from '@/components/spec/SpecDocumentPanel'
 import { SpecDocumentPicker } from '@/components/spec/SpecDocumentPicker'
 import { SpecIndexTab } from '@/components/spec/SpecIndexTab'
 import { buildInventory, resolveTabPath, tabKeyForNode } from '@/components/spec/specNavigation'
+import { useWorkspacePaths } from '@/api/workspace'
 import {
   CONVERSATION_DEFAULT_WIDTH,
   CONVERSATION_MIN_WIDTH,
@@ -26,6 +29,9 @@ import {
   saveSpecPreferences,
 } from '@/components/spec/specPreferences'
 import {
+  fileTabId,
+  filePath,
+  isFileTabId,
   isSpecTabId,
   selectProjectPanel,
   specDocumentId,
@@ -226,24 +232,66 @@ export function ConversationView({
   }, [refetchList])
 
   // Section 3's first index tenant: the plus affordance can always offer the specs browser,
-  // whether or not anything is attached yet.
+  // whether or not anything is attached yet. Section 5 adds the files tab beside it.
+  const { data: workspacePaths = [], isLoading: workspacePathsLoading } = useWorkspacePaths()
   const availablePanelTabs: PanelTabDescriptor[] = useMemo(
-    () => [{ id: 'specs', label: 'Specs', icon: 'folder_open' }],
+    () => [
+      { id: 'specs', label: 'Specs', icon: 'folder_open' },
+      { id: 'files', label: 'Files', icon: 'folder_open' },
+    ],
     [],
   )
   const describePanelTab = useCallback(
     (id: TabId): PanelTabDescriptor => {
       if (id === 'specs') return { id, label: 'Specs', icon: 'folder_open' }
+      if (id === 'files') return { id, label: 'Files', icon: 'folder_open' }
+      if (isFileTabId(id)) {
+        const path = filePath(id)
+        return { id, label: path.slice(path.lastIndexOf('/') + 1), icon: 'description' }
+      }
       const path = isSpecTabId(id) ? resolveTabPath(inventory, specDocumentId(id)) : id
       const node = inventory.byPath.get(path)
       return { id, label: node?.title ?? path, icon: 'article' }
     },
     [inventory],
   )
+
+  // The files tab's "Insert into composer" (task 5.4): a counter-keyed request the mounted
+  // Composer consumes once, the same shape `panelTabsStore` already uses for "reveal this tab
+  // again" — a plain boolean or the raw path could not tell a second insert of the same file
+  // apart from the first.
+  const insertRequestCounter = useRef(0)
+  const [insertPathRequest, setInsertPathRequest] = useState<{ path: string; requestId: number } | null>(
+    null,
+  )
+  const insertIntoComposer = useCallback((path: string) => {
+    insertRequestCounter.current += 1
+    setInsertPathRequest({ path, requestId: insertRequestCounter.current })
+  }, [])
+
   const renderPanelTabContent = useCallback(
     (tab: PanelTab) => {
       if (tab.id === 'specs') {
         return <SpecIndexTab projectId={projectId} inventory={inventory} attachedPath={document} />
+      }
+      if (tab.id === 'files') {
+        return (
+          <FilesIndexTab
+            paths={workspacePaths}
+            isLoading={workspacePathsLoading}
+            currentPath={panelActiveTabId && isFileTabId(panelActiveTabId) ? filePath(panelActiveTabId) : null}
+            onSelect={(path) => openTab(projectId, fileTabId(path))}
+          />
+        )
+      }
+      if (isFileTabId(tab.id)) {
+        return (
+          <FileTab
+            path={filePath(tab.id)}
+            onInsertIntoComposer={insertIntoComposer}
+            onClose={() => closeTab(projectId, tab.id)}
+          />
+        )
       }
       if (!isSpecTabId(tab.id)) return null
       // `tab.id`'s key is a document id where the node has one, else the path itself
@@ -267,7 +315,22 @@ export function ConversationView({
         />
       )
     },
-    [projectId, inventory, specList, listLoading, onOpenDocument, openPicker, closeTab, handleRefresh, document],
+    [
+      projectId,
+      inventory,
+      specList,
+      listLoading,
+      onOpenDocument,
+      openPicker,
+      closeTab,
+      handleRefresh,
+      document,
+      workspacePaths,
+      workspacePathsLoading,
+      openTab,
+      insertIntoComposer,
+      panelActiveTabId,
+    ],
   )
   const panel = document ? (
     <PanelShell
@@ -313,6 +376,7 @@ export function ConversationView({
        * the way back would be a trap dressed as a switch. */
       onStopExploring={() => onOpenDocument(null)}
       specBusy={createDocument.isPending}
+      insertPathRequest={insertPathRequest}
     />
   )
 

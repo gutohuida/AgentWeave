@@ -17,6 +17,32 @@ export function useWorkspacePaths() {
   })
 }
 
+export interface WorkspaceFileResponse {
+  path: string
+  binary: boolean
+  size: number
+  /** `null` for a binary file — the endpoint never sends binary bytes as text. */
+  content: string | null
+}
+
+/**
+ * One file's content, for the panel shell's files tab (task 5.3, `2026-08-18-one-shell-three-panels`).
+ * `enabled` is false while `path` is null so switching away from a file tab (or before one has
+ * ever opened) issues no request.
+ */
+export function useWorkspaceFile(path: string | null) {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  return useQuery<WorkspaceFileResponse>({
+    queryKey: ['project', projectId, 'workspace', 'file', path],
+    queryFn: () =>
+      getJson<WorkspaceFileResponse>(
+        `/api/v1/projects/${projectId}/workspace/file?path=${encodeURIComponent(path as string)}`,
+      ),
+    enabled: isConfigured && !!projectId && !!path,
+    staleTime: 60_000,
+  })
+}
+
 export interface AgentWorkspaceInfo {
   agent: string
   repo_root: string

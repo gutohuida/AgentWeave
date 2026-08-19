@@ -167,3 +167,45 @@ describe('Composer — project- and conversation-scoped drafts', () => {
     setItem.mockRestore()
   })
 })
+
+describe('Composer — insertPathRequest (task 5.4, 2026-08-18-one-shell-three-panels)', () => {
+  it('appends a @path mention on the composer’s current text', () => {
+    const { view } = renderComposer({
+      insertPathRequest: { path: 'src/a.ts', requestId: 1 },
+    })
+
+    expect(screen.getByRole('textbox')).toHaveValue('@src/a.ts ')
+    view.unmount()
+  })
+
+  it('quote-escapes a path containing whitespace, same as the @path trigger', () => {
+    renderComposer({ insertPathRequest: { path: 'docs/release notes.md', requestId: 1 } })
+
+    expect(screen.getByRole('textbox')).toHaveValue('@"docs/release notes.md" ')
+  })
+
+  it('appends to existing text rather than replacing it, adding a separating space', () => {
+    const { view, props } = renderComposer({ insertPathRequest: null })
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'see' } })
+
+    view.rerender(<Composer {...props} insertPathRequest={{ path: 'src/a.ts', requestId: 1 }} />)
+
+    expect(screen.getByRole('textbox')).toHaveValue('see @src/a.ts ')
+  })
+
+  it('a repeated requestId for the same path does not insert a second time', () => {
+    const { view, props } = renderComposer({ insertPathRequest: { path: 'src/a.ts', requestId: 1 } })
+
+    view.rerender(<Composer {...props} insertPathRequest={{ path: 'src/a.ts', requestId: 1 }} />)
+
+    expect(screen.getByRole('textbox')).toHaveValue('@src/a.ts ')
+  })
+
+  it('a new requestId for the same path inserts again', () => {
+    const { view, props } = renderComposer({ insertPathRequest: { path: 'src/a.ts', requestId: 1 } })
+
+    view.rerender(<Composer {...props} insertPathRequest={{ path: 'src/a.ts', requestId: 2 }} />)
+
+    expect(screen.getByRole('textbox')).toHaveValue('@src/a.ts @src/a.ts ')
+  })
+})

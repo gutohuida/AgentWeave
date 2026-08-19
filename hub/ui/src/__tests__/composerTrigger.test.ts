@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   acceptTriggerResult,
   detectComposerTrigger,
+  formatMention,
   quoteMentionValue,
   replaceTextRange,
 } from '@/lib/composerTrigger'
@@ -108,5 +109,26 @@ describe('acceptTriggerResult', () => {
     const result = acceptTriggerResult(text, trigger, 'model')
     expect(result.text).toBe('/model')
     expect(result.cursor).toBe('/model'.length)
+  })
+})
+
+describe('formatMention', () => {
+  it('is byte-identical to what the open-trigger path produces for the same file (task 5.4, 2026-08-18-one-shell-three-panels)', () => {
+    const path = 'docs/release notes.md'
+    const text = 'see @doc then continue'
+    const trigger = detectComposerTrigger(text, 8)! // cursor right after "@doc"
+    const viaTrigger = acceptTriggerResult(text, trigger, path)
+    // The trigger's insertion is the mention alone, dropped into the matched range — isolate it
+    // by re-slicing the result rather than hand-writing the expected string a second time.
+    const insertedMention = viaTrigger.text.slice(trigger.rangeStart, viaTrigger.cursor)
+    expect(formatMention('path', path)).toBe(insertedMention)
+  })
+
+  it('quote-escapes a path containing whitespace, same as the trigger path', () => {
+    expect(formatMention('path', 'docs/release notes.md')).toBe('@"docs/release notes.md"')
+  })
+
+  it('leaves an unquoted path unchanged but for the leading @', () => {
+    expect(formatMention('path', 'src/index.ts')).toBe('@src/index.ts')
   })
 })

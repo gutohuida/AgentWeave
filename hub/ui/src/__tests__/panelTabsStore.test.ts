@@ -113,6 +113,34 @@ describe('panelTabsStore — open, close, activate, reorder', () => {
     expect(panel().activeTabId).toBe('spec:doc-1')
   })
 
+  it('opening a file tab closes the files tree tab (design D8, 2026-08-18-one-shell-three-panels)', () => {
+    const store = usePanelTabsStore.getState()
+    store.openTab(P1, 'files')
+    store.openTab(P1, fileTabId('src/a.ts'))
+
+    expect(tabIds()).toEqual([fileTabId('src/a.ts')])
+    expect(panel().activeTabId).toBe(fileTabId('src/a.ts'))
+  })
+
+  it('opening a second file tab does not disturb a specs tab left open beside it', () => {
+    const store = usePanelTabsStore.getState()
+    store.openTab(P1, 'specs')
+    store.openTab(P1, 'files')
+    store.openTab(P1, fileTabId('src/a.ts'))
+    store.openTab(P1, fileTabId('src/b.ts'))
+
+    expect(tabIds()).toEqual(['specs', fileTabId('src/a.ts'), fileTabId('src/b.ts')])
+  })
+
+  it('reopening the files tree after a file tab is open does not close the file tab (D8 is asymmetric)', () => {
+    const store = usePanelTabsStore.getState()
+    store.openTab(P1, 'files')
+    store.openTab(P1, fileTabId('src/a.ts'))
+    store.openTab(P1, 'files')
+
+    expect(tabIds()).toEqual([fileTabId('src/a.ts'), 'files'])
+  })
+
   it('reorders by index and ignores out-of-range indices', () => {
     const store = usePanelTabsStore.getState()
     store.openTab(P1, 'specs')

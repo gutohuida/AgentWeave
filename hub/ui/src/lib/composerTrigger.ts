@@ -72,6 +72,17 @@ export function quoteMentionValue(value: string): string {
 }
 
 /**
+ * The trigger-char-prefixed, quote-escaped text a `path`/`skill` mention inserts —
+ * factored out of `acceptTriggerResult` so a caller with no open trigger to replace (the
+ * panel shell's files tab "Insert into composer", task 5.4 of
+ * `2026-08-18-one-shell-three-panels`) produces byte-identical output by construction,
+ * not by keeping a second copy of this expression in step with this one.
+ */
+export function formatMention(kind: 'path' | 'skill', value: string): string {
+  return MENTION_PREFIX[kind] + quoteMentionValue(value)
+}
+
+/**
  * Accept a menu result for an open `trigger`: builds the trigger-char-prefixed,
  * quote-escaped insertion text and replaces the trigger's own matched range with it
  * (the trigger character itself is part of that range, so it must be part of the
@@ -82,7 +93,7 @@ export function acceptTriggerResult(
   trigger: ComposerTriggerMatch,
   value: string,
 ): { text: string; cursor: number } {
-  const prefix = trigger.kind === 'slash-command' ? '/' : MENTION_PREFIX[trigger.kind]
-  const insertion = prefix + quoteMentionValue(value)
+  const insertion =
+    trigger.kind === 'slash-command' ? '/' + quoteMentionValue(value) : formatMention(trigger.kind, value)
   return replaceTextRange(text, trigger.rangeStart, trigger.rangeEnd, insertion)
 }

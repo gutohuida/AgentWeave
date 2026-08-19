@@ -1262,3 +1262,72 @@ MEASURE-don't-guess tasks, to be done with Playwright against the live shell onc
 
 Committed and pushed as the work landed (implementation + tests together, tasks.md/STATE.json close-out
 separately), heartbeat refreshed before each push.
+
+## Iteration 16 (2026-08-19T02:3x-02:5x+01:00) — P5: the files tab, end to end
+
+Verified branch/log/STATE.json agreed before starting: `autonomous/2026-08-18-panels-loops-and-app`,
+HEAD `732b187` ("Release heartbeat for the next firing"), clean tree. Read task 5 (tasks.md) and design
+D8/D12 fresh, plus `specNavigation.ts`'s `buildPathTree`, `panelTabsStore.ts`'s `openTab` (already
+carrying a comment naming this task as its own follow-up), `composerTrigger.ts`, `SpecIndexTab.tsx`,
+`SpecDocumentPanel.tsx`, and `ConversationView.tsx`'s panel-hosting block as the patterns to mirror.
+
+**Implementation, five pieces.** 5.1: `buildFilePathTree` in `specNavigation.ts` — `buildPathTree`'s
+directory-grouping algorithm adapted for `GET /workspace/paths`'s raw listing (no manifest title, no
+shared `spec/` prefix to drop, so a second function rather than a shared call). `FileTree.tsx` renders
+it the way `SpecTree.tsx` renders `buildPathTree`'s rows, own `aw.files.treeCollapsed` storage key.
+`FilesIndexTab.tsx` mirrors `SpecIndexTab`: tree when nothing typed, ranked flat substring match once
+something is. 5.2/D8: `openTab`'s reducer now actually filters `files` out of the tab list when a
+`file:` tab is opened for the first time — the comment already sitting there promising this was written
+during panel section 2/3 and never actioned. Confirmed the asymmetry both ways: refocusing an
+already-open file tab does not touch `files`; reopening `files` after a file tab is active does not
+close the file tab. 5.3: `FileTab.tsx` + new `useWorkspaceFile` hook (`api/workspace.ts`) render
+whichever of the endpoint's three states comes back — text in a `<pre>`, an explicit binary notice
+naming the size, or `readableApiError`'s rendering of the 404/413 body (413 already names both numbers
+in its own text, from task 4.3). 5.4: `formatMention(kind, value)` factored out of
+`acceptTriggerResult` so both call sites share one expression — byte-identical by construction. Wiring
+"Insert into composer" to a mounted `Composer` needed real plumbing across three components (no shared
+ref or state to reuse): `Composer` gained `insertPathRequest?: {path, requestId} | null`, the same
+counter-keyed "do this again" shape `revealRequestId` already uses, consumed by an effect that appends
+the mention to whatever is typed; threaded through `AgentOutputPanel` verbatim, originated in
+`ConversationView`, which owns the counter. 5.5: measured with a throwaway script
+(`.claude/autonomous/scratch/measure_files_tab_width.py`, gitignored) against the live trial Hub —
+forced the document pane's own CSS width down directly (the app's *current* floor is exactly the number
+under test, so the resizer itself couldn't be used to probe below it) and found `FileTab`'s header row
+(filename, "Insert into composer", close) first clips at 248px; `FilesIndexTab`'s search box and tree
+stayed clean to 200px. Recorded `FILE_TAB_MIN_WIDTH = 260` in `specPreferences.ts` (12px margin, same
+reasoning `CONVERSATION_MIN_WIDTH`'s own comment gives for its margin), `minWidthForTabKind` now
+returns it for `file`/`files` instead of falling back to `SPEC_DOC_MIN_WIDTH`.
+
+**A gap found, not fixed — logged instead.** `ConversationView.tsx`'s panel is
+`document ? <PanelShell/> : null` — the whole shell, files tab included, is unreachable unless a spec
+document is already attached, even though `panelTabsStore.setShellOpen` exists to let the shell open on
+its own and is never called. Predates this task (sections 2b/3). Recorded in `decisions_for_user`
+rather than patched in passing — fixing it is a real, separate change to the mount condition.
+
+**Verification.** New vitest: `fileNavigation.test.ts`, `filesIndexTab.test.tsx`, `fileTab.test.tsx`,
+plus additions to `panelTabsStore.test.ts` (+3, the D8 asymmetry both ways), `composerTrigger.test.ts`
+(+3, including the byte-identical-by-construction assertion), `conversationComposer.test.tsx` (+5, the
+`insertPathRequest` effect). Full suite: **1064 passed**, up from the 1014 baseline at prep, 0 skipped.
+`tsc --noEmit` and `eslint --max-warnings 0 src` clean throughout (checked after every file, not just at
+the end). Rebuilt the UI (`npm run build`), staged new source **before** `refresh_ui_bundle.py` per the
+trap already recorded in `STATE.json`, verified with `--check`. Live: new
+`hub/tests/browser/test_files_tab.py`, **7/7 passed** — plus-menu discovery, the empty-workspace
+statement (this fixture project's real `workspace/paths` genuinely returns `[]`, `testbed/.gitignore`
+blankets it), a real tree-row click (via `page.route`-faked `GET /workspace/paths` and
+`GET /workspace/file`, since there is nothing real to click through here) opening a file and closing
+`files`, the true unrouted 404 refusal against this project's real empty listing, "Insert into composer"
+landing in the real composer textarea, and the measured 260px width holding while 240px does not (both
+directions asserted, so the boundary is anchored to the right element rather than vacuously true). Full
+`hub/tests/browser` suite: **48/48 passed**, up from the 33-passed baseline. `ruff check` / `black
+--check` clean on the new Python test file. `mypy hub/hub/` NOT re-run — no Python under `hub/hub/`
+changed this task (browser test file only), so the 361-error baseline is unaffected by construction.
+
+Marked 5.1-5.5 done in `tasks.md` with a full dated note (implementation summary per subtask, the
+found-not-fixed gap, verification commands and counts). `current`/`next_action` now point at **P6**
+(strip overflow, task 6.1 — a single item: start from T3's plain `scrollIntoView`-on-active-tab, only
+add more if it measurably fails against the real strip). After 6.1, only the panel change's human-only
+7.1-7.4 remain, which this run must not tick — the panel change's agent-verifiable work is then
+essentially done and the queue moves to LB1 (loop archival) per the interleaving.
+
+Committed and pushed as the work landed. Heartbeat refreshed before the push; releasing it (backdating
+~40 minutes) as the very last step per the driver's own instructions.

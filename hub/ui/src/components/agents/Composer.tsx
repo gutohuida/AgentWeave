@@ -5,6 +5,7 @@ import { clearComposerDraft, getComposerDraft, setComposerDraft } from '@/lib/co
 import {
   acceptTriggerResult,
   detectComposerTrigger,
+  formatMention,
   type ComposerTriggerMatch,
 } from '@/lib/composerTrigger'
 import { resolveTriggerResults } from '@/lib/composerTriggerSources'
@@ -68,6 +69,11 @@ export interface ComposerProps {
   specBusy?: boolean
   /** The open document's display name, for the Spec pill. `null` means none is open. */
   specDocumentLabel?: string | null
+  /** The files tab's "Insert into composer" (task 5.4, `2026-08-18-one-shell-three-panels`): a
+   *  `@path` mention to append, keyed by `requestId` so a repeat press of the same file inserts
+   *  again rather than being swallowed as an unchanged prop (the same `revealRequestId` shape
+   *  `panelTabsStore` already uses for "open this again"). `null` means nothing pending. */
+  insertPathRequest?: { path: string; requestId: number } | null
 }
 
 /**
@@ -98,6 +104,7 @@ export function Composer({
   specArmed = false,
   specBusy = false,
   specDocumentLabel = null,
+  insertPathRequest = null,
 }: ComposerProps) {
   const [text, setText] = useState(() => getComposerDraft(projectId, agent, conversationId))
   const [submitting, setSubmitting] = useState(false)
@@ -108,6 +115,7 @@ export function Composer({
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const pendingCursorRef = useRef<number | null>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const lastInsertedRequestId = useRef<number | null>(null)
 
   const menuItems: ComposerTriggerMenuItem[] = trigger ? resolveTriggerResults(trigger, workspacePaths) : []
 
@@ -157,6 +165,21 @@ export function Composer({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // The files tab's "Insert into composer" (task 5.4) — a new `requestId` appends the mention to
+  // whatever is already typed rather than replacing it, since unlike the `@`/`$` trigger there is
+  // no open range to replace. A trailing space so a second insertion, or continued typing, never
+  // runs straight into the mention it follows.
+  useEffect(() => {
+    if (!insertPathRequest || insertPathRequest.requestId === lastInsertedRequestId.current) return
+    lastInsertedRequestId.current = insertPathRequest.requestId
+    const mention = formatMention('path', insertPathRequest.path)
+    setText((prev) => {
+      const needsLeadingSpace = prev.length > 0 && !/\s$/.test(prev)
+      return prev + (needsLeadingSpace ? ' ' : '') + mention + ' '
+    })
+    textareaRef.current?.focus()
+  }, [insertPathRequest])
 
   const handleSend = async () => {
     const trimmed = text.trim()
