@@ -3,6 +3,7 @@ import { Icon } from '@/components/common/Icon'
 import { Badge } from '@/components/common/Badge'
 import { Button } from '@/components/ui/button'
 import { useLoop, type LoopSummary } from '@/api/loops'
+import { hubDate } from '@/lib/hubTime'
 
 interface LoopTabProps {
   loopId: string
@@ -16,7 +17,7 @@ function stopWhenQueueEmptiesText(value: boolean): string {
 }
 
 function stopAtText(value?: string | null): string {
-  return value ? `at ${new Date(value).toLocaleString()}` : 'no scheduled stop'
+  return value ? `at ${hubDate(value).toLocaleString()}` : 'no scheduled stop'
 }
 
 /** The staged fields, each as the pair the operator has to compare: what governs the loop now,
@@ -82,7 +83,7 @@ function PendingEdit({ loop }: { loop: LoopSummary }) {
       </div>
       <p className="mt-1" style={{ fontSize: 11, color: 'var(--text-3)' }} data-testid="loop-tab-pending-edit-who">
         Staged by {pending.staged_by || 'the operator'}{' '}
-        {formatDistanceToNow(new Date(pending.staged_at), { addSuffix: true })}.
+        {formatDistanceToNow(hubDate(pending.staged_at), { addSuffix: true })}.
         {loop.firing_active
           ? ' The firing running now keeps the definition below marked “In force now”; the edit reaches the firing after it.'
           : ' Until then the loop runs on the definition below marked “In force now”.'}
@@ -221,7 +222,7 @@ export function LoopTab({ loopId, onClose }: LoopTabProps) {
         <p data-testid="loop-tab-stop-condition">
           Stop condition:{' '}
           {loop.stop_at
-            ? `at ${new Date(loop.stop_at).toLocaleString()}`
+            ? `at ${hubDate(loop.stop_at).toLocaleString()}`
             : loop.stop_when_queue_empties
               ? 'when the queue empties'
               : 'runs until stopped by the operator'}
@@ -232,7 +233,7 @@ export function LoopTab({ loopId, onClose }: LoopTabProps) {
             </span>
           )}
         </p>
-        {loop.stopped_at && <p>Stopped {formatDistanceToNow(new Date(loop.stopped_at), { addSuffix: true })}</p>}
+        {loop.stopped_at && <p>Stopped {formatDistanceToNow(hubDate(loop.stopped_at), { addSuffix: true })}</p>}
       </div>
 
       <div className="mt-4">
@@ -303,7 +304,7 @@ export function LoopTab({ loopId, onClose }: LoopTabProps) {
                   <span style={{ fontSize: 11, color: 'var(--text)' }}>{run.trigger}</span>
                 </div>
                 <span style={{ fontSize: 11, color: 'var(--text-3)' }}>
-                  {formatDistanceToNow(new Date(run.fired_at), { addSuffix: true })}
+                  {formatDistanceToNow(hubDate(run.fired_at), { addSuffix: true })}
                 </span>
               </div>
             ))}
