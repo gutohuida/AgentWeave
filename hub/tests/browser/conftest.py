@@ -34,6 +34,7 @@ import os
 import urllib.error
 import urllib.request
 from collections.abc import Iterator
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -63,12 +64,21 @@ TAB_LABELS = {
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
-    """Skip the whole package unless a live Hub was named."""
+    """Skip this package unless a live Hub was named.
+
+    `items` here is the WHOLE session's collected list, not just this package's — a plain
+    `for item in items` marks every test in the run skipped the moment this conftest is
+    merely importable, which only bites locally (CI has no Playwright, so
+    `importorskip` above aborts the import before this hook is ever registered, and the
+    bug was invisible there). Scope the skip to items actually under this directory.
+    """
     if os.environ.get("AW_HUB_URL"):
         return
+    package_dir = Path(__file__).parent
     skip = pytest.mark.skip(reason="set AW_HUB_URL to run browser tests against a live Hub")
     for item in items:
-        item.add_marker(skip)
+        if package_dir in Path(str(item.fspath)).resolve().parents:
+            item.add_marker(skip)
 
 
 @pytest.fixture(scope="session")

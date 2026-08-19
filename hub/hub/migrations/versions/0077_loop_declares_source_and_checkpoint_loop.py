@@ -35,16 +35,18 @@ branch_labels = None
 depends_on = None
 
 
-def _tables(conn) -> set[str]:
+def _tables(conn: sa.engine.Connection) -> set[str]:
     return set(sa.inspect(conn).get_table_names())
 
 
-def _columns(conn, table: str) -> set[str]:
+def _columns(conn: sa.engine.Connection, table: str) -> set[str]:
     return {column["name"] for column in sa.inspect(conn).get_columns(table)}
 
 
-def _indexes(conn, table: str) -> set[str]:
-    return {index["name"] for index in sa.inspect(conn).get_indexes(table)}
+def _indexes(conn: sa.engine.Connection, table: str) -> set[str]:
+    return {
+        index["name"] for index in sa.inspect(conn).get_indexes(table) if index["name"] is not None
+    }
 
 
 def upgrade() -> None:
