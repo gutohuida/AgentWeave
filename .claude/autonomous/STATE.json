@@ -8,9 +8,9 @@
   "stop_at": "2026-08-19T13:00:00+01:00",
   "stop_when_queue_empties": false,
   "run": 2,
-  "iteration": 4,
+  "iteration": 5,
   "session_stopped": false,
-  "last_heartbeat": "2026-08-19T09:38:49+01:00",
+  "last_heartbeat": "2026-08-19T10:16:47+01:00",
   "prepared_by": "Interactive review session 2026-08-19T07:58-08:40+01:00. Run 1's claims were re-verified rather than trusted: every suite re-run, the browser suite's failures reproduced and diagnosed to a named line, and CI's absence confirmed via `gh run list`.",
 
   "what_run_1_achieved": {
@@ -41,12 +41,12 @@
     {"id": "A45", "title": "A4.5 crash reconciliation — a crashed run must not leave a firing in progress", "status": "done", "note": "reconcile_stale_job_runs() in run_reconciliation.py, wired into main.py lifespan after reconcile_interrupted_runs(). Scope widened beyond the literal task title: also reconciles a JobRun in_progress with NO Run row ever created (the live job-0b490274 fixture — claude-1 has no runner bound), not just a Run that died. 4 new tests, mutation-checked. Live-restart smoke test against the trial Hub: firing_active true->false, 8 stuck rows -> failed."},
     {"id": "LA5", "title": "A5.1-A5.3 write-once loop_id, and RECORD (do not fix) the D15 name gap", "status": "done", "note": "Found already implemented and uncommitted at iteration 3's start (a prior process's work, no matching log entry) — re-verified line by line (tests, ruff, black, mypy, openspec) rather than trusted, then committed."},
     {"id": "B6X", "title": "B6.2-B6.4 the live active-now indicator, SSE updates, reduced motion", "status": "done", "note": "The recorded blocker (D13's helper) was stale — JobRun.status already had in_progress and firing_active was already computed server-side. Built LoopTab's badge (B6.2), Tailwind animate-pulse motion inheriting index.css's reduced-motion rule (B6.3), and SSE-driven invalidation (B6.4) — which surfaced and fixed a real gap: all six loop_* SSE event types were missing from useSSE.ts's client-side allowlist and were being silently dropped. Live-verified against a genuinely-true firing_active on the trial Hub (loop-8e86eb9f)."},
-    {"id": "APP1", "title": "App experience: a desktop icon/shortcut for AgentWeave", "status": "open"},
+    {"id": "APP1", "title": "App experience: a desktop icon/shortcut for AgentWeave", "status": "done", "note": "_create_desktop_shortcut() in cli.py, called once from _hub_native_start on is_first_run. Windows-only v1: drops ~/Desktop/AgentWeave.lnk targeting pythonw.exe -m agentweave (falls back to the agentweave.exe console script) with the packaged icon.ico, via PowerShell's WScript.Shell COM (no new pip dependency). 8 new tests incl. one real unmocked PowerShell invocation + header-byte check; mutation-checked the is_first_run wiring guard. Judged a full openspec proposal disproportionate for a small, contained, non-fatal addition with no new CLI surface — recorded as a decision below rather than assumed. macOS/Linux equivalents NOT attempted."},
     {"id": "APP2", "title": "App experience: further improvements", "status": "open"},
     {"id": "FREE", "title": "Free choice: outstanding fixes, findings, whatever is most needed", "status": "open"}
   ],
-  "current": "APP1",
-  "next_action": "Every agent-verifiable task in both openspec/changes/2026-08-18-a-loop-writes-its-own-queue and openspec/changes/2026-08-18-one-shell-three-panels is now done (only human-only sections A6.x/B7.x/panel-7.x/loop-13.x remain, correctly untouched — do not start them). APP1: give AgentWeave a desktop icon/shortcut. src/agentweave/assets/icon.ico already exists (confirmed present, not yet inspected for quality/size). Scope not yet designed this run — start by reading src/agentweave/cli.py's cmd_hub_start and cmd_status (how the Hub is actually launched today) and deciding what 'a desktop icon' means concretely for a CLI-launched local web app: likely a Windows .lnk shortcut (via a small script, not requiring pywin32 if avoidable — the CLI's only runtime dependency is agentweave-hub, per CLAUDE.md's 'do not add a second' rule) that opens the default browser at the running Hub's URL, placed via a CLI command or setup step. Check whether there's already a relevant openspec change or exploration for this (grep openspec/ for 'desktop' or 'shortcut' or 'icon' first — none was found as of iteration 4, but confirm). If no change exists, this may need a short proposal via openspec-propose before implementing, per this repo's own process — do not skip straight to code without one unless the operator's original queue entry is judged sufficient authorization for a small, contained addition (use judgement; record the choice either way).",
+  "current": "APP2",
+  "next_action": "APP1 (desktop shortcut) is done — see its queue entry's note and the iteration-5 log entry. APP2: 'further app-experience improvements' is deliberately open-ended and undesigned. Before picking something, re-read openspec/explorations/2026-08-16-desktop-app-global-state.md and openspec/explorations/2026-08-16-ui-gap-analysis.md for operator-stated app-experience gaps that were deferred out of the one-hub-and-a-window-of-its-own change (e.g. its Non-Goals: platformdirs-style OS-idiomatic data location, code signing/auto-update, Linux GTK/Qt packaging, a macOS/Linux desktop-icon equivalent to what APP1 just built for Windows). Also check `agentweave status`/`agentweave doctor` output quality as a candidate (are they actually useful for a non-technical operator?). Pick ONE small, contained, verifiable slice — same sizing discipline as APP1 — and apply the same judgement test (small+contained+no-new-surface -> implement directly and record the call; anything bigger -> openspec-propose first). If nothing concrete surfaces after that read, fall through to FREE rather than inventing scope.",
 
   "pre_authorised": [
     {
@@ -85,6 +85,11 @@
       "cost_if_wrong": "N/A — done, and verification would have caught a problem before commit."
     },
     {
+      "situation": "APP1 had no existing openspec change and next_action left the propose-vs-implement-directly call to this run's judgement.",
+      "decision": "Implemented directly rather than running openspec-propose first: one new private helper (_create_desktop_shortcut) plus a two-line gated call site in an existing function, no new CLI command, no new dependency, best-effort/non-fatal by construction. Recorded the reasoning in the iteration-5 log entry and flagged the macOS/Linux gap and 'should this become a formal app-lifecycle capability' as decisions_for_user rather than assumed.",
+      "cost_if_wrong": "Low — contained to one file pair, fully covered by tests including one real (unmocked) PowerShell invocation."
+    },
+    {
       "situation": "B6X's own queue entry (and tasks.md's B6.2-B6.4 lines) recorded a blocker — D13's helper not existing yet — that iteration 4 found was already false by the time it read the code.",
       "decision": "Verified the blocker was actually resolved (grepped for firing_active, read _batch_loop_summaries, confirmed LoopDetail extends LoopSummary) before proceeding, rather than trusting either the queue's or tasks.md's own prior note. Built B6.2-B6.4 as ordinary frontend work once confirmed. A blocker note in this file or in tasks.md is a claim like any other — verify against current code before treating it as still true.",
       "cost_if_wrong": "N/A — done."
@@ -92,6 +97,7 @@
   ],
 
   "decisions_for_user": [
+    "APP1's desktop shortcut is Windows-only. A macOS (.app wrapper or Automator alias) or Linux (.desktop file) equivalent was not researched or attempted — say if either matters to you and it becomes a scoped follow-up. Also unresolved: should this graduate into a formal app-lifecycle openspec requirement (with scenarios, like the archived native-window change has) now that it exists as code, or stay as an undocumented convenience? Judged the latter as proportionate for this run; your call if you want the former.",
     "Run 1's nine decisions are preserved in the log's iteration entries and were NOT discarded. The two that are genuine design questions, still unanswered and NOT actioned by this run: (a) `POST /jobs/{job_id}/archive` lets a job be archived while its Loop is still actively firing, hiding a running loop from the default listing — arguably the governance failure D17 exists to prevent, but D17's text is scoped to the loop, so run 1 did not extend it unilaterally; (b) run 1 changed the panel shell's mount condition while implementing a LOOP task (LB5), which you may want attributed to the panel change instead.",
     "`JobCard.tsx:121` renders `Icon name=\"all_inclusive\"`, which is not in Icon.tsx's ICONS map — it silently renders nothing. Pre-existing, one line. Not queued; say if you want it.",
     "Still open and untouched by either run: the D15 name-reuse hole (LA5 will RECORD it, not fix it — that is what the task asks for); whether an agent should be able to archive a bare job at all; and the two naming explorations, which may be a live question about renaming the product before more UI is built on the current name.",

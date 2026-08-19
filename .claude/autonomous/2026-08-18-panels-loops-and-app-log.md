@@ -2911,3 +2911,82 @@ Queue: B6X closed — every agent-verifiable task in both `2026-08-18-a-loop-wri
 and `2026-08-18-one-shell-three-panels` is now done (only human-only sections and A6.x/B7.x remain
 open, correctly untouched). Next: APP1 (desktop icon/shortcut — `src/agentweave/assets/icon.ico`
 already exists, confirmed present; scope not yet designed).
+
+## Run 2, iteration 5: APP1 — a Desktop shortcut so AgentWeave can be launched without a terminal (2026-08-19, ~10:10-10:35+01:00)
+
+**Scoping first.** `next_action` flagged APP1 as undesigned. Grepped `openspec/` for "desktop",
+"shortcut", "icon" — no open change covers this; the only hits were the archived
+`2026-08-18-2026-08-16-one-hub-and-a-window-of-its-own` (the pywebview *window* AgentWeave already
+opens once running — `_open_app_window_native`, `_app_icon_path`, `_set_windows_app_user_model_id`
+in `cli.py`) and its `app-lifecycle` spec. That change is a real, different thing: it makes the
+*already-running* app look native. It says nothing about how the operator gets from "nothing
+running" to "running" without opening a terminal and typing `agentweave` — that gap is what APP1's
+queue text ("a desktop icon/shortcut") actually names.
+
+**Judgement call, recorded per the queue's own instruction:** did not run `openspec-propose` for
+this. Reasoning: the addition is small and fully contained (one new private helper plus a two-line
+call site, no new CLI command — CLAUDE.md's "down from 56, to add a sixth see the exploration
+first" guard doesn't apply because nothing new is exposed on the argument parser), adds no new
+dependency (PowerShell's `WScript.Shell` COM object via `subprocess`, not `pywin32` — preserves the
+CLI's `dependencies = []` stance the archived change's own proposal called out), and is best-effort
+/ non-fatal by construction. If the operator wants this to carry a capability spec later (e.g. to
+extend it to macOS/Linux, or make it removable/configurable), that's a clean follow-up proposal
+against `app-lifecycle` — recorded in `decisions_for_user` below rather than assumed.
+
+**What was built.** `_create_desktop_shortcut()` in `cli.py`, called once from `_hub_native_start`
+right after `_hub_native_scaffold`, gated on `is_first_run` (never re-attempted on every start —
+also idempotent on its own if it were: it returns `False` and does nothing if
+`~/Desktop/AgentWeave.lnk` already exists, so a repeat call can't clobber a shortcut the operator
+moved or customized). Windows-only for v1 — no-ops immediately off `win32`; a macOS/Linux
+equivalent (`.app` wrapper / `.desktop` file) is unresearched and left as a named follow-up, not
+attempted.
+
+Target resolution (`_resolve_shortcut_target`) prefers `pythonw.exe -m agentweave` when a
+windowless interpreter sits next to the running one — this avoids a console window flashing behind
+the pywebview app window during startup (confirmed live: `agentweave.exe`, the console-script
+entry point, is console-mode; `pythonw.exe` is not). Falls back to `shutil.which("agentweave")`
+(the installed console-script exe, no `-m` args needed) when no `pythonw.exe` sibling exists, then
+to `sys.executable -m agentweave` as a last resort. The shortcut's icon is `_app_icon_path()` — the
+same packaged `icon.ico` the native window already uses, reused rather than duplicated.
+
+The `.lnk` itself is built via a PowerShell one-liner invoking `WScript.Shell`'s
+`CreateShortcut`/`.Save()`, all values passed through a single-quote PowerShell literal with `'`
+doubled for escaping (never string-interpolated into the command unescaped). `subprocess.run(...,
+timeout=15, check=True)` wrapped in a bare `except Exception: return False` — a missing PowerShell,
+a sandboxed process, or a locked Desktop folder degrades to "no shortcut," never to a failed Hub
+start.
+
+**Tests, mutation-checked.** Eight new tests in `tests/test_cli.py::TestDesktopShortcut`: no-op off
+Windows (asserts `subprocess.run` never called), idempotent skip when the `.lnk` already exists,
+swallows a `subprocess.run` exception without raising, targets `pythonw.exe` with `-m agentweave`
+and the icon when a `pythonw.exe` sibling exists, falls back to the console-script exe with no `-m`
+args and no `IconLocation` when it doesn't, and a source-level wiring regression guard on
+`_hub_native_start`. Mutation-checked the wiring guard specifically (the one most at risk of being
+vacuous): changed the call site from `if is_first_run and _create_desktop_shortcut():` to `if
+_create_desktop_shortcut():`, watched `test_hub_native_start_calls_create_shortcut_gated_on_first_run`
+fail by name (`assert '...' in src` — the guard string no longer matched), restored, watched it
+pass again. (First attempt at this used a `python3` alias that silently doesn't exist on this
+machine — the "mutation" script never ran, diffed identical, caught before trusting a false
+pass. Re-ran with `py -3.11`, which really did mutate the file, confirmed by the diff.)
+
+**One test is a real, unmocked integration test, not just mocked subprocess calls** — matching this
+repo's own "live-verified, not just mocked" standard from prior iterations. On `win32` (this dev
+box, and CI's `windows-latest` matrix leg — `ci.yml`'s matrix includes it), the test actually
+invokes PowerShell with `Path.home` redirected to `tmp_path`, then asserts the resulting file exists
+and its first four bytes match the fixed `ShellLinkHeader` magic (`0x0000004C` little-endian) —
+skipped (not xfailed) off Windows. Additionally, outside pytest, manually created a real shortcut
+under `testbed/scratch/shortcut_test/` (gitignored, cleaned up after) and read it back with a
+second, independent PowerShell invocation (`(New-Object -ComObject WScript.Shell).CreateShortcut(...)`)
+to confirm `TargetPath`/`Arguments`/`IconLocation`/`WorkingDirectory` all resolved to real,
+correct values — `pythonw.exe`, `-m agentweave`, the packaged `icon.ico` path, and the redirected
+home directory respectively.
+
+**Full verification.** `pytest tests/ -q`: 392 passed, 3 skipped (was 384/3 — +8 new). `ruff check`
+and `black --check` clean on both changed files. `mypy src/agentweave/cli.py`: no issues. `npx
+openspec validate --changes --strict`: 2/2 (unaffected — no openspec files touched, by design per
+the scoping decision above). No Hub/UI files changed this iteration; browser suite and `hub/tests/`
+not re-run (out of scope — nothing under `hub/` changed).
+
+Queue: APP1 closed. Next: APP2 (further app-experience improvements — undesigned, same "propose or
+judge contained" call to make) or FREE.
+

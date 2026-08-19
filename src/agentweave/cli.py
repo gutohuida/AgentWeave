@@ -749,6 +749,70 @@ def _open_app_window(url: str) -> None:
     webbrowser.open(url)
 
 
+def _resolve_shortcut_target() -> tuple:
+    """Choose what a desktop shortcut should launch: `pythonw.exe -m agentweave` when a
+    windowless interpreter sits next to the running one (so no console flashes behind
+    the app window), else the installed `agentweave` console script, else
+    `sys.executable -m agentweave` as a last resort. Returns (target, arguments)."""
+    pythonw = Path(sys.executable).with_name("pythonw.exe")
+    if pythonw.is_file():
+        return str(pythonw), "-m agentweave"
+    agentweave_exe = shutil.which("agentweave")
+    if agentweave_exe:
+        return agentweave_exe, ""
+    return sys.executable, "-m agentweave"
+
+
+def _create_desktop_shortcut() -> bool:
+    """Best-effort: drop an `AgentWeave.lnk` on the user's Desktop so the app can be
+    launched without a terminal. Windows only for now -- a macOS/Linux desktop-icon
+    equivalent is unresearched and left as a follow-up, same posture as design.md D5's
+    Linux GTK/Qt note for the native window itself. Creates the shortcut via
+    PowerShell's WScript.Shell COM object rather than a new pip dependency (pywin32),
+    matching CLAUDE.md's zero-runtime-dependency stance on the CLI's own code. Never
+    raises and never blocks Hub startup on failure -- this is convenience, not a
+    requirement for the app to run."""
+    if sys.platform != "win32":
+        return False
+
+    desktop = Path.home() / "Desktop"
+    lnk_path = desktop / "AgentWeave.lnk"
+    if lnk_path.exists():
+        # Idempotent: the call site only invokes this on first run, but a repeated
+        # call (e.g. from a test, or a future re-run of scaffolding) must not clobber
+        # a shortcut the operator may have moved, renamed, or customized in place.
+        return False
+
+    def _ps_quote(value: str) -> str:
+        return "'" + value.replace("'", "''") + "'"
+
+    try:
+        desktop.mkdir(parents=True, exist_ok=True)
+        target, arguments = _resolve_shortcut_target()
+        icon_path = _app_icon_path()
+
+        script_lines = [
+            f"$s = (New-Object -ComObject WScript.Shell).CreateShortcut({_ps_quote(str(lnk_path))})",
+            f"$s.TargetPath = {_ps_quote(target)}",
+            f"$s.Arguments = {_ps_quote(arguments)}",
+            f"$s.WorkingDirectory = {_ps_quote(str(Path.home()))}",
+            f"$s.Description = {_ps_quote('Launch AgentWeave')}",
+        ]
+        if icon_path:
+            script_lines.append(f"$s.IconLocation = {_ps_quote(icon_path)}")
+        script_lines.append("$s.Save()")
+
+        subprocess.run(
+            ["powershell", "-NoProfile", "-NonInteractive", "-Command", "; ".join(script_lines)],
+            capture_output=True,
+            timeout=15,
+            check=True,
+        )
+        return True
+    except Exception:
+        return False
+
+
 def _app_icon_path() -> Optional[str]:
     """Absolute path to the packaged provisional AgentWeave mark, if the asset is
     present on disk. Both an editable install and a built wheel put it at
@@ -888,6 +952,9 @@ def _hub_native_start(
 
         # 6. Scaffold .env (creates it with the same db_url if first run)
         env_path, api_key, is_first_run = _hub_native_scaffold(data_dir)
+
+        if is_first_run and _create_desktop_shortcut():
+            print_info("Desktop shortcut created (AgentWeave.lnk)")
 
         # 7. Run migrations
         print_info("Running database migrations...")

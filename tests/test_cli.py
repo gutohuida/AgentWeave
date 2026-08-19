@@ -522,6 +522,148 @@ class TestAppModeNativeWindow:
         assert "_open_app_window(" in wait_src
 
 
+class TestDesktopShortcut:
+    """APP1 — a Desktop shortcut (`AgentWeave.lnk`) is created on first native-mode run
+    so the app can be launched without a terminal. Windows only for now; a macOS/Linux
+    equivalent is an unresearched follow-up, recorded in the log rather than attempted
+    here. Built via PowerShell's `WScript.Shell` COM object, invoked as a subprocess, so
+    it adds no new pip dependency (CLAUDE.md: the CLI's own code stays stdlib-only)."""
+
+    def test_noop_off_windows(self, monkeypatch):
+        from agentweave import cli
+
+        monkeypatch.setattr(cli.sys, "platform", "darwin")
+        calls = []
+        monkeypatch.setattr(cli.subprocess, "run", lambda *a, **k: calls.append(a) or None)
+        assert cli._create_desktop_shortcut() is False
+        assert calls == []
+
+    def test_skips_when_shortcut_already_exists(self, tmp_path, monkeypatch):
+        """Idempotent: a second call (e.g. a second `agentweave` install, or a future
+        re-run) must not clobber a shortcut the operator may have moved or customized."""
+        from agentweave import cli
+
+        monkeypatch.setattr(cli.sys, "platform", "win32")
+        monkeypatch.setattr(cli.Path, "home", lambda: tmp_path)
+        desktop = tmp_path / "Desktop"
+        desktop.mkdir()
+        (desktop / "AgentWeave.lnk").write_text("existing", encoding="utf-8")
+
+        calls = []
+        monkeypatch.setattr(cli.subprocess, "run", lambda *a, **k: calls.append(a) or None)
+        assert cli._create_desktop_shortcut() is False
+        assert calls == []
+
+    def test_swallows_subprocess_errors(self, tmp_path, monkeypatch):
+        """A failure here (no PowerShell, a sandboxed process, whatever) must not raise —
+        this is convenience, not a requirement for the Hub to start."""
+        from agentweave import cli
+
+        monkeypatch.setattr(cli.sys, "platform", "win32")
+        monkeypatch.setattr(cli.Path, "home", lambda: tmp_path)
+
+        def _boom(*a, **k):
+            raise OSError("powershell not found")
+
+        monkeypatch.setattr(cli.subprocess, "run", _boom)
+        assert cli._create_desktop_shortcut() is False
+
+    def test_builds_powershell_script_targeting_pythonw_with_icon(self, tmp_path, monkeypatch):
+        """When a `pythonw.exe` sibling exists next to the running interpreter, the
+        shortcut targets it with `-m agentweave` (no console window flashes behind the
+        app window) rather than the console-mode `agentweave.exe`, and passes the
+        packaged icon through `IconLocation`."""
+        from agentweave import cli
+
+        monkeypatch.setattr(cli.sys, "platform", "win32")
+        monkeypatch.setattr(cli.Path, "home", lambda: tmp_path)
+        monkeypatch.setattr(cli, "_app_icon_path", lambda: r"C:\fake\icon.ico")
+
+        pythonw = tmp_path / "pythonw.exe"
+        pythonw.write_bytes(b"")
+        monkeypatch.setattr(cli.sys, "executable", str(tmp_path / "python.exe"))
+
+        calls = []
+
+        def fake_run(cmd, **kwargs):
+            calls.append(cmd)
+
+            class _Result:
+                returncode = 0
+
+            return _Result()
+
+        monkeypatch.setattr(cli.subprocess, "run", fake_run)
+        assert cli._create_desktop_shortcut() is True
+        assert len(calls) == 1
+        cmd = calls[0]
+        assert cmd[0] == "powershell"
+        script = cmd[-1]
+        assert "AgentWeave.lnk" in script
+        assert str(pythonw) in script
+        assert "-m agentweave" in script
+        assert r"C:\fake\icon.ico" in script
+
+    def test_falls_back_to_console_script_without_pythonw(self, tmp_path, monkeypatch):
+        """No `pythonw.exe` sibling (e.g. a venv layout that doesn't ship one) -> falls
+        back to `shutil.which("agentweave")`, the installed console-script entry point,
+        with no `-m agentweave` arguments (the exe itself is the entry point)."""
+        from agentweave import cli
+
+        monkeypatch.setattr(cli.sys, "platform", "win32")
+        monkeypatch.setattr(cli.Path, "home", lambda: tmp_path)
+        monkeypatch.setattr(cli, "_app_icon_path", lambda: None)
+        monkeypatch.setattr(cli.sys, "executable", str(tmp_path / "python.exe"))
+        monkeypatch.setattr(cli.shutil, "which", lambda name: r"C:\fake\Scripts\agentweave.exe")
+
+        calls = []
+        monkeypatch.setattr(
+            cli.subprocess,
+            "run",
+            lambda cmd, **k: calls.append(cmd) or type("R", (), {"returncode": 0})(),
+        )
+        assert cli._create_desktop_shortcut() is True
+        script = calls[0][-1]
+        assert r"C:\fake\Scripts\agentweave.exe" in script
+        assert "-m agentweave" not in script
+        # No icon patched in this case — IconLocation must not appear.
+        assert "IconLocation" not in script
+
+    def test_hub_native_start_calls_create_shortcut_gated_on_first_run(self):
+        """Regression guard for the call site inside `_hub_native_start`: the shortcut
+        must be attempted exactly once, gated on `is_first_run`, not on every start."""
+        import inspect
+
+        from agentweave import cli
+
+        src = inspect.getsource(cli._hub_native_start)
+        assert src.count("_create_desktop_shortcut()") == 1
+        assert "if is_first_run and _create_desktop_shortcut():" in src
+
+    def test_real_powershell_creates_a_valid_lnk_file_on_windows(self, tmp_path, monkeypatch):
+        """Live verification, not only a mocked subprocess call: on a real Windows
+        environment (this dev box, and CI's windows-latest matrix leg) actually invoke
+        PowerShell and confirm a genuine shell-link file lands on Desktop. `.lnk` files
+        begin with a fixed 4-byte header (ShellLinkHeader's HeaderSize field, always
+        0x0000004C little-endian) — checking it is a cheap, real structural assertion
+        that this is a shortcut, not an empty or garbage file."""
+        import sys as _sys
+
+        if _sys.platform != "win32":
+            import pytest
+
+            pytest.skip("PowerShell shortcut creation only runs on Windows")
+
+        from agentweave import cli
+
+        monkeypatch.setattr(cli.Path, "home", lambda: tmp_path)
+
+        assert cli._create_desktop_shortcut() is True
+        lnk_path = tmp_path / "Desktop" / "AgentWeave.lnk"
+        assert lnk_path.is_file()
+        assert lnk_path.read_bytes()[:4] == b"\x4c\x00\x00\x00"
+
+
 class TestDownloadWithSha256:
     """S9 — verify SHA256 of downloaded Hub docker-compose.yml and .env
     via a new _download_with_sha256 helper.
