@@ -288,18 +288,73 @@ Proves the whole shell without a loop or a file endpoint existing.
 
 ## 4. The file content endpoint
 
-- [ ] 4.1 `GET /api/v1/workspace/file?path=...`, project-scoped, resolving through
+- [x] 4.1 `GET /api/v1/workspace/file?path=...`, project-scoped, resolving through
       `project_workspace.resolve_project_workspace` like every other project-scoped route.
-- [ ] 4.2 Allowlist by **membership of `list_workspace_paths`'s own output** (design D7) — not a second
+- [x] 4.2 Allowlist by **membership of `list_workspace_paths`'s own output** (design D7) — not a second
       containment check. Test traversal, a symlink pointing outside the workspace, and a `.gitignore`d
       path; all refused because the listing does not contain them, not because a separate sanitizer
       caught them.
-- [ ] 4.3 Size bound at `aw_max_body_size`'s existing default. Over the bound: refuse, naming size and
+- [x] 4.3 Size bound at `aw_max_body_size`'s existing default. Over the bound: refuse, naming size and
       bound. Test that no partial body is returned.
-- [ ] 4.4 Binary detection: NUL byte in the first 8,000 bytes. Test an extensionless text file (a
+- [x] 4.4 Binary detection: NUL byte in the first 8,000 bytes. Test an extensionless text file (a
       `Makefile`) is treated as text and a small binary is not.
-- [ ] 4.5 Docker-mode path handling matches every other project-scoped route — container-visible paths
+- [x] 4.5 Docker-mode path handling matches every other project-scoped route — container-visible paths
       beneath `AW_WORKSPACE_ROOT` only, no host-path guessing.
+
+      **Done 2026-08-19, iteration 15.** Domain logic in `hub/hub/workspace_file.py`
+      (`read_workspace_file`), schema in `hub/hub/schemas/workspace.py`
+      (`WorkspaceFileResponse`), route `GET /file` added to the existing
+      `hub/hub/api/v1/workspace.py` beside `/paths`, mirroring its exact
+      `resolve_project_workspace` pattern (4.1, 4.5 — Docker parity is automatic:
+      `resolve_project_workspace(session, project_id)` with no `workspace_root` override
+      defaults to `configured_workspace_root()` internally, identical to `/paths`; no
+      bespoke path handling exists in this route to diverge).
+
+      4.2's allowlist is membership of `list_workspace_paths(workspace.root)`, exactly as
+      D7 specifies. One thing D7 understates: membership alone is not a *content*
+      guarantee, because `git ls-files` lists a symlink by its own path, not by where it
+      resolves — so a listed path can still be a symlink whose target lives outside the
+      workspace. The resolved filesystem path is therefore additionally passed through
+      `ProjectWorkspace.resolve_relative`, the same established primitive
+      `spec_documents.py` already uses for every other project-relative read (its own
+      docstring: "refuses absolute paths, traversal, control characters and symlink
+      escapes") — reuse of an existing, already-trusted primitive, not a second
+      independently-reasoned check invented for this endpoint, so D7's rejection of that
+      shape still holds. A manual empirical check that first appeared to show a real
+      symlink-escape leak (reading a `secret.txt` outside the repo through a `leak.txt`
+      symlink via git bash's `ln -s`) turned out to be a false positive: this machine
+      lacks `SeCreateSymbolicLinkPrivilege`, and Git for Windows' `ln -s` silently falls
+      back to copying the target's *content* into a plain file rather than failing —
+      confirmed via `fsutil reparsepoint query` reporting "not a reparse point" and the
+      file's on-disk size matching the target's content length exactly. `os.symlink`
+      (used by the actual test) correctly raises `WinError 1314` and the test skips, same
+      as `test_docker_workspace_root.py`'s own symlink test on this machine; a real
+      symlink is exercised on CI (Linux).
+
+      4.3's bound reads `settings.aw_max_body_size` fresh (confirmed 1_048_576, matching
+      D7's "1 MiB" claim) — checked via `stat()` before any content is read, so an
+      oversized file is refused with size and bound named in the message and never
+      partially returned (tested at the HTTP layer: response body has no `content` key,
+      both the file's actual size and the configured bound appear in the 413's text).
+
+      4.4's binary detection is `b"\x00" in data[:8000]`, tested against a `Makefile`
+      (extensionless, text) staying non-binary and a small PNG-header blob correctly
+      flagged binary with `content: null`.
+
+      New tests: `hub/tests/test_workspace_file_endpoint.py` (14 tests: 8 direct
+      `read_workspace_file` unit tests + 5 HTTP-layer tests including a Docker-mode
+      parity test that reuses `test_docker_workspace_root.py`'s own
+      `resolve_project_workspace`-restoration trick; 1 skips on this machine for the
+      reason above). `ruff check` and `black --check` clean on all four touched/new
+      files (`hub/hub/workspace_file.py`, `hub/hub/schemas/workspace.py`,
+      `hub/hub/api/v1/workspace.py`, the new test file) — one `N818` finding fixed by
+      renaming the two new exception classes to end in `Error`
+      (`WorkspaceFileNotFoundError`, `WorkspaceFileTooLargeError`) rather than adding a
+      `noqa`. `mypy hub/hub/` (repo-root cwd): 361 errors in 86 files — identical to
+      `.claude/autonomous/mypy-baseline.txt`'s total, zero new errors from this change.
+      `npx openspec validate --changes --strict`: 2/2 still pass. Full suite was NOT
+      re-run for this task — per `next_action`'s own note, that is deferred to the next
+      section-12-equivalent close-out point for this change.
 
 ## 5. The files tab
 
