@@ -102,10 +102,24 @@ class Project(Base):
     )
 
     # --- Checkpointing ---
-    # "off" | "offered" | "automatic". Off by default: a project should not start spending tokens
-    # on generation, or cutting conversations over, because it was upgraded.
+    # "off" | "offered" | "automatic".
+    #
+    # A **new** project starts at "offered"; the column default stays "off" so nothing changes for
+    # a project that already exists. The original reasoning — "a project should not start spending
+    # tokens on generation, or cutting conversations over, because it was upgraded" — is about
+    # upgrade safety, and it still holds: `server_default` is what an existing row kept, and no
+    # migration rewrites it.
+    #
+    # "offered" spends nothing on its own. `CheckpointPolicy.enabled` is
+    # `mode in ("offered", "automatic")` while only `automatic` acts unasked, so the token
+    # argument protects "automatic" and never reached "offered".
+    #
+    # Starting at "off" made the whole mechanism invisible: a loop's continuity between firings
+    # *is* its checkpoint (design D5, tasks 7.1-7.3, 9.1), so a fresh project's loops silently had
+    # no memory at all, and finding that out took three firings and a database query
+    # (human-only check 13.2, 2026-08-19).
     checkpoint_mode: Mapped[str] = mapped_column(
-        String(16), default="off", server_default="off", nullable=False
+        String(16), default="offered", server_default="off", nullable=False
     )
     # One mode plus one value, never two nullable value columns — "150 000 tokens" and "50%" are
     # the same setting expressed differently, and two columns make "both set" representable.

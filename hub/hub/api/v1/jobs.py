@@ -243,6 +243,42 @@ async def _batch_loop_summaries(
     return summaries
 
 
+async def _loop_continuity_warning(session: AsyncSession, project_id: str) -> Optional[str]:
+    """Why this project's loops will have no memory between firings, or None if they will.
+
+    A loop's continuity *is* its checkpoint: `latest_checkpoint_for_loop` is what carries one
+    firing's outcome into the next one's briefing (design D5, tasks 7.1-7.3, 9.1). With
+    checkpointing off, or with no runner able to generate one, every firing starts blank and the
+    briefing simply has no prior-checkpoint section.
+
+    Said at loop creation because that is the moment it can still be acted on. Driving human-only
+    check 13.2 on 2026-08-19 took three firings and a database query to notice, and only then
+    because the agent said so itself: "no prior checkpoint output was provided to me in this
+    firing."
+
+    Advisory, never a refusal — a loop with no memory is a legitimate thing to want; it just
+    should not be a surprise.
+    """
+    from ...checkpoint_policy import resolve_policy
+
+    project = await session.get(Project, project_id)
+    if project is None:
+        return None
+    policy = resolve_policy(None, project)
+    if not policy.enabled:
+        return (
+            "Checkpointing is off for this project, so each firing of this loop will start with "
+            "no memory of the last one. Turn it on in project settings to give the loop continuity."
+        )
+    if not policy.runner_id:
+        return (
+            "No checkpoint runner is configured for this project, so no checkpoint can be "
+            "generated and each firing of this loop will start with no memory of the last one. "
+            "Choose one in project settings to give the loop continuity."
+        )
+    return None
+
+
 def _pending_loop_edit(loop: Loop) -> Optional[Dict[str, Any]]:
     """Design D11 (task A2.4): report the staged edit separately from the live fields above,
     reading only `pending_edit_at`'s own presence — never inferring "is there a pending edit"
@@ -427,6 +463,8 @@ async def create_job(
     )
 
     job.loop = loop_summary
+    if loop_summary is not None:
+        job.continuity_warning = await _loop_continuity_warning(session, project_id)
     return job
 
 

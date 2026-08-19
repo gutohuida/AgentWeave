@@ -170,5 +170,11 @@ class JobResponse(BaseModel):
     archived_at: Optional[datetime] = None
     history: Optional[List[Dict[str, Any]]] = None  # Included in get_job only
     loop: Optional[LoopSummary] = None
+    # Set only when creating a loop into a project that cannot produce checkpoints. A loop's
+    # continuity between firings *is* its checkpoint (design D5, tasks 7.1-7.3, 9.1), so without
+    # one every firing starts blank — and nothing said so until three firings later
+    # (human-only check 13.2, 2026-08-19). Advisory, never a refusal: a loop with no memory is a
+    # legitimate thing to want, it just should not be a surprise.
+    continuity_warning: Optional[str] = None
 
     model_config = {"from_attributes": True}
