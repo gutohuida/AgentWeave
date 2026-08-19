@@ -629,16 +629,95 @@ class TestDesktopShortcut:
         # No icon patched in this case — IconLocation must not appear.
         assert "IconLocation" not in script
 
-    def test_hub_native_start_calls_create_shortcut_gated_on_first_run(self):
-        """Regression guard for the call site inside `_hub_native_start`: the shortcut
-        must be attempted exactly once, gated on `is_first_run`, not on every start."""
+    def test_hub_native_start_does_not_gate_the_shortcut_on_first_run(self):
+        """Regression guard for the call site inside `_hub_native_start`.
+
+        The original version read `if is_first_run and _create_desktop_shortcut():`.
+        `is_first_run` is `not env_path.exists()`, so on any install that had ever
+        started the Hub the shortcut could never be created -- exactly the operators
+        who already have AgentWeave. The gate now lives in
+        `_maybe_create_desktop_shortcut`, keyed on whether one has been *offered*.
+        This asserts the old condition is gone, not merely that the new one is present.
+        """
         import inspect
 
         from agentweave import cli
 
         src = inspect.getsource(cli._hub_native_start)
-        assert src.count("_create_desktop_shortcut()") == 1
-        assert "if is_first_run and _create_desktop_shortcut():" in src
+        assert "is_first_run and _create_desktop_shortcut()" not in src
+        assert src.count("_maybe_create_desktop_shortcut(") == 1
+
+    def test_offers_the_shortcut_on_an_install_that_already_has_an_env(self, tmp_path, monkeypatch):
+        """The defect this fix exists for: an existing install (`.env` present, so
+        `is_first_run` False) must still be offered a shortcut."""
+        from agentweave import cli
+
+        monkeypatch.setattr(cli, "HUB_DIR", tmp_path)
+        (tmp_path / ".env").write_text("DATABASE_URL=x\n", encoding="utf-8")
+        attempts = []
+        monkeypatch.setattr(cli, "_create_desktop_shortcut", lambda: attempts.append(1) or True)
+
+        assert cli._maybe_create_desktop_shortcut() is True
+        assert len(attempts) == 1
+        assert (tmp_path / cli.SHORTCUT_MARKER_NAME).exists()
+
+    def test_does_not_offer_twice_so_a_deleted_shortcut_stays_deleted(self, tmp_path, monkeypatch):
+        """Deleting the shortcut is a deliberate act; a launcher that reappears on every
+        start is worse than one that never appears."""
+        from agentweave import cli
+
+        monkeypatch.setattr(cli, "HUB_DIR", tmp_path)
+        attempts = []
+        monkeypatch.setattr(cli, "_create_desktop_shortcut", lambda: attempts.append(1) or True)
+
+        cli._maybe_create_desktop_shortcut()
+        cli._maybe_create_desktop_shortcut()
+        cli._maybe_create_desktop_shortcut()
+
+        assert len(attempts) == 1
+
+    def test_force_reoffers_past_the_marker(self, tmp_path, monkeypatch):
+        """`--desktop-shortcut` is the way back for an operator whose shortcut was
+        deleted, or whose first attempt failed."""
+        from agentweave import cli
+
+        monkeypatch.setattr(cli, "HUB_DIR", tmp_path)
+        attempts = []
+        monkeypatch.setattr(cli, "_create_desktop_shortcut", lambda: attempts.append(1) or True)
+
+        cli._maybe_create_desktop_shortcut()
+        cli._maybe_create_desktop_shortcut(force=True)
+
+        assert len(attempts) == 2
+
+    def test_a_failed_attempt_still_marks_so_it_does_not_retry_every_start(
+        self, tmp_path, monkeypatch
+    ):
+        """No PowerShell, a locked Desktop, or a non-Windows platform must not mean an
+        attempt on every single Hub start."""
+        from agentweave import cli
+
+        monkeypatch.setattr(cli, "HUB_DIR", tmp_path)
+        attempts = []
+        monkeypatch.setattr(cli, "_create_desktop_shortcut", lambda: attempts.append(1) or False)
+
+        assert cli._maybe_create_desktop_shortcut() is False
+        assert (tmp_path / cli.SHORTCUT_MARKER_NAME).exists()
+        assert cli._maybe_create_desktop_shortcut() is False
+        assert len(attempts) == 1
+
+    def test_desktop_shortcut_flag_is_parsed_and_reaches_the_native_start(self):
+        """The flag has to exist and be threaded through, or `force` is unreachable."""
+        import inspect
+
+        from agentweave import cli
+
+        args = cli.create_parser().parse_args(["--desktop-shortcut"])
+        assert args.desktop_shortcut is True
+        assert cli.create_parser().parse_args([]).desktop_shortcut is False
+
+        src = inspect.getsource(cli.cmd_hub_start)
+        assert 'getattr(args, "desktop_shortcut", False)' in src
 
     def test_real_powershell_creates_a_valid_lnk_file_on_windows(self, tmp_path, monkeypatch):
         """Live verification, not only a mocked subprocess call: on a real Windows

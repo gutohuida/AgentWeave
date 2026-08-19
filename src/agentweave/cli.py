@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any, List, Optional
 
 from . import __version__
-from .utils import load_dotenv, print_error, print_info, print_success, print_warning
+from .utils import load_dotenv, now_iso, print_error, print_info, print_success, print_warning
 
 logger = logging.getLogger(__name__)
 
@@ -813,6 +813,46 @@ def _create_desktop_shortcut() -> bool:
         return False
 
 
+#: Written beside `.env` once the shortcut has been *offered*, successfully or not.
+SHORTCUT_MARKER_NAME = ".desktop-shortcut-offered"
+
+
+def _maybe_create_desktop_shortcut(force: bool = False) -> bool:
+    """Offer the Desktop shortcut once per install -- not once per *fresh* install.
+
+    The first version gated this on `is_first_run`, which is `not env_path.exists()`.
+    That is true only for an install that has never started the Hub before, so every
+    operator who already had AgentWeave -- precisely the population that has it and
+    might want a launcher -- could never receive one. Measured on the machine this was
+    built for: `.env` dated 2026-08-01, gate permanently false, no shortcut ever
+    created despite the feature being implemented, tested and CI-green. No test caught
+    it because every test either calls the creation function directly or mocks the
+    gate; the defect lived entirely in the choice of condition.
+
+    The gate is now "have we offered one before", recorded by a marker file beside
+    `.env`. That keeps the one property `is_first_run` was really buying: deleting the
+    shortcut is a deliberate act, and a launcher that silently reappears on every
+    start is worse than one that never appears at all. `force=True` (the
+    `--desktop-shortcut` flag) ignores the marker, so an operator who deleted it, or
+    whose first attempt failed, can ask for it back without hand-editing state.
+
+    The marker is written whichever way the attempt goes. A machine with no
+    PowerShell, a locked Desktop folder, or a non-Windows platform must not re-attempt
+    on every single start.
+    """
+    marker = HUB_DIR / SHORTCUT_MARKER_NAME
+    if marker.exists() and not force:
+        return False
+
+    created = _create_desktop_shortcut()
+
+    with contextlib.suppress(OSError):
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text(f"{now_iso()}\n", encoding="utf-8")
+
+    return created
+
+
 def _app_icon_path() -> Optional[str]:
     """Absolute path to the packaged provisional AgentWeave mark, if the asset is
     present on disk. Both an editable install and a built wheel put it at
@@ -885,6 +925,7 @@ def _hub_native_start(
     app: bool = False,
     cwd: Optional[Path] = None,
     profile: str = "default",
+    desktop_shortcut: bool = False,
 ) -> int:
     """Start the Hub natively using uvicorn (no Docker).
 
@@ -953,8 +994,13 @@ def _hub_native_start(
         # 6. Scaffold .env (creates it with the same db_url if first run)
         env_path, api_key, is_first_run = _hub_native_scaffold(data_dir)
 
-        if is_first_run and _create_desktop_shortcut():
+        # Deliberately NOT gated on `is_first_run` -- see _maybe_create_desktop_shortcut.
+        # `is_first_run` is still returned and used below for the API-key notice, which
+        # genuinely is a first-run-only concern.
+        if _maybe_create_desktop_shortcut(force=desktop_shortcut):
             print_info("Desktop shortcut created (AgentWeave.lnk)")
+        elif desktop_shortcut:
+            print_info("Desktop shortcut already present, or could not be created")
 
         # 7. Run migrations
         print_info("Running database migrations...")
@@ -1066,7 +1112,12 @@ def cmd_hub_start(args: argparse.Namespace) -> int:
 
     if not docker:
         return _hub_native_start(
-            port=port, detach=not no_detach, app=app, cwd=Path.cwd(), profile=profile
+            port=port,
+            detach=not no_detach,
+            app=app,
+            cwd=Path.cwd(),
+            profile=profile,
+            desktop_shortcut=getattr(args, "desktop_shortcut", False),
         )
 
     import subprocess as _sp
@@ -1332,6 +1383,15 @@ For more help: https://github.com/gutohuida/AgentWeave
         type=str,
         default="default",
         help='Named Hub instance to use, isolated from the default one (default: "default")',
+    )
+    parser.add_argument(
+        "--desktop-shortcut",
+        action="store_true",
+        dest="desktop_shortcut",
+        help=(
+            "Create the Desktop shortcut even if one has already been offered "
+            "(Windows only; never overwrites an existing AgentWeave.lnk)"
+        ),
     )
 
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
