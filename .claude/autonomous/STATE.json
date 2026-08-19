@@ -8,7 +8,7 @@
   "stop_at": "2026-08-20T08:00:00+01:00",
   "stop_when_queue_empties": false,
   "run": 1,
-  "iteration": 0,
+  "iteration": 1,
   "session_stopped": false,
   "prepared_by": "Interactive session 2026-08-19T22:55-23:25+01:00, via /autonomous-prep. Both headline defects were reproduced or traced to a named line before being queued — item 1 by reading the render path end to end, item 2 by exercising the live API against two databases. Runway verified rather than assumed: playwright present, `pytest tests/test_project_lifecycle.py tests/test_project_persistence.py` 17 passed, vitest 1152 passed, tsc clean, working tree clean.",
   "operator_intent_verbatim": "Open any agentweave project with any agentweave app. Also: 'I think I clicked to create an agent in one project but it was actually creating into another project. Something weird there.'",
@@ -48,7 +48,7 @@
     {
       "id": "P1",
       "title": "Agent creation posts to the selected project, not the one you clicked",
-      "status": "pending",
+      "status": "done",
       "severity": "high — silently creates agents in the wrong project",
       "confirmed": "Yes, traced end to end tonight. Not a hypothesis.",
       "evidence": "hub/ui/src/App.tsx:474 sets agentCreateProjectId from the rail's per-project add button. App.tsx:516-524 renders <AgentCreateDialog open onClose onCreated /> and NEVER passes it — the value is used only to gate the render and to pick the post-create navigation target at line 522. Inside the dialog, useCreateAgent (hub/ui/src/api/agents.ts:318-329) posts to `/api/v1/projects/${selectedProjectId}/agents`. useCharters() and useProviderLaunchability(), also used by the dialog (AgentCreateDialog.tsx:150-152), read selectedProjectId too — so the charter list offered belongs to the wrong project as well.",
@@ -56,7 +56,8 @@
       "operator_decision": "Create in the clicked project AND switch selection to it. Chosen over 'leave selection alone' because every hook in that dialog reads selectedProjectId, and threading an explicit id through all of them is precisely the kind of thing that silently regresses — which is how this bug happened.",
       "do": "Make the rail's add-agent action select the clicked project before opening the dialog, reusing the existing open-project path (App.tsx:121 already calls setSelectedProject) rather than a second ad-hoc setter. Then verify the dialog's three hooks all resolve to the clicked project.",
       "verify": "A vitest test that asserts the POST URL carries the CLICKED project id when it differs from the selected one. Mutation-check it: revert the fix and watch that test fail by name before restoring.",
-      "note": "Consider whether threading an explicit projectId prop is ALSO worth doing as defence in depth. If it is cheap, do both; the operator's choice was about behaviour, not about forbidding belt-and-braces."
+      "note": "Consider whether threading an explicit projectId prop is ALSO worth doing as defence in depth. If it is cheap, do both; the operator's choice was about behaviour, not about forbidding belt-and-braces.",
+      "outcome": "Fixed in App.tsx: onAddAgent now navigates to the clicked project before opening the dialog, using the same projectDestination call onOpenProject already uses. New test src/__tests__/agentCreateProjectScope.test.tsx mounts App over a two-project rail; mutation-checked (revert -> exactly that test fails by name). tsc clean, vitest 1155 passed, eslint clean, bundle refreshed. Defence-in-depth prop threading deliberately NOT done - see the log entry for why."
     },
     {
       "id": "P2",
@@ -107,8 +108,8 @@
       "note": "The pinning is the same disease as P2 — identity that should travel, hard-coded to one place. Worth saying so in the commit message."
     }
   ],
-  "current": "P1",
-  "next_action": "Cut branch autonomous/2026-08-19-project-portability from master at 75c7685. Then start P1: open hub/ui/src/App.tsx and read lines 466-525 — the onAddAgent handler at 474 and the AgentCreateDialog render at 516-524. The bug is that agentCreateProjectId never reaches the dialog. Per the operator's decision, make the rail's add-agent action select the clicked project first, reusing the existing open-project path (App.tsx:121 already calls setSelectedProject) rather than adding a second ad-hoc setter. Then confirm all three of the dialog's hooks — useCreateAgent (api/agents.ts:318), useCharters, useProviderLaunchability — resolve to the clicked project. Write the vitest test FIRST if practical, and mutation-check it either way: revert the fix, watch the test fail by name, restore.",
+  "current": "P2",
+  "next_action": "Start P2 - the item the operator named as the point of the night. This is an OPENSPEC change, not a direct fix. Step 1: run /openspec-propose for a change named 2026-08-20-portable-project-identity against the local-multi-project-workspace capability. The proposal must state the behaviour change (hub/hub/project_lifecycle.py open_existing case 3, lines 86-90: a marker naming a project THIS database does not have is currently refused as 'copied or orphaned'; it should ADOPT that project id and open) AND record why the current refusal was reasonable when written and why it is not now - real copy detection lives in _guard_relocation (lines 190-208, case 2) and is untouched by this. Do NOT implement before the proposal and spec delta exist and `npx openspec validate --changes --strict` passes. Then implement: create the project row with the marker's id, seed it as _seed_new_project does (runners + starter charters), record an adoption event, open. Tests owed: (a) orphaned marker adopted, id preserved; (b) delete-then-reopen returns the SAME id; (c) two directories with one marker - second still refused. hub/tests/test_project_lifecycle.py:75 must stay green UNTOUCHED - it is the proof the copy guard survived.",
   "decisions_for_user": [
     {
       "id": "D-env",
@@ -150,7 +151,7 @@
     "openspec_changes_in_flight": "none — `ls openspec/changes/ | grep -v archive` is empty",
     "not_run_at_prep": "Full hub/tests/ suite and eslint were NOT run tonight. The loop should establish its own baseline early so it can tell inherited breakage from its own."
   },
-  "last_heartbeat": "2026-08-19T23:26:19+01:00",
+  "last_heartbeat": "2026-08-19T23:31:38+01:00",
   "log_file": ".claude/autonomous/2026-08-19-project-portability-log.md",
   "driver": "Windows Scheduled Task 'AgentWeaveAutonomousSession' -> .claude/skills/autonomous-session/scripts/run-iteration.ps1 -> headless `claude -p`. Each firing is a fresh process; all continuity is STATE.json + the log. Session-bound drivers (ScheduleWakeup, CronCreate) are NOT used - the 2026-08-15 run asked for nine hours and got forty minutes because the session went away."
 }

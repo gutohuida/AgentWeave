@@ -471,7 +471,17 @@ export default function App() {
             onOpenSpecDocument={(id, path) =>
               navigateTo(projectDestination(id, 'spec', path), { replace: true })
             }
-            onAddAgent={(id) => setAgentCreateProjectId(id)}
+            // Navigating is not decoration here, it is what scopes the dialog. Everything the
+            // dialog reads — `useCreateAgent`, `useCharters`, `useProviderLaunchability` — resolves
+            // the *selected* project, and selection is derived from the destination by the effect
+            // above. So opening the dialog without navigating first pointed all three at whichever
+            // project happened to be selected: the agent was created there, and then the operator
+            // was navigated to the project they clicked, to an agent that was not in it. Every
+            // other rail action already navigates; this was the one that did not.
+            onAddAgent={(id) => {
+              navigateTo(projectDestination(id))
+              setAgentCreateProjectId(id)
+            }}
             // One action. `open_existing` resolves a known path, a marked directory, or a plain
             // folder it initialises, so "create" never needed a separate entry point.
             onAddProject={() => setProjectManagerMode('open')}
