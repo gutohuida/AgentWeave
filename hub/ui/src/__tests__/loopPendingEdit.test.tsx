@@ -52,7 +52,6 @@ describe('LoopTab — a staged edit versus the definition in force', () => {
 
     expect(screen.queryByTestId('loop-tab-pending-edit')).not.toBeInTheDocument()
     expect(screen.queryByTestId('loop-tab-pending-badge')).not.toBeInTheDocument()
-    expect(screen.queryByTestId('loop-tab-purpose-staged')).not.toBeInTheDocument()
   })
 
   it('states both values, each labelled by when it applies', () => {
@@ -75,15 +74,21 @@ describe('LoopTab — a staged edit versus the definition in force', () => {
     expect(screen.getByTestId('loop-tab-pending-edit-who')).toHaveTextContent('q2verify')
   })
 
-  it('marks the live purpose where it is read, not only in the panel', () => {
+  it('leaves the live purpose unannotated — the panel above it is the only place this is said', () => {
+    // A first cut annotated it in place too. The panel renders directly above, so the annotation
+    // restated what was already on screen; the operator judged it noise (2026-08-19).
     renderLoop({
+      purpose: 'sweep the queue',
       pending_edit: { staged_at: new Date().toISOString(), purpose: 'something else' },
     })
 
-    expect(screen.getByTestId('loop-tab-purpose-staged')).toHaveTextContent('in force now')
+    expect(screen.queryByTestId('loop-tab-purpose-staged')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('loop-tab-stop-condition-staged')).not.toBeInTheDocument()
+    // The live value itself is still shown, unchanged and unqualified.
+    expect(screen.getByTestId('loop-tab')).toHaveTextContent('sweep the queue')
   })
 
-  it('marks the live stop condition when either stop field is staged', () => {
+  it('pairs the live stop condition with the staged one, in the panel', () => {
     renderLoop({
       stop_when_queue_empties: true,
       pending_edit: { staged_at: new Date().toISOString(), stop_when_queue_empties: false },
@@ -92,7 +97,6 @@ describe('LoopTab — a staged edit versus the definition in force', () => {
     const row = screen.getByTestId('loop-tab-pending-stop_when_queue_empties')
     expect(row).toHaveTextContent('In force now: when the queue empties')
     expect(row).toHaveTextContent('From the next firing: not when the queue empties')
-    expect(screen.getByTestId('loop-tab-stop-condition-staged')).toBeInTheDocument()
   })
 
   it('does not invent a change to a field the edit never touched', () => {
@@ -102,7 +106,6 @@ describe('LoopTab — a staged edit versus the definition in force', () => {
     })
 
     expect(screen.queryByTestId('loop-tab-pending-purpose')).not.toBeInTheDocument()
-    expect(screen.queryByTestId('loop-tab-purpose-staged')).not.toBeInTheDocument()
   })
 
   it('says the running firing keeps the live definition, which is when "next firing" is ambiguous', () => {

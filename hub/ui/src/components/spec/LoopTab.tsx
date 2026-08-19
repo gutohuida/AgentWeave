@@ -63,6 +63,12 @@ function stagedFields(loop: LoopSummary): Array<{ key: string; label: string; no
  * now" against "From the next firing". A firing already running keeps the live definition to its
  * end — stated explicitly here, because that is exactly the case where "next firing" is ambiguous
  * and an operator watching a run could otherwise believe their edit is already governing it.
+ *
+ * This panel is the *only* place the distinction is drawn. A first cut also annotated the live
+ * purpose and stop condition in place, guarding against an operator who reads one of them and
+ * stops there — but the panel renders directly above both, so the annotation restated what was
+ * already on screen twice over, and the operator judged it noise (2026-08-19). If either live
+ * field ever moves out of this panel's sightline, the guard becomes real again.
  */
 function PendingEdit({ loop }: { loop: LoopSummary }) {
   const pending = loop.pending_edit
@@ -162,10 +168,6 @@ export function LoopTab({ loopId, onClose }: LoopTabProps) {
 
   const queueEntries = Object.entries(loop.queue)
   const totalQueued = queueEntries.reduce((sum, [, n]) => sum + n, 0)
-  // Which live fields a staged edit will replace, so each is marked where it is read rather than
-  // only in the panel below it. An operator who scrolls to the purpose and stops there must not
-  // come away believing it is settled.
-  const staged = new Set(stagedFields(loop).map((row) => row.key))
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col overflow-y-auto p-3" data-testid="loop-tab">
@@ -206,15 +208,6 @@ export function LoopTab({ loopId, onClose }: LoopTabProps) {
       {loop.purpose && (
         <p className="mt-3" style={{ fontSize: 12, color: 'var(--text)' }}>
           {loop.purpose}
-          {staged.has('purpose') && (
-            <span
-              data-testid="loop-tab-purpose-staged"
-              style={{ fontSize: 11, color: 'var(--amber)' }}
-            >
-              {' '}
-              (in force now — a staged edit replaces it at the next firing)
-            </span>
-          )}
         </p>
       )}
 
@@ -226,12 +219,6 @@ export function LoopTab({ loopId, onClose }: LoopTabProps) {
             : loop.stop_when_queue_empties
               ? 'when the queue empties'
               : 'runs until stopped by the operator'}
-          {(staged.has('stop_at') || staged.has('stop_when_queue_empties')) && (
-            <span data-testid="loop-tab-stop-condition-staged" style={{ color: 'var(--amber)' }}>
-              {' '}
-              (in force now — a staged edit replaces it at the next firing)
-            </span>
-          )}
         </p>
         {loop.stopped_at && <p>Stopped {formatDistanceToNow(hubDate(loop.stopped_at), { addSuffix: true })}</p>}
       </div>

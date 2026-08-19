@@ -1726,12 +1726,16 @@ two files touched here).
       the running firing undisturbed, applied at the next one, and the two states reported
       separately and unambiguously.
 
-      **But `pending_edit` has no UI surface** — nothing in `hub/ui/src` reads it, `LoopTab`
-      included. So the question A6.1 actually asks ("is it obvious which is in force *right now*")
-      cannot be judged: neither definition is shown to the operator at all. Same position as A6.3.
-      Either it needs a pending-edit indicator on `LoopTab`, or A6.1 is not-applicable for now on
-      the same "the endpoint is enough" reasoning — operator's call.
-      Not whether both are shown, but whether it is obvious which is in force right now.
+      **`pending_edit` had no UI surface** — nothing in `hub/ui/src` read it, `LoopTab` included. So
+      the question A6.1 actually asks ("is it obvious which is in force *right now*") could not be
+      judged: neither definition was shown to the operator at all. The operator's call was to build
+      it rather than mark this not-applicable the way A6.3 was.
+
+      **Unblocked 2026-08-19 by B9.1-B9.3 below.** The surface now exists and was driven against the
+      live trial Hub with a real staged edit on `loop-57f2f62c` — captures in
+      `testbed/scratch/shots/pending-0{2,3}-loop-tab-*.png`, both themes. Still the operator's to
+      judge, and still unticked: what is being asked is not whether both are shown, but whether it
+      is obvious which is in force right now.
 - [x] A6.2 **Is the refusal of a late task helpful or merely correct?** Does it read as the product
       helping, or as it saying no?
 - [x] A6.3 **Is delegating control discoverable without being easy to do by accident?**
@@ -2340,3 +2344,75 @@ Run after the guides already in this file:
 **Where it would go wrong.** If step 13 succeeds anywhere, D16 is not enforced at the route and only
 in the UI. If step 15 shows "stopped" rather than "completed", B2.5 is not setting the value at the
 drain path. If step 16 archives silently, B3.2 fell back to `create_job`'s allowance-only gate.
+
+## B9. Loop traceability — the marker, the staged edit, and the times
+
+Approved by the operator 2026-08-19 after A6.1 and 13.2 were found blocked on missing surfaces
+rather than on judgement. **A fourth item was proposed and explicitly dropped** — staging
+`job.message` as a pending edit (*"forget about 4 you misunderstood me"*). Do not reopen it.
+
+- [x] B9.1 **A conversation created by a loop firing names its loop.** `ConversationResponse` gains
+      `loop: {id, label} | null`, populated in `_to_response` (`hub/hub/api/v1/agent_chat.py`) by ONE
+      batched `JobRun -> AIJob -> Loop` join alongside the existing attention query — never per row,
+      following `_batch_loop_summaries`' own rule. Both list endpoints get it: the per-agent
+      `/agent/{agent}/conversations` and the project-wide `/conversations` the rail actually reads.
+
+      The join to `Loop` is **inner, deliberately**. A plain scheduled job carries the same
+      `origin == "job"` and has no loop, so it falls out with `null` — which is the whole point:
+      `origin` cannot make this distinction, and a marker driven off it would mislabel every plain
+      job as a loop. `hub/tests/test_conversation_loop_marker.py` pins exactly that, plus the
+      deterministic answer when more than one firing reaches one conversation (newest wins).
+
+- [x] B9.2 **The marker on the conversation row** (`ConversationRow.tsx`), following the existing
+      `origin === 'peer'` branch rather than inventing a second pattern. It opens the existing
+      `loop:<loop_id>` drill-down through `panelTabsStore.openTab`.
+
+      Two structural points worth keeping. It is a **sibling** of the row button, not a child —
+      nesting one button inside another is invalid HTML and this one has its own destination. And it
+      is deliberately **not** `.row-action`, which hides at rest and reveals on hover: that is right
+      for an action and wrong for the fact that distinguishes a firing from a thread the operator
+      typed, which has to be legible while scanning.
+
+      *Rejected:* another expandable level in the left rail, which was the operator's first
+      suggestion. Loops already have two surfaces (the `loops` index and the `loop:<id>` drill-down,
+      which already lists firing history); a third would render the same history twice — exactly what
+      the panel change's design D2 rejects. The operator accepted the reasoning.
+
+- [x] B9.3 **The pending-edit indicator on `LoopTab`** — what A6.1 was blocked on. An "Edit staged"
+      badge, and a panel pairing each staged field with the value it replaces, each labelled **in
+      words** ("In force now" / "From the next firing") rather than by position or colour, because
+      the question A6.1 asks is whether the distinction survives being read quickly.
+
+      Two cases stated rather than left to inference: a firing already running keeps the live
+      definition to its end (precisely when "next firing" is ambiguous), and an edit that touched no
+      field the panel shows still says it exists rather than rendering an empty box that reads as a
+      bug — `pending_edit_at` set with every per-field column NULL is legitimate.
+
+      **A first cut also annotated the live purpose and stop condition in place** and was removed on
+      the operator's judgement (2026-08-19): the panel renders directly above both, so the
+      annotation restated what was already on screen. Recorded because the guard becomes real again
+      if either field ever moves out of the panel's sightline.
+
+- [x] B9.4 **Times read as the instants they are** (`hub/ui/src/lib/hubTime.ts`). Found while
+      capturing B9.3 against the live Hub: an edit staged seconds earlier rendered as *"about 1 hour
+      ago"*.
+
+      The columns are `DateTime(timezone=True)`, but SQLite stores no timezone, so a value read back
+      through SQLAlchemy is naive and Pydantic serialises it bare — `"2026-08-19T19:09:01.285899"`,
+      no `Z`, no offset. `new Date()` reads a bare date-time string as **local**, so on any machine
+      not on UTC every relative time is wrong by that offset. The same `staged_at` comes back *aware*
+      from `PATCH /jobs/{job_id}` (still the in-memory aware object) and *naive* from
+      `GET /loops/{loop_id}` (through SQLite), so both shapes reach one component — which is why
+      `hubDate` adds the missing label and leaves an already-labelled string alone.
+
+      **Scoped to `LoopTab`'s five parses, and no further.** The same fault reaches every surface
+      calling `formatDistanceToNow` on a Hub timestamp — 12 components, confirmed live on
+      `conversations.updated_at` and `tasks.created_at` too. Fixing it at the **serialisation
+      boundary** instead is the better fix and is left open as the operator's call; this task does
+      not attempt it and does not pretend the rest is fixed.
+
+- [ ] B9.5 **Grouping consecutive firings of one loop** into a single expandable row in `AgentTree`
+      and `RecencyView`. Deliberately not started: the operator's instruction was to do this last and
+      only after living with B9.2's marker, since grouping may turn out to be unnecessary once a
+      firing is merely *identifiable*. Same reasoning as B9.2's rejected rail level — solve flooding
+      in the existing list, never with a new hierarchy.

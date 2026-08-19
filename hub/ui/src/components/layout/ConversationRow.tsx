@@ -194,10 +194,15 @@ export function ConversationRow({
            * tells it apart from one the operator typed, so it has to be legible while scanning. */
           <button
             type="button"
-            className="flex shrink-0 items-center gap-0.5 rounded px-1 py-0.5 text-[10px]"
+            /* `min-w-0` and a proportional cap rather than `shrink-0` and a fixed width: the rail
+             * is narrow, and a fixed 96px marker truncated real conversation titles to "taste…"
+             * — which loses the thing the row is primarily for to the thing that qualifies it.
+             * The icon never shrinks, so a firing stays identifiable even when the name is cut;
+             * the full name is on the tooltip and the accessible name either way. */
+            className="flex min-w-0 items-center gap-0.5 rounded px-1 py-0.5 text-[10px]"
             data-testid={`${testId}-loop`}
             data-loop-id={loop.id}
-            style={{ color: 'var(--text-3)', maxWidth: 96 }}
+            style={{ color: 'var(--text-3)', maxWidth: '40%' }}
             title={`Fired by the loop “${loop.label}” — open it`}
             aria-label={`Open loop ${loop.label}`}
             onClick={(event) => {
@@ -205,7 +210,7 @@ export function ConversationRow({
               openTab(projectId, loopTabId(loop.id))
             }}
           >
-            <Icon name="sync" size={11} aria-hidden="true" />
+            <Icon name="sync" size={11} className="shrink-0" aria-hidden="true" />
             <span className="truncate">{loop.label}</span>
           </button>
         )}
