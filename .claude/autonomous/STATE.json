@@ -8,9 +8,9 @@
   "stop_at": "2026-08-19T13:00:00+01:00",
   "stop_when_queue_empties": false,
   "run": 2,
-  "iteration": 0,
+  "iteration": 1,
   "session_stopped": false,
-  "last_heartbeat": null,
+  "last_heartbeat": "2026-08-19T08:39:00+01:00",
   "prepared_by": "Interactive review session 2026-08-19T07:58-08:40+01:00. Run 1's claims were re-verified rather than trusted: every suite re-run, the browser suite's failures reproduced and diagnosed to a named line, and CI's absence confirmed via `gh run list`.",
 
   "what_run_1_achieved": {
@@ -32,12 +32,12 @@
   ],
 
   "queue": [
-    {"id": "C4", "title": "Open the draft PR so CI finally runs on all 62+ commits", "status": "open"},
-    {"id": "C1", "title": "FIX the active-tab steal (ConversationView.tsx:199-211) and de-vacuum its test", "status": "open"},
-    {"id": "C2a", "title": "Fix the remaining real browser failures: test_files_tab (3 in isolation)", "status": "open"},
-    {"id": "C2b", "title": "Fix the fixture-drift failures: test_job_loop_block (2), test_loops_index (1)", "status": "open"},
-    {"id": "C3", "title": "Make the browser suite order-independent — it is currently state-coupled", "status": "open"},
-    {"id": "C5", "title": "Examine the xpassed test; fix or remove the stale xfail marker", "status": "open"},
+    {"id": "C4", "title": "Open the draft PR so CI finally runs on all 62+ commits", "status": "done", "note": "PR #5, draft. CI green on the pre-fix commit (7m12s) — no cross-platform break found."},
+    {"id": "C1", "title": "FIX the active-tab steal (ConversationView.tsx:199-211) and de-vacuum its test", "status": "done", "note": "panelTabsStore.replaceTabId added; mutation-checked at both the store level and, harder, by reverting the UI build and watching the rewritten Playwright test fail by name before restoring the fix."},
+    {"id": "C2a", "title": "Fix the remaining real browser failures: test_files_tab (3 in isolation)", "status": "done", "note": "Resolved as a side effect of C1 — was the false-green cascade, not a files-tab defect. Confirmed clean in isolation and in the full run."},
+    {"id": "C2b", "title": "Fix the fixture-drift failures: test_job_loop_block (2), test_loops_index (1)", "status": "done", "note": "test_job_loop_block: job_counts fixture derives total/with-loop from the live API instead of hardcoded 3/2. test_loops_index: was actually a second C1-class race (raw text_content() read racing the loops query), fixed with expect().to_contain_text."},
+    {"id": "C3", "title": "Make the browser suite order-independent — it is currently state-coupled", "status": "done", "note": "Investigated rather than rewritten: conftest.py's `page` fixture is already function-scoped with a fresh browser context per test, so localStorage was never actually shared. Full suite ran 53/53 twice back to back post-fix. Recorded as the finding; no rewrite needed on current evidence."},
+    {"id": "C5", "title": "Examine the xpassed test; fix or remove the stale xfail marker", "status": "done", "note": "test_agent_trigger_overrides.py's xfail(strict=False) is a documented, intentional tolerance for a SQLite StaticPool fixture race. Ran 3x in isolation, xpassed all 3 (isolation removes the contention the race needs) — matches both this run's '1 xpassed' and CI-on-master's '1 xfailed': same coin flip. Not stale; no change made."},
     {"id": "A45", "title": "A4.5 crash reconciliation — a crashed run must not leave a firing in progress", "status": "open"},
     {"id": "LA5", "title": "A5.1-A5.3 write-once loop_id, and RECORD (do not fix) the D15 name gap", "status": "open"},
     {"id": "B6X", "title": "B6.2-B6.4 the live active-now indicator, SSE updates, reduced motion", "status": "open"},
@@ -45,8 +45,8 @@
     {"id": "APP2", "title": "App experience: further improvements", "status": "open"},
     {"id": "FREE", "title": "Free choice: outstanding fixes, findings, whatever is most needed", "status": "open"}
   ],
-  "current": "C4",
-  "next_action": "C4, and it is deliberately first because it is two minutes of work that starts a 7-minute CI cycle running in the background while you do C1. Open a DRAFT pull request from `autonomous/2026-08-18-panels-loops-and-app` to `master` with `gh pr create --draft`. Title it so the operator can find it; body should summarise run 1 (62 commits, both changes driven, hub suite 2440 passed) AND state plainly that the browser suite is currently 8/53 red with fixes in flight, so nobody reads the PR as ready. NEVER mark it ready for review and NEVER merge it — the operator's standing limit is 'no merging to master unattended'. Then confirm CI actually started with `gh run list --branch autonomous/2026-08-18-panels-loops-and-app`. If CI comes back red on something run 1 could not see (a Linux/macOS/py3.12-only failure), insert fixing that at the FRONT of the queue ahead of C1 — a cross-platform break is worth more than a UI polish fix.",
+  "current": "A45",
+  "next_action": "A4.5 — crash reconciliation: a crashed run must not leave a firing in progress. Use the stale fixture already sitting on the trial Hub (see pre_authorised below: loop-8e86eb9f / job-0b490274 in proj-5e960453 — verify it is still stuck 'in_progress' before relying on it). Read openspec/changes/2026-08-18-a-loop-writes-its-own-queue/tasks.md for A4.5's exact wording and openspec/changes/2026-08-18-a-loop-writes-its-own-queue/design.md for how A4.1-A4.4 (already done, iterations 26-28 of run 1) modeled 'firing_active'. The fix needs a place that runs on Hub startup (or on next access) that finds JobRun/firing state stuck in_progress with no live process behind it and reconciles it to a real ending state. Write the test FIRST against the stale fixture, watch it fail, then implement. Verify against the real trial Hub, not just unit tests.",
 
   "pre_authorised": [
     {

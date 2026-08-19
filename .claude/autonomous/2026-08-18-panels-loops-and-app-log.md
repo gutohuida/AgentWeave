@@ -2653,3 +2653,111 @@ C4 (open the PR, start CI) → C1 (the active-tab steal, with a test proven to f
 (the remaining browser failures, real defects separated from fixture drift) → C3 (suite isolation)
 → C5 (the xpass) → A4.5 → LA5 → B6.2–B6.4 → APP1/APP2 → FREE. Corrections before new work,
 deliberately: finishing the last 7 tasks on top of a red suite would only bury the failures deeper.
+
+---
+
+## Run 2, iteration 1 (2026-08-19, ~08:25–08:40 +01:00) — C4, C1, C2a, C2b, C3, C5
+
+### C4 — draft PR opened, CI confirmed green
+
+Opened `gh pr create --draft` from this branch to `master`
+(https://github.com/gutohuida/AgentWeave/pull/5, title prefixed `[DRAFT, DO NOT MERGE]`, body
+states plainly that the browser suite was red with fixes in flight). `gh run list --branch` showed
+both `CI` and `Docs` workflows start within 15 seconds and finish green (`CI` in 7m12s) — on the
+pre-fix commit, so **no cross-platform break** was found that needed to jump the queue ahead of C1.
+
+### C1 — the active-tab steal, fixed and mutation-checked both ways
+
+`ConversationView.tsx`'s re-key effect upgraded a document tab from its path-keyed fallback to its
+Hub-id key by calling `closeTab` then `openTab` once the workspace inventory resolved. `openTab`
+forces activation, so a late inventory resolve stole the active tab back from whatever the operator
+had since selected — reproduced live via `testbed/scratch/diag_panel_shell.py` exactly as the
+review described.
+
+Fix, per the run's own pre-authorised decision: added `panelTabsStore.replaceTabId(projectId,
+previousId, nextId)` — swaps a tab's id in place, preserving strip position and `activeTabId`
+*unless* the tab being re-keyed was itself the active one (in which case it stays active under its
+new key). Folds into an existing `nextId` tab rather than duplicating if one is already open.
+`ConversationView`'s effect now calls this instead of `closeTab` + `openTab` for the re-key case;
+the genuine-attach-change branch is untouched (still `openTab`, still forces activation — that one
+is a real operator action).
+
+**Mutation-checked at the store level:** forced `replaceTabId` back to unconditional activation,
+watched the new store test (`replaceTabId re-keys a tab in place without disturbing activeTabId`)
+fail by name with the exact expected-vs-actual mismatch, reverted, watched it pass.
+
+**Mutation-checked at the Playwright level, the harder proof:** reverted `ConversationView.tsx` to
+the pre-fix `closeTab`+`openTab` pair, rebuilt the UI bundle (`npm run build` +
+`refresh_ui_bundle.py`), ran the rewritten
+`test_the_specs_index_tab_opens_from_the_plus_affordance` against the live trial Hub — it failed
+with `aria-selected` `false` on `panel-tab-specs`, the exact symptom the review reproduced by hand.
+Restored the real fix, rebuilt, re-ran — passed. The rewrite itself: click the plus affordance
+first (matching a real operator, and the original race window), THEN wait for the document tab to
+reach its steady-state key (i.e. for the inventory fetch, in flight or not, to resolve) BEFORE
+asserting on the specs tab — so the assertion measures steady state rather than winning a race
+against an `expect()` auto-retry that stops as soon as it sees one true value.
+
+### C2a — the `test_files_tab` failures: resolved as a side effect, not touched directly
+
+After the C1 fix and a UI rebuild, a full `tests/browser` run came back **50 passed, 3 failed** —
+down from the review's 8. The 3 remaining were exactly C2b's fixture drift; `test_files_tab.py` in
+isolation and inside the full run both came back clean. The false-green cascade (one test's race
+corrupting the next test's starting state) was almost certainly the actual cause the review
+attributed to `test_files_tab` specifically — fixing C1 fixed it.
+
+### C2b — fixture drift, derived from the API instead of hardcoded
+
+`proj-5e960453` now carries 8 jobs (three original taste-pass fixtures plus five smoke-test loops
+left deliberately as evidence by earlier iterations: `smoke-b3-loop`, `LB4 Smoke Loop`, `LA3 smoke
+loop`, `A4 smoke loop`, `A4 smoke loop B`), of which 7 carry a `loop` object.
+`test_job_loop_block.py` hardcoded `3` (total) and `2` (with-loop). Added a `job_counts` fixture
+that reads `GET /api/v1/projects/{id}/jobs` live and computes both counts, so the test still
+verifies "a loop block renders only for jobs that have a loop" as a real regression check rather
+than asserting a number that will rot the next time a run adds another smoke fixture. Renamed
+`test_jobs_page_shows_all_three_fixture_jobs` → `..._the_three_taste_pass_fixture_jobs` since
+"all" stopped being true.
+
+`test_loops_index.py`'s failure turned out to be a **second instance of the same race class as
+C1**, not fixture drift as `STATE.json` had guessed: `assert "running" in summary.text_content()`
+read the summary span's text immediately after `expect(...).to_be_visible()`, which does not wait
+for content to settle — catching the `LoopsIndexTab`'s own pre-fetch "No loops" default before
+`GET /projects/{id}/loops` resolved. Switched to `expect(summary).to_contain_text("running",
+timeout=10_000)`, which retries. No fixture-count change was needed here at all.
+
+### C3 — order-independence: already true, not a rewrite needed
+
+Investigated before doing the "cheap half" rewrite the pre-authorised decision described (fresh
+browser context per test). Found it already exists: `conftest.py`'s `page` fixture is
+function-scoped and calls `browser.new_context()` per test — every test already gets its own
+`localStorage`, so `aw.spec.treeCollapsed` cannot leak between tests the way the review speculated.
+Ran the full `tests/browser` suite twice back to back after the C1/C2 fixes: **53 passed, 53
+passed**, no flakiness, no order-dependence observed. The order-dependence the review saw was very
+likely entirely downstream of C1's cascading false-green failures, now fixed. Recording this as the
+finding rather than doing a fixture-isolation rewrite that current evidence does not show is
+needed — the operator can ask for it if flakiness resurfaces.
+
+### C5 — the xpass: examined, not stale, no change needed
+
+`test_agent_trigger_overrides.py::test_a_conversation_whose_model_changed_attributes_usage_per_turn`
+carries `@pytest.mark.xfail(strict=False, reason=...)` for a **documented fixture defect**:
+`sqlite+aiosqlite:///:memory:` resolves to a `StaticPool` (one DBAPI connection shared by every
+session in the process), so a concurrent session's close can roll back another session's pending
+commit. The reason text itself predicts nondeterminism and says not to un-xfail until the fixture
+gives each session its own connection.
+
+Ran the test three times in isolation: **xpassed all three**, because isolation removes the
+concurrent contention the race depends on. This matches both this run's own full-suite "1 xpassed"
+and CI-on-master's "1 xfailed" — same test, same known race, coin flip decided by scheduling
+contention with whatever else the suite happens to run concurrently. `strict=False` exists
+specifically so neither outcome fails the suite. Conclusion: **not a stale marker** — examined and
+confirmed still correct and still needed. No code or marker change made.
+
+### Verification
+
+`hub/tests/browser` — 53/53 passed, run twice. `vitest` — 1074/1074 (was 1070; +4 for the new
+`replaceTabId` store tests). `tsc --noEmit` — clean. `eslint --max-warnings 0` — clean. `ruff
+check` — clean. `black` — one file reformatted (`test_job_loop_block.py`), then clean. Backend
+`hub/tests` (non-browser) not re-run this iteration — nothing in it changed; the touched files are
+all `hub/ui/src`, `hub/hub/static/ui` (rebuilt bundle), and three `hub/tests/browser/*.py` files.
+
+Queue: C4, C1, C2a, C2b, C3, C5 all closed this iteration. Next: A4.5.
