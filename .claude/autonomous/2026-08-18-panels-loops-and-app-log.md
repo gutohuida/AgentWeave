@@ -3137,3 +3137,74 @@ iteration 6's note: Gap 6 (agent grid view) or Gap 3 (command palette, needs a n
 dependency — flag the trade-off) from `ui-gap-analysis.md`, or a fresh cold run of the full test
 suites to catch drift. `stop_at` is 13:00; roughly two hours of runway remain.
 
+---
+
+## Run 2, iteration 8 — FREE: OverviewPage's stalled-agent color gap (Gap 6, scoped down)
+
+Started scoping Gap 6 ("all runs at a glance") as `next_action` suggested. Delegated a read-only
+research pass (Explore agent) over `AgentsPage`/`AgentCard`, `useAgents`/`useSSE`, `App.tsx`'s
+routing, and the B6.2 live-indicator pattern, expecting to scope a new page. The research came back
+with a correction to the exploration doc's own premise: there is no `AgentsPage.tsx` grid page —
+`AgentCard.tsx` is a rail list-item, not a page. The thing Gap 6 actually describes ("a dedicated
+grid/dashboard of concurrently running agents side by side") **already exists**:
+`OverviewPage.tsx`'s `AgentHealthCard` grid (`hub/ui/src/components/overview/OverviewPage.tsx:16-70`),
+scoped to the selected project, backed by `useAgents()` alone (no N+1, already SSE-invalidated on
+`agent_heartbeat`/`run_*`/etc. per `useSSE.ts`'s central switch — a grid built on it updates live
+for free). Building a *second*, wholly new route for the same concept, or widening scope to a
+cross-*project* view (a real, unanswered design question — both `OverviewPage` and the tab system
+are project-scoped throughout), was judged disproportionate and premature for one iteration. Instead
+of forcing Gap 6's letter, read what the existing grid actually does today and found a real,
+contained defect in it — the same "cheapest real thing, not the biggest plausible thing" call this
+run made for APP1/APP2/iteration 7.
+
+**The defect.** `AgentHealthCard`'s `statusColor` (`OverviewPage.tsx:17`, pre-fix) was
+`agent.status === 'running' ? green : agent.status === 'waiting' ? amber : gray` — a hand-rolled
+duplicate of the status→color mapping that `agentStatusConfig.ts`'s own header comment says was
+already deduplicated out of 2 other components (`AgentCard`, `AgentInfoTab`) under Q6, but was
+missed here. The practical effect: `hub/hub/agent_status.py`'s `effective_heartbeat_status()`
+computes `'stalled'` specifically for a heartbeat that still says `running` but hasn't been renewed
+in over `HEARTBEAT_STALE_AFTER` (120s) — i.e. exactly the case the operator most needs to notice on
+an "at a glance" screen, a run that looks alive but has silently died. Because `'stalled'` fell into
+the `else` branch, it rendered identically to a merely-idle agent: same gray dot, no glow, nothing
+to distinguish "this needs you" from "this is doing nothing in particular." The canonical
+`STATUS_CONFIG.stalled` (`agentStatusConfig.ts:15`) already says amber, same urgency tier as
+waiting — `OverviewPage` just wasn't consulting it.
+
+**Fix.** Replaced the hand-rolled ternary with `getStatusConfig(agent.status)`, using `.dotColor`
+for the dot's background and `.pulse` (not `agent.status === 'running'`) to decide the glow shadow —
+so any future status marked `pulse: true` in the one shared table gets the glow automatically,
+instead of needing a second hardcoded check here. Kept the card's own static-dot-plus-glow visual
+rather than switching to `<StatusDot/>`'s `animate-ping` halo: `lib/agentStatus.tsx`'s own comment
+documents that divergence as intentional, and this fix is about the color mapping, not the visual
+idiom.
+
+**Test, mutation-checked.** New `hub/ui/src/__tests__/overviewPage.test.tsx` renders three agents
+(`stalled`, `idle`, `running`) through the real `OverviewPage` (API hooks mocked, not the component
+itself) and asserts: stalled reads `var(--amber)` (not the idle gray), idle stays
+`var(--text-3)`, running stays `var(--green)` with a glow, stalled has none. Mutation-checked the
+required way — `git stash`ed the fix, ran just the new file, watched it fail by name
+(`expected 'var(--text-3)' to be 'var(--amber)'`), then `git stash pop`ped and watched it pass.
+
+**Full verification.** `npx vitest run`: 107/107 files, 1087/1087 passed (was 1085; +2 new). `npx
+tsc --noEmit`: clean. `npm run lint`: clean, 0 warnings. Source staged before rebuild (per
+CLAUDE.md), `npm run build` + `py -3.11 scripts/refresh_ui_bundle.py`, `--check`-confirmed current.
+Full Playwright browser suite: `54 passed in 29.13s` against the trial Hub — unaffected, since no
+existing browser test exercises the Overview grid's status coloring. No Python files touched, so
+`hub/tests/` (the 11-minute suite) was not re-run.
+
+**Live-verified, partially.** A throwaway script (`testbed/scratch/diag_overview_status.py`,
+gitignored) opened the trial Hub's real Overview tab and read the one real agent's rendered dot:
+`claude-1` is `idle` there, and rendered `rgb(133, 133, 143)` (= `var(--text-3)`) with `boxShadow:
+none` — confirming the idle path still renders correctly post-fix, screenshotted for the visual
+record. The `stalled` and `running` paths were **not** observed live: `proj-5e960453` has no agent
+in either state right now, and manufacturing one — a genuinely 2-minute-stale heartbeat, or an
+actual running turn — was judged disproportionate for a color-mapping fix already covered by a
+mutation-checked component test with a realistic three-status fixture. Recorded rather than glossed
+over, per this run's "every claim is measured or labelled unverified" standard (same call APP2's
+token-count display made for the same reason).
+
+Committed as `f6b7f94`. `stop_at` is 13:00; roughly two hours of runway remain. Queue's FREE item
+stays open — Gap 3 (command palette, needs the new `cmdk` dependency) is the next-cheapest
+candidate per `ui-gap-analysis.md` if the operator wants this run to keep pulling from that list;
+otherwise a fresh cold full-suite run is the fallback.
+
