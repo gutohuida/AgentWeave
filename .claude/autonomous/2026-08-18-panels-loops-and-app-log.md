@@ -1197,3 +1197,68 @@ D7 (already read fresh this iteration, design.md:123-150) is summarised in `next
 detail to start immediately: allowlist by membership of `list_workspace_paths`'s own output (not a
 second independent check), size bound from `aw_max_body_size`, NUL-byte-in-first-8000-bytes binary
 detection, Docker-mode parity with `workspace.py`'s existing `/paths` route.
+
+## Iteration 15 (2026-08-19T02:1x-02:2x+01:00) — P4: the file content endpoint
+
+Verified branch/log/STATE.json agreed before starting: `autonomous/2026-08-18-panels-loops-and-app`,
+HEAD `0f48d53` ("Release heartbeat for the next firing"), clean tree. Read D7 (design.md:123-150) and
+task 4 (tasks.md) fresh, plus the existing `/paths` route (`hub/hub/api/v1/workspace.py`) as the pattern
+to mirror.
+
+**Implementation.** `hub/hub/workspace_file.py` (`read_workspace_file`): checks `path` is a member of
+`list_workspace_paths(workspace.root)` (D7's allowlist), then resolves the filesystem path through
+`ProjectWorkspace.resolve_relative` — the same primitive `spec_documents.py` already uses for every
+other project-relative read (its own docstring: "refuses absolute paths, traversal, control characters
+and symlink escapes"). Size checked via `stat()` before any read (refuses over `aw_max_body_size`,
+naming both numbers, never truncates). Binary detection is a NUL byte in the first 8,000 bytes. Schema
+`hub/hub/schemas/workspace.py` (`WorkspaceFileResponse`); route `GET /file` added beside `/paths` in
+`hub/hub/api/v1/workspace.py`, 404 on not-found, 413 on oversized. Docker parity is automatic — the
+route calls `resolve_project_workspace(session, project_id)` with no `workspace_root` override, exactly
+like `/paths`, so it inherits the same `configured_workspace_root()` behavior with no bespoke logic to
+diverge.
+
+**A refinement to D7, not a deviation.** D7 frames membership-of-`list_workspace_paths` as the *entire*
+gate, rejecting "an independent resolve-and-check-prefix check." That's right for visibility, but not
+quite right for content: `git ls-files` lists a symlink by its own path, not by where it resolves, so a
+path can be a legitimate member of the listing and still be a symlink pointing outside the workspace.
+The fix is not a new bespoke check — it's reusing `resolve_relative`, a primitive that already exists
+and is already trusted for exactly this purpose elsewhere in the codebase (`spec_documents.py`,
+`agent_trigger.py`'s work_dir handling). Documented this reasoning in the task's dated note so it isn't
+read as a contradiction of D7 later.
+
+**A false alarm worth recording precisely.** Manually verified this reasoning against a real-looking
+symlink escape: created `leak.txt -> ../outside/secret.txt` via git bash's `ln -s`, confirmed `git
+ls-files` lists `leak.txt`, then read it through `read_workspace_file` *before* adding the
+`resolve_relative` containment step — and it returned the outside file's content, which looked like
+confirmation of a real vulnerability. It wasn't: `fsutil reparsepoint query leak.txt` reported "not a
+reparse point," and the file's on-disk size matched the target content's length exactly — this machine
+lacks `SeCreateSymbolicLinkPrivilege`, and Git for Windows' `ln -s` silently falls back to *copying* the
+target's bytes into a plain file rather than failing or erroring. No symlink, no escape, just a file that
+happens to contain the same bytes. The domain test using Python's real `os.symlink` correctly raises
+`WinError 1314` and skips, matching `test_docker_workspace_root.py`'s own symlink test's established
+behavior on this machine — a real symlink is only exercised on CI (Linux). Left the `resolve_relative`
+containment step in regardless, since it's free (an existing, already-tested primitive) and is the
+correct defense for the actual CI/Linux/production case even though the local manual "proof" of the
+gap turned out to be an artifact of this machine's privilege level, not the endpoint's logic.
+
+**Verification.** 14 new tests in `hub/tests/test_workspace_file_endpoint.py` (8 domain-level + 5
+HTTP-layer, including a Docker-mode parity test reusing `test_docker_workspace_root.py`'s
+`resolve_project_workspace`-restoration trick) — 13 passed, 1 skipped (the symlink test, for the reason
+above). Also re-ran `test_workspace_paths.py`, `test_project_workspace.py`, `test_docker_workspace_root.py`
+alongside it: 55 passed, 4 skipped, no regressions. `ruff check` initially flagged N818 on the two new
+exception classes (not ending in `Error`) — fixed by renaming
+(`WorkspaceFileNotFoundError`/`WorkspaceFileTooLargeError`) rather than suppressing. `black` clean after
+one auto-format. `mypy hub/hub/` (repo-root cwd, matching baseline methodology): 361 errors in 86 files
+— identical to `.claude/autonomous/mypy-baseline.txt`'s total, zero new errors introduced. `npx openspec
+validate --changes --strict`: 2/2. Full suite NOT re-run — deferred per this task's own prior note to
+the next section-12-equivalent close-out point.
+
+Marked 4.1-4.5 done in `tasks.md` with a full dated note (file list, the D7 refinement's reasoning, the
+false-alarm writeup, verification commands and counts). `current`/`next_action` now point at **P5** (the
+files tab, tasks 5.1-5.5) — read fresh this iteration: 5.1 reuses `specNavigation.ts`'s `buildPathTree`;
+5.2 closes the tree tab on file-open per design D8; 5.3 consumes the endpoint just built; 5.4 must match
+`composerTrigger.ts`'s `@path` mention format byte-for-byte; 5.5 is one of the two pre-authorised
+MEASURE-don't-guess tasks, to be done with Playwright against the live shell once it renders.
+
+Committed and pushed as the work landed (implementation + tests together, tasks.md/STATE.json close-out
+separately), heartbeat refreshed before each push.
