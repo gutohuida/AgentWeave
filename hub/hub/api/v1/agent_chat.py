@@ -35,8 +35,11 @@ from ...db.engine import get_session
 from ...db.models import (
     CONVERSATION_TITLE_MAX_LENGTH,
     AgentOutput,
+    AIJob,
     Conversation,
     InboundQueueEntry,
+    JobRun,
+    Loop,
     Message,
     Project,
 )
@@ -75,6 +78,20 @@ class TimelineEntry(BaseModel):
 ConversationAttention = Literal["running", "waiting", "idle"]
 
 
+class ConversationLoop(BaseModel):
+    """Which loop's firing created this conversation, for the row that lists it.
+
+    A loop firing starts a *new* conversation every time (task 8.1 refuses `session_mode="resume"`
+    for a loop), so an agent's conversation list fills with threads nobody typed and nothing
+    distinguishes them from the ones somebody did. `label` is the loop's job name — the same
+    pairing `LoopSummary.label` already uses, so a marker here and the loops index name the same
+    loop the same way.
+    """
+
+    id: str
+    label: str
+
+
 class ConversationResponse(BaseModel):
     id: str
     agent: str
@@ -85,6 +102,10 @@ class ConversationResponse(BaseModel):
     title: Optional[str] = None
     title_set_by_operator: bool = False
     origin: str = "operator"
+    # Set only when a *loop* firing created this conversation. `origin == "job"` alone cannot
+    # say so — a plain scheduled job has the same origin and no loop — so this is null there,
+    # and the row shows no loop marker.
+    loop: Optional[ConversationLoop] = None
     # Whether this conversation needs the operator, without opening it. "waiting" outranks
     # "running" — a run blocked on a question is running, but stopping for the operator is the
     # part they have to see.
@@ -206,16 +227,51 @@ async def _queued_entries_for(
     ]
 
 
+async def _loops_by_conversation(
+    session: AsyncSession, conversation_ids: List[str]
+) -> Dict[str, ConversationLoop]:
+    """Which loop, if any, fired each of these conversations — one query for the whole page.
+
+    Batched rather than per row, following `_batch_loop_summaries`: the conversation list is the
+    navigation rail, so a per-row query would be one round trip per thread on every render.
+
+    The join to `Loop` is inner on purpose. `JobRun.conversation_id -> AIJob -> Loop` yields a row
+    only where a loop actually exists, so a plain scheduled job — same `origin == "job"`, no
+    `Loop` — falls out with nothing and its conversation gets no marker. That distinction is the
+    whole reason this cannot be derived from `origin`.
+    """
+    if not conversation_ids:
+        return {}
+    result = await session.execute(
+        select(JobRun.conversation_id, Loop.id, AIJob.name, JobRun.fired_at)
+        .join(AIJob, AIJob.id == JobRun.job_id)
+        .join(Loop, Loop.job_id == AIJob.id)
+        .where(JobRun.conversation_id.in_(conversation_ids))
+        # A resume-mode job fires repeatedly onto one conversation, and two jobs can in principle
+        # reach the same thread. Newest firing first, then first-write-wins below, so the marker
+        # is deterministic rather than whatever the database happened to return first.
+        .order_by(JobRun.fired_at.desc())
+    )
+    loops: Dict[str, ConversationLoop] = {}
+    for conversation_id, loop_id, job_name, _fired_at in result.all():
+        if conversation_id not in loops:
+            loops[conversation_id] = ConversationLoop(id=loop_id, label=job_name)
+    return loops
+
+
 async def _to_response(
     session: AsyncSession, conversations: List[Conversation]
 ) -> List[ConversationResponse]:
     """Serialise conversations with their attention state, one query for the whole page."""
     await backfill_titles(session, conversations)
-    attention = await conversation_attention(session, [row.id for row in conversations])
+    conversation_ids = [row.id for row in conversations]
+    attention = await conversation_attention(session, conversation_ids)
+    loops = await _loops_by_conversation(session, conversation_ids)
     responses = []
     for row in conversations:
         response = ConversationResponse.model_validate(row, from_attributes=True)
         response.attention = attention.get(row.id, "idle")  # type: ignore[assignment]
+        response.loop = loops.get(row.id)
         responses.append(response)
     return responses
 

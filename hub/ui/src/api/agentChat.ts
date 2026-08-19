@@ -51,6 +51,13 @@ export type ConversationAttention = 'running' | 'waiting' | 'idle'
  *  accepted by the Hub with no producer yet. */
 export type ConversationOrigin = 'operator' | 'peer' | 'handoff' | 'spec' | 'job'
 
+/** Which loop's firing created this conversation. `label` is the loop's job name, the same
+ *  pairing the loops index uses, so one loop is named one way wherever it appears. */
+export interface ConversationLoop {
+  id: string
+  label: string
+}
+
 export interface AgentConversation {
   id: string
   agent: string
@@ -61,6 +68,14 @@ export interface AgentConversation {
   title: string | null
   title_set_by_operator: boolean
   origin: ConversationOrigin
+  /**
+   * Set only when a loop firing created this thread; null otherwise.
+   *
+   * `origin === 'job'` cannot stand in for it — a plain scheduled job carries the same origin and
+   * has no loop. Optional so a Hub predating the field degrades to "no marker" rather than to a
+   * crash.
+   */
+  loop?: ConversationLoop | null
   attention: ConversationAttention
   /** Where this conversation stands with its checkpoint threshold. `due` warns; `dismissed`
    *  does not warn again while there is still room to keep working, because re-asking an

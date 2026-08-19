@@ -7,6 +7,8 @@ import {
   useUnarchiveConversation,
   type AgentConversation,
 } from '@/api/agentChat'
+import { Icon } from '@/components/common/Icon'
+import { loopTabId, usePanelTabsStore } from '@/store/panelTabsStore'
 import { RowMenu, type RowMenuItem } from './RowMenu'
 
 /** What each attention state looks like at rest.
@@ -47,6 +49,8 @@ export function ConversationRow({
   const attention = ATTENTION[conversation.attention]
   const label = conversationLabel(conversation)
   const archived = conversation.lifecycle === 'archived'
+  // Held as a const so the null check below narrows inside the click handler too.
+  const loop = conversation.loop ?? null
 
   const [renaming, setRenaming] = useState(false)
   const [draft, setDraft] = useState(label)
@@ -55,6 +59,7 @@ export function ConversationRow({
   const rename = useRenameConversation()
   const toArchive = useArchiveConversation()
   const toUnarchive = useUnarchiveConversation()
+  const openTab = usePanelTabsStore((state) => state.openTab)
 
   useEffect(() => {
     if (renaming) inputRef.current?.select()
@@ -175,6 +180,33 @@ export function ConversationRow({
                 role="img"
               />
             )}
+          </button>
+        )}
+        {!renaming && loop && (
+          /* A sibling of the row button, not a child of it: nesting one button inside another is
+           * invalid, and this one has its own destination. It opens the loop's existing drill-down
+           * tab rather than introducing a second place loop history lives — the rejected
+           * alternative was a whole extra level in this rail (design D2: never give "open on the
+           * right" two meanings).
+           *
+           * Deliberately not `.row-action`: that class hides at rest and reveals on hover, which is
+           * right for an action and wrong for this. Which loop a thread came from is the fact that
+           * tells it apart from one the operator typed, so it has to be legible while scanning. */
+          <button
+            type="button"
+            className="flex shrink-0 items-center gap-0.5 rounded px-1 py-0.5 text-[10px]"
+            data-testid={`${testId}-loop`}
+            data-loop-id={loop.id}
+            style={{ color: 'var(--text-3)', maxWidth: 96 }}
+            title={`Fired by the loop “${loop.label}” — open it`}
+            aria-label={`Open loop ${loop.label}`}
+            onClick={(event) => {
+              event.stopPropagation()
+              openTab(projectId, loopTabId(loop.id))
+            }}
+          >
+            <Icon name="sync" size={11} aria-hidden="true" />
+            <span className="truncate">{loop.label}</span>
           </button>
         )}
         {!renaming && (
