@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { formatDistanceToNow } from 'date-fns'
 import { Button } from '@/components/ui/button'
 import { Question } from '@/api/questions'
+import { hubDate } from '@/lib/hubTime'
 
 interface QuestionInterruptCardProps {
   questions: Question[]
@@ -50,7 +51,7 @@ export function QuestionInterruptCard({ questions, compact = false, onNavigateTo
             {first.question}
           </p>
           <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>
-            {formatDistanceToNow(new Date(first.created_at), { addSuffix: true })}
+            {formatDistanceToNow(hubDate(first.created_at), { addSuffix: true })}
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">

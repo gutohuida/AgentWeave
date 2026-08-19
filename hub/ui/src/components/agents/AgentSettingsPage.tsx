@@ -17,6 +17,7 @@ import {
   WaitingSetting,
 } from './AgentSettingsControls'
 import type { AgentSettingsSection } from '@/lib/navigation'
+import { hubDate } from '@/lib/hubTime'
 
 interface AgentSettingsPageProps {
   agent: string
@@ -398,7 +399,7 @@ function SessionRow({ session }: { session: { id: string; type: string; path: st
       </span>
       {session.last_active && (
         <span className="text-[11px] shrink-0" style={{ color: 'var(--text-3)', opacity: 0.6 }}>
-          {formatDistanceToNow(new Date(session.last_active), { addSuffix: true })}
+          {formatDistanceToNow(hubDate(session.last_active), { addSuffix: true })}
         </span>
       )}
     </div>

@@ -14,9 +14,15 @@
  * `PATCH /jobs/{job_id}`, because there it is still the in-memory aware object, and naive from
  * `GET /loops/{loop_id}`, because there it has been through SQLite).
  *
- * Scoped to `LoopTab` for now. The same fault affects every other surface that calls
- * `formatDistanceToNow` on a Hub timestamp — see the handoff; fixing it at the serialisation
- * boundary instead is the operator's call, and is the better fix.
+ * **Every Hub timestamp the UI parses goes through here.** Two call sites deliberately do not, and
+ * both say why at the line: `JobForm`'s stop-at field is wall-clock time the operator typed into a
+ * `datetime-local` input, and `LogsView`'s `dataUpdatedAt` is React Query's own epoch milliseconds.
+ * Neither is a timestamp the Hub serialised, so neither is this function's business.
+ *
+ * This is the *consumer-side* fix. Correcting it at the Hub's serialisation boundary instead —
+ * so a naive datetime never leaves the API — remains the better fix and is still open. The two
+ * compose rather than conflict: this function leaves an already-labelled string untouched, so it
+ * keeps working unchanged the day the server starts labelling them.
  */
 export function hubDate(value: string): Date {
   return new Date(hasTimezone(value) ? value : `${value}Z`)

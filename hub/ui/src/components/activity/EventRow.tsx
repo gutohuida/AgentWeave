@@ -3,6 +3,7 @@ import { Icon } from '@/components/common/Icon'
 import { summaryForEvent } from '@/lib/eventSummary'
 import { agentColorVars } from '@/lib/agentColors'
 import { tint } from '@/lib/colorTint'
+import { hubDate } from '@/lib/hubTime'
 
 interface EventRowProps {
   event: {
@@ -90,7 +91,7 @@ export function EventRow({ event, actorName, actorColorIndex }: EventRowProps) {
 
       {/* Timestamp */}
       <span className="text-[11px] shrink-0" style={{ color: 'var(--text-3)', opacity: 0.6 }}>
-        {formatDistanceToNow(new Date(event.timestamp), { addSuffix: true })}
+        {formatDistanceToNow(hubDate(event.timestamp), { addSuffix: true })}
       </span>
     </div>
   )

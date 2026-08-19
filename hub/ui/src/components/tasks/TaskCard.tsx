@@ -9,6 +9,7 @@ import { RowMenu } from '@/components/layout/RowMenu'
 import { TaskIntegrationNote } from '@/components/tasks/TaskIntegrationNote'
 import { agentColorVars } from '@/lib/agentColors'
 import { useRequirementChips } from '@/hooks/useRequirementChips'
+import { hubDate } from '@/lib/hubTime'
 
 interface TaskCardProps {
   task: Task
@@ -51,7 +52,7 @@ function agentStatusTitle(task: Task): string {
   if (task.assignee_status_msg) details.push(task.assignee_status_msg)
   if (task.assignee_last_seen) {
     details.push(
-      `last seen ${formatDistanceToNow(new Date(task.assignee_last_seen), { addSuffix: true })}`,
+      `last seen ${formatDistanceToNow(hubDate(task.assignee_last_seen), { addSuffix: true })}`,
     )
   }
   return details.join(' · ')
@@ -333,7 +334,7 @@ export function TaskCard({ task, assigneeColorIndex, onOpenRequirement, onOpen }
 
         {/* Timestamp */}
         <p className="text-[11px] mt-2" style={{ color: 'var(--text-3)' }}>
-          {formatDistanceToNow(new Date(task.updated), { addSuffix: true })}
+          {formatDistanceToNow(hubDate(task.updated), { addSuffix: true })}
         </p>
 
         {/* A refused "start work". The status-transition menu (and its own refusals) moved into

@@ -2405,11 +2405,8 @@ rather than on judgement. **A fourth item was proposed and explicitly dropped** 
       `GET /loops/{loop_id}` (through SQLite), so both shapes reach one component — which is why
       `hubDate` adds the missing label and leaves an already-labelled string alone.
 
-      **Scoped to `LoopTab`'s five parses, and no further.** The same fault reaches every surface
-      calling `formatDistanceToNow` on a Hub timestamp — 12 components, confirmed live on
-      `conversations.updated_at` and `tasks.created_at` too. Fixing it at the **serialisation
-      boundary** instead is the better fix and is left open as the operator's call; this task does
-      not attempt it and does not pretend the rest is fixed.
+      Landed first as `LoopTab`'s five parses only; **B9.6 below then swept the rest of the app**,
+      so this note's original "scoped to LoopTab, and no further" no longer describes the code.
 
 - [x] B9.5 **Grouping consecutive firings of one loop** into a single expandable row in `AgentTree`
       and `RecencyView`. Sequenced last on the operator's instruction — grouping might have proved
@@ -2440,3 +2437,24 @@ rather than on judgement. **A fourth item was proposed and explicitly dropped** 
       their counts, plain-job conversations stayed interleaved in recency order, and the expander
       went from "Show 256 more" to "Show 250 more" — 15 rows now standing for 21 conversations.
       Capture: `testbed/scratch/shots/marker-02-recency.png`.
+
+- [x] B9.6 **Every Hub timestamp the UI parses goes through `hubDate`** — 27 call sites across 15
+      files, the rest of what B9.4 found and deliberately left. Done on the operator's "continue
+      until done", 2026-08-19.
+
+      **Two sites deliberately still parse raw, and say so at the line.** `JobForm`'s stop-at is
+      wall-clock time the operator typed into a `datetime-local` input — reading it as UTC would
+      move the stop condition by the machine's offset. `LogsView`'s `dataUpdatedAt` is React
+      Query's own epoch milliseconds, measured in this browser, not a Hub timestamp at all.
+
+      **Guarded, because a sweep is only worth doing once.** `hubTime.test.ts` walks the source
+      through Vite's own module graph (`import.meta.glob`, not `node:fs` — the production build
+      type-checks tests against the app tsconfig, which has no node types) and fails on any new raw
+      `new Date(value)` outside the two exemptions. The guard was verified to actually fail by
+      introducing an offender: it named the file. It also asserts the scan found >50 files and
+      found each exemption, so a broken path cannot make it pass vacuously.
+
+      **This is the consumer-side fix.** Correcting it at the Hub's serialisation boundary, so a
+      naive datetime never leaves the API, remains the better fix and is **still open** — see the
+      open questions. The two compose rather than conflict: `hubDate` leaves an already-labelled
+      string untouched, so it keeps working unchanged the day the server starts labelling them.

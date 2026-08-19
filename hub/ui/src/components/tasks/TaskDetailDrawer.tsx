@@ -15,6 +15,7 @@ import { useAgents } from '@/api/agents'
 import { useSpecDocuments } from '@/api/spec'
 import { RowMenu } from '@/components/layout/RowMenu'
 import { useDialogFocus } from '@/hooks/useDialogFocus'
+import { hubDate } from '@/lib/hubTime'
 
 function statusLabel(status: string): string {
   return status.replace(/_/g, ' ')
@@ -40,12 +41,12 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 /** Absolute time for the title attribute — "2 days ago" is the right density for a field, but
  *  the exact stamp is what someone reconciling against a log actually needs. */
 function exactTime(value: string): string {
-  const parsed = new Date(value)
+  const parsed = hubDate(value)
   return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString()
 }
 
 function relativeTime(value: string): string {
-  const parsed = new Date(value)
+  const parsed = hubDate(value)
   return Number.isNaN(parsed.getTime()) ? value : formatDistanceToNow(parsed, { addSuffix: true })
 }
 

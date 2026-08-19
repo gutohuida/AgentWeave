@@ -3,6 +3,7 @@ import { AgentLaunchability, AgentSummary } from '@/api/agents'
 import { StatusDot } from '@/lib/agentStatus'
 import { getStatusConfig } from '@/lib/agentStatusConfig'
 import { ContextUsageIndicator } from '@/components/context/ContextUsageIndicator'
+import { hubDate } from '@/lib/hubTime'
 
 interface AgentCardProps {
   agent: AgentSummary
@@ -87,7 +88,7 @@ export function AgentCard({ agent, selected, onClick, launchability }: AgentCard
         <span>{agent.active_task_count} tasks</span>
         {agent.last_seen && (
           <span className="ml-auto">
-            {formatDistanceToNow(new Date(agent.last_seen), { addSuffix: true })}
+            {formatDistanceToNow(hubDate(agent.last_seen), { addSuffix: true })}
           </span>
         )}
       </div>

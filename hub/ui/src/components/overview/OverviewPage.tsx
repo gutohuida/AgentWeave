@@ -9,6 +9,7 @@ import { QuestionInterruptCard } from '@/components/questions/QuestionInterruptC
 import { ContextUsageIndicator } from '@/components/context/ContextUsageIndicator'
 import { AccountingPanel } from '@/components/accounting/AccountingPanel'
 import { getStatusConfig } from '@/lib/agentStatusConfig'
+import { hubDate } from '@/lib/hubTime'
 
 interface OverviewPageProps {
   onNavigate: (page: string) => void
@@ -64,7 +65,7 @@ function AgentHealthCard({ agent, onClick }: { agent: AgentSummary; onClick: () 
       {/* Last seen + preview */}
       {agent.last_seen && (
         <p style={{ fontSize: 11, color: 'var(--text-3)' }}>
-          {formatDistanceToNow(new Date(agent.last_seen), { addSuffix: true })}
+          {formatDistanceToNow(hubDate(agent.last_seen), { addSuffix: true })}
         </p>
       )}
       {agent.latest_status_msg && (
@@ -254,7 +255,7 @@ export function OverviewPage({ onNavigate }: OverviewPageProps) {
                   {agentName && <span className="font-medium" style={{ color: 'var(--text)' }}>{String(agentName)}</span>}
                   <span className="truncate max-w-[160px]">{evt.type.replace(/_/g, ' ')}</span>
                   <span style={{ color: 'var(--text-3)' }}>
-                    {formatDistanceToNow(new Date(evt.timestamp), { addSuffix: true })}
+                    {formatDistanceToNow(hubDate(evt.timestamp), { addSuffix: true })}
                   </span>
                 </div>
               )

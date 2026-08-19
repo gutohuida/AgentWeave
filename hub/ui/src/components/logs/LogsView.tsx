@@ -79,6 +79,8 @@ export function LogsView() {
     queryClient.invalidateQueries({ queryKey: ['logs'] })
   }
 
+  // Deliberately `new Date`, not `hubDate`: `dataUpdatedAt` is React Query's own epoch
+  // milliseconds, measured in this browser — not a timestamp the Hub serialised.
   const lastUpdate = dataUpdatedAt ? new Date(dataUpdatedAt).toLocaleTimeString() : '—'
 
   const chipBaseClassName = 'row-item w-auto whitespace-nowrap rounded-lg px-3 text-xs font-medium capitalize'

@@ -4,6 +4,7 @@ import { Icon } from '@/components/common/Icon'
 import { useCopy } from '@/hooks/useCopy'
 import { summaryForEvent } from '@/lib/eventSummary'
 import { tint } from '@/lib/colorTint'
+import { hubDate } from '@/lib/hubTime'
 
 interface LogLineProps {
   entry: {
@@ -47,7 +48,7 @@ export function LogLine({ entry }: LogLineProps) {
   const { copied, copy } = useCopy()
 
   const severity  = entry.severity ?? 'info'
-  const ts        = format(new Date(entry.timestamp), 'MMM dd HH:mm:ss.SSS')
+  const ts        = format(hubDate(entry.timestamp), 'MMM dd HH:mm:ss.SSS')
   const summary   = summaryForEvent(entry.event_type, (entry.data ?? {}) as Record<string, unknown>)
   const hasData   = entry.data && Object.keys(entry.data).length > 0
   const chip      = SEVERITY_CHIP[severity] ?? SEVERITY_CHIP.info

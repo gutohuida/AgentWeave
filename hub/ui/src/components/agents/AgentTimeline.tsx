@@ -10,6 +10,7 @@ import type { TimelineEntry } from '@/api/agentChat'
 import type { QueueStatus } from '@/api/queue'
 import type { TurnUsage } from '@/api/accounting'
 import { agentColorVars } from '@/lib/agentColors'
+import { hubDate } from '@/lib/hubTime'
 import {
   entryCategory,
   findPairedResult,
@@ -222,7 +223,7 @@ export function AgentTimeline({
                 <span className="flex-1 h-px" style={{ background: 'var(--border)' }} />
                 {terminalLabel}
                 {turn.entries.length > 0 &&
-                  ` · ${format(new Date(turn.entries[turn.entries.length - 1].timestamp), 'HH:mm')}`}
+                  ` · ${format(hubDate(turn.entries[turn.entries.length - 1].timestamp), 'HH:mm')}`}
                 <span className="flex-1 h-px" style={{ background: 'var(--border)' }} />
               </div>
             )}
@@ -424,7 +425,7 @@ function WorkBlockDisclosure({ entries }: { entries: TimelineEntry[] }) {
   const workRows = entries.filter((e) => !pairedResultIds.has(e.id))
   const duration =
     entries.length > 1
-      ? ((new Date(entries[entries.length - 1].timestamp).getTime() - new Date(entries[0].timestamp).getTime()) / 1000).toFixed(1)
+      ? ((hubDate(entries[entries.length - 1].timestamp).getTime() - hubDate(entries[0].timestamp).getTime()) / 1000).toFixed(1)
       : null
 
   // What is worth knowing before opening this. "14 steps · 27.3s" says how much happened but not
@@ -732,7 +733,7 @@ function MessageEntry({
   queued?: boolean
   onWithdraw?: (entryId: string) => void
 }) {
-  const time = format(new Date(entry.timestamp), 'HH:mm')
+  const time = format(hubDate(entry.timestamp), 'HH:mm')
   const wrapperStyle: React.CSSProperties = { opacity: queued ? 0.55 : 1 }
   const queuedTag = queued && (
     <span
