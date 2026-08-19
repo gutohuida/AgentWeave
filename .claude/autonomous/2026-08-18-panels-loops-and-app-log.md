@@ -1331,3 +1331,82 @@ essentially done and the queue moves to LB1 (loop archival) per the interleaving
 
 Committed and pushed as the work landed. Heartbeat refreshed before the push; releasing it (backdating
 ~40 minutes) as the very last step per the driver's own instructions.
+
+## Iteration 17 (2026-08-19T02:5x-03:1x+01:00) — P6: strip overflow, scrollIntoView on activation
+
+Verified branch/log/STATE.json agreed before starting: `autonomous/2026-08-18-panels-loops-and-app`,
+HEAD `d0f54b0` ("Release heartbeat for the next firing"), clean tree. Read task 6.1 (tasks.md) and
+design D12 (design.md:202-206) fresh: "T3 does one native `scrollIntoView` for the newly active tab
+and nothing else. Both need measuring/deciding against a real shell, not guessed" — and studied (not
+copied) `testbed/scratch/t3ref/src/components/RightPanelTabs.tsx:376-379` for the exact pattern.
+Confirmed via grep that `PanelShell.tsx` had no existing `scrollIntoView` call before starting, so this
+was a real gap, not a re-derivation.
+
+**Implementation.** One `useEffect` in `PanelShell.tsx`, keyed on `panel.activeTabId`, calling
+`tabButtons.current.get(activeTabId)?.scrollIntoView({block:'nearest', inline:'nearest'})` — reusing
+the `TabId -> HTMLButtonElement` ref map the component already keeps for keyboard focus movement
+rather than adding T3's second lookup mechanism (`querySelector` on a `data-active-tab` attribute). The
+strip was already `overflow-x-auto` (task 2's own markup), so horizontal scroll already worked; what
+was missing was the newly active tab auto-scrolling into view, which matters once more tabs are open
+than fit (arrow-key navigation past the visible edge, or opening a tab from the plus menu while the
+strip is already scrolled elsewhere). Added nothing beyond T3's own answer — no chevrons, no manual
+overflow indicators, no reordering — per D12's explicit "only add if it measurably fails," and manual
+exercise of the live shell (many tabs, narrow window, keyboard-only navigation) showed no such failure.
+
+**Verification.** New `describe('task 6.1 — the newly active tab scrolls into view')` block in
+`panelShell.test.tsx`, 2 tests: click-driven activation, and arrow-key-driven activation (not just
+tab-open — the earlier keyboard tests already open three tabs and navigate between them, so this
+confirms the effect fires on every activation path, matching T3's own `[props.activeSurfaceId]`
+dependency shape). Spied on `Element.prototype.scrollIntoView` (already stubbed globally as a no-op in
+`__tests__/setup.ts` for jsdom) and asserted both the call args and that it fired on the tab that is
+now actually active, not some other strip element. Had to fix `scrollSpy.mock.instances.at(-1)` to
+`scrollSpy.mock.instances[length - 1]` after `tsc` flagged `Array.prototype.at` as unavailable under
+this project's `lib` target (TS2550) — an easy, contained fix, not a design change. Full vitest suite:
+**1066 passed** (up from the 1064 baseline after P5), 0 skipped. `tsc --noEmit` and
+`eslint --max-warnings 0 src` both clean. UI rebuilt (`npm run build`), files staged before
+`refresh_ui_bundle.py` (both already tracked so the untracked-file trap did not apply this time),
+verified with `--check`.
+
+**A flakiness scare, run down and closed.** Live against the trial Hub, the full `hub/tests/browser`
+suite failed once on `test_the_specs_index_tab_opens_from_the_plus_affordance` (aria-selected stayed
+false after a menu-item click) and once more on a different test
+(`test_selecting_a_document_from_the_index_tab_reads_it_without_attaching_it`, a `Locator.click`
+timeout) across separate runs — worrying, since this iteration's change touches activation. Ran the
+same suite down properly rather than assuming either verdict: `git stash`'d this iteration's diff,
+rebuilt the UI from the untouched baseline, and reran — the same class of failure still appeared
+(`test_the_specs_index_tab_opens_from_the_plus_affordance` again, aria-selected stuck false) on code
+this iteration never touches. `git stash pop` restored the change, rebuilt again, reran
+`test_panel_shell.py` alone (8/8) and the full suite (48/48) clean. Concluded: pre-existing test-infra
+flakiness (consistent with the traps this file's STATE.json already records — Playwright auto-wait
+gaps have bitten this suite three times before), not a regression from the `scrollIntoView` effect,
+which has no relationship to a plus-menu click's activation logic. Recorded in the task's own dated
+note in `tasks.md` rather than silently discarded, so a future iteration seeing the same test flake
+doesn't re-litigate this from scratch.
+
+No Python under `hub/hub/` changed, so `mypy hub/hub/`'s 361-error baseline was not re-checked
+(unaffected by construction); `ruff`/`black` not applicable, no `.py` files touched. `npx openspec
+validate --changes --strict`: 2/2 still valid after the `tasks.md` edits.
+
+Marked 6.1 done in `tasks.md` with a full dated note (pattern studied, what was chosen and why,
+verification commands and counts, the flakiness investigation). Updated the file's stale top summary
+line (still said "Nothing in this file has been started" despite sections 1-5 already being done in
+prior iterations) to state plainly that sections 1-6 are implemented and verified, and only section 7
+(human-only) and section 8 (user test guide) remain. **The panel change
+(`2026-08-18-one-shell-three-panels`)'s agent-verifiable work is now complete.**
+
+`current`/`next_action` now point at **LB1** (loop archival migration + model columns,
+`openspec/changes/2026-08-18-a-loop-writes-its-own-queue/tasks.md` section B1, tasks B1.1-B1.4) —
+read fresh this iteration to brief the next one precisely: current migration head is `0077`
+(`loop_declares_source_and_checkpoint_loop.py`), whose missing-table-guard helper shape
+(`_tables`/`_columns`/`_indexes`, the `if "loops" in present:` pattern) is the template to copy rather
+than re-derive. Three additive nullable columns across two tables (`loops.archived_at`,
+`ai_jobs.archived_at`, plus a short string column on `Loop` for how it ended per D17), `Loop.job_id`'s
+existing `ondelete="CASCADE"` gets an explanatory comment rather than removal, and both
+`test_migrations.py` and `test_project_persistence.py` head assertions need bumping per CLAUDE.md.
+Noted the existing `archived_at` precedent to match stylistically (`Agent.lifecycle`+`archived_at` at
+`models.py:235-246`, `Conversation.archived_at` at `models.py:454`) while flagging that B1 does not ask
+for a second lifecycle-enum mechanism, only the one ending-value column D17 describes.
+
+Committed and pushed as the work landed (implementation+tests+tasks.md+rebuilt UI bundle together,
+since the panel change's close-out note lived in the same task). Heartbeat refreshed before the push;
+releasing it (backdating ~40 minutes) as the very last step per the driver's own instructions.
