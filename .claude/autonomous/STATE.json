@@ -10,7 +10,7 @@
   "run": 2,
   "iteration": 8,
   "session_stopped": false,
-  "last_heartbeat": "2026-08-19T11:02:57+01:00",
+  "last_heartbeat": "2026-08-19T10:23:53+01:00",
   "prepared_by": "Interactive review session 2026-08-19T07:58-08:40+01:00. Run 1's claims were re-verified rather than trusted: every suite re-run, the browser suite's failures reproduced and diagnosed to a named line, and CI's absence confirmed via `gh run list`.",
 
   "what_run_1_achieved": {
