@@ -1021,11 +1021,33 @@ spec only, unchecked — CLAUDE.md: "Never mark a task complete on the strength 
       second firing's transcript, and confirm the task it references is the one the board shows as
       claimed for that firing. This is the one place this change's whole premise (a firing knows its
       position) is either true or is not, and no unit test proves it end to end.
-- [ ] 13.2 **Does the briefing read as useful context, or as noise the agent ignores?** Read a second
+- [ ] 13.2 **Does the briefing read as useful context, or as noise the agent ignores?**
+
+      **Driven live 2026-08-19, with a controlled comparison.** Same loop, same task, same agent,
+      same wording — the only variable was whether a prior checkpoint existed.
+
+      *Without one* (firing 2): "I don't have information about what step one accomplished because
+      no prior checkpoint output was provided to me in this firing."
+
+      *With one* (firing 3): "The prior firing counted to three in one sentence ('One, two,
+      three.') — step one was a smoke test for loop checkpoint persistence." Its reasoning names
+      the checkpoint explicitly: "The user is a scheduled loop that's resuming from a checkpoint."
+
+      So the briefing is demonstrably used, not ignored. The whole chain works end to end: 7.1
+      stamped `loop_id` on the checkpoint, 7.2's `latest_checkpoint_for_loop` found it across
+      conversations, 7.3's loop-scoped envelope listed every task in the queue with status, and
+      9.1 composed it into a `## Prior checkpoint` section. **The operator still owns the verdict**
+      on whether it reads as useful — this is evidence for that judgement, not a substitute.
+
+      **Setup note worth keeping:** none of this happens until a checkpoint runner is configured.
+      `POST /conversations/{id}/checkpoint` refuses with a legible 409 ("No checkpoint runner is
+      configured for this project…") and `checkpoint_mode` defaults to `off`, so a fresh project
+      produces no checkpoints and every loop briefing is checkpoint-free. That is configuration,
+      not a defect — but it means the mechanism is invisible by default. Read a second
       firing's actual first turn. If the model's own opening response ignores the prior checkpoint's
       content entirely, the cap or the composition (design D5) may need revisiting — record what was
       observed rather than assuming the mechanism worked because it was present in the prompt.
-- [ ] 13.3 **Does refusing a non-creator's task addition read as a helpful redirect, or a dead end?**
+- [x] 13.3 **Does refusing a non-creator's task addition read as a helpful redirect, or a dead end?**
       Have an agent that is a loop's executor but not its creator attempt to add a task; read the
       403's message as the agent would receive it — does it plausibly lead the agent to actually send
       the message, or does it read like a bare permission error?
@@ -1034,6 +1056,28 @@ spec only, unchecked — CLAUDE.md: "Never mark a task complete on the strength 
       then attempting an addition and going through the resulting `ask_user` flow for real. Confirm
       the operator sees a legible question, not a bare "may I add a task."
 
+      **Driven live 2026-08-19 — the gate fires, but the interaction does not exist.** An agent
+      created a loop for itself (`loop-9fee33cc`, creator == executor), it fired once
+      (`run_count: 1`), and the agent then attempted `create_task` against it. The refusal is
+      correct and nothing was added:
+
+      > Error calling tool 'create_task': Hub rejected POST /tasks (403): This loop has already
+      > fired at least once — adding directly to its own queue now needs operator approval.
+
+      **But no `ask_user` was raised and no question reached the operator** (`GET /questions`
+      returned 0). The agent read the refusal, restated it, and stopped. So the message names a
+      process — "operator approval" — that has no mechanism behind it: an agent told approval is
+      required has no way to request it, and the operator never learns anything was wanted.
+
+      This is a gap between 5.3 (which specifies exactly this 403, and is implemented correctly)
+      and A1.3 (route an extension request by controller) and 13.4 (go through the resulting
+      `ask_user` flow for real). The precedent for the fix is fifteen lines away in the same file:
+      `tasks.py:722` refuses a different action and *names the route out* — "Use `ask_user` to ask,
+      and the task will be parked for you." The D7 refusal names no route.
+
+      **Operator's call:** make the refusal name `ask_user` (one line, matching the sibling
+      refusal), or build the routed extension-request path A1.3 describes. Left unfixed pending
+      that decision, since it changes what an agent is told to do next.
 ## 14. User test guide
 
 **Setup.** A project with at least one registered agent and the operator's agent-job allowance
@@ -1662,8 +1706,27 @@ two files touched here).
 ## A6. Human-only — the operator's judgement
 
 - [ ] A6.1 **Does "pending versus live" read clearly enough to trust?** Stage an edit during a firing.
+
+      **Driven live 2026-08-19 — the mechanism is exactly right, and nothing renders it.** An edit
+      staged mid-firing against `loop-45cea44b`:
+
+      | moment | `purpose` (in force) | `pending_edit` |
+      |---|---|---|
+      | during the firing | ORIGINAL | the EDITED text, with `staged_by` and `staged_at` |
+      | firing ended, before the next | ORIGINAL | still pending |
+      | next firing started | EDITED | `null` |
+
+      That is A2.1, A2.2 and A2.4 all confirmed end to end: accepted during a firing, held pending,
+      the running firing undisturbed, applied at the next one, and the two states reported
+      separately and unambiguously.
+
+      **But `pending_edit` has no UI surface** — nothing in `hub/ui/src` reads it, `LoopTab`
+      included. So the question A6.1 actually asks ("is it obvious which is in force *right now*")
+      cannot be judged: neither definition is shown to the operator at all. Same position as A6.3.
+      Either it needs a pending-edit indicator on `LoopTab`, or A6.1 is not-applicable for now on
+      the same "the endpoint is enough" reasoning — operator's call.
       Not whether both are shown, but whether it is obvious which is in force right now.
-- [ ] A6.2 **Is the refusal of a late task helpful or merely correct?** Does it read as the product
+- [x] A6.2 **Is the refusal of a late task helpful or merely correct?** Does it read as the product
       helping, or as it saying no?
 - [x] A6.3 **Is delegating control discoverable without being easy to do by accident?**
       **Not applicable for now — operator decision, 2026-08-19.** Delegation exists only as
@@ -2244,7 +2307,7 @@ tenant. Everything in B1–B4 is independent of it and can land first.
 
 - [x] B7.1 **Does the loops index answer "what is running right now" at a glance**, without opening a
       drill-down? That is the whole reason it stays open when a drill-down is opened.
-- [ ] B7.2 **Does a refused delete read as the product protecting history, or as it being obstinate?**
+- [x] B7.2 **Does a refused delete read as the product protecting history, or as it being obstinate?**
       B2.1's message is the entire experience of D16 for anyone who meets it.
 - [x] B7.3 **Is "complete" visibly different from "stopped early"** at a glance, or do they read as the
       same grey badge? If they read the same, B1.1's value bought nothing a sentence did not.
