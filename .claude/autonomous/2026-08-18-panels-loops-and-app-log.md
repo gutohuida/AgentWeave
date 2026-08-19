@@ -3387,3 +3387,32 @@ Committing this log entry plus the `session_stopped: true` STATE.json update now
 driver's standing "verify on resume" discipline, whoever picks this up next — operator or a fresh
 run — should still re-verify live rather than trust this file, but there is no indication anything
 here has gone stale in the 15-20 minutes since it was last checked.
+
+
+---
+
+## Run 2, iteration 13 — stop_at reached, run 2 formally over
+
+Woke at 12:55:25, 5 minutes before `stop_at` (13:00:00+01:00). `git status`/`git log` matched
+STATE.json exactly (HEAD `583f630`, tree clean) — nothing changed since iteration 12's close 12
+minutes earlier. Live spot-check repeated anyway rather than trusted from the file: trial Hub
+`/health` → `{"status":"ok"}`; draft PR #5 → `OPEN`/`MERGEABLE`/still a draft, untouched.
+
+Iteration 12 already made the call to stop manufacturing work and set `session_stopped: true`; that
+reasoning still holds and `stop_at` has now passed while this iteration was reading state. No new
+code, no new verification value in a third identical spot-check cycle. This is run 2's formal end,
+not just another no-op tick.
+
+**Deliberately deviating from the standard end-of-iteration heartbeat release:** the driver's
+generic instructions call for aging `last_heartbeat` ~40 minutes back so the next firing picks up
+immediately. That is the correct move when there is a `next_action` to hand off. There is not — the
+only open threads are the five `decisions_for_user` items, none agent-decidable, and `next_action`
+itself says not to release the heartbeat into a vacuum. Setting `last_heartbeat` to *now* instead
+(not backdated) still lets the cron's normal grace period apply if it fires again before an
+operator picks this up, without falsely presenting a completed hand-off. `session_stopped` stays
+`true`.
+
+Run 2 close, final: both openspec changes' agent-verifiable tasks done (panel 32/37, loop 76/95 —
+remainder is human-only); C1-C5 fixed and mutation-checked; A4.5/A5.1-5.3/B6.2-6.4 built and
+live-verified; APP1/APP2 built and verified; three FREE-queue fixes landed; draft PR #5 open, CI
+green, unmerged; trial Hub alive. Five `decisions_for_user` items await the operator.
