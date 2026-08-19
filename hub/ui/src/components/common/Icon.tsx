@@ -28,6 +28,7 @@ import {
   HelpCircle,
   Home,
   Hourglass,
+  Infinity as InfinityIcon,
   Info,
   Link2,
   ListChecks,
@@ -77,6 +78,7 @@ import {
  */
 const ICONS: Record<string, LucideIcon> = {
   add: Plus,
+  all_inclusive: InfinityIcon,
   archive: Archive,
   arrow_downward: ArrowDown,
   arrow_left: ArrowLeft,

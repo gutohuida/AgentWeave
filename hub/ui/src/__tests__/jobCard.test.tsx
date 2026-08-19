@@ -93,6 +93,11 @@ describe('JobCard loop block', () => {
     expect(screen.getByText('Bump lodash (in_progress)')).toBeInTheDocument()
     expect(screen.getByText('2 open questions')).toBeInTheDocument()
     expect(within(screen.getByTestId('job-loop-block')).getByText('Active')).toBeInTheDocument()
+    // Icon.tsx's ICONS map must carry an entry for "all_inclusive" — an unmapped name
+    // renders null, silently dropping the loop glyph next to the "Loop" label.
+    expect(
+      within(screen.getByTestId('job-loop-block')).getByText('Loop').previousElementSibling,
+    ).toBeInstanceOf(SVGElement)
   })
 
   it('shows the stop reason and a Stopped badge once the loop has stopped', async () => {
