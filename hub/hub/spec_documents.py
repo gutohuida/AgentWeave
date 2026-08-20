@@ -273,11 +273,28 @@ def build_index(
             diagnostics.append(_diag("unindexable_document", path=path))
 
     previous = existing.by_path() if existing is not None else {}
+    ordered_paths = sorted(available)
+
+    # A document added to an already-arranged corpus is placed *after* everything the operator has
+    # ordered, not renumbered from one. Numbering from position alone let a new document collide
+    # with an existing order — adding a 34th document to a 33-document corpus produced three
+    # entries all claiming order 10, and `order` carries no uniqueness constraint to catch it, so
+    # the display order among the tie was arbitrary. Found by adding a system map to an imported
+    # corpus, 2026-08-20.
+    carried_orders = [
+        previous[path].order for path in ordered_paths if previous.get(path) is not None
+    ]
+    next_order = (max(carried_orders) + 10) if carried_orders else 10
 
     entries: List[ManifestDocument] = []
-    for position, path in enumerate(sorted(available), start=1):
+    for path in ordered_paths:
         title, kind, phase = known[path]
         carried = previous.get(path)
+        if carried is not None:
+            order = carried.order
+        else:
+            order = next_order
+            next_order += 10
         entries.append(
             ManifestDocument(
                 path=path,
@@ -289,10 +306,11 @@ def build_index(
                 # meaningful parent document, and inventing one writes a hierarchy the operator
                 # never chose into a file that travels with the folder.
                 parent=carried.parent if carried is not None else None,
-                # Order is carried, or a stable sort by path. Deliberately not creation order:
-                # that would make the file's contents depend on database rows which do not
-                # travel with it, so the same corpus would order differently on another machine.
-                order=carried.order if carried is not None else position * 10,
+                # Order is carried where recorded, otherwise derived from a stable sort by path.
+                # Deliberately not creation order: that would make the file's contents depend on
+                # database rows which do not travel with it, so the same corpus would order
+                # differently on another machine.
+                order=order,
             )
         )
 

@@ -111,6 +111,57 @@ class TestBuildIndex:
         assert manifest is None
         assert any(d["code"] == "home_missing" for d in diagnostics)
 
+    def test_a_new_document_is_ordered_after_an_arranged_corpus_not_among_it(self):
+        """Regression: adding one document to an arranged corpus must not collide with it.
+
+        Numbering a new document from its position alone put it at order 10 alongside whatever the
+        operator had already placed there. `order` carries no uniqueness constraint, so the
+        manifest still validated and the display order among the tie was arbitrary — found by
+        adding a system map to a 33-document imported corpus, which produced three entries all
+        claiming order 10.
+        """
+        existing, _ = load_manifest(
+            json.dumps(
+                {
+                    "version": 1,
+                    "home": "spec/b.html",
+                    "documents": [
+                        {
+                            "path": "spec/b.html",
+                            "title": "B",
+                            "kind": "capability",
+                            "status": "current",
+                            "parent": None,
+                            "order": 10,
+                        },
+                        {
+                            "path": "spec/c.html",
+                            "title": "C",
+                            "kind": "capability",
+                            "status": "current",
+                            "parent": None,
+                            "order": 20,
+                        },
+                    ],
+                }
+            )
+        )
+        manifest, _ = spec_documents.build_index(
+            ["spec/a.html", "spec/b.html", "spec/c.html"],
+            _rows(
+                ("spec/a.html", "A", "capability", "current"),
+                ("spec/b.html", "B", "capability", "current"),
+                ("spec/c.html", "C", "capability", "current"),
+            ),
+            existing,
+        )
+        by_path = manifest.by_path()
+        assert by_path["spec/b.html"].order == 10, "an arranged document must not move"
+        assert by_path["spec/c.html"].order == 20
+        assert by_path["spec/a.html"].order == 30, "the new document goes after, not among"
+        orders = [document.order for document in manifest.documents]
+        assert len(orders) == len(set(orders)), f"orders collide: {orders}"
+
     def test_order_is_a_stable_path_sort_and_repeats_identically(self):
         args = (
             ["spec/c.html", "spec/a.html", "spec/b.html"],

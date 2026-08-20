@@ -320,6 +320,29 @@ somewhere to author it (it is not a migration of anything, so it has no openspec
 Worth noting the shape this points to: **an imported corpus is not a finished corpus.** It has the
 content but none of the structure, and the structure is the part AgentWeave is supposed to add.
 
+## 16. The index writer collided orders when a document joined an arranged corpus — FIXED
+
+**What happened.** Adding the authored system map to the 33-document imported corpus produced an
+index in which **three documents all claimed `order: 10`**. `build_index` numbered a new document
+`position * 10` counting from one, ignoring the orders already recorded — so the 34th document
+landed on top of the first.
+
+The manifest validated anyway: `order` carries no uniqueness constraint. The only symptom was
+display order among the tie being arbitrary.
+
+**Why it matters beyond the fix.** This was a defect in the change made *earlier the same day*, and
+neither the unit tests nor the 33-document import surfaced it. It appeared the first time a document
+was added to a corpus that already had an arrangement — which is the ordinary case for every day
+after the first, and the case no test covered because every test built its index from nothing.
+
+**Fixed:** a new document is placed after the highest recorded order, never among the existing ones,
+with a regression test asserting the orders are distinct.
+
+**What would be nice.** `load_manifest` validates a great deal — duplicate paths, unknown parents,
+parent cycles, kind/phase pairing — but not that orders are distinct. It is the one field whose
+whole purpose is to be compared against the others. Worth adding, since an index is now something
+the product writes rather than something a human hand-maintains.
+
 ## 13. `propose` answers 200 with a list of reasons it did not propose
 
 **What happened.** Getting a document to `approved` in a test took four attempts, each failing on
