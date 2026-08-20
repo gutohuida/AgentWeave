@@ -90,9 +90,20 @@ This is the *"spinning on none"* failure the 2026-08-19 fix was written against,
 different route — and that fix did not close this one, because it added `assigned` to the claimable
 set, not `completed`.
 
-**It appears reachable today, without dependencies**, whenever a loop's tasks all complete and
-nothing reviews them. **Not verified.** It should be, before any of this is designed around: it
-would be a live bug worth fixing on its own terms.
+**VERIFIED 2026-08-20**, and it is reachable today, without dependencies, whenever a loop's tasks
+all complete and nothing reviews them. Reproduced by execution against the real firing path in
+`hub/tests/test_scheduler.py::test_loop_whose_tasks_are_all_completed_but_unapproved_spins`: a loop
+with `stop_when_queue_empties=True` and two `completed` tasks was fired three times; **all three
+firings succeeded, claimed nothing, changed no task, and left `stopped_at` null**, each having
+spawned a `JobRun` that reached `completed` doing nothing. The job stayed `enabled`.
+
+`under_review` reaches the same gap by the same route —
+`test_a_stalled_loop_queue_is_neither_claimable_nor_drained` pins both statuses against the two
+constants directly. Every other task status is in exactly one of `CLAIMABLE_LOOP_TASK_STATUSES` or
+`TERMINAL_FOR_BINDING`; these two are in neither, and that gap **is** the bug.
+
+So this is a live bug worth fixing on its own terms. **What the fix should be is not obvious** —
+see §11's first two open questions, which it turns out are the same question.
 
 ## 4. Why a solo loop cannot execute a chain at all
 
@@ -290,8 +301,10 @@ at a document that declares an order.
 
 ## 11. Still open
 
-- **Does the §3 spin actually happen?** Everything else here is reasoning; this is checkable. Do it
-  first.
+- ~~**Does the §3 spin actually happen?**~~ **Answered 2026-08-20: yes.** Reproduced by execution —
+  see §3. What remains open is the fix, and it is entangled with the two questions below rather than
+  being a local repair: the loop cannot distinguish *waiting for a reviewer who is coming* from
+  *waiting for a reviewer who never will*, and which of those it is depends entirely on §7's fork.
 - **Who guarantees the handoff** (§7) — agent alone, loop alone, or both.
 - **Should a loop ever claim more than one item** (§9).
 - **How does a reviewer get chosen when several are free?** The same least-loaded-versus-round-robin

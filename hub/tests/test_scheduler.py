@@ -31,9 +31,12 @@ from hub.db.models import (
     Run,
     Task,
 )
+from hub.run_task_binding import TERMINAL_FOR_BINDING
 from hub.scheduler import (
     _LOOP_BRIEFING_CHECKPOINT_CHARS,
+    CLAIMABLE_LOOP_TASK_STATUSES,
     JobScheduler,
+    _claim_loop_task,
     _loop_stop_reason,
     finalize_job_run_for_conversation,
 )
@@ -699,6 +702,152 @@ async def test_loop_fire_resumes_an_assigned_task_rather_than_stranding_it(
         # And the pending one is NOT claimed alongside it -- that skipping is what stranded work.
         assert untouched.status == "pending"
         assert untouched.assignee is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stalled_status", ["completed", "under_review"])
+async def test_a_stalled_loop_queue_is_neither_claimable_nor_drained(stalled_status):
+    """The two constants behind the §3 spin, stated directly and for both statuses it reaches.
+
+    A task awaiting review is invisible to `_claim_loop_task` and simultaneously counted as open
+    by `_loop_stop_reason`. Every status is in exactly one of those two sets except these two,
+    which are in neither -- that gap IS the bug. The end-to-end consequence is the test below;
+    this one pins the mechanism so a fix cannot half-close it.
+    """
+    assert stalled_status not in CLAIMABLE_LOOP_TASK_STATUSES
+    assert stalled_status not in TERMINAL_FOR_BINDING
+
+    suffix = f"stalled-{stalled_status}"
+    async with async_session_factory() as db:
+        job = await _make_job(db, suffix=suffix, agent=f"loop-agent-{suffix}")
+        loop = await _make_loop(
+            db, job_id=job.id, purpose="stalled, not drained", stop_when_queue_empties=True
+        )
+        db.add(
+            Task(
+                id=f"task-{suffix}",
+                project_id="proj-test",
+                title="worked, awaiting a reviewer",
+                status=stalled_status,
+                loop_id=loop.id,
+            )
+        )
+        await db.commit()
+
+    async with async_session_factory() as db:
+        fresh_job = await db.get(AIJob, job.id)
+        fresh_loop = (await db.execute(select(Loop).where(Loop.job_id == job.id))).scalar_one()
+        # Nothing to work on...
+        assert await _claim_loop_task(db, fresh_loop) is None
+        # ...and no reason to stop. The firing happens anyway, and does nothing.
+        assert await _loop_stop_reason(db, fresh_job) is None
+
+
+@pytest.mark.asyncio
+async def test_loop_whose_tasks_are_all_completed_but_unapproved_spins(
+    app, auth_headers, bind_runner
+):
+    """REPRODUCTION, 2026-08-20: the spin predicted by
+    `openspec/explorations/2026-08-20-the-loop-under-dependencies.md` §3.
+
+    `completed` sits in neither set that decides a firing's fate:
+
+    - not in `CLAIMABLE_LOOP_TASK_STATUSES` (`scheduler.py`) -> nothing to claim;
+    - not in `TERMINAL_FOR_BINDING` (`run_task_binding.py`) -> `_loop_stop_reason` counts it
+      as open, so `stop_when_queue_empties` never arms.
+
+    So a loop whose queue has all been worked and none of it reviewed fires forever, claims
+    nothing, and never stops. This is the same "spinning on none" failure the 2026-08-19 fix
+    was written against (see the `assigned` test above); that fix added `assigned` to the
+    claimable set and left this route open.
+
+    Asserting the CURRENT behaviour, so the test flips when the bug is fixed.
+    """
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {"loop-agent-spin": {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    await bind_runner("loop-agent-spin", cli="claude")
+
+    fake_session = MagicMock()
+    fake_session.pid = 4747
+    fake_session.read.side_effect = [
+        '{"type":"result","subtype":"success","is_error":false,"session_id":"sess-spin-1"}\n',
+        "",
+        '{"type":"result","subtype":"success","is_error":false,"session_id":"sess-spin-2"}\n',
+        "",
+        '{"type":"result","subtype":"success","is_error":false,"session_id":"sess-spin-3"}\n',
+        "",
+    ]
+    fake_session.wait.return_value = 0
+
+    now = datetime.now(timezone.utc)
+    async with async_session_factory() as db:
+        job = await _make_job(db, suffix="spin", agent="loop-agent-spin")
+        loop = await _make_loop(
+            db,
+            job_id=job.id,
+            purpose="worked but never reviewed",
+            stop_when_queue_empties=True,
+        )
+        for n in (1, 2):
+            db.add(
+                Task(
+                    id=f"task-spin-{n}",
+                    project_id="proj-test",
+                    title=f"done, awaiting a reviewer who never comes ({n})",
+                    status="completed",
+                    assignee="loop-agent-spin",
+                    loop_id=loop.id,
+                    created_at=now - timedelta(minutes=10 - n),
+                    updated=now - timedelta(minutes=10 - n),
+                )
+            )
+        await db.commit()
+
+    firings = []
+    with patch(  # noqa: SIM117
+        "hub.api.v1.agent_trigger.PtySession.spawn", MagicMock(return_value=fake_session)
+    ):
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            scheduler = JobScheduler()
+            for _ in range(3):
+                async with async_session_factory() as db:
+                    fresh_job = await db.get(AIJob, job.id)
+                    firings.append(
+                        await scheduler._fire_job_internal(
+                            fresh_job, trigger="scheduled", session=db
+                        )
+                    )
+                for task in list(agent_trigger._background_runs):
+                    await task
+
+    # Fires forever: three scheduled firings, none refused by the stop condition.
+    assert firings == [True, True, True]
+
+    async with async_session_factory() as db:
+        refreshed_job = await db.get(AIJob, job.id)
+        assert refreshed_job.enabled is True
+
+        refreshed_loop = (await db.execute(select(Loop).where(Loop.job_id == job.id))).scalar_one()
+        # Never stops: the queue is not "empty" because `completed` is not terminal for binding.
+        assert refreshed_loop.stop_reason is None
+        assert refreshed_loop.stopped_at is None
+
+        # Claims nothing: three firings left both tasks exactly as they were.
+        tasks = (
+            (await db.execute(select(Task).where(Task.loop_id == refreshed_loop.id)))
+            .scalars()
+            .all()
+        )
+        assert [t.status for t in tasks] == ["completed", "completed"]
+
+        # And each firing still spawned a run and burned a turn doing nothing.
+        job_runs = (await db.execute(select(JobRun).where(JobRun.job_id == job.id))).scalars().all()
+        assert len(job_runs) == 3
+        assert {r.status for r in job_runs} == {"completed"}
 
 
 @pytest.mark.asyncio
