@@ -8,7 +8,7 @@
   "stop_at": "2026-08-20T08:00:00+01:00",
   "stop_when_queue_empties": false,
   "run": 1,
-  "iteration": 17,
+  "iteration": 18,
   "session_stopped": false,
   "prepared_by": "Interactive session 2026-08-19T22:55-23:25+01:00, via /autonomous-prep. Both headline defects were reproduced or traced to a named line before being queued — item 1 by reading the render path end to end, item 2 by exercising the live API against two databases. Runway verified rather than assumed: playwright present, `pytest tests/test_project_lifecycle.py tests/test_project_persistence.py` 17 passed, vitest 1152 passed, tsc clean, working tree clean.",
   "operator_intent_verbatim": "Open any agentweave project with any agentweave app. Also: 'I think I clicked to create an agent in one project but it was actually creating into another project. Something weird there.'",
@@ -125,7 +125,7 @@
     }
   ],
   "current": "idle",
-  "next_action": "Iteration 17 re-verified iteration 16's conclusion rather than trusting it secondhand: branch/log/STATE.json all matched (HEAD 338438b, clean tree), `openspec list` still empty, `openspec validate --all --strict` 33/33 (unchanged), draft PR #7 still open, mergeable, CLEAN, zero comments/reviews. The two newest CI runs (2026-08-20T03:29Z) trace to iteration 16's own two checkpoint commits, not new operator activity. The queue (P1-P7) is fully closed and stays closed. Next iteration: repeat the same check (branch state, `openspec list`, log grep, CI, PR activity), and specifically re-derive whether any 'newer' CI run is actually new push activity or just the previous iteration's own checkpoint commit (compare commit timestamps, don't assume). If genuinely nothing surfaces, idle-checkpoint again (verify branch state, confirm CI green, extend the heartbeat, stop) rather than manufacture a queue item. Do NOT restart or reconfigure the Hubs on ports 8000/8010 even to 'just check' — that limit is still in force. stop_at is 2026-08-20T08:00:00+01:00.",
+  "next_action": "Iteration 18 re-verified iteration 17's conclusion rather than trusting it secondhand: branch/log/STATE.json all matched (HEAD 9c25794, clean tree), `openspec list` still empty, `openspec validate --all --strict` 33/33 (unchanged), draft PR #7 still open, mergeable, CLEAN, zero comments/reviews. The two newest CI runs (2026-08-20T03:49Z) trace to iteration 17's own two checkpoint commits, not new operator activity. The queue (P1-P7) is fully closed and stays closed. Next iteration: repeat the same check (branch state, `openspec list`, log grep, CI, PR activity), and specifically re-derive whether any 'newer' CI run is actually new push activity or just the previous iteration's own checkpoint commit (compare commit timestamps, don't assume). If genuinely nothing surfaces, idle-checkpoint again (verify branch state, confirm CI green, extend the heartbeat, stop) rather than manufacture a queue item. Do NOT restart or reconfigure the Hubs on ports 8000/8010 even to 'just check' — that limit is still in force. stop_at is 2026-08-20T08:00:00+01:00.",
   "decisions_for_user": [
     {
       "id": "D-env",
@@ -167,7 +167,7 @@
     "openspec_changes_in_flight": "none — `ls openspec/changes/ | grep -v archive` is empty",
     "not_run_at_prep": "Full hub/tests/ suite and eslint were NOT run tonight. The loop should establish its own baseline early so it can tell inherited breakage from its own."
   },
-  "last_heartbeat": "2026-08-20T04:08:55+01:00",
+  "last_heartbeat": "2026-08-20T05:08:21+01:00",
   "log_file": ".claude/autonomous/2026-08-19-project-portability-log.md",
   "driver": "Windows Scheduled Task 'AgentWeaveAutonomousSession' -> .claude/skills/autonomous-session/scripts/run-iteration.ps1 -> headless `claude -p`. Each firing is a fresh process; all continuity is STATE.json + the log. Session-bound drivers (ScheduleWakeup, CronCreate) are NOT used - the 2026-08-15 run asked for nine hours and got forty minutes because the session went away.",
   "heartbeat_note": "Deliberately stale. The process that ran iteration 10 has finished and released the branch, so the next scheduled firing takes over instead of standing down against a heartbeat nobody is refreshing.",
