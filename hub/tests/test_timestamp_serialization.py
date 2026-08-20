@@ -10,6 +10,7 @@ sees a naive value that actually came from the database.
 """
 
 from datetime import timezone
+from pathlib import Path
 
 import pytest
 
@@ -48,3 +49,40 @@ async def test_runner_response_timestamps_carry_a_utc_offset(app, auth_headers) 
                 f"{field}={value!r} has no UTC offset — a client parsing this as a bare "
                 "date-time will read it as local time"
             )
+
+
+def test_every_orm_datetime_column_uses_the_utc_correction() -> None:
+    """No lint or test previously swept every `DateTime(...)` declaration in `models.py` the way
+    `hub/ui/src/__tests__/hubTime.test.ts` sweeps the client — so a future column written as
+    `mapped_column(DateTime(timezone=True))` directly, instead of `mapped_column(UTCDateTime())`,
+    would silently bypass the relabeling above and reintroduce the naive-timestamp bug. This is
+    that sweep, the server-side mirror of `hubTime.test.ts`'s own.
+
+    Excludes `UTCDateTime`'s own `impl = DateTime(timezone=True)` line — that one *is* the
+    correction, not a bypass of it — and the `from sqlalchemy import (... DateTime ...)` line.
+    """
+    source_path = Path(__file__).resolve().parents[1] / "hub" / "db" / "models.py"
+    lines = source_path.read_text(encoding="utf-8").splitlines()
+
+    utc_datetime_uses = [line for line in lines if "UTCDateTime(" in line]
+    # A sweep that found nothing to exempt would pass vacuously forever.
+    assert len(utc_datetime_uses) > 30, (
+        "expected dozens of UTCDateTime() columns already in models.py — found "
+        f"{len(utc_datetime_uses)}; the sweep may be reading the wrong file"
+    )
+
+    offenders = []
+    for i, line in enumerate(lines):
+        if "UTCDateTime(" in line:
+            continue
+        stripped = line.strip()
+        # A `mapped_column(` argument list either opens with the type on the same line
+        # (`mapped_column(DateTime(...))`) or, wrapped, has it as the first token of a
+        # continuation line (`    DateTime(...), default=...`) — either shape is a bypass.
+        if stripped.startswith("DateTime(") or "mapped_column(DateTime(" in line:
+            offenders.append((i + 1, stripped))
+
+    assert offenders == [], (
+        "found a raw DateTime(...) column bypassing UTCDateTime — SQLite will silently drop "
+        f"its timezone on round-trip: {offenders}"
+    )
