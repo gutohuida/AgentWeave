@@ -563,3 +563,30 @@ No further work is queued. The next iteration should re-run `openspec list` and 
 new findings before assuming there is nothing left — but if genuinely nothing surfaces, idle-
 checkpointing (verify the branch, confirm CI, extend the heartbeat, stop) is the correct outcome
 per the pre-authorised guidance, not manufacturing a queue item to fill the window.
+
+## Iteration 8 — idle checkpoint, queue confirmed still empty (2026-08-20T01:48+01:00)
+
+Followed iteration 7's own instruction literally rather than trusting its conclusion secondhand.
+`git branch --show-current` / `git log --oneline` / `git status` confirm the branch, its four most
+recent commits, and a clean tree all match STATE.json exactly — no reconciliation needed.
+
+`openspec list` — "No active changes found." `ls openspec/changes/ | grep -v archive` — empty.
+`openspec validate --all --strict` — 33/33 passed (down from 34 pre-archive, as expected: the
+archived `portable-project-identity` change no longer counts as a separate item). Grepped the
+full log (all 565 lines, not just iteration 7's entry) for `open finding|worth rechecking|future
+iteration|not yet|todo|TODO|deferred|not done|still open|unresolved`. Every hit traced to already-
+closed, deliberate decisions recorded inline at the time: P1's choice not to thread a defence-in-
+depth `projectId` prop (log line ~97), P2's choice not to run the full suite/browser check because
+P2 has no UI surface of its own (log line ~177), and P5's `_require_agent_job_allowance` thread,
+which is conditional on a change that has not happened and is not actionable today (log line
+~535). Nothing new.
+
+`gh run list --branch autonomous/2026-08-19-project-portability --limit 5` — five most recent CI
+runs on this branch all `completed success`, 5m30s-7m45s each. Branch remains fully green.
+
+**Conclusion.** The queue is genuinely empty and stays empty. Per the pre-authorised guidance,
+this is an idle checkpoint: verify branch, confirm CI, extend the heartbeat, stop — not manufacture
+a queue item to fill the window. `stop_at` is 2026-08-20T08:00:00+01:00; six hours remain. Next
+iteration should repeat this same check (branch state, `openspec list`, log grep, CI) before
+assuming the same conclusion still holds — new work could arrive from the operator, or CI could
+regress, between now and then.
