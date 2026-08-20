@@ -1,1 +1,1 @@
-.claude/handoffs/handoff-0066-2026-08-20-2221-document-adoption-shipped-and-the-ports-were-backwards.md
+.claude/handoffs/handoff-0067-2026-08-20-2300-the-corpus-is-tracked-and-the-marker-pointed-nowhere.md
