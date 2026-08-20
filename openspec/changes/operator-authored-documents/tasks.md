@@ -25,7 +25,7 @@
 
 ## 4. Verification
 
-- [ ] 4.1 Run the full `hub/tests/` suite and confirm no regression against the 2521-passed baseline
+- [x] 4.1 Run the full `hub/tests/` suite and confirm no regression against the 2521-passed baseline
 - [x] 4.2 Run `py -3.11 -m ruff check` and `py -3.11 -m black --check` on every changed file
 - [x] 4.3 Import two real openspec capabilities end to end against a throwaway project, and confirm both render, index and read back with the requirements the source declared
 - [x] 4.4 Perform one mutation check: revert the operator actor to an agent actor, watch a named test fail, restore it
