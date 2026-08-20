@@ -52,16 +52,21 @@
 
 ## 8. Verification only a human can do
 
-**Driven against a rehearsal corpus, 2026-08-20.** Everything factual below was settled against a
+**Rehearsed 2026-08-20, then run for real the same day.** The rehearsal came first, deliberately:
+the first run of a route that *could* overwrite a corpus should not be against the corpus. It used a
 throwaway Hub on port 8021, a fresh database, and a **byte-identical copy** of this repository's
-`spec/` tree (35 documents) registered as `proj-f8de11d8`. The operator's trial Hub on 8010, its
-database, and the real `spec/` files were never involved — deliberately, because the first run of a
-route that *could* overwrite a corpus should not be against the corpus. Browser assertions live in
+`spec/` tree (35 documents) registered as `proj-f8de11d8`. Browser assertions live in
 `hub/tests/browser/test_adopted_corpus.py` and were shown to **fail on an identical un-adopted
 project** (`proj-2795a7b6`), so they measure adoption rather than the app rendering.
 
-What remains genuinely open is (a) doing it for real, which is the operator's call and their Hub,
-and (b) three judgements a browser must not be allowed to tick.
+**The real run then followed §9 against the trial Hub on 8010 and this repository's own corpus as
+`proj-5e960453`** — every figure below reproduced exactly, `git status --short spec/` stayed empty
+across both adoption runs, and the same 9 browser tests passed against the real project. Getting
+there needed one correction the chain had wrong: `proj-5e960453` does not exist in
+`<repo>/hub/data/agentweave.db`, only in `~/.agentweave/hub/profiles/beta/agentweave.db`, so 8010
+was restarted against that database (operator's call) before §9 had a target at all.
+
+What remains open is the three judgements a browser must not be allowed to tick.
 
 - [x] 8.1 **The corpus adopts.** Register this repo as a project, run corpus-wide adoption over `spec/`, and confirm the response lists 34 capability documents plus `spec/agentweave.html`. **Rehearsed:** 35 adopted, 0 skipped, 0 diagnostics; kinds `{capability: 34, system-map: 1}`; phases `{current: 34, exploring: 1}`; all 35 `phase_source: read`, none defaulted; 452 requirements indexed.
 - [x] 8.2 **Nothing was destroyed.** Run `git status` and `git diff --stat` on `spec/` afterwards. **The expected result is no change at all.** This is the single most important check in the list. **Rehearsed:** sha256 of all 36 files taken before and after — identical; the copy still `diff -r`-equal to `<repo>/spec`; and `git status --short spec/` in the real repo empty throughout.
@@ -82,10 +87,13 @@ contact with a real corpus.
 
 ### Left for the operator
 
-1. **Run it for real.** The rehearsal proves the route behaves; it does not put a row in *your*
-   database. Follow §9 against the trial Hub on 8010 and `proj-5e960453` when you want the real
-   corpus tracked. §9 step 1 remains the one that matters.
-2. **The three taste judgements** marked "still open" above.
+1. ~~**Run it for real.**~~ **Done 2026-08-20.** §9 was run end to end against 8010 and
+   `proj-5e960453`: 35 adopted, 452 requirements, 0 diagnostics; sha256 of all 36 `spec/` files
+   identical before and after; the second run skipped all 35 as `document_exists` with no
+   differences; the 409 and 422 refusals read as written and left their files untouched; reindex
+   filed `project-instructions` and `quiet-hours` with real titles, a 16-line pure insertion into
+   `spec/index.json` with nothing removed. **This repository's corpus is now tracked.**
+2. **The three taste judgements** marked "still open" above — the only thing left in this section.
 
 ## 9. User test guide
 

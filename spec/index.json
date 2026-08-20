@@ -195,6 +195,22 @@
       "order": 240
     },
     {
+      "path": "spec/capabilities/project-instructions/spec.html",
+      "title": "Project instructions",
+      "kind": "capability",
+      "status": "current",
+      "parent": null,
+      "order": 340
+    },
+    {
+      "path": "spec/capabilities/quiet-hours/spec.html",
+      "title": "Quiet hours",
+      "kind": "capability",
+      "status": "current",
+      "parent": null,
+      "order": 350
+    },
+    {
       "path": "spec/capabilities/requirement-traceability/spec.html",
       "title": "Requirement traceability",
       "kind": "capability",
