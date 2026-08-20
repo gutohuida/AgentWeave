@@ -217,6 +217,47 @@ both `blocked` and dependency-unmet. Nothing does: `blocked` is reachable only f
 (§3), and an unmet dependency prevents reaching `in_progress` at all. The two are mutually exclusive
 by construction.
 
+### DECIDED — a dependency is met at `approved`, and two things fall out of that
+
+Not at `completed`. The wave advances only after the prerequisite has been reviewed and signed off.
+
+**Consequence one: a dependency chain cannot advance with a single agent.** Author/reviewer
+separation is structural (§6), so review needs a second agent:
+
+```
+   layer 0   agent A builds ──▶ completed ──▶ agent B reviews ──▶ approved
+                                                                     │
+   layer 1                                    agent A can now start ◀┘
+```
+
+This retroactively strengthens §6. Withdrawing the concurrency cap was not merely correct — it was
+**necessary**. `max_concurrent_runs = 1` would have deadlocked every dependency chain of depth
+greater than one, permanently, rather than merely making review awkward.
+
+**Consequence two, unplanned: a dependency chain cannot advance past unverified work.** The gate on
+the `→ approved` edge is already `requirement_gate.evaluate`, which at `gate` rigor refuses approval
+while any of the task's requirements is unverified. Putting the dependency gate and the requirement
+gate on the same edge means the second one guards the first for free. Nobody designed this; it is
+worth stating so it is not removed by accident.
+
+**The cost, stated: the bottleneck moves to review.** A five-deep decomposition needs five review
+cycles, and if review is not happening the board stalls at layer 1 with everything downstream gated.
+The board must say *"layer 2 is waiting on 3 reviews"* rather than only drawing gated cards —
+otherwise a review backlog is indistinguishable from the dependency feature being broken.
+
+**One thing this makes better:** regression becomes rare. `approved → revision_needed` is
+operator-only, so a met dependency can now only come unmet by an explicit operator act, and the rule
+below is a rare safety net rather than a common state.
+
+**DECIDED — a rejected dependency is surfaced, not resolved.** A rejected task never reaches
+`approved`, so its dependents are gated permanently, and `rejected → pending` is operator-only so
+nothing self-heals. The board shows the dependent as gated on rejected work and names it; the
+operator either reopens the dependency or edits the document to drop the edge.
+
+*Rejected:* propagating rejection downstream — one rejection could cascade through a whole
+decomposition unseen. *Rejected:* treating a rejected dependency as met — a dependent would start
+because its prerequisite was abandoned, which is almost never the intent.
+
 **DECIDED — a dependency that regresses after a dependent started flags, it does not halt.** `A` can
 go `completed → under_review → revision_needed → in_progress` while `C`, which depends on it, is
 already running. A precondition checked on an edge says nothing about this, so `C` continues — and
@@ -286,9 +327,40 @@ was settled. The existing rule covers this exactly (`spec_service.py:98-101`):
 So: an import naming a non-approved document is **reported in `blocking`**, and refused at propose or
 approval. Same pattern, same place, nothing new.
 
-**Open:** an import naming a document that has since been **archived**. Archived is downstream of
-approved, so the reference should hold — but nothing has been checked, and `archived` was added late
-(2026-08-16).
+### DECIDED — once approved, a path is frozen forever
+
+The archived question was checked and **did not close cleanly**, which turned out to matter more than
+the question itself. `rename_document` refuses on exactly one phase (`spec_service.py:638-641`):
+
+```python
+if document.phase == spec_lifecycle.APPROVED:      # equality — not "approved or later"
+```
+
+and `approved` has two exits, both in `spec_lifecycle.TRANSITIONS` (`:45`, `:50`):
+
+```
+                    ┌──▶ (APPROVED, ARCHIVED)    ← path unfreezes
+   approved ────────┤
+                    └──▶ (APPROVED, EXPLORING)   ← path unfreezes
+```
+
+So the path is frozen *while the document sits in approved*, not permanently. Approve → import →
+archive or reopen → rename → the import dangles. **This is a latent hole independent of imports:
+today an approved document's path can be changed by archiving it first**, which the refusal's own
+stated reason — *"its path is part of what was approved"* — plainly does not intend.
+
+**DECIDED — change the refusal from "is approved" to "has ever been approved".** Monotone, faithful
+to the stated reason, and reopening a document for revision does not un-approve history.
+
+It needs a durable fact, and `explore_closed_at` (`models.py:1649`) is the precedent for exactly that
+shape — a nullable timestamp recording a one-way event. The distinction is that `explore_closed_at`
+is deliberately **reset** on reopen (`spec_lifecycle.py:253-257`, *"reopening genuinely reopens"*),
+and this one never is. That difference is the whole point and should be commented where the column is
+added.
+
+It is also derivable without a column: phase transitions are recorded as `kind="phase"` events
+carrying `{"from", "to"}` (`spec_lifecycle.py:259-265`). A column is cheaper to read and matches the
+existing precedent; the event history is the check that it is correct.
 
 **Open:** cross-document cycles. `spec_completeness` checks within one document (`:106`, `:130`);
 `A ↔ B` needs the corpus, and only part of it may be adopted on this machine. A dangling import has a
@@ -513,6 +585,14 @@ filter on a column that exists.
 unreachable for edge-drawing, contradicting the decision below. The picker lists the real documents
 plus one board for the loose tasks. It is a filter on `NULL`, not a new concept.
 
+**DECIDED — a layer whose tasks are all finished collapses to one expandable row.** Scoping to a
+document narrowed the overpopulation problem the operator raised but did not solve it: a finished
+document's board is still a screen of done cards. Collapsing by layer keeps the DAG's shape intact —
+what depended on what is still legible — without the finished half taking the screen.
+
+*Rejected:* hiding terminal tasks behind a toggle. Edges into a hidden task have to render as
+something, or the remaining graph looks rootless.
+
 **The picker is worth designing, not just listing.** If it carries each document's open and total
 counts, choosing a board and seeing what remains become one act:
 
@@ -590,10 +670,14 @@ written. Auto-assignment is filling in two `None`s at `spec_tasks.py:192-193` �
 
 - **Does a tier name a model, or a (model, effort) pair?** The second is better and costs building
   `Runner.flags` support that nothing has yet. (The tier *names* are decided — §5.)
-- **An import naming a document that has since been archived** (§4). `archived` is downstream of
-  `approved` so the reference should hold, but nothing has been checked and the phase shipped late.
 - **Cross-document cycles** (§4). Within-document cycle detection is a small addition to
   `spec_completeness`; across documents it needs the corpus, and only part of it may be adopted here.
+- **Whether an agent may declare a task's complexity** (§5). The exploration notes that *"an agent
+  writing 'this needs Opus 5' is an agent committing the operator's money"*, and complexity is one
+  indirection from a model choice. `decide_evidence` already refuses an agent deciding evidence it
+  produced (`mcp_server.py:1127`) — the same shape, unresolved here. **This is what blocks 4c.**
+- **Does review become the bottleneck in practice?** (§4.) Metering a dependency chain against review
+  latency is the kind of thing only real use answers.
 - **Least-loaded or round-robin** (§5, Q2).
 - **Should assignment ever start work?** Recommended as a firm non-goal, but it is the question
   behind "does approving a document make eight agents wake up", and leaving it unanswered means
