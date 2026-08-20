@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Requirement traceability</title>
+<meta name="aw-spec-kind" content="capability">
+<meta name="aw-spec-status" content="current">
+<meta name="aw-spec-rigor" content="sketch">
+<meta name="aw-spec-schema-version" content="1">
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+    --surface-2: #21262d; --surface: #161b22;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+:root[data-theme="dark"] {
+  --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+  --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+  --surface-2: #21262d; --surface: #161b22;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 2rem 2.5rem 4rem; background: var(--bg); color: var(--fg);
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+h1 { font-size: 1.75rem; margin: 0 0 .25rem; }
+h2 { font-size: 1.15rem; margin: 2.5rem 0 .75rem; padding-bottom: .3rem;
+     border-bottom: 1px solid var(--border); }
+h3 { font-size: 1rem; margin: 1.5rem 0 .4rem; }
+p { margin: .5rem 0; }
+ul, ol { margin: .5rem 0; padding-left: 1.4rem; }
+li { margin: .25rem 0; }
+a { color: var(--aw-accent); }
+.aw-meta { color: var(--muted); font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-chip { display: inline-block; padding: .1rem .5rem; border-radius: 999px;
+           background: var(--surface-2); font-size: .78rem; margin-right: .4rem; }
+.aw-requirement { border-left: 3px solid var(--border); padding: .1rem 0 .1rem .9rem;
+                  margin: 1.1rem 0; }
+.aw-requirement-must { border-left-color: var(--aw-accent); }
+.aw-requirement-should { border-left-color: var(--aw-warn); }
+.aw-requirement-may { border-left-color: var(--border); }
+.aw-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8rem;
+         color: var(--muted); }
+.aw-modal { font-weight: 600; }
+.aw-modal-must { color: var(--aw-accent); }
+.aw-modal-should { color: var(--aw-warn); }
+.aw-modal-may { color: var(--fg); font-weight: 400; }
+.aw-chip-rigor-gate { color: var(--aw-accent); border: 1px solid var(--aw-accent); }
+.aw-chip-rigor-contract { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Phase is a lifecycle, and the question it answers is "can I rely on this?". `approved` and a
+   capability's `current` are settled and take the done tone; `proposed` is waiting on an operator
+   decision and takes warn; `exploring` and `archived` are quiet for opposite reasons — one has not
+   arrived yet, the other has been superseded. Deliberately NOT the accent: this document already
+   spends accent on links and on MUST, and a third meaning would empty it of any. `kind` keeps the
+   plain chip on purpose — it is a category, not a state, and hue there ranks nothing. */
+.aw-chip-phase-done { color: var(--aw-ok); border: 1px solid var(--aw-ok); }
+.aw-chip-phase-waiting { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+.aw-chip-phase-quiet { color: var(--muted); }
+.aw-chip-phase-archived { color: var(--muted); text-decoration: line-through; }
+/* An unresolved question blocks `propose`, so it is a real state and not a label. Resolved stays
+   the plain chip — the reader needs to find what is still open, not celebrate what is closed. */
+.aw-chip-open { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Limits is where a reader is most likely to be misled, and it read identically to Checked. */
+.aw-limits { color: var(--aw-warn); }
+/* The first screenful was entirely monochrome, so the document read as texty however the
+   requirements below were coloured. This puts the same modal scheme where the eye lands first,
+   carrying counts rather than decoration. */
+.aw-summary { margin: 0 0 1.5rem; font-size: .9rem; color: var(--muted); }
+.aw-summary .aw-count { font-weight: 600; }
+.aw-summary-sep { color: var(--border); margin: 0 .45rem; }
+.aw-rationale { color: var(--muted); font-size: .9rem; }
+.aw-refs { font-size: .82rem; color: var(--muted); }
+.aw-note { color: var(--muted); font-style: italic; }
+.aw-empty { color: var(--muted); }
+table { border-collapse: collapse; margin: .75rem 0; width: 100%; }
+th, td { border: 1px solid var(--border); padding: .4rem .6rem; text-align: left;
+         vertical-align: top; font-size: .92rem; }
+code, pre { background: var(--surface); border-radius: 4px; }
+code { padding: .1rem .3rem; font-size: .88em; }
+</style>
+</head>
+<body>
+<h1>Requirement traceability</h1>
+<p class="aw-meta"><span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><span class="aw-chip">sketch</span></p>
+<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">6</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">6</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">31</span> criteria</p>
+<section><h2 id="requirements">Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-1"><span class="aw-id">FR-1</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL maintain an index of the requirements a project&#x27;s specification documents declare, keyed by the stable identifier the Hub mints, so that other records can point at a requirement without copying its wording.</p><p class="aw-rationale">The index SHALL be derived from the documents and SHALL NOT be authoritative. It SHALL be reconstructible from the files alone, and it SHALL NOT hold wording that is not in a document. Each indexed requirement SHALL carry its stable identifier, the document declaring it, whether it is active or retired, its current semantic digest, and where it sits in the rendered document. An identifier SHALL be unique within the document that declares it. Identifiers are minted per document, so the same identifier names a different requirement in a different document; a record pointing at a requirement SHALL therefore point at the indexed requirement itself rather than at its identifier as text. Where an identifier is supplied by name and more than one document in the project declares it, resolution SHALL be refused as ambiguous rather than resolved to either — choosing one would link work to a requirement nobody named, and being wrong would be invisible until someone read both documents. The semantic digest SHALL be computed from one definition used by every surface, and SHALL cover what a reader must satisfy: the obligation, the statement, the side of the boundary it binds, and the criteria demonstrating it. It SHALL NOT cover explanatory prose. The canonicalization producing it SHALL be recorded with each digest, so a digest taken under an earlier rule is distinguishable from a rewording. A requirement that is removed from its document SHALL become retired rather than disappear. Work and evidence already pointing at it remain pointed at it — what a retired requirement once demanded, and what was built for it, is a question that outlives the requirement. Each change of a requirement&#x27;s semantic digest SHALL be recorded append-only with the digest before, the digest after, whether the change arrived through the Hub or from an external edit, and the actor.</p></div><div class="aw-requirement aw-requirement-must" id="FR-2"><span class="aw-id">FR-2</span> <p><span class="aw-modal aw-modal-must">SHALL</span> A task SHALL be linked to the requirements it serves by reference, not by copied text.</p><p class="aw-rationale">A free-text list naming requirements cannot be joined, cannot be checked, and does not notice when the requirement it names is reworded or retired. Observed in a live run: a task carried `&quot;FR-8 — initialize-members&quot;` as a string, and nothing in the system could answer whether FR-8 had a task, whether it had changed since, or whether anything had verified it. The agent building that task could not read the specification at all and worked from that copied string, which made it the contract in practice. A link SHALL record which actor created it and, where an agent did, the run. Links SHALL NOT be removed when a task reaches a terminal state. What work served a requirement is asked mostly about finished work. Where existing tasks carry legacy free-text references, migration SHALL convert those that resolve to a requirement in the same project into links, and SHALL preserve the remainder verbatim as unresolved references. It SHALL NOT discard a value it cannot interpret, and SHALL NOT create a requirement to match one.</p></div><div class="aw-requirement aw-requirement-must" id="FR-3"><span class="aw-id">FR-3</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Evidence for a requirement SHALL record its kind, the location of its artifact, the actor that produced it, the run where an agent produced it, and **the requirement digest it was produced against**.</p><p class="aw-rationale">Evidence SHALL be whatever demonstrates the work — a test run, a screenshot, a diff, a path. The set of kinds SHALL be open to additions, because constraining evidence to what was imaginable at design time is how the record stops describing what was actually done. Pinning evidence to a digest rather than to a requirement is what makes staleness detectable: evidence accepted against one wording says nothing about a different wording, and without the pin the difference is unobservable after the fact. Evidence SHALL be stored as an artifact in the project&#x27;s own directory, with the record holding its location rather than its content. An operator SHALL be able to read, move and archive evidence with ordinary tools, and the database SHALL NOT become an artifact store. Retention SHALL be a project policy with `never` among its choices. Removing an artifact SHALL NOT remove its evidence record: that something was verified, by whom, and against which digest is the record, and the artifact is its attachment. A record whose artifact is gone SHALL report that state rather than disappear. **An agent&#x27;s assertion SHALL NOT by itself constitute evidence.** A run reporting that it verified something produces a record awaiting review, not a verified requirement. A live run produced an agent that correctly reported its work as unverified-by-execution; a less careful one would have reported success in the same words with the same authority, and the record must be able to tell them apart. What distinguishes them is that the artifact is a fact and the claim about what it proves is not — so producing evidence is open, and **accepting** it is the controlled act. Acceptance and rejection SHALL be recorded append-only, attributed to the actor that decided, with no update and no delete. Evidence MAY be accepted by an agent the operator has granted that capability, and by the operator. The capability SHALL be granted per agent by the operator; it SHALL NOT be conferred by a charter or by anything an agent can assert about itself, because a charter describes behaviour and behaviour is not authority. **An agent SHALL NOT accept evidence it produced.** Distinctness is on agent identity, not run identity — the same rule, for the same reason, that already governs task approval. Where a project has granted no agent that capability, acceptance SHALL fall to the operator. That is a supported way to work, not a degraded one.</p></div><div class="aw-requirement aw-requirement-must" id="FR-4"><span class="aw-id">FR-4</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL compute a requirement&#x27;s coverage state from a single definition, and every surface reporting coverage SHALL use it.</p><p class="aw-rationale">Two implementations of &quot;is this verified&quot; disagree eventually, and the disagreement is invisible until someone compares two screens. The precedence, highest first, SHALL be: an unresolved drift record; evidence that no longer applies to the current digest; current-digest evidence awaiting review; sufficient accepted current-digest evidence; linked work in progress or completed without evidence; linked work not started; no linked work at all. A requirement that is structurally invalid or carries no identifier SHALL be reported as a diagnostic outside coverage rather than assigned a coverage state. It is not unserved; it is broken. A project SHALL be able to report, for a document, which of its requirements have no linked work. Coverage SHALL also report whether the evidence&#x27;s implementation footprint is reachable from the project&#x27;s main line of work, and **no surface reporting a coverage state may omit it**. Approved work in this product currently remains on a per-agent branch that nothing merges, so a requirement can hold accepted evidence for code that is not in the product. Reporting `verified` alone would be true of the branch and false of the product; reporting both makes the gap visible where the work is, not only to someone inspecting branches by hand. Integration SHALL NOT be a coverage state. The precedence ranks how good the evidence is; integration is an independent fact about the same evidence, and ranking them together would force a choice between &quot;stale but merged&quot; and &quot;verified but unmerged&quot; that has no correct answer.</p></div><div class="aw-requirement aw-requirement-must" id="FR-5"><span class="aw-id">FR-5</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Where evidence is recorded, the Hub SHALL capture the implementation footprint it was produced against: in a git repository, the commit and the changed blob identifiers; where the project is not a repository, the changed paths and a content hash of each. Both SHALL be supported, because a project without a repository is a supported first-class case and would otherwise be permanently unverifiable.</p><p class="aw-rationale">A later change to a linked footprint, with no new requirement revision and no explicit resolution, SHALL raise a drift candidate. The Hub SHALL NOT edit a specification document in response to drift. That an implementation changed is observable; that a requirement *should* change is a judgement, and inferring it would rewrite an approved specification on the strength of a file diff. An operator SHALL resolve a candidate as specification updated, implementation corrected, or no specification change required. The resolution SHALL record the digest and fingerprint current at that moment, so the same change is not reported again. Overlap between a footprint and a later change is a candidate signal, not proof of divergence.</p></div><div class="aw-requirement aw-requirement-must" id="FR-6"><span class="aw-id">FR-6</span> <p><span class="aw-modal aw-modal-must">SHALL</span> From a requirement it SHALL be possible to reach the work linked to it and the evidence recorded for it; from a task it SHALL be possible to reach the requirements it serves.</p><p class="aw-rationale">An agent recording evidence SHALL be identified by its run credential, never by a value it supplies.</p></div></section><section><h2 id="acceptance">Acceptance criteria</h2><table><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>a specification document is saved with requirements</td><td>each requirement is indexed under its stable identifier with its current digest</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>the index is discarded and rebuilt from the project&#x27;s documents</td><td>it describes the same requirements, identifiers and digests as before</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>a requirement is removed from its document</td><td>it is marked retired records pointing at it still resolve</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>a requirement&#x27;s statement changes so its semantic digest changes</td><td>the previous and current digests are recorded with the actor who caused the change</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>a requirement&#x27;s modal changes and its statement does not</td><td>its semantic digest changes</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>only a requirement&#x27;s rationale changes</td><td>its semantic digest is unchanged</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>work names an identifier that more than one of the project&#x27;s documents declares</td><td>resolution is refused as ambiguous rather than resolved to one of them</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>a task is created naming requirement identifiers</td><td>a link exists from that task to each named requirement</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>a linked task reaches a terminal status</td><td>its links remain</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>a task carries a legacy reference naming an identifier that exists in its project</td><td>migration creates a link to that requirement</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>a task carries a legacy reference that resolves to no requirement</td><td>it is preserved as an unresolved reference with its original text no requirement is created for it</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>evidence is recorded for a requirement</td><td>it names its kind, its producing actor, and the requirement digest current at that moment</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>an agent records evidence for a requirement</td><td>that evidence is awaiting review rather than accepted</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>evidence is accepted or rejected</td><td>the decision is appended with its actor&#x27;s attribution and never overwritten</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>an agent the operator granted the capability accepts evidence produced by a different</td><td>the acceptance is recorded with that agent as the actor</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>an agent attempts to accept evidence it produced</td><td>it is refused</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>an agent without the capability attempts to accept evidence</td><td>it is refused</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>a project has granted no agent the capability</td><td>evidence can still be accepted by the operator</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>an evidence artifact is deleted under the project&#x27;s retention policy</td><td>the evidence record remains and reports that its artifact is gone</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>a document has a requirement with no linked task</td><td>its coverage state is that no work is linked</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>a requirement has accepted evidence and its statement is then reworded</td><td>its coverage state reports the evidence as no longer applying</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>a requirement&#x27;s coverage is shown on its document and counted in a project total</td><td>both derive from the same computation</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>a requirement has accepted evidence whose footprint is not reachable from the project&#x27;s</td><td>its coverage reports both that it is verified and that it is not integrated</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>any surface reports a coverage state</td><td>it also reports whether that evidence is integrated</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>a file named in a requirement&#x27;s evidence footprint changes and the requirement does not</td><td>a drift candidate exists for that requirement</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>evidence is recorded in a project that is not a git repository</td><td>the footprint names the changed paths and a content hash of each a later change to one of them raises a drift candidate</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>a drift candidate is raised</td><td>the specification document is unchanged</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>an operator resolves a drift candidate</td><td>the same change does not raise the candidate again</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>a requirement has linked tasks and evidence</td><td>both are reachable from it</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>a task is linked to requirements</td><td>those requirements are reachable from it, with their current statements</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>an agent records evidence</td><td>the recorded actor is the one its run credential establishes</td></tr></tbody></table></section><section><h2 id="evidence">Evidence and coverage limits</h2><h3>Checked</h3><ul><li>Translated from openspec/specs/requirement-traceability/spec.md (6 requirements, 31 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten.</li></ul><h3 class="aw-limits">Limits</h3><ul><li>source-had-no-purpose: the source&#x27;s Purpose was an unedited archiving placeholder, so this document has no summary rather than a note about openspec&#x27;s workflow</li><li>scenarios-state-no-starting-state: 31 of 31 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed</li></ul></section><section><h2 id="open-questions">Open questions</h2><p class="aw-empty">None outstanding.</p></section>
+<script type="application/agentweave-spec+json" id="aw-spec-payload">
+{
+  "schema_version": 1,
+  "kind": "capability",
+  "title": "Requirement traceability",
+  "summary": "",
+  "problem": "",
+  "scope": {
+    "in_scope": [],
+    "non_goals": []
+  },
+  "requirements": [
+    {
+      "key": "a-requirement-is-addressable-outside-its-document",
+      "statement": "The Hub SHALL maintain an index of the requirements a project's specification documents declare, keyed by the stable identifier the Hub mints, so that other records can point at a requirement without copying its wording.",
+      "modal": "SHALL",
+      "rationale": "The index SHALL be derived from the documents and SHALL NOT be authoritative. It SHALL be reconstructible from the files alone, and it SHALL NOT hold wording that is not in a document. Each indexed requirement SHALL carry its stable identifier, the document declaring it, whether it is active or retired, its current semantic digest, and where it sits in the rendered document. An identifier SHALL be unique within the document that declares it. Identifiers are minted per document, so the same identifier names a different requirement in a different document; a record pointing at a requirement SHALL therefore point at the indexed requirement itself rather than at its identifier as text. Where an identifier is supplied by name and more than one document in the project declares it, resolution SHALL be refused as ambiguous rather than resolved to either — choosing one would link work to a requirement nobody named, and being wrong would be invisible until someone read both documents. The semantic digest SHALL be computed from one definition used by every surface, and SHALL cover what a reader must satisfy: the obligation, the statement, the side of the boundary it binds, and the criteria demonstrating it. It SHALL NOT cover explanatory prose. The canonicalization producing it SHALL be recorded with each digest, so a digest taken under an earlier rule is distinguishable from a rewording. A requirement that is removed from its document SHALL become retired rather than disappear. Work and evidence already pointing at it remain pointed at it — what a retired requirement once demanded, and what was built for it, is a question that outlives the requirement. Each change of a requirement's semantic digest SHALL be recorded append-only with the digest before, the digest after, whether the change arrived through the Hub or from an external edit, and the actor.",
+      "party": null
+    },
+    {
+      "key": "work-is-linked-to-the-requirements-it-serves",
+      "statement": "A task SHALL be linked to the requirements it serves by reference, not by copied text.",
+      "modal": "SHALL",
+      "rationale": "A free-text list naming requirements cannot be joined, cannot be checked, and does not notice when the requirement it names is reworded or retired. Observed in a live run: a task carried `\"FR-8 — initialize-members\"` as a string, and nothing in the system could answer whether FR-8 had a task, whether it had changed since, or whether anything had verified it. The agent building that task could not read the specification at all and worked from that copied string, which made it the contract in practice. A link SHALL record which actor created it and, where an agent did, the run. Links SHALL NOT be removed when a task reaches a terminal state. What work served a requirement is asked mostly about finished work. Where existing tasks carry legacy free-text references, migration SHALL convert those that resolve to a requirement in the same project into links, and SHALL preserve the remainder verbatim as unresolved references. It SHALL NOT discard a value it cannot interpret, and SHALL NOT create a requirement to match one.",
+      "party": null
+    },
+    {
+      "key": "evidence-names-what-produced-it-and-what-it-was-produced-aga",
+      "statement": "Evidence for a requirement SHALL record its kind, the location of its artifact, the actor that produced it, the run where an agent produced it, and **the requirement digest it was produced against**.",
+      "modal": "SHALL",
+      "rationale": "Evidence SHALL be whatever demonstrates the work — a test run, a screenshot, a diff, a path. The set of kinds SHALL be open to additions, because constraining evidence to what was imaginable at design time is how the record stops describing what was actually done. Pinning evidence to a digest rather than to a requirement is what makes staleness detectable: evidence accepted against one wording says nothing about a different wording, and without the pin the difference is unobservable after the fact. Evidence SHALL be stored as an artifact in the project's own directory, with the record holding its location rather than its content. An operator SHALL be able to read, move and archive evidence with ordinary tools, and the database SHALL NOT become an artifact store. Retention SHALL be a project policy with `never` among its choices. Removing an artifact SHALL NOT remove its evidence record: that something was verified, by whom, and against which digest is the record, and the artifact is its attachment. A record whose artifact is gone SHALL report that state rather than disappear. **An agent's assertion SHALL NOT by itself constitute evidence.** A run reporting that it verified something produces a record awaiting review, not a verified requirement. A live run produced an agent that correctly reported its work as unverified-by-execution; a less careful one would have reported success in the same words with the same authority, and the record must be able to tell them apart. What distinguishes them is that the artifact is a fact and the claim about what it proves is not — so producing evidence is open, and **accepting** it is the controlled act. Acceptance and rejection SHALL be recorded append-only, attributed to the actor that decided, with no update and no delete. Evidence MAY be accepted by an agent the operator has granted that capability, and by the operator. The capability SHALL be granted per agent by the operator; it SHALL NOT be conferred by a charter or by anything an agent can assert about itself, because a charter describes behaviour and behaviour is not authority. **An agent SHALL NOT accept evidence it produced.** Distinctness is on agent identity, not run identity — the same rule, for the same reason, that already governs task approval. Where a project has granted no agent that capability, acceptance SHALL fall to the operator. That is a supported way to work, not a degraded one.",
+      "party": null
+    },
+    {
+      "key": "coverage-is-one-computation-with-one-precedence",
+      "statement": "The Hub SHALL compute a requirement's coverage state from a single definition, and every surface reporting coverage SHALL use it.",
+      "modal": "SHALL",
+      "rationale": "Two implementations of \"is this verified\" disagree eventually, and the disagreement is invisible until someone compares two screens. The precedence, highest first, SHALL be: an unresolved drift record; evidence that no longer applies to the current digest; current-digest evidence awaiting review; sufficient accepted current-digest evidence; linked work in progress or completed without evidence; linked work not started; no linked work at all. A requirement that is structurally invalid or carries no identifier SHALL be reported as a diagnostic outside coverage rather than assigned a coverage state. It is not unserved; it is broken. A project SHALL be able to report, for a document, which of its requirements have no linked work. Coverage SHALL also report whether the evidence's implementation footprint is reachable from the project's main line of work, and **no surface reporting a coverage state may omit it**. Approved work in this product currently remains on a per-agent branch that nothing merges, so a requirement can hold accepted evidence for code that is not in the product. Reporting `verified` alone would be true of the branch and false of the product; reporting both makes the gap visible where the work is, not only to someone inspecting branches by hand. Integration SHALL NOT be a coverage state. The precedence ranks how good the evidence is; integration is an independent fact about the same evidence, and ranking them together would force a choice between \"stale but merged\" and \"verified but unmerged\" that has no correct answer.",
+      "party": null
+    },
+    {
+      "key": "a-changed-implementation-raises-a-candidate-never-an-edit",
+      "statement": "Where evidence is recorded, the Hub SHALL capture the implementation footprint it was produced against: in a git repository, the commit and the changed blob identifiers; where the project is not a repository, the changed paths and a content hash of each. Both SHALL be supported, because a project without a repository is a supported first-class case and would otherwise be permanently unverifiable.",
+      "modal": "SHALL",
+      "rationale": "A later change to a linked footprint, with no new requirement revision and no explicit resolution, SHALL raise a drift candidate. The Hub SHALL NOT edit a specification document in response to drift. That an implementation changed is observable; that a requirement *should* change is a judgement, and inferring it would rewrite an approved specification on the strength of a file diff. An operator SHALL resolve a candidate as specification updated, implementation corrected, or no specification change required. The resolution SHALL record the digest and fingerprint current at that moment, so the same change is not reported again. Overlap between a footprint and a later change is a candidate signal, not proof of divergence.",
+      "party": null
+    },
+    {
+      "key": "a-requirement-and-its-work-are-navigable-in-both-directions",
+      "statement": "From a requirement it SHALL be possible to reach the work linked to it and the evidence recorded for it; from a task it SHALL be possible to reach the requirements it serves.",
+      "modal": "SHALL",
+      "rationale": "An agent recording evidence SHALL be identified by its run credential, never by a value it supplies.",
+      "party": null
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "key": "ac1",
+      "requirement": "a-requirement-is-addressable-outside-its-document",
+      "given": "",
+      "when": "a specification document is saved with requirements",
+      "then": "each requirement is indexed under its stable identifier with its current digest"
+    },
+    {
+      "key": "ac2",
+      "requirement": "a-requirement-is-addressable-outside-its-document",
+      "given": "",
+      "when": "the index is discarded and rebuilt from the project's documents",
+      "then": "it describes the same requirements, identifiers and digests as before"
+    },
+    {
+      "key": "ac3",
+      "requirement": "a-requirement-is-addressable-outside-its-document",
+      "given": "",
+      "when": "a requirement is removed from its document",
+      "then": "it is marked retired records pointing at it still resolve"
+    },
+    {
+      "key": "ac4",
+      "requirement": "a-requirement-is-addressable-outside-its-document",
+      "given": "",
+      "when": "a requirement's statement changes so its semantic digest changes",
+      "then": "the previous and current digests are recorded with the actor who caused the change"
+    },
+    {
+      "key": "ac5",
+      "requirement": "a-requirement-is-addressable-outside-its-document",
+      "given": "",
+      "when": "a requirement's modal changes and its statement does not",
+      "then": "its semantic digest changes"
+    },
+    {
+      "key": "ac6",
+      "requirement": "a-requirement-is-addressable-outside-its-document",
+      "given": "",
+      "when": "only a requirement's rationale changes",
+      "then": "its semantic digest is unchanged"
+    },
+    {
+      "key": "ac7",
+      "requirement": "a-requirement-is-addressable-outside-its-document",
+      "given": "",
+      "when": "work names an identifier that more than one of the project's documents declares",
+      "then": "resolution is refused as ambiguous rather than resolved to one of them"
+    },
+    {
+      "key": "ac8",
+      "requirement": "work-is-linked-to-the-requirements-it-serves",
+      "given": "",
+      "when": "a task is created naming requirement identifiers",
+      "then": "a link exists from that task to each named requirement"
+    },
+    {
+      "key": "ac9",
+      "requirement": "work-is-linked-to-the-requirements-it-serves",
+      "given": "",
+      "when": "a linked task reaches a terminal status",
+      "then": "its links remain"
+    },
+    {
+      "key": "ac10",
+      "requirement": "work-is-linked-to-the-requirements-it-serves",
+      "given": "",
+      "when": "a task carries a legacy reference naming an identifier that exists in its project",
+      "then": "migration creates a link to that requirement"
+    },
+    {
+      "key": "ac11",
+      "requirement": "work-is-linked-to-the-requirements-it-serves",
+      "given": "",
+      "when": "a task carries a legacy reference that resolves to no requirement",
+      "then": "it is preserved as an unresolved reference with its original text no requirement is created for it"
+    },
+    {
+      "key": "ac12",
+      "requirement": "evidence-names-what-produced-it-and-what-it-was-produced-aga",
+      "given": "",
+      "when": "evidence is recorded for a requirement",
+      "then": "it names its kind, its producing actor, and the requirement digest current at that moment"
+    },
+    {
+      "key": "ac13",
+      "requirement": "evidence-names-what-produced-it-and-what-it-was-produced-aga",
+      "given": "",
+      "when": "an agent records evidence for a requirement",
+      "then": "that evidence is awaiting review rather than accepted"
+    },
+    {
+      "key": "ac14",
+      "requirement": "evidence-names-what-produced-it-and-what-it-was-produced-aga",
+      "given": "",
+      "when": "evidence is accepted or rejected",
+      "then": "the decision is appended with its actor's attribution and never overwritten"
+    },
+    {
+      "key": "ac15",
+      "requirement": "evidence-names-what-produced-it-and-what-it-was-produced-aga",
+      "given": "",
+      "when": "an agent the operator granted the capability accepts evidence produced by a different",
+      "then": "the acceptance is recorded with that agent as the actor"
+    },
+    {
+      "key": "ac16",
+      "requirement": "evidence-names-what-produced-it-and-what-it-was-produced-aga",
+      "given": "",
+      "when": "an agent attempts to accept evidence it produced",
+      "then": "it is refused"
+    },
+    {
+      "key": "ac17",
+      "requirement": "evidence-names-what-produced-it-and-what-it-was-produced-aga",
+      "given": "",
+      "when": "an agent without the capability attempts to accept evidence",
+      "then": "it is refused"
+    },
+    {
+      "key": "ac18",
+      "requirement": "evidence-names-what-produced-it-and-what-it-was-produced-aga",
+      "given": "",
+      "when": "a project has granted no agent the capability",
+      "then": "evidence can still be accepted by the operator"
+    },
+    {
+      "key": "ac19",
+      "requirement": "evidence-names-what-produced-it-and-what-it-was-produced-aga",
+      "given": "",
+      "when": "an evidence artifact is deleted under the project's retention policy",
+      "then": "the evidence record remains and reports that its artifact is gone"
+    },
+    {
+      "key": "ac20",
+      "requirement": "coverage-is-one-computation-with-one-precedence",
+      "given": "",
+      "when": "a document has a requirement with no linked task",
+      "then": "its coverage state is that no work is linked"
+    },
+    {
+      "key": "ac21",
+      "requirement": "coverage-is-one-computation-with-one-precedence",
+      "given": "",
+      "when": "a requirement has accepted evidence and its statement is then reworded",
+      "then": "its coverage state reports the evidence as no longer applying"
+    },
+    {
+      "key": "ac22",
+      "requirement": "coverage-is-one-computation-with-one-precedence",
+      "given": "",
+      "when": "a requirement's coverage is shown on its document and counted in a project total",
+      "then": "both derive from the same computation"
+    },
+    {
+      "key": "ac23",
+      "requirement": "coverage-is-one-computation-with-one-precedence",
+      "given": "",
+      "when": "a requirement has accepted evidence whose footprint is not reachable from the project's",
+      "then": "its coverage reports both that it is verified and that it is not integrated"
+    },
+    {
+      "key": "ac24",
+      "requirement": "coverage-is-one-computation-with-one-precedence",
+      "given": "",
+      "when": "any surface reports a coverage state",
+      "then": "it also reports whether that evidence is integrated"
+    },
+    {
+      "key": "ac25",
+      "requirement": "a-changed-implementation-raises-a-candidate-never-an-edit",
+      "given": "",
+      "when": "a file named in a requirement's evidence footprint changes and the requirement does not",
+      "then": "a drift candidate exists for that requirement"
+    },
+    {
+      "key": "ac26",
+      "requirement": "a-changed-implementation-raises-a-candidate-never-an-edit",
+      "given": "",
+      "when": "evidence is recorded in a project that is not a git repository",
+      "then": "the footprint names the changed paths and a content hash of each a later change to one of them raises a drift candidate"
+    },
+    {
+      "key": "ac27",
+      "requirement": "a-changed-implementation-raises-a-candidate-never-an-edit",
+      "given": "",
+      "when": "a drift candidate is raised",
+      "then": "the specification document is unchanged"
+    },
+    {
+      "key": "ac28",
+      "requirement": "a-changed-implementation-raises-a-candidate-never-an-edit",
+      "given": "",
+      "when": "an operator resolves a drift candidate",
+      "then": "the same change does not raise the candidate again"
+    },
+    {
+      "key": "ac29",
+      "requirement": "a-requirement-and-its-work-are-navigable-in-both-directions",
+      "given": "",
+      "when": "a requirement has linked tasks and evidence",
+      "then": "both are reachable from it"
+    },
+    {
+      "key": "ac30",
+      "requirement": "a-requirement-and-its-work-are-navigable-in-both-directions",
+      "given": "",
+      "when": "a task is linked to requirements",
+      "then": "those requirements are reachable from it, with their current statements"
+    },
+    {
+      "key": "ac31",
+      "requirement": "a-requirement-and-its-work-are-navigable-in-both-directions",
+      "given": "",
+      "when": "an agent records evidence",
+      "then": "the recorded actor is the one its run credential establishes"
+    }
+  ],
+  "tasks": [],
+  "algorithms": [],
+  "design": "",
+  "evidence": {
+    "checked": [
+      "Translated from openspec/specs/requirement-traceability/spec.md (6 requirements, 31 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten."
+    ],
+    "limits": [
+      "source-had-no-purpose: the source's Purpose was an unedited archiving placeholder, so this document has no summary rather than a note about openspec's workflow",
+      "scenarios-state-no-starting-state: 31 of 31 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed"
+    ]
+  },
+  "lifecycle": "",
+  "open_questions": [],
+  "aw_identity": {
+    "requirements": {
+      "a-requirement-is-addressable-outside-its-document": "FR-1",
+      "work-is-linked-to-the-requirements-it-serves": "FR-2",
+      "evidence-names-what-produced-it-and-what-it-was-produced-aga": "FR-3",
+      "coverage-is-one-computation-with-one-precedence": "FR-4",
+      "a-changed-implementation-raises-a-candidate-never-an-edit": "FR-5",
+      "a-requirement-and-its-work-are-navigable-in-both-directions": "FR-6"
+    },
+    "high_water": 6,
+    "retired": {},
+    "digests": {
+      "FR-1": "7b6e4abfb9509babd3c8adf0524577db4576e1eb0827da59a97c8b677bdfaf0f",
+      "FR-2": "945c681efd1491c65e43dccc13dd11e971cb9eb7a62a6fd52d76d615d38a6918",
+      "FR-3": "715673fdf031c57b67d5b31c82b317527dc2c60c99017a1e434647521118df72",
+      "FR-4": "ac8c2b75c4e7babdcefe883a1e289a26b5a9eb356d545846e37ed5869a95ac18",
+      "FR-5": "2ffcf458245f43c5e8a7be794ef109e10afc74fa2bdf8c1651534cfb18fc8872",
+      "FR-6": "f4c19cc15a3d1ca92847d15bcb3d525b7795815c3be8839a5e370bf84c1d595d"
+    }
+  }
+}
+</script>
+</body>
+</html>

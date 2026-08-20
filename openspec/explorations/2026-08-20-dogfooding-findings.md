@@ -343,6 +343,38 @@ parent cycles, kind/phase pairing — but not that orders are distinct. It is th
 whole purpose is to be compared against the others. Worth adding, since an index is now something
 the product writes rather than something a human hand-maintains.
 
+## 17. A document on disk cannot be adopted — the only way to give it a row destroys it
+
+**What happened.** This repo's `spec/` already held three documents written through the app, with no
+rows in the Hub's database (the database was rebuilt since). They are therefore `unfiled`: discovery
+finds them, but the index cannot describe them because the Hub has no title or kind for them.
+
+The obvious remedy is to create a document row at each existing path. It cannot be done.
+`POST /documents` (`hub/hub/api/v1/spec.py:1141-1153`) builds a placeholder payload
+`{schema_version, kind, title}` and passes it to `save_document`, which **renders it and overwrites
+the file**. Creating a row for an existing document replaces that document with an empty one.
+
+So for a file on disk with no row there are exactly two outcomes: leave it unfiled forever, or
+destroy it to file it.
+
+**Why it matters.** This is the mirror image of the project-adoption fix shipped 2026-08-19. That
+change established the principle that *a project's identity lives with its folder* — a Hub meeting a
+marker it has never seen adopts it rather than refusing it. Documents have the same property and
+none of the same courtesy: the files travel, and a receiving Hub cannot take ownership of them.
+
+It is also the exact gap that makes the corpus's portability incomplete. `spec/index.json` and the
+document files now travel together, so any Hub can *read* the whole corpus. But a Hub that reads a
+corpus it did not write can never own it — no requirement identifiers, no evidence, no coverage —
+unless every document is re-imported through a path that overwrites what is already there.
+
+**What would fix it.** Document adoption, mirroring project adoption: given a file whose path has no
+row, read its rendered payload — which the Hub itself wrote, and which carries `title`, `kind`,
+`schema_version` and the full `aw_identity` block including the previously minted identifiers — and
+create the row from it, keeping the file. `extract_payload` already exists and is already used by
+`save_document` to carry identity forward on rewrite; nothing new has to be parsed.
+
+Until then: **do not create a document row at a path that already has a file you want to keep.**
+
 ## 13. `propose` answers 200 with a list of reasons it did not propose
 
 **What happened.** Getting a document to `approved` in a test took four attempts, each failing on

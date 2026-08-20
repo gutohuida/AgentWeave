@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent stream events</title>
+<meta name="aw-spec-kind" content="capability">
+<meta name="aw-spec-status" content="current">
+<meta name="aw-spec-rigor" content="sketch">
+<meta name="aw-spec-schema-version" content="1">
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+    --surface-2: #21262d; --surface: #161b22;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+:root[data-theme="dark"] {
+  --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+  --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+  --surface-2: #21262d; --surface: #161b22;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 2rem 2.5rem 4rem; background: var(--bg); color: var(--fg);
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+h1 { font-size: 1.75rem; margin: 0 0 .25rem; }
+h2 { font-size: 1.15rem; margin: 2.5rem 0 .75rem; padding-bottom: .3rem;
+     border-bottom: 1px solid var(--border); }
+h3 { font-size: 1rem; margin: 1.5rem 0 .4rem; }
+p { margin: .5rem 0; }
+ul, ol { margin: .5rem 0; padding-left: 1.4rem; }
+li { margin: .25rem 0; }
+a { color: var(--aw-accent); }
+.aw-meta { color: var(--muted); font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-chip { display: inline-block; padding: .1rem .5rem; border-radius: 999px;
+           background: var(--surface-2); font-size: .78rem; margin-right: .4rem; }
+.aw-requirement { border-left: 3px solid var(--border); padding: .1rem 0 .1rem .9rem;
+                  margin: 1.1rem 0; }
+.aw-requirement-must { border-left-color: var(--aw-accent); }
+.aw-requirement-should { border-left-color: var(--aw-warn); }
+.aw-requirement-may { border-left-color: var(--border); }
+.aw-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8rem;
+         color: var(--muted); }
+.aw-modal { font-weight: 600; }
+.aw-modal-must { color: var(--aw-accent); }
+.aw-modal-should { color: var(--aw-warn); }
+.aw-modal-may { color: var(--fg); font-weight: 400; }
+.aw-chip-rigor-gate { color: var(--aw-accent); border: 1px solid var(--aw-accent); }
+.aw-chip-rigor-contract { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Phase is a lifecycle, and the question it answers is "can I rely on this?". `approved` and a
+   capability's `current` are settled and take the done tone; `proposed` is waiting on an operator
+   decision and takes warn; `exploring` and `archived` are quiet for opposite reasons — one has not
+   arrived yet, the other has been superseded. Deliberately NOT the accent: this document already
+   spends accent on links and on MUST, and a third meaning would empty it of any. `kind` keeps the
+   plain chip on purpose — it is a category, not a state, and hue there ranks nothing. */
+.aw-chip-phase-done { color: var(--aw-ok); border: 1px solid var(--aw-ok); }
+.aw-chip-phase-waiting { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+.aw-chip-phase-quiet { color: var(--muted); }
+.aw-chip-phase-archived { color: var(--muted); text-decoration: line-through; }
+/* An unresolved question blocks `propose`, so it is a real state and not a label. Resolved stays
+   the plain chip — the reader needs to find what is still open, not celebrate what is closed. */
+.aw-chip-open { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Limits is where a reader is most likely to be misled, and it read identically to Checked. */
+.aw-limits { color: var(--aw-warn); }
+/* The first screenful was entirely monochrome, so the document read as texty however the
+   requirements below were coloured. This puts the same modal scheme where the eye lands first,
+   carrying counts rather than decoration. */
+.aw-summary { margin: 0 0 1.5rem; font-size: .9rem; color: var(--muted); }
+.aw-summary .aw-count { font-weight: 600; }
+.aw-summary-sep { color: var(--border); margin: 0 .45rem; }
+.aw-rationale { color: var(--muted); font-size: .9rem; }
+.aw-refs { font-size: .82rem; color: var(--muted); }
+.aw-note { color: var(--muted); font-style: italic; }
+.aw-empty { color: var(--muted); }
+table { border-collapse: collapse; margin: .75rem 0; width: 100%; }
+th, td { border: 1px solid var(--border); padding: .4rem .6rem; text-align: left;
+         vertical-align: top; font-size: .92rem; }
+code, pre { background: var(--surface); border-radius: 4px; }
+code { padding: .1rem .3rem; font-size: .88em; }
+</style>
+</head>
+<body>
+<h1>Agent stream events</h1>
+<p class="aw-meta"><span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><span class="aw-chip">sketch</span></p>
+<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">19</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">19</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">40</span> criteria</p>
+<section><h2 id="requirements">Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-1"><span class="aw-id">FR-1</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The Hub&#x27;s direct-execution path SHALL normalize supported runner output into a provider-neutral parser result containing zero or more output events, an independent optional usage sample, optional session changes, and control flags.</p><p class="aw-rationale">Each output event SHALL contain a `kind`, readable `content`, and versioned structured `payload`.</p></div><div class="aw-requirement aw-requirement-must" id="FR-2"><span class="aw-id">FR-2</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Normalized output events SHALL use exactly one of `text`, `thinking`, `tool_use`, `tool_result`, `status`, `diagnostic`, or `error`.</p><p class="aw-rationale">Successful run completion SHALL be represented as `status`; failed run completion SHALL be represented as `error`; a failed tool invocation SHALL remain `tool_result` with `is_error=true`.</p></div><div class="aw-requirement aw-requirement-must" id="FR-3"><span class="aw-id">FR-3</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Every structured payload SHALL include `version=1` and satisfy the schema for its event kind.</p><p class="aw-rationale">Text and thinking payloads SHALL carry readable text. Tool-use and tool-result payloads SHALL carry correlation and summary fields. Status payloads SHALL carry a lifecycle phase. Diagnostic payloads SHALL identify stream and severity. Error payloads SHALL carry a stable code and readable message.</p></div><div class="aw-requirement aw-requirement-must" id="FR-4"><span class="aw-id">FR-4</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Tool-use and tool-result events SHALL retain the provider&#x27;s call identifier as `call_id` whenever the provider supplies one, and SHALL preserve a readable tool name and summary.</p></div><div class="aw-requirement aw-requirement-must" id="FR-5"><span class="aw-id">FR-5</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Every Hub-triggered run SHALL receive a unique `run_id`, and each emitted event within that run SHALL receive a monotonically increasing `sequence` assigned after normalization.</p></div><div class="aw-requirement aw-requirement-must" id="FR-6"><span class="aw-id">FR-6</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL normalize the installed or documented streaming formats for Claude and Codex into the canonical event contract.</p></div><div class="aw-requirement aw-requirement-must" id="FR-7"><span class="aw-id">FR-7</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Runner adapters SHALL tolerate syntactically valid provider events that they do not recognize. They SHALL either omit non-user-relevant events or emit bounded `diagnostic` events without terminating the runner stream.</p></div><div class="aw-requirement aw-requirement-must" id="FR-8"><span class="aw-id">FR-8</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL recursively redact known secret patterns before transport and SHALL NOT persist complete raw provider events, opaque reasoning blobs, or encrypted reasoning fields.</p><p class="aw-rationale">The serialized payload SHALL be at most 64 KiB, and a retained tool-result excerpt SHALL be at most 8 KiB. Truncated payloads SHALL preserve readable content and set `truncated=true`.</p></div><div class="aw-requirement aw-requirement-must" id="FR-9"><span class="aw-id">FR-9</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Agent output persistence, creation requests, responses, and SSE events SHALL support nullable `kind`, `payload`, `run_id`, and `sequence` fields in addition to existing content, session, and timestamp fields.</p><p class="aw-rationale">The Hub SHALL validate allowed kinds and payload bounds independently of upstream parser validation.</p></div><div class="aw-requirement aw-requirement-must" id="FR-10"><span class="aw-id">FR-10</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL remain compatible with existing text-only producers, text-only database rows, and clients that ignore unknown response fields. Every new structured event SHALL retain meaningful `content` as a plain-text and accessibility fallback.</p></div><div class="aw-requirement aw-requirement-must" id="FR-11"><span class="aw-id">FR-11</span> <p><span class="aw-modal aw-modal-must">SHALL</span> When agent output is projected into per-agent chat history, the projection SHALL retain available stream kind, payload, run identity, sequence, and timestamp rather than flattening the record back to content alone.</p></div><div class="aw-requirement aw-requirement-must" id="FR-12"><span class="aw-id">FR-12</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The default bounded output query SHALL return the newest N matching records and present those records in chronological order with deterministic tie-breaking.</p><p class="aw-rationale">Incremental queries SHALL continue from their cursor in chronological order.</p></div><div class="aw-requirement aw-requirement-must" id="FR-13"><span class="aw-id">FR-13</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The Hub UI SHALL use one shared structured-event renderer for the agent output panel, spec chat, and agent activity views. Rendering logic SHALL use `kind` and payload fields rather than string prefix inspection when structured fields are present.</p></div><div class="aw-requirement aw-requirement-must" id="FR-14"><span class="aw-id">FR-14</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Consecutive thinking events in one run SHALL render as a grouped live section. The section SHALL automatically collapse when the first text event or terminal lifecycle event for that run arrives, and SHALL remain user-expandable with a duration summary when timestamps permit.</p></div><div class="aw-requirement aw-requirement-must" id="FR-15"><span class="aw-id">FR-15</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Correlated tool-use and tool-result events SHALL render as a compact paired activity that can expand to safe input and result details. Errors SHALL remain prominent, while diagnostics SHALL be visually distinct and hideable without hiding errors or tool failures.</p></div><div class="aw-requirement aw-requirement-must" id="FR-16"><span class="aw-id">FR-16</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The repository SHALL include representative fixtures and tests for every supported runner adapter, event persistence and delivery, legacy compatibility, payload bounds and redaction, ordering, and shared UI rendering behavior.</p></div><div class="aw-requirement aw-requirement-must" id="FR-17"><span class="aw-id">FR-17</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The canonical runner observation SHALL keep context-usage samples separate from display events. Context samples SHALL use the `agent-context-usage` contract and SHALL NOT be persisted as `AgentOutput` rows or rendered as stream event kinds.</p></div><div class="aw-requirement aw-requirement-must" id="FR-18"><span class="aw-id">FR-18</span> <p><span class="aw-modal aw-modal-must">MUST</span> The entries of a turn SHALL be presented in the order they occurred. Tool activity MUST NOT be hoisted ahead of text that preceded it.</p><p class="aw-rationale">Consecutive tool activity SHALL be grouped into a single collapsible block positioned where that activity occurred in the turn. A turn containing several separated runs of tool activity SHALL present several such blocks, each in its own position.</p></div><div class="aw-requirement aw-requirement-must" id="FR-19"><span class="aw-id">FR-19</span> <p><span class="aw-modal aw-modal-must">MUST</span> Every work block in a turn SHALL carry its own expansion state and its own reported duration. Expanding one block MUST NOT expand another.</p><p class="aw-rationale">A block&#x27;s reported duration SHALL span that block&#x27;s own first and last entry. Tool-use and tool-result pairing SHALL be resolved within a block. A tool result MUST NOT be paired with a tool use from a different block.</p></div></section><section><h2 id="acceptance">Acceptance criteria</h2><table><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>a provider line contains multiple independently displayable content blocks</td><td>the parser result SHALL preserve those blocks as ordered output events</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>a provider event reports token usage but has no user-readable content</td><td>the parser result SHALL preserve the usage sample without fabricating an output event</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>a runner reports successful turn completion</td><td>the Hub SHALL emit a `status` event whose payload phase is `completed`</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>a tool result reports failure</td><td>the Hub SHALL emit a `tool_result` event with `is_error=true` rather than a top-level `error`</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>a normalized event is sent to the Hub</td><td>its payload SHALL contain `version=1` and the fields required by its kind</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>an old producer submits content without a structured payload</td><td>the Hub SHALL accept and preserve the readable content</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>a provider emits a tool invocation followed by its result</td><td>both normalized events SHALL carry the same `call_id`</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>a provider emits tool activity without a call identifier</td><td>the events SHALL remain renderable as unpaired tool activity without inventing a provider identifier</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>multiple output events are emitted by one runner invocation</td><td>they SHALL share a `run_id` and have strictly increasing sequence values</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>the Hub starts another process attempt after a stale-session or transient failure</td><td>the new invocation SHALL receive a new `run_id`</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>Claude emits readable thinking, text, tool-use, tool-result, result, or error data</td><td>the adapter SHALL map each item to the corresponding canonical event and retain usage separately</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>Codex emits reasoning, agent-message, command, file-change, MCP-call, web-search,</td><td>the adapter SHALL map them to canonical events without exposing raw JSONL as user content</td></tr><tr><td><a href="#FR-7">FR-7</a></td><td></td><td>an adapter receives a valid but unknown event type</td><td>parsing SHALL continue and later recognized events SHALL still be emitted</td></tr><tr><td><a href="#FR-7">FR-7</a></td><td></td><td>a runner produces malformed structured output</td><td>the Hub SHALL preserve a bounded diagnostic or readable fallback and continue when safe</td></tr><tr><td><a href="#FR-8">FR-8</a></td><td></td><td>normalized structured input contains a recognized credential or secret</td><td>the secret SHALL be redacted before the event leaves the Hub&#x27;s direct-execution path</td></tr><tr><td><a href="#FR-8">FR-8</a></td><td></td><td>a tool result is larger than 8 KiB</td><td>the stored result excerpt SHALL be bounded, the summary SHALL remain readable, and `truncated` SHALL be true</td></tr><tr><td><a href="#FR-8">FR-8</a></td><td></td><td>a provider event contains encrypted or otherwise opaque reasoning data</td><td>that field SHALL NOT be copied into content or payload</td></tr><tr><td><a href="#FR-9">FR-9</a></td><td></td><td>the Hub receives valid content with structured stream fields</td><td>it SHALL persist and return those fields through REST and SSE</td></tr><tr><td><a href="#FR-9">FR-9</a></td><td></td><td>an output creation request violates the event contract</td><td>the Hub SHALL reject the structured fields with a validation response and SHALL NOT persist unsafe payload data</td></tr><tr><td><a href="#FR-10">FR-10</a></td><td></td><td>an output row has null structured fields</td><td>APIs and UI SHALL treat it as ordinary plain text</td></tr><tr><td><a href="#FR-10">FR-10</a></td><td></td><td>an older Hub ignores unsupported optional structured fields</td><td>readable content SHALL still represent the event</td></tr><tr><td><a href="#FR-11">FR-11</a></td><td></td><td>chat history includes a thinking or tool event</td><td>the chat response SHALL provide the fields required by the shared renderer</td></tr><tr><td><a href="#FR-12">FR-12</a></td><td></td><td>a client requests output without a cursor and more than N matching rows exist</td><td>the response SHALL contain the newest N rows ordered oldest-to-newest</td></tr><tr><td><a href="#FR-12">FR-12</a></td><td></td><td>two matching records have equal timestamps</td><td>run sequence and record ID SHALL provide stable ordering</td></tr><tr><td><a href="#FR-13">FR-13</a></td><td></td><td>a structured event is shown in agent output, spec chat, and agent activity</td><td>all surfaces SHALL use the same semantic label, severity, and content treatment</td></tr><tr><td><a href="#FR-13">FR-13</a></td><td></td><td>a text-only legacy event contains an existing pre-canonical content prefix</td><td>compatibility handling SHALL preserve current visibility behavior without affecting structured events</td></tr><tr><td><a href="#FR-14">FR-14</a></td><td></td><td>a run emits thinking followed by text</td><td>the thinking group SHALL collapse and the text SHALL remain visible</td></tr><tr><td><a href="#FR-14">FR-14</a></td><td></td><td>the latest event in an active run is thinking</td><td>the current thinking group SHALL remain visibly active</td></tr><tr><td><a href="#FR-15">FR-15</a></td><td></td><td>tool-use and tool-result events share a call ID</td><td>the UI SHALL present one expandable tool activity with its completion or failure state</td></tr><tr><td><a href="#FR-15">FR-15</a></td><td></td><td>diagnostic visibility is disabled</td><td>diagnostic events SHALL be hidden while error events and failed tool results remain visible</td></tr><tr><td><a href="#FR-16">FR-16</a></td><td></td><td>the stream adapter tests execute</td><td>fixtures for Claude and Codex SHALL produce the expected canonical events</td></tr><tr><td><a href="#FR-16">FR-16</a></td><td></td><td>the Hub UI test or build verification executes</td><td>structured and legacy records SHALL type-check and render through the shared component</td></tr><tr><td><a href="#FR-17">FR-17</a></td><td></td><td>one provider event contains both readable output and token usage</td><td>the parser SHALL return output events and the usage sample in separate result fields</td></tr><tr><td><a href="#FR-17">FR-17</a></td><td></td><td>an auxiliary provider collector reports a context sample</td><td>the invocation coordinator SHALL deliver the context snapshot without fabricating a stream event</td></tr><tr><td><a href="#FR-18">FR-18</a></td><td></td><td>a turn produced text, then tool activity, then further text, then further tool activity</td><td>the rendered order is that text, a work block, the further text, and a further work block</td></tr><tr><td><a href="#FR-18">FR-18</a></td><td></td><td>a turn produced several tool calls with no intervening text</td><td>those calls are presented as a single work block</td></tr><tr><td><a href="#FR-18">FR-18</a></td><td></td><td>a turn produced tool activity and no interleaved text</td><td>that activity is presented as one work block, as before</td></tr><tr><td><a href="#FR-19">FR-19</a></td><td></td><td>a turn presents two work blocks and the operator expands the first</td><td>the second remains collapsed</td></tr><tr><td><a href="#FR-19">FR-19</a></td><td></td><td>a work block reports a duration</td><td>that duration spans the block&#x27;s own first and last entry rather than the whole turn</td></tr><tr><td><a href="#FR-19">FR-19</a></td><td></td><td>a turn presents several work blocks</td><td>each tool result is rendered inline with the tool use it pairs with inside the same block</td></tr></tbody></table></section><section><h2 id="evidence">Evidence and coverage limits</h2><h3>Checked</h3><ul><li>Translated from openspec/specs/agent-stream-events/spec.md (19 requirements, 40 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten.</li></ul><h3 class="aw-limits">Limits</h3><ul><li>source-had-no-purpose: the source&#x27;s Purpose was an unedited archiving placeholder, so this document has no summary rather than a note about openspec&#x27;s workflow</li><li>scenarios-state-no-starting-state: 40 of 40 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed</li></ul></section><section><h2 id="open-questions">Open questions</h2><p class="aw-empty">None outstanding.</p></section>
+<script type="application/agentweave-spec+json" id="aw-spec-payload">
+{
+  "schema_version": 1,
+  "kind": "capability",
+  "title": "Agent stream events",
+  "summary": "",
+  "problem": "",
+  "scope": {
+    "in_scope": [],
+    "non_goals": []
+  },
+  "requirements": [
+    {
+      "key": "canonical-runner-event-envelope",
+      "statement": "The Hub's direct-execution path SHALL normalize supported runner output into a provider-neutral parser result containing zero or more output events, an independent optional usage sample, optional session changes, and control flags.",
+      "modal": "SHALL",
+      "rationale": "Each output event SHALL contain a `kind`, readable `content`, and versioned structured `payload`.",
+      "party": null
+    },
+    {
+      "key": "closed-event-kind-taxonomy",
+      "statement": "Normalized output events SHALL use exactly one of `text`, `thinking`, `tool_use`, `tool_result`, `status`, `diagnostic`, or `error`.",
+      "modal": "SHALL",
+      "rationale": "Successful run completion SHALL be represented as `status`; failed run completion SHALL be represented as `error`; a failed tool invocation SHALL remain `tool_result` with `is_error=true`.",
+      "party": null
+    },
+    {
+      "key": "versioned-kind-specific-payloads",
+      "statement": "Every structured payload SHALL include `version=1` and satisfy the schema for its event kind.",
+      "modal": "SHALL",
+      "rationale": "Text and thinking payloads SHALL carry readable text. Tool-use and tool-result payloads SHALL carry correlation and summary fields. Status payloads SHALL carry a lifecycle phase. Diagnostic payloads SHALL identify stream and severity. Error payloads SHALL carry a stable code and readable message.",
+      "party": null
+    },
+    {
+      "key": "tool-call-correlation",
+      "statement": "Tool-use and tool-result events SHALL retain the provider's call identifier as `call_id` whenever the provider supplies one, and SHALL preserve a readable tool name and summary.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "run-identity-and-deterministic-ordering",
+      "statement": "Every Hub-triggered run SHALL receive a unique `run_id`, and each emitted event within that run SHALL receive a monotonically increasing `sequence` assigned after normalization.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "supported-runner-normalization",
+      "statement": "The system SHALL normalize the installed or documented streaming formats for Claude and Codex into the canonical event contract.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "unknown-provider-events-degrade-safely",
+      "statement": "Runner adapters SHALL tolerate syntactically valid provider events that they do not recognize. They SHALL either omit non-user-relevant events or emit bounded `diagnostic` events without terminating the runner stream.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "structured-payload-safety",
+      "statement": "The Hub SHALL recursively redact known secret patterns before transport and SHALL NOT persist complete raw provider events, opaque reasoning blobs, or encrypted reasoning fields.",
+      "modal": "SHALL",
+      "rationale": "The serialized payload SHALL be at most 64 KiB, and a retained tool-result excerpt SHALL be at most 8 KiB. Truncated payloads SHALL preserve readable content and set `truncated=true`.",
+      "party": null
+    },
+    {
+      "key": "additive-hub-persistence-and-transport",
+      "statement": "Agent output persistence, creation requests, responses, and SSE events SHALL support nullable `kind`, `payload`, `run_id`, and `sequence` fields in addition to existing content, session, and timestamp fields.",
+      "modal": "SHALL",
+      "rationale": "The Hub SHALL validate allowed kinds and payload bounds independently of upstream parser validation.",
+      "party": null
+    },
+    {
+      "key": "cross-version-compatibility",
+      "statement": "The system SHALL remain compatible with existing text-only producers, text-only database rows, and clients that ignore unknown response fields. Every new structured event SHALL retain meaningful `content` as a plain-text and accessibility fallback.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "chat-history-preserves-stream-semantics",
+      "statement": "When agent output is projected into per-agent chat history, the projection SHALL retain available stream kind, payload, run identity, sequence, and timestamp rather than flattening the record back to content alone.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "recent-output-retrieval",
+      "statement": "The default bounded output query SHALL return the newest N matching records and present those records in chronological order with deterministic tie-breaking.",
+      "modal": "SHALL",
+      "rationale": "Incremental queries SHALL continue from their cursor in chronological order.",
+      "party": null
+    },
+    {
+      "key": "shared-stream-renderer",
+      "statement": "The Hub UI SHALL use one shared structured-event renderer for the agent output panel, spec chat, and agent activity views. Rendering logic SHALL use `kind` and payload fields rather than string prefix inspection when structured fields are present.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "thinking-presentation",
+      "statement": "Consecutive thinking events in one run SHALL render as a grouped live section. The section SHALL automatically collapse when the first text event or terminal lifecycle event for that run arrives, and SHALL remain user-expandable with a duration summary when timestamps permit.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "tool-and-diagnostic-presentation",
+      "statement": "Correlated tool-use and tool-result events SHALL render as a compact paired activity that can expand to safe input and result details. Errors SHALL remain prominent, while diagnostics SHALL be visually distinct and hideable without hiding errors or tool failures.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "stream-contract-conformance-tests",
+      "statement": "The repository SHALL include representative fixtures and tests for every supported runner adapter, event persistence and delivery, legacy compatibility, payload bounds and redaction, ordering, and shared UI rendering behavior.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "independent-context-usage-boundary",
+      "statement": "The canonical runner observation SHALL keep context-usage samples separate from display events. Context samples SHALL use the `agent-context-usage` contract and SHALL NOT be persisted as `AgentOutput` rows or rendered as stream event kinds.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "a-turn-renders-in-execution-order",
+      "statement": "The entries of a turn SHALL be presented in the order they occurred. Tool activity MUST NOT be hoisted ahead of text that preceded it.",
+      "modal": "MUST",
+      "rationale": "Consecutive tool activity SHALL be grouped into a single collapsible block positioned where that activity occurred in the turn. A turn containing several separated runs of tool activity SHALL present several such blocks, each in its own position.",
+      "party": null
+    },
+    {
+      "key": "each-work-block-carries-independent-state",
+      "statement": "Every work block in a turn SHALL carry its own expansion state and its own reported duration. Expanding one block MUST NOT expand another.",
+      "modal": "MUST",
+      "rationale": "A block's reported duration SHALL span that block's own first and last entry. Tool-use and tool-result pairing SHALL be resolved within a block. A tool result MUST NOT be paired with a tool use from a different block.",
+      "party": null
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "key": "ac1",
+      "requirement": "canonical-runner-event-envelope",
+      "given": "",
+      "when": "a provider line contains multiple independently displayable content blocks",
+      "then": "the parser result SHALL preserve those blocks as ordered output events"
+    },
+    {
+      "key": "ac2",
+      "requirement": "canonical-runner-event-envelope",
+      "given": "",
+      "when": "a provider event reports token usage but has no user-readable content",
+      "then": "the parser result SHALL preserve the usage sample without fabricating an output event"
+    },
+    {
+      "key": "ac3",
+      "requirement": "closed-event-kind-taxonomy",
+      "given": "",
+      "when": "a runner reports successful turn completion",
+      "then": "the Hub SHALL emit a `status` event whose payload phase is `completed`"
+    },
+    {
+      "key": "ac4",
+      "requirement": "closed-event-kind-taxonomy",
+      "given": "",
+      "when": "a tool result reports failure",
+      "then": "the Hub SHALL emit a `tool_result` event with `is_error=true` rather than a top-level `error`"
+    },
+    {
+      "key": "ac5",
+      "requirement": "versioned-kind-specific-payloads",
+      "given": "",
+      "when": "a normalized event is sent to the Hub",
+      "then": "its payload SHALL contain `version=1` and the fields required by its kind"
+    },
+    {
+      "key": "ac6",
+      "requirement": "versioned-kind-specific-payloads",
+      "given": "",
+      "when": "an old producer submits content without a structured payload",
+      "then": "the Hub SHALL accept and preserve the readable content"
+    },
+    {
+      "key": "ac7",
+      "requirement": "tool-call-correlation",
+      "given": "",
+      "when": "a provider emits a tool invocation followed by its result",
+      "then": "both normalized events SHALL carry the same `call_id`"
+    },
+    {
+      "key": "ac8",
+      "requirement": "tool-call-correlation",
+      "given": "",
+      "when": "a provider emits tool activity without a call identifier",
+      "then": "the events SHALL remain renderable as unpaired tool activity without inventing a provider identifier"
+    },
+    {
+      "key": "ac9",
+      "requirement": "run-identity-and-deterministic-ordering",
+      "given": "",
+      "when": "multiple output events are emitted by one runner invocation",
+      "then": "they SHALL share a `run_id` and have strictly increasing sequence values"
+    },
+    {
+      "key": "ac10",
+      "requirement": "run-identity-and-deterministic-ordering",
+      "given": "",
+      "when": "the Hub starts another process attempt after a stale-session or transient failure",
+      "then": "the new invocation SHALL receive a new `run_id`"
+    },
+    {
+      "key": "ac11",
+      "requirement": "supported-runner-normalization",
+      "given": "",
+      "when": "Claude emits readable thinking, text, tool-use, tool-result, result, or error data",
+      "then": "the adapter SHALL map each item to the corresponding canonical event and retain usage separately"
+    },
+    {
+      "key": "ac12",
+      "requirement": "supported-runner-normalization",
+      "given": "",
+      "when": "Codex emits reasoning, agent-message, command, file-change, MCP-call, web-search,",
+      "then": "the adapter SHALL map them to canonical events without exposing raw JSONL as user content"
+    },
+    {
+      "key": "ac13",
+      "requirement": "unknown-provider-events-degrade-safely",
+      "given": "",
+      "when": "an adapter receives a valid but unknown event type",
+      "then": "parsing SHALL continue and later recognized events SHALL still be emitted"
+    },
+    {
+      "key": "ac14",
+      "requirement": "unknown-provider-events-degrade-safely",
+      "given": "",
+      "when": "a runner produces malformed structured output",
+      "then": "the Hub SHALL preserve a bounded diagnostic or readable fallback and continue when safe"
+    },
+    {
+      "key": "ac15",
+      "requirement": "structured-payload-safety",
+      "given": "",
+      "when": "normalized structured input contains a recognized credential or secret",
+      "then": "the secret SHALL be redacted before the event leaves the Hub's direct-execution path"
+    },
+    {
+      "key": "ac16",
+      "requirement": "structured-payload-safety",
+      "given": "",
+      "when": "a tool result is larger than 8 KiB",
+      "then": "the stored result excerpt SHALL be bounded, the summary SHALL remain readable, and `truncated` SHALL be true"
+    },
+    {
+      "key": "ac17",
+      "requirement": "structured-payload-safety",
+      "given": "",
+      "when": "a provider event contains encrypted or otherwise opaque reasoning data",
+      "then": "that field SHALL NOT be copied into content or payload"
+    },
+    {
+      "key": "ac18",
+      "requirement": "additive-hub-persistence-and-transport",
+      "given": "",
+      "when": "the Hub receives valid content with structured stream fields",
+      "then": "it SHALL persist and return those fields through REST and SSE"
+    },
+    {
+      "key": "ac19",
+      "requirement": "additive-hub-persistence-and-transport",
+      "given": "",
+      "when": "an output creation request violates the event contract",
+      "then": "the Hub SHALL reject the structured fields with a validation response and SHALL NOT persist unsafe payload data"
+    },
+    {
+      "key": "ac20",
+      "requirement": "cross-version-compatibility",
+      "given": "",
+      "when": "an output row has null structured fields",
+      "then": "APIs and UI SHALL treat it as ordinary plain text"
+    },
+    {
+      "key": "ac21",
+      "requirement": "cross-version-compatibility",
+      "given": "",
+      "when": "an older Hub ignores unsupported optional structured fields",
+      "then": "readable content SHALL still represent the event"
+    },
+    {
+      "key": "ac22",
+      "requirement": "chat-history-preserves-stream-semantics",
+      "given": "",
+      "when": "chat history includes a thinking or tool event",
+      "then": "the chat response SHALL provide the fields required by the shared renderer"
+    },
+    {
+      "key": "ac23",
+      "requirement": "recent-output-retrieval",
+      "given": "",
+      "when": "a client requests output without a cursor and more than N matching rows exist",
+      "then": "the response SHALL contain the newest N rows ordered oldest-to-newest"
+    },
+    {
+      "key": "ac24",
+      "requirement": "recent-output-retrieval",
+      "given": "",
+      "when": "two matching records have equal timestamps",
+      "then": "run sequence and record ID SHALL provide stable ordering"
+    },
+    {
+      "key": "ac25",
+      "requirement": "shared-stream-renderer",
+      "given": "",
+      "when": "a structured event is shown in agent output, spec chat, and agent activity",
+      "then": "all surfaces SHALL use the same semantic label, severity, and content treatment"
+    },
+    {
+      "key": "ac26",
+      "requirement": "shared-stream-renderer",
+      "given": "",
+      "when": "a text-only legacy event contains an existing pre-canonical content prefix",
+      "then": "compatibility handling SHALL preserve current visibility behavior without affecting structured events"
+    },
+    {
+      "key": "ac27",
+      "requirement": "thinking-presentation",
+      "given": "",
+      "when": "a run emits thinking followed by text",
+      "then": "the thinking group SHALL collapse and the text SHALL remain visible"
+    },
+    {
+      "key": "ac28",
+      "requirement": "thinking-presentation",
+      "given": "",
+      "when": "the latest event in an active run is thinking",
+      "then": "the current thinking group SHALL remain visibly active"
+    },
+    {
+      "key": "ac29",
+      "requirement": "tool-and-diagnostic-presentation",
+      "given": "",
+      "when": "tool-use and tool-result events share a call ID",
+      "then": "the UI SHALL present one expandable tool activity with its completion or failure state"
+    },
+    {
+      "key": "ac30",
+      "requirement": "tool-and-diagnostic-presentation",
+      "given": "",
+      "when": "diagnostic visibility is disabled",
+      "then": "diagnostic events SHALL be hidden while error events and failed tool results remain visible"
+    },
+    {
+      "key": "ac31",
+      "requirement": "stream-contract-conformance-tests",
+      "given": "",
+      "when": "the stream adapter tests execute",
+      "then": "fixtures for Claude and Codex SHALL produce the expected canonical events"
+    },
+    {
+      "key": "ac32",
+      "requirement": "stream-contract-conformance-tests",
+      "given": "",
+      "when": "the Hub UI test or build verification executes",
+      "then": "structured and legacy records SHALL type-check and render through the shared component"
+    },
+    {
+      "key": "ac33",
+      "requirement": "independent-context-usage-boundary",
+      "given": "",
+      "when": "one provider event contains both readable output and token usage",
+      "then": "the parser SHALL return output events and the usage sample in separate result fields"
+    },
+    {
+      "key": "ac34",
+      "requirement": "independent-context-usage-boundary",
+      "given": "",
+      "when": "an auxiliary provider collector reports a context sample",
+      "then": "the invocation coordinator SHALL deliver the context snapshot without fabricating a stream event"
+    },
+    {
+      "key": "ac35",
+      "requirement": "a-turn-renders-in-execution-order",
+      "given": "",
+      "when": "a turn produced text, then tool activity, then further text, then further tool activity",
+      "then": "the rendered order is that text, a work block, the further text, and a further work block"
+    },
+    {
+      "key": "ac36",
+      "requirement": "a-turn-renders-in-execution-order",
+      "given": "",
+      "when": "a turn produced several tool calls with no intervening text",
+      "then": "those calls are presented as a single work block"
+    },
+    {
+      "key": "ac37",
+      "requirement": "a-turn-renders-in-execution-order",
+      "given": "",
+      "when": "a turn produced tool activity and no interleaved text",
+      "then": "that activity is presented as one work block, as before"
+    },
+    {
+      "key": "ac38",
+      "requirement": "each-work-block-carries-independent-state",
+      "given": "",
+      "when": "a turn presents two work blocks and the operator expands the first",
+      "then": "the second remains collapsed"
+    },
+    {
+      "key": "ac39",
+      "requirement": "each-work-block-carries-independent-state",
+      "given": "",
+      "when": "a work block reports a duration",
+      "then": "that duration spans the block's own first and last entry rather than the whole turn"
+    },
+    {
+      "key": "ac40",
+      "requirement": "each-work-block-carries-independent-state",
+      "given": "",
+      "when": "a turn presents several work blocks",
+      "then": "each tool result is rendered inline with the tool use it pairs with inside the same block"
+    }
+  ],
+  "tasks": [],
+  "algorithms": [],
+  "design": "",
+  "evidence": {
+    "checked": [
+      "Translated from openspec/specs/agent-stream-events/spec.md (19 requirements, 40 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten."
+    ],
+    "limits": [
+      "source-had-no-purpose: the source's Purpose was an unedited archiving placeholder, so this document has no summary rather than a note about openspec's workflow",
+      "scenarios-state-no-starting-state: 40 of 40 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed"
+    ]
+  },
+  "lifecycle": "",
+  "open_questions": [],
+  "aw_identity": {
+    "requirements": {
+      "canonical-runner-event-envelope": "FR-1",
+      "closed-event-kind-taxonomy": "FR-2",
+      "versioned-kind-specific-payloads": "FR-3",
+      "tool-call-correlation": "FR-4",
+      "run-identity-and-deterministic-ordering": "FR-5",
+      "supported-runner-normalization": "FR-6",
+      "unknown-provider-events-degrade-safely": "FR-7",
+      "structured-payload-safety": "FR-8",
+      "additive-hub-persistence-and-transport": "FR-9",
+      "cross-version-compatibility": "FR-10",
+      "chat-history-preserves-stream-semantics": "FR-11",
+      "recent-output-retrieval": "FR-12",
+      "shared-stream-renderer": "FR-13",
+      "thinking-presentation": "FR-14",
+      "tool-and-diagnostic-presentation": "FR-15",
+      "stream-contract-conformance-tests": "FR-16",
+      "independent-context-usage-boundary": "FR-17",
+      "a-turn-renders-in-execution-order": "FR-18",
+      "each-work-block-carries-independent-state": "FR-19"
+    },
+    "high_water": 19,
+    "retired": {},
+    "digests": {
+      "FR-1": "ec661e87e3a925a7f3426c3c89ee03c574cc4d93d6fd3a5f8395c98c6b303674",
+      "FR-2": "9862b45aa07cead84b6ff1f01c0f6a74c734ba97d1806fe50d50097e72603adc",
+      "FR-3": "b68890be69662c4c57cc33b362c664af2f0b7f1b1e24ccd4bcd2a3f1d65ba98c",
+      "FR-4": "8a6e9eeb9c4d4cc8a54d44921a0650021e40ddeea326bfce6647b13965542663",
+      "FR-5": "920ce71a3d337baf3b9ac5fde2b668af1e04d38fe455e9938720914336e31d2f",
+      "FR-6": "907459002490363e52d6a787bbdba14fb431b4b5000d5fd173d9e8bce29772ee",
+      "FR-7": "079d52455651f4d7b72254ad1343083f5d593db2121db34cf0cabbdf8b03c226",
+      "FR-8": "8a00557df59fa088f6f99ed421239e7644a46402dc6d8fe2962c97b5e8b8d608",
+      "FR-9": "f8498d467e06ad86e41a64358a78ff7e3a35b49519fb993f88e572641a7cb569",
+      "FR-10": "6037f8fa39c0b3d76ccbe81d040a6e677cc743bdb577360598cb05805a6cf3c9",
+      "FR-11": "19b7d7b6419eaa4fe180449ba5065e8e7f1f3087e9a15bffbca10795e11005dd",
+      "FR-12": "1a1e818f3790a39ad5895d68667c3d31ab61901df870b3fab5bd5256f0ccc0fa",
+      "FR-13": "00c3ced4ae2e82b2c7a1d3c5292281df9f6b79ba47f5d798df709810f81e6c25",
+      "FR-14": "5f02f2f7572639ffb961d81e292b3790048cc7449bc5d7a37f4962c13c0b5cb1",
+      "FR-15": "024099d8258381d0bf04a473dbd955a6b7871bd6c9a021c2b0200db1bcf3a7f9",
+      "FR-16": "e21682dc842c871e3bec2cfcadbc81d8b6c97dcb8a248f0799ed3d9a73ce0fa2",
+      "FR-17": "d03359a9c6eb539243605f0cdcb566651f6bc18328920291f29a8bddb74a548d",
+      "FR-18": "9b984d8d839a63412a457c0534469628bd2f72ee9b76d0b2d262d1cc7e1d22cb",
+      "FR-19": "c4111f8201da8ca1c004b4e3631afc5d700932b7b26bbb3bc673370031392cb3"
+    }
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent loops</title>
+<meta name="aw-spec-kind" content="capability">
+<meta name="aw-spec-status" content="current">
+<meta name="aw-spec-rigor" content="sketch">
+<meta name="aw-spec-schema-version" content="1">
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+    --surface-2: #21262d; --surface: #161b22;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+:root[data-theme="dark"] {
+  --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+  --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+  --surface-2: #21262d; --surface: #161b22;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 2rem 2.5rem 4rem; background: var(--bg); color: var(--fg);
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+h1 { font-size: 1.75rem; margin: 0 0 .25rem; }
+h2 { font-size: 1.15rem; margin: 2.5rem 0 .75rem; padding-bottom: .3rem;
+     border-bottom: 1px solid var(--border); }
+h3 { font-size: 1rem; margin: 1.5rem 0 .4rem; }
+p { margin: .5rem 0; }
+ul, ol { margin: .5rem 0; padding-left: 1.4rem; }
+li { margin: .25rem 0; }
+a { color: var(--aw-accent); }
+.aw-meta { color: var(--muted); font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-chip { display: inline-block; padding: .1rem .5rem; border-radius: 999px;
+           background: var(--surface-2); font-size: .78rem; margin-right: .4rem; }
+.aw-requirement { border-left: 3px solid var(--border); padding: .1rem 0 .1rem .9rem;
+                  margin: 1.1rem 0; }
+.aw-requirement-must { border-left-color: var(--aw-accent); }
+.aw-requirement-should { border-left-color: var(--aw-warn); }
+.aw-requirement-may { border-left-color: var(--border); }
+.aw-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8rem;
+         color: var(--muted); }
+.aw-modal { font-weight: 600; }
+.aw-modal-must { color: var(--aw-accent); }
+.aw-modal-should { color: var(--aw-warn); }
+.aw-modal-may { color: var(--fg); font-weight: 400; }
+.aw-chip-rigor-gate { color: var(--aw-accent); border: 1px solid var(--aw-accent); }
+.aw-chip-rigor-contract { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Phase is a lifecycle, and the question it answers is "can I rely on this?". `approved` and a
+   capability's `current` are settled and take the done tone; `proposed` is waiting on an operator
+   decision and takes warn; `exploring` and `archived` are quiet for opposite reasons — one has not
+   arrived yet, the other has been superseded. Deliberately NOT the accent: this document already
+   spends accent on links and on MUST, and a third meaning would empty it of any. `kind` keeps the
+   plain chip on purpose — it is a category, not a state, and hue there ranks nothing. */
+.aw-chip-phase-done { color: var(--aw-ok); border: 1px solid var(--aw-ok); }
+.aw-chip-phase-waiting { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+.aw-chip-phase-quiet { color: var(--muted); }
+.aw-chip-phase-archived { color: var(--muted); text-decoration: line-through; }
+/* An unresolved question blocks `propose`, so it is a real state and not a label. Resolved stays
+   the plain chip — the reader needs to find what is still open, not celebrate what is closed. */
+.aw-chip-open { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Limits is where a reader is most likely to be misled, and it read identically to Checked. */
+.aw-limits { color: var(--aw-warn); }
+/* The first screenful was entirely monochrome, so the document read as texty however the
+   requirements below were coloured. This puts the same modal scheme where the eye lands first,
+   carrying counts rather than decoration. */
+.aw-summary { margin: 0 0 1.5rem; font-size: .9rem; color: var(--muted); }
+.aw-summary .aw-count { font-weight: 600; }
+.aw-summary-sep { color: var(--border); margin: 0 .45rem; }
+.aw-rationale { color: var(--muted); font-size: .9rem; }
+.aw-refs { font-size: .82rem; color: var(--muted); }
+.aw-note { color: var(--muted); font-style: italic; }
+.aw-empty { color: var(--muted); }
+table { border-collapse: collapse; margin: .75rem 0; width: 100%; }
+th, td { border: 1px solid var(--border); padding: .4rem .6rem; text-align: left;
+         vertical-align: top; font-size: .92rem; }
+code, pre { background: var(--surface); border-radius: 4px; }
+code { padding: .1rem .3rem; font-size: .88em; }
+</style>
+</head>
+<body>
+<h1>Agent loops</h1>
+<p class="aw-meta"><span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><span class="aw-chip">sketch</span></p>
+<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">25</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">25</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">68</span> criteria</p>
+<section><h2 id="requirements">Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-1"><span class="aw-id">FR-1</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL let a project opt a scheduled job into being a loop by supplying a purpose, a wall-clock stop time, a queue-emptiness stop condition, or any combination of the three, at creation or afterward. A job for which none of these was ever supplied SHALL behave exactly as a plain scheduled job, with no loop state attached.</p><p class="aw-rationale">Opting a job into being a loop SHALL NOT change its cron, its message, its agent, or its firing history — a loop&#x27;s cadence and payload remain exactly what the underlying job already declares.</p></div><div class="aw-requirement aw-requirement-must" id="FR-2"><span class="aw-id">FR-2</span> <p><span class="aw-modal aw-modal-must">SHALL</span> A task MAY be linked to a loop through `loop_id`. The Hub SHALL let a caller of the task list scope the result to exactly the tasks naming one loop, showing every one of them regardless of status — an explicit loop scope SHALL hide nothing, matching the guarantee an explicit specification-document scope already gives.</p><p class="aw-rationale">`loop_id` SHALL be written by exactly two mechanisms, and by no other: 1. **Specification materialisation.** When a specification document is approved and its declared tasks are created, any task created for a document that a loop has declared as its source SHALL be written with that loop&#x27;s id. 2. **Creator authorship.** A caller creating a task MAY supply a `loop_id` directly. The Hub SHALL accept it only from the loop&#x27;s own creator or from the operator, and SHALL reject it from anyone else, naming why. No other code path SHALL set or change a task&#x27;s `loop_id` once created.</p></div><div class="aw-requirement aw-requirement-must" id="FR-3"><span class="aw-id">FR-3</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Each firing of a job SHALL record the conversation that firing created or resumed, so that a later reader can find every output, question, and bound task the firing produced without guessing from timestamps.</p></div><div class="aw-requirement aw-requirement-must" id="FR-4"><span class="aw-id">FR-4</span> <p><span class="aw-modal aw-modal-must">SHALL</span> For a job that is a loop, the Hub SHALL surface: its stated purpose; its stop condition and, once stopped, the reason and time it stopped; a count of its queue&#x27;s tasks by status; which task, if any, is its current item; and a count of unanswered, non-declined questions raised across its own firing history. A job that is not a loop SHALL surface none of this.</p></div><div class="aw-requirement aw-requirement-must" id="FR-5"><span class="aw-id">FR-5</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL check a loop&#x27;s stop condition immediately before a firing that its own cron or a manual trigger already caused, and SHALL NOT create, schedule, or trigger any firing that would not otherwise have occurred. When a stop condition is met, the Hub SHALL skip that firing, record why, mark the loop stopped with that reason, and stop scheduling further firings for it.</p><p class="aw-rationale">A loop&#x27;s stop condition SHALL NOT determine what an agent does during a firing, choose the loop&#x27;s next queue item, or start a new conversation on the Hub&#x27;s own initiative.</p></div><div class="aw-requirement aw-requirement-must" id="FR-6"><span class="aw-id">FR-6</span> <p><span class="aw-modal aw-modal-must">SHALL</span> A loop SHALL be creatable with an optional binding to one specification document. Once declared, this binding SHALL be exactly one document per loop and exactly one loop per document — a second loop attempting to declare a document another loop has already claimed SHALL be refused.</p><p class="aw-rationale">When the bound document&#x27;s declared tasks are created on approval, the Hub SHALL write the declaring loop&#x27;s id onto every task created for that document in that approval.</p></div><div class="aw-requirement aw-requirement-must" id="FR-7"><span class="aw-id">FR-7</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL accept a caller-supplied `loop_id` when creating a task only from that loop&#x27;s creator (the agent that created it, or the operator) or from the operator. A loop also has an executor (the agent its job triggers on each fire) — the same agent MAY be both creator and executor. Every other caller, including the loop&#x27;s own executor when it is not also the creator, SHALL be refused, and the refusal SHALL name `send_message` to the creator as the path to request the addition instead.</p><p class="aw-rationale">This requirement governs only the *creator-authorship* write path above. It does not apply to tasks a loop&#x27;s source document materialises on approval, which name no individual caller as their actor.</p></div><div class="aw-requirement aw-requirement-must" id="FR-8"><span class="aw-id">FR-8</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Each time a loop&#x27;s job fires, the Hub SHALL select the queue&#x27;s current item deterministically — the queue&#x27;s existing task in an active, non-terminal status if one exists, else its oldest task in an entry status — and SHALL mark it as claimed by that firing before the firing&#x27;s agent begins its turn. No firing SHALL leave the choice of which queued task to work to the firing agent&#x27;s own judgement.</p></div><div class="aw-requirement aw-requirement-must" id="FR-9"><span class="aw-id">FR-9</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Each firing of a loop&#x27;s job SHALL be briefed with the most recent checkpoint recorded by any prior firing of that same loop, regardless of which conversation produced it. A job that carries a loop SHALL refuse a `session_mode` of `resume`, naming loop continuity as the reason, rather than silently ignoring the setting.</p></div><div class="aw-requirement aw-requirement-must" id="FR-10"><span class="aw-id">FR-10</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The content composed ahead of a loop&#x27;s job message for each firing SHALL include the loop&#x27;s purpose, the item claimed for that firing, and the prior checkpoint content when one exists. The prior checkpoint content included SHALL be bounded to a fixed size, so that a long-running loop&#x27;s accumulated history cannot grow the size of what a single firing is asked to read.</p></div><div class="aw-requirement aw-requirement-must" id="FR-11"><span class="aw-id">FR-11</span> <p><span class="aw-modal aw-modal-must">SHALL</span> When a loop&#x27;s stop condition fires because its queue is empty, the Hub SHALL check whether an unanswered request for more work — a message to the loop&#x27;s creator, or an unanswered question — was outstanding at that moment, and SHALL record what it found as part of stopping the loop. The loop SHALL still stop; an outstanding request SHALL NOT create a third, waiting state.</p></div><div class="aw-requirement aw-requirement-must" id="FR-12"><span class="aw-id">FR-12</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL end a self-created loop&#x27;s creator privilege to add tasks directly once that loop has fired for the first time, where &quot;self-created&quot; means the loop&#x27;s creator and executor are the same agent. After a self-created loop&#x27;s first fire, the creator agent MAY request an addition only by asking the operator and receiving an answer; a direct addition attempt SHALL be refused. This requirement does not narrow the creator privilege for a loop whose creator and executor are different agents.</p></div><div class="aw-requirement aw-requirement-must" id="FR-13"><span class="aw-id">FR-13</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL record for each loop a controller, which decides whether that loop&#x27;s queue may be extended, and which SHALL default to the operator.</p><p class="aw-rationale">The operator SHALL be able to delegate control to the loop&#x27;s creator agent, and to take it back, after the loop has been created. Where the operator holds control, a request to extend the queue SHALL be relayed to the operator and SHALL change nothing until the operator decides. Where control has been delegated, the creator agent SHALL be able to decide the request itself. Each change of control SHALL be recorded against the loop with the actor responsible and the time it occurred.</p></div><div class="aw-requirement aw-requirement-must" id="FR-14"><span class="aw-id">FR-14</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL accept an edit to a loop at any time, including while one of its firings is running, and SHALL apply that edit at the loop&#x27;s next firing.</p><p class="aw-rationale">A firing already running SHALL continue under the definition it was briefed with. The Hub SHALL report an edit that is pending separately from the definition currently in force, so that an operator can tell what is staged from what is live. Each edit SHALL be recorded against the loop with the actor responsible and the time it occurred. Reporting the two separately is not sufficient on its own. Where a loop is presented to the operator, a pending edit SHALL be shown, each value SHALL state in words when it applies, and a loop with no pending edit SHALL show nothing — the absence of an indicator is itself the statement that the definition on screen is the one in force. A field the edit did not touch MUST NOT be presented as changing.</p></div><div class="aw-requirement aw-requirement-must" id="FR-15"><span class="aw-id">FR-15</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL refuse a task added to a loop that has stopped, stating the reason that loop stopped and when it stopped. Refusing SHALL NOT restart a stopped loop.</p><p class="aw-rationale">The refused task SHALL be offered as the initial work of a new loop, so that a task written moments after its intended loop terminated is not discarded.</p></div><div class="aw-requirement aw-requirement-must" id="FR-16"><span class="aw-id">FR-16</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL record against the loop each event in its life: its creation, each edit, each change of control, each addition to its queue, each firing, and its stop with the reason. Each SHALL carry the actor responsible and the time it occurred.</p><p class="aw-rationale">The Hub SHALL let a caller retrieve that history scoped to one loop, without filtering a project-wide record by hand.</p></div><div class="aw-requirement aw-requirement-must" id="FR-17"><span class="aw-id">FR-17</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL record a loop firing as in progress for as long as its run is executing, and SHALL distinguish that state from a firing that completed and from one that failed.</p></div><div class="aw-requirement aw-requirement-must" id="FR-18"><span class="aw-id">FR-18</span> <p><span class="aw-modal aw-modal-must">MUST</span> The Hub MUST NOT permanently remove a loop or a scheduled job, nor any record of the runs, queue history, purpose, or stop state belonging to one. A loop or a job SHALL instead be archivable, which hides it from default listings and destroys nothing.</p><p class="aw-rationale">Archiving a loop SHALL be an operator action only, and MUST NOT be reachable by an agent.</p></div><div class="aw-requirement aw-requirement-must" id="FR-19"><span class="aw-id">FR-19</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL refuse to archive a loop that has neither completed nor stopped, so that archiving can never conceal work that is still firing.</p></div><div class="aw-requirement aw-requirement-must" id="FR-20"><span class="aw-id">FR-20</span> <p><span class="aw-modal aw-modal-must">SHALL</span> A loop that ends SHALL record how it ended as a distinct value that can be filtered and counted, separately from the human-readable reason it already records. Completing — ending because its queue drained — SHALL be distinguishable from stopping for any other cause without interpreting prose.</p></div><div class="aw-requirement aw-requirement-must" id="FR-21"><span class="aw-id">FR-21</span> <p><span class="aw-modal aw-modal-must">MUST</span> A task claimed by a firing SHALL be reported as the loop&#x27;s current item even before any later step moves it to an in-progress status. The Hub MUST NOT omit the claimed task from a loop&#x27;s summary solely because of the status a claim assigns it.</p></div><div class="aw-requirement aw-requirement-must" id="FR-22"><span class="aw-id">FR-22</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL let the operator list every loop in a project, whatever its state, and inspect any one of them individually. A loop&#x27;s listing entry SHALL carry a label the operator can recognise it by, without the caller having to fetch its job separately.</p><p class="aw-rationale">Listing SHALL be scoped to the project and MUST NOT require naming a conversation, since a loop&#x27;s firings each occupy a conversation of their own and none of them is the loop.</p></div><div class="aw-requirement aw-requirement-must" id="FR-23"><span class="aw-id">FR-23</span> <p><span class="aw-modal aw-modal-must">SHALL</span> A conversation created by a loop firing SHALL name the loop that created it, wherever conversations are listed, by the same label the loop is listed under elsewhere. A loop firing starts a conversation of its own, so without this an agent&#x27;s conversations accumulate threads the operator never began and cannot tell apart from the ones they did.</p><p class="aw-rationale">The naming SHALL distinguish a loop firing from a plain scheduled job. A conversation created by a job that has no loop SHALL carry no loop and be marked as none, since both are created the same way and are otherwise indistinguishable. Naming a loop SHALL lead to that loop&#x27;s existing record rather than to a second place its history is kept.</p></div><div class="aw-requirement aw-requirement-must" id="FR-24"><span class="aw-id">FR-24</span> <p><span class="aw-modal aw-modal-must">SHALL</span> A time SHALL be shown to the operator as the instant it happened, independently of where the operator&#x27;s machine is. Every time the Hub records is an instant in UTC — when an edit was staged, when a firing happened, when a loop stopped — and where the operator reads one, it is that instant they must be reading.</p><p class="aw-rationale">A time the Hub reports without stating its zone SHALL be read as UTC, since that is what it is. A time that does state its zone SHALL be read as stated and MUST NOT be overridden.</p></div><div class="aw-requirement aw-requirement-must" id="FR-25"><span class="aw-id">FR-25</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Where conversations are listed, a run of consecutive conversations created by the same loop SHALL be presentable as a single row, expandable to the firings it stands for. A loop left running fills the list with threads the operator never began; naming each one is not sufficient once there are enough of them.</p><p class="aw-rationale">Collapsing SHALL NOT reorder the list. Only *consecutive* conversations may be collapsed together, so that a conversation which fell between two firings keeps its place between them. Collapsing SHALL NOT hide that a firing needs the operator: a run containing a conversation waiting for them SHALL say so without being expanded. A run containing the conversation currently open SHALL present it.</p></div></section><section><h2 id="acceptance">Acceptance criteria</h2><table><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>a job is created supplying none of purpose, a stop time, or a queue-emptiness stop</td><td>the job has no loop state it fires on its cron exactly as a job created before this capability existed would</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>a job is created or updated supplying at least one of purpose, a stop time, or a</td><td>the job becomes a loop its cron, message, agent, and existing firing history are unchanged</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>an update supplies a loop field for a job that has never been opted into being a loop</td><td>the request is rejected no loop state is created as a side effect of the rejected request</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>the task list is requested scoped to one loop</td><td>every task naming that loop is returned no task naming a different loop, or no loop, is returned</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>the task list is scoped to a loop that owns a task in a terminal status</td><td>that task is included in the scoped result</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>a task is created supplying no `loop_id`, and no specification document it might belong</td><td>the task&#x27;s `loop_id` is empty the task does not appear in any loop-scoped task list</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>a job fires, on schedule or on demand</td><td>the firing record identifies the conversation the fire used that conversation&#x27;s own output and questions are reachable from the firing record without</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>a loop is read through the job listing or a single job&#x27;s detail</td><td>its purpose, stop condition, queue counts, current item, and open-question count are a plain job&#x27;s response carries no loop state</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>a loop&#x27;s queue holds a task that is in progress or blocked a loop&#x27;s queue holds no in-progress or blocked task but holds a pending one a loop&#x27;s queue holds no in-progress, blocked, or pending task</td><td>that task is the loop&#x27;s current item its oldest pending task, by creation order, is the loop&#x27;s current item the loop has no current item</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>a job&#x27;s cron would fire it after its loop&#x27;s stop time has passed</td><td>that firing is skipped the loop is marked stopped with a reason naming the stop time the job no longer fires on subsequent cron ticks</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>a job&#x27;s cron would fire it, its loop has the queue-emptiness stop condition set, the</td><td>that firing is skipped the loop is marked stopped with a reason naming the empty queue</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>a job&#x27;s cron would fire it, its loop has the queue-emptiness stop condition set, and no</td><td>that firing proceeds the loop is not marked stopped and the job remains enabled</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>a loop has neither a stop time nor the queue-emptiness stop condition set</td><td>its firings are never skipped for a stop-condition reason</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>a loop declares specification document D as its source, and D is later approved with</td><td>every task D&#x27;s approval creates carries that loop&#x27;s id the loop&#x27;s queue now contains those tasks</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>a second loop attempts to declare a specification document another loop has already</td><td>the second loop&#x27;s creation or update is refused, naming the conflicting loop</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>a specification document with no loop declaring it as source is approved</td><td>the tasks it creates carry no `loop_id` materialisation behaves exactly as it did before this capability existed</td></tr><tr><td><a href="#FR-7">FR-7</a></td><td></td><td>an agent that created loop L creates a task supplying L&#x27;s id</td><td>the task is created with `loop_id` set to L</td></tr><tr><td><a href="#FR-7">FR-7</a></td><td></td><td>the operator creates a task supplying any loop&#x27;s id</td><td>the task is created with that loop&#x27;s `loop_id` set</td></tr><tr><td><a href="#FR-7">FR-7</a></td><td></td><td>an agent that is loop L&#x27;s executor but not its creator attempts to create a task</td><td>the request is refused the refusal names `send_message` to L&#x27;s creator as the alternative</td></tr><tr><td><a href="#FR-8">FR-8</a></td><td></td><td>a loop&#x27;s job fires and its queue holds only tasks in an entry status</td><td>the firing claims the oldest one by creation time that task is marked as claimed before the agent&#x27;s turn begins</td></tr><tr><td><a href="#FR-8">FR-8</a></td><td></td><td>a loop&#x27;s job fires and its queue already holds a task in an active, non-terminal status</td><td>the firing claims that task rather than starting a different one</td></tr><tr><td><a href="#FR-8">FR-8</a></td><td></td><td>a loop&#x27;s job fires and its queue holds no task in an entry or active status</td><td>the firing claims no item whether the fire proceeds at all is governed by the loop&#x27;s stop condition, unchanged by</td></tr><tr><td><a href="#FR-9">FR-9</a></td><td></td><td>a loop&#x27;s job fires a second time, and its first firing&#x27;s conversation produced a</td><td>the second firing&#x27;s briefing includes that checkpoint&#x27;s content this holds even though the second firing&#x27;s conversation is a different conversation than</td></tr><tr><td><a href="#FR-9">FR-9</a></td><td></td><td>a loop&#x27;s job fires for the first time</td><td>the firing&#x27;s briefing carries no prior checkpoint content the fire is not refused or delayed for lacking one</td></tr><tr><td><a href="#FR-9">FR-9</a></td><td></td><td>an update sets `session_mode` to `resume` on a job that carries a `Loop`</td><td>the update is refused, naming that the job&#x27;s continuity is by checkpoint</td></tr><tr><td><a href="#FR-10">FR-10</a></td><td></td><td>a firing&#x27;s inherited checkpoint content is within the fixed size bound</td><td>the briefing includes it in full</td></tr><tr><td><a href="#FR-10">FR-10</a></td><td></td><td>a firing&#x27;s inherited checkpoint content exceeds the fixed size bound</td><td>the briefing includes a truncated version up to that bound the briefing is not silently sent with no prior context at all</td></tr><tr><td><a href="#FR-11">FR-11</a></td><td></td><td>a loop&#x27;s queue empties and no message to its creator or unanswered question is</td><td>the loop stops the stop is recorded with no pending request noted</td></tr><tr><td><a href="#FR-11">FR-11</a></td><td></td><td>a loop&#x27;s queue empties while its executor has an unread message to the creator or an</td><td>the loop still stops the stop is recorded noting the outstanding request, so it can be reviewed later</td></tr><tr><td><a href="#FR-12">FR-12</a></td><td></td><td>an agent creates a loop for itself and adds a task to it before the loop has fired</td><td>the addition is accepted</td></tr><tr><td><a href="#FR-12">FR-12</a></td><td></td><td>an agent that created a loop for itself attempts to add a task directly after that loop</td><td>the addition is refused, naming that operator approval is required</td></tr><tr><td><a href="#FR-12">FR-12</a></td><td></td><td>an agent that created a loop for itself asks the operator for an addition after the</td><td>the task is added with that loop&#x27;s id</td></tr><tr><td><a href="#FR-13">FR-13</a></td><td></td><td>a loop is created</td><td>its controller is the operator an extension of its queue changes nothing until the operator decides</td></tr><tr><td><a href="#FR-13">FR-13</a></td><td></td><td>the operator delegates control of an existing loop to its creator agent</td><td>subsequent extension requests are decided by that agent the change of control is recorded against the loop with its actor and time</td></tr><tr><td><a href="#FR-13">FR-13</a></td><td></td><td>the operator takes back control of a loop it had delegated</td><td>subsequent extension requests are presented to the operator again</td></tr><tr><td><a href="#FR-14">FR-14</a></td><td>a loop with a firing in progress</td><td>its purpose or stop condition is edited</td><td>the edit is accepted the running firing continues under the definition it was briefed with</td></tr><tr><td><a href="#FR-14">FR-14</a></td><td></td><td>the loop fires after an edit was accepted</td><td>that firing is briefed with the edited definition the edit is no longer reported as pending</td></tr><tr><td><a href="#FR-14">FR-14</a></td><td>a loop with an accepted edit that has not yet been applied</td><td>the loop is inspected</td><td>the pending edit is reported as pending the definition currently in force is reported separately</td></tr><tr><td><a href="#FR-14">FR-14</a></td><td>a loop with an accepted edit that has not yet been applied</td><td>the operator opens that loop</td><td>each staged value is shown beside the value it will replace each of the two states in words when it applies, rather than by position or colour alone a field the edit did not touch is not shown as changing</td></tr><tr><td><a href="#FR-14">FR-14</a></td><td>a loop with a pending edit and a firing already in progress</td><td>the operator opens that loop</td><td>it states that the running firing keeps the definition currently in force that the edit reaches the firing after it</td></tr><tr><td><a href="#FR-14">FR-14</a></td><td>a loop with no staged edit</td><td>the operator opens it</td><td>no pending-edit indicator is shown the definition shown is the one in force, unqualified</td></tr><tr><td><a href="#FR-15">FR-15</a></td><td>a loop that stopped because its queue emptied</td><td>a task is added to it</td><td>the addition is refused the refusal states that the loop stopped because its queue emptied, and when</td></tr><tr><td><a href="#FR-15">FR-15</a></td><td></td><td>a task is refused because its loop has stopped</td><td>it is offered as the initial work of a new loop the stopped loop remains stopped</td></tr><tr><td><a href="#FR-16">FR-16</a></td><td></td><td>a caller requests one loop&#x27;s history</td><td>the events of that loop&#x27;s life are returned in order no event belonging to a different loop is returned</td></tr><tr><td><a href="#FR-16">FR-16</a></td><td></td><td>a loop&#x27;s history is retrieved</td><td>each event states the actor responsible and the time it occurred</td></tr><tr><td><a href="#FR-17">FR-17</a></td><td>a loop firing whose run is executing</td><td>the loop is inspected</td><td>the firing is reported as in progress</td></tr><tr><td><a href="#FR-17">FR-17</a></td><td></td><td>a firing&#x27;s run has ended</td><td>the firing is no longer reported as in progress whether it completed or failed is reported</td></tr><tr><td><a href="#FR-18">FR-18</a></td><td></td><td>any caller asks the Hub to delete a job</td><td>the request is refused, naming archiving as the available alternative the job, its loop if it has one, and every run record still exist afterwards</td></tr><tr><td><a href="#FR-18">FR-18</a></td><td>a loop with a queue history, firings, and a stop reason</td><td>the loop is archived</td><td>its purpose, queue history, firings, and stop state are all still retrievable</td></tr><tr><td><a href="#FR-18">FR-18</a></td><td></td><td>an agent asks the Hub to archive a loop</td><td>the request is refused, regardless of any standing allowance</td></tr><tr><td><a href="#FR-19">FR-19</a></td><td>a loop that is still enabled and firing</td><td>the operator attempts to archive it</td><td>the request is refused, stating that it must be stopped or complete first</td></tr><tr><td><a href="#FR-19">FR-19</a></td><td>a loop that has stopped or completed</td><td>the operator archives it</td><td>the loop is archived and no longer appears in default listings</td></tr><tr><td><a href="#FR-20">FR-20</a></td><td></td><td>a loop ends because every task naming it has reached a terminal status</td><td>the loop records that it completed, as a value distinct from its written reason</td></tr><tr><td><a href="#FR-20">FR-20</a></td><td>one loop that ended because its queue drained and another stopped by the operator</td><td>the project&#x27;s loops are listed and counted by how they ended</td><td>the two are counted separately, without matching on the text of any reason</td></tr><tr><td><a href="#FR-21">FR-21</a></td><td>a firing that has claimed its queue&#x27;s item and not yet begun its turn</td><td>the loop&#x27;s summary is retrieved</td><td>the claimed task is reported as the loop&#x27;s current item</td></tr><tr><td><a href="#FR-22">FR-22</a></td><td></td><td>the operator lists a project&#x27;s loops</td><td>every loop is returned regardless of whether it is running, complete, stopped, or archived each carries a label, its purpose, how it ended if it has, and its queue counts</td></tr><tr><td><a href="#FR-22">FR-22</a></td><td></td><td>the operator inspects one loop</td><td>its queue, current item, firing history, and whether a firing is in progress are returned no conversation identifier is required to make the request</td></tr><tr><td><a href="#FR-22">FR-22</a></td><td>a project with archived and unarchived loops</td><td>the operator lists the project&#x27;s loops without asking for archived ones</td><td>only the unarchived loops are returned</td></tr><tr><td><a href="#FR-23">FR-23</a></td><td>a loop that has fired</td><td>the operator lists the conversations of the agent that ran it</td><td>the conversation the firing created names that loop the name shown is the one the loop is listed under elsewhere</td></tr><tr><td><a href="#FR-23">FR-23</a></td><td>a scheduled job with no loop, which has fired</td><td>the operator lists the conversations of the agent that ran it</td><td>that conversation carries no loop it is not marked as belonging to one</td></tr><tr><td><a href="#FR-23">FR-23</a></td><td></td><td>the operator lists conversations they started themselves</td><td>none of them names a loop</td></tr><tr><td><a href="#FR-23">FR-23</a></td><td>a conversation that names a loop</td><td>the operator follows that name</td><td>the loop&#x27;s existing record opens no second copy of its firing history is presented</td></tr><tr><td><a href="#FR-24">FR-24</a></td><td>an operator whose machine is not on UTC</td><td>they open a loop moments after staging an edit</td><td>the edit is shown as having been staged moments ago</td></tr><tr><td><a href="#FR-24">FR-24</a></td><td>a time reported with an explicit zone</td><td>it is shown to the operator</td><td>it is presented as the instant that zone makes it, not shifted again</td></tr><tr><td><a href="#FR-25">FR-25</a></td><td>several consecutive conversations created by the same loop</td><td>the operator lists them</td><td>they occupy a single row naming the loop and stating how many there are expanding it presents each firing</td></tr><tr><td><a href="#FR-25">FR-25</a></td><td>a loop&#x27;s firings, then a conversation the operator started, then more of that loop&#x27;s</td><td>the operator lists them</td><td>the conversation they started still falls between the two runs the runs are not joined across it</td></tr><tr><td><a href="#FR-25">FR-25</a></td><td>a collapsed run containing a firing that stopped for the operator</td><td>the operator looks at the list</td><td>the row says a firing is waiting for them</td></tr><tr><td><a href="#FR-25">FR-25</a></td><td>a run containing the conversation the operator currently has open</td><td>the list is presented</td><td>that conversation is presented rather than collapsed out of view</td></tr></tbody></table></section><section><h2 id="evidence">Evidence and coverage limits</h2><h3>Checked</h3><ul><li>Translated from openspec/specs/agent-loops/spec.md (25 requirements, 68 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten.</li></ul><h3 class="aw-limits">Limits</h3><ul><li>source-had-no-purpose: the source&#x27;s Purpose was an unedited archiving placeholder, so this document has no summary rather than a note about openspec&#x27;s workflow</li><li>scenario-had-multiple-cycles: &#x27;The current item is the queue&#x27;s own in-progress task, or its oldest pending one&#x27; states 3 WHEN/THEN cycles under one name; they are joined into one criterion because a criterion has one of each</li><li>scenarios-state-no-starting-state: 46 of 68 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed</li></ul></section><section><h2 id="open-questions">Open questions</h2><p class="aw-empty">None outstanding.</p></section>
+<script type="application/agentweave-spec+json" id="aw-spec-payload">
+{
+  "schema_version": 1,
+  "kind": "capability",
+  "title": "Agent loops",
+  "summary": "",
+  "problem": "",
+  "scope": {
+    "in_scope": [],
+    "non_goals": []
+  },
+  "requirements": [
+    {
+      "key": "a-recurring-job-may-be-named-as-a-loop-with-a-purpose-and-a-",
+      "statement": "The Hub SHALL let a project opt a scheduled job into being a loop by supplying a purpose, a wall-clock stop time, a queue-emptiness stop condition, or any combination of the three, at creation or afterward. A job for which none of these was ever supplied SHALL behave exactly as a plain scheduled job, with no loop state attached.",
+      "modal": "SHALL",
+      "rationale": "Opting a job into being a loop SHALL NOT change its cron, its message, its agent, or its firing history — a loop's cadence and payload remain exactly what the underlying job already declares.",
+      "party": null
+    },
+    {
+      "key": "a-loop-s-queue-is-the-tasks-that-name-it-and-each-write-name",
+      "statement": "A task MAY be linked to a loop through `loop_id`. The Hub SHALL let a caller of the task list scope the result to exactly the tasks naming one loop, showing every one of them regardless of status — an explicit loop scope SHALL hide nothing, matching the guarantee an explicit specification-document scope already gives.",
+      "modal": "SHALL",
+      "rationale": "`loop_id` SHALL be written by exactly two mechanisms, and by no other: 1. **Specification materialisation.** When a specification document is approved and its declared tasks are created, any task created for a document that a loop has declared as its source SHALL be written with that loop's id. 2. **Creator authorship.** A caller creating a task MAY supply a `loop_id` directly. The Hub SHALL accept it only from the loop's own creator or from the operator, and SHALL reject it from anyone else, naming why. No other code path SHALL set or change a task's `loop_id` once created.",
+      "party": null
+    },
+    {
+      "key": "a-loop-s-firing-is-traceable-to-what-it-produced",
+      "statement": "Each firing of a job SHALL record the conversation that firing created or resumed, so that a later reader can find every output, question, and bound task the firing produced without guessing from timestamps.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "a-loop-surfaces-its-current-state-without-a-caller-assemblin",
+      "statement": "For a job that is a loop, the Hub SHALL surface: its stated purpose; its stop condition and, once stopped, the reason and time it stopped; a count of its queue's tasks by status; which task, if any, is its current item; and a count of unanswered, non-declined questions raised across its own firing history. A job that is not a loop SHALL surface none of this.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "a-loop-s-stop-condition-can-only-ever-prevent-a-firing-that-",
+      "statement": "The Hub SHALL check a loop's stop condition immediately before a firing that its own cron or a manual trigger already caused, and SHALL NOT create, schedule, or trigger any firing that would not otherwise have occurred. When a stop condition is met, the Hub SHALL skip that firing, record why, mark the loop stopped with that reason, and stop scheduling further firings for it.",
+      "modal": "SHALL",
+      "rationale": "A loop's stop condition SHALL NOT determine what an agent does during a firing, choose the loop's next queue item, or start a new conversation on the Hub's own initiative.",
+      "party": null
+    },
+    {
+      "key": "a-loop-may-declare-one-specification-document-as-its-queue-s",
+      "statement": "A loop SHALL be creatable with an optional binding to one specification document. Once declared, this binding SHALL be exactly one document per loop and exactly one loop per document — a second loop attempting to declare a document another loop has already claimed SHALL be refused.",
+      "modal": "SHALL",
+      "rationale": "When the bound document's declared tasks are created on approval, the Hub SHALL write the declaring loop's id onto every task created for that document in that approval.",
+      "party": null
+    },
+    {
+      "key": "only-a-loop-s-creator-or-the-operator-may-add-to-its-queue-d",
+      "statement": "The Hub SHALL accept a caller-supplied `loop_id` when creating a task only from that loop's creator (the agent that created it, or the operator) or from the operator. A loop also has an executor (the agent its job triggers on each fire) — the same agent MAY be both creator and executor. Every other caller, including the loop's own executor when it is not also the creator, SHALL be refused, and the refusal SHALL name `send_message` to the creator as the path to request the addition instead.",
+      "modal": "SHALL",
+      "rationale": "This requirement governs only the *creator-authorship* write path above. It does not apply to tasks a loop's source document materialises on approval, which name no individual caller as their actor.",
+      "party": null
+    },
+    {
+      "key": "a-firing-claims-its-queue-s-current-item-before-the-turn-beg",
+      "statement": "Each time a loop's job fires, the Hub SHALL select the queue's current item deterministically — the queue's existing task in an active, non-terminal status if one exists, else its oldest task in an entry status — and SHALL mark it as claimed by that firing before the firing's agent begins its turn. No firing SHALL leave the choice of which queued task to work to the firing agent's own judgement.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "a-loop-s-continuity-across-firings-is-by-checkpoint-not-by-r",
+      "statement": "Each firing of a loop's job SHALL be briefed with the most recent checkpoint recorded by any prior firing of that same loop, regardless of which conversation produced it. A job that carries a loop SHALL refuse a `session_mode` of `resume`, naming loop continuity as the reason, rather than silently ignoring the setting.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "a-firing-s-briefing-is-bounded",
+      "statement": "The content composed ahead of a loop's job message for each firing SHALL include the loop's purpose, the item claimed for that firing, and the prior checkpoint content when one exists. The prior checkpoint content included SHALL be bounded to a fixed size, so that a long-running loop's accumulated history cannot grow the size of what a single firing is asked to read.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "an-empty-queue-with-a-request-still-in-flight-terminates-and",
+      "statement": "When a loop's stop condition fires because its queue is empty, the Hub SHALL check whether an unanswered request for more work — a message to the loop's creator, or an unanswered question — was outstanding at that moment, and SHALL record what it found as part of stopping the loop. The loop SHALL still stop; an outstanding request SHALL NOT create a third, waiting state.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "a-self-created-loop-s-queue-accepts-additions-from-its-creat",
+      "statement": "The Hub SHALL end a self-created loop's creator privilege to add tasks directly once that loop has fired for the first time, where \"self-created\" means the loop's creator and executor are the same agent. After a self-created loop's first fire, the creator agent MAY request an addition only by asking the operator and receiving an answer; a direct addition attempt SHALL be refused. This requirement does not narrow the creator privilege for a loop whose creator and executor are different agents.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "a-loop-has-a-controller-defaulting-to-the-operator-which-may",
+      "statement": "The Hub SHALL record for each loop a controller, which decides whether that loop's queue may be extended, and which SHALL default to the operator.",
+      "modal": "SHALL",
+      "rationale": "The operator SHALL be able to delegate control to the loop's creator agent, and to take it back, after the loop has been created. Where the operator holds control, a request to extend the queue SHALL be relayed to the operator and SHALL change nothing until the operator decides. Where control has been delegated, the creator agent SHALL be able to decide the request itself. Each change of control SHALL be recorded against the loop with the actor responsible and the time it occurred.",
+      "party": null
+    },
+    {
+      "key": "an-edit-to-a-loop-takes-effect-at-its-next-firing-and-never-",
+      "statement": "The Hub SHALL accept an edit to a loop at any time, including while one of its firings is running, and SHALL apply that edit at the loop's next firing.",
+      "modal": "SHALL",
+      "rationale": "A firing already running SHALL continue under the definition it was briefed with. The Hub SHALL report an edit that is pending separately from the definition currently in force, so that an operator can tell what is staged from what is live. Each edit SHALL be recorded against the loop with the actor responsible and the time it occurred. Reporting the two separately is not sufficient on its own. Where a loop is presented to the operator, a pending edit SHALL be shown, each value SHALL state in words when it applies, and a loop with no pending edit SHALL show nothing — the absence of an indicator is itself the statement that the definition on screen is the one in force. A field the edit did not touch MUST NOT be presented as changing.",
+      "party": null
+    },
+    {
+      "key": "a-task-offered-to-a-stopped-loop-is-refused-and-offered-to-a",
+      "statement": "The Hub SHALL refuse a task added to a loop that has stopped, stating the reason that loop stopped and when it stopped. Refusing SHALL NOT restart a stopped loop.",
+      "modal": "SHALL",
+      "rationale": "The refused task SHALL be offered as the initial work of a new loop, so that a task written moments after its intended loop terminated is not discarded.",
+      "party": null
+    },
+    {
+      "key": "a-loop-s-history-is-answerable-for-that-loop-alone",
+      "statement": "The Hub SHALL record against the loop each event in its life: its creation, each edit, each change of control, each addition to its queue, each firing, and its stop with the reason. Each SHALL carry the actor responsible and the time it occurred.",
+      "modal": "SHALL",
+      "rationale": "The Hub SHALL let a caller retrieve that history scoped to one loop, without filtering a project-wide record by hand.",
+      "party": null
+    },
+    {
+      "key": "a-firing-in-progress-is-distinguishable-from-one-that-has-fi",
+      "statement": "The Hub SHALL record a loop firing as in progress for as long as its run is executing, and SHALL distinguish that state from a firing that completed and from one that failed.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "a-loop-and-a-job-are-archivable-never-deletable",
+      "statement": "The Hub MUST NOT permanently remove a loop or a scheduled job, nor any record of the runs, queue history, purpose, or stop state belonging to one. A loop or a job SHALL instead be archivable, which hides it from default listings and destroys nothing.",
+      "modal": "MUST",
+      "rationale": "Archiving a loop SHALL be an operator action only, and MUST NOT be reachable by an agent.",
+      "party": null
+    },
+    {
+      "key": "a-loop-that-is-still-running-cannot-be-archived",
+      "statement": "The Hub SHALL refuse to archive a loop that has neither completed nor stopped, so that archiving can never conceal work that is still firing.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "how-a-loop-ended-is-a-distinct-value-not-only-a-written-reas",
+      "statement": "A loop that ends SHALL record how it ended as a distinct value that can be filtered and counted, separately from the human-readable reason it already records. Completing — ending because its queue drained — SHALL be distinguishable from stopping for any other cause without interpreting prose.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "a-claimed-task-is-still-the-loop-s-current-item",
+      "statement": "A task claimed by a firing SHALL be reported as the loop's current item even before any later step moves it to an in-progress status. The Hub MUST NOT omit the claimed task from a loop's summary solely because of the status a claim assigns it.",
+      "modal": "MUST",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "a-project-s-loops-are-listable-and-individually-inspectable",
+      "statement": "The Hub SHALL let the operator list every loop in a project, whatever its state, and inspect any one of them individually. A loop's listing entry SHALL carry a label the operator can recognise it by, without the caller having to fetch its job separately.",
+      "modal": "SHALL",
+      "rationale": "Listing SHALL be scoped to the project and MUST NOT require naming a conversation, since a loop's firings each occupy a conversation of their own and none of them is the loop.",
+      "party": null
+    },
+    {
+      "key": "a-conversation-a-loop-firing-created-names-the-loop-that-cre",
+      "statement": "A conversation created by a loop firing SHALL name the loop that created it, wherever conversations are listed, by the same label the loop is listed under elsewhere. A loop firing starts a conversation of its own, so without this an agent's conversations accumulate threads the operator never began and cannot tell apart from the ones they did.",
+      "modal": "SHALL",
+      "rationale": "The naming SHALL distinguish a loop firing from a plain scheduled job. A conversation created by a job that has no loop SHALL carry no loop and be marked as none, since both are created the same way and are otherwise indistinguishable. Naming a loop SHALL lead to that loop's existing record rather than to a second place its history is kept.",
+      "party": null
+    },
+    {
+      "key": "a-time-shown-for-a-loop-is-the-instant-it-happened",
+      "statement": "A time SHALL be shown to the operator as the instant it happened, independently of where the operator's machine is. Every time the Hub records is an instant in UTC — when an edit was staged, when a firing happened, when a loop stopped — and where the operator reads one, it is that instant they must be reading.",
+      "modal": "SHALL",
+      "rationale": "A time the Hub reports without stating its zone SHALL be read as UTC, since that is what it is. A time that does state its zone SHALL be read as stated and MUST NOT be overridden.",
+      "party": null
+    },
+    {
+      "key": "consecutive-firings-of-one-loop-occupy-one-row",
+      "statement": "Where conversations are listed, a run of consecutive conversations created by the same loop SHALL be presentable as a single row, expandable to the firings it stands for. A loop left running fills the list with threads the operator never began; naming each one is not sufficient once there are enough of them.",
+      "modal": "SHALL",
+      "rationale": "Collapsing SHALL NOT reorder the list. Only *consecutive* conversations may be collapsed together, so that a conversation which fell between two firings keeps its place between them. Collapsing SHALL NOT hide that a firing needs the operator: a run containing a conversation waiting for them SHALL say so without being expanded. A run containing the conversation currently open SHALL present it.",
+      "party": null
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "key": "ac1",
+      "requirement": "a-recurring-job-may-be-named-as-a-loop-with-a-purpose-and-a-",
+      "given": "",
+      "when": "a job is created supplying none of purpose, a stop time, or a queue-emptiness stop",
+      "then": "the job has no loop state it fires on its cron exactly as a job created before this capability existed would"
+    },
+    {
+      "key": "ac2",
+      "requirement": "a-recurring-job-may-be-named-as-a-loop-with-a-purpose-and-a-",
+      "given": "",
+      "when": "a job is created or updated supplying at least one of purpose, a stop time, or a",
+      "then": "the job becomes a loop its cron, message, agent, and existing firing history are unchanged"
+    },
+    {
+      "key": "ac3",
+      "requirement": "a-recurring-job-may-be-named-as-a-loop-with-a-purpose-and-a-",
+      "given": "",
+      "when": "an update supplies a loop field for a job that has never been opted into being a loop",
+      "then": "the request is rejected no loop state is created as a side effect of the rejected request"
+    },
+    {
+      "key": "ac4",
+      "requirement": "a-loop-s-queue-is-the-tasks-that-name-it-and-each-write-name",
+      "given": "",
+      "when": "the task list is requested scoped to one loop",
+      "then": "every task naming that loop is returned no task naming a different loop, or no loop, is returned"
+    },
+    {
+      "key": "ac5",
+      "requirement": "a-loop-s-queue-is-the-tasks-that-name-it-and-each-write-name",
+      "given": "",
+      "when": "the task list is scoped to a loop that owns a task in a terminal status",
+      "then": "that task is included in the scoped result"
+    },
+    {
+      "key": "ac6",
+      "requirement": "a-loop-s-queue-is-the-tasks-that-name-it-and-each-write-name",
+      "given": "",
+      "when": "a task is created supplying no `loop_id`, and no specification document it might belong",
+      "then": "the task's `loop_id` is empty the task does not appear in any loop-scoped task list"
+    },
+    {
+      "key": "ac7",
+      "requirement": "a-loop-s-firing-is-traceable-to-what-it-produced",
+      "given": "",
+      "when": "a job fires, on schedule or on demand",
+      "then": "the firing record identifies the conversation the fire used that conversation's own output and questions are reachable from the firing record without"
+    },
+    {
+      "key": "ac8",
+      "requirement": "a-loop-surfaces-its-current-state-without-a-caller-assemblin",
+      "given": "",
+      "when": "a loop is read through the job listing or a single job's detail",
+      "then": "its purpose, stop condition, queue counts, current item, and open-question count are a plain job's response carries no loop state"
+    },
+    {
+      "key": "ac9",
+      "requirement": "a-loop-surfaces-its-current-state-without-a-caller-assemblin",
+      "given": "",
+      "when": "a loop's queue holds a task that is in progress or blocked a loop's queue holds no in-progress or blocked task but holds a pending one a loop's queue holds no in-progress, blocked, or pending task",
+      "then": "that task is the loop's current item its oldest pending task, by creation order, is the loop's current item the loop has no current item"
+    },
+    {
+      "key": "ac10",
+      "requirement": "a-loop-s-stop-condition-can-only-ever-prevent-a-firing-that-",
+      "given": "",
+      "when": "a job's cron would fire it after its loop's stop time has passed",
+      "then": "that firing is skipped the loop is marked stopped with a reason naming the stop time the job no longer fires on subsequent cron ticks"
+    },
+    {
+      "key": "ac11",
+      "requirement": "a-loop-s-stop-condition-can-only-ever-prevent-a-firing-that-",
+      "given": "",
+      "when": "a job's cron would fire it, its loop has the queue-emptiness stop condition set, the",
+      "then": "that firing is skipped the loop is marked stopped with a reason naming the empty queue"
+    },
+    {
+      "key": "ac12",
+      "requirement": "a-loop-s-stop-condition-can-only-ever-prevent-a-firing-that-",
+      "given": "",
+      "when": "a job's cron would fire it, its loop has the queue-emptiness stop condition set, and no",
+      "then": "that firing proceeds the loop is not marked stopped and the job remains enabled"
+    },
+    {
+      "key": "ac13",
+      "requirement": "a-loop-s-stop-condition-can-only-ever-prevent-a-firing-that-",
+      "given": "",
+      "when": "a loop has neither a stop time nor the queue-emptiness stop condition set",
+      "then": "its firings are never skipped for a stop-condition reason"
+    },
+    {
+      "key": "ac14",
+      "requirement": "a-loop-may-declare-one-specification-document-as-its-queue-s",
+      "given": "",
+      "when": "a loop declares specification document D as its source, and D is later approved with",
+      "then": "every task D's approval creates carries that loop's id the loop's queue now contains those tasks"
+    },
+    {
+      "key": "ac15",
+      "requirement": "a-loop-may-declare-one-specification-document-as-its-queue-s",
+      "given": "",
+      "when": "a second loop attempts to declare a specification document another loop has already",
+      "then": "the second loop's creation or update is refused, naming the conflicting loop"
+    },
+    {
+      "key": "ac16",
+      "requirement": "a-loop-may-declare-one-specification-document-as-its-queue-s",
+      "given": "",
+      "when": "a specification document with no loop declaring it as source is approved",
+      "then": "the tasks it creates carry no `loop_id` materialisation behaves exactly as it did before this capability existed"
+    },
+    {
+      "key": "ac17",
+      "requirement": "only-a-loop-s-creator-or-the-operator-may-add-to-its-queue-d",
+      "given": "",
+      "when": "an agent that created loop L creates a task supplying L's id",
+      "then": "the task is created with `loop_id` set to L"
+    },
+    {
+      "key": "ac18",
+      "requirement": "only-a-loop-s-creator-or-the-operator-may-add-to-its-queue-d",
+      "given": "",
+      "when": "the operator creates a task supplying any loop's id",
+      "then": "the task is created with that loop's `loop_id` set"
+    },
+    {
+      "key": "ac19",
+      "requirement": "only-a-loop-s-creator-or-the-operator-may-add-to-its-queue-d",
+      "given": "",
+      "when": "an agent that is loop L's executor but not its creator attempts to create a task",
+      "then": "the request is refused the refusal names `send_message` to L's creator as the alternative"
+    },
+    {
+      "key": "ac20",
+      "requirement": "a-firing-claims-its-queue-s-current-item-before-the-turn-beg",
+      "given": "",
+      "when": "a loop's job fires and its queue holds only tasks in an entry status",
+      "then": "the firing claims the oldest one by creation time that task is marked as claimed before the agent's turn begins"
+    },
+    {
+      "key": "ac21",
+      "requirement": "a-firing-claims-its-queue-s-current-item-before-the-turn-beg",
+      "given": "",
+      "when": "a loop's job fires and its queue already holds a task in an active, non-terminal status",
+      "then": "the firing claims that task rather than starting a different one"
+    },
+    {
+      "key": "ac22",
+      "requirement": "a-firing-claims-its-queue-s-current-item-before-the-turn-beg",
+      "given": "",
+      "when": "a loop's job fires and its queue holds no task in an entry or active status",
+      "then": "the firing claims no item whether the fire proceeds at all is governed by the loop's stop condition, unchanged by"
+    },
+    {
+      "key": "ac23",
+      "requirement": "a-loop-s-continuity-across-firings-is-by-checkpoint-not-by-r",
+      "given": "",
+      "when": "a loop's job fires a second time, and its first firing's conversation produced a",
+      "then": "the second firing's briefing includes that checkpoint's content this holds even though the second firing's conversation is a different conversation than"
+    },
+    {
+      "key": "ac24",
+      "requirement": "a-loop-s-continuity-across-firings-is-by-checkpoint-not-by-r",
+      "given": "",
+      "when": "a loop's job fires for the first time",
+      "then": "the firing's briefing carries no prior checkpoint content the fire is not refused or delayed for lacking one"
+    },
+    {
+      "key": "ac25",
+      "requirement": "a-loop-s-continuity-across-firings-is-by-checkpoint-not-by-r",
+      "given": "",
+      "when": "an update sets `session_mode` to `resume` on a job that carries a `Loop`",
+      "then": "the update is refused, naming that the job's continuity is by checkpoint"
+    },
+    {
+      "key": "ac26",
+      "requirement": "a-firing-s-briefing-is-bounded",
+      "given": "",
+      "when": "a firing's inherited checkpoint content is within the fixed size bound",
+      "then": "the briefing includes it in full"
+    },
+    {
+      "key": "ac27",
+      "requirement": "a-firing-s-briefing-is-bounded",
+      "given": "",
+      "when": "a firing's inherited checkpoint content exceeds the fixed size bound",
+      "then": "the briefing includes a truncated version up to that bound the briefing is not silently sent with no prior context at all"
+    },
+    {
+      "key": "ac28",
+      "requirement": "an-empty-queue-with-a-request-still-in-flight-terminates-and",
+      "given": "",
+      "when": "a loop's queue empties and no message to its creator or unanswered question is",
+      "then": "the loop stops the stop is recorded with no pending request noted"
+    },
+    {
+      "key": "ac29",
+      "requirement": "an-empty-queue-with-a-request-still-in-flight-terminates-and",
+      "given": "",
+      "when": "a loop's queue empties while its executor has an unread message to the creator or an",
+      "then": "the loop still stops the stop is recorded noting the outstanding request, so it can be reviewed later"
+    },
+    {
+      "key": "ac30",
+      "requirement": "a-self-created-loop-s-queue-accepts-additions-from-its-creat",
+      "given": "",
+      "when": "an agent creates a loop for itself and adds a task to it before the loop has fired",
+      "then": "the addition is accepted"
+    },
+    {
+      "key": "ac31",
+      "requirement": "a-self-created-loop-s-queue-accepts-additions-from-its-creat",
+      "given": "",
+      "when": "an agent that created a loop for itself attempts to add a task directly after that loop",
+      "then": "the addition is refused, naming that operator approval is required"
+    },
+    {
+      "key": "ac32",
+      "requirement": "a-self-created-loop-s-queue-accepts-additions-from-its-creat",
+      "given": "",
+      "when": "an agent that created a loop for itself asks the operator for an addition after the",
+      "then": "the task is added with that loop's id"
+    },
+    {
+      "key": "ac33",
+      "requirement": "a-loop-has-a-controller-defaulting-to-the-operator-which-may",
+      "given": "",
+      "when": "a loop is created",
+      "then": "its controller is the operator an extension of its queue changes nothing until the operator decides"
+    },
+    {
+      "key": "ac34",
+      "requirement": "a-loop-has-a-controller-defaulting-to-the-operator-which-may",
+      "given": "",
+      "when": "the operator delegates control of an existing loop to its creator agent",
+      "then": "subsequent extension requests are decided by that agent the change of control is recorded against the loop with its actor and time"
+    },
+    {
+      "key": "ac35",
+      "requirement": "a-loop-has-a-controller-defaulting-to-the-operator-which-may",
+      "given": "",
+      "when": "the operator takes back control of a loop it had delegated",
+      "then": "subsequent extension requests are presented to the operator again"
+    },
+    {
+      "key": "ac36",
+      "requirement": "an-edit-to-a-loop-takes-effect-at-its-next-firing-and-never-",
+      "given": "a loop with a firing in progress",
+      "when": "its purpose or stop condition is edited",
+      "then": "the edit is accepted the running firing continues under the definition it was briefed with"
+    },
+    {
+      "key": "ac37",
+      "requirement": "an-edit-to-a-loop-takes-effect-at-its-next-firing-and-never-",
+      "given": "",
+      "when": "the loop fires after an edit was accepted",
+      "then": "that firing is briefed with the edited definition the edit is no longer reported as pending"
+    },
+    {
+      "key": "ac38",
+      "requirement": "an-edit-to-a-loop-takes-effect-at-its-next-firing-and-never-",
+      "given": "a loop with an accepted edit that has not yet been applied",
+      "when": "the loop is inspected",
+      "then": "the pending edit is reported as pending the definition currently in force is reported separately"
+    },
+    {
+      "key": "ac39",
+      "requirement": "an-edit-to-a-loop-takes-effect-at-its-next-firing-and-never-",
+      "given": "a loop with an accepted edit that has not yet been applied",
+      "when": "the operator opens that loop",
+      "then": "each staged value is shown beside the value it will replace each of the two states in words when it applies, rather than by position or colour alone a field the edit did not touch is not shown as changing"
+    },
+    {
+      "key": "ac40",
+      "requirement": "an-edit-to-a-loop-takes-effect-at-its-next-firing-and-never-",
+      "given": "a loop with a pending edit and a firing already in progress",
+      "when": "the operator opens that loop",
+      "then": "it states that the running firing keeps the definition currently in force that the edit reaches the firing after it"
+    },
+    {
+      "key": "ac41",
+      "requirement": "an-edit-to-a-loop-takes-effect-at-its-next-firing-and-never-",
+      "given": "a loop with no staged edit",
+      "when": "the operator opens it",
+      "then": "no pending-edit indicator is shown the definition shown is the one in force, unqualified"
+    },
+    {
+      "key": "ac42",
+      "requirement": "a-task-offered-to-a-stopped-loop-is-refused-and-offered-to-a",
+      "given": "a loop that stopped because its queue emptied",
+      "when": "a task is added to it",
+      "then": "the addition is refused the refusal states that the loop stopped because its queue emptied, and when"
+    },
+    {
+      "key": "ac43",
+      "requirement": "a-task-offered-to-a-stopped-loop-is-refused-and-offered-to-a",
+      "given": "",
+      "when": "a task is refused because its loop has stopped",
+      "then": "it is offered as the initial work of a new loop the stopped loop remains stopped"
+    },
+    {
+      "key": "ac44",
+      "requirement": "a-loop-s-history-is-answerable-for-that-loop-alone",
+      "given": "",
+      "when": "a caller requests one loop's history",
+      "then": "the events of that loop's life are returned in order no event belonging to a different loop is returned"
+    },
+    {
+      "key": "ac45",
+      "requirement": "a-loop-s-history-is-answerable-for-that-loop-alone",
+      "given": "",
+      "when": "a loop's history is retrieved",
+      "then": "each event states the actor responsible and the time it occurred"
+    },
+    {
+      "key": "ac46",
+      "requirement": "a-firing-in-progress-is-distinguishable-from-one-that-has-fi",
+      "given": "a loop firing whose run is executing",
+      "when": "the loop is inspected",
+      "then": "the firing is reported as in progress"
+    },
+    {
+      "key": "ac47",
+      "requirement": "a-firing-in-progress-is-distinguishable-from-one-that-has-fi",
+      "given": "",
+      "when": "a firing's run has ended",
+      "then": "the firing is no longer reported as in progress whether it completed or failed is reported"
+    },
+    {
+      "key": "ac48",
+      "requirement": "a-loop-and-a-job-are-archivable-never-deletable",
+      "given": "",
+      "when": "any caller asks the Hub to delete a job",
+      "then": "the request is refused, naming archiving as the available alternative the job, its loop if it has one, and every run record still exist afterwards"
+    },
+    {
+      "key": "ac49",
+      "requirement": "a-loop-and-a-job-are-archivable-never-deletable",
+      "given": "a loop with a queue history, firings, and a stop reason",
+      "when": "the loop is archived",
+      "then": "its purpose, queue history, firings, and stop state are all still retrievable"
+    },
+    {
+      "key": "ac50",
+      "requirement": "a-loop-and-a-job-are-archivable-never-deletable",
+      "given": "",
+      "when": "an agent asks the Hub to archive a loop",
+      "then": "the request is refused, regardless of any standing allowance"
+    },
+    {
+      "key": "ac51",
+      "requirement": "a-loop-that-is-still-running-cannot-be-archived",
+      "given": "a loop that is still enabled and firing",
+      "when": "the operator attempts to archive it",
+      "then": "the request is refused, stating that it must be stopped or complete first"
+    },
+    {
+      "key": "ac52",
+      "requirement": "a-loop-that-is-still-running-cannot-be-archived",
+      "given": "a loop that has stopped or completed",
+      "when": "the operator archives it",
+      "then": "the loop is archived and no longer appears in default listings"
+    },
+    {
+      "key": "ac53",
+      "requirement": "how-a-loop-ended-is-a-distinct-value-not-only-a-written-reas",
+      "given": "",
+      "when": "a loop ends because every task naming it has reached a terminal status",
+      "then": "the loop records that it completed, as a value distinct from its written reason"
+    },
+    {
+      "key": "ac54",
+      "requirement": "how-a-loop-ended-is-a-distinct-value-not-only-a-written-reas",
+      "given": "one loop that ended because its queue drained and another stopped by the operator",
+      "when": "the project's loops are listed and counted by how they ended",
+      "then": "the two are counted separately, without matching on the text of any reason"
+    },
+    {
+      "key": "ac55",
+      "requirement": "a-claimed-task-is-still-the-loop-s-current-item",
+      "given": "a firing that has claimed its queue's item and not yet begun its turn",
+      "when": "the loop's summary is retrieved",
+      "then": "the claimed task is reported as the loop's current item"
+    },
+    {
+      "key": "ac56",
+      "requirement": "a-project-s-loops-are-listable-and-individually-inspectable",
+      "given": "",
+      "when": "the operator lists a project's loops",
+      "then": "every loop is returned regardless of whether it is running, complete, stopped, or archived each carries a label, its purpose, how it ended if it has, and its queue counts"
+    },
+    {
+      "key": "ac57",
+      "requirement": "a-project-s-loops-are-listable-and-individually-inspectable",
+      "given": "",
+      "when": "the operator inspects one loop",
+      "then": "its queue, current item, firing history, and whether a firing is in progress are returned no conversation identifier is required to make the request"
+    },
+    {
+      "key": "ac58",
+      "requirement": "a-project-s-loops-are-listable-and-individually-inspectable",
+      "given": "a project with archived and unarchived loops",
+      "when": "the operator lists the project's loops without asking for archived ones",
+      "then": "only the unarchived loops are returned"
+    },
+    {
+      "key": "ac59",
+      "requirement": "a-conversation-a-loop-firing-created-names-the-loop-that-cre",
+      "given": "a loop that has fired",
+      "when": "the operator lists the conversations of the agent that ran it",
+      "then": "the conversation the firing created names that loop the name shown is the one the loop is listed under elsewhere"
+    },
+    {
+      "key": "ac60",
+      "requirement": "a-conversation-a-loop-firing-created-names-the-loop-that-cre",
+      "given": "a scheduled job with no loop, which has fired",
+      "when": "the operator lists the conversations of the agent that ran it",
+      "then": "that conversation carries no loop it is not marked as belonging to one"
+    },
+    {
+      "key": "ac61",
+      "requirement": "a-conversation-a-loop-firing-created-names-the-loop-that-cre",
+      "given": "",
+      "when": "the operator lists conversations they started themselves",
+      "then": "none of them names a loop"
+    },
+    {
+      "key": "ac62",
+      "requirement": "a-conversation-a-loop-firing-created-names-the-loop-that-cre",
+      "given": "a conversation that names a loop",
+      "when": "the operator follows that name",
+      "then": "the loop's existing record opens no second copy of its firing history is presented"
+    },
+    {
+      "key": "ac63",
+      "requirement": "a-time-shown-for-a-loop-is-the-instant-it-happened",
+      "given": "an operator whose machine is not on UTC",
+      "when": "they open a loop moments after staging an edit",
+      "then": "the edit is shown as having been staged moments ago"
+    },
+    {
+      "key": "ac64",
+      "requirement": "a-time-shown-for-a-loop-is-the-instant-it-happened",
+      "given": "a time reported with an explicit zone",
+      "when": "it is shown to the operator",
+      "then": "it is presented as the instant that zone makes it, not shifted again"
+    },
+    {
+      "key": "ac65",
+      "requirement": "consecutive-firings-of-one-loop-occupy-one-row",
+      "given": "several consecutive conversations created by the same loop",
+      "when": "the operator lists them",
+      "then": "they occupy a single row naming the loop and stating how many there are expanding it presents each firing"
+    },
+    {
+      "key": "ac66",
+      "requirement": "consecutive-firings-of-one-loop-occupy-one-row",
+      "given": "a loop's firings, then a conversation the operator started, then more of that loop's",
+      "when": "the operator lists them",
+      "then": "the conversation they started still falls between the two runs the runs are not joined across it"
+    },
+    {
+      "key": "ac67",
+      "requirement": "consecutive-firings-of-one-loop-occupy-one-row",
+      "given": "a collapsed run containing a firing that stopped for the operator",
+      "when": "the operator looks at the list",
+      "then": "the row says a firing is waiting for them"
+    },
+    {
+      "key": "ac68",
+      "requirement": "consecutive-firings-of-one-loop-occupy-one-row",
+      "given": "a run containing the conversation the operator currently has open",
+      "when": "the list is presented",
+      "then": "that conversation is presented rather than collapsed out of view"
+    }
+  ],
+  "tasks": [],
+  "algorithms": [],
+  "design": "",
+  "evidence": {
+    "checked": [
+      "Translated from openspec/specs/agent-loops/spec.md (25 requirements, 68 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten."
+    ],
+    "limits": [
+      "source-had-no-purpose: the source's Purpose was an unedited archiving placeholder, so this document has no summary rather than a note about openspec's workflow",
+      "scenario-had-multiple-cycles: 'The current item is the queue's own in-progress task, or its oldest pending one' states 3 WHEN/THEN cycles under one name; they are joined into one criterion because a criterion has one of each",
+      "scenarios-state-no-starting-state: 46 of 68 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed"
+    ]
+  },
+  "lifecycle": "",
+  "open_questions": [],
+  "aw_identity": {
+    "requirements": {
+      "a-recurring-job-may-be-named-as-a-loop-with-a-purpose-and-a-": "FR-1",
+      "a-loop-s-queue-is-the-tasks-that-name-it-and-each-write-name": "FR-2",
+      "a-loop-s-firing-is-traceable-to-what-it-produced": "FR-3",
+      "a-loop-surfaces-its-current-state-without-a-caller-assemblin": "FR-4",
+      "a-loop-s-stop-condition-can-only-ever-prevent-a-firing-that-": "FR-5",
+      "a-loop-may-declare-one-specification-document-as-its-queue-s": "FR-6",
+      "only-a-loop-s-creator-or-the-operator-may-add-to-its-queue-d": "FR-7",
+      "a-firing-claims-its-queue-s-current-item-before-the-turn-beg": "FR-8",
+      "a-loop-s-continuity-across-firings-is-by-checkpoint-not-by-r": "FR-9",
+      "a-firing-s-briefing-is-bounded": "FR-10",
+      "an-empty-queue-with-a-request-still-in-flight-terminates-and": "FR-11",
+      "a-self-created-loop-s-queue-accepts-additions-from-its-creat": "FR-12",
+      "a-loop-has-a-controller-defaulting-to-the-operator-which-may": "FR-13",
+      "an-edit-to-a-loop-takes-effect-at-its-next-firing-and-never-": "FR-14",
+      "a-task-offered-to-a-stopped-loop-is-refused-and-offered-to-a": "FR-15",
+      "a-loop-s-history-is-answerable-for-that-loop-alone": "FR-16",
+      "a-firing-in-progress-is-distinguishable-from-one-that-has-fi": "FR-17",
+      "a-loop-and-a-job-are-archivable-never-deletable": "FR-18",
+      "a-loop-that-is-still-running-cannot-be-archived": "FR-19",
+      "how-a-loop-ended-is-a-distinct-value-not-only-a-written-reas": "FR-20",
+      "a-claimed-task-is-still-the-loop-s-current-item": "FR-21",
+      "a-project-s-loops-are-listable-and-individually-inspectable": "FR-22",
+      "a-conversation-a-loop-firing-created-names-the-loop-that-cre": "FR-23",
+      "a-time-shown-for-a-loop-is-the-instant-it-happened": "FR-24",
+      "consecutive-firings-of-one-loop-occupy-one-row": "FR-25"
+    },
+    "high_water": 25,
+    "retired": {},
+    "digests": {
+      "FR-1": "331c214d4eb622a014ee8bd9462d7880ab5b927656d5d9c5b95c26ec54ab9951",
+      "FR-2": "e438aac006ae420e10c51868d48b88bde0d23a6d2cee0fa1262ee3b5a2a1d22e",
+      "FR-3": "81193adf1eec13158d25ec4ef50d58256b5d9bd0038aed5dfc0772faf4562a6b",
+      "FR-4": "288eec41910900967286f0208e21727fc465073ce89b5aa9f8ed6e14c0145212",
+      "FR-5": "7ee06c633d87c821cf96a36b40cc8392318be14817eaad9416ad0f131f8f3a51",
+      "FR-6": "b6a9a976c3a2962c6fc589583a4bc6c35d20d885744b79f12d300b6f6a1bc8c9",
+      "FR-7": "de42a4ae8111ef22f940139fef1e825681f2ac0c9ff9b2326d6fd924cf324269",
+      "FR-8": "2b52f6912b7de0848bba869848253aed348861a7a59733f71ce6e651b15ba75f",
+      "FR-9": "943211ff1a64f7431d45efc8380949a55974c29792074b04e0ac20518c5421ef",
+      "FR-10": "863d055330763a44b8bd4b58234af269b413f7cfea4ae87f4c038baa33d3e91f",
+      "FR-11": "09aa35672acda8372c94feeaf74540562c46e1d1eb00c01e3079e7e343d2dd26",
+      "FR-12": "4d48eed08f641f8c2344ee99cef3e1e15d2fb9a641a1fb9c2fa167c8c40f3c32",
+      "FR-13": "d793ff2f097893600a86374e32b146eec8ee59a922cee4083a208b3e6f59c636",
+      "FR-14": "2ca241c88134c8ce42505d3213a61de0140501b01a11ee09dadb4c6b68a7d753",
+      "FR-15": "591b91ce9856a69511c34d4e1ca875d8f52b38253fc6417121524679caafe33f",
+      "FR-16": "8c4c14f196f2915af3f7a31a1d2b5edb123ee0f6a6c87c88019554a1ac85f626",
+      "FR-17": "0ba4547f5363e7b6649372334e93b341df1763bc0e2d7226b6fd1dd6ffc9d008",
+      "FR-18": "c272f9671b496370ac53c76f9eae4d217f3e58aff49efc428711a443cf738817",
+      "FR-19": "5264ce4c04bd0a432d31cbe9bff648398f9ca7ed52ab5fb68436530a2a026c2e",
+      "FR-20": "af4569ed8fbed63c01f88bb8c20bdf1551ba3ed7a7b9754dfe54a6cfac18feef",
+      "FR-21": "cdb66d905733734126181623738681f83f6578ea8dcb999abf362a10b4599a4c",
+      "FR-22": "b1a13d2261cffa7c928e776f9c40f220d274d4e495655780040e891c13f972e2",
+      "FR-23": "c6c29f2eabec3d9b19412c78095cd5379dc09e86f7261ec5f87c3326b0777a75",
+      "FR-24": "2d94e7642c5663f80ee59331d8cf23688ceec788f8b5ab6aae327dd46704e8d1",
+      "FR-25": "814661ddd803f054922ecead5c6c2ce1eb0a5281232644f9ad208a430731ca91"
+    }
+  }
+}
+</script>
+</body>
+</html>

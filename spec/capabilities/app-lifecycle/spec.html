@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>App lifecycle</title>
+<meta name="aw-spec-kind" content="capability">
+<meta name="aw-spec-status" content="current">
+<meta name="aw-spec-rigor" content="sketch">
+<meta name="aw-spec-schema-version" content="1">
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+    --surface-2: #21262d; --surface: #161b22;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+:root[data-theme="dark"] {
+  --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+  --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+  --surface-2: #21262d; --surface: #161b22;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 2rem 2.5rem 4rem; background: var(--bg); color: var(--fg);
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+h1 { font-size: 1.75rem; margin: 0 0 .25rem; }
+h2 { font-size: 1.15rem; margin: 2.5rem 0 .75rem; padding-bottom: .3rem;
+     border-bottom: 1px solid var(--border); }
+h3 { font-size: 1rem; margin: 1.5rem 0 .4rem; }
+p { margin: .5rem 0; }
+ul, ol { margin: .5rem 0; padding-left: 1.4rem; }
+li { margin: .25rem 0; }
+a { color: var(--aw-accent); }
+.aw-meta { color: var(--muted); font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-chip { display: inline-block; padding: .1rem .5rem; border-radius: 999px;
+           background: var(--surface-2); font-size: .78rem; margin-right: .4rem; }
+.aw-requirement { border-left: 3px solid var(--border); padding: .1rem 0 .1rem .9rem;
+                  margin: 1.1rem 0; }
+.aw-requirement-must { border-left-color: var(--aw-accent); }
+.aw-requirement-should { border-left-color: var(--aw-warn); }
+.aw-requirement-may { border-left-color: var(--border); }
+.aw-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8rem;
+         color: var(--muted); }
+.aw-modal { font-weight: 600; }
+.aw-modal-must { color: var(--aw-accent); }
+.aw-modal-should { color: var(--aw-warn); }
+.aw-modal-may { color: var(--fg); font-weight: 400; }
+.aw-chip-rigor-gate { color: var(--aw-accent); border: 1px solid var(--aw-accent); }
+.aw-chip-rigor-contract { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Phase is a lifecycle, and the question it answers is "can I rely on this?". `approved` and a
+   capability's `current` are settled and take the done tone; `proposed` is waiting on an operator
+   decision and takes warn; `exploring` and `archived` are quiet for opposite reasons — one has not
+   arrived yet, the other has been superseded. Deliberately NOT the accent: this document already
+   spends accent on links and on MUST, and a third meaning would empty it of any. `kind` keeps the
+   plain chip on purpose — it is a category, not a state, and hue there ranks nothing. */
+.aw-chip-phase-done { color: var(--aw-ok); border: 1px solid var(--aw-ok); }
+.aw-chip-phase-waiting { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+.aw-chip-phase-quiet { color: var(--muted); }
+.aw-chip-phase-archived { color: var(--muted); text-decoration: line-through; }
+/* An unresolved question blocks `propose`, so it is a real state and not a label. Resolved stays
+   the plain chip — the reader needs to find what is still open, not celebrate what is closed. */
+.aw-chip-open { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Limits is where a reader is most likely to be misled, and it read identically to Checked. */
+.aw-limits { color: var(--aw-warn); }
+/* The first screenful was entirely monochrome, so the document read as texty however the
+   requirements below were coloured. This puts the same modal scheme where the eye lands first,
+   carrying counts rather than decoration. */
+.aw-summary { margin: 0 0 1.5rem; font-size: .9rem; color: var(--muted); }
+.aw-summary .aw-count { font-weight: 600; }
+.aw-summary-sep { color: var(--border); margin: 0 .45rem; }
+.aw-rationale { color: var(--muted); font-size: .9rem; }
+.aw-refs { font-size: .82rem; color: var(--muted); }
+.aw-note { color: var(--muted); font-style: italic; }
+.aw-empty { color: var(--muted); }
+table { border-collapse: collapse; margin: .75rem 0; width: 100%; }
+th, td { border: 1px solid var(--border); padding: .4rem .6rem; text-align: left;
+         vertical-align: top; font-size: .92rem; }
+code, pre { background: var(--surface); border-radius: 4px; }
+code { padding: .1rem .3rem; font-size: .88em; }
+</style>
+</head>
+<body>
+<h1>App lifecycle</h1>
+<p class="aw-meta"><span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><span class="aw-chip">sketch</span></p>
+<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">6</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">6</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">23</span> criteria</p>
+<section><h2 id="summary">Summary</h2><p>Defines the single supported way to begin and manage a local AgentWeave instance: bare `agentweave` invocation as the only entry point, plus `doctor`/`status`/`stop`/`reset` for diagnosing and managing that instance. Originated by `openspec/changes/single-runtime`, which also removed every CLI command that manipulated collaboration state directly.</p></section><section><h2 id="requirements">Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-1"><span class="aw-id">FR-1</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Running `agentweave` with no subcommand SHALL launch or reuse the one local AgentWeave runtime, open or register the invocation directory as a project through that runtime, and open the app at that project&#x27;s overview. This SHALL be the only supported way to begin using AgentWeave.</p><p class="aw-rationale">The one local AgentWeave runtime SHALL resolve to the same database and instance state regardless of which directory it was launched from, whether started through bare `agentweave` (with or without `--docker`/`--local`), a direct `uvicorn hub.main:app` invocation, or `docker compose up` against the Hub&#x27;s compose file. Only the directory-scoped *project* registered against that runtime SHALL vary by launch directory.</p></div><div class="aw-requirement aw-requirement-must" id="FR-2"><span class="aw-id">FR-2</span> <p><span class="aw-modal aw-modal-must">SHALL</span> `agentweave doctor` SHALL report environment readiness — Python version, runner CLIs on PATH, port availability, database accessibility, and file permissions — without requiring the Hub to be running.</p></div><div class="aw-requirement aw-requirement-must" id="FR-3"><span class="aw-id">FR-3</span> <p><span class="aw-modal aw-modal-must">MUST</span> `agentweave status` SHALL report whether the local runtime is running, on what port, how many projects are registered, and which project was opened most recently. `agentweave stop` SHALL stop the one running instance. `agentweave reset` SHALL destroy local Hub state only after explicit confirmation and MUST NOT delete registered project directories or source content.</p></div><div class="aw-requirement aw-requirement-must" id="FR-4"><span class="aw-id">FR-4</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The CLI SHALL provide no command that sends a message, creates or updates a task, asks or answers a question, manages the agent roster, or manages scheduled jobs. Every such capability SHALL be reachable only through the app UI (for the operator) or the agent capability plane (for an agent).</p></div><div class="aw-requirement aw-requirement-must" id="FR-5"><span class="aw-id">FR-5</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL open app mode in a dedicated window with no browser chrome (no address bar, no tabs) and its own OS taskbar/dock presence, rather than a browser tab or window, when a native webview backend (`pywebview`, an optional extra) is installed and can create a window.</p><p class="aw-rationale">App mode is not an opt-in flag — it is forced on for bare `agentweave` invocation, the CLI&#x27;s only entry point, and for its `--docker`/`--local` branch equally. This requirement therefore governs the **default** behavior of every normal launch, not a feature an operator must ask for. This applies uniformly to every launch path that reaches app mode — native (`agentweave`) and Docker (`agentweave --docker`, `agentweave --local`) alike; neither is exempt. This uniformity is about the native-vs-Docker launch path specifically, not about detached vs. foreground process mode: the foreground (`--no-detach`) start path is a separate, narrower exception, stated below, because a native webview&#x27;s event loop must run on the process&#x27;s main thread, and `--no-detach` already commits that thread to blocking in the backend server until the operator interrupts it. When no native webview backend is installed, or window creation fails for any reason (missing platform runtime, no display), the system SHALL fall back to the existing chromeless-browser-or- default-browser-tab behavior without error, and SHALL NOT crash the invoking command. The invoking process SHALL remain running for as long as the native desktop window is open, and SHALL exit once the operator closes it. The detached Hub backend process itself SHALL be unaffected by the window closing — closing the window MUST NOT stop the Hub. A foreground (`--no-detach`) start SHALL be exempt from opening a native desktop window, regardless of whether a native webview backend is installed — it SHALL continue to use the existing chromeless-browser-or-default-browser-tab behavior for app mode, unchanged by this requirement. This exemption exists because `--no-detach` keeps the backend server itself in the foreground, occupying the one thread a native webview&#x27;s event loop would need; Ctrl+C on that foreground server remains the only stop mechanism for a `--no-detach` start, exactly as before this change.</p></div><div class="aw-requirement aw-requirement-must" id="FR-6"><span class="aw-id">FR-6</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL accept a `--profile &lt;name&gt;` argument on `agentweave`, `agentweave status`, and `agentweave stop`, defaulting to `&quot;default&quot;` when omitted. A profile SHALL resolve to its own database path and its own PID file, independent of every other profile&#x27;s.</p><p class="aw-rationale">The default profile SHALL resolve to the same database path this capability already specifies (unaffected by this requirement — no existing install migrates). A named profile other than `&quot;default&quot;` SHALL resolve to a database path beneath `~/.agentweave/hub/profiles/&lt;name&gt;/`, distinct from the default profile&#x27;s path and from every other named profile&#x27;s. An explicit `DATABASE_URL` environment variable SHALL continue to override whatever path profile resolution would otherwise compute, exactly as it does today without `--profile`. A `--profile &lt;name&gt;` value other than `&quot;default&quot;` SHALL require an explicit `--port` argument. If `--port` was not explicitly given, the system SHALL exit with an error naming both flags rather than silently resolving to the default port, because that default port is the same one the default profile normally runs on. `agentweave reset` SHALL target only the default profile&#x27;s data unless invoked with `--profile &lt;name&gt;`, in which case it SHALL target only that named profile&#x27;s data. `agentweave reset` SHALL NOT delete more than one profile&#x27;s data in a single invocation.</p></div></section><section><h2 id="acceptance">Acceptance criteria</h2><table><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>a user runs bare `agentweave` for the first time from a project directory</td><td>the system scaffolds local runtime state, runs migrations, launches the native runtime,</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>a user runs bare `agentweave` from an already registered directory while the runtime is</td><td>the system selects that existing project and opens it rather than starting another</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>a user runs bare `agentweave` from a second directory while the runtime is running</td><td>that directory is opened or registered as a second project in the same instance the app opens with the second project selected</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>a user inspects the CLI&#x27;s available commands</td><td>there is no `init`, `activate`, `quick`, or `start` subcommand distinct from bare</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>the Hub is started via a direct `uvicorn hub.main:app` invocation with no</td><td>both invocations resolve to the same absolute database path under the user&#x27;s home</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>`docker compose up` is run against the Hub&#x27;s compose file from two different host</td><td>both invocations resolve to the same named Compose project and the same `hub-data`</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>a user runs `agentweave doctor` in a directory that has never been registered</td><td>the system reports readiness checks without creating a project or starting the Hub</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>a required dependency, port, or permission check fails</td><td>the reported check names the failure and a remediation hint</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>the runtime is serving more than one project</td><td>status reports the port, registered-project count, and most recently opened project</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>the user runs `agentweave stop`</td><td>active runs across projects are terminated through normal shutdown the one runtime process stops</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>the user confirms `agentweave reset`</td><td>local runtime/database state is removed no registered working directory or project source content is deleted</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>a user inspects the CLI&#x27;s available commands</td><td>none of them sends a message, creates or updates a task, or manages agents or jobs</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>bare `agentweave` is run with a working native webview backend installed</td><td>a single window opens with no browser chrome, titled for the app the invoking command does not return until that window is closed</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>`agentweave --docker` (or `agentweave --local`) is run with a working native webview</td><td>a single window opens with no browser chrome, exactly as it does for a native launch —</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>bare `agentweave` is run with no native webview backend installed</td><td>the system opens the Hub in a chromeless app-mode browser window or the default browser, the invoking command returns without waiting for that window to close</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>a native webview backend is installed but raises an error while creating or starting the</td><td>the system reports what could not be created falls back to the browser-window behavior instead of exiting with an unhandled error</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>the operator closes a native app window opened in app mode</td><td>the detached Hub backend process remains running and reachable</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>`agentweave --no-detach` is run with a working native webview backend installed</td><td>the system still opens the existing chromeless-browser-or-default-browser-tab behavior for the foreground `uvicorn` server keeps running attached to the invoking terminal, stopped</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>`agentweave --profile a --port 8010` and `agentweave --profile b --port 8011` are both</td><td>each resolves to its own database file and its own PID file `agentweave stop --profile a` stops only the `a` profile&#x27;s instance, leaving `b` running</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>`agentweave` is run with no `--profile` argument</td><td>it resolves to exactly the database path this capability already specifies for bare</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>`agentweave --profile a` is run with `DATABASE_URL` set in the environment</td><td>the system uses the `DATABASE_URL` value, not the path profile `a` would otherwise resolve the system states which one took effect</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>`agentweave reset --profile a` is run while profiles `a` and `b` both have data</td><td>only profile `a`&#x27;s data is deleted profile `b`&#x27;s data is untouched</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>`agentweave --profile dev` is run with no `--port` argument</td><td>the system exits with an error naming both `--profile` and `--port` it does not start a Hub instance on the default port</td></tr></tbody></table></section><section><h2 id="evidence">Evidence and coverage limits</h2><h3>Checked</h3><ul><li>Translated from openspec/specs/app-lifecycle/spec.md (6 requirements, 23 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten.</li></ul><h3 class="aw-limits">Limits</h3><ul><li>scenarios-state-no-starting-state: 23 of 23 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed</li></ul></section><section><h2 id="open-questions">Open questions</h2><p class="aw-empty">None outstanding.</p></section>
+<script type="application/agentweave-spec+json" id="aw-spec-payload">
+{
+  "schema_version": 1,
+  "kind": "capability",
+  "title": "App lifecycle",
+  "summary": "Defines the single supported way to begin and manage a local AgentWeave instance: bare `agentweave` invocation as the only entry point, plus `doctor`/`status`/`stop`/`reset` for diagnosing and managing that instance. Originated by `openspec/changes/single-runtime`, which also removed every CLI command that manipulated collaboration state directly.",
+  "problem": "",
+  "scope": {
+    "in_scope": [],
+    "non_goals": []
+  },
+  "requirements": [
+    {
+      "key": "bare-invocation-is-the-only-entry-point",
+      "statement": "Running `agentweave` with no subcommand SHALL launch or reuse the one local AgentWeave runtime, open or register the invocation directory as a project through that runtime, and open the app at that project's overview. This SHALL be the only supported way to begin using AgentWeave.",
+      "modal": "SHALL",
+      "rationale": "The one local AgentWeave runtime SHALL resolve to the same database and instance state regardless of which directory it was launched from, whether started through bare `agentweave` (with or without `--docker`/`--local`), a direct `uvicorn hub.main:app` invocation, or `docker compose up` against the Hub's compose file. Only the directory-scoped *project* registered against that runtime SHALL vary by launch directory.",
+      "party": null
+    },
+    {
+      "key": "environment-readiness-is-diagnosable-without-starting-the-ap",
+      "statement": "`agentweave doctor` SHALL report environment readiness — Python version, runner CLIs on PATH, port availability, database accessibility, and file permissions — without requiring the Hub to be running.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "status-stop-and-reset-act-on-the-local-instance",
+      "statement": "`agentweave status` SHALL report whether the local runtime is running, on what port, how many projects are registered, and which project was opened most recently. `agentweave stop` SHALL stop the one running instance. `agentweave reset` SHALL destroy local Hub state only after explicit confirmation and MUST NOT delete registered project directories or source content.",
+      "modal": "MUST",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "no-cli-command-manipulates-collaboration-state",
+      "statement": "The CLI SHALL provide no command that sends a message, creates or updates a task, asks or answers a question, manages the agent roster, or manages scheduled jobs. Every such capability SHALL be reachable only through the app UI (for the operator) or the agent capability plane (for an agent).",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "app-mode-opens-a-dedicated-desktop-window-when-a-native-webv",
+      "statement": "The system SHALL open app mode in a dedicated window with no browser chrome (no address bar, no tabs) and its own OS taskbar/dock presence, rather than a browser tab or window, when a native webview backend (`pywebview`, an optional extra) is installed and can create a window.",
+      "modal": "SHALL",
+      "rationale": "App mode is not an opt-in flag — it is forced on for bare `agentweave` invocation, the CLI's only entry point, and for its `--docker`/`--local` branch equally. This requirement therefore governs the **default** behavior of every normal launch, not a feature an operator must ask for. This applies uniformly to every launch path that reaches app mode — native (`agentweave`) and Docker (`agentweave --docker`, `agentweave --local`) alike; neither is exempt. This uniformity is about the native-vs-Docker launch path specifically, not about detached vs. foreground process mode: the foreground (`--no-detach`) start path is a separate, narrower exception, stated below, because a native webview's event loop must run on the process's main thread, and `--no-detach` already commits that thread to blocking in the backend server until the operator interrupts it. When no native webview backend is installed, or window creation fails for any reason (missing platform runtime, no display), the system SHALL fall back to the existing chromeless-browser-or- default-browser-tab behavior without error, and SHALL NOT crash the invoking command. The invoking process SHALL remain running for as long as the native desktop window is open, and SHALL exit once the operator closes it. The detached Hub backend process itself SHALL be unaffected by the window closing — closing the window MUST NOT stop the Hub. A foreground (`--no-detach`) start SHALL be exempt from opening a native desktop window, regardless of whether a native webview backend is installed — it SHALL continue to use the existing chromeless-browser-or-default-browser-tab behavior for app mode, unchanged by this requirement. This exemption exists because `--no-detach` keeps the backend server itself in the foreground, occupying the one thread a native webview's event loop would need; Ctrl+C on that foreground server remains the only stop mechanism for a `--no-detach` start, exactly as before this change.",
+      "party": null
+    },
+    {
+      "key": "a-named-profile-selects-a-separate-deliberate-instance",
+      "statement": "The system SHALL accept a `--profile \u003cname>` argument on `agentweave`, `agentweave status`, and `agentweave stop`, defaulting to `\"default\"` when omitted. A profile SHALL resolve to its own database path and its own PID file, independent of every other profile's.",
+      "modal": "SHALL",
+      "rationale": "The default profile SHALL resolve to the same database path this capability already specifies (unaffected by this requirement — no existing install migrates). A named profile other than `\"default\"` SHALL resolve to a database path beneath `~/.agentweave/hub/profiles/\u003cname>/`, distinct from the default profile's path and from every other named profile's. An explicit `DATABASE_URL` environment variable SHALL continue to override whatever path profile resolution would otherwise compute, exactly as it does today without `--profile`. A `--profile \u003cname>` value other than `\"default\"` SHALL require an explicit `--port` argument. If `--port` was not explicitly given, the system SHALL exit with an error naming both flags rather than silently resolving to the default port, because that default port is the same one the default profile normally runs on. `agentweave reset` SHALL target only the default profile's data unless invoked with `--profile \u003cname>`, in which case it SHALL target only that named profile's data. `agentweave reset` SHALL NOT delete more than one profile's data in a single invocation.",
+      "party": null
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "key": "ac1",
+      "requirement": "bare-invocation-is-the-only-entry-point",
+      "given": "",
+      "when": "a user runs bare `agentweave` for the first time from a project directory",
+      "then": "the system scaffolds local runtime state, runs migrations, launches the native runtime,"
+    },
+    {
+      "key": "ac2",
+      "requirement": "bare-invocation-is-the-only-entry-point",
+      "given": "",
+      "when": "a user runs bare `agentweave` from an already registered directory while the runtime is",
+      "then": "the system selects that existing project and opens it rather than starting another"
+    },
+    {
+      "key": "ac3",
+      "requirement": "bare-invocation-is-the-only-entry-point",
+      "given": "",
+      "when": "a user runs bare `agentweave` from a second directory while the runtime is running",
+      "then": "that directory is opened or registered as a second project in the same instance the app opens with the second project selected"
+    },
+    {
+      "key": "ac4",
+      "requirement": "bare-invocation-is-the-only-entry-point",
+      "given": "",
+      "when": "a user inspects the CLI's available commands",
+      "then": "there is no `init`, `activate`, `quick`, or `start` subcommand distinct from bare"
+    },
+    {
+      "key": "ac5",
+      "requirement": "bare-invocation-is-the-only-entry-point",
+      "given": "",
+      "when": "the Hub is started via a direct `uvicorn hub.main:app` invocation with no",
+      "then": "both invocations resolve to the same absolute database path under the user's home"
+    },
+    {
+      "key": "ac6",
+      "requirement": "bare-invocation-is-the-only-entry-point",
+      "given": "",
+      "when": "`docker compose up` is run against the Hub's compose file from two different host",
+      "then": "both invocations resolve to the same named Compose project and the same `hub-data`"
+    },
+    {
+      "key": "ac7",
+      "requirement": "environment-readiness-is-diagnosable-without-starting-the-ap",
+      "given": "",
+      "when": "a user runs `agentweave doctor` in a directory that has never been registered",
+      "then": "the system reports readiness checks without creating a project or starting the Hub"
+    },
+    {
+      "key": "ac8",
+      "requirement": "environment-readiness-is-diagnosable-without-starting-the-ap",
+      "given": "",
+      "when": "a required dependency, port, or permission check fails",
+      "then": "the reported check names the failure and a remediation hint"
+    },
+    {
+      "key": "ac9",
+      "requirement": "status-stop-and-reset-act-on-the-local-instance",
+      "given": "",
+      "when": "the runtime is serving more than one project",
+      "then": "status reports the port, registered-project count, and most recently opened project"
+    },
+    {
+      "key": "ac10",
+      "requirement": "status-stop-and-reset-act-on-the-local-instance",
+      "given": "",
+      "when": "the user runs `agentweave stop`",
+      "then": "active runs across projects are terminated through normal shutdown the one runtime process stops"
+    },
+    {
+      "key": "ac11",
+      "requirement": "status-stop-and-reset-act-on-the-local-instance",
+      "given": "",
+      "when": "the user confirms `agentweave reset`",
+      "then": "local runtime/database state is removed no registered working directory or project source content is deleted"
+    },
+    {
+      "key": "ac12",
+      "requirement": "no-cli-command-manipulates-collaboration-state",
+      "given": "",
+      "when": "a user inspects the CLI's available commands",
+      "then": "none of them sends a message, creates or updates a task, or manages agents or jobs"
+    },
+    {
+      "key": "ac13",
+      "requirement": "app-mode-opens-a-dedicated-desktop-window-when-a-native-webv",
+      "given": "",
+      "when": "bare `agentweave` is run with a working native webview backend installed",
+      "then": "a single window opens with no browser chrome, titled for the app the invoking command does not return until that window is closed"
+    },
+    {
+      "key": "ac14",
+      "requirement": "app-mode-opens-a-dedicated-desktop-window-when-a-native-webv",
+      "given": "",
+      "when": "`agentweave --docker` (or `agentweave --local`) is run with a working native webview",
+      "then": "a single window opens with no browser chrome, exactly as it does for a native launch —"
+    },
+    {
+      "key": "ac15",
+      "requirement": "app-mode-opens-a-dedicated-desktop-window-when-a-native-webv",
+      "given": "",
+      "when": "bare `agentweave` is run with no native webview backend installed",
+      "then": "the system opens the Hub in a chromeless app-mode browser window or the default browser, the invoking command returns without waiting for that window to close"
+    },
+    {
+      "key": "ac16",
+      "requirement": "app-mode-opens-a-dedicated-desktop-window-when-a-native-webv",
+      "given": "",
+      "when": "a native webview backend is installed but raises an error while creating or starting the",
+      "then": "the system reports what could not be created falls back to the browser-window behavior instead of exiting with an unhandled error"
+    },
+    {
+      "key": "ac17",
+      "requirement": "app-mode-opens-a-dedicated-desktop-window-when-a-native-webv",
+      "given": "",
+      "when": "the operator closes a native app window opened in app mode",
+      "then": "the detached Hub backend process remains running and reachable"
+    },
+    {
+      "key": "ac18",
+      "requirement": "app-mode-opens-a-dedicated-desktop-window-when-a-native-webv",
+      "given": "",
+      "when": "`agentweave --no-detach` is run with a working native webview backend installed",
+      "then": "the system still opens the existing chromeless-browser-or-default-browser-tab behavior for the foreground `uvicorn` server keeps running attached to the invoking terminal, stopped"
+    },
+    {
+      "key": "ac19",
+      "requirement": "a-named-profile-selects-a-separate-deliberate-instance",
+      "given": "",
+      "when": "`agentweave --profile a --port 8010` and `agentweave --profile b --port 8011` are both",
+      "then": "each resolves to its own database file and its own PID file `agentweave stop --profile a` stops only the `a` profile's instance, leaving `b` running"
+    },
+    {
+      "key": "ac20",
+      "requirement": "a-named-profile-selects-a-separate-deliberate-instance",
+      "given": "",
+      "when": "`agentweave` is run with no `--profile` argument",
+      "then": "it resolves to exactly the database path this capability already specifies for bare"
+    },
+    {
+      "key": "ac21",
+      "requirement": "a-named-profile-selects-a-separate-deliberate-instance",
+      "given": "",
+      "when": "`agentweave --profile a` is run with `DATABASE_URL` set in the environment",
+      "then": "the system uses the `DATABASE_URL` value, not the path profile `a` would otherwise resolve the system states which one took effect"
+    },
+    {
+      "key": "ac22",
+      "requirement": "a-named-profile-selects-a-separate-deliberate-instance",
+      "given": "",
+      "when": "`agentweave reset --profile a` is run while profiles `a` and `b` both have data",
+      "then": "only profile `a`'s data is deleted profile `b`'s data is untouched"
+    },
+    {
+      "key": "ac23",
+      "requirement": "a-named-profile-selects-a-separate-deliberate-instance",
+      "given": "",
+      "when": "`agentweave --profile dev` is run with no `--port` argument",
+      "then": "the system exits with an error naming both `--profile` and `--port` it does not start a Hub instance on the default port"
+    }
+  ],
+  "tasks": [],
+  "algorithms": [],
+  "design": "",
+  "evidence": {
+    "checked": [
+      "Translated from openspec/specs/app-lifecycle/spec.md (6 requirements, 23 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten."
+    ],
+    "limits": [
+      "scenarios-state-no-starting-state: 23 of 23 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed"
+    ]
+  },
+  "lifecycle": "",
+  "open_questions": [],
+  "aw_identity": {
+    "requirements": {
+      "bare-invocation-is-the-only-entry-point": "FR-1",
+      "environment-readiness-is-diagnosable-without-starting-the-ap": "FR-2",
+      "status-stop-and-reset-act-on-the-local-instance": "FR-3",
+      "no-cli-command-manipulates-collaboration-state": "FR-4",
+      "app-mode-opens-a-dedicated-desktop-window-when-a-native-webv": "FR-5",
+      "a-named-profile-selects-a-separate-deliberate-instance": "FR-6"
+    },
+    "high_water": 6,
+    "retired": {},
+    "digests": {
+      "FR-1": "d8033f9a3b2bf2d8a5038a04157876fa71db7ceac7701338973784e41f2f51c9",
+      "FR-2": "39fbce0817050b898937fc43c528a308db46e06d8bb55403b6c242d6d43cf769",
+      "FR-3": "85d7cb46dc031a55047e603a997b272023f877667345078bfe9002ab0fbf569f",
+      "FR-4": "a26300da3d5f8b362b679d1c431a33a742ec41dd347eb0ba9d578b8df2784792",
+      "FR-5": "eedd3186c52f1d4b9bbbd0958b73b81faec607d7e4ce6961398d763e46f144bb",
+      "FR-6": "dfa20f804b03cf97de292b6d2205a58c57c51ab99763ddbc79fe49ba41469129"
+    }
+  }
+}
+</script>
+</body>
+</html>

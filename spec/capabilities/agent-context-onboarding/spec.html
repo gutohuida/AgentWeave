@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent context onboarding</title>
+<meta name="aw-spec-kind" content="capability">
+<meta name="aw-spec-status" content="current">
+<meta name="aw-spec-rigor" content="sketch">
+<meta name="aw-spec-schema-version" content="1">
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+    --surface-2: #21262d; --surface: #161b22;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+:root[data-theme="dark"] {
+  --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+  --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+  --surface-2: #21262d; --surface: #161b22;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 2rem 2.5rem 4rem; background: var(--bg); color: var(--fg);
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+h1 { font-size: 1.75rem; margin: 0 0 .25rem; }
+h2 { font-size: 1.15rem; margin: 2.5rem 0 .75rem; padding-bottom: .3rem;
+     border-bottom: 1px solid var(--border); }
+h3 { font-size: 1rem; margin: 1.5rem 0 .4rem; }
+p { margin: .5rem 0; }
+ul, ol { margin: .5rem 0; padding-left: 1.4rem; }
+li { margin: .25rem 0; }
+a { color: var(--aw-accent); }
+.aw-meta { color: var(--muted); font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-chip { display: inline-block; padding: .1rem .5rem; border-radius: 999px;
+           background: var(--surface-2); font-size: .78rem; margin-right: .4rem; }
+.aw-requirement { border-left: 3px solid var(--border); padding: .1rem 0 .1rem .9rem;
+                  margin: 1.1rem 0; }
+.aw-requirement-must { border-left-color: var(--aw-accent); }
+.aw-requirement-should { border-left-color: var(--aw-warn); }
+.aw-requirement-may { border-left-color: var(--border); }
+.aw-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8rem;
+         color: var(--muted); }
+.aw-modal { font-weight: 600; }
+.aw-modal-must { color: var(--aw-accent); }
+.aw-modal-should { color: var(--aw-warn); }
+.aw-modal-may { color: var(--fg); font-weight: 400; }
+.aw-chip-rigor-gate { color: var(--aw-accent); border: 1px solid var(--aw-accent); }
+.aw-chip-rigor-contract { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Phase is a lifecycle, and the question it answers is "can I rely on this?". `approved` and a
+   capability's `current` are settled and take the done tone; `proposed` is waiting on an operator
+   decision and takes warn; `exploring` and `archived` are quiet for opposite reasons — one has not
+   arrived yet, the other has been superseded. Deliberately NOT the accent: this document already
+   spends accent on links and on MUST, and a third meaning would empty it of any. `kind` keeps the
+   plain chip on purpose — it is a category, not a state, and hue there ranks nothing. */
+.aw-chip-phase-done { color: var(--aw-ok); border: 1px solid var(--aw-ok); }
+.aw-chip-phase-waiting { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+.aw-chip-phase-quiet { color: var(--muted); }
+.aw-chip-phase-archived { color: var(--muted); text-decoration: line-through; }
+/* An unresolved question blocks `propose`, so it is a real state and not a label. Resolved stays
+   the plain chip — the reader needs to find what is still open, not celebrate what is closed. */
+.aw-chip-open { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Limits is where a reader is most likely to be misled, and it read identically to Checked. */
+.aw-limits { color: var(--aw-warn); }
+/* The first screenful was entirely monochrome, so the document read as texty however the
+   requirements below were coloured. This puts the same modal scheme where the eye lands first,
+   carrying counts rather than decoration. */
+.aw-summary { margin: 0 0 1.5rem; font-size: .9rem; color: var(--muted); }
+.aw-summary .aw-count { font-weight: 600; }
+.aw-summary-sep { color: var(--border); margin: 0 .45rem; }
+.aw-rationale { color: var(--muted); font-size: .9rem; }
+.aw-refs { font-size: .82rem; color: var(--muted); }
+.aw-note { color: var(--muted); font-style: italic; }
+.aw-empty { color: var(--muted); }
+table { border-collapse: collapse; margin: .75rem 0; width: 100%; }
+th, td { border: 1px solid var(--border); padding: .4rem .6rem; text-align: left;
+         vertical-align: top; font-size: .92rem; }
+code, pre { background: var(--surface); border-radius: 4px; }
+code { padding: .1rem .3rem; font-size: .88em; }
+</style>
+</head>
+<body>
+<h1>Agent context onboarding</h1>
+<p class="aw-meta"><span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><span class="aw-chip">sketch</span></p>
+<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">11</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">11</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">32</span> criteria</p>
+<section><h2 id="summary">Summary</h2><p>Define generated model-facing context, project operating profiles, and Hub/MCP onboarding, sourced from Hub-owned records, so every agent the Hub knows starts work with complete, fresh, non-placeholder project context — including the names of the peers it can address.</p></section><section><h2 id="requirements">Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-1"><span class="aw-id">FR-1</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL build canonical runtime context for each configured agent and supply it to every run. It MAY materialize that context inside a run workspace when a runner requires a file.</p></div><div class="aw-requirement aw-requirement-must" id="FR-2"><span class="aw-id">FR-2</span> <p><span class="aw-modal aw-modal-must">MUST</span> The system SHALL generate a concise project operating profile from Hub-owned project, agent, runner, and charter records. The project&#x27;s identity and its agent roster MUST be derived from those records and MUST NOT depend on `agentweave.yml` or on synced session state, neither of which a Hub-owned project has.</p><p class="aw-rationale">Configuration that the Hub does not yet own natively MAY continue to be read from synced session state where that is its only home, provided it never determines an agent&#x27;s identity, its roster, or what work it is permitted to do. The profile SHALL name every agent registered in the project, so that an agent can address a peer without guessing. For each agent it SHALL state that agent&#x27;s name, its bound runner&#x27;s CLI, and its configured model, and SHALL mark which entry is the reading agent itself. Environment variables SHALL be identified by name only, never by value. Sections describing configuration the Hub does not hold SHALL be omitted rather than rendered empty or populated with invented defaults.</p></div><div class="aw-requirement aw-requirement-must" id="FR-3"><span class="aw-id">FR-3</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL layer stable charter guidance, generated project facts, long-lived project context, project-wide instructions, and live session state without duplicating stale information across files.</p></div><div class="aw-requirement aw-requirement-must" id="FR-4"><span class="aw-id">FR-4</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The Hub/MCP interface SHALL provide `get_agent_context(agent)` for retrieving runtime context by agent name. Whether an agent is known SHALL be determined by whether the Hub has a record of it, and by nothing else.</p><p class="aw-rationale">An agent the Hub knows SHALL receive full runtime context. The system MUST NOT instruct a known agent to withhold work, to refrain from modifying files, to refrain from claiming tasks, or to wait for another agent to assign it work. An agent the operator created and addressed is an agent the operator intends to act. Generated context MUST NOT refer to `agentweave.yml`, to an agent being &quot;declared&quot;, or to a &quot;principal&quot;, unless a real registered agent holds that position.</p></div><div class="aw-requirement aw-requirement-must" id="FR-5"><span class="aw-id">FR-5</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL preserve `get_context(charter)` as a direct charter-content lookup while making `get_agent_context(agent)` the preferred onboarding/runtime context API.</p></div><div class="aw-requirement aw-requirement-must" id="FR-6"><span class="aw-id">FR-6</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL provide diagnostics that explain what context each agent receives and whether it is fresh enough to trust.</p></div><div class="aw-requirement aw-requirement-must" id="FR-7"><span class="aw-id">FR-7</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Generated context SHALL state the absolute directory the agent&#x27;s run executes in, and whether that directory is an isolated workspace or the project&#x27;s shared checkout.</p><p class="aw-rationale">Where the workspace is isolated, the context SHALL name the branch it is on and state that other agents work in separate workspaces whose contents this agent cannot see. An agent that is not told where it is resolves paths by guessing, and a guess that lands outside its workspace is refused.</p></div><div class="aw-requirement aw-requirement-must" id="FR-8"><span class="aw-id">FR-8</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Generated context SHALL describe the tool surface available to the agent, including for each tool the parameters it takes and, where a parameter is constrained, the values it accepts.</p><p class="aw-rationale">Every tool the agent can call SHALL be described. A tool that exists but is never mentioned cannot be used deliberately. The description SHALL derive from the same source as the tool definitions themselves.</p></div><div class="aw-requirement aw-requirement-must" id="FR-9"><span class="aw-id">FR-9</span> <p><span class="aw-modal aw-modal-must">MUST</span> Generated context MUST NOT direct an agent to read a file whose contents that same context already carries.</p><p class="aw-rationale">Such a pointer invites a read that is at best redundant and, where the file lies outside the agent&#x27;s permitted paths, is refused — turning delivered information into an apparent failure.</p></div><div class="aw-requirement aw-requirement-must" id="FR-10"><span class="aw-id">FR-10</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL name, in the turn context, the specification document a bound task implements, and SHALL say how to read it.</p><p class="aw-rationale">An agent given a task and no document path cannot reach the thing it is supposed to build against. It will guess paths, fail, and fall back to whatever summary it was handed — which is how an implementation quietly stops matching what was approved. The wording SHALL treat the document as what the work implements, not as something the operator happens to be looking at. The two are different claims, and the second one tells an agent not to act on it. The system SHALL NOT present a task-derived document as an instruction to author a specification. A turn spent writing a document instead of implementing one is worse than a turn with no document at all. Where the operator is also viewing that same document, the system SHALL render one statement rather than two. Saying the same thing twice in two framings invites the agent to pick the weaker one.</p></div><div class="aw-requirement aw-requirement-must" id="FR-11"><span class="aw-id">FR-11</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL tell an agent, in its turn context, which operator-conferred capabilities it holds.</p><p class="aw-rationale">A capability an agent does not know it has is one it does not use. An agent that guesses instead is refused in the middle of a turn, having already spent it.</p></div></section><section><h2 id="acceptance">Acceptance criteria</h2><table><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>the Hub prepares a run for a configured agent</td><td>it builds context containing the agent&#x27;s project operating profile, team context, quality gates, charter guidance, project instructions, and project context when available</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>agent, runner, project, charter, or quality configuration changes before a run</td><td>the next run receives context generated from the current Hub-owned configuration</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>the Hub launches a supported runner</td><td>it supplies canonical context using that runner&#x27;s supported prompt or file mechanism</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>generated context is built for an agent in a project containing other agents</td><td>the profile lists every registered agent by name with its runner CLI and configured model marks the reading agent&#x27;s own entry</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>generated context is built for a project that has never synced session state</td><td>the profile is still complete, sourced from the Hub&#x27;s own project, agent, and runner records does not report the project session as missing</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>an agent&#x27;s runner declares environment variables</td><td>the profile includes their names only includes no value</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>the Hub holds no quality-gate or scheduled-job configuration for a project</td><td>generated context omits those sections entirely does not render an empty or placeholder section in their place</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>the Hub holds quality-gate configuration for the project</td><td>generated context includes actionable instructions for docs threshold, docs path, review</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>a charter is authored or edited through the Hub UI</td><td>it describes agent scope, responsibilities, boundaries, handoff rules, quality behavior, definition of done, and escalation paths without embedding a full copy of project instructions</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>`.agentweave/ai_context.md` contains known untouched template placeholders</td><td>generated context omits the placeholder content or includes a clear missing-context warning instead of presenting the placeholder as project facts</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>the Hub triggers an agent from a peer message and `.agentweave/shared/context.md` is non-empty</td><td>the system prepends the shared context to the prompt as current session focus without requiring regeneration of `.agentweave/context/&lt;agent&gt;.md`</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>`get_agent_context(agent)` is called for an agent the Hub has a record of</td><td>the response returns full runtime context including the project profile, the real agent contains no instruction to stand by or withhold work</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>generated context is built for any agent the Hub has a record of</td><td>it contains no direction to await assignment before acting names no recipient that is not a registered agent of that project</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>`get_agent_context(agent)` is called for an agent the Hub has no record of</td><td>the response explains how to register with AgentWeave and does not provide work-taking</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>`get_agent_context(agent)` returns successfully</td><td>the response includes machine-readable fields for agent name, known status, registered</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>an agent calls `get_context(charter)` with a valid charter identifier</td><td>the system returns that charter&#x27;s content compatible with existing clients</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>`get_context(charter)` returns charter content</td><td>the returned content or metadata indicates that `get_agent_context(agent)` should be used for full project and onboarding context when the caller knows its agent name</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>AgentWeave context diagnostics run</td><td>the output lists relevant source files, generated per-agent context files, root bootstrap files, and runner-specific injection mechanisms</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>generated context is missing required inputs or sections</td><td>diagnostics report the issue and identify the Hub-owned configuration that needs attention</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>`.agentweave/ai_context.md` still contains known template placeholders</td><td>diagnostics warn that project context is incomplete and identify the file to update</td></tr><tr><td><a href="#FR-7">FR-7</a></td><td></td><td>generated context is built for a run</td><td>it names the absolute directory that run will execute in</td></tr><tr><td><a href="#FR-7">FR-7</a></td><td></td><td>the run&#x27;s workspace is an isolated one</td><td>the context says so, names its branch, and states that peers work elsewhere</td></tr><tr><td><a href="#FR-7">FR-7</a></td><td></td><td>the run executes in the project&#x27;s shared checkout rather than an isolated workspace</td><td>the context describes it as such and does not claim isolation</td></tr><tr><td><a href="#FR-8">FR-8</a></td><td></td><td>generated context describes a tool with a constrained parameter</td><td>it lists the accepted values for that parameter</td></tr><tr><td><a href="#FR-8">FR-8</a></td><td></td><td>the described tools are compared with the tools the agent can actually call</td><td>every callable tool is described</td></tr><tr><td><a href="#FR-9">FR-9</a></td><td></td><td>generated context is built</td><td>it contains no instruction to read the file that context was written to</td></tr><tr><td><a href="#FR-10">FR-10</a></td><td></td><td>an agent&#x27;s turn is bound to a task that implements a document</td><td>the context names that document says how to read it</td></tr><tr><td><a href="#FR-10">FR-10</a></td><td></td><td>the context names a document a task implements</td><td>it does not describe it as what the operator is viewing</td></tr><tr><td><a href="#FR-10">FR-10</a></td><td></td><td>the document was derived from the bound task rather than opened by the operator</td><td>the turn is not framed as a specification-authoring turn</td></tr><tr><td><a href="#FR-10">FR-10</a></td><td></td><td>the operator is viewing the same document the bound task implements</td><td>the context names it once</td></tr><tr><td><a href="#FR-11">FR-11</a></td><td></td><td>an agent has been granted evidence acceptance</td><td>its turn context says so</td></tr><tr><td><a href="#FR-11">FR-11</a></td><td></td><td>an agent has not been granted evidence acceptance</td><td>its turn context does not claim it has</td></tr></tbody></table></section><section><h2 id="evidence">Evidence and coverage limits</h2><h3>Checked</h3><ul><li>Translated from openspec/specs/agent-context-onboarding/spec.md (11 requirements, 32 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten.</li></ul><h3 class="aw-limits">Limits</h3><ul><li>scenarios-state-no-starting-state: 32 of 32 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed</li></ul></section><section><h2 id="open-questions">Open questions</h2><p class="aw-empty">None outstanding.</p></section>
+<script type="application/agentweave-spec+json" id="aw-spec-payload">
+{
+  "schema_version": 1,
+  "kind": "capability",
+  "title": "Agent context onboarding",
+  "summary": "Define generated model-facing context, project operating profiles, and Hub/MCP onboarding, sourced from Hub-owned records, so every agent the Hub knows starts work with complete, fresh, non-placeholder project context — including the names of the peers it can address.",
+  "problem": "",
+  "scope": {
+    "in_scope": [],
+    "non_goals": []
+  },
+  "requirements": [
+    {
+      "key": "canonical-per-agent-runtime-context",
+      "statement": "The Hub SHALL build canonical runtime context for each configured agent and supply it to every run. It MAY materialize that context inside a run workspace when a runner requires a file.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "project-operating-profile-generation",
+      "statement": "The system SHALL generate a concise project operating profile from Hub-owned project, agent, runner, and charter records. The project's identity and its agent roster MUST be derived from those records and MUST NOT depend on `agentweave.yml` or on synced session state, neither of which a Hub-owned project has.",
+      "modal": "MUST",
+      "rationale": "Configuration that the Hub does not yet own natively MAY continue to be read from synced session state where that is its only home, provided it never determines an agent's identity, its roster, or what work it is permitted to do. The profile SHALL name every agent registered in the project, so that an agent can address a peer without guessing. For each agent it SHALL state that agent's name, its bound runner's CLI, and its configured model, and SHALL mark which entry is the reading agent itself. Environment variables SHALL be identified by name only, never by value. Sections describing configuration the Hub does not hold SHALL be omitted rather than rendered empty or populated with invented defaults.",
+      "party": null
+    },
+    {
+      "key": "layered-project-and-role-context",
+      "statement": "The system SHALL layer stable charter guidance, generated project facts, long-lived project context, project-wide instructions, and live session state without duplicating stale information across files.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "agent-context-onboarding-api",
+      "statement": "The Hub/MCP interface SHALL provide `get_agent_context(agent)` for retrieving runtime context by agent name. Whether an agent is known SHALL be determined by whether the Hub has a record of it, and by nothing else.",
+      "modal": "SHALL",
+      "rationale": "An agent the Hub knows SHALL receive full runtime context. The system MUST NOT instruct a known agent to withhold work, to refrain from modifying files, to refrain from claiming tasks, or to wait for another agent to assign it work. An agent the operator created and addressed is an agent the operator intends to act. Generated context MUST NOT refer to `agentweave.yml`, to an agent being \"declared\", or to a \"principal\", unless a real registered agent holds that position.",
+      "party": null
+    },
+    {
+      "key": "role-context-lookup-compatibility",
+      "statement": "The system SHALL preserve `get_context(charter)` as a direct charter-content lookup while making `get_agent_context(agent)` the preferred onboarding/runtime context API.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "context-diagnostics",
+      "statement": "The system SHALL provide diagnostics that explain what context each agent receives and whether it is fresh enough to trust.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "an-agent-is-told-where-it-is-working",
+      "statement": "Generated context SHALL state the absolute directory the agent's run executes in, and whether that directory is an isolated workspace or the project's shared checkout.",
+      "modal": "SHALL",
+      "rationale": "Where the workspace is isolated, the context SHALL name the branch it is on and state that other agents work in separate workspaces whose contents this agent cannot see. An agent that is not told where it is resolves paths by guessing, and a guess that lands outside its workspace is refused.",
+      "party": null
+    },
+    {
+      "key": "an-agent-is-told-what-its-tools-accept",
+      "statement": "Generated context SHALL describe the tool surface available to the agent, including for each tool the parameters it takes and, where a parameter is constrained, the values it accepts.",
+      "modal": "SHALL",
+      "rationale": "Every tool the agent can call SHALL be described. A tool that exists but is never mentioned cannot be used deliberately. The description SHALL derive from the same source as the tool definitions themselves.",
+      "party": null
+    },
+    {
+      "key": "context-does-not-point-at-content-it-already-contains",
+      "statement": "Generated context MUST NOT direct an agent to read a file whose contents that same context already carries.",
+      "modal": "MUST",
+      "rationale": "Such a pointer invites a read that is at best redundant and, where the file lies outside the agent's permitted paths, is refused — turning delivered information into an apparent failure.",
+      "party": null
+    },
+    {
+      "key": "a-turn-bound-to-a-task-names-the-specification-that-task-imp",
+      "statement": "The system SHALL name, in the turn context, the specification document a bound task implements, and SHALL say how to read it.",
+      "modal": "SHALL",
+      "rationale": "An agent given a task and no document path cannot reach the thing it is supposed to build against. It will guess paths, fail, and fall back to whatever summary it was handed — which is how an implementation quietly stops matching what was approved. The wording SHALL treat the document as what the work implements, not as something the operator happens to be looking at. The two are different claims, and the second one tells an agent not to act on it. The system SHALL NOT present a task-derived document as an instruction to author a specification. A turn spent writing a document instead of implementing one is worse than a turn with no document at all. Where the operator is also viewing that same document, the system SHALL render one statement rather than two. Saying the same thing twice in two framings invites the agent to pick the weaker one.",
+      "party": null
+    },
+    {
+      "key": "an-agent-granted-a-capability-is-told-it-has-it",
+      "statement": "The system SHALL tell an agent, in its turn context, which operator-conferred capabilities it holds.",
+      "modal": "SHALL",
+      "rationale": "A capability an agent does not know it has is one it does not use. An agent that guesses instead is refused in the middle of a turn, having already spent it.",
+      "party": null
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "key": "ac1",
+      "requirement": "canonical-per-agent-runtime-context",
+      "given": "",
+      "when": "the Hub prepares a run for a configured agent",
+      "then": "it builds context containing the agent's project operating profile, team context, quality gates, charter guidance, project instructions, and project context when available"
+    },
+    {
+      "key": "ac2",
+      "requirement": "canonical-per-agent-runtime-context",
+      "given": "",
+      "when": "agent, runner, project, charter, or quality configuration changes before a run",
+      "then": "the next run receives context generated from the current Hub-owned configuration"
+    },
+    {
+      "key": "ac3",
+      "requirement": "canonical-per-agent-runtime-context",
+      "given": "",
+      "when": "the Hub launches a supported runner",
+      "then": "it supplies canonical context using that runner's supported prompt or file mechanism"
+    },
+    {
+      "key": "ac4",
+      "requirement": "project-operating-profile-generation",
+      "given": "",
+      "when": "generated context is built for an agent in a project containing other agents",
+      "then": "the profile lists every registered agent by name with its runner CLI and configured model marks the reading agent's own entry"
+    },
+    {
+      "key": "ac5",
+      "requirement": "project-operating-profile-generation",
+      "given": "",
+      "when": "generated context is built for a project that has never synced session state",
+      "then": "the profile is still complete, sourced from the Hub's own project, agent, and runner records does not report the project session as missing"
+    },
+    {
+      "key": "ac6",
+      "requirement": "project-operating-profile-generation",
+      "given": "",
+      "when": "an agent's runner declares environment variables",
+      "then": "the profile includes their names only includes no value"
+    },
+    {
+      "key": "ac7",
+      "requirement": "project-operating-profile-generation",
+      "given": "",
+      "when": "the Hub holds no quality-gate or scheduled-job configuration for a project",
+      "then": "generated context omits those sections entirely does not render an empty or placeholder section in their place"
+    },
+    {
+      "key": "ac8",
+      "requirement": "project-operating-profile-generation",
+      "given": "",
+      "when": "the Hub holds quality-gate configuration for the project",
+      "then": "generated context includes actionable instructions for docs threshold, docs path, review"
+    },
+    {
+      "key": "ac9",
+      "requirement": "layered-project-and-role-context",
+      "given": "",
+      "when": "a charter is authored or edited through the Hub UI",
+      "then": "it describes agent scope, responsibilities, boundaries, handoff rules, quality behavior, definition of done, and escalation paths without embedding a full copy of project instructions"
+    },
+    {
+      "key": "ac10",
+      "requirement": "layered-project-and-role-context",
+      "given": "",
+      "when": "`.agentweave/ai_context.md` contains known untouched template placeholders",
+      "then": "generated context omits the placeholder content or includes a clear missing-context warning instead of presenting the placeholder as project facts"
+    },
+    {
+      "key": "ac11",
+      "requirement": "layered-project-and-role-context",
+      "given": "",
+      "when": "the Hub triggers an agent from a peer message and `.agentweave/shared/context.md` is non-empty",
+      "then": "the system prepends the shared context to the prompt as current session focus without requiring regeneration of `.agentweave/context/\u003cagent>.md`"
+    },
+    {
+      "key": "ac12",
+      "requirement": "agent-context-onboarding-api",
+      "given": "",
+      "when": "`get_agent_context(agent)` is called for an agent the Hub has a record of",
+      "then": "the response returns full runtime context including the project profile, the real agent contains no instruction to stand by or withhold work"
+    },
+    {
+      "key": "ac13",
+      "requirement": "agent-context-onboarding-api",
+      "given": "",
+      "when": "generated context is built for any agent the Hub has a record of",
+      "then": "it contains no direction to await assignment before acting names no recipient that is not a registered agent of that project"
+    },
+    {
+      "key": "ac14",
+      "requirement": "agent-context-onboarding-api",
+      "given": "",
+      "when": "`get_agent_context(agent)` is called for an agent the Hub has no record of",
+      "then": "the response explains how to register with AgentWeave and does not provide work-taking"
+    },
+    {
+      "key": "ac15",
+      "requirement": "agent-context-onboarding-api",
+      "given": "",
+      "when": "`get_agent_context(agent)` returns successfully",
+      "then": "the response includes machine-readable fields for agent name, known status, registered"
+    },
+    {
+      "key": "ac16",
+      "requirement": "role-context-lookup-compatibility",
+      "given": "",
+      "when": "an agent calls `get_context(charter)` with a valid charter identifier",
+      "then": "the system returns that charter's content compatible with existing clients"
+    },
+    {
+      "key": "ac17",
+      "requirement": "role-context-lookup-compatibility",
+      "given": "",
+      "when": "`get_context(charter)` returns charter content",
+      "then": "the returned content or metadata indicates that `get_agent_context(agent)` should be used for full project and onboarding context when the caller knows its agent name"
+    },
+    {
+      "key": "ac18",
+      "requirement": "context-diagnostics",
+      "given": "",
+      "when": "AgentWeave context diagnostics run",
+      "then": "the output lists relevant source files, generated per-agent context files, root bootstrap files, and runner-specific injection mechanisms"
+    },
+    {
+      "key": "ac19",
+      "requirement": "context-diagnostics",
+      "given": "",
+      "when": "generated context is missing required inputs or sections",
+      "then": "diagnostics report the issue and identify the Hub-owned configuration that needs attention"
+    },
+    {
+      "key": "ac20",
+      "requirement": "context-diagnostics",
+      "given": "",
+      "when": "`.agentweave/ai_context.md` still contains known template placeholders",
+      "then": "diagnostics warn that project context is incomplete and identify the file to update"
+    },
+    {
+      "key": "ac21",
+      "requirement": "an-agent-is-told-where-it-is-working",
+      "given": "",
+      "when": "generated context is built for a run",
+      "then": "it names the absolute directory that run will execute in"
+    },
+    {
+      "key": "ac22",
+      "requirement": "an-agent-is-told-where-it-is-working",
+      "given": "",
+      "when": "the run's workspace is an isolated one",
+      "then": "the context says so, names its branch, and states that peers work elsewhere"
+    },
+    {
+      "key": "ac23",
+      "requirement": "an-agent-is-told-where-it-is-working",
+      "given": "",
+      "when": "the run executes in the project's shared checkout rather than an isolated workspace",
+      "then": "the context describes it as such and does not claim isolation"
+    },
+    {
+      "key": "ac24",
+      "requirement": "an-agent-is-told-what-its-tools-accept",
+      "given": "",
+      "when": "generated context describes a tool with a constrained parameter",
+      "then": "it lists the accepted values for that parameter"
+    },
+    {
+      "key": "ac25",
+      "requirement": "an-agent-is-told-what-its-tools-accept",
+      "given": "",
+      "when": "the described tools are compared with the tools the agent can actually call",
+      "then": "every callable tool is described"
+    },
+    {
+      "key": "ac26",
+      "requirement": "context-does-not-point-at-content-it-already-contains",
+      "given": "",
+      "when": "generated context is built",
+      "then": "it contains no instruction to read the file that context was written to"
+    },
+    {
+      "key": "ac27",
+      "requirement": "a-turn-bound-to-a-task-names-the-specification-that-task-imp",
+      "given": "",
+      "when": "an agent's turn is bound to a task that implements a document",
+      "then": "the context names that document says how to read it"
+    },
+    {
+      "key": "ac28",
+      "requirement": "a-turn-bound-to-a-task-names-the-specification-that-task-imp",
+      "given": "",
+      "when": "the context names a document a task implements",
+      "then": "it does not describe it as what the operator is viewing"
+    },
+    {
+      "key": "ac29",
+      "requirement": "a-turn-bound-to-a-task-names-the-specification-that-task-imp",
+      "given": "",
+      "when": "the document was derived from the bound task rather than opened by the operator",
+      "then": "the turn is not framed as a specification-authoring turn"
+    },
+    {
+      "key": "ac30",
+      "requirement": "a-turn-bound-to-a-task-names-the-specification-that-task-imp",
+      "given": "",
+      "when": "the operator is viewing the same document the bound task implements",
+      "then": "the context names it once"
+    },
+    {
+      "key": "ac31",
+      "requirement": "an-agent-granted-a-capability-is-told-it-has-it",
+      "given": "",
+      "when": "an agent has been granted evidence acceptance",
+      "then": "its turn context says so"
+    },
+    {
+      "key": "ac32",
+      "requirement": "an-agent-granted-a-capability-is-told-it-has-it",
+      "given": "",
+      "when": "an agent has not been granted evidence acceptance",
+      "then": "its turn context does not claim it has"
+    }
+  ],
+  "tasks": [],
+  "algorithms": [],
+  "design": "",
+  "evidence": {
+    "checked": [
+      "Translated from openspec/specs/agent-context-onboarding/spec.md (11 requirements, 32 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten."
+    ],
+    "limits": [
+      "scenarios-state-no-starting-state: 32 of 32 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed"
+    ]
+  },
+  "lifecycle": "",
+  "open_questions": [],
+  "aw_identity": {
+    "requirements": {
+      "canonical-per-agent-runtime-context": "FR-1",
+      "project-operating-profile-generation": "FR-2",
+      "layered-project-and-role-context": "FR-3",
+      "agent-context-onboarding-api": "FR-4",
+      "role-context-lookup-compatibility": "FR-5",
+      "context-diagnostics": "FR-6",
+      "an-agent-is-told-where-it-is-working": "FR-7",
+      "an-agent-is-told-what-its-tools-accept": "FR-8",
+      "context-does-not-point-at-content-it-already-contains": "FR-9",
+      "a-turn-bound-to-a-task-names-the-specification-that-task-imp": "FR-10",
+      "an-agent-granted-a-capability-is-told-it-has-it": "FR-11"
+    },
+    "high_water": 11,
+    "retired": {},
+    "digests": {
+      "FR-1": "8c3f03698f25270e7231657c9caf07a4b2b0c274e383cd431b7de509c3eb91f3",
+      "FR-2": "8f37b36666f9b5071269464b451dada06d674c52030a44760e9b787fe3f23665",
+      "FR-3": "845f3cafb51342c4a3edf2b7efc7c880491f33fd1a10d4978b9666255173a392",
+      "FR-4": "b4ac858d90f1b51980295738bca5fb488ca5a8308c8ce2575728160175d2c13e",
+      "FR-5": "5a28ae8a33a6dc2fba50fd544fae6577a97ba05836127818c462696897139e95",
+      "FR-6": "0103aa51247adde1919fe42cb090961cab0f91206672d7aaec6395f37b237c8c",
+      "FR-7": "76031993274ffa11fab5ad238adb72f53e4e7cf94324cd93c3b87f6d7bb39e10",
+      "FR-8": "c492881d09263b78ec2d5c5178dc754f744a8de9c5e01a1dccc59661bf458f1e",
+      "FR-9": "2303a11b7451da5f3e40eebb52885950824e5d3e41a21053b97566c21d4c920c",
+      "FR-10": "0053901d7eb9891fe5137c5b4f81b0c0f8d144e4f300af1f08c0cc2e56171b1f",
+      "FR-11": "bb77524e7939ae997391425f073b206bbeb3a62f637cdaa0f90461aa91fdb9df"
+    }
+  }
+}
+</script>
+</body>
+</html>

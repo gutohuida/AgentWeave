@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Conversation lifecycle</title>
+<meta name="aw-spec-kind" content="capability">
+<meta name="aw-spec-status" content="current">
+<meta name="aw-spec-rigor" content="sketch">
+<meta name="aw-spec-schema-version" content="1">
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+    --surface-2: #21262d; --surface: #161b22;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+:root[data-theme="dark"] {
+  --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+  --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+  --surface-2: #21262d; --surface: #161b22;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 2rem 2.5rem 4rem; background: var(--bg); color: var(--fg);
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+h1 { font-size: 1.75rem; margin: 0 0 .25rem; }
+h2 { font-size: 1.15rem; margin: 2.5rem 0 .75rem; padding-bottom: .3rem;
+     border-bottom: 1px solid var(--border); }
+h3 { font-size: 1rem; margin: 1.5rem 0 .4rem; }
+p { margin: .5rem 0; }
+ul, ol { margin: .5rem 0; padding-left: 1.4rem; }
+li { margin: .25rem 0; }
+a { color: var(--aw-accent); }
+.aw-meta { color: var(--muted); font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-chip { display: inline-block; padding: .1rem .5rem; border-radius: 999px;
+           background: var(--surface-2); font-size: .78rem; margin-right: .4rem; }
+.aw-requirement { border-left: 3px solid var(--border); padding: .1rem 0 .1rem .9rem;
+                  margin: 1.1rem 0; }
+.aw-requirement-must { border-left-color: var(--aw-accent); }
+.aw-requirement-should { border-left-color: var(--aw-warn); }
+.aw-requirement-may { border-left-color: var(--border); }
+.aw-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8rem;
+         color: var(--muted); }
+.aw-modal { font-weight: 600; }
+.aw-modal-must { color: var(--aw-accent); }
+.aw-modal-should { color: var(--aw-warn); }
+.aw-modal-may { color: var(--fg); font-weight: 400; }
+.aw-chip-rigor-gate { color: var(--aw-accent); border: 1px solid var(--aw-accent); }
+.aw-chip-rigor-contract { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Phase is a lifecycle, and the question it answers is "can I rely on this?". `approved` and a
+   capability's `current` are settled and take the done tone; `proposed` is waiting on an operator
+   decision and takes warn; `exploring` and `archived` are quiet for opposite reasons — one has not
+   arrived yet, the other has been superseded. Deliberately NOT the accent: this document already
+   spends accent on links and on MUST, and a third meaning would empty it of any. `kind` keeps the
+   plain chip on purpose — it is a category, not a state, and hue there ranks nothing. */
+.aw-chip-phase-done { color: var(--aw-ok); border: 1px solid var(--aw-ok); }
+.aw-chip-phase-waiting { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+.aw-chip-phase-quiet { color: var(--muted); }
+.aw-chip-phase-archived { color: var(--muted); text-decoration: line-through; }
+/* An unresolved question blocks `propose`, so it is a real state and not a label. Resolved stays
+   the plain chip — the reader needs to find what is still open, not celebrate what is closed. */
+.aw-chip-open { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Limits is where a reader is most likely to be misled, and it read identically to Checked. */
+.aw-limits { color: var(--aw-warn); }
+/* The first screenful was entirely monochrome, so the document read as texty however the
+   requirements below were coloured. This puts the same modal scheme where the eye lands first,
+   carrying counts rather than decoration. */
+.aw-summary { margin: 0 0 1.5rem; font-size: .9rem; color: var(--muted); }
+.aw-summary .aw-count { font-weight: 600; }
+.aw-summary-sep { color: var(--border); margin: 0 .45rem; }
+.aw-rationale { color: var(--muted); font-size: .9rem; }
+.aw-refs { font-size: .82rem; color: var(--muted); }
+.aw-note { color: var(--muted); font-style: italic; }
+.aw-empty { color: var(--muted); }
+table { border-collapse: collapse; margin: .75rem 0; width: 100%; }
+th, td { border: 1px solid var(--border); padding: .4rem .6rem; text-align: left;
+         vertical-align: top; font-size: .92rem; }
+code, pre { background: var(--surface); border-radius: 4px; }
+code { padding: .1rem .3rem; font-size: .88em; }
+</style>
+</head>
+<body>
+<h1>Conversation lifecycle</h1>
+<p class="aw-meta"><span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><span class="aw-chip">sketch</span></p>
+<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">7</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">7</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">21</span> criteria</p>
+<section><h2 id="summary">Summary</h2><p>A conversation is a durable record with a life of its own, independent of the provider session beneath it. It carries a human-readable title so no operator surface has to fall back to an identifier, and an immutable origin recording what created it — the operator, a peer agent, a handoff, the spec workflow, or a job. It can be renamed by the operator, and a title the operator set is never overwritten by a generated one. Whether titles are generated at all is a per-project setting that is off by default; when on, the titling run is bound to no conversation, resumes no provider session, and is invisible in every timeline. A conversation can be archived and unarchived. Archiving is a reversible act of tidying, never a destructive one: an archived conversation stays fully readable, and archiving is refused rather than forced when a run has not ended or inbound queue entries have not been delivered. An agent that addresses an archived conversation is told so, told to open a new one, and handed back its own submitted content so the retry is mechanical rather than reconstructive.</p></section><section><h2 id="requirements">Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-1"><span class="aw-id">FR-1</span> <p><span class="aw-modal aw-modal-must">MUST</span> Every conversation SHALL carry a `title` that is readable without knowing its identifier. A conversation&#x27;s identifier MUST NOT be presented as its label on any operator surface.</p><p class="aw-rationale">A title SHALL be set when the conversation&#x27;s first message is recorded, derived from that message&#x27;s text, truncated at a word boundary. A conversation that has no message yet SHALL be labelled by its surface as new rather than by its identifier.</p></div><div class="aw-requirement aw-requirement-must" id="FR-2"><span class="aw-id">FR-2</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Every conversation SHALL carry an `origin` recorded at creation, drawn from a closed set: `operator`, `peer`, `handoff`, `spec`, `job`. A conversation created for a recipient agent because a peer agent addressed it SHALL be recorded as `peer`; a conversation created because the operator started one SHALL be recorded as `operator`.</p><p class="aw-rationale">Origin SHALL be immutable after creation.</p></div><div class="aw-requirement aw-requirement-must" id="FR-3"><span class="aw-id">FR-3</span> <p><span class="aw-modal aw-modal-must">MUST</span> The operator SHALL be able to set a conversation&#x27;s title. A title set by the operator SHALL be recorded as operator-set and MUST NOT be replaced by any generated title thereafter.</p><p class="aw-rationale">A rename SHALL be rejected when the submitted title is empty or exceeds the stored length.</p></div><div class="aw-requirement aw-requirement-must" id="FR-4"><span class="aw-id">FR-4</span> <p><span class="aw-modal aw-modal-must">SHALL</span> A project SHALL carry a setting selecting how conversation titles are produced: truncation of the first message (the default), or generation by a model.</p><p class="aw-rationale">When generation is selected, the title SHALL be produced by a one-shot run of a runner already configured for that project. That run MUST NOT be bound to the conversation being titled, MUST NOT resume any provider session, and MUST NOT appear in any conversation timeline. Generation SHALL run after the agent&#x27;s first response has been recorded, and SHALL replace the truncated title only when the operator has not set one. A failed or timed-out generation SHALL leave the truncated title in place and MUST NOT fail the conversation or the agent&#x27;s run.</p></div><div class="aw-requirement aw-requirement-must" id="FR-5"><span class="aw-id">FR-5</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The operator SHALL be able to archive a conversation, setting its lifecycle to `archived` and recording the time. An archived conversation SHALL be excluded from the default conversation listing and reachable through an explicit archived listing.</p><p class="aw-rationale">The operator SHALL be able to unarchive an archived conversation, returning it to `open`.</p></div><div class="aw-requirement aw-requirement-must" id="FR-6"><span class="aw-id">FR-6</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Archiving SHALL be refused, with a stated reason naming the obstruction, when the conversation has a run that has not ended, or when it has inbound queue entries that have not been delivered.</p><p class="aw-rationale">The system MUST NOT stop a run or discard a queue entry in order to satisfy an archive request.</p></div><div class="aw-requirement aw-requirement-must" id="FR-7"><span class="aw-id">FR-7</span> <p><span class="aw-modal aw-modal-must">SHALL</span> When an agent sends a message whose recipient conversation is archived, the send SHALL fail with a response that states the conversation is archived, instructs the agent to send to a new conversation, and restates the content it submitted.</p><p class="aw-rationale">The archived conversation MUST NOT receive the message, and no queue entry MUST be created against it.</p></div></section><section><h2 id="acceptance">Acceptance criteria</h2><table><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>the first message is recorded against a conversation with no title</td><td>the conversation&#x27;s title is set from that message&#x27;s text, truncated at a word boundary the title is returned by the conversation listing</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>the first message is longer than the title limit</td><td>the stored title ends at a word boundary at or before the limit the stored title contains no partial word</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>any operator surface lists or names a conversation</td><td>the conversation&#x27;s title is shown its identifier is not shown as its label</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>the operator starts a conversation and sends its first message</td><td>the conversation&#x27;s origin is `operator`</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>an agent sends a message to a peer that has no open conversation</td><td>the conversation created for the recipient has origin `peer`</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>a conversation is renamed, archived, or unarchived</td><td>its origin is unchanged</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>the operator submits a new title for a conversation</td><td>the conversation&#x27;s title is that value every surface listing that conversation shows it</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>a conversation whose title was set by the operator becomes eligible for a generated title</td><td>the generated title is discarded the operator&#x27;s title is unchanged</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>the operator submits an empty title</td><td>the request is rejected with a stated reason the existing title is unchanged</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>a project is created and its title setting has never been changed</td><td>titles are produced by truncation no model run is spawned for titling</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>title generation is enabled and an agent&#x27;s first response has been recorded</td><td>a one-shot titling run is spawned that is bound to no conversation the conversation&#x27;s title is replaced with the generated title</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>a titling run completes</td><td>the conversation&#x27;s timeline contains no entry for it the agent&#x27;s context usage is unchanged by it</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>a titling run fails or exceeds its time limit</td><td>the conversation keeps its truncated title the agent&#x27;s own run is unaffected</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>the operator archives a conversation</td><td>its lifecycle is `archived` and its archived time is recorded the default conversation listing for that agent no longer includes it</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>the operator opens an archived conversation from the archived listing</td><td>its full timeline is rendered its entries, runs, and usage records are unchanged</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>the operator unarchives an archived conversation</td><td>its lifecycle is `open` it appears in the default conversation listing again</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>the operator archives a conversation whose run has not ended</td><td>the request is refused with a reason naming the running run the run continues unaffected</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>the operator archives a conversation holding undelivered inbound queue entries</td><td>the request is refused with a reason naming the undelivered entries the entries remain queued</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>the obstructing run has ended and the entries have been delivered the operator archives the conversation again</td><td>the conversation is archived</td></tr><tr><td><a href="#FR-7">FR-7</a></td><td></td><td>an agent sends a message to an archived conversation</td><td>the send fails the response states that the conversation is archived, instructs the agent to send to a new conversation, and restates the submitted content</td></tr><tr><td><a href="#FR-7">FR-7</a></td><td></td><td>a send to an archived conversation has failed</td><td>the archived conversation has no new message and no new queue entry</td></tr></tbody></table></section><section><h2 id="evidence">Evidence and coverage limits</h2><h3>Checked</h3><ul><li>Translated from openspec/specs/conversation-lifecycle/spec.md (7 requirements, 21 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten.</li></ul><h3 class="aw-limits">Limits</h3><ul><li>scenarios-state-no-starting-state: 21 of 21 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed</li></ul></section><section><h2 id="open-questions">Open questions</h2><p class="aw-empty">None outstanding.</p></section>
+<script type="application/agentweave-spec+json" id="aw-spec-payload">
+{
+  "schema_version": 1,
+  "kind": "capability",
+  "title": "Conversation lifecycle",
+  "summary": "A conversation is a durable record with a life of its own, independent of the provider session beneath it. It carries a human-readable title so no operator surface has to fall back to an identifier, and an immutable origin recording what created it — the operator, a peer agent, a handoff, the spec workflow, or a job. It can be renamed by the operator, and a title the operator set is never overwritten by a generated one. Whether titles are generated at all is a per-project setting that is off by default; when on, the titling run is bound to no conversation, resumes no provider session, and is invisible in every timeline. A conversation can be archived and unarchived. Archiving is a reversible act of tidying, never a destructive one: an archived conversation stays fully readable, and archiving is refused rather than forced when a run has not ended or inbound queue entries have not been delivered. An agent that addresses an archived conversation is told so, told to open a new one, and handed back its own submitted content so the retry is mechanical rather than reconstructive.",
+  "problem": "",
+  "scope": {
+    "in_scope": [],
+    "non_goals": []
+  },
+  "requirements": [
+    {
+      "key": "a-conversation-carries-a-human-readable-title",
+      "statement": "Every conversation SHALL carry a `title` that is readable without knowing its identifier. A conversation's identifier MUST NOT be presented as its label on any operator surface.",
+      "modal": "MUST",
+      "rationale": "A title SHALL be set when the conversation's first message is recorded, derived from that message's text, truncated at a word boundary. A conversation that has no message yet SHALL be labelled by its surface as new rather than by its identifier.",
+      "party": null
+    },
+    {
+      "key": "a-conversation-records-where-it-came-from",
+      "statement": "Every conversation SHALL carry an `origin` recorded at creation, drawn from a closed set: `operator`, `peer`, `handoff`, `spec`, `job`. A conversation created for a recipient agent because a peer agent addressed it SHALL be recorded as `peer`; a conversation created because the operator started one SHALL be recorded as `operator`.",
+      "modal": "SHALL",
+      "rationale": "Origin SHALL be immutable after creation.",
+      "party": null
+    },
+    {
+      "key": "the-operator-can-rename-a-conversation",
+      "statement": "The operator SHALL be able to set a conversation's title. A title set by the operator SHALL be recorded as operator-set and MUST NOT be replaced by any generated title thereafter.",
+      "modal": "MUST",
+      "rationale": "A rename SHALL be rejected when the submitted title is empty or exceeds the stored length.",
+      "party": null
+    },
+    {
+      "key": "title-generation-is-a-project-setting-off-by-default",
+      "statement": "A project SHALL carry a setting selecting how conversation titles are produced: truncation of the first message (the default), or generation by a model.",
+      "modal": "SHALL",
+      "rationale": "When generation is selected, the title SHALL be produced by a one-shot run of a runner already configured for that project. That run MUST NOT be bound to the conversation being titled, MUST NOT resume any provider session, and MUST NOT appear in any conversation timeline. Generation SHALL run after the agent's first response has been recorded, and SHALL replace the truncated title only when the operator has not set one. A failed or timed-out generation SHALL leave the truncated title in place and MUST NOT fail the conversation or the agent's run.",
+      "party": null
+    },
+    {
+      "key": "a-conversation-can-be-archived-and-unarchived",
+      "statement": "The operator SHALL be able to archive a conversation, setting its lifecycle to `archived` and recording the time. An archived conversation SHALL be excluded from the default conversation listing and reachable through an explicit archived listing.",
+      "modal": "SHALL",
+      "rationale": "The operator SHALL be able to unarchive an archived conversation, returning it to `open`.",
+      "party": null
+    },
+    {
+      "key": "archiving-is-refused-while-work-is-outstanding",
+      "statement": "Archiving SHALL be refused, with a stated reason naming the obstruction, when the conversation has a run that has not ended, or when it has inbound queue entries that have not been delivered.",
+      "modal": "SHALL",
+      "rationale": "The system MUST NOT stop a run or discard a queue entry in order to satisfy an archive request.",
+      "party": null
+    },
+    {
+      "key": "an-agent-addressing-an-archived-conversation-is-told-how-to-",
+      "statement": "When an agent sends a message whose recipient conversation is archived, the send SHALL fail with a response that states the conversation is archived, instructs the agent to send to a new conversation, and restates the content it submitted.",
+      "modal": "SHALL",
+      "rationale": "The archived conversation MUST NOT receive the message, and no queue entry MUST be created against it.",
+      "party": null
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "key": "ac1",
+      "requirement": "a-conversation-carries-a-human-readable-title",
+      "given": "",
+      "when": "the first message is recorded against a conversation with no title",
+      "then": "the conversation's title is set from that message's text, truncated at a word boundary the title is returned by the conversation listing"
+    },
+    {
+      "key": "ac2",
+      "requirement": "a-conversation-carries-a-human-readable-title",
+      "given": "",
+      "when": "the first message is longer than the title limit",
+      "then": "the stored title ends at a word boundary at or before the limit the stored title contains no partial word"
+    },
+    {
+      "key": "ac3",
+      "requirement": "a-conversation-carries-a-human-readable-title",
+      "given": "",
+      "when": "any operator surface lists or names a conversation",
+      "then": "the conversation's title is shown its identifier is not shown as its label"
+    },
+    {
+      "key": "ac4",
+      "requirement": "a-conversation-records-where-it-came-from",
+      "given": "",
+      "when": "the operator starts a conversation and sends its first message",
+      "then": "the conversation's origin is `operator`"
+    },
+    {
+      "key": "ac5",
+      "requirement": "a-conversation-records-where-it-came-from",
+      "given": "",
+      "when": "an agent sends a message to a peer that has no open conversation",
+      "then": "the conversation created for the recipient has origin `peer`"
+    },
+    {
+      "key": "ac6",
+      "requirement": "a-conversation-records-where-it-came-from",
+      "given": "",
+      "when": "a conversation is renamed, archived, or unarchived",
+      "then": "its origin is unchanged"
+    },
+    {
+      "key": "ac7",
+      "requirement": "the-operator-can-rename-a-conversation",
+      "given": "",
+      "when": "the operator submits a new title for a conversation",
+      "then": "the conversation's title is that value every surface listing that conversation shows it"
+    },
+    {
+      "key": "ac8",
+      "requirement": "the-operator-can-rename-a-conversation",
+      "given": "",
+      "when": "a conversation whose title was set by the operator becomes eligible for a generated title",
+      "then": "the generated title is discarded the operator's title is unchanged"
+    },
+    {
+      "key": "ac9",
+      "requirement": "the-operator-can-rename-a-conversation",
+      "given": "",
+      "when": "the operator submits an empty title",
+      "then": "the request is rejected with a stated reason the existing title is unchanged"
+    },
+    {
+      "key": "ac10",
+      "requirement": "title-generation-is-a-project-setting-off-by-default",
+      "given": "",
+      "when": "a project is created and its title setting has never been changed",
+      "then": "titles are produced by truncation no model run is spawned for titling"
+    },
+    {
+      "key": "ac11",
+      "requirement": "title-generation-is-a-project-setting-off-by-default",
+      "given": "",
+      "when": "title generation is enabled and an agent's first response has been recorded",
+      "then": "a one-shot titling run is spawned that is bound to no conversation the conversation's title is replaced with the generated title"
+    },
+    {
+      "key": "ac12",
+      "requirement": "title-generation-is-a-project-setting-off-by-default",
+      "given": "",
+      "when": "a titling run completes",
+      "then": "the conversation's timeline contains no entry for it the agent's context usage is unchanged by it"
+    },
+    {
+      "key": "ac13",
+      "requirement": "title-generation-is-a-project-setting-off-by-default",
+      "given": "",
+      "when": "a titling run fails or exceeds its time limit",
+      "then": "the conversation keeps its truncated title the agent's own run is unaffected"
+    },
+    {
+      "key": "ac14",
+      "requirement": "a-conversation-can-be-archived-and-unarchived",
+      "given": "",
+      "when": "the operator archives a conversation",
+      "then": "its lifecycle is `archived` and its archived time is recorded the default conversation listing for that agent no longer includes it"
+    },
+    {
+      "key": "ac15",
+      "requirement": "a-conversation-can-be-archived-and-unarchived",
+      "given": "",
+      "when": "the operator opens an archived conversation from the archived listing",
+      "then": "its full timeline is rendered its entries, runs, and usage records are unchanged"
+    },
+    {
+      "key": "ac16",
+      "requirement": "a-conversation-can-be-archived-and-unarchived",
+      "given": "",
+      "when": "the operator unarchives an archived conversation",
+      "then": "its lifecycle is `open` it appears in the default conversation listing again"
+    },
+    {
+      "key": "ac17",
+      "requirement": "archiving-is-refused-while-work-is-outstanding",
+      "given": "",
+      "when": "the operator archives a conversation whose run has not ended",
+      "then": "the request is refused with a reason naming the running run the run continues unaffected"
+    },
+    {
+      "key": "ac18",
+      "requirement": "archiving-is-refused-while-work-is-outstanding",
+      "given": "",
+      "when": "the operator archives a conversation holding undelivered inbound queue entries",
+      "then": "the request is refused with a reason naming the undelivered entries the entries remain queued"
+    },
+    {
+      "key": "ac19",
+      "requirement": "archiving-is-refused-while-work-is-outstanding",
+      "given": "",
+      "when": "the obstructing run has ended and the entries have been delivered the operator archives the conversation again",
+      "then": "the conversation is archived"
+    },
+    {
+      "key": "ac20",
+      "requirement": "an-agent-addressing-an-archived-conversation-is-told-how-to-",
+      "given": "",
+      "when": "an agent sends a message to an archived conversation",
+      "then": "the send fails the response states that the conversation is archived, instructs the agent to send to a new conversation, and restates the submitted content"
+    },
+    {
+      "key": "ac21",
+      "requirement": "an-agent-addressing-an-archived-conversation-is-told-how-to-",
+      "given": "",
+      "when": "a send to an archived conversation has failed",
+      "then": "the archived conversation has no new message and no new queue entry"
+    }
+  ],
+  "tasks": [],
+  "algorithms": [],
+  "design": "",
+  "evidence": {
+    "checked": [
+      "Translated from openspec/specs/conversation-lifecycle/spec.md (7 requirements, 21 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten."
+    ],
+    "limits": [
+      "scenarios-state-no-starting-state: 21 of 21 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed"
+    ]
+  },
+  "lifecycle": "",
+  "open_questions": [],
+  "aw_identity": {
+    "requirements": {
+      "a-conversation-carries-a-human-readable-title": "FR-1",
+      "a-conversation-records-where-it-came-from": "FR-2",
+      "the-operator-can-rename-a-conversation": "FR-3",
+      "title-generation-is-a-project-setting-off-by-default": "FR-4",
+      "a-conversation-can-be-archived-and-unarchived": "FR-5",
+      "archiving-is-refused-while-work-is-outstanding": "FR-6",
+      "an-agent-addressing-an-archived-conversation-is-told-how-to-": "FR-7"
+    },
+    "high_water": 7,
+    "retired": {},
+    "digests": {
+      "FR-1": "6ad949a01a48f214f5d6688e1448f6a5c2855b452a8eef7342cad24c3d942d1a",
+      "FR-2": "4ea98f396636d5f176638efbae14e259662eb3b18878a6773b0f2cf8771c7747",
+      "FR-3": "f4db43e3bd1cfb006baa6c77a192977296911b13eab3a3af13b9474823888547",
+      "FR-4": "44dae96067f3411f31af4e18fe86f70d0a163d1e74971aec45118bfa7a431637",
+      "FR-5": "b6ae09e48d77624c68f907500c8036dd78cb94da7613a22bf15a60fe2b3cbdf0",
+      "FR-6": "075ebae3685f309f0154b99b97d135c9ae08d0206dc0a47d1a1edea378b8b776",
+      "FR-7": "3ecf70d1d2f611debdf23b3078c6797530537e9b62dd6365bcdf06452a169225"
+    }
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AgentWeave</title>
+<meta name="aw-spec-kind" content="system-map">
+<meta name="aw-spec-status" content="exploring">
+<meta name="aw-spec-rigor" content="sketch">
+<meta name="aw-spec-schema-version" content="1">
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+    --surface-2: #21262d; --surface: #161b22;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+:root[data-theme="dark"] {
+  --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+  --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+  --surface-2: #21262d; --surface: #161b22;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 2rem 2.5rem 4rem; background: var(--bg); color: var(--fg);
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+h1 { font-size: 1.75rem; margin: 0 0 .25rem; }
+h2 { font-size: 1.15rem; margin: 2.5rem 0 .75rem; padding-bottom: .3rem;
+     border-bottom: 1px solid var(--border); }
+h3 { font-size: 1rem; margin: 1.5rem 0 .4rem; }
+p { margin: .5rem 0; }
+ul, ol { margin: .5rem 0; padding-left: 1.4rem; }
+li { margin: .25rem 0; }
+a { color: var(--aw-accent); }
+.aw-meta { color: var(--muted); font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-chip { display: inline-block; padding: .1rem .5rem; border-radius: 999px;
+           background: var(--surface-2); font-size: .78rem; margin-right: .4rem; }
+.aw-requirement { border-left: 3px solid var(--border); padding: .1rem 0 .1rem .9rem;
+                  margin: 1.1rem 0; }
+.aw-requirement-must { border-left-color: var(--aw-accent); }
+.aw-requirement-should { border-left-color: var(--aw-warn); }
+.aw-requirement-may { border-left-color: var(--border); }
+.aw-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8rem;
+         color: var(--muted); }
+.aw-modal { font-weight: 600; }
+.aw-modal-must { color: var(--aw-accent); }
+.aw-modal-should { color: var(--aw-warn); }
+.aw-modal-may { color: var(--fg); font-weight: 400; }
+.aw-chip-rigor-gate { color: var(--aw-accent); border: 1px solid var(--aw-accent); }
+.aw-chip-rigor-contract { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Phase is a lifecycle, and the question it answers is "can I rely on this?". `approved` and a
+   capability's `current` are settled and take the done tone; `proposed` is waiting on an operator
+   decision and takes warn; `exploring` and `archived` are quiet for opposite reasons — one has not
+   arrived yet, the other has been superseded. Deliberately NOT the accent: this document already
+   spends accent on links and on MUST, and a third meaning would empty it of any. `kind` keeps the
+   plain chip on purpose — it is a category, not a state, and hue there ranks nothing. */
+.aw-chip-phase-done { color: var(--aw-ok); border: 1px solid var(--aw-ok); }
+.aw-chip-phase-waiting { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+.aw-chip-phase-quiet { color: var(--muted); }
+.aw-chip-phase-archived { color: var(--muted); text-decoration: line-through; }
+/* An unresolved question blocks `propose`, so it is a real state and not a label. Resolved stays
+   the plain chip — the reader needs to find what is still open, not celebrate what is closed. */
+.aw-chip-open { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Limits is where a reader is most likely to be misled, and it read identically to Checked. */
+.aw-limits { color: var(--aw-warn); }
+/* The first screenful was entirely monochrome, so the document read as texty however the
+   requirements below were coloured. This puts the same modal scheme where the eye lands first,
+   carrying counts rather than decoration. */
+.aw-summary { margin: 0 0 1.5rem; font-size: .9rem; color: var(--muted); }
+.aw-summary .aw-count { font-weight: 600; }
+.aw-summary-sep { color: var(--border); margin: 0 .45rem; }
+.aw-rationale { color: var(--muted); font-size: .9rem; }
+.aw-refs { font-size: .82rem; color: var(--muted); }
+.aw-note { color: var(--muted); font-style: italic; }
+.aw-empty { color: var(--muted); }
+table { border-collapse: collapse; margin: .75rem 0; width: 100%; }
+th, td { border: 1px solid var(--border); padding: .4rem .6rem; text-align: left;
+         vertical-align: top; font-size: .92rem; }
+code, pre { background: var(--surface); border-radius: 4px; }
+code { padding: .1rem .3rem; font-size: .88em; }
+</style>
+</head>
+<body>
+<h1>AgentWeave</h1>
+<p class="aw-meta"><span class="aw-chip">system-map</span><span class="aw-chip aw-chip-phase-quiet">exploring</span><span class="aw-chip">sketch</span></p>
+<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">8</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">8</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">11</span> criteria<span class="aw-summary-sep">·</span><span class="aw-limits"><span class="aw-count">3</span> open questions</span></p>
+<section><h2 id="summary">Summary</h2><p>A locally-installed multi-agent development environment. One local instance owns a collection of projects, spawns the agent processes on your machine, and connects specification, tasks, runs and evidence into one surface. This document is the corpus&#x27;s entry point: it states the invariants that hold across the whole product and that no single capability document owns. The 33 capability documents beneath it describe individual behaviours.</p></section><section><h2 id="problem">Problem</h2><p>Multi-agent development tools fragment the work: the specification lives in one place, the tasks in another, the agent transcripts in a third, and nothing connects a requirement to the run that satisfied it or the evidence that proves it. AgentWeave&#x27;s premise is that these are one workflow, and that the barrier to using them together should be as close to zero as a local install allows.</p></section><section><h2 id="scope">Scope</h2><h3>In scope</h3><ul><li>Multi-agent collaboration with inter-agent communication</li><li>Spec-driven development with the agents: requirements, tasks, runs and evidence connected to the conversation</li><li>Governance and quality gates over that work</li><li>A local install that owns the agent processes on one machine</li></ul><h3>Non-goals</h3><ul><li>Remote or multi-user deployment; a federated connect-to-other-users-agents story is deliberately deferred</li><li>A no-Hub product: the CLI-as-collaboration-substrate, the watchdog, and the local and git transports were removed, not preserved</li><li>Backward compatibility with those removed surfaces; there is no external install base to protect</li></ul></section><section><h2 id="requirements">Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-1"><span class="aw-id">FR-1</span> <p><span class="aw-modal aw-modal-must">SHALL</span> There SHALL be exactly one runtime that executes agent work. The command-line interface MUST do only what cannot be done from inside the application - start it, diagnose why it will not start, stop it, reset it - and MUST NOT be a collaboration surface.</p><p class="aw-rationale">A second runtime is a second source of truth about what an agent is doing. The CLI carried one until 2026-08-02; removing it is why the watchdog, the local and git transports, and the role subsystem no longer exist and are not to be recreated.</p></div><div class="aw-requirement aw-requirement-must" id="FR-2"><span class="aw-id">FR-2</span> <span class="aw-chip">consumer</span><p><span class="aw-modal aw-modal-must">SHALL</span> An agent&#x27;s identity SHALL be established from the credential its run was started with, and MUST NOT be accepted from a request body, header or parameter.</p><p class="aw-rationale">Anything a caller can assert about itself, a caller can assert falsely. A per-run credential makes every effect attributable to the run that caused it.</p></div><div class="aw-requirement aw-requirement-must" id="FR-3"><span class="aw-id">FR-3</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Every project filesystem path SHALL resolve through the project workspace, which refuses absolute paths, traversal, control characters and symlink escapes. The instance&#x27;s own working directory MUST NOT be used as project identity.</p><p class="aw-rationale">One instance owns many projects, so the current directory names nothing. A path that skipped this check would let one project read another&#x27;s files.</p></div><div class="aw-requirement aw-requirement-must" id="FR-4"><span class="aw-id">FR-4</span> <p><span class="aw-modal aw-modal-must">SHALL</span> A specification document SHALL be a file in the project&#x27;s working directory, rendered by the instance from a structured payload. An author MUST NOT write specification markup directly, and markup written by any other means MUST NOT be treated as a document&#x27;s content.</p><p class="aw-rationale">The instance mints requirement identifiers and records content digests while rendering. Markup that arrived another way has neither, so it cannot be traced to or from anything.</p></div><div class="aw-requirement aw-requirement-must" id="FR-5"><span class="aw-id">FR-5</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Approval, rigor, archiving, and the arrangement of the document index SHALL be reserved to the operator. An agent MUST NOT be able to express any of them, and the refusal MUST hold at the service boundary rather than only at the surface that offers it.</p><p class="aw-rationale">A rule enforced in one place survives exactly as long as nobody adds a second caller. These are judgements about whether work is acceptable, which is the thing a person is for.</p></div><div class="aw-requirement aw-requirement-must" id="FR-6"><span class="aw-id">FR-6</span> <p><span class="aw-modal aw-modal-must">SHALL</span> A capability document&#x27;s content SHALL be written only by the operator. A submission from any other actor SHALL be refused regardless of the document&#x27;s phase.</p><p class="aw-rationale">A capability document states current, shipped behaviour. It sits outside the phase machine, so no phase would otherwise block a submission against it.</p></div><div class="aw-requirement aw-requirement-must" id="FR-7"><span class="aw-id">FR-7</span> <p><span class="aw-modal aw-modal-must">SHALL</span> A project&#x27;s identity SHALL travel with its directory rather than with the database that first saw it. An instance encountering a project marker naming an identity it has never seen SHALL adopt that identity rather than refuse the folder.</p><p class="aw-rationale">An operator should be able to open any AgentWeave project from any AgentWeave instance they choose. Identity bound to a database makes a folder unopenable anywhere else.</p></div><div class="aw-requirement aw-requirement-must" id="FR-8"><span class="aw-id">FR-8</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The agent tool server SHALL be a thin adapter over the same operations the HTTP surface exposes, and MUST depend on nothing beyond the standard library and its own server framework.</p><p class="aw-rationale">It is spawned as a standalone process, so anything it imports from the wider application would not be there. Direct HTTP stays first-class because some environments prohibit tool servers entirely.</p></div></section><section><h2 id="acceptance">Acceptance criteria</h2><table><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr><td><a href="#FR-1">FR-1</a></td><td>the shipped command-line interface</td><td>its commands are enumerated</td><td>there are exactly five - status, doctor, stop, hub-start and reset - and none of them sends a message, assigns work, or runs an agent</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td>a request carrying an agent name or run id in its body</td><td>the effect is recorded</td><td>the actor is the one established from the credential and the body&#x27;s claim is disregarded</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td>a credential belonging to a run that has completed, failed, stopped or been interrupted</td><td>it is presented</td><td>the request is refused</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td>a project-relative path containing traversal, an absolute prefix, or a symlink leaving the project</td><td>it is resolved</td><td>it is refused, and the refusal names the path rather than silently skipping it</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td>a valid structured payload</td><td>it is submitted</td><td>the instance renders the document, writes it to the project working directory, and mints the requirement identifiers itself</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td>a payload that omits a required field or violates a declared constraint</td><td>it is submitted</td><td>it is refused with an error naming the offending field, and no partial document is written</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td>an agent acting under a run credential</td><td>it attempts to approve a document, change its rigor, archive it, or write the document index</td><td>each attempt is refused, and the refusal comes from the service rather than only from the route</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td>a capability document</td><td>an agent submits content against it</td><td>it is refused and the document&#x27;s content is unchanged</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td>the same capability document and the same payload</td><td>the operator submits it</td><td>the content is written and the document remains in the current phase</td></tr><tr><td><a href="#FR-7">FR-7</a></td><td>a directory whose project marker names an identity this instance has no record of, and no other project bound to that path or identity</td><td>the operator opens it</td><td>a project is created under that same identity and opened, rather than the folder being refused</td></tr><tr><td><a href="#FR-8">FR-8</a></td><td>the agent tool server module</td><td>its imports are enumerated</td><td>every one is either from the standard library or from its own server framework</td></tr></tbody></table></section><section><h2 id="behaviour">Behaviour</h2><h3>How a specification document reaches current behaviour</h3><ol><li>The operator starts an exploration, which creates an empty document in the exploring phase</li><li>An author fills it in by submitting a structured payload; the instance renders it and mints identifiers</li><li>The operator closes the exploration, then proposes the document - proposal is refused while any requirement lacks a covering acceptance criterion or task</li><li>The operator approves it; approval is theirs alone and is refused for any other actor</li><li>When the work ships, the operator archives the change, or merges its delta into a capability document that describes current behaviour</li><li>A capability document is created directly in the current phase and never transitions; the operator writes it, either by merging an approved change into it or by writing its content outright</li></ol><h3>How a corpus travels between machines</h3><ol><li>Each document is a file beneath spec/ in the project&#x27;s working directory</li><li>spec/index.json records each document&#x27;s title, kind, phase, parent and order, and which document is home</li><li>Both the files and the index travel with the folder, so any instance that opens the directory can read the whole corpus and its arrangement</li><li>What does not travel is per-database: the requirement, evidence and coverage graph, which the receiving instance rebuilds</li><li>An instance rebuilds the index from the documents it holds, preserving any arrangement already recorded rather than recomputing it</li></ol></section><section><h2 id="design">Design</h2><p>Three components. The command-line interface (src/agentweave/) starts, diagnoses, stops and resets the application and does nothing else; it is published as agentweave-ai and its own code imports nothing outside the standard library. The application itself (hub/) is a FastAPI backend with a React dashboard, and owns execution: the agent processes, the run credentials, the specification documents, the task board and the event stream. Documentation (docs/) is built with MkDocs.</p><p>Three independent project-scoped concepts underpin the roster. A runner describes reusable execution capability - a tool, a model and flags. An agent is an addressable identity bound to at most one runner and at most one charter. A charter is an editable behaviour contract injected into an agent&#x27;s turn context. Fresh projects seed default runners and nine starter charters.</p><p>The 33 capability documents beneath this one describe individual behaviours in detail. They group loosely into the agent surface (capability plane, charter, composer, configuration, context, conversation workspace, loops, run sandboxing, stream events, tool surface), the specification surface (document authority, chat session, requirement traceability, task lifecycle governance), and the workspace surface (local project workspace, workspace shell, project environment settings, app lifecycle, runtime diagnostics, usage accounting).</p></section><section><h2 id="evidence">Evidence and coverage limits</h2><h3>Checked</h3><ul><li>src/agentweave/cli.py - exactly five cmd_ functions: status, doctor, stop, hub_start, reset. Verified by enumeration, 2026-08-20</li><li>hub/hub/agent_auth.py - run tokens are minted per run and matched by hash against the Run row; hub/hub/api/v1/agent_actions.py binds the actor to the run rather than to anything in the request body</li><li>hub/hub/project_workspace.py - resolve_relative refuses absolute paths, traversal and control characters; hub/hub/spec_documents.py routes every path through it</li><li>hub/hub/spec_service.py:128 - a capability write is refused for any actor that is not the operator; hub/tests/test_operator_authored_documents.py exercises both halves over HTTP</li><li>hub/hub/mcp_server.py - imports are json, os, re, time, urllib and typing from the standard library, plus fastmcp. Verified by enumeration, 2026-08-20</li><li>hub/hub/project_lifecycle.py - open_existing adopts a marker naming a project this database has never seen, creating the row under that same identity</li><li>hub/hub/data/charters/charters.json - nine starter charters, verified by count 2026-08-20</li></ul><h3 class="aw-limits">Limits</h3><ul><li>This document was authored rather than migrated: unlike the 33 capability documents beneath it, it has no openspec source, so its requirements are the author&#x27;s synthesis of invariants stated across CLAUDE.md, the product-direction exploration and the code cited above. Each was checked against the code on 2026-08-20; none was carried verbatim from a specification that already existed.</li><li>The project&#x27;s stated rule that live state reaches the interface by server-sent events and never by polling is NOT asserted here as a requirement, because it is not currently true: hub/ui/src/api/permissions.ts, questions.ts and unaskedQuestions.ts each set a refetchInterval. Recorded rather than asserted.</li><li>The component groupings in the design section are the author&#x27;s, for orientation. The corpus records no parent-child structure, so nothing in the index reflects them.</li></ul></section><section><h2 id="open-questions">Open questions</h2><ul><li><span class="aw-chip aw-chip-open">open</span>Should the instance carry an agent&#x27;s please-add-this-task request and hand the operator a one-click accept?</li><li><span class="aw-chip aw-chip-open">open</span>Does the name AgentWeave still fit the product it has become?</li><li><span class="aw-chip aw-chip-open">open</span>Should the 33 capability documents hang beneath this one as children, and who arranges them?</li></ul></section>
+<script type="application/agentweave-spec+json" id="aw-spec-payload">
+{
+  "schema_version": 1,
+  "kind": "system-map",
+  "title": "AgentWeave",
+  "summary": "A locally-installed multi-agent development environment. One local instance owns a collection of projects, spawns the agent processes on your machine, and connects specification, tasks, runs and evidence into one surface. This document is the corpus's entry point: it states the invariants that hold across the whole product and that no single capability document owns. The 33 capability documents beneath it describe individual behaviours.",
+  "problem": "Multi-agent development tools fragment the work: the specification lives in one place, the tasks in another, the agent transcripts in a third, and nothing connects a requirement to the run that satisfied it or the evidence that proves it. AgentWeave's premise is that these are one workflow, and that the barrier to using them together should be as close to zero as a local install allows.",
+  "scope": {
+    "in_scope": [
+      "Multi-agent collaboration with inter-agent communication",
+      "Spec-driven development with the agents: requirements, tasks, runs and evidence connected to the conversation",
+      "Governance and quality gates over that work",
+      "A local install that owns the agent processes on one machine"
+    ],
+    "non_goals": [
+      "Remote or multi-user deployment; a federated connect-to-other-users-agents story is deliberately deferred",
+      "A no-Hub product: the CLI-as-collaboration-substrate, the watchdog, and the local and git transports were removed, not preserved",
+      "Backward compatibility with those removed surfaces; there is no external install base to protect"
+    ]
+  },
+  "requirements": [
+    {
+      "key": "hub-owns-execution",
+      "statement": "There SHALL be exactly one runtime that executes agent work. The command-line interface MUST do only what cannot be done from inside the application - start it, diagnose why it will not start, stop it, reset it - and MUST NOT be a collaboration surface.",
+      "modal": "SHALL",
+      "rationale": "A second runtime is a second source of truth about what an agent is doing. The CLI carried one until 2026-08-02; removing it is why the watchdog, the local and git transports, and the role subsystem no longer exist and are not to be recreated.",
+      "party": null
+    },
+    {
+      "key": "identity-comes-from-the-credential",
+      "statement": "An agent's identity SHALL be established from the credential its run was started with, and MUST NOT be accepted from a request body, header or parameter.",
+      "modal": "SHALL",
+      "rationale": "Anything a caller can assert about itself, a caller can assert falsely. A per-run credential makes every effect attributable to the run that caused it.",
+      "party": "consumer"
+    },
+    {
+      "key": "paths-resolve-through-the-workspace",
+      "statement": "Every project filesystem path SHALL resolve through the project workspace, which refuses absolute paths, traversal, control characters and symlink escapes. The instance's own working directory MUST NOT be used as project identity.",
+      "modal": "SHALL",
+      "rationale": "One instance owns many projects, so the current directory names nothing. A path that skipped this check would let one project read another's files.",
+      "party": null
+    },
+    {
+      "key": "a-document-is-a-file-the-hub-renders",
+      "statement": "A specification document SHALL be a file in the project's working directory, rendered by the instance from a structured payload. An author MUST NOT write specification markup directly, and markup written by any other means MUST NOT be treated as a document's content.",
+      "modal": "SHALL",
+      "rationale": "The instance mints requirement identifiers and records content digests while rendering. Markup that arrived another way has neither, so it cannot be traced to or from anything.",
+      "party": null
+    },
+    {
+      "key": "the-operator-holds-the-decisions",
+      "statement": "Approval, rigor, archiving, and the arrangement of the document index SHALL be reserved to the operator. An agent MUST NOT be able to express any of them, and the refusal MUST hold at the service boundary rather than only at the surface that offers it.",
+      "modal": "SHALL",
+      "rationale": "A rule enforced in one place survives exactly as long as nobody adds a second caller. These are judgements about whether work is acceptable, which is the thing a person is for.",
+      "party": null
+    },
+    {
+      "key": "a-capability-document-is-the-operators-to-write",
+      "statement": "A capability document's content SHALL be written only by the operator. A submission from any other actor SHALL be refused regardless of the document's phase.",
+      "modal": "SHALL",
+      "rationale": "A capability document states current, shipped behaviour. It sits outside the phase machine, so no phase would otherwise block a submission against it.",
+      "party": null
+    },
+    {
+      "key": "project-identity-lives-with-the-folder",
+      "statement": "A project's identity SHALL travel with its directory rather than with the database that first saw it. An instance encountering a project marker naming an identity it has never seen SHALL adopt that identity rather than refuse the folder.",
+      "modal": "SHALL",
+      "rationale": "An operator should be able to open any AgentWeave project from any AgentWeave instance they choose. Identity bound to a database makes a folder unopenable anywhere else.",
+      "party": null
+    },
+    {
+      "key": "the-tool-surface-is-a-thin-adapter",
+      "statement": "The agent tool server SHALL be a thin adapter over the same operations the HTTP surface exposes, and MUST depend on nothing beyond the standard library and its own server framework.",
+      "modal": "SHALL",
+      "rationale": "It is spawned as a standalone process, so anything it imports from the wider application would not be there. Direct HTTP stays first-class because some environments prohibit tool servers entirely.",
+      "party": null
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "key": "ac1",
+      "requirement": "hub-owns-execution",
+      "given": "the shipped command-line interface",
+      "when": "its commands are enumerated",
+      "then": "there are exactly five - status, doctor, stop, hub-start and reset - and none of them sends a message, assigns work, or runs an agent"
+    },
+    {
+      "key": "ac2",
+      "requirement": "identity-comes-from-the-credential",
+      "given": "a request carrying an agent name or run id in its body",
+      "when": "the effect is recorded",
+      "then": "the actor is the one established from the credential and the body's claim is disregarded"
+    },
+    {
+      "key": "ac3",
+      "requirement": "identity-comes-from-the-credential",
+      "given": "a credential belonging to a run that has completed, failed, stopped or been interrupted",
+      "when": "it is presented",
+      "then": "the request is refused"
+    },
+    {
+      "key": "ac4",
+      "requirement": "paths-resolve-through-the-workspace",
+      "given": "a project-relative path containing traversal, an absolute prefix, or a symlink leaving the project",
+      "when": "it is resolved",
+      "then": "it is refused, and the refusal names the path rather than silently skipping it"
+    },
+    {
+      "key": "ac5",
+      "requirement": "a-document-is-a-file-the-hub-renders",
+      "given": "a valid structured payload",
+      "when": "it is submitted",
+      "then": "the instance renders the document, writes it to the project working directory, and mints the requirement identifiers itself"
+    },
+    {
+      "key": "ac6",
+      "requirement": "a-document-is-a-file-the-hub-renders",
+      "given": "a payload that omits a required field or violates a declared constraint",
+      "when": "it is submitted",
+      "then": "it is refused with an error naming the offending field, and no partial document is written"
+    },
+    {
+      "key": "ac7",
+      "requirement": "the-operator-holds-the-decisions",
+      "given": "an agent acting under a run credential",
+      "when": "it attempts to approve a document, change its rigor, archive it, or write the document index",
+      "then": "each attempt is refused, and the refusal comes from the service rather than only from the route"
+    },
+    {
+      "key": "ac8",
+      "requirement": "a-capability-document-is-the-operators-to-write",
+      "given": "a capability document",
+      "when": "an agent submits content against it",
+      "then": "it is refused and the document's content is unchanged"
+    },
+    {
+      "key": "ac9",
+      "requirement": "a-capability-document-is-the-operators-to-write",
+      "given": "the same capability document and the same payload",
+      "when": "the operator submits it",
+      "then": "the content is written and the document remains in the current phase"
+    },
+    {
+      "key": "ac10",
+      "requirement": "project-identity-lives-with-the-folder",
+      "given": "a directory whose project marker names an identity this instance has no record of, and no other project bound to that path or identity",
+      "when": "the operator opens it",
+      "then": "a project is created under that same identity and opened, rather than the folder being refused"
+    },
+    {
+      "key": "ac11",
+      "requirement": "the-tool-surface-is-a-thin-adapter",
+      "given": "the agent tool server module",
+      "when": "its imports are enumerated",
+      "then": "every one is either from the standard library or from its own server framework"
+    }
+  ],
+  "tasks": [],
+  "algorithms": [
+    {
+      "name": "How a specification document reaches current behaviour",
+      "steps": [
+        "The operator starts an exploration, which creates an empty document in the exploring phase",
+        "An author fills it in by submitting a structured payload; the instance renders it and mints identifiers",
+        "The operator closes the exploration, then proposes the document - proposal is refused while any requirement lacks a covering acceptance criterion or task",
+        "The operator approves it; approval is theirs alone and is refused for any other actor",
+        "When the work ships, the operator archives the change, or merges its delta into a capability document that describes current behaviour",
+        "A capability document is created directly in the current phase and never transitions; the operator writes it, either by merging an approved change into it or by writing its content outright"
+      ]
+    },
+    {
+      "name": "How a corpus travels between machines",
+      "steps": [
+        "Each document is a file beneath spec/ in the project's working directory",
+        "spec/index.json records each document's title, kind, phase, parent and order, and which document is home",
+        "Both the files and the index travel with the folder, so any instance that opens the directory can read the whole corpus and its arrangement",
+        "What does not travel is per-database: the requirement, evidence and coverage graph, which the receiving instance rebuilds",
+        "An instance rebuilds the index from the documents it holds, preserving any arrangement already recorded rather than recomputing it"
+      ]
+    }
+  ],
+  "design": "Three components. The command-line interface (src/agentweave/) starts, diagnoses, stops and resets the application and does nothing else; it is published as agentweave-ai and its own code imports nothing outside the standard library. The application itself (hub/) is a FastAPI backend with a React dashboard, and owns execution: the agent processes, the run credentials, the specification documents, the task board and the event stream. Documentation (docs/) is built with MkDocs.\n\nThree independent project-scoped concepts underpin the roster. A runner describes reusable execution capability - a tool, a model and flags. An agent is an addressable identity bound to at most one runner and at most one charter. A charter is an editable behaviour contract injected into an agent's turn context. Fresh projects seed default runners and nine starter charters.\n\nThe 33 capability documents beneath this one describe individual behaviours in detail. They group loosely into the agent surface (capability plane, charter, composer, configuration, context, conversation workspace, loops, run sandboxing, stream events, tool surface), the specification surface (document authority, chat session, requirement traceability, task lifecycle governance), and the workspace surface (local project workspace, workspace shell, project environment settings, app lifecycle, runtime diagnostics, usage accounting).",
+  "evidence": {
+    "checked": [
+      "src/agentweave/cli.py - exactly five cmd_ functions: status, doctor, stop, hub_start, reset. Verified by enumeration, 2026-08-20",
+      "hub/hub/agent_auth.py - run tokens are minted per run and matched by hash against the Run row; hub/hub/api/v1/agent_actions.py binds the actor to the run rather than to anything in the request body",
+      "hub/hub/project_workspace.py - resolve_relative refuses absolute paths, traversal and control characters; hub/hub/spec_documents.py routes every path through it",
+      "hub/hub/spec_service.py:128 - a capability write is refused for any actor that is not the operator; hub/tests/test_operator_authored_documents.py exercises both halves over HTTP",
+      "hub/hub/mcp_server.py - imports are json, os, re, time, urllib and typing from the standard library, plus fastmcp. Verified by enumeration, 2026-08-20",
+      "hub/hub/project_lifecycle.py - open_existing adopts a marker naming a project this database has never seen, creating the row under that same identity",
+      "hub/hub/data/charters/charters.json - nine starter charters, verified by count 2026-08-20"
+    ],
+    "limits": [
+      "This document was authored rather than migrated: unlike the 33 capability documents beneath it, it has no openspec source, so its requirements are the author's synthesis of invariants stated across CLAUDE.md, the product-direction exploration and the code cited above. Each was checked against the code on 2026-08-20; none was carried verbatim from a specification that already existed.",
+      "The project's stated rule that live state reaches the interface by server-sent events and never by polling is NOT asserted here as a requirement, because it is not currently true: hub/ui/src/api/permissions.ts, questions.ts and unaskedQuestions.ts each set a refetchInterval. Recorded rather than asserted.",
+      "The component groupings in the design section are the author's, for orientation. The corpus records no parent-child structure, so nothing in the index reflects them."
+    ]
+  },
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "question": "Should the instance carry an agent's please-add-this-task request and hand the operator a one-click accept?",
+      "resolved": false,
+      "status": "open"
+    },
+    {
+      "question": "Does the name AgentWeave still fit the product it has become?",
+      "resolved": false,
+      "status": "open"
+    },
+    {
+      "question": "Should the 33 capability documents hang beneath this one as children, and who arranges them?",
+      "resolved": false,
+      "status": "open"
+    }
+  ],
+  "aw_identity": {
+    "requirements": {
+      "hub-owns-execution": "FR-1",
+      "identity-comes-from-the-credential": "FR-2",
+      "paths-resolve-through-the-workspace": "FR-3",
+      "a-document-is-a-file-the-hub-renders": "FR-4",
+      "the-operator-holds-the-decisions": "FR-5",
+      "a-capability-document-is-the-operators-to-write": "FR-6",
+      "project-identity-lives-with-the-folder": "FR-7",
+      "the-tool-surface-is-a-thin-adapter": "FR-8"
+    },
+    "high_water": 8,
+    "retired": {},
+    "digests": {
+      "FR-1": "2db4209a625fbbb6a8a52d5b15aaddfccb10aae3185d6b047a3c02e314025605",
+      "FR-2": "d1403700b984e4c16cbeb11cde2aaf344551f82c5a27d836b97e55bde221afd4",
+      "FR-3": "51013b96b5eb9846092067f7ea4ef3077108ec9ac5d1f9c1c3474ee9c3d622b4",
+      "FR-4": "ffe7200d41a6cd2cf721232d1895b76277f75209aa022f45ad02d283b13eace5",
+      "FR-5": "a7ef932004dda048dd75f285edf8c69e51ee9fac03d86524afae022c8b5a52dd",
+      "FR-6": "86d19c70220fd13bad124fdd03f37a2657a0f0f96c0e93b7bee0963360cae46b",
+      "FR-7": "5001a39d45d4f404afd9c42ad7f65007e295e3d355f635164ed22b225799966a",
+      "FR-8": "d5d002c65e817974095174f3f2a40fdd813be41fd07ba354a4711491cd2a108e"
+    }
+  }
+}
+</script>
+</body>
+</html>

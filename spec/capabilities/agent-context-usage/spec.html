@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent context usage</title>
+<meta name="aw-spec-kind" content="capability">
+<meta name="aw-spec-status" content="current">
+<meta name="aw-spec-rigor" content="sketch">
+<meta name="aw-spec-schema-version" content="1">
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+    --surface-2: #21262d; --surface: #161b22;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+:root[data-theme="dark"] {
+  --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+  --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+  --surface-2: #21262d; --surface: #161b22;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 2rem 2.5rem 4rem; background: var(--bg); color: var(--fg);
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+h1 { font-size: 1.75rem; margin: 0 0 .25rem; }
+h2 { font-size: 1.15rem; margin: 2.5rem 0 .75rem; padding-bottom: .3rem;
+     border-bottom: 1px solid var(--border); }
+h3 { font-size: 1rem; margin: 1.5rem 0 .4rem; }
+p { margin: .5rem 0; }
+ul, ol { margin: .5rem 0; padding-left: 1.4rem; }
+li { margin: .25rem 0; }
+a { color: var(--aw-accent); }
+.aw-meta { color: var(--muted); font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-chip { display: inline-block; padding: .1rem .5rem; border-radius: 999px;
+           background: var(--surface-2); font-size: .78rem; margin-right: .4rem; }
+.aw-requirement { border-left: 3px solid var(--border); padding: .1rem 0 .1rem .9rem;
+                  margin: 1.1rem 0; }
+.aw-requirement-must { border-left-color: var(--aw-accent); }
+.aw-requirement-should { border-left-color: var(--aw-warn); }
+.aw-requirement-may { border-left-color: var(--border); }
+.aw-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8rem;
+         color: var(--muted); }
+.aw-modal { font-weight: 600; }
+.aw-modal-must { color: var(--aw-accent); }
+.aw-modal-should { color: var(--aw-warn); }
+.aw-modal-may { color: var(--fg); font-weight: 400; }
+.aw-chip-rigor-gate { color: var(--aw-accent); border: 1px solid var(--aw-accent); }
+.aw-chip-rigor-contract { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Phase is a lifecycle, and the question it answers is "can I rely on this?". `approved` and a
+   capability's `current` are settled and take the done tone; `proposed` is waiting on an operator
+   decision and takes warn; `exploring` and `archived` are quiet for opposite reasons — one has not
+   arrived yet, the other has been superseded. Deliberately NOT the accent: this document already
+   spends accent on links and on MUST, and a third meaning would empty it of any. `kind` keeps the
+   plain chip on purpose — it is a category, not a state, and hue there ranks nothing. */
+.aw-chip-phase-done { color: var(--aw-ok); border: 1px solid var(--aw-ok); }
+.aw-chip-phase-waiting { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+.aw-chip-phase-quiet { color: var(--muted); }
+.aw-chip-phase-archived { color: var(--muted); text-decoration: line-through; }
+/* An unresolved question blocks `propose`, so it is a real state and not a label. Resolved stays
+   the plain chip — the reader needs to find what is still open, not celebrate what is closed. */
+.aw-chip-open { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Limits is where a reader is most likely to be misled, and it read identically to Checked. */
+.aw-limits { color: var(--aw-warn); }
+/* The first screenful was entirely monochrome, so the document read as texty however the
+   requirements below were coloured. This puts the same modal scheme where the eye lands first,
+   carrying counts rather than decoration. */
+.aw-summary { margin: 0 0 1.5rem; font-size: .9rem; color: var(--muted); }
+.aw-summary .aw-count { font-weight: 600; }
+.aw-summary-sep { color: var(--border); margin: 0 .45rem; }
+.aw-rationale { color: var(--muted); font-size: .9rem; }
+.aw-refs { font-size: .82rem; color: var(--muted); }
+.aw-note { color: var(--muted); font-style: italic; }
+.aw-empty { color: var(--muted); }
+table { border-collapse: collapse; margin: .75rem 0; width: 100%; }
+th, td { border: 1px solid var(--border); padding: .4rem .6rem; text-align: left;
+         vertical-align: top; font-size: .92rem; }
+code, pre { background: var(--surface); border-radius: 4px; }
+code { padding: .1rem .3rem; font-size: .88em; }
+</style>
+</head>
+<body>
+<h1>Agent context usage</h1>
+<p class="aw-meta"><span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><span class="aw-chip">sketch</span></p>
+<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">18</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">18</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">43</span> criteria</p>
+<section><h2 id="requirements">Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-1"><span class="aw-id">FR-1</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL represent runner context usage with one canonical sample containing:</p><p class="aw-rationale">- `status`: `measured`, `estimated`, `unsupported`, or `unavailable`; - optional non-negative `context_tokens`; - optional positive `limit_tokens`; - optional `percent` from 0 through 100; - optional `model` and `session_id`; - bounded `source`; - `basis`: `provider_context`, `latest_request_input`, `provider_reported_ratio`, or `cumulative_delta`; - `observed_at`; and - an optional bounded numeric token breakdown. When `context_tokens` and `limit_tokens` are present, `percent` SHALL be derived from those values. When either is absent, `percent` SHALL be absent unless the provider directly reports a ratio.</p></div><div class="aw-requirement aw-requirement-must" id="FR-2"><span class="aw-id">FR-2</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Context usage SHALL describe the latest non-cumulative context observation for the active top-level provider session. A later valid sample SHALL replace the previous sample for that session; samples from separate steps, turns, or model calls SHALL NOT be summed.</p></div><div class="aw-requirement aw-requirement-must" id="FR-3"><span class="aw-id">FR-3</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL add cache fields only when the provider defines them as exclusive input components. It SHALL NOT add cache fields to a provider-normalized input or total that already includes them.</p></div><div class="aw-requirement aw-requirement-must" id="FR-4"><span class="aw-id">FR-4</span> <p><span class="aw-modal aw-modal-must">SHALL</span> For Claude and Claude-proxy runners, the canonical context source SHALL be the latest assistant-message request usage. The latest-request measurement SHALL equal:</p><p class="aw-rationale">`input_tokens + cache_read_input_tokens + cache_creation_input_tokens`. A final-result usage record MAY be used only as a fixture-proven fallback for a supported stream shape. Unknown model limits SHALL produce a token-only sample.</p></div><div class="aw-requirement aw-requirement-must" id="FR-5"><span class="aw-id">FR-5</span> <p><span class="aw-modal aw-modal-must">SHALL</span> For a non-ephemeral Codex session, the canonical source SHALL be the latest matching rollout `token_count.info` record. Context tokens SHALL equal `last_token_usage.total_tokens - last_token_usage.reasoning_output_tokens`, and the effective limit SHALL be `model_context_window`.</p><p class="aw-rationale">Codex stdout `turn.completed.usage` SHALL be treated as cumulative. A delta from cumulative values MAY be emitted only as `status=estimated`, `basis=cumulative_delta`, when the exact rollout cannot be resolved.</p></div><div class="aw-requirement aw-requirement-must" id="FR-6"><span class="aw-id">FR-6</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Auxiliary usage collectors SHALL be configured and resolved by the runner invocation coordinator. Codex rollout sources SHALL be associated with the active provider session and SHALL NOT be selected through an unscoped newest-file heuristic.</p><p class="aw-rationale">Collectors SHALL tolerate partial records and perform a final bounded poll after stdout closes.</p></div><div class="aw-requirement aw-requirement-must" id="FR-7"><span class="aw-id">FR-7</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Context snapshots SHALL be keyed to the active agent and provider session. Starting a new session SHALL immediately replace the prior display with `unavailable` until a valid sample for the new session arrives.</p><p class="aw-rationale">Samples tied to an old session, earlier invocation boundary, or mismatched agent SHALL be rejected.</p></div><div class="aw-requirement aw-requirement-must" id="FR-8"><span class="aw-id">FR-8</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The pipeline SHALL use the canonical context sample schema for the local context file, HTTP transport request, Hub validation/storage event, SSE projection, `AgentSummary.context_usage`, and UI API type.</p><p class="aw-rationale">The Hub SHALL validate enums, numeric ranges, bounded identifiers, bounded breakdown keys, and percentage consistency. Invalid payloads SHALL be rejected rather than stored as arbitrary dictionaries.</p></div><div class="aw-requirement aw-requirement-must" id="FR-9"><span class="aw-id">FR-9</span> <p><span class="aw-modal aw-modal-must">SHALL</span> During rolling upgrades, readers SHALL normalize unambiguous legacy aliases including `tokens_used`, `tokens_limit`, `input_tokens`, `context_limit`, and ratio-form `context_usage`. Canonical writers SHALL emit only canonical fields.</p><p class="aw-rationale">Contradictory or incomplete legacy values SHALL become `unavailable` or token-only samples rather than a fabricated zero percentage.</p></div><div class="aw-requirement aw-requirement-must" id="FR-10"><span class="aw-id">FR-10</span> <p><span class="aw-modal aw-modal-must">SHALL</span> All Hub surfaces that present agent context SHALL consume the normalized context type and render measured, estimated, token-only, unavailable, and unsupported states consistently.</p><p class="aw-rationale">Estimated samples SHALL be visibly labeled. Unknown limits SHALL not render a percentage. Estimated samples SHALL NOT trigger automatic warning or critical policy in this change.</p></div><div class="aw-requirement aw-requirement-must" id="FR-11"><span class="aw-id">FR-11</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Context samples SHALL be delivered as replaceable agent/session snapshots and SHALL NOT be stored as `AgentOutput`, assigned a stream event kind, or rendered by the shared stream-event renderer.</p></div><div class="aw-requirement aw-requirement-must" id="FR-12"><span class="aw-id">FR-12</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The repository SHALL include versioned provider fixtures and tests for arithmetic, cache inclusion, latest-sample selection, model limits, session binding, stale rejection, legacy normalization, typed Hub delivery, SSE/summary projection, and UI state rendering.</p></div><div class="aw-requirement aw-requirement-must" id="FR-13"><span class="aw-id">FR-13</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The size of the context window used to express usage SHALL be resolved in this order:</p><p class="aw-rationale">1. the window the provider itself reports for the model that ran the turn; 2. the window the model catalog declares for that model; 3. unknown. A window MUST NOT be resolved from a default that does not describe the model in use.</p></div><div class="aw-requirement aw-requirement-must" id="FR-14"><span class="aw-id">FR-14</span> <p><span class="aw-modal aw-modal-must">MUST</span> When the context window for a turn cannot be resolved, the Hub SHALL report usage as unknown. It MUST NOT present a proportion, a percentage, or a pressure state derived from an unresolved window.</p><p class="aw-rationale">A condition that pauses autonomous turns MUST NOT be raised from an unresolved window.</p></div><div class="aw-requirement aw-requirement-must" id="FR-15"><span class="aw-id">FR-15</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Usage SHALL be attributed to the model that ran each turn, because a conversation may contain turns run under different models with different context windows.</p><p class="aw-rationale">A conversation-level figure MUST NOT assume that every turn shares one context window.</p></div><div class="aw-requirement aw-requirement-must" id="FR-16"><span class="aw-id">FR-16</span> <p><span class="aw-modal aw-modal-must">SHALL</span> A sample with `status: measured` SHALL carry the model identifier for the turn it measured, so that the stated window-resolution order can reach the catalog.</p><p class="aw-rationale">*Context-window size is resolved in a stated order* already requires the catalog to fill a missing provider report, and *Unknown context usage is reported as unknown* already forbids substituting a default. Neither is reachable for a sample that does not say which model ran: the catalog is keyed by model, so an unidentified sample can only ever resolve to unknown. Observed consequence of the gap: every `claude` sample carrying `context_tokens` was emitted with `model: null`, so no Claude agent has ever reported a usable proportion — 329 samples, zero percentages — while `codex_appserver` samples, which identify their model, always did.</p></div><div class="aw-requirement aw-requirement-must" id="FR-17"><span class="aw-id">FR-17</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Once a context window has been resolved for a provider session, the Hub SHALL continue to express that session&#x27;s usage against it when a later sample omits the window, rather than reporting unknown.</p><p class="aw-rationale">*Latest observation replaces rather than accumulates* governs token counts: successive samples must not be summed. It does not require window metadata to be discarded, and discarding it is what turns a complete picture into an incomplete one. A runner may report usage and window in separate events. Claude does exactly this: the per-message `usage` payload carries token counts with no window, while the result payload carries `modelUsage.contextWindow` with no token count. Replacing one with the other loses whichever half arrived first. This requirement governs window and model metadata only. Token counts continue to replace.</p></div><div class="aw-requirement aw-requirement-must" id="FR-18"><span class="aw-id">FR-18</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The model catalog SHALL declare a context window for each model it offers, or the resulting usage SHALL be reported as unknown for that model without falling back to another model&#x27;s window.</p><p class="aw-rationale">`claude-opus-5` and `claude-fable-5` are currently offered with no declared window, so agents bound to them cannot report a proportion even once the defects above are corrected. Declaring the windows is a data completion; the requirement is that an absent one degrades to unknown rather than to a borrowed value.</p></div></section><section><h2 id="acceptance">Acceptance criteria</h2><table><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>a provider reports context tokens and an effective limit</td><td>the sample SHALL have `status=measured` and a percentage derived from those operands</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>context tokens are known but no trustworthy effective limit is available</td><td>the sample SHALL retain `context_tokens`, omit `limit_tokens` and `percent`, and SHALL NOT substitute zero</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>a supported runner exposes neither a trustworthy context count nor ratio</td><td>the sample SHALL report `unavailable` without fabricating token values</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>a later provider request represents previous input as cache-read tokens</td><td>the system SHALL replace the prior observation and SHALL NOT add the two requests together</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>both cumulative invocation usage and a latest-request or provider-context value exist</td><td>the latest non-cumulative value SHALL be canonical</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>Claude or Kimi reports uncached input, cache-read input, and cache-created input as</td><td>the system SHALL add the applicable components exactly once</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>Codex or Copilot reports cached input as a subset of an inclusive input total</td><td>the system SHALL retain the cache value as a breakdown and SHALL NOT add it to context tokens</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>a Claude assistant message reports all three input classes</td><td>the sample SHALL add the three fields once and use `basis=latest_request_input`</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>both records exist and their usage differs</td><td>the assistant-message request usage SHALL take precedence</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>resumed-turn stdout totals include previous turns</td><td>the collector SHALL use matching rollout `last_token_usage` instead</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>`last_token_usage` contains `cached_input_tokens`</td><td>that value SHALL remain a breakdown and SHALL NOT be added to `input_tokens`</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>no matching rollout record can be resolved but consecutive cumulative observations are available</td><td>any delta sample SHALL be visibly estimated and SHALL NOT be presented as measured</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>auxiliary files for multiple sessions are present</td><td>the collector SHALL accept records only from the active session or a strictly verified bounded fallback</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>a matching token record arrives while the process is closing</td><td>the final bounded collector poll SHALL make it eligible for delivery</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>the collector observes a record still being written</td><td>it SHALL skip or retry that record without terminating the runner</td></tr><tr><td><a href="#FR-7">FR-7</a></td><td></td><td>the Hub launches a run without resuming the prior provider session</td><td>the old context percentage SHALL disappear before the new session&#x27;s first sample</td></tr><tr><td><a href="#FR-7">FR-7</a></td><td></td><td>a late observation belongs to the previous provider session</td><td>it SHALL NOT overwrite the active session&#x27;s context snapshot</td></tr><tr><td><a href="#FR-8">FR-8</a></td><td></td><td>a canonical sample reaches the Hub</td><td>the Hub SHALL preserve its status, basis, operands, percentage, source, session, model, and observation time</td></tr><tr><td><a href="#FR-8">FR-8</a></td><td></td><td>a context request contains a percentage outside 0 through 100 or inconsistent with known operands</td><td>the Hub SHALL reject the invalid payload</td></tr><tr><td><a href="#FR-8">FR-8</a></td><td></td><td>the Hub stores a new valid context snapshot</td><td>subsequent agent summaries and real-time updates SHALL expose the same normalized fields</td></tr><tr><td><a href="#FR-9">FR-9</a></td><td></td><td>a reader encounters an unambiguous legacy context dictionary</td><td>it SHALL normalize the values into the canonical sample</td></tr><tr><td><a href="#FR-9">FR-9</a></td><td></td><td>a legacy payload cannot distinguish unknown from a real zero measurement</td><td>the UI SHALL show unavailable rather than a trusted zero-percent bar</td></tr><tr><td><a href="#FR-10">FR-10</a></td><td></td><td>a measured sample reaches a configured warning or critical display threshold</td><td>every context surface SHALL apply the corresponding consistent visual state</td></tr><tr><td><a href="#FR-10">FR-10</a></td><td></td><td>only an estimated sample is available</td><td>the UI SHALL label it as estimated and SHALL NOT present it as exact</td></tr><tr><td><a href="#FR-10">FR-10</a></td><td></td><td>context tokens are known but the limit is unknown</td><td>the UI SHALL show the token count without a percentage bar value</td></tr><tr><td><a href="#FR-11">FR-11</a></td><td></td><td>normalization produces both a text event and a context sample</td><td>output persistence SHALL receive the text event and context delivery SHALL independently receive the sample</td></tr><tr><td><a href="#FR-12">FR-12</a></td><td></td><td>context adapter tests execute</td><td>Claude and Codex fixtures SHALL produce their specified canonical samples without cache double-counting</td></tr><tr><td><a href="#FR-12">FR-12</a></td><td></td><td>the context pipeline integration suite executes</td><td>a canonical sample SHALL survive local writing, HTTP validation, Hub storage/projection, and UI normalization without field-name drift</td></tr><tr><td><a href="#FR-12">FR-12</a></td><td></td><td>a fixture represents missing telemetry or missing limit</td><td>the pipeline SHALL preserve the appropriate honest status instead of silently swallowing the state</td></tr><tr><td><a href="#FR-13">FR-13</a></td><td></td><td>the provider reports the context window for the model that ran the turn</td><td>usage is expressed against that reported window</td></tr><tr><td><a href="#FR-13">FR-13</a></td><td></td><td>the provider reports no context window and the catalog declares one for that model</td><td>usage is expressed against the catalog&#x27;s declared window</td></tr><tr><td><a href="#FR-13">FR-13</a></td><td></td><td>neither the provider nor the catalog supplies a window for the model that ran the turn</td><td>no window is assumed</td></tr><tr><td><a href="#FR-14">FR-14</a></td><td></td><td>the context window for a model cannot be resolved</td><td>the interface reports usage as unknown rather than as a proportion</td></tr><tr><td><a href="#FR-14">FR-14</a></td><td></td><td>the context window for a model cannot be resolved</td><td>no context-pressure condition is raised for that turn</td></tr><tr><td><a href="#FR-14">FR-14</a></td><td></td><td>usage is expressed as a proportion of a context window</td><td>that window is one the provider reported or the catalog declared for the model that ran</td></tr><tr><td><a href="#FR-15">FR-15</a></td><td></td><td>a conversation contains turns run under two models with different context windows</td><td>each turn&#x27;s usage is expressed against the window of the model that ran it</td></tr><tr><td><a href="#FR-15">FR-15</a></td><td></td><td>the operator changes a conversation&#x27;s model and sends a further message</td><td>the reported context pressure describes the newly chosen model</td></tr><tr><td><a href="#FR-16">FR-16</a></td><td></td><td>a measured context-usage sample is produced for a turn</td><td>it identifies the model that ran that turn the window-resolution order is applied to that model</td></tr><tr><td><a href="#FR-16">FR-16</a></td><td></td><td>a sample cannot identify the model that ran the turn</td><td>usage is reported as unknown no window is assumed from another model or from a default</td></tr><tr><td><a href="#FR-17">FR-17</a></td><td></td><td>a provider reports a context window for a session a later sample for that session carries token counts but no window</td><td>usage is expressed against the previously reported window</td></tr><tr><td><a href="#FR-17">FR-17</a></td><td></td><td>successive samples carry token counts for the same session</td><td>the later count replaces the earlier one the counts are not summed</td></tr><tr><td><a href="#FR-17">FR-17</a></td><td></td><td>a later sample identifies a different model from the one whose window was retained</td><td>the retained window no longer applies the window is resolved again for the new model</td></tr><tr><td><a href="#FR-18">FR-18</a></td><td></td><td>an agent runs on a model the catalog offers with no declared window the provider reports no window</td><td>usage is reported as unknown for that turn no other model&#x27;s window is substituted</td></tr></tbody></table></section><section><h2 id="evidence">Evidence and coverage limits</h2><h3>Checked</h3><ul><li>Translated from openspec/specs/agent-context-usage/spec.md (18 requirements, 43 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten.</li></ul><h3 class="aw-limits">Limits</h3><ul><li>source-had-no-purpose: the source&#x27;s Purpose was an unedited archiving placeholder, so this document has no summary rather than a note about openspec&#x27;s workflow</li><li>scenarios-state-no-starting-state: 43 of 43 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed</li></ul></section><section><h2 id="open-questions">Open questions</h2><p class="aw-empty">None outstanding.</p></section>
+<script type="application/agentweave-spec+json" id="aw-spec-payload">
+{
+  "schema_version": 1,
+  "kind": "capability",
+  "title": "Agent context usage",
+  "summary": "",
+  "problem": "",
+  "scope": {
+    "in_scope": [],
+    "non_goals": []
+  },
+  "requirements": [
+    {
+      "key": "canonical-context-usage-sample",
+      "statement": "The system SHALL represent runner context usage with one canonical sample containing:",
+      "modal": "SHALL",
+      "rationale": "- `status`: `measured`, `estimated`, `unsupported`, or `unavailable`; - optional non-negative `context_tokens`; - optional positive `limit_tokens`; - optional `percent` from 0 through 100; - optional `model` and `session_id`; - bounded `source`; - `basis`: `provider_context`, `latest_request_input`, `provider_reported_ratio`, or `cumulative_delta`; - `observed_at`; and - an optional bounded numeric token breakdown. When `context_tokens` and `limit_tokens` are present, `percent` SHALL be derived from those values. When either is absent, `percent` SHALL be absent unless the provider directly reports a ratio.",
+      "party": null
+    },
+    {
+      "key": "latest-observation-replaces-rather-than-accumulates",
+      "statement": "Context usage SHALL describe the latest non-cumulative context observation for the active top-level provider session. A later valid sample SHALL replace the previous sample for that session; samples from separate steps, turns, or model calls SHALL NOT be summed.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "cache-breakdowns-are-counted-according-to-provider-semantics",
+      "statement": "The system SHALL add cache fields only when the provider defines them as exclusive input components. It SHALL NOT add cache fields to a provider-normalized input or total that already includes them.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "claude-context-mapping",
+      "statement": "For Claude and Claude-proxy runners, the canonical context source SHALL be the latest assistant-message request usage. The latest-request measurement SHALL equal:",
+      "modal": "SHALL",
+      "rationale": "`input_tokens + cache_read_input_tokens + cache_creation_input_tokens`. A final-result usage record MAY be used only as a fixture-proven fallback for a supported stream shape. Unknown model limits SHALL produce a token-only sample.",
+      "party": null
+    },
+    {
+      "key": "codex-context-mapping",
+      "statement": "For a non-ephemeral Codex session, the canonical source SHALL be the latest matching rollout `token_count.info` record. Context tokens SHALL equal `last_token_usage.total_tokens - last_token_usage.reasoning_output_tokens`, and the effective limit SHALL be `model_context_window`.",
+      "modal": "SHALL",
+      "rationale": "Codex stdout `turn.completed.usage` SHALL be treated as cumulative. A delta from cumulative values MAY be emitted only as `status=estimated`, `basis=cumulative_delta`, when the exact rollout cannot be resolved.",
+      "party": null
+    },
+    {
+      "key": "auxiliary-collectors-are-invocation-and-session-bound",
+      "statement": "Auxiliary usage collectors SHALL be configured and resolved by the runner invocation coordinator. Codex rollout sources SHALL be associated with the active provider session and SHALL NOT be selected through an unscoped newest-file heuristic.",
+      "modal": "SHALL",
+      "rationale": "Collectors SHALL tolerate partial records and perform a final bounded poll after stdout closes.",
+      "party": null
+    },
+    {
+      "key": "session-isolation-and-reset",
+      "statement": "Context snapshots SHALL be keyed to the active agent and provider session. Starting a new session SHALL immediately replace the prior display with `unavailable` until a valid sample for the new session arrives.",
+      "modal": "SHALL",
+      "rationale": "Samples tied to an old session, earlier invocation boundary, or mismatched agent SHALL be rejected.",
+      "party": null
+    },
+    {
+      "key": "canonical-context-persistence-and-delivery",
+      "statement": "The pipeline SHALL use the canonical context sample schema for the local context file, HTTP transport request, Hub validation/storage event, SSE projection, `AgentSummary.context_usage`, and UI API type.",
+      "modal": "SHALL",
+      "rationale": "The Hub SHALL validate enums, numeric ranges, bounded identifiers, bounded breakdown keys, and percentage consistency. Invalid payloads SHALL be rejected rather than stored as arbitrary dictionaries.",
+      "party": null
+    },
+    {
+      "key": "legacy-context-compatibility",
+      "statement": "During rolling upgrades, readers SHALL normalize unambiguous legacy aliases including `tokens_used`, `tokens_limit`, `input_tokens`, `context_limit`, and ratio-form `context_usage`. Canonical writers SHALL emit only canonical fields.",
+      "modal": "SHALL",
+      "rationale": "Contradictory or incomplete legacy values SHALL become `unavailable` or token-only samples rather than a fabricated zero percentage.",
+      "party": null
+    },
+    {
+      "key": "context-state-presentation",
+      "statement": "All Hub surfaces that present agent context SHALL consume the normalized context type and render measured, estimated, token-only, unavailable, and unsupported states consistently.",
+      "modal": "SHALL",
+      "rationale": "Estimated samples SHALL be visibly labeled. Unknown limits SHALL not render a percentage. Estimated samples SHALL NOT trigger automatic warning or critical policy in this change.",
+      "party": null
+    },
+    {
+      "key": "context-usage-is-not-a-stream-event",
+      "statement": "Context samples SHALL be delivered as replaceable agent/session snapshots and SHALL NOT be stored as `AgentOutput`, assigned a stream event kind, or rendered by the shared stream-event renderer.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "context-conformance-and-pipeline-tests",
+      "statement": "The repository SHALL include versioned provider fixtures and tests for arithmetic, cache inclusion, latest-sample selection, model limits, session binding, stale rejection, legacy normalization, typed Hub delivery, SSE/summary projection, and UI state rendering.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "context-window-size-is-resolved-in-a-stated-order",
+      "statement": "The size of the context window used to express usage SHALL be resolved in this order:",
+      "modal": "SHALL",
+      "rationale": "1. the window the provider itself reports for the model that ran the turn; 2. the window the model catalog declares for that model; 3. unknown. A window MUST NOT be resolved from a default that does not describe the model in use.",
+      "party": null
+    },
+    {
+      "key": "unknown-context-usage-is-reported-as-unknown",
+      "statement": "When the context window for a turn cannot be resolved, the Hub SHALL report usage as unknown. It MUST NOT present a proportion, a percentage, or a pressure state derived from an unresolved window.",
+      "modal": "MUST",
+      "rationale": "A condition that pauses autonomous turns MUST NOT be raised from an unresolved window.",
+      "party": null
+    },
+    {
+      "key": "a-conversation-whose-model-changed-reports-usage-per-turn",
+      "statement": "Usage SHALL be attributed to the model that ran each turn, because a conversation may contain turns run under different models with different context windows.",
+      "modal": "SHALL",
+      "rationale": "A conversation-level figure MUST NOT assume that every turn shares one context window.",
+      "party": null
+    },
+    {
+      "key": "a-measured-sample-identifies-the-model-it-measured",
+      "statement": "A sample with `status: measured` SHALL carry the model identifier for the turn it measured, so that the stated window-resolution order can reach the catalog.",
+      "modal": "SHALL",
+      "rationale": "*Context-window size is resolved in a stated order* already requires the catalog to fill a missing provider report, and *Unknown context usage is reported as unknown* already forbids substituting a default. Neither is reachable for a sample that does not say which model ran: the catalog is keyed by model, so an unidentified sample can only ever resolve to unknown. Observed consequence of the gap: every `claude` sample carrying `context_tokens` was emitted with `model: null`, so no Claude agent has ever reported a usable proportion — 329 samples, zero percentages — while `codex_appserver` samples, which identify their model, always did.",
+      "party": null
+    },
+    {
+      "key": "window-metadata-observed-for-a-session-persists-across-later",
+      "statement": "Once a context window has been resolved for a provider session, the Hub SHALL continue to express that session's usage against it when a later sample omits the window, rather than reporting unknown.",
+      "modal": "SHALL",
+      "rationale": "*Latest observation replaces rather than accumulates* governs token counts: successive samples must not be summed. It does not require window metadata to be discarded, and discarding it is what turns a complete picture into an incomplete one. A runner may report usage and window in separate events. Claude does exactly this: the per-message `usage` payload carries token counts with no window, while the result payload carries `modelUsage.contextWindow` with no token count. Replacing one with the other loses whichever half arrived first. This requirement governs window and model metadata only. Token counts continue to replace.",
+      "party": null
+    },
+    {
+      "key": "every-model-the-catalog-offers-declares-a-context-window-or-",
+      "statement": "The model catalog SHALL declare a context window for each model it offers, or the resulting usage SHALL be reported as unknown for that model without falling back to another model's window.",
+      "modal": "SHALL",
+      "rationale": "`claude-opus-5` and `claude-fable-5` are currently offered with no declared window, so agents bound to them cannot report a proportion even once the defects above are corrected. Declaring the windows is a data completion; the requirement is that an absent one degrades to unknown rather than to a borrowed value.",
+      "party": null
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "key": "ac1",
+      "requirement": "canonical-context-usage-sample",
+      "given": "",
+      "when": "a provider reports context tokens and an effective limit",
+      "then": "the sample SHALL have `status=measured` and a percentage derived from those operands"
+    },
+    {
+      "key": "ac2",
+      "requirement": "canonical-context-usage-sample",
+      "given": "",
+      "when": "context tokens are known but no trustworthy effective limit is available",
+      "then": "the sample SHALL retain `context_tokens`, omit `limit_tokens` and `percent`, and SHALL NOT substitute zero"
+    },
+    {
+      "key": "ac3",
+      "requirement": "canonical-context-usage-sample",
+      "given": "",
+      "when": "a supported runner exposes neither a trustworthy context count nor ratio",
+      "then": "the sample SHALL report `unavailable` without fabricating token values"
+    },
+    {
+      "key": "ac4",
+      "requirement": "latest-observation-replaces-rather-than-accumulates",
+      "given": "",
+      "when": "a later provider request represents previous input as cache-read tokens",
+      "then": "the system SHALL replace the prior observation and SHALL NOT add the two requests together"
+    },
+    {
+      "key": "ac5",
+      "requirement": "latest-observation-replaces-rather-than-accumulates",
+      "given": "",
+      "when": "both cumulative invocation usage and a latest-request or provider-context value exist",
+      "then": "the latest non-cumulative value SHALL be canonical"
+    },
+    {
+      "key": "ac6",
+      "requirement": "cache-breakdowns-are-counted-according-to-provider-semantics",
+      "given": "",
+      "when": "Claude or Kimi reports uncached input, cache-read input, and cache-created input as",
+      "then": "the system SHALL add the applicable components exactly once"
+    },
+    {
+      "key": "ac7",
+      "requirement": "cache-breakdowns-are-counted-according-to-provider-semantics",
+      "given": "",
+      "when": "Codex or Copilot reports cached input as a subset of an inclusive input total",
+      "then": "the system SHALL retain the cache value as a breakdown and SHALL NOT add it to context tokens"
+    },
+    {
+      "key": "ac8",
+      "requirement": "claude-context-mapping",
+      "given": "",
+      "when": "a Claude assistant message reports all three input classes",
+      "then": "the sample SHALL add the three fields once and use `basis=latest_request_input`"
+    },
+    {
+      "key": "ac9",
+      "requirement": "claude-context-mapping",
+      "given": "",
+      "when": "both records exist and their usage differs",
+      "then": "the assistant-message request usage SHALL take precedence"
+    },
+    {
+      "key": "ac10",
+      "requirement": "codex-context-mapping",
+      "given": "",
+      "when": "resumed-turn stdout totals include previous turns",
+      "then": "the collector SHALL use matching rollout `last_token_usage` instead"
+    },
+    {
+      "key": "ac11",
+      "requirement": "codex-context-mapping",
+      "given": "",
+      "when": "`last_token_usage` contains `cached_input_tokens`",
+      "then": "that value SHALL remain a breakdown and SHALL NOT be added to `input_tokens`"
+    },
+    {
+      "key": "ac12",
+      "requirement": "codex-context-mapping",
+      "given": "",
+      "when": "no matching rollout record can be resolved but consecutive cumulative observations are available",
+      "then": "any delta sample SHALL be visibly estimated and SHALL NOT be presented as measured"
+    },
+    {
+      "key": "ac13",
+      "requirement": "auxiliary-collectors-are-invocation-and-session-bound",
+      "given": "",
+      "when": "auxiliary files for multiple sessions are present",
+      "then": "the collector SHALL accept records only from the active session or a strictly verified bounded fallback"
+    },
+    {
+      "key": "ac14",
+      "requirement": "auxiliary-collectors-are-invocation-and-session-bound",
+      "given": "",
+      "when": "a matching token record arrives while the process is closing",
+      "then": "the final bounded collector poll SHALL make it eligible for delivery"
+    },
+    {
+      "key": "ac15",
+      "requirement": "auxiliary-collectors-are-invocation-and-session-bound",
+      "given": "",
+      "when": "the collector observes a record still being written",
+      "then": "it SHALL skip or retry that record without terminating the runner"
+    },
+    {
+      "key": "ac16",
+      "requirement": "session-isolation-and-reset",
+      "given": "",
+      "when": "the Hub launches a run without resuming the prior provider session",
+      "then": "the old context percentage SHALL disappear before the new session's first sample"
+    },
+    {
+      "key": "ac17",
+      "requirement": "session-isolation-and-reset",
+      "given": "",
+      "when": "a late observation belongs to the previous provider session",
+      "then": "it SHALL NOT overwrite the active session's context snapshot"
+    },
+    {
+      "key": "ac18",
+      "requirement": "canonical-context-persistence-and-delivery",
+      "given": "",
+      "when": "a canonical sample reaches the Hub",
+      "then": "the Hub SHALL preserve its status, basis, operands, percentage, source, session, model, and observation time"
+    },
+    {
+      "key": "ac19",
+      "requirement": "canonical-context-persistence-and-delivery",
+      "given": "",
+      "when": "a context request contains a percentage outside 0 through 100 or inconsistent with known operands",
+      "then": "the Hub SHALL reject the invalid payload"
+    },
+    {
+      "key": "ac20",
+      "requirement": "canonical-context-persistence-and-delivery",
+      "given": "",
+      "when": "the Hub stores a new valid context snapshot",
+      "then": "subsequent agent summaries and real-time updates SHALL expose the same normalized fields"
+    },
+    {
+      "key": "ac21",
+      "requirement": "legacy-context-compatibility",
+      "given": "",
+      "when": "a reader encounters an unambiguous legacy context dictionary",
+      "then": "it SHALL normalize the values into the canonical sample"
+    },
+    {
+      "key": "ac22",
+      "requirement": "legacy-context-compatibility",
+      "given": "",
+      "when": "a legacy payload cannot distinguish unknown from a real zero measurement",
+      "then": "the UI SHALL show unavailable rather than a trusted zero-percent bar"
+    },
+    {
+      "key": "ac23",
+      "requirement": "context-state-presentation",
+      "given": "",
+      "when": "a measured sample reaches a configured warning or critical display threshold",
+      "then": "every context surface SHALL apply the corresponding consistent visual state"
+    },
+    {
+      "key": "ac24",
+      "requirement": "context-state-presentation",
+      "given": "",
+      "when": "only an estimated sample is available",
+      "then": "the UI SHALL label it as estimated and SHALL NOT present it as exact"
+    },
+    {
+      "key": "ac25",
+      "requirement": "context-state-presentation",
+      "given": "",
+      "when": "context tokens are known but the limit is unknown",
+      "then": "the UI SHALL show the token count without a percentage bar value"
+    },
+    {
+      "key": "ac26",
+      "requirement": "context-usage-is-not-a-stream-event",
+      "given": "",
+      "when": "normalization produces both a text event and a context sample",
+      "then": "output persistence SHALL receive the text event and context delivery SHALL independently receive the sample"
+    },
+    {
+      "key": "ac27",
+      "requirement": "context-conformance-and-pipeline-tests",
+      "given": "",
+      "when": "context adapter tests execute",
+      "then": "Claude and Codex fixtures SHALL produce their specified canonical samples without cache double-counting"
+    },
+    {
+      "key": "ac28",
+      "requirement": "context-conformance-and-pipeline-tests",
+      "given": "",
+      "when": "the context pipeline integration suite executes",
+      "then": "a canonical sample SHALL survive local writing, HTTP validation, Hub storage/projection, and UI normalization without field-name drift"
+    },
+    {
+      "key": "ac29",
+      "requirement": "context-conformance-and-pipeline-tests",
+      "given": "",
+      "when": "a fixture represents missing telemetry or missing limit",
+      "then": "the pipeline SHALL preserve the appropriate honest status instead of silently swallowing the state"
+    },
+    {
+      "key": "ac30",
+      "requirement": "context-window-size-is-resolved-in-a-stated-order",
+      "given": "",
+      "when": "the provider reports the context window for the model that ran the turn",
+      "then": "usage is expressed against that reported window"
+    },
+    {
+      "key": "ac31",
+      "requirement": "context-window-size-is-resolved-in-a-stated-order",
+      "given": "",
+      "when": "the provider reports no context window and the catalog declares one for that model",
+      "then": "usage is expressed against the catalog's declared window"
+    },
+    {
+      "key": "ac32",
+      "requirement": "context-window-size-is-resolved-in-a-stated-order",
+      "given": "",
+      "when": "neither the provider nor the catalog supplies a window for the model that ran the turn",
+      "then": "no window is assumed"
+    },
+    {
+      "key": "ac33",
+      "requirement": "unknown-context-usage-is-reported-as-unknown",
+      "given": "",
+      "when": "the context window for a model cannot be resolved",
+      "then": "the interface reports usage as unknown rather than as a proportion"
+    },
+    {
+      "key": "ac34",
+      "requirement": "unknown-context-usage-is-reported-as-unknown",
+      "given": "",
+      "when": "the context window for a model cannot be resolved",
+      "then": "no context-pressure condition is raised for that turn"
+    },
+    {
+      "key": "ac35",
+      "requirement": "unknown-context-usage-is-reported-as-unknown",
+      "given": "",
+      "when": "usage is expressed as a proportion of a context window",
+      "then": "that window is one the provider reported or the catalog declared for the model that ran"
+    },
+    {
+      "key": "ac36",
+      "requirement": "a-conversation-whose-model-changed-reports-usage-per-turn",
+      "given": "",
+      "when": "a conversation contains turns run under two models with different context windows",
+      "then": "each turn's usage is expressed against the window of the model that ran it"
+    },
+    {
+      "key": "ac37",
+      "requirement": "a-conversation-whose-model-changed-reports-usage-per-turn",
+      "given": "",
+      "when": "the operator changes a conversation's model and sends a further message",
+      "then": "the reported context pressure describes the newly chosen model"
+    },
+    {
+      "key": "ac38",
+      "requirement": "a-measured-sample-identifies-the-model-it-measured",
+      "given": "",
+      "when": "a measured context-usage sample is produced for a turn",
+      "then": "it identifies the model that ran that turn the window-resolution order is applied to that model"
+    },
+    {
+      "key": "ac39",
+      "requirement": "a-measured-sample-identifies-the-model-it-measured",
+      "given": "",
+      "when": "a sample cannot identify the model that ran the turn",
+      "then": "usage is reported as unknown no window is assumed from another model or from a default"
+    },
+    {
+      "key": "ac40",
+      "requirement": "window-metadata-observed-for-a-session-persists-across-later",
+      "given": "",
+      "when": "a provider reports a context window for a session a later sample for that session carries token counts but no window",
+      "then": "usage is expressed against the previously reported window"
+    },
+    {
+      "key": "ac41",
+      "requirement": "window-metadata-observed-for-a-session-persists-across-later",
+      "given": "",
+      "when": "successive samples carry token counts for the same session",
+      "then": "the later count replaces the earlier one the counts are not summed"
+    },
+    {
+      "key": "ac42",
+      "requirement": "window-metadata-observed-for-a-session-persists-across-later",
+      "given": "",
+      "when": "a later sample identifies a different model from the one whose window was retained",
+      "then": "the retained window no longer applies the window is resolved again for the new model"
+    },
+    {
+      "key": "ac43",
+      "requirement": "every-model-the-catalog-offers-declares-a-context-window-or-",
+      "given": "",
+      "when": "an agent runs on a model the catalog offers with no declared window the provider reports no window",
+      "then": "usage is reported as unknown for that turn no other model's window is substituted"
+    }
+  ],
+  "tasks": [],
+  "algorithms": [],
+  "design": "",
+  "evidence": {
+    "checked": [
+      "Translated from openspec/specs/agent-context-usage/spec.md (18 requirements, 43 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten."
+    ],
+    "limits": [
+      "source-had-no-purpose: the source's Purpose was an unedited archiving placeholder, so this document has no summary rather than a note about openspec's workflow",
+      "scenarios-state-no-starting-state: 43 of 43 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed"
+    ]
+  },
+  "lifecycle": "",
+  "open_questions": [],
+  "aw_identity": {
+    "requirements": {
+      "canonical-context-usage-sample": "FR-1",
+      "latest-observation-replaces-rather-than-accumulates": "FR-2",
+      "cache-breakdowns-are-counted-according-to-provider-semantics": "FR-3",
+      "claude-context-mapping": "FR-4",
+      "codex-context-mapping": "FR-5",
+      "auxiliary-collectors-are-invocation-and-session-bound": "FR-6",
+      "session-isolation-and-reset": "FR-7",
+      "canonical-context-persistence-and-delivery": "FR-8",
+      "legacy-context-compatibility": "FR-9",
+      "context-state-presentation": "FR-10",
+      "context-usage-is-not-a-stream-event": "FR-11",
+      "context-conformance-and-pipeline-tests": "FR-12",
+      "context-window-size-is-resolved-in-a-stated-order": "FR-13",
+      "unknown-context-usage-is-reported-as-unknown": "FR-14",
+      "a-conversation-whose-model-changed-reports-usage-per-turn": "FR-15",
+      "a-measured-sample-identifies-the-model-it-measured": "FR-16",
+      "window-metadata-observed-for-a-session-persists-across-later": "FR-17",
+      "every-model-the-catalog-offers-declares-a-context-window-or-": "FR-18"
+    },
+    "high_water": 18,
+    "retired": {},
+    "digests": {
+      "FR-1": "8b00a6f115dcf88396bd3c03ba07f56ed83e728beef96c0068a4cd22dd67b513",
+      "FR-2": "96ea41e7f2ffa4c92024d588bb0249a8daf2f1b3fb3646fcd69bde12ec0bf1bc",
+      "FR-3": "9288cbad56614f114d22203164334fb5fff98b660d6b15d7bc770dafbe89b693",
+      "FR-4": "fd5c78c3f2d9a7326c32d22a8ccf1078a917d0fcb2e215fb5b4f7f864511bd7f",
+      "FR-5": "45f9521fcc0515405ca46f8834af3f99806ad0b36fe09a4b69e07c4217b03099",
+      "FR-6": "1f9f22838930be7a5865d6a6ef12cd08df625949dd385e8feffad8eae1f11436",
+      "FR-7": "4b89b47a67a5cab980921c9b4bf73336ef95a3c0aa61c693650db89a930763a6",
+      "FR-8": "550482c6dc4e9e86aafdb82d216a3f3465f25597f94ce297b3a66c61c40bc82f",
+      "FR-9": "771bb48905555ec1e048a368a0be71f4a232866d0e858f76989df2429c508dfc",
+      "FR-10": "300c93573f2e5d63f101133779d85a2c75a3de3c0a514fd64c8b058f58868af5",
+      "FR-11": "c1804a838577979a3dba34932aa581779b35042221f8620bcdeb2a68fc21cc2a",
+      "FR-12": "06755d1644188ff968ea6d73294dd5f07bc41d868bf613e1ed755b55e6348f02",
+      "FR-13": "292fbbe465e542ddcd1e9c63d385c22a6a4620e14d6301d3b78f634ec9b52dcf",
+      "FR-14": "d05d876219fb90f66301eecf9e7a0e751c29127f32f42db2a550c92ab8fc378c",
+      "FR-15": "9eee3590f6698954e7c1e009135815bbd08e2f92a4d5fd350370be8bbbdb59f9",
+      "FR-16": "a0c5d1230f5defbb6bdd1ec97c2c0430ff3cc89e6ad488ff16c432d406a7a8c6",
+      "FR-17": "25cd643bf4a8b9577fc1c36248ca4c8b33c38f1d5407d552e6294f8d2cc7d63e",
+      "FR-18": "161080bbcf3b4f1fdd489a857bc2ed05b8284178623a02ccc968b9376ede5392"
+    }
+  }
+}
+</script>
+</body>
+</html>

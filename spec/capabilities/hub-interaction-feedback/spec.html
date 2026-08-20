@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hub interaction feedback</title>
+<meta name="aw-spec-kind" content="capability">
+<meta name="aw-spec-status" content="current">
+<meta name="aw-spec-rigor" content="sketch">
+<meta name="aw-spec-schema-version" content="1">
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+    --surface-2: #21262d; --surface: #161b22;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+:root[data-theme="dark"] {
+  --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+  --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+  --surface-2: #21262d; --surface: #161b22;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 2rem 2.5rem 4rem; background: var(--bg); color: var(--fg);
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+h1 { font-size: 1.75rem; margin: 0 0 .25rem; }
+h2 { font-size: 1.15rem; margin: 2.5rem 0 .75rem; padding-bottom: .3rem;
+     border-bottom: 1px solid var(--border); }
+h3 { font-size: 1rem; margin: 1.5rem 0 .4rem; }
+p { margin: .5rem 0; }
+ul, ol { margin: .5rem 0; padding-left: 1.4rem; }
+li { margin: .25rem 0; }
+a { color: var(--aw-accent); }
+.aw-meta { color: var(--muted); font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-chip { display: inline-block; padding: .1rem .5rem; border-radius: 999px;
+           background: var(--surface-2); font-size: .78rem; margin-right: .4rem; }
+.aw-requirement { border-left: 3px solid var(--border); padding: .1rem 0 .1rem .9rem;
+                  margin: 1.1rem 0; }
+.aw-requirement-must { border-left-color: var(--aw-accent); }
+.aw-requirement-should { border-left-color: var(--aw-warn); }
+.aw-requirement-may { border-left-color: var(--border); }
+.aw-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8rem;
+         color: var(--muted); }
+.aw-modal { font-weight: 600; }
+.aw-modal-must { color: var(--aw-accent); }
+.aw-modal-should { color: var(--aw-warn); }
+.aw-modal-may { color: var(--fg); font-weight: 400; }
+.aw-chip-rigor-gate { color: var(--aw-accent); border: 1px solid var(--aw-accent); }
+.aw-chip-rigor-contract { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Phase is a lifecycle, and the question it answers is "can I rely on this?". `approved` and a
+   capability's `current` are settled and take the done tone; `proposed` is waiting on an operator
+   decision and takes warn; `exploring` and `archived` are quiet for opposite reasons — one has not
+   arrived yet, the other has been superseded. Deliberately NOT the accent: this document already
+   spends accent on links and on MUST, and a third meaning would empty it of any. `kind` keeps the
+   plain chip on purpose — it is a category, not a state, and hue there ranks nothing. */
+.aw-chip-phase-done { color: var(--aw-ok); border: 1px solid var(--aw-ok); }
+.aw-chip-phase-waiting { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+.aw-chip-phase-quiet { color: var(--muted); }
+.aw-chip-phase-archived { color: var(--muted); text-decoration: line-through; }
+/* An unresolved question blocks `propose`, so it is a real state and not a label. Resolved stays
+   the plain chip — the reader needs to find what is still open, not celebrate what is closed. */
+.aw-chip-open { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Limits is where a reader is most likely to be misled, and it read identically to Checked. */
+.aw-limits { color: var(--aw-warn); }
+/* The first screenful was entirely monochrome, so the document read as texty however the
+   requirements below were coloured. This puts the same modal scheme where the eye lands first,
+   carrying counts rather than decoration. */
+.aw-summary { margin: 0 0 1.5rem; font-size: .9rem; color: var(--muted); }
+.aw-summary .aw-count { font-weight: 600; }
+.aw-summary-sep { color: var(--border); margin: 0 .45rem; }
+.aw-rationale { color: var(--muted); font-size: .9rem; }
+.aw-refs { font-size: .82rem; color: var(--muted); }
+.aw-note { color: var(--muted); font-style: italic; }
+.aw-empty { color: var(--muted); }
+table { border-collapse: collapse; margin: .75rem 0; width: 100%; }
+th, td { border: 1px solid var(--border); padding: .4rem .6rem; text-align: left;
+         vertical-align: top; font-size: .92rem; }
+code, pre { background: var(--surface); border-radius: 4px; }
+code { padding: .1rem .3rem; font-size: .88em; }
+</style>
+</head>
+<body>
+<h1>Hub interaction feedback</h1>
+<p class="aw-meta"><span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><span class="aw-chip">sketch</span></p>
+<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">6</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">6</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">12</span> criteria</p>
+<section><h2 id="summary">Summary</h2><p>How the Hub answers a pointer and a keyboard: what every activatable element owes the operator in resting, hover, pressed, and focused states, and how emphasis is allowed to change. Separated from `hub-workspace-shell` by `2026-08-04-hub-contextual-navigation` because it is not about layout. The shell decides what is on screen and where; this decides whether what is on screen answers when touched. Stating it once keeps every surface from inventing its own answer.</p></section><section><h2 id="requirements">Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-1"><span class="aw-id">FR-1</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Every activatable element SHALL present a visible resting state, a hover state, a pressed state, and a visible focus indicator when focused by keyboard. This applies to controls, navigation rows, list rows, tabs, cards, and disclosures.</p><p class="aw-rationale">An element that changes the application&#x27;s state when clicked MUST NOT be visually inert under the pointer.</p></div><div class="aw-requirement aw-requirement-must" id="FR-2"><span class="aw-id">FR-2</span> <p><span class="aw-modal aw-modal-must">MUST</span> A selected or current element SHALL be distinguishable from a merely hovered element. The two states MUST NOT resolve to the same appearance.</p><p class="aw-rationale">The current element SHALL remain identifiable while the pointer is elsewhere.</p></div><div class="aw-requirement aw-requirement-must" id="FR-3"><span class="aw-id">FR-3</span> <p><span class="aw-modal aw-modal-must">MUST</span> An element changing between its resting, hover, pressed, and selected states MUST NOT change its own size or position, and MUST NOT displace any neighbouring element.</p></div><div class="aw-requirement aw-requirement-must" id="FR-4"><span class="aw-id">FR-4</span> <p><span class="aw-modal aw-modal-must">SHALL</span> A row that reveals secondary actions only while hovered or focused SHALL reserve their layout space at rest, so revealing them displaces nothing. Those actions MUST remain reachable by keyboard.</p></div><div class="aw-requirement aw-requirement-must" id="FR-5"><span class="aw-id">FR-5</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Transitions between interaction states SHALL be eased using the application&#x27;s shared duration and easing tokens rather than switching instantly.</p><p class="aw-rationale">When the operator has asked for reduced motion, transitions SHALL be suppressed while every state remains distinguishable by its appearance alone.</p></div><div class="aw-requirement aw-requirement-must" id="FR-6"><span class="aw-id">FR-6</span> <p><span class="aw-modal aw-modal-must">MUST</span> Resting, hover, pressed, and selected treatments SHALL resolve from semantic tokens defined for both the light and dark themes. A surface MUST NOT hard-code a colour for an interaction state, and the same kind of element SHALL use the same tokens wherever it appears.</p></div></section><section><h2 id="acceptance">Acceptance criteria</h2><table><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>the operator hovers a project, an agent, a project view, or a configuration section</td><td>that row takes on a hover treatment distinguishing it from the rows around it</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>the operator presses an activatable element</td><td>its appearance changes again, distinctly from its hover appearance it returns to the hover appearance when released with the pointer still over it</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>the operator moves focus to an activatable element with the keyboard</td><td>a focus indicator is drawn that is visible against the surface behind it</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>one configuration section is selected and the operator hovers a different one</td><td>both are distinguishable from the unselected rows they are distinguishable from each other</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>the pointer leaves the navigation region entirely</td><td>the current destination remains marked</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>the operator moves the pointer across a list of rows</td><td>no row, and no text within a row, moves by any amount</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>the operator hovers a row carrying secondary actions</td><td>those actions become visible the row&#x27;s other content does not move</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>the operator tabs into a row whose secondary actions are not currently drawn</td><td>those actions can be reached and activated</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>an element enters or leaves its hover state</td><td>the change is eased over the application&#x27;s fast duration</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>the operator has requested reduced motion</td><td>interaction states change without animating hover, pressed, and selected states remain distinguishable from one another and from rest</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>a navigation row, a configuration section row, and a list row are compared in either theme</td><td>their hover, pressed, and selected treatments are drawn from the same tokens</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>the production stylesheet is checked</td><td>every token referenced by an interaction state has a value in both light and dark themes</td></tr></tbody></table></section><section><h2 id="evidence">Evidence and coverage limits</h2><h3>Checked</h3><ul><li>Translated from openspec/specs/hub-interaction-feedback/spec.md (6 requirements, 12 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten.</li></ul><h3 class="aw-limits">Limits</h3><ul><li>scenarios-state-no-starting-state: 12 of 12 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed</li></ul></section><section><h2 id="open-questions">Open questions</h2><p class="aw-empty">None outstanding.</p></section>
+<script type="application/agentweave-spec+json" id="aw-spec-payload">
+{
+  "schema_version": 1,
+  "kind": "capability",
+  "title": "Hub interaction feedback",
+  "summary": "How the Hub answers a pointer and a keyboard: what every activatable element owes the operator in resting, hover, pressed, and focused states, and how emphasis is allowed to change. Separated from `hub-workspace-shell` by `2026-08-04-hub-contextual-navigation` because it is not about layout. The shell decides what is on screen and where; this decides whether what is on screen answers when touched. Stating it once keeps every surface from inventing its own answer.",
+  "problem": "",
+  "scope": {
+    "in_scope": [],
+    "non_goals": []
+  },
+  "requirements": [
+    {
+      "key": "every-activatable-element-responds-to-the-pointer-and-to-foc",
+      "statement": "Every activatable element SHALL present a visible resting state, a hover state, a pressed state, and a visible focus indicator when focused by keyboard. This applies to controls, navigation rows, list rows, tabs, cards, and disclosures.",
+      "modal": "SHALL",
+      "rationale": "An element that changes the application's state when clicked MUST NOT be visually inert under the pointer.",
+      "party": null
+    },
+    {
+      "key": "where-the-operator-is-differs-from-where-the-pointer-is",
+      "statement": "A selected or current element SHALL be distinguishable from a merely hovered element. The two states MUST NOT resolve to the same appearance.",
+      "modal": "MUST",
+      "rationale": "The current element SHALL remain identifiable while the pointer is elsewhere.",
+      "party": null
+    },
+    {
+      "key": "gaining-emphasis-never-moves-anything",
+      "statement": "An element changing between its resting, hover, pressed, and selected states MUST NOT change its own size or position, and MUST NOT displace any neighbouring element.",
+      "modal": "MUST",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "a-row-may-reveal-its-secondary-actions-on-hover",
+      "statement": "A row that reveals secondary actions only while hovered or focused SHALL reserve their layout space at rest, so revealing them displaces nothing. Those actions MUST remain reachable by keyboard.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "state-changes-are-eased-and-easing-is-never-the-only-signal",
+      "statement": "Transitions between interaction states SHALL be eased using the application's shared duration and easing tokens rather than switching instantly.",
+      "modal": "SHALL",
+      "rationale": "When the operator has asked for reduced motion, transitions SHALL be suppressed while every state remains distinguishable by its appearance alone.",
+      "party": null
+    },
+    {
+      "key": "interaction-states-resolve-from-shared-semantic-tokens",
+      "statement": "Resting, hover, pressed, and selected treatments SHALL resolve from semantic tokens defined for both the light and dark themes. A surface MUST NOT hard-code a colour for an interaction state, and the same kind of element SHALL use the same tokens wherever it appears.",
+      "modal": "MUST",
+      "rationale": null,
+      "party": null
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "key": "ac1",
+      "requirement": "every-activatable-element-responds-to-the-pointer-and-to-foc",
+      "given": "",
+      "when": "the operator hovers a project, an agent, a project view, or a configuration section",
+      "then": "that row takes on a hover treatment distinguishing it from the rows around it"
+    },
+    {
+      "key": "ac2",
+      "requirement": "every-activatable-element-responds-to-the-pointer-and-to-foc",
+      "given": "",
+      "when": "the operator presses an activatable element",
+      "then": "its appearance changes again, distinctly from its hover appearance it returns to the hover appearance when released with the pointer still over it"
+    },
+    {
+      "key": "ac3",
+      "requirement": "every-activatable-element-responds-to-the-pointer-and-to-foc",
+      "given": "",
+      "when": "the operator moves focus to an activatable element with the keyboard",
+      "then": "a focus indicator is drawn that is visible against the surface behind it"
+    },
+    {
+      "key": "ac4",
+      "requirement": "where-the-operator-is-differs-from-where-the-pointer-is",
+      "given": "",
+      "when": "one configuration section is selected and the operator hovers a different one",
+      "then": "both are distinguishable from the unselected rows they are distinguishable from each other"
+    },
+    {
+      "key": "ac5",
+      "requirement": "where-the-operator-is-differs-from-where-the-pointer-is",
+      "given": "",
+      "when": "the pointer leaves the navigation region entirely",
+      "then": "the current destination remains marked"
+    },
+    {
+      "key": "ac6",
+      "requirement": "gaining-emphasis-never-moves-anything",
+      "given": "",
+      "when": "the operator moves the pointer across a list of rows",
+      "then": "no row, and no text within a row, moves by any amount"
+    },
+    {
+      "key": "ac7",
+      "requirement": "a-row-may-reveal-its-secondary-actions-on-hover",
+      "given": "",
+      "when": "the operator hovers a row carrying secondary actions",
+      "then": "those actions become visible the row's other content does not move"
+    },
+    {
+      "key": "ac8",
+      "requirement": "a-row-may-reveal-its-secondary-actions-on-hover",
+      "given": "",
+      "when": "the operator tabs into a row whose secondary actions are not currently drawn",
+      "then": "those actions can be reached and activated"
+    },
+    {
+      "key": "ac9",
+      "requirement": "state-changes-are-eased-and-easing-is-never-the-only-signal",
+      "given": "",
+      "when": "an element enters or leaves its hover state",
+      "then": "the change is eased over the application's fast duration"
+    },
+    {
+      "key": "ac10",
+      "requirement": "state-changes-are-eased-and-easing-is-never-the-only-signal",
+      "given": "",
+      "when": "the operator has requested reduced motion",
+      "then": "interaction states change without animating hover, pressed, and selected states remain distinguishable from one another and from rest"
+    },
+    {
+      "key": "ac11",
+      "requirement": "interaction-states-resolve-from-shared-semantic-tokens",
+      "given": "",
+      "when": "a navigation row, a configuration section row, and a list row are compared in either theme",
+      "then": "their hover, pressed, and selected treatments are drawn from the same tokens"
+    },
+    {
+      "key": "ac12",
+      "requirement": "interaction-states-resolve-from-shared-semantic-tokens",
+      "given": "",
+      "when": "the production stylesheet is checked",
+      "then": "every token referenced by an interaction state has a value in both light and dark themes"
+    }
+  ],
+  "tasks": [],
+  "algorithms": [],
+  "design": "",
+  "evidence": {
+    "checked": [
+      "Translated from openspec/specs/hub-interaction-feedback/spec.md (6 requirements, 12 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten."
+    ],
+    "limits": [
+      "scenarios-state-no-starting-state: 12 of 12 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed"
+    ]
+  },
+  "lifecycle": "",
+  "open_questions": [],
+  "aw_identity": {
+    "requirements": {
+      "every-activatable-element-responds-to-the-pointer-and-to-foc": "FR-1",
+      "where-the-operator-is-differs-from-where-the-pointer-is": "FR-2",
+      "gaining-emphasis-never-moves-anything": "FR-3",
+      "a-row-may-reveal-its-secondary-actions-on-hover": "FR-4",
+      "state-changes-are-eased-and-easing-is-never-the-only-signal": "FR-5",
+      "interaction-states-resolve-from-shared-semantic-tokens": "FR-6"
+    },
+    "high_water": 6,
+    "retired": {},
+    "digests": {
+      "FR-1": "1982dda2b1a38689a37c0961c3bf8901c585ea5d947c8e767fe7a44b84bac745",
+      "FR-2": "739fd435313fe67dbc4b7c100fb70f3c0a1f6097c58869ccb0b545b34a33adc9",
+      "FR-3": "1d2581295491ad855a725f2f8dc396152c1cb8bc15773203abbf5a366020604a",
+      "FR-4": "ce77f79dd05df37dcca13146ee87f47f922f36034600ad3593f37295c01d31fd",
+      "FR-5": "f62cb8462b5a29f2cb95af0d5e9633abfa03d200ca32ccd1def0f3159025914a",
+      "FR-6": "00a02cd6729f57f8564cb8eb2559b3ba0e5a50ee0084d00d6732f3ad93c6db1b"
+    }
+  }
+}
+</script>
+</body>
+</html>

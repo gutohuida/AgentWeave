@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Opencode config</title>
+<meta name="aw-spec-kind" content="capability">
+<meta name="aw-spec-status" content="current">
+<meta name="aw-spec-rigor" content="sketch">
+<meta name="aw-spec-schema-version" content="1">
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+    --surface-2: #21262d; --surface: #161b22;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+:root[data-theme="dark"] {
+  --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+  --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+  --surface-2: #21262d; --surface: #161b22;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 2rem 2.5rem 4rem; background: var(--bg); color: var(--fg);
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+h1 { font-size: 1.75rem; margin: 0 0 .25rem; }
+h2 { font-size: 1.15rem; margin: 2.5rem 0 .75rem; padding-bottom: .3rem;
+     border-bottom: 1px solid var(--border); }
+h3 { font-size: 1rem; margin: 1.5rem 0 .4rem; }
+p { margin: .5rem 0; }
+ul, ol { margin: .5rem 0; padding-left: 1.4rem; }
+li { margin: .25rem 0; }
+a { color: var(--aw-accent); }
+.aw-meta { color: var(--muted); font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-chip { display: inline-block; padding: .1rem .5rem; border-radius: 999px;
+           background: var(--surface-2); font-size: .78rem; margin-right: .4rem; }
+.aw-requirement { border-left: 3px solid var(--border); padding: .1rem 0 .1rem .9rem;
+                  margin: 1.1rem 0; }
+.aw-requirement-must { border-left-color: var(--aw-accent); }
+.aw-requirement-should { border-left-color: var(--aw-warn); }
+.aw-requirement-may { border-left-color: var(--border); }
+.aw-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8rem;
+         color: var(--muted); }
+.aw-modal { font-weight: 600; }
+.aw-modal-must { color: var(--aw-accent); }
+.aw-modal-should { color: var(--aw-warn); }
+.aw-modal-may { color: var(--fg); font-weight: 400; }
+.aw-chip-rigor-gate { color: var(--aw-accent); border: 1px solid var(--aw-accent); }
+.aw-chip-rigor-contract { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Phase is a lifecycle, and the question it answers is "can I rely on this?". `approved` and a
+   capability's `current` are settled and take the done tone; `proposed` is waiting on an operator
+   decision and takes warn; `exploring` and `archived` are quiet for opposite reasons — one has not
+   arrived yet, the other has been superseded. Deliberately NOT the accent: this document already
+   spends accent on links and on MUST, and a third meaning would empty it of any. `kind` keeps the
+   plain chip on purpose — it is a category, not a state, and hue there ranks nothing. */
+.aw-chip-phase-done { color: var(--aw-ok); border: 1px solid var(--aw-ok); }
+.aw-chip-phase-waiting { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+.aw-chip-phase-quiet { color: var(--muted); }
+.aw-chip-phase-archived { color: var(--muted); text-decoration: line-through; }
+/* An unresolved question blocks `propose`, so it is a real state and not a label. Resolved stays
+   the plain chip — the reader needs to find what is still open, not celebrate what is closed. */
+.aw-chip-open { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Limits is where a reader is most likely to be misled, and it read identically to Checked. */
+.aw-limits { color: var(--aw-warn); }
+/* The first screenful was entirely monochrome, so the document read as texty however the
+   requirements below were coloured. This puts the same modal scheme where the eye lands first,
+   carrying counts rather than decoration. */
+.aw-summary { margin: 0 0 1.5rem; font-size: .9rem; color: var(--muted); }
+.aw-summary .aw-count { font-weight: 600; }
+.aw-summary-sep { color: var(--border); margin: 0 .45rem; }
+.aw-rationale { color: var(--muted); font-size: .9rem; }
+.aw-refs { font-size: .82rem; color: var(--muted); }
+.aw-note { color: var(--muted); font-style: italic; }
+.aw-empty { color: var(--muted); }
+table { border-collapse: collapse; margin: .75rem 0; width: 100%; }
+th, td { border: 1px solid var(--border); padding: .4rem .6rem; text-align: left;
+         vertical-align: top; font-size: .92rem; }
+code, pre { background: var(--surface); border-radius: 4px; }
+code { padding: .1rem .3rem; font-size: .88em; }
+</style>
+</head>
+<body>
+<h1>Opencode config</h1>
+<p class="aw-meta"><span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><span class="aw-chip">sketch</span></p>
+<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">4</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">4</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">6</span> criteria</p>
+<section><h2 id="requirements">Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-1"><span class="aw-id">FR-1</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL accept `runner: opencode` as a valid value in an agent&#x27;s configuration block in `agentweave.yml`, passing validation without error.</p></div><div class="aw-requirement aw-requirement-must" id="FR-2"><span class="aw-id">FR-2</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL accept the same optional fields for opencode agents as for all other runner types.</p></div><div class="aw-requirement aw-requirement-must" id="FR-3"><span class="aw-id">FR-3</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL serialize opencode agents back to `agentweave.yml` with the correct `runner: opencode` and `model` fields when `generate_agentweave_yml()` is called.</p></div><div class="aw-requirement aw-requirement-must" id="FR-4"><span class="aw-id">FR-4</span> <p><span class="aw-modal aw-modal-must">SHALL</span> When a user runs `agentweave init` and the session includes an opencode agent, the system SHALL print a reminder that `agentweave mcp-setup` will write `opencode.json`.</p></div></section><section><h2 id="acceptance">Acceptance criteria</h2><table><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>`agentweave.yml` contains an agent with `runner: opencode` and `model: ollama/qwen2.5-coder:7b`</td><td>`load_agentweave_yml()` SHALL return an `AgentConfig` with `runner=&quot;opencode&quot;` and `model=&quot;ollama/qwen2.5-coder:7b&quot;` without raising `ConfigValidationError`</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>`agentweave.yml` contains an agent with `runner: opencode` and `model: anthropic/claude-sonnet-4-5`</td><td>`load_agentweave_yml()` SHALL return an `AgentConfig` with `runner=&quot;opencode&quot;` and `model=&quot;anthropic/claude-sonnet-4-5&quot;` without raising `ConfigValidationError`</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>`agentweave.yml` contains an agent with `runner: opencode` and no `model` field</td><td>`load_agentweave_yml()` SHALL return an `AgentConfig` with `runner=&quot;opencode&quot;` and `model=None` without raising `ConfigValidationError`</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>`agentweave.yml` contains an opencode agent with `roles: [developer]` and `env: [SOME_VAR]`</td><td>`load_agentweave_yml()` SHALL return an `AgentConfig` with `roles=[&quot;developer&quot;]` and `env=[&quot;SOME_VAR&quot;]`</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>a session contains an opencode agent with `runner=&quot;opencode&quot;` and `model=&quot;ollama/qwen2.5-coder:7b&quot;`</td><td>the generated `agentweave.yml` SHALL contain `runner: opencode` and `model: ollama/qwen2.5-coder:7b` under that agent&#x27;s key</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>`agentweave init` completes with at least one opencode agent in the session</td><td>the printed instructions SHALL mention that `agentweave mcp-setup` configures `opencode.json`</td></tr></tbody></table></section><section><h2 id="evidence">Evidence and coverage limits</h2><h3>Checked</h3><ul><li>Translated from openspec/specs/opencode-config/spec.md (4 requirements, 6 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten.</li></ul><h3 class="aw-limits">Limits</h3><ul><li>source-had-no-purpose: the source&#x27;s Purpose was an unedited archiving placeholder, so this document has no summary rather than a note about openspec&#x27;s workflow</li><li>scenarios-state-no-starting-state: 6 of 6 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed</li></ul></section><section><h2 id="open-questions">Open questions</h2><p class="aw-empty">None outstanding.</p></section>
+<script type="application/agentweave-spec+json" id="aw-spec-payload">
+{
+  "schema_version": 1,
+  "kind": "capability",
+  "title": "Opencode config",
+  "summary": "",
+  "problem": "",
+  "scope": {
+    "in_scope": [],
+    "non_goals": []
+  },
+  "requirements": [
+    {
+      "key": "agentweave-yml-accepts-runner-opencode",
+      "statement": "The system SHALL accept `runner: opencode` as a valid value in an agent's configuration block in `agentweave.yml`, passing validation without error.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "agentweave-yml-opencode-agents-support-roles-env-yolo",
+      "statement": "The system SHALL accept the same optional fields for opencode agents as for all other runner types.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "generate-agentweave-yml-serializes-opencode-agents-correctly",
+      "statement": "The system SHALL serialize opencode agents back to `agentweave.yml` with the correct `runner: opencode` and `model` fields when `generate_agentweave_yml()` is called.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "agentweave-init-printed-instructions-include-opencode-exampl",
+      "statement": "When a user runs `agentweave init` and the session includes an opencode agent, the system SHALL print a reminder that `agentweave mcp-setup` will write `opencode.json`.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "key": "ac1",
+      "requirement": "agentweave-yml-accepts-runner-opencode",
+      "given": "",
+      "when": "`agentweave.yml` contains an agent with `runner: opencode` and `model: ollama/qwen2.5-coder:7b`",
+      "then": "`load_agentweave_yml()` SHALL return an `AgentConfig` with `runner=\"opencode\"` and `model=\"ollama/qwen2.5-coder:7b\"` without raising `ConfigValidationError`"
+    },
+    {
+      "key": "ac2",
+      "requirement": "agentweave-yml-accepts-runner-opencode",
+      "given": "",
+      "when": "`agentweave.yml` contains an agent with `runner: opencode` and `model: anthropic/claude-sonnet-4-5`",
+      "then": "`load_agentweave_yml()` SHALL return an `AgentConfig` with `runner=\"opencode\"` and `model=\"anthropic/claude-sonnet-4-5\"` without raising `ConfigValidationError`"
+    },
+    {
+      "key": "ac3",
+      "requirement": "agentweave-yml-accepts-runner-opencode",
+      "given": "",
+      "when": "`agentweave.yml` contains an agent with `runner: opencode` and no `model` field",
+      "then": "`load_agentweave_yml()` SHALL return an `AgentConfig` with `runner=\"opencode\"` and `model=None` without raising `ConfigValidationError`"
+    },
+    {
+      "key": "ac4",
+      "requirement": "agentweave-yml-opencode-agents-support-roles-env-yolo",
+      "given": "",
+      "when": "`agentweave.yml` contains an opencode agent with `roles: [developer]` and `env: [SOME_VAR]`",
+      "then": "`load_agentweave_yml()` SHALL return an `AgentConfig` with `roles=[\"developer\"]` and `env=[\"SOME_VAR\"]`"
+    },
+    {
+      "key": "ac5",
+      "requirement": "generate-agentweave-yml-serializes-opencode-agents-correctly",
+      "given": "",
+      "when": "a session contains an opencode agent with `runner=\"opencode\"` and `model=\"ollama/qwen2.5-coder:7b\"`",
+      "then": "the generated `agentweave.yml` SHALL contain `runner: opencode` and `model: ollama/qwen2.5-coder:7b` under that agent's key"
+    },
+    {
+      "key": "ac6",
+      "requirement": "agentweave-init-printed-instructions-include-opencode-exampl",
+      "given": "",
+      "when": "`agentweave init` completes with at least one opencode agent in the session",
+      "then": "the printed instructions SHALL mention that `agentweave mcp-setup` configures `opencode.json`"
+    }
+  ],
+  "tasks": [],
+  "algorithms": [],
+  "design": "",
+  "evidence": {
+    "checked": [
+      "Translated from openspec/specs/opencode-config/spec.md (4 requirements, 6 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten."
+    ],
+    "limits": [
+      "source-had-no-purpose: the source's Purpose was an unedited archiving placeholder, so this document has no summary rather than a note about openspec's workflow",
+      "scenarios-state-no-starting-state: 6 of 6 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed"
+    ]
+  },
+  "lifecycle": "",
+  "open_questions": [],
+  "aw_identity": {
+    "requirements": {
+      "agentweave-yml-accepts-runner-opencode": "FR-1",
+      "agentweave-yml-opencode-agents-support-roles-env-yolo": "FR-2",
+      "generate-agentweave-yml-serializes-opencode-agents-correctly": "FR-3",
+      "agentweave-init-printed-instructions-include-opencode-exampl": "FR-4"
+    },
+    "high_water": 4,
+    "retired": {},
+    "digests": {
+      "FR-1": "6f6230aa66d71d31293a4f6f960661450e16a321054913554db07ba6770351b6",
+      "FR-2": "fb98da364fe7fe3c505aef386869ae51f984030ba310000e7ad686a8a251c363",
+      "FR-3": "218e1bcab5926b3ae4c644202fa5b6470b084f1257f925b9175c990617e53865",
+      "FR-4": "ae15fb7bdccc8adfb875a1220ad7eef7bdfca090722ce5a26f43c9438ab68801"
+    }
+  }
+}
+</script>
+</body>
+</html>

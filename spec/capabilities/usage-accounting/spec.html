@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Usage accounting</title>
+<meta name="aw-spec-kind" content="capability">
+<meta name="aw-spec-status" content="current">
+<meta name="aw-spec-rigor" content="sketch">
+<meta name="aw-spec-schema-version" content="1">
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+    --surface-2: #21262d; --surface: #161b22;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+:root[data-theme="dark"] {
+  --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+  --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+  --surface-2: #21262d; --surface: #161b22;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 2rem 2.5rem 4rem; background: var(--bg); color: var(--fg);
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+h1 { font-size: 1.75rem; margin: 0 0 .25rem; }
+h2 { font-size: 1.15rem; margin: 2.5rem 0 .75rem; padding-bottom: .3rem;
+     border-bottom: 1px solid var(--border); }
+h3 { font-size: 1rem; margin: 1.5rem 0 .4rem; }
+p { margin: .5rem 0; }
+ul, ol { margin: .5rem 0; padding-left: 1.4rem; }
+li { margin: .25rem 0; }
+a { color: var(--aw-accent); }
+.aw-meta { color: var(--muted); font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-chip { display: inline-block; padding: .1rem .5rem; border-radius: 999px;
+           background: var(--surface-2); font-size: .78rem; margin-right: .4rem; }
+.aw-requirement { border-left: 3px solid var(--border); padding: .1rem 0 .1rem .9rem;
+                  margin: 1.1rem 0; }
+.aw-requirement-must { border-left-color: var(--aw-accent); }
+.aw-requirement-should { border-left-color: var(--aw-warn); }
+.aw-requirement-may { border-left-color: var(--border); }
+.aw-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8rem;
+         color: var(--muted); }
+.aw-modal { font-weight: 600; }
+.aw-modal-must { color: var(--aw-accent); }
+.aw-modal-should { color: var(--aw-warn); }
+.aw-modal-may { color: var(--fg); font-weight: 400; }
+.aw-chip-rigor-gate { color: var(--aw-accent); border: 1px solid var(--aw-accent); }
+.aw-chip-rigor-contract { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Phase is a lifecycle, and the question it answers is "can I rely on this?". `approved` and a
+   capability's `current` are settled and take the done tone; `proposed` is waiting on an operator
+   decision and takes warn; `exploring` and `archived` are quiet for opposite reasons — one has not
+   arrived yet, the other has been superseded. Deliberately NOT the accent: this document already
+   spends accent on links and on MUST, and a third meaning would empty it of any. `kind` keeps the
+   plain chip on purpose — it is a category, not a state, and hue there ranks nothing. */
+.aw-chip-phase-done { color: var(--aw-ok); border: 1px solid var(--aw-ok); }
+.aw-chip-phase-waiting { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+.aw-chip-phase-quiet { color: var(--muted); }
+.aw-chip-phase-archived { color: var(--muted); text-decoration: line-through; }
+/* An unresolved question blocks `propose`, so it is a real state and not a label. Resolved stays
+   the plain chip — the reader needs to find what is still open, not celebrate what is closed. */
+.aw-chip-open { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Limits is where a reader is most likely to be misled, and it read identically to Checked. */
+.aw-limits { color: var(--aw-warn); }
+/* The first screenful was entirely monochrome, so the document read as texty however the
+   requirements below were coloured. This puts the same modal scheme where the eye lands first,
+   carrying counts rather than decoration. */
+.aw-summary { margin: 0 0 1.5rem; font-size: .9rem; color: var(--muted); }
+.aw-summary .aw-count { font-weight: 600; }
+.aw-summary-sep { color: var(--border); margin: 0 .45rem; }
+.aw-rationale { color: var(--muted); font-size: .9rem; }
+.aw-refs { font-size: .82rem; color: var(--muted); }
+.aw-note { color: var(--muted); font-style: italic; }
+.aw-empty { color: var(--muted); }
+table { border-collapse: collapse; margin: .75rem 0; width: 100%; }
+th, td { border: 1px solid var(--border); padding: .4rem .6rem; text-align: left;
+         vertical-align: top; font-size: .92rem; }
+code, pre { background: var(--surface); border-radius: 4px; }
+code { padding: .1rem .3rem; font-size: .88em; }
+</style>
+</head>
+<body>
+<h1>Usage accounting</h1>
+<p class="aw-meta"><span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><span class="aw-chip">sketch</span></p>
+<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">6</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">6</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">12</span> criteria</p>
+<section><h2 id="summary">Summary</h2><p>Define durable per-turn token accounting, runner-neutral usage aggregation, honest allowance and API-equivalent presentation, and project budgets that pause autonomous work without preventing operator control.</p></section><section><h2 id="requirements">Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-1"><span class="aw-id">FR-1</span> <p><span class="aw-modal aw-modal-must">MUST</span> The system SHALL persist exactly one accounting outcome for every Hub-owned run after that run ends. When the runner reports usable token telemetry, the outcome SHALL record normalized input, output, total, cache, and reasoning dimensions when available. When it does not, the outcome SHALL be explicitly unavailable and MUST NOT represent missing values as zero.</p></div><div class="aw-requirement aw-requirement-must" id="FR-2"><span class="aw-id">FR-2</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL normalize Claude Code result usage and model usage, Codex completed-turn and token-count telemetry, and OpenCode completed-step telemetry without changing the separate context-window meter semantics. Malformed telemetry SHALL degrade to an unavailable accounting outcome rather than failing the run.</p></div><div class="aw-requirement aw-requirement-must" id="FR-3"><span class="aw-id">FR-3</span> <p><span class="aw-modal aw-modal-must">MUST</span> The accounting API SHALL aggregate measured token totals per agent and project and SHALL separately report measured-turn and unavailable-turn counts. Historical or missing telemetry MUST NOT be invented.</p></div><div class="aw-requirement aw-requirement-must" id="FR-4"><span class="aw-id">FR-4</span> <p><span class="aw-modal aw-modal-must">MUST</span> When a runner reports remaining rate-limit allowance, the accounting presentation SHALL prefer it to a monetary figure. Otherwise, any runner-reported monetary figure SHALL be labelled &quot;API-equivalent estimate&quot; and MUST NOT be described as an amount charged. The system MUST NOT invent a monetary figure from a model price catalog.</p></div><div class="aw-requirement aw-requirement-must" id="FR-5"><span class="aw-id">FR-5</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL allow an operator to configure a positive token budget per project or disable it. When measured project usage is greater than or equal to the configured budget, autonomous turns SHALL remain queued and SHALL NOT start. Operator-initiated turns SHALL remain available and SHALL still be accounted.</p></div><div class="aw-requirement aw-requirement-must" id="FR-6"><span class="aw-id">FR-6</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The interface SHALL show the project&#x27;s measured token total and budget state, SHALL distinguish unavailable usage from zero, and SHALL state when exhausted budget has paused autonomous work while operator input remains available.</p></div></section><section><h2 id="acceptance">Acceptance criteria</h2><table><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>a runner completes a turn and reports token usage</td><td>exactly one measured accounting record is associated with that run its normalized total is available for aggregation</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>a runner completes a turn without usable token telemetry</td><td>exactly one unavailable accounting record is associated with that run the interface does not display zero tokens for that turn</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>a Claude stream contains partial assistant usage followed by final result usage</td><td>the final result usage is the turn&#x27;s accounting outcome partial samples are not added as additional turns</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>Codex or OpenCode reports input, output, cache, or reasoning dimensions</td><td>the dimensions are retained in the normalized accounting record cache or reasoning subsets are not double-counted in the total</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>measured turns exist for more than one agent in a project</td><td>each agent summary contains only that agent&#x27;s usage the project total contains the sum of their measured totals</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>a project contains both measured and unavailable turn outcomes</td><td>the aggregate reports both counts the unavailable turn contributes no fabricated token value</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>the latest accounting telemetry includes both rate-limit allowance and monetary data</td><td>the preferred display is the allowance</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>runner-reported monetary telemetry is displayed without allowance</td><td>it is labelled &quot;API-equivalent estimate&quot; it is not labelled spend, bill, or amount charged</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>an agent-origin queue batch is ready and the project budget is exhausted</td><td>no run starts every entry remains queued the waiting reason states that the token budget is exhausted</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>a scheduled job queues work while the project budget is exhausted</td><td>that work does not start autonomously it is not misclassified as an operator turn</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>operator input is queued while the project budget is exhausted</td><td>its turn can start the resulting run is classified as operator-initiated</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>project usage meets or exceeds its configured budget</td><td>the interface states that autonomous turns are paused it states that operator messages can still run</td></tr></tbody></table></section><section><h2 id="evidence">Evidence and coverage limits</h2><h3>Checked</h3><ul><li>Translated from openspec/specs/usage-accounting/spec.md (6 requirements, 12 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten.</li></ul><h3 class="aw-limits">Limits</h3><ul><li>scenarios-state-no-starting-state: 12 of 12 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed</li></ul></section><section><h2 id="open-questions">Open questions</h2><p class="aw-empty">None outstanding.</p></section>
+<script type="application/agentweave-spec+json" id="aw-spec-payload">
+{
+  "schema_version": 1,
+  "kind": "capability",
+  "title": "Usage accounting",
+  "summary": "Define durable per-turn token accounting, runner-neutral usage aggregation, honest allowance and API-equivalent presentation, and project budgets that pause autonomous work without preventing operator control.",
+  "problem": "",
+  "scope": {
+    "in_scope": [],
+    "non_goals": []
+  },
+  "requirements": [
+    {
+      "key": "every-hub-owned-turn-has-a-durable-accounting-outcome",
+      "statement": "The system SHALL persist exactly one accounting outcome for every Hub-owned run after that run ends. When the runner reports usable token telemetry, the outcome SHALL record normalized input, output, total, cache, and reasoning dimensions when available. When it does not, the outcome SHALL be explicitly unavailable and MUST NOT represent missing values as zero.",
+      "modal": "MUST",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "supported-runner-telemetry-normalizes-to-one-accounting-shap",
+      "statement": "The system SHALL normalize Claude Code result usage and model usage, Codex completed-turn and token-count telemetry, and OpenCode completed-step telemetry without changing the separate context-window meter semantics. Malformed telemetry SHALL degrade to an unavailable accounting outcome rather than failing the run.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "usage-aggregates-by-agent-and-project",
+      "statement": "The accounting API SHALL aggregate measured token totals per agent and project and SHALL separately report measured-turn and unavailable-turn counts. Historical or missing telemetry MUST NOT be invented.",
+      "modal": "MUST",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "allowance-and-currency-presentation-cannot-imply-billing",
+      "statement": "When a runner reports remaining rate-limit allowance, the accounting presentation SHALL prefer it to a monetary figure. Otherwise, any runner-reported monetary figure SHALL be labelled \"API-equivalent estimate\" and MUST NOT be described as an amount charged. The system MUST NOT invent a monetary figure from a model price catalog.",
+      "modal": "MUST",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "a-project-token-budget-pauses-autonomy-but-not-the-operator",
+      "statement": "The system SHALL allow an operator to configure a positive token budget per project or disable it. When measured project usage is greater than or equal to the configured budget, autonomous turns SHALL remain queued and SHALL NOT start. Operator-initiated turns SHALL remain available and SHALL still be accounted.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "the-operator-can-see-accounting-and-exhaustion-state",
+      "statement": "The interface SHALL show the project's measured token total and budget state, SHALL distinguish unavailable usage from zero, and SHALL state when exhausted budget has paused autonomous work while operator input remains available.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "key": "ac1",
+      "requirement": "every-hub-owned-turn-has-a-durable-accounting-outcome",
+      "given": "",
+      "when": "a runner completes a turn and reports token usage",
+      "then": "exactly one measured accounting record is associated with that run its normalized total is available for aggregation"
+    },
+    {
+      "key": "ac2",
+      "requirement": "every-hub-owned-turn-has-a-durable-accounting-outcome",
+      "given": "",
+      "when": "a runner completes a turn without usable token telemetry",
+      "then": "exactly one unavailable accounting record is associated with that run the interface does not display zero tokens for that turn"
+    },
+    {
+      "key": "ac3",
+      "requirement": "supported-runner-telemetry-normalizes-to-one-accounting-shap",
+      "given": "",
+      "when": "a Claude stream contains partial assistant usage followed by final result usage",
+      "then": "the final result usage is the turn's accounting outcome partial samples are not added as additional turns"
+    },
+    {
+      "key": "ac4",
+      "requirement": "supported-runner-telemetry-normalizes-to-one-accounting-shap",
+      "given": "",
+      "when": "Codex or OpenCode reports input, output, cache, or reasoning dimensions",
+      "then": "the dimensions are retained in the normalized accounting record cache or reasoning subsets are not double-counted in the total"
+    },
+    {
+      "key": "ac5",
+      "requirement": "usage-aggregates-by-agent-and-project",
+      "given": "",
+      "when": "measured turns exist for more than one agent in a project",
+      "then": "each agent summary contains only that agent's usage the project total contains the sum of their measured totals"
+    },
+    {
+      "key": "ac6",
+      "requirement": "usage-aggregates-by-agent-and-project",
+      "given": "",
+      "when": "a project contains both measured and unavailable turn outcomes",
+      "then": "the aggregate reports both counts the unavailable turn contributes no fabricated token value"
+    },
+    {
+      "key": "ac7",
+      "requirement": "allowance-and-currency-presentation-cannot-imply-billing",
+      "given": "",
+      "when": "the latest accounting telemetry includes both rate-limit allowance and monetary data",
+      "then": "the preferred display is the allowance"
+    },
+    {
+      "key": "ac8",
+      "requirement": "allowance-and-currency-presentation-cannot-imply-billing",
+      "given": "",
+      "when": "runner-reported monetary telemetry is displayed without allowance",
+      "then": "it is labelled \"API-equivalent estimate\" it is not labelled spend, bill, or amount charged"
+    },
+    {
+      "key": "ac9",
+      "requirement": "a-project-token-budget-pauses-autonomy-but-not-the-operator",
+      "given": "",
+      "when": "an agent-origin queue batch is ready and the project budget is exhausted",
+      "then": "no run starts every entry remains queued the waiting reason states that the token budget is exhausted"
+    },
+    {
+      "key": "ac10",
+      "requirement": "a-project-token-budget-pauses-autonomy-but-not-the-operator",
+      "given": "",
+      "when": "a scheduled job queues work while the project budget is exhausted",
+      "then": "that work does not start autonomously it is not misclassified as an operator turn"
+    },
+    {
+      "key": "ac11",
+      "requirement": "a-project-token-budget-pauses-autonomy-but-not-the-operator",
+      "given": "",
+      "when": "operator input is queued while the project budget is exhausted",
+      "then": "its turn can start the resulting run is classified as operator-initiated"
+    },
+    {
+      "key": "ac12",
+      "requirement": "the-operator-can-see-accounting-and-exhaustion-state",
+      "given": "",
+      "when": "project usage meets or exceeds its configured budget",
+      "then": "the interface states that autonomous turns are paused it states that operator messages can still run"
+    }
+  ],
+  "tasks": [],
+  "algorithms": [],
+  "design": "",
+  "evidence": {
+    "checked": [
+      "Translated from openspec/specs/usage-accounting/spec.md (6 requirements, 12 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten."
+    ],
+    "limits": [
+      "scenarios-state-no-starting-state: 12 of 12 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed"
+    ]
+  },
+  "lifecycle": "",
+  "open_questions": [],
+  "aw_identity": {
+    "requirements": {
+      "every-hub-owned-turn-has-a-durable-accounting-outcome": "FR-1",
+      "supported-runner-telemetry-normalizes-to-one-accounting-shap": "FR-2",
+      "usage-aggregates-by-agent-and-project": "FR-3",
+      "allowance-and-currency-presentation-cannot-imply-billing": "FR-4",
+      "a-project-token-budget-pauses-autonomy-but-not-the-operator": "FR-5",
+      "the-operator-can-see-accounting-and-exhaustion-state": "FR-6"
+    },
+    "high_water": 6,
+    "retired": {},
+    "digests": {
+      "FR-1": "805a5f188e135ff0e247f833d307d5ddb1e47412b510f19ed2bcbd5dc19678f2",
+      "FR-2": "4694462deba1a46dc50a4275d8ae5e2333b9c3b148598dc44eed30fd16eafd2b",
+      "FR-3": "8c0bd2e99377fbd39c413c992dbbba30a9b610f24e920a2a0fc9e88f106423b8",
+      "FR-4": "eabe399a4110bbdee3dc0bba84f4b5bdf5d4d1c1a69e36cfaf33687f6fe7a897",
+      "FR-5": "4972c0e0ccd15794f8f728e1e2bd42b6d714a12057cc6a235bb15d22abc005a4",
+      "FR-6": "cb52efd40f7ee301cf5399fc75adc36ed153c44cbbfc438cd0ea49bdb698c693"
+    }
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Local project workspace</title>
+<meta name="aw-spec-kind" content="capability">
+<meta name="aw-spec-status" content="current">
+<meta name="aw-spec-rigor" content="sketch">
+<meta name="aw-spec-schema-version" content="1">
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+    --surface-2: #21262d; --surface: #161b22;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+:root[data-theme="dark"] {
+  --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+  --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+  --surface-2: #21262d; --surface: #161b22;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 2rem 2.5rem 4rem; background: var(--bg); color: var(--fg);
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+h1 { font-size: 1.75rem; margin: 0 0 .25rem; }
+h2 { font-size: 1.15rem; margin: 2.5rem 0 .75rem; padding-bottom: .3rem;
+     border-bottom: 1px solid var(--border); }
+h3 { font-size: 1rem; margin: 1.5rem 0 .4rem; }
+p { margin: .5rem 0; }
+ul, ol { margin: .5rem 0; padding-left: 1.4rem; }
+li { margin: .25rem 0; }
+a { color: var(--aw-accent); }
+.aw-meta { color: var(--muted); font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-chip { display: inline-block; padding: .1rem .5rem; border-radius: 999px;
+           background: var(--surface-2); font-size: .78rem; margin-right: .4rem; }
+.aw-requirement { border-left: 3px solid var(--border); padding: .1rem 0 .1rem .9rem;
+                  margin: 1.1rem 0; }
+.aw-requirement-must { border-left-color: var(--aw-accent); }
+.aw-requirement-should { border-left-color: var(--aw-warn); }
+.aw-requirement-may { border-left-color: var(--border); }
+.aw-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8rem;
+         color: var(--muted); }
+.aw-modal { font-weight: 600; }
+.aw-modal-must { color: var(--aw-accent); }
+.aw-modal-should { color: var(--aw-warn); }
+.aw-modal-may { color: var(--fg); font-weight: 400; }
+.aw-chip-rigor-gate { color: var(--aw-accent); border: 1px solid var(--aw-accent); }
+.aw-chip-rigor-contract { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Phase is a lifecycle, and the question it answers is "can I rely on this?". `approved` and a
+   capability's `current` are settled and take the done tone; `proposed` is waiting on an operator
+   decision and takes warn; `exploring` and `archived` are quiet for opposite reasons — one has not
+   arrived yet, the other has been superseded. Deliberately NOT the accent: this document already
+   spends accent on links and on MUST, and a third meaning would empty it of any. `kind` keeps the
+   plain chip on purpose — it is a category, not a state, and hue there ranks nothing. */
+.aw-chip-phase-done { color: var(--aw-ok); border: 1px solid var(--aw-ok); }
+.aw-chip-phase-waiting { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+.aw-chip-phase-quiet { color: var(--muted); }
+.aw-chip-phase-archived { color: var(--muted); text-decoration: line-through; }
+/* An unresolved question blocks `propose`, so it is a real state and not a label. Resolved stays
+   the plain chip — the reader needs to find what is still open, not celebrate what is closed. */
+.aw-chip-open { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Limits is where a reader is most likely to be misled, and it read identically to Checked. */
+.aw-limits { color: var(--aw-warn); }
+/* The first screenful was entirely monochrome, so the document read as texty however the
+   requirements below were coloured. This puts the same modal scheme where the eye lands first,
+   carrying counts rather than decoration. */
+.aw-summary { margin: 0 0 1.5rem; font-size: .9rem; color: var(--muted); }
+.aw-summary .aw-count { font-weight: 600; }
+.aw-summary-sep { color: var(--border); margin: 0 .45rem; }
+.aw-rationale { color: var(--muted); font-size: .9rem; }
+.aw-refs { font-size: .82rem; color: var(--muted); }
+.aw-note { color: var(--muted); font-style: italic; }
+.aw-empty { color: var(--muted); }
+table { border-collapse: collapse; margin: .75rem 0; width: 100%; }
+th, td { border: 1px solid var(--border); padding: .4rem .6rem; text-align: left;
+         vertical-align: top; font-size: .92rem; }
+code, pre { background: var(--surface); border-radius: 4px; }
+code { padding: .1rem .3rem; font-size: .88em; }
+</style>
+</head>
+<body>
+<h1>Local project workspace</h1>
+<p class="aw-meta"><span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><span class="aw-chip">sketch</span></p>
+<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">19</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">19</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">61</span> criteria</p>
+<section><h2 id="requirements">Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-1"><span class="aw-id">FR-1</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Each project SHALL have a stable project identifier and one canonical absolute working directory. The identifier SHALL survive project rename and explicit directory relocation. The system MUST reject two active project records resolving to the same canonical directory.</p><p class="aw-rationale">A registered directory SHALL contain a versioned, non-secret AgentWeave project marker carrying its stable project identifier. The marker MUST NOT contain credentials, settings, or an absolute path. A directory whose marker names a project identifier that the opening database holds no record of, and which is not already bound to any other project in that database, SHALL be adopted under the marker&#x27;s own identifier rather than refused. Adoption seeds the project the same way a newly created project is seeded (default runners, starter charters) and records that the project was adopted rather than newly created.</p></div><div class="aw-requirement aw-requirement-must" id="FR-2"><span class="aw-id">FR-2</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL canonicalize project directories server-side and SHALL route every project filesystem operation through one project workspace resolver. It MUST reject filesystem roots, the Hub data directory, nested AgentWeave worktree directories, traversal, control characters, and symlink or junction escapes.</p><p class="aw-rationale">No project-aware runtime operation SHALL use the Hub process working directory as project identity.</p></div><div class="aw-requirement aw-requirement-must" id="FR-3"><span class="aw-id">FR-3</span> <p><span class="aw-modal aw-modal-must">MUST</span> The operator SHALL be able to open an existing directory or explicitly create and register one new directory. Opening MUST NOT create the target directory. Creating MUST create exactly the requested new directory and MUST refuse an existing non-empty target.</p><p class="aw-rationale">Creation SHALL be expressed as an existing parent directory plus a name for the new project. The created directory SHALL be that name within that parent, and the project SHALL take that same name. The operator SHALL NOT be required to compose a filesystem path in order to create a project. The parent directory MUST already exist. Creation SHALL NOT create intermediate directories. A project name offered at creation MUST be a single path segment. A name that is empty, that contains a path separator, that is a traversal segment, or that the host filesystem rejects SHALL be refused with a message naming the problem, and MUST NOT be silently rewritten into an acceptable one. Before the operator confirms, the interface SHALL show the absolute path that will be created, derived from the same values that are submitted. Registration SHALL atomically create the project, seed its default runners and starter charters, and write its identity marker. It SHALL NOT initialize git, start an agent, create a specification, or otherwise modify project source.</p></div><div class="aw-requirement aw-requirement-must" id="FR-4"><span class="aw-id">FR-4</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The local application SHALL maintain one automatically discovered instance-local operator credential. It SHALL authorize access to the project collection but SHALL NOT select or imply one project. Operator project resources SHALL carry explicit project identity in their route.</p><p class="aw-rationale">Run-bound agent credentials SHALL remain scoped to their recorded run, agent, and project and MUST NOT accept caller-selected project identity.</p></div><div class="aw-requirement aw-requirement-must" id="FR-5"><span class="aw-id">FR-5</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Each project SHALL expose its name, hop budget, per-turn delivery cap, agent budget, token budget, and agent-job allowance through project-scoped settings. Updates SHALL be validated and SHALL take effect through the existing scheduling and budget services.</p><p class="aw-rationale">Directory relocation MUST be a distinct guarded action and MUST NOT be a generic settings field.</p></div><div class="aw-requirement aw-requirement-must" id="FR-6"><span class="aw-id">FR-6</span> <p><span class="aw-modal aw-modal-must">SHALL</span> A project whose directory is missing, unreadable, not a directory, or in identity conflict SHALL remain visible with that state. Its stored history, tasks, and conversations SHALL remain readable.</p><p class="aw-rationale">New operator input and new process starts MUST be refused while unavailable. Existing queued entries and enabled jobs SHALL remain durable; autonomous and scheduled work SHALL pause and be reconsidered after successful repair.</p></div><div class="aw-requirement aw-requirement-must" id="FR-7"><span class="aw-id">FR-7</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The local app SHALL receive one operator event stream for the instance. Every project-scoped event SHALL include a `project_id` stamped by the server from trusted context. The stream SHALL carry updates for inactive projects so their navigation state remains live.</p></div><div class="aw-requirement aw-requirement-must" id="FR-8"><span class="aw-id">FR-8</span> <p><span class="aw-modal aw-modal-must">MUST</span> Every project-scoped query, mutation, invalidation, URL destination, and persisted draft SHALL carry the stable project identifier. Switching projects while requests are in flight MUST NOT allow one project&#x27;s response or event to populate another project&#x27;s view.</p></div><div class="aw-requirement aw-requirement-must" id="FR-9"><span class="aw-id">FR-9</span> <p><span class="aw-modal aw-modal-must">MUST</span> Navigation SHALL list registered projects and their live agents. Opening a project SHALL expose Overview, Tasks, Spec, Jobs, Activity, and Environment within the content area; adding another project view MUST NOT add a navigation-rail destination.</p><p class="aw-rationale">Overview SHALL surface unanswered questions, Activity SHALL contain logs, and Environment SHALL contain quality, instructions, runners, charters, worktrees, diagnostics, budgets, and settings.</p></div><div class="aw-requirement aw-requirement-must" id="FR-10"><span class="aw-id">FR-10</span> <p><span class="aw-modal aw-modal-must">SHALL</span> An agent&#x27;s assigned color SHALL be the same in navigation, conversation, task assignment, and activity within its project. Color MUST always be accompanied by the agent name, and lookup MUST use both project and agent identity.</p></div><div class="aw-requirement aw-requirement-must" id="FR-11"><span class="aw-id">FR-11</span> <p><span class="aw-modal aw-modal-must">SHALL</span> An existing unbound `proj-default` and its related records SHALL be preserved. On the first explicit open, exactly one unbound legacy project SHALL bind to that directory instead of creating a second project. The existing bootstrap secret SHALL become the instance operator credential without changing its value.</p><p class="aw-rationale">The system MUST NOT bind legacy state to the Hub process directory implicitly.</p></div><div class="aw-requirement aw-requirement-must" id="FR-12"><span class="aw-id">FR-12</span> <p><span class="aw-modal aw-modal-must">MUST</span> When AgentWeave runs in explicit Docker mode, it SHALL accept only project directories visible beneath a configured container workspace root. A host path that is not mounted MUST produce a typed mount diagnostic. The system MUST NOT mount the Docker socket or guess host/container path mappings.</p></div><div class="aw-requirement aw-requirement-must" id="FR-13"><span class="aw-id">FR-13</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The Hub UI SHALL let the operator browse the filesystem visible to the Hub process to choose a project directory, rather than requiring an absolute path to be typed from memory.</p><p class="aw-rationale">What browsing returns SHALL be directly usable in the mode it was invoked from, without the operator editing it. Because browsing yields a directory that exists, in create mode it SHALL supply the parent directory rather than the project directory itself.</p></div><div class="aw-requirement aw-requirement-must" id="FR-14"><span class="aw-id">FR-14</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The directory-listing endpoint SHALL require the same authentication as every other Hub endpoint.</p><p class="aw-rationale">The endpoint SHALL NOT follow a symbolic link out of the directory being listed. Where a workspace root is configured, listings SHALL remain within it and a request outside it SHALL be refused with a stated reason. Where no workspace root is configured, any directory the Hub process can read MAY be listed.</p></div><div class="aw-requirement aw-requirement-must" id="FR-15"><span class="aw-id">FR-15</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Where the Hub runs directly on the operator&#x27;s machine, choosing a project directory SHALL be possible through the host operating system&#x27;s own folder-selection dialog, returning a real filesystem path.</p><p class="aw-rationale">The Hub SHALL report whether this is available before offering it, so the operator is never offered a dialog that cannot open. Availability depends on the host and on the Hub not running in a container. Opening the dialog MUST NOT block the Hub&#x27;s handling of other requests. The Hub SHALL remain responsive while a dialog is open. Where the dialog is unavailable, directory selection SHALL remain possible by browsing Hub-visible directories and by typing a path directly. Neither of those paths is removed by this requirement.</p></div><div class="aw-requirement aw-requirement-must" id="FR-16"><span class="aw-id">FR-16</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Directory selection through the host dialog SHALL distinguish the operator cancelling, the request timing out, and the dialog failing to open.</p><p class="aw-rationale">Cancelling SHALL leave the operator&#x27;s current input unchanged and MUST NOT be reported as an error. A timeout and a failure SHALL each be reported in terms naming what happened, and SHALL leave the other selection methods available. A request for a dialog while one is already open MUST NOT open a second dialog.</p></div><div class="aw-requirement aw-requirement-must" id="FR-17"><span class="aw-id">FR-17</span> <p><span class="aw-modal aw-modal-must">SHALL</span> A project SHALL carry an explicit main branch setting, and the system SHALL NOT write to a branch it inferred.</p><p class="aw-rationale">Where the setting is absent, the system SHALL NOT merge. Inferring a branch name is acceptable for a read-only report, whose worst outcome is an `unknown` answer, and is not acceptable for an operation that writes commits — a wrong inference there places work in a branch the operator did not choose. The system MAY detect a likely main branch and offer it to the operator to confirm when a project is set up or first configured. A detected name SHALL NOT take effect until the operator has accepted it. An absent setting SHALL NOT be treated as an error, SHALL NOT block any task transition, and SHALL NOT change how integration is reported for projects that have not set one. Existing projects therefore keep their current coverage answers until an operator chooses a branch.</p></div><div class="aw-requirement aw-requirement-must" id="FR-18"><span class="aw-id">FR-18</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL ensure a project&#x27;s version control ignores the working artefacts the system itself creates, and those rules SHALL apply in every checkout the system provisions, not only in the operator&#x27;s own.</p><p class="aw-rationale">Agents commit what they find. Without this, the isolated checkouts, logs, captured evidence and rendered turn context the system places in the project directory are committed by the first agent that runs, and the operator inherits them in their own history having never chosen them. The rules SHALL also cover build and dependency artefacts the system&#x27;s own commit would otherwise sweep in. The system commits an agent&#x27;s working tree wholesale, so anything left lying there becomes the system&#x27;s commit — bytecode caches and installed dependency trees included. This is a narrower claim than &quot;artefacts of the project&#x27;s language&quot;: it covers what the system writes into history, not what the project&#x27;s ecosystem produces, and that is the test for anything added later. The rules SHALL take effect without the system committing to the operator&#x27;s repository. Repairing a mess the system made by adding a commit the operator did not ask for is a worse outcome than the mess. The system SHALL NOT untrack what is already committed. Ignore rules govern untracked paths; undoing a commit already made would mean rewriting the operator&#x27;s index unasked, and a repository the system has already dirtied stays dirty until its owner says otherwise. Seeding SHALL NOT be limited to registration. A project registered before a rule existed never passes through registration again, and it is precisely the project whose agents have already been committing the artefact; the rules SHALL therefore also be applied when the system resolves a workspace for an agent. Seeding SHALL be additive and SHALL NOT remove or reorder rules the operator already has. Ignore rules are the operator&#x27;s; the system owning some of them is not a reason to rewrite the rest. Seeding SHALL be idempotent, so that repeating it does not accumulate repeated rules. Where the system&#x27;s own set of rules has since changed, the system SHALL bring an already-seeded project up to date rather than leaving it on the set it first received. A project that is not under version control SHALL be left unchanged, and this SHALL NOT be an error. Failure to seed SHALL NOT fail registration or a turn. Ignore rules are a convenience; a project that cannot receive them is still a project.</p></div><div class="aw-requirement aw-requirement-must" id="FR-19"><span class="aw-id">FR-19</span> <p><span class="aw-modal aw-modal-must">MUST</span> The operator SHALL be able to remove a project and every Hub-owned record scoped to it. Deletion SHALL remove database rows only. It MUST NOT delete, move, or write to the project&#x27;s registered working directory or any file within it, including the project&#x27;s own identity marker.</p><p class="aw-rationale">The system MUST refuse deletion while any run for the project is active (`status == &quot;running&quot;`). An existing conversation, message, task, or any other record scoped to the project SHALL NOT itself block deletion. Deletion SHALL be irreversible and MUST require the operator to confirm by supplying the project&#x27;s current name before it proceeds. Deleting the operator&#x27;s only remaining project SHALL leave the interface in a defined, non-error state that still offers a way to add a project.</p></div></section><section><h2 id="acceptance">Acceptance criteria</h2><table><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>an operator opens a directory already registered through an equivalent path</td><td>the existing project is selected no duplicate project is created</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>an unavailable project&#x27;s marked directory is opened at a new path and it has no active</td><td>the existing project is rebound to the new canonical directory every task, conversation, run, agent, and setting retains the same project identifier</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>a marked directory and the existing registered directory are both available, and the</td><td>the copy is reported as an identity conflict it is not merged or adopted without an explicit register-copy-as-new action</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>a directory&#x27;s marker names a project identifier absent from the opening database, and</td><td>the directory is opened as that project, under the marker&#x27;s own identifier the project is seeded with default runners and starter charters as a new project would be the adoption is recorded so it is distinguishable after the fact from ordinary creation</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>a project is deleted and the same directory, still carrying its original marker, is</td><td>the directory is adopted under its original identifier rather than refused</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>agents in two projects run at the same time</td><td>each process, context file, workspace search, and worktree operation uses only its own</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>an execution or path request resolves outside the project or effective worktree root</td><td>it is refused before any file or process operation occurs</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>the operator chooses Open and supplies an available unregistered directory</td><td>it is registered without changing its source content beyond AgentWeave runtime metadata it becomes the selected project</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>the operator chooses Create, supplies an existing parent directory and the name `my-app`</td><td>exactly `my-app` is created within that parent and registered the project is named `my-app`</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>the operator has supplied a parent and a name</td><td>the absolute path that will be created is displayed before confirmation</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>the operator supplies a project name containing a path separator or a traversal segment</td><td>creation is refused with a message naming the problem no directory is created, and the name is not rewritten into an acceptable one</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>the identity marker cannot be written during a new registration</td><td>the project transaction is rolled back or reported as incomplete with a repair action no silently unusable project is presented as ready</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>the local app authenticates with its automatically discovered instance credential</td><td>it can list every registered project and its safe summary no login or project-key selection is required</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>a run credential calls an agent operation while naming another project</td><td>the supplied identity is rejected or ignored the operation remains bound to the run&#x27;s recorded project</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>the operator saves valid project limit settings</td><td>subsequent queue, agent-creation, accounting, and job decisions use those values</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>a setting is outside its accepted range or type</td><td>the complete invalid update is rejected with field-specific diagnostics</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>a registered project directory becomes unavailable</td><td>the project remains visible with a repairable state no new agent process starts for it</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>the project is successfully rebound or becomes available again</td><td>its queued work is reconsidered under current budgets and hop limits jobs and entries have not been silently disabled or deleted</td></tr><tr><td><a href="#FR-7">FR-7</a></td><td></td><td>an agent or scheduled job changes a project that is not selected</td><td>the one operator stream emits an event carrying that project&#x27;s identifier its rail summary updates without switching to it</td></tr><tr><td><a href="#FR-7">FR-7</a></td><td></td><td>an event-producing operation includes an untrusted project value in its payload</td><td>the operator envelope uses the authenticated or recorded project identity instead</td></tr><tr><td><a href="#FR-8">FR-8</a></td><td></td><td>the operator switches from project A to project B before project A&#x27;s request completes</td><td>the response remains cached only under project A project B&#x27;s rendered state is unchanged</td></tr><tr><td><a href="#FR-8">FR-8</a></td><td></td><td>a project view or agent conversation URL is reloaded</td><td>the same project and AgentWeave destination are restored no provider session identifier is used as navigation identity</td></tr><tr><td><a href="#FR-9">FR-9</a></td><td></td><td>two projects are registered</td><td>both and their agents appear in the rail opening either project shows only its own project views and data</td></tr><tr><td><a href="#FR-9">FR-9</a></td><td></td><td>the rail is inspected</td><td>tasks, spec, jobs, activity, environment, questions, logs, quality, instructions, their functionality remains reachable from the selected project</td></tr><tr><td><a href="#FR-10">FR-10</a></td><td></td><td>an agent is shown in the rail, conversation, a task assignee, and activity</td><td>each surface uses the same project-assigned color and textual name</td></tr><tr><td><a href="#FR-11">FR-11</a></td><td></td><td>a pre-change installation with one unbound project invokes AgentWeave from its project</td><td>that project is bound to the directory its agents, conversations, tasks, runs, settings, and credential continuity are preserved</td></tr><tr><td><a href="#FR-11">FR-11</a></td><td></td><td>the Hub starts without an invocation directory</td><td>the legacy project remains unbound and repairable no package, data, or process directory is guessed as its workspace</td></tr><tr><td><a href="#FR-12">FR-12</a></td><td></td><td>a project directory is visible beneath the configured container workspace root</td><td>it can be registered using its container-visible canonical path</td></tr><tr><td><a href="#FR-12">FR-12</a></td><td></td><td>a directory exists on the host but is not visible within the container workspace root</td><td>registration is refused with the required mount information</td></tr><tr><td><a href="#FR-13">FR-13</a></td><td></td><td>the operator browses for a directory while creating a project</td><td>the chosen directory becomes the parent, and the operator supplies only a name the operator is not required to edit the chosen path</td></tr><tr><td><a href="#FR-13">FR-13</a></td><td></td><td>the operator browses for a directory while opening a project</td><td>the chosen directory is the project directory, and no further editing is required</td></tr><tr><td><a href="#FR-14">FR-14</a></td><td></td><td>a directory listing is requested without valid authentication</td><td>the request is refused and no directory contents are returned</td></tr><tr><td><a href="#FR-14">FR-14</a></td><td></td><td>a listed directory contains a symbolic link pointing outside it</td><td>the listing does not traverse that link</td></tr><tr><td><a href="#FR-14">FR-14</a></td><td></td><td>a workspace root is configured and a directory outside it is requested</td><td>the request is refused with a stated reason</td></tr><tr><td><a href="#FR-15">FR-15</a></td><td></td><td>the operator chooses a directory through the host dialog</td><td>the Hub receives that directory&#x27;s filesystem path the path is usable to register a project without further translation</td></tr><tr><td><a href="#FR-15">FR-15</a></td><td></td><td>the directory-selection interface is displayed</td><td>the host dialog is offered only where the Hub reports it available</td></tr><tr><td><a href="#FR-15">FR-15</a></td><td></td><td>the Hub runs in a container</td><td>the host dialog is reported unavailable browsing Hub-visible directories remains offered</td></tr><tr><td><a href="#FR-15">FR-15</a></td><td></td><td>a host dialog is open</td><td>the Hub continues to serve other requests</td></tr><tr><td><a href="#FR-15">FR-15</a></td><td></td><td>the host dialog is available</td><td>the operator can still type a directory path directly</td></tr><tr><td><a href="#FR-16">FR-16</a></td><td></td><td>the operator cancels the host dialog</td><td>no error is reported any directory path already entered is unchanged</td></tr><tr><td><a href="#FR-16">FR-16</a></td><td></td><td>a dialog request exceeds the Hub&#x27;s waiting period</td><td>the outcome is reported as a timeout the other selection methods remain available</td></tr><tr><td><a href="#FR-16">FR-16</a></td><td></td><td>the host dialog cannot be opened</td><td>the outcome names the failure the other selection methods remain available</td></tr><tr><td><a href="#FR-16">FR-16</a></td><td></td><td>a dialog is requested while one is already open</td><td>no second dialog is opened</td></tr><tr><td><a href="#FR-17">FR-17</a></td><td></td><td>a project has no main branch configured</td><td>no merge is performed for any approval task transitions behave exactly as they did before the setting existed integration continues to be reported as it was</td></tr><tr><td><a href="#FR-17">FR-17</a></td><td></td><td>the system detects a likely main branch for a project</td><td>it is offered to the operator it does not become the merge target until the operator accepts it</td></tr><tr><td><a href="#FR-17">FR-17</a></td><td></td><td>coverage reports integration for a project with no configured main branch</td><td>the answer is the same as it was before this capability existed</td></tr><tr><td><a href="#FR-18">FR-18</a></td><td></td><td>a project under version control is registered</td><td>the system&#x27;s own working artefacts are ignored</td></tr><tr><td><a href="#FR-18">FR-18</a></td><td></td><td>an agent works in the isolated checkout the system provisioned for it the system writes its own working files there</td><td>version control reports that checkout as clean the agent&#x27;s commits do not carry the system&#x27;s working files</td></tr><tr><td><a href="#FR-18">FR-18</a></td><td></td><td>an agent&#x27;s work leaves bytecode or installed dependencies in its checkout the system commits that checkout on the agent&#x27;s behalf</td><td>those artefacts are not in the commit</td></tr><tr><td><a href="#FR-18">FR-18</a></td><td></td><td>a project already carries an artefact the system&#x27;s rules now cover</td><td>seeding does not remove it from version control</td></tr><tr><td><a href="#FR-18">FR-18</a></td><td></td><td>a project registered earlier has a workspace resolved for an agent</td><td>the system&#x27;s ignore rules are in place the operator was not asked to re-register it</td></tr><tr><td><a href="#FR-18">FR-18</a></td><td></td><td>a project with its own ignore rules is seeded</td><td>those rules remain the system&#x27;s rules are added alongside them</td></tr><tr><td><a href="#FR-18">FR-18</a></td><td></td><td>a project is seeded again</td><td>the ignore rules are not repeated</td></tr><tr><td><a href="#FR-18">FR-18</a></td><td></td><td>the system&#x27;s set of ignore rules has grown since a project was seeded that project is seeded again</td><td>the new rules are present everything outside the system&#x27;s own rules is unchanged</td></tr><tr><td><a href="#FR-18">FR-18</a></td><td></td><td>a project not under version control is seeded</td><td>it succeeds no ignore file is created</td></tr><tr><td><a href="#FR-19">FR-19</a></td><td></td><td>the operator confirms deletion of a project with no run in `status == &quot;running&quot;`</td><td>the project and every database record scoped to it are removed the project no longer appears in the project collection</td></tr><tr><td><a href="#FR-19">FR-19</a></td><td></td><td>a project pointing at a directory containing files is deleted</td><td>that directory and every file within it, including the project&#x27;s identity marker, still</td></tr><tr><td><a href="#FR-19">FR-19</a></td><td></td><td>deletion is requested for a project with a run in `status == &quot;running&quot;`</td><td>the deletion is refused no database record for the project is removed</td></tr><tr><td><a href="#FR-19">FR-19</a></td><td></td><td>deletion is requested for a project that has conversations and no active run</td><td>the deletion proceeds</td></tr><tr><td><a href="#FR-19">FR-19</a></td><td></td><td>the operator deletes their only remaining project</td><td>the interface shows no project selected and no error an affordance to add a new project remains available</td></tr><tr><td><a href="#FR-19">FR-19</a></td><td></td><td>the operator opens the delete confirmation for a project</td><td>the deletion is not available until they enter that project&#x27;s current name</td></tr></tbody></table></section><section><h2 id="evidence">Evidence and coverage limits</h2><h3>Checked</h3><ul><li>Translated from openspec/specs/local-project-workspace/spec.md (19 requirements, 61 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten.</li></ul><h3 class="aw-limits">Limits</h3><ul><li>source-had-no-purpose: the source&#x27;s Purpose was an unedited archiving placeholder, so this document has no summary rather than a note about openspec&#x27;s workflow</li><li>scenarios-state-no-starting-state: 61 of 61 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed</li></ul></section><section><h2 id="open-questions">Open questions</h2><p class="aw-empty">None outstanding.</p></section>
+<script type="application/agentweave-spec+json" id="aw-spec-payload">
+{
+  "schema_version": 1,
+  "kind": "capability",
+  "title": "Local project workspace",
+  "summary": "",
+  "problem": "",
+  "scope": {
+    "in_scope": [],
+    "non_goals": []
+  },
+  "requirements": [
+    {
+      "key": "projects-have-stable-directory-backed-identity",
+      "statement": "Each project SHALL have a stable project identifier and one canonical absolute working directory. The identifier SHALL survive project rename and explicit directory relocation. The system MUST reject two active project records resolving to the same canonical directory.",
+      "modal": "SHALL",
+      "rationale": "A registered directory SHALL contain a versioned, non-secret AgentWeave project marker carrying its stable project identifier. The marker MUST NOT contain credentials, settings, or an absolute path. A directory whose marker names a project identifier that the opening database holds no record of, and which is not already bound to any other project in that database, SHALL be adopted under the marker's own identifier rather than refused. Adoption seeds the project the same way a newly created project is seeded (default runners, starter charters) and records that the project was adopted rather than newly created.",
+      "party": null
+    },
+    {
+      "key": "project-paths-are-resolved-safely-by-the-server",
+      "statement": "The system SHALL canonicalize project directories server-side and SHALL route every project filesystem operation through one project workspace resolver. It MUST reject filesystem roots, the Hub data directory, nested AgentWeave worktree directories, traversal, control characters, and symlink or junction escapes.",
+      "modal": "SHALL",
+      "rationale": "No project-aware runtime operation SHALL use the Hub process working directory as project identity.",
+      "party": null
+    },
+    {
+      "key": "project-creation-and-opening-are-explicit-and-bounded",
+      "statement": "The operator SHALL be able to open an existing directory or explicitly create and register one new directory. Opening MUST NOT create the target directory. Creating MUST create exactly the requested new directory and MUST refuse an existing non-empty target.",
+      "modal": "MUST",
+      "rationale": "Creation SHALL be expressed as an existing parent directory plus a name for the new project. The created directory SHALL be that name within that parent, and the project SHALL take that same name. The operator SHALL NOT be required to compose a filesystem path in order to create a project. The parent directory MUST already exist. Creation SHALL NOT create intermediate directories. A project name offered at creation MUST be a single path segment. A name that is empty, that contains a path separator, that is a traversal segment, or that the host filesystem rejects SHALL be refused with a message naming the problem, and MUST NOT be silently rewritten into an acceptable one. Before the operator confirms, the interface SHALL show the absolute path that will be created, derived from the same values that are submitted. Registration SHALL atomically create the project, seed its default runners and starter charters, and write its identity marker. It SHALL NOT initialize git, start an agent, create a specification, or otherwise modify project source.",
+      "party": null
+    },
+    {
+      "key": "the-local-operator-reaches-a-project-collection-without-proj",
+      "statement": "The local application SHALL maintain one automatically discovered instance-local operator credential. It SHALL authorize access to the project collection but SHALL NOT select or imply one project. Operator project resources SHALL carry explicit project identity in their route.",
+      "modal": "SHALL",
+      "rationale": "Run-bound agent credentials SHALL remain scoped to their recorded run, agent, and project and MUST NOT accept caller-selected project identity.",
+      "party": null
+    },
+    {
+      "key": "project-settings-are-managed-as-one-validated-resource",
+      "statement": "Each project SHALL expose its name, hop budget, per-turn delivery cap, agent budget, token budget, and agent-job allowance through project-scoped settings. Updates SHALL be validated and SHALL take effect through the existing scheduling and budget services.",
+      "modal": "SHALL",
+      "rationale": "Directory relocation MUST be a distinct guarded action and MUST NOT be a generic settings field.",
+      "party": null
+    },
+    {
+      "key": "unavailable-project-directories-preserve-state-and-pause-exe",
+      "statement": "A project whose directory is missing, unreadable, not a directory, or in identity conflict SHALL remain visible with that state. Its stored history, tasks, and conversations SHALL remain readable.",
+      "modal": "SHALL",
+      "rationale": "New operator input and new process starts MUST be refused while unavailable. Existing queued entries and enabled jobs SHALL remain durable; autonomous and scheduled work SHALL pause and be reconsidered after successful repair.",
+      "party": null
+    },
+    {
+      "key": "one-live-operator-stream-identifies-every-project-event",
+      "statement": "The local app SHALL receive one operator event stream for the instance. Every project-scoped event SHALL include a `project_id` stamped by the server from trusted context. The stream SHALL carry updates for inactive projects so their navigation state remains live.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "frontend-server-state-is-isolated-by-project",
+      "statement": "Every project-scoped query, mutation, invalidation, URL destination, and persisted draft SHALL carry the stable project identifier. Switching projects while requests are in flight MUST NOT allow one project's response or event to populate another project's view.",
+      "modal": "MUST",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "project-views-live-inside-the-selected-project",
+      "statement": "Navigation SHALL list registered projects and their live agents. Opening a project SHALL expose Overview, Tasks, Spec, Jobs, Activity, and Environment within the content area; adding another project view MUST NOT add a navigation-rail destination.",
+      "modal": "MUST",
+      "rationale": "Overview SHALL surface unanswered questions, Activity SHALL contain logs, and Environment SHALL contain quality, instructions, runners, charters, worktrees, diagnostics, budgets, and settings.",
+      "party": null
+    },
+    {
+      "key": "agent-identity-color-remains-project-consistent",
+      "statement": "An agent's assigned color SHALL be the same in navigation, conversation, task assignment, and activity within its project. Color MUST always be accompanied by the agent name, and lookup MUST use both project and agent identity.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "legacy-single-project-state-migrates-without-deletion",
+      "statement": "An existing unbound `proj-default` and its related records SHALL be preserved. On the first explicit open, exactly one unbound legacy project SHALL bind to that directory instead of creating a second project. The existing bootstrap secret SHALL become the instance operator credential without changing its value.",
+      "modal": "SHALL",
+      "rationale": "The system MUST NOT bind legacy state to the Hub process directory implicitly.",
+      "party": null
+    },
+    {
+      "key": "docker-registrations-are-limited-to-a-mounted-workspace-root",
+      "statement": "When AgentWeave runs in explicit Docker mode, it SHALL accept only project directories visible beneath a configured container workspace root. A host path that is not mounted MUST produce a typed mount diagnostic. The system MUST NOT mount the Docker socket or guess host/container path mappings.",
+      "modal": "MUST",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "the-operator-can-browse-for-a-project-directory",
+      "statement": "The Hub UI SHALL let the operator browse the filesystem visible to the Hub process to choose a project directory, rather than requiring an absolute path to be typed from memory.",
+      "modal": "SHALL",
+      "rationale": "What browsing returns SHALL be directly usable in the mode it was invoked from, without the operator editing it. Because browsing yields a directory that exists, in create mode it SHALL supply the parent directory rather than the project directory itself.",
+      "party": null
+    },
+    {
+      "key": "directory-listing-is-authenticated-and-bounded",
+      "statement": "The directory-listing endpoint SHALL require the same authentication as every other Hub endpoint.",
+      "modal": "SHALL",
+      "rationale": "The endpoint SHALL NOT follow a symbolic link out of the directory being listed. Where a workspace root is configured, listings SHALL remain within it and a request outside it SHALL be refused with a stated reason. Where no workspace root is configured, any directory the Hub process can read MAY be listed.",
+      "party": null
+    },
+    {
+      "key": "a-project-directory-can-be-chosen-through-the-host-s-own-fol",
+      "statement": "Where the Hub runs directly on the operator's machine, choosing a project directory SHALL be possible through the host operating system's own folder-selection dialog, returning a real filesystem path.",
+      "modal": "SHALL",
+      "rationale": "The Hub SHALL report whether this is available before offering it, so the operator is never offered a dialog that cannot open. Availability depends on the host and on the Hub not running in a container. Opening the dialog MUST NOT block the Hub's handling of other requests. The Hub SHALL remain responsive while a dialog is open. Where the dialog is unavailable, directory selection SHALL remain possible by browsing Hub-visible directories and by typing a path directly. Neither of those paths is removed by this requirement.",
+      "party": null
+    },
+    {
+      "key": "cancelling-timing-out-and-failing-are-distinct-outcomes",
+      "statement": "Directory selection through the host dialog SHALL distinguish the operator cancelling, the request timing out, and the dialog failing to open.",
+      "modal": "SHALL",
+      "rationale": "Cancelling SHALL leave the operator's current input unchanged and MUST NOT be reported as an error. A timeout and a failure SHALL each be reported in terms naming what happened, and SHALL leave the other selection methods available. A request for a dialog while one is already open MUST NOT open a second dialog.",
+      "party": null
+    },
+    {
+      "key": "a-project-s-main-branch-is-named-not-inferred",
+      "statement": "A project SHALL carry an explicit main branch setting, and the system SHALL NOT write to a branch it inferred.",
+      "modal": "SHALL",
+      "rationale": "Where the setting is absent, the system SHALL NOT merge. Inferring a branch name is acceptable for a read-only report, whose worst outcome is an `unknown` answer, and is not acceptable for an operation that writes commits — a wrong inference there places work in a branch the operator did not choose. The system MAY detect a likely main branch and offer it to the operator to confirm when a project is set up or first configured. A detected name SHALL NOT take effect until the operator has accepted it. An absent setting SHALL NOT be treated as an error, SHALL NOT block any task transition, and SHALL NOT change how integration is reported for projects that have not set one. Existing projects therefore keep their current coverage answers until an operator chooses a branch.",
+      "party": null
+    },
+    {
+      "key": "a-project-ignores-what-the-system-creates-in-every-checkout-",
+      "statement": "The system SHALL ensure a project's version control ignores the working artefacts the system itself creates, and those rules SHALL apply in every checkout the system provisions, not only in the operator's own.",
+      "modal": "SHALL",
+      "rationale": "Agents commit what they find. Without this, the isolated checkouts, logs, captured evidence and rendered turn context the system places in the project directory are committed by the first agent that runs, and the operator inherits them in their own history having never chosen them. The rules SHALL also cover build and dependency artefacts the system's own commit would otherwise sweep in. The system commits an agent's working tree wholesale, so anything left lying there becomes the system's commit — bytecode caches and installed dependency trees included. This is a narrower claim than \"artefacts of the project's language\": it covers what the system writes into history, not what the project's ecosystem produces, and that is the test for anything added later. The rules SHALL take effect without the system committing to the operator's repository. Repairing a mess the system made by adding a commit the operator did not ask for is a worse outcome than the mess. The system SHALL NOT untrack what is already committed. Ignore rules govern untracked paths; undoing a commit already made would mean rewriting the operator's index unasked, and a repository the system has already dirtied stays dirty until its owner says otherwise. Seeding SHALL NOT be limited to registration. A project registered before a rule existed never passes through registration again, and it is precisely the project whose agents have already been committing the artefact; the rules SHALL therefore also be applied when the system resolves a workspace for an agent. Seeding SHALL be additive and SHALL NOT remove or reorder rules the operator already has. Ignore rules are the operator's; the system owning some of them is not a reason to rewrite the rest. Seeding SHALL be idempotent, so that repeating it does not accumulate repeated rules. Where the system's own set of rules has since changed, the system SHALL bring an already-seeded project up to date rather than leaving it on the set it first received. A project that is not under version control SHALL be left unchanged, and this SHALL NOT be an error. Failure to seed SHALL NOT fail registration or a turn. Ignore rules are a convenience; a project that cannot receive them is still a project.",
+      "party": null
+    },
+    {
+      "key": "a-project-can-be-deleted-from-the-hub-without-touching-its-w",
+      "statement": "The operator SHALL be able to remove a project and every Hub-owned record scoped to it. Deletion SHALL remove database rows only. It MUST NOT delete, move, or write to the project's registered working directory or any file within it, including the project's own identity marker.",
+      "modal": "MUST",
+      "rationale": "The system MUST refuse deletion while any run for the project is active (`status == \"running\"`). An existing conversation, message, task, or any other record scoped to the project SHALL NOT itself block deletion. Deletion SHALL be irreversible and MUST require the operator to confirm by supplying the project's current name before it proceeds. Deleting the operator's only remaining project SHALL leave the interface in a defined, non-error state that still offers a way to add a project.",
+      "party": null
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "key": "ac1",
+      "requirement": "projects-have-stable-directory-backed-identity",
+      "given": "",
+      "when": "an operator opens a directory already registered through an equivalent path",
+      "then": "the existing project is selected no duplicate project is created"
+    },
+    {
+      "key": "ac2",
+      "requirement": "projects-have-stable-directory-backed-identity",
+      "given": "",
+      "when": "an unavailable project's marked directory is opened at a new path and it has no active",
+      "then": "the existing project is rebound to the new canonical directory every task, conversation, run, agent, and setting retains the same project identifier"
+    },
+    {
+      "key": "ac3",
+      "requirement": "projects-have-stable-directory-backed-identity",
+      "given": "",
+      "when": "a marked directory and the existing registered directory are both available, and the",
+      "then": "the copy is reported as an identity conflict it is not merged or adopted without an explicit register-copy-as-new action"
+    },
+    {
+      "key": "ac4",
+      "requirement": "projects-have-stable-directory-backed-identity",
+      "given": "",
+      "when": "a directory's marker names a project identifier absent from the opening database, and",
+      "then": "the directory is opened as that project, under the marker's own identifier the project is seeded with default runners and starter charters as a new project would be the adoption is recorded so it is distinguishable after the fact from ordinary creation"
+    },
+    {
+      "key": "ac5",
+      "requirement": "projects-have-stable-directory-backed-identity",
+      "given": "",
+      "when": "a project is deleted and the same directory, still carrying its original marker, is",
+      "then": "the directory is adopted under its original identifier rather than refused"
+    },
+    {
+      "key": "ac6",
+      "requirement": "project-paths-are-resolved-safely-by-the-server",
+      "given": "",
+      "when": "agents in two projects run at the same time",
+      "then": "each process, context file, workspace search, and worktree operation uses only its own"
+    },
+    {
+      "key": "ac7",
+      "requirement": "project-paths-are-resolved-safely-by-the-server",
+      "given": "",
+      "when": "an execution or path request resolves outside the project or effective worktree root",
+      "then": "it is refused before any file or process operation occurs"
+    },
+    {
+      "key": "ac8",
+      "requirement": "project-creation-and-opening-are-explicit-and-bounded",
+      "given": "",
+      "when": "the operator chooses Open and supplies an available unregistered directory",
+      "then": "it is registered without changing its source content beyond AgentWeave runtime metadata it becomes the selected project"
+    },
+    {
+      "key": "ac9",
+      "requirement": "project-creation-and-opening-are-explicit-and-bounded",
+      "given": "",
+      "when": "the operator chooses Create, supplies an existing parent directory and the name `my-app`",
+      "then": "exactly `my-app` is created within that parent and registered the project is named `my-app`"
+    },
+    {
+      "key": "ac10",
+      "requirement": "project-creation-and-opening-are-explicit-and-bounded",
+      "given": "",
+      "when": "the operator has supplied a parent and a name",
+      "then": "the absolute path that will be created is displayed before confirmation"
+    },
+    {
+      "key": "ac11",
+      "requirement": "project-creation-and-opening-are-explicit-and-bounded",
+      "given": "",
+      "when": "the operator supplies a project name containing a path separator or a traversal segment",
+      "then": "creation is refused with a message naming the problem no directory is created, and the name is not rewritten into an acceptable one"
+    },
+    {
+      "key": "ac12",
+      "requirement": "project-creation-and-opening-are-explicit-and-bounded",
+      "given": "",
+      "when": "the identity marker cannot be written during a new registration",
+      "then": "the project transaction is rolled back or reported as incomplete with a repair action no silently unusable project is presented as ready"
+    },
+    {
+      "key": "ac13",
+      "requirement": "the-local-operator-reaches-a-project-collection-without-proj",
+      "given": "",
+      "when": "the local app authenticates with its automatically discovered instance credential",
+      "then": "it can list every registered project and its safe summary no login or project-key selection is required"
+    },
+    {
+      "key": "ac14",
+      "requirement": "the-local-operator-reaches-a-project-collection-without-proj",
+      "given": "",
+      "when": "a run credential calls an agent operation while naming another project",
+      "then": "the supplied identity is rejected or ignored the operation remains bound to the run's recorded project"
+    },
+    {
+      "key": "ac15",
+      "requirement": "project-settings-are-managed-as-one-validated-resource",
+      "given": "",
+      "when": "the operator saves valid project limit settings",
+      "then": "subsequent queue, agent-creation, accounting, and job decisions use those values"
+    },
+    {
+      "key": "ac16",
+      "requirement": "project-settings-are-managed-as-one-validated-resource",
+      "given": "",
+      "when": "a setting is outside its accepted range or type",
+      "then": "the complete invalid update is rejected with field-specific diagnostics"
+    },
+    {
+      "key": "ac17",
+      "requirement": "unavailable-project-directories-preserve-state-and-pause-exe",
+      "given": "",
+      "when": "a registered project directory becomes unavailable",
+      "then": "the project remains visible with a repairable state no new agent process starts for it"
+    },
+    {
+      "key": "ac18",
+      "requirement": "unavailable-project-directories-preserve-state-and-pause-exe",
+      "given": "",
+      "when": "the project is successfully rebound or becomes available again",
+      "then": "its queued work is reconsidered under current budgets and hop limits jobs and entries have not been silently disabled or deleted"
+    },
+    {
+      "key": "ac19",
+      "requirement": "one-live-operator-stream-identifies-every-project-event",
+      "given": "",
+      "when": "an agent or scheduled job changes a project that is not selected",
+      "then": "the one operator stream emits an event carrying that project's identifier its rail summary updates without switching to it"
+    },
+    {
+      "key": "ac20",
+      "requirement": "one-live-operator-stream-identifies-every-project-event",
+      "given": "",
+      "when": "an event-producing operation includes an untrusted project value in its payload",
+      "then": "the operator envelope uses the authenticated or recorded project identity instead"
+    },
+    {
+      "key": "ac21",
+      "requirement": "frontend-server-state-is-isolated-by-project",
+      "given": "",
+      "when": "the operator switches from project A to project B before project A's request completes",
+      "then": "the response remains cached only under project A project B's rendered state is unchanged"
+    },
+    {
+      "key": "ac22",
+      "requirement": "frontend-server-state-is-isolated-by-project",
+      "given": "",
+      "when": "a project view or agent conversation URL is reloaded",
+      "then": "the same project and AgentWeave destination are restored no provider session identifier is used as navigation identity"
+    },
+    {
+      "key": "ac23",
+      "requirement": "project-views-live-inside-the-selected-project",
+      "given": "",
+      "when": "two projects are registered",
+      "then": "both and their agents appear in the rail opening either project shows only its own project views and data"
+    },
+    {
+      "key": "ac24",
+      "requirement": "project-views-live-inside-the-selected-project",
+      "given": "",
+      "when": "the rail is inspected",
+      "then": "tasks, spec, jobs, activity, environment, questions, logs, quality, instructions, their functionality remains reachable from the selected project"
+    },
+    {
+      "key": "ac25",
+      "requirement": "agent-identity-color-remains-project-consistent",
+      "given": "",
+      "when": "an agent is shown in the rail, conversation, a task assignee, and activity",
+      "then": "each surface uses the same project-assigned color and textual name"
+    },
+    {
+      "key": "ac26",
+      "requirement": "legacy-single-project-state-migrates-without-deletion",
+      "given": "",
+      "when": "a pre-change installation with one unbound project invokes AgentWeave from its project",
+      "then": "that project is bound to the directory its agents, conversations, tasks, runs, settings, and credential continuity are preserved"
+    },
+    {
+      "key": "ac27",
+      "requirement": "legacy-single-project-state-migrates-without-deletion",
+      "given": "",
+      "when": "the Hub starts without an invocation directory",
+      "then": "the legacy project remains unbound and repairable no package, data, or process directory is guessed as its workspace"
+    },
+    {
+      "key": "ac28",
+      "requirement": "docker-registrations-are-limited-to-a-mounted-workspace-root",
+      "given": "",
+      "when": "a project directory is visible beneath the configured container workspace root",
+      "then": "it can be registered using its container-visible canonical path"
+    },
+    {
+      "key": "ac29",
+      "requirement": "docker-registrations-are-limited-to-a-mounted-workspace-root",
+      "given": "",
+      "when": "a directory exists on the host but is not visible within the container workspace root",
+      "then": "registration is refused with the required mount information"
+    },
+    {
+      "key": "ac30",
+      "requirement": "the-operator-can-browse-for-a-project-directory",
+      "given": "",
+      "when": "the operator browses for a directory while creating a project",
+      "then": "the chosen directory becomes the parent, and the operator supplies only a name the operator is not required to edit the chosen path"
+    },
+    {
+      "key": "ac31",
+      "requirement": "the-operator-can-browse-for-a-project-directory",
+      "given": "",
+      "when": "the operator browses for a directory while opening a project",
+      "then": "the chosen directory is the project directory, and no further editing is required"
+    },
+    {
+      "key": "ac32",
+      "requirement": "directory-listing-is-authenticated-and-bounded",
+      "given": "",
+      "when": "a directory listing is requested without valid authentication",
+      "then": "the request is refused and no directory contents are returned"
+    },
+    {
+      "key": "ac33",
+      "requirement": "directory-listing-is-authenticated-and-bounded",
+      "given": "",
+      "when": "a listed directory contains a symbolic link pointing outside it",
+      "then": "the listing does not traverse that link"
+    },
+    {
+      "key": "ac34",
+      "requirement": "directory-listing-is-authenticated-and-bounded",
+      "given": "",
+      "when": "a workspace root is configured and a directory outside it is requested",
+      "then": "the request is refused with a stated reason"
+    },
+    {
+      "key": "ac35",
+      "requirement": "a-project-directory-can-be-chosen-through-the-host-s-own-fol",
+      "given": "",
+      "when": "the operator chooses a directory through the host dialog",
+      "then": "the Hub receives that directory's filesystem path the path is usable to register a project without further translation"
+    },
+    {
+      "key": "ac36",
+      "requirement": "a-project-directory-can-be-chosen-through-the-host-s-own-fol",
+      "given": "",
+      "when": "the directory-selection interface is displayed",
+      "then": "the host dialog is offered only where the Hub reports it available"
+    },
+    {
+      "key": "ac37",
+      "requirement": "a-project-directory-can-be-chosen-through-the-host-s-own-fol",
+      "given": "",
+      "when": "the Hub runs in a container",
+      "then": "the host dialog is reported unavailable browsing Hub-visible directories remains offered"
+    },
+    {
+      "key": "ac38",
+      "requirement": "a-project-directory-can-be-chosen-through-the-host-s-own-fol",
+      "given": "",
+      "when": "a host dialog is open",
+      "then": "the Hub continues to serve other requests"
+    },
+    {
+      "key": "ac39",
+      "requirement": "a-project-directory-can-be-chosen-through-the-host-s-own-fol",
+      "given": "",
+      "when": "the host dialog is available",
+      "then": "the operator can still type a directory path directly"
+    },
+    {
+      "key": "ac40",
+      "requirement": "cancelling-timing-out-and-failing-are-distinct-outcomes",
+      "given": "",
+      "when": "the operator cancels the host dialog",
+      "then": "no error is reported any directory path already entered is unchanged"
+    },
+    {
+      "key": "ac41",
+      "requirement": "cancelling-timing-out-and-failing-are-distinct-outcomes",
+      "given": "",
+      "when": "a dialog request exceeds the Hub's waiting period",
+      "then": "the outcome is reported as a timeout the other selection methods remain available"
+    },
+    {
+      "key": "ac42",
+      "requirement": "cancelling-timing-out-and-failing-are-distinct-outcomes",
+      "given": "",
+      "when": "the host dialog cannot be opened",
+      "then": "the outcome names the failure the other selection methods remain available"
+    },
+    {
+      "key": "ac43",
+      "requirement": "cancelling-timing-out-and-failing-are-distinct-outcomes",
+      "given": "",
+      "when": "a dialog is requested while one is already open",
+      "then": "no second dialog is opened"
+    },
+    {
+      "key": "ac44",
+      "requirement": "a-project-s-main-branch-is-named-not-inferred",
+      "given": "",
+      "when": "a project has no main branch configured",
+      "then": "no merge is performed for any approval task transitions behave exactly as they did before the setting existed integration continues to be reported as it was"
+    },
+    {
+      "key": "ac45",
+      "requirement": "a-project-s-main-branch-is-named-not-inferred",
+      "given": "",
+      "when": "the system detects a likely main branch for a project",
+      "then": "it is offered to the operator it does not become the merge target until the operator accepts it"
+    },
+    {
+      "key": "ac46",
+      "requirement": "a-project-s-main-branch-is-named-not-inferred",
+      "given": "",
+      "when": "coverage reports integration for a project with no configured main branch",
+      "then": "the answer is the same as it was before this capability existed"
+    },
+    {
+      "key": "ac47",
+      "requirement": "a-project-ignores-what-the-system-creates-in-every-checkout-",
+      "given": "",
+      "when": "a project under version control is registered",
+      "then": "the system's own working artefacts are ignored"
+    },
+    {
+      "key": "ac48",
+      "requirement": "a-project-ignores-what-the-system-creates-in-every-checkout-",
+      "given": "",
+      "when": "an agent works in the isolated checkout the system provisioned for it the system writes its own working files there",
+      "then": "version control reports that checkout as clean the agent's commits do not carry the system's working files"
+    },
+    {
+      "key": "ac49",
+      "requirement": "a-project-ignores-what-the-system-creates-in-every-checkout-",
+      "given": "",
+      "when": "an agent's work leaves bytecode or installed dependencies in its checkout the system commits that checkout on the agent's behalf",
+      "then": "those artefacts are not in the commit"
+    },
+    {
+      "key": "ac50",
+      "requirement": "a-project-ignores-what-the-system-creates-in-every-checkout-",
+      "given": "",
+      "when": "a project already carries an artefact the system's rules now cover",
+      "then": "seeding does not remove it from version control"
+    },
+    {
+      "key": "ac51",
+      "requirement": "a-project-ignores-what-the-system-creates-in-every-checkout-",
+      "given": "",
+      "when": "a project registered earlier has a workspace resolved for an agent",
+      "then": "the system's ignore rules are in place the operator was not asked to re-register it"
+    },
+    {
+      "key": "ac52",
+      "requirement": "a-project-ignores-what-the-system-creates-in-every-checkout-",
+      "given": "",
+      "when": "a project with its own ignore rules is seeded",
+      "then": "those rules remain the system's rules are added alongside them"
+    },
+    {
+      "key": "ac53",
+      "requirement": "a-project-ignores-what-the-system-creates-in-every-checkout-",
+      "given": "",
+      "when": "a project is seeded again",
+      "then": "the ignore rules are not repeated"
+    },
+    {
+      "key": "ac54",
+      "requirement": "a-project-ignores-what-the-system-creates-in-every-checkout-",
+      "given": "",
+      "when": "the system's set of ignore rules has grown since a project was seeded that project is seeded again",
+      "then": "the new rules are present everything outside the system's own rules is unchanged"
+    },
+    {
+      "key": "ac55",
+      "requirement": "a-project-ignores-what-the-system-creates-in-every-checkout-",
+      "given": "",
+      "when": "a project not under version control is seeded",
+      "then": "it succeeds no ignore file is created"
+    },
+    {
+      "key": "ac56",
+      "requirement": "a-project-can-be-deleted-from-the-hub-without-touching-its-w",
+      "given": "",
+      "when": "the operator confirms deletion of a project with no run in `status == \"running\"`",
+      "then": "the project and every database record scoped to it are removed the project no longer appears in the project collection"
+    },
+    {
+      "key": "ac57",
+      "requirement": "a-project-can-be-deleted-from-the-hub-without-touching-its-w",
+      "given": "",
+      "when": "a project pointing at a directory containing files is deleted",
+      "then": "that directory and every file within it, including the project's identity marker, still"
+    },
+    {
+      "key": "ac58",
+      "requirement": "a-project-can-be-deleted-from-the-hub-without-touching-its-w",
+      "given": "",
+      "when": "deletion is requested for a project with a run in `status == \"running\"`",
+      "then": "the deletion is refused no database record for the project is removed"
+    },
+    {
+      "key": "ac59",
+      "requirement": "a-project-can-be-deleted-from-the-hub-without-touching-its-w",
+      "given": "",
+      "when": "deletion is requested for a project that has conversations and no active run",
+      "then": "the deletion proceeds"
+    },
+    {
+      "key": "ac60",
+      "requirement": "a-project-can-be-deleted-from-the-hub-without-touching-its-w",
+      "given": "",
+      "when": "the operator deletes their only remaining project",
+      "then": "the interface shows no project selected and no error an affordance to add a new project remains available"
+    },
+    {
+      "key": "ac61",
+      "requirement": "a-project-can-be-deleted-from-the-hub-without-touching-its-w",
+      "given": "",
+      "when": "the operator opens the delete confirmation for a project",
+      "then": "the deletion is not available until they enter that project's current name"
+    }
+  ],
+  "tasks": [],
+  "algorithms": [],
+  "design": "",
+  "evidence": {
+    "checked": [
+      "Translated from openspec/specs/local-project-workspace/spec.md (19 requirements, 61 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten."
+    ],
+    "limits": [
+      "source-had-no-purpose: the source's Purpose was an unedited archiving placeholder, so this document has no summary rather than a note about openspec's workflow",
+      "scenarios-state-no-starting-state: 61 of 61 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed"
+    ]
+  },
+  "lifecycle": "",
+  "open_questions": [],
+  "aw_identity": {
+    "requirements": {
+      "projects-have-stable-directory-backed-identity": "FR-1",
+      "project-paths-are-resolved-safely-by-the-server": "FR-2",
+      "project-creation-and-opening-are-explicit-and-bounded": "FR-3",
+      "the-local-operator-reaches-a-project-collection-without-proj": "FR-4",
+      "project-settings-are-managed-as-one-validated-resource": "FR-5",
+      "unavailable-project-directories-preserve-state-and-pause-exe": "FR-6",
+      "one-live-operator-stream-identifies-every-project-event": "FR-7",
+      "frontend-server-state-is-isolated-by-project": "FR-8",
+      "project-views-live-inside-the-selected-project": "FR-9",
+      "agent-identity-color-remains-project-consistent": "FR-10",
+      "legacy-single-project-state-migrates-without-deletion": "FR-11",
+      "docker-registrations-are-limited-to-a-mounted-workspace-root": "FR-12",
+      "the-operator-can-browse-for-a-project-directory": "FR-13",
+      "directory-listing-is-authenticated-and-bounded": "FR-14",
+      "a-project-directory-can-be-chosen-through-the-host-s-own-fol": "FR-15",
+      "cancelling-timing-out-and-failing-are-distinct-outcomes": "FR-16",
+      "a-project-s-main-branch-is-named-not-inferred": "FR-17",
+      "a-project-ignores-what-the-system-creates-in-every-checkout-": "FR-18",
+      "a-project-can-be-deleted-from-the-hub-without-touching-its-w": "FR-19"
+    },
+    "high_water": 19,
+    "retired": {},
+    "digests": {
+      "FR-1": "1e03e424cf915fa83e1bdcdc3d24a6ac036b73558348633ef337cdbda7f0cdda",
+      "FR-2": "9d5626f291619e84c846006897864b046180a0832b7bbadbf507d099ad098e36",
+      "FR-3": "c3965c146c105d7d92998a377e0e11fd9074b2adf055c4657b6013811dfe24f9",
+      "FR-4": "c934a5f6b9fa71385eb6bd099686923e5d487dac954907f1dd8562aa6e423f49",
+      "FR-5": "00cb5df1efb58cfa417436852bb9365336c64a54bcfa9fa1ab15f0b4aff3a534",
+      "FR-6": "91434a6e40ac154438c200ee8a263e34c5da93871526813477c7a68ba3eb46d1",
+      "FR-7": "e50d808d2d7f9005505a6f7a4315a00e2e2a8d34f0380cae5c075d31f06fc2e1",
+      "FR-8": "baca7dc6ec98cede7682a00e2c3bbe082b85ab151b3b7257f86c055ba943383c",
+      "FR-9": "1501e87394b482944cd8e7c1853f884ef4ab8f70345c4b835a34d0817a043db6",
+      "FR-10": "5c28c547b1e2e6a5080ebb910e3f30ebeb2e8d7daa924bcc8f73252135e8ce2b",
+      "FR-11": "4a7297ae748e38588e62d61cac0835757d39146d73c5f1a8cde48f14a5b9b34e",
+      "FR-12": "a91cd76a47892146c832260d7ac9e83f92bd8070aca98bb094432696d745913a",
+      "FR-13": "f3328738572470f8a0be5108c91661ce3b7f82019ebe4e2ebffcb69e818abbc4",
+      "FR-14": "4c7e68250f83830deb9e2aaf9977190a2a65a4f047b9f6b8b7160bca3fe54e75",
+      "FR-15": "51a3ed5d42885d353443534c7d156adbab8404b26df6c182724e449a0836df28",
+      "FR-16": "faeca0a763d8f7d9979b20df5884e2048590c1f099b99d7d5f2e0ca2a59c3996",
+      "FR-17": "b3990abacf191e1534d719ba1a121ba7d14fe179ab00b44c8ea9faee52e59b12",
+      "FR-18": "da7f94384e2c50e9eb67389c446cc3c82b570204a910a63e76793b15f9929c6d",
+      "FR-19": "3b1fc2ff8d5f21efbc86a303086d3c27e0e53433c4e4580271f421b0bb15de04"
+    }
+  }
+}
+</script>
+</body>
+</html>

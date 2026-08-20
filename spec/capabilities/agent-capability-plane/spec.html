@@ -1,0 +1,875 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent capability plane</title>
+<meta name="aw-spec-kind" content="capability">
+<meta name="aw-spec-status" content="current">
+<meta name="aw-spec-rigor" content="sketch">
+<meta name="aw-spec-schema-version" content="1">
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+    --surface-2: #21262d; --surface: #161b22;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+:root[data-theme="dark"] {
+  --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+  --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+  --surface-2: #21262d; --surface: #161b22;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 2rem 2.5rem 4rem; background: var(--bg); color: var(--fg);
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+h1 { font-size: 1.75rem; margin: 0 0 .25rem; }
+h2 { font-size: 1.15rem; margin: 2.5rem 0 .75rem; padding-bottom: .3rem;
+     border-bottom: 1px solid var(--border); }
+h3 { font-size: 1rem; margin: 1.5rem 0 .4rem; }
+p { margin: .5rem 0; }
+ul, ol { margin: .5rem 0; padding-left: 1.4rem; }
+li { margin: .25rem 0; }
+a { color: var(--aw-accent); }
+.aw-meta { color: var(--muted); font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-chip { display: inline-block; padding: .1rem .5rem; border-radius: 999px;
+           background: var(--surface-2); font-size: .78rem; margin-right: .4rem; }
+.aw-requirement { border-left: 3px solid var(--border); padding: .1rem 0 .1rem .9rem;
+                  margin: 1.1rem 0; }
+.aw-requirement-must { border-left-color: var(--aw-accent); }
+.aw-requirement-should { border-left-color: var(--aw-warn); }
+.aw-requirement-may { border-left-color: var(--border); }
+.aw-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8rem;
+         color: var(--muted); }
+.aw-modal { font-weight: 600; }
+.aw-modal-must { color: var(--aw-accent); }
+.aw-modal-should { color: var(--aw-warn); }
+.aw-modal-may { color: var(--fg); font-weight: 400; }
+.aw-chip-rigor-gate { color: var(--aw-accent); border: 1px solid var(--aw-accent); }
+.aw-chip-rigor-contract { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Phase is a lifecycle, and the question it answers is "can I rely on this?". `approved` and a
+   capability's `current` are settled and take the done tone; `proposed` is waiting on an operator
+   decision and takes warn; `exploring` and `archived` are quiet for opposite reasons — one has not
+   arrived yet, the other has been superseded. Deliberately NOT the accent: this document already
+   spends accent on links and on MUST, and a third meaning would empty it of any. `kind` keeps the
+   plain chip on purpose — it is a category, not a state, and hue there ranks nothing. */
+.aw-chip-phase-done { color: var(--aw-ok); border: 1px solid var(--aw-ok); }
+.aw-chip-phase-waiting { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+.aw-chip-phase-quiet { color: var(--muted); }
+.aw-chip-phase-archived { color: var(--muted); text-decoration: line-through; }
+/* An unresolved question blocks `propose`, so it is a real state and not a label. Resolved stays
+   the plain chip — the reader needs to find what is still open, not celebrate what is closed. */
+.aw-chip-open { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Limits is where a reader is most likely to be misled, and it read identically to Checked. */
+.aw-limits { color: var(--aw-warn); }
+/* The first screenful was entirely monochrome, so the document read as texty however the
+   requirements below were coloured. This puts the same modal scheme where the eye lands first,
+   carrying counts rather than decoration. */
+.aw-summary { margin: 0 0 1.5rem; font-size: .9rem; color: var(--muted); }
+.aw-summary .aw-count { font-weight: 600; }
+.aw-summary-sep { color: var(--border); margin: 0 .45rem; }
+.aw-rationale { color: var(--muted); font-size: .9rem; }
+.aw-refs { font-size: .82rem; color: var(--muted); }
+.aw-note { color: var(--muted); font-style: italic; }
+.aw-empty { color: var(--muted); }
+table { border-collapse: collapse; margin: .75rem 0; width: 100%; }
+th, td { border: 1px solid var(--border); padding: .4rem .6rem; text-align: left;
+         vertical-align: top; font-size: .92rem; }
+code, pre { background: var(--surface); border-radius: 4px; }
+code { padding: .1rem .3rem; font-size: .88em; }
+</style>
+</head>
+<body>
+<h1>Agent capability plane</h1>
+<p class="aw-meta"><span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><span class="aw-chip">sketch</span></p>
+<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">21</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">21</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">78</span> criteria</p>
+<section><h2 id="summary">Summary</h2><p>One least-privilege, run-authenticated application contract for agent-caused effects and scoped reads, shared identically by HTTP and MCP. Established by `openspec/changes/agent-capability-plane`. **Reconciled 2026-08-07.** The equal-capability requirement below previously named &quot;ordinary commands&quot; as a third adapter. No such command exists — the CLI was reduced to local instance management — and `openspec/explorations/2026-08-02-product-direction.md` states that the reduced CLI is not an agent capability adapter.</p></section><section><h2 id="requirements">Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-1"><span class="aw-id">FR-1</span> <p><span class="aw-modal aw-modal-must">MUST</span> The system SHALL mint an unguessable credential for each Hub-owned run, store only a non-reversible digest, and accept the credential only while that exact run is active. Authentication SHALL derive the project, agent, and run from the matched row. The credential MUST NOT be exposed in output, events, command arguments, or API responses.</p></div><div class="aw-requirement aw-requirement-must" id="FR-2"><span class="aw-id">FR-2</span> <p><span class="aw-modal aw-modal-must">MUST</span> The agent application API SHALL expose only peer messaging, shared task-ledger reads/writes, operator questions and their answers, governed agent requests, and governed scheduled-work mutations. It MUST NOT expose inbound queue/history, roster, project settings, agent configuration, charter/scope, credentials, or other operator capabilities.</p></div><div class="aw-requirement aw-requirement-must" id="FR-3"><span class="aw-id">FR-3</span> <p><span class="aw-modal aw-modal-must">MUST</span> Agent-action payloads SHALL contain no project, agent, sender, assigner, requester, or run identity field. Every affected service SHALL use only the authenticated actor. Caller headers or extra body fields MUST NOT change attribution.</p></div><div class="aw-requirement aw-requirement-must" id="FR-4"><span class="aw-id">FR-4</span> <p><span class="aw-modal aw-modal-must">MUST</span> The system SHALL ensure every message, task creation/update, question, scheduled-work mutation, and agent request caused by the agent plane durably identifies the responsible agent and run. Event logs MUST NOT be the only source of that attribution. Historical/operator effects MAY remain unattributed where no run exists.</p><p class="aw-rationale">For **task status** specifically, last-writer attribution is insufficient: approval is a judgement about work a different run performed, so a single mutable field cannot express the question of whether author and reviewer differ. Task status attribution SHALL therefore be an append-only sequence, one record per accepted transition, each naming its own responsible run. A materialised &quot;latest responsible run&quot; MAY be retained for convenience but MUST NOT be the only durable record.</p></div><div class="aw-requirement aw-requirement-must" id="FR-5"><span class="aw-id">FR-5</span> <p><span class="aw-modal aw-modal-must">MUST</span> Direct HTTP SHALL be the application contract. MCP SHALL be a thin adapter over that contract with the same operations, validation, governance, attribution, and typed failure meaning. An adapter MUST NOT duplicate queue, budget, identity, or lifecycle business rules and MUST NOT silently convert failures into empty or successful results.</p><p class="aw-rationale">Two adapters exist rather than one because MCP is convenient where it is permitted and some environments forbid MCP servers while still allowing ordinary local API calls. The command-line interface is **not** one of them: it manages the local application instance and carries no agent capabilities.</p></div><div class="aw-requirement aw-requirement-must" id="FR-6"><span class="aw-id">FR-6</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL durably record, and show the operator, any run that completes having produced a trailing question without opening a question of record.</p><p class="aw-rationale">An agent that ends a turn on an unanswered question has stopped working and is waiting for an answer that cannot arrive, because nothing was ever asked. From the operator&#x27;s side this is indistinguishable from a completed turn. Detection is the only available remedy: no provider protocol permits requiring that a turn end through a particular tool.</p></div><div class="aw-requirement aw-requirement-must" id="FR-7"><span class="aw-id">FR-7</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL offer the operator, for each pending unasked question, an action that re-prompts the agent to ask that same question through the question tool, and an action that dismisses it.</p><p class="aw-rationale">Answering the detected question directly is not possible: the turn has ended and no tool call is waiting on a value. Re-prompting is the only action that restores the intended flow.</p></div><div class="aw-requirement aw-requirement-must" id="FR-8"><span class="aw-id">FR-8</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Events persisted for the operator&#x27;s attention SHALL use the severity vocabulary the operator&#x27;s views filter and style by.</p><p class="aw-rationale">A severity that no view recognises is worse than none: the row renders unmarked and is hidden by the filter intended to reveal it, so the events most needing attention are the ones least likely to be seen.</p></div><div class="aw-requirement aw-requirement-must" id="FR-9"><span class="aw-id">FR-9</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The question tool SHALL accept a list of questions and hold the turn until every one has been answered or the wait expires.</p><p class="aw-rationale">An agent needing several decisions before it can start would otherwise block its turn once per question and interrupt the operator once per question, or decide some of them itself. Asking together is one interruption and one wait. Where the asking run is no longer waiting — it expired, ended, or the question was not blocking — the answers SHALL reach the agent as **one** delivery for the batch rather than one per answer, and that delivery SHALL happen only once every question in the batch has been answered or declined. An answer delivered on its own has the agent act on part of a decision while the operator is still making the rest, which is the interruption asking together exists to prevent. The delivery SHALL carry every question in the batch, in the order they were asked, each with its answer or with the fact that the operator declined it. It SHALL include an answer that was recorded while the asking run was still waiting but which that run never received. Where the batch produced no answers at all, nothing SHALL be delivered. Recording an answer SHALL NOT wait for the batch. Each answer SHALL be persisted, reported, and SHALL release any task it had parked when the operator gives it.</p></div><div class="aw-requirement aw-requirement-must" id="FR-10"><span class="aw-id">FR-10</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The operator SHALL be shown one question of a batch at a time, told which step they are on and how many there are, and advanced to the next once the current one is answered.</p><p class="aw-rationale">Showing a batch at once turns a conversation into a form, and a count of outstanding questions displayed where a step count belongs misrepresents how much is left. Where a batch&#x27;s answers are held until it completes, the operator SHALL be told that the answers go to the agent together. Without it, a part-answered batch is indistinguishable from answers that were discarded: the operator answers, sees nothing happen, and has no way to tell that the agent is waiting on the rest. This statement is about what has been sent and is distinct from the step counter, which is about position.</p></div><div class="aw-requirement aw-requirement-must" id="FR-11"><span class="aw-id">FR-11</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Each agent SHALL carry its own limit for how long it waits on a permission decision and on an answer to a question, and an agent with no limit set SHALL use the system default.</p><p class="aw-rationale">How long a wait is reasonable depends on the agent and on whether the operator is watching. A single compiled-in number serves neither the agent being supervised closely nor the one left running while the operator is elsewhere.</p></div><div class="aw-requirement aw-requirement-must" id="FR-12"><span class="aw-id">FR-12</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Settings that belong to an agent rather than to one conversation SHALL be presented on the agent&#x27;s own surface, reachable from a conversation without leaving it.</p><p class="aw-rationale">The composer&#x27;s controls are per-conversation and chosen at the moment of sending. Mixing durable per-agent configuration into them would make it unclear which choices persist, and adding a third settings location would make it unclear where to look.</p></div><div class="aw-requirement aw-requirement-must" id="FR-13"><span class="aw-id">FR-13</span> <p><span class="aw-modal aw-modal-must">SHALL</span> An agent&#x27;s `send_message` SHALL fail when the recipient&#x27;s target conversation is archived, and the failure response MUST carry three things: that the conversation is archived, an instruction to send to a new conversation instead, and the content the agent submitted, restated verbatim.</p><p class="aw-rationale">Restating the content is the point of the requirement, not a courtesy. A blocked send that returns only an error forces the agent to reconstruct its own message from a context it may have already moved past; returning the content makes the retry mechanical. The archived conversation MUST NOT receive the message, and no inbound queue entry MUST be created against it. The failure MUST NOT silently redirect the message to a different conversation — the agent decides where its message goes.</p></div><div class="aw-requirement aw-requirement-must" id="FR-14"><span class="aw-id">FR-14</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Every rule the system enforces on agent behaviour SHALL be enforced at a boundary the system owns — the capability plane, the run boundary, or the data model — independently of any runner-specific hook mechanism.</p><p class="aw-rationale">A runner hook MAY make an already-enforced rule fire **sooner**, at the offending operation rather than at run end, or **more pleasantly**, as a message inside the agent&#x27;s own transcript rather than a rejection after the fact. Removing every hook SHALL leave the identical rule in force, differing only in when and how it is reported. Hooks are per-machine, per-user, unevenly shaped across runners, and absent from runners that do not have them. A capability that lived only in a hook would be missing from a teammate&#x27;s checkout, would have to be written twice and drift, and would make any future runner without hooks structurally second-class. The system already states runner configuration explicitly rather than reading whatever the host machine&#x27;s settings say; this requirement holds that line for behavioural rules.</p></div><div class="aw-requirement aw-requirement-must" id="FR-15"><span class="aw-id">FR-15</span> <p><span class="aw-modal aw-modal-must">SHALL</span> When an agent delegates work naming a task, the system SHALL treat that task as state governing the resulting run, not solely as a field on the delegated message. The named task SHALL be validated against the delegating run&#x27;s project at the time of the call.</p><p class="aw-rationale">Attribution of the resulting binding SHALL derive from the authenticated run, as with every other agent-caused effect; a caller SHALL NOT be able to assert on whose behalf a binding is made.</p></div><div class="aw-requirement aw-requirement-must" id="FR-16"><span class="aw-id">FR-16</span> <p><span class="aw-modal aw-modal-must">SHALL</span> No agent-facing operation — over HTTP or MCP — SHALL move a task into or out of the status meaning it is waiting on a person. That status SHALL be reached only by the system observing an unanswered question, or by the operator.</p><p class="aw-rationale">This is the same rule, for the same reason, as an agent&#x27;s inability to bind its own run or to set its own task&#x27;s divergence policy: a state the subject can assert is not a state that constrains it. Of all the statuses, this is the one an agent under a completion gate has most reason to want — it is the account that excuses an unfinished task — so it is the one that must be earned by actually having asked a person something they have not yet answered.</p></div><div class="aw-requirement aw-requirement-must" id="FR-17"><span class="aw-id">FR-17</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL let the operator close an outstanding question without answering it, and SHALL record that they did.</p><p class="aw-rationale">Declining SHALL be available to the operator only. An agent SHALL NOT decline a question, including one it asked itself: an agent able to close its own question could clear the record of having asked without anyone having decided anything. A question that has already been answered SHALL NOT be declinable.</p></div><div class="aw-requirement aw-requirement-must" id="FR-18"><span class="aw-id">FR-18</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Where an agent is waiting on a question, the system SHALL end that wait when the question is declined, rather than leaving it to expire, and SHALL report the decline distinctly from both an answer and an expiry.</p><p class="aw-rationale">A decline and an expiry mean different things. An expiry means nobody was there; a decline means someone was there and chose not to answer, which tells the agent the decision is now its own. An agent left to time out spends the interval waiting for something already decided and then arrives at a weaker conclusion than the one available. The report SHALL NOT present a decline as an answer. What an agent does with a decline is its own judgement, and the system SHALL NOT require any particular response to one.</p></div><div class="aw-requirement aw-requirement-must" id="FR-19"><span class="aw-id">FR-19</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL provide an agent with a way to read a specification document, and that capability SHALL be described in the surface the agent is told it has.</p><p class="aw-rationale">Documents are written into the project&#x27;s own directory, while a working agent&#x27;s checkout is an isolated one branched before the document existed. An agent is therefore told which document governs its work and, without this, has no way to open it — leaving it to implement from another agent&#x27;s paraphrase, with no way to detect divergence from what was approved. The document SHALL be returned as structured content rather than as its rendered form. The rendering exists for a person; returning it spends an agent&#x27;s context on markup and leaves it to re-derive what the structure already states. Each requirement returned SHALL carry the identifier the system minted for it, so that an agent quotes the same identifier that tasks, evidence and gates use. Acceptance criteria SHALL be returned grouped under the requirement they demonstrate, rather than as a separate list to be joined by the reader. Reading SHALL be permitted in every phase. Reading is not authoring, and every gate in this area governs writing or approving. A capability that is refused depending on state is one an agent concludes it does not have. The document&#x27;s phase SHALL be returned, so that how settled it is can be judged rather than assumed. Content that cannot be matched to a minted identifier SHALL still be returned, accompanied by a statement of the problem. A document carrying no structured content SHALL be reported as such rather than as a document with no requirements.</p></div><div class="aw-requirement aw-requirement-must" id="FR-20"><span class="aw-id">FR-20</span> <p><span class="aw-modal aw-modal-must">SHALL</span> A task SHALL carry, for each requirement it serves, the wording of that requirement as the document currently states it, alongside its identifier.</p><p class="aw-rationale">An identifier and a location within a document are only actionable by a reader that can open the document. Carrying the wording makes a task independently actionable, and is what a task&#x27;s own description must otherwise duplicate and can then contradict. The wording SHALL be read from the document rather than stored alongside the requirement&#x27;s identity, so that it cannot come to disagree with what the document says. Reading the wording SHALL NOT be per task: a board serving many tasks from one document SHALL read that document once. Where the wording cannot be obtained, the task SHALL still be returned with its identifiers. A task board SHALL NOT fail because a project&#x27;s directory is unavailable.</p></div><div class="aw-requirement aw-requirement-must" id="FR-21"><span class="aw-id">FR-21</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL offer agents tools to record evidence against a requirement, to read the evidence a project holds, and to accept or reject it.</p><p class="aw-rationale">Evidence is what opens integration. A system that gates merging on accepted evidence and offers no way for an agent to produce any has built a pipeline only its operator can drive, one HTTP call at a time. Deciding SHALL be a single operation covering both acceptance and rejection. Offering only acceptance would make rejection unreachable from the agent plane while the underlying operation allows it, which is the surface disagreement this capability exists to prevent. Reading SHALL be offered alongside deciding. A decision names a specific piece of evidence, so an agent with no way to discover what evidence exists cannot decide anything, and the capability to decide is decorative without it. The evidence an agent reads SHALL identify who produced it. An agent may not decide evidence it produced itself, so one that cannot see the producer discovers that rule only by being refused. Recording SHALL state, where the agent will read it, that evidence is what allows approved work to merge. The consequence of recording nothing is reported to the operator and never to the agent that could have prevented it. Constrained values SHALL be constrained identically on both surfaces, and open ones SHALL stay open. A tool that accepts less than its route makes the plane narrower than the system, which this capability forbids in either direction.</p></div></section><section><h2 id="acceptance">Acceptance criteria</h2><table><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>an agent request carries a valid credential for a running run</td><td>the server derives that run&#x27;s project and agent the request supplies no actor identity</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>a credential belongs to a completed, failed, stopped, or interrupted run</td><td>the agent request is refused</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>a project API key is presented to the agent API or a run credential is presented to an</td><td>authentication is refused</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>an authenticated run messages a peer, works with the shared task ledger, or asks the</td><td>the permitted effect or read succeeds under the same validation as the operator system</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>an authenticated run tries to read undelivered input or alter project/agent configuration</td><td>no agent API operation provides that capability</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>an operator-only route is added without an explicit agent capability</td><td>a run credential cannot call it</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>an agent constructs a valid action request</td><td>there is no supported field by which it can select another actor</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>a caller adds identity-like headers or unknown body fields</td><td>the effect is either rejected as invalid or remains attributed to the authenticated run</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>an authenticated run causes an allowed effect</td><td>the resulting durable record identifies that run its project and agent are consistent with the authenticated actor</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>an authenticated run updates a mutable task or job</td><td>the record identifies the run responsible for that update</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>one authenticated run moves a task to `completed` and a later run moves it to another</td><td>the run responsible for the earlier transition is still identifiable the later transition has not overwritten it</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>equivalent valid actions are performed through HTTP and through MCP</td><td>their persisted effects have equivalent content and attribution</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>the application API returns validation, denied, not-found, or conflict failure</td><td>MCP callers receive the same failure meaning</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>an agent attempts to affect shared state through a command-line invocation</td><td>no such command exists</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>the Hub starts an agent with either adapter available</td><td>the process receives its run credential it does not receive a project/operator API key</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>a run completes, its final assistant text ends in a question, and the run opened no</td><td>a pending record of the unasked question is stored, carrying the agent, the run, the an event is broadcast so the operator&#x27;s view updates without a reload</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>a run completes having opened a question of record</td><td>no unasked-question record is created, regardless of how its final text ends</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>a run completes and its final assistant text does not end in a question</td><td>no unasked-question record is created</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>a run completes ending in a question and the agent still has queued input</td><td>no unasked-question record is created, because the next turn starts on its own</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>a run ends in any status other than completed</td><td>no unasked-question record is created</td></tr><tr><td><a href="#FR-7">FR-7</a></td><td></td><td>the operator chooses to have the question asked properly</td><td>the record moves out of pending the agent is triggered with an instruction naming that question and requiring it be asked</td></tr><tr><td><a href="#FR-7">FR-7</a></td><td></td><td>the operator dismisses a pending unasked question</td><td>the record moves out of pending and the operator is not shown it again</td></tr><tr><td><a href="#FR-7">FR-7</a></td><td></td><td>an action is taken on a record that is no longer pending</td><td>the request is refused rather than silently repeated</td></tr><tr><td><a href="#FR-8">FR-8</a></td><td></td><td>the system records that an agent&#x27;s action was refused</td><td>the stored severity is one the operator&#x27;s activity view filters and styles by</td></tr><tr><td><a href="#FR-9">FR-9</a></td><td></td><td>an agent asks several questions in one call the operator answers all of them</td><td>the tool returns every answer, each identified with the question it answers</td></tr><tr><td><a href="#FR-9">FR-9</a></td><td></td><td>the wait expires before every question in a batch is answered</td><td>the tool returns without an answer for the unanswered ones and states plainly that they</td></tr><tr><td><a href="#FR-9">FR-9</a></td><td></td><td>an agent asks one question</td><td>it behaves exactly as an unbatched question does, with no extra step for the operator</td></tr><tr><td><a href="#FR-9">FR-9</a></td><td></td><td>any question in a batch is submitted without its header, its options, or its</td><td>the call is rejected rather than partially accepted</td></tr><tr><td><a href="#FR-9">FR-9</a></td><td></td><td>the asking run is no longer waiting and the operator answers the first question of a the operator resolves the remaining questions</td><td>nothing is delivered to the agent exactly one delivery reaches the agent, carrying every question and its answer in the</td></tr><tr><td><a href="#FR-9">FR-9</a></td><td></td><td>the operator answers some questions of a batch and declines the rest</td><td>the batch is delivered the declined questions are named as declined rather than omitted</td></tr><tr><td><a href="#FR-9">FR-9</a></td><td></td><td>the operator answers a question while its asking run is waiting that run ends before the batch completes the operator then resolves the remaining questions</td><td>the delivery carries the earlier answer as well as the later ones</td></tr><tr><td><a href="#FR-9">FR-9</a></td><td></td><td>every question in a batch is declined and none is answered</td><td>no delivery is made to the agent</td></tr><tr><td><a href="#FR-9">FR-9</a></td><td></td><td>the operator answers one question of a batch and the batch is not yet complete</td><td>that answer is recorded and any task it had parked is released it survives a reload of the operator&#x27;s view</td></tr><tr><td><a href="#FR-9">FR-9</a></td><td></td><td>the asking run is still waiting and the operator answers every question in the batch</td><td>the tool call returns the answers no delivery is queued to the agent</td></tr><tr><td><a href="#FR-10">FR-10</a></td><td></td><td>the operator is answering a batch</td><td>the displayed count is their position within that batch and its total, not the number of</td></tr><tr><td><a href="#FR-10">FR-10</a></td><td></td><td>the operator answers the question on screen and others in its batch remain</td><td>the next unanswered question in that batch is shown</td></tr><tr><td><a href="#FR-10">FR-10</a></td><td></td><td>the operator answers</td><td>the answer is recorded against the question they were shown</td></tr><tr><td><a href="#FR-10">FR-10</a></td><td></td><td>the operator answers part of a batch and their view is reloaded</td><td>the answers already given are still recorded, and the batch resumes at the first</td></tr><tr><td><a href="#FR-10">FR-10</a></td><td></td><td>the operator has answered part of a batch whose asker is no longer waiting</td><td>the panel states that the answers reach the agent together once the batch is finished</td></tr><tr><td><a href="#FR-11">FR-11</a></td><td></td><td>an agent with its own waiting limits starts a run</td><td>that run waits for the operator for the configured time rather than the default</td></tr><tr><td><a href="#FR-11">FR-11</a></td><td></td><td>an agent with no waiting limits set starts a run</td><td>it waits for the system default, exactly as it did before the setting existed</td></tr><tr><td><a href="#FR-11">FR-11</a></td><td></td><td>a waiting limit is set below the minimum or above the maximum</td><td>the change is refused and the stored value is unchanged</td></tr><tr><td><a href="#FR-11">FR-11</a></td><td></td><td>a run&#x27;s waiting limit cannot be read or understood</td><td>the run uses the default rather than failing</td></tr><tr><td><a href="#FR-11">FR-11</a></td><td></td><td>an agent&#x27;s waiting limit is changed while one of its runs is already in progress</td><td>that run continues under the limit it started with</td></tr><tr><td><a href="#FR-12">FR-12</a></td><td></td><td>the operator opens the agent&#x27;s settings from a conversation</td><td>the setting is presented there the conversation is not discarded or reset</td></tr><tr><td><a href="#FR-12">FR-12</a></td><td></td><td>the operator views the composer&#x27;s controls</td><td>they offer only choices scoped to that conversation, not durable agent settings</td></tr><tr><td><a href="#FR-13">FR-13</a></td><td></td><td>an agent sends a message whose recipient conversation is archived</td><td>the send fails the response states that the conversation is archived and instructs the agent to send to a new conversation</td></tr><tr><td><a href="#FR-13">FR-13</a></td><td></td><td>a send to an archived conversation has failed</td><td>the response restates the content the agent submitted, verbatim</td></tr><tr><td><a href="#FR-13">FR-13</a></td><td></td><td>a send to an archived conversation has failed</td><td>that conversation has no new message and no new inbound queue entry</td></tr><tr><td><a href="#FR-13">FR-13</a></td><td></td><td>a send to an archived conversation has failed</td><td>no other conversation has received the message</td></tr><tr><td><a href="#FR-13">FR-13</a></td><td></td><td>the send is attempted over the direct HTTP API and over the MCP adapter</td><td>both fail both carry the cause, the instruction, and the restated content</td></tr><tr><td><a href="#FR-14">FR-14</a></td><td></td><td>a rule is enforced and every runner-specific hook is removed</td><td>the rule is still enforced the only difference is when it fires or how it is reported</td></tr><tr><td><a href="#FR-14">FR-14</a></td><td></td><td>an agent runs under a runner that has no hook mechanism</td><td>every rule that binds agents under other runners binds it identically</td></tr><tr><td><a href="#FR-14">FR-14</a></td><td></td><td>a capability is added whose enforcement exists only in a hook</td><td>it does not satisfy this requirement</td></tr><tr><td><a href="#FR-15">FR-15</a></td><td></td><td>an authenticated run delegates work naming a task in its project</td><td>the task is carried to the run that receives the delegation it is not only recorded on the message</td></tr><tr><td><a href="#FR-15">FR-15</a></td><td></td><td>an authenticated run names a task that does not belong to its project</td><td>the call is refused no binding is created</td></tr><tr><td><a href="#FR-15">FR-15</a></td><td></td><td>a binding results from a delegation</td><td>the run and agent it is attributed to are the authenticated ones no value supplied by the caller can change that</td></tr><tr><td><a href="#FR-16">FR-16</a></td><td></td><td>an agent enumerates the operations available to it</td><td>none of them moves a task into or out of the waiting status</td></tr><tr><td><a href="#FR-16">FR-16</a></td><td></td><td>an agent requests the waiting status for a task through any available operation</td><td>the request is refused the task is unchanged</td></tr><tr><td><a href="#FR-16">FR-16</a></td><td></td><td>an agent asks the operator a blocking question and its run ends unanswered</td><td>its bound task is recorded as waiting the record identifies the question it is waiting on</td></tr><tr><td><a href="#FR-17">FR-17</a></td><td></td><td>the operator declines an outstanding question</td><td>the question is no longer outstanding it carries no answer</td></tr><tr><td><a href="#FR-17">FR-17</a></td><td></td><td>a question that has been answered is declined</td><td>the request is refused the recorded answer is unchanged</td></tr><tr><td><a href="#FR-17">FR-17</a></td><td></td><td>an agent enumerates the operations available to it</td><td>none of them declines a question</td></tr><tr><td><a href="#FR-18">FR-18</a></td><td></td><td>an agent is waiting on a question and the operator declines it</td><td>the wait ends without waiting for the expiry the agent is told the question was declined</td></tr><tr><td><a href="#FR-18">FR-18</a></td><td></td><td>an agent receives the outcome of a declined question</td><td>the outcome states that no answer was given it is distinguishable from a question that expired unanswered</td></tr><tr><td><a href="#FR-18">FR-18</a></td><td></td><td>an agent asked several questions together and the operator answers some and declines others</td><td>each question&#x27;s outcome is reported individually</td></tr><tr><td><a href="#FR-19">FR-19</a></td><td></td><td>an agent reads a specification document by path</td><td>it receives the requirements with their identifiers, statements and obligations each requirement carries its own acceptance criteria the document&#x27;s phase is stated</td></tr><tr><td><a href="#FR-19">FR-19</a></td><td></td><td>an agent reads a document that has not been approved</td><td>the document is returned its phase says it is not approved</td></tr><tr><td><a href="#FR-19">FR-19</a></td><td></td><td>an agent reads a document carrying no structured content</td><td>the response states that, rather than reporting an empty set of requirements</td></tr><tr><td><a href="#FR-19">FR-19</a></td><td></td><td>an agent is told what it can do</td><td>reading a specification document is among the capabilities described</td></tr><tr><td><a href="#FR-20">FR-20</a></td><td></td><td>a task serving requirements is read</td><td>each requirement&#x27;s current statement is present alongside its identifier</td></tr><tr><td><a href="#FR-20">FR-20</a></td><td></td><td>tasks are read and the project&#x27;s directory cannot be reached</td><td>the tasks are returned with their identifiers no error is raised</td></tr><tr><td><a href="#FR-21">FR-21</a></td><td></td><td>an agent records evidence against a requirement it has satisfied</td><td>the evidence is held against that requirement it awaits a decision</td></tr><tr><td><a href="#FR-21">FR-21</a></td><td></td><td>an agent asks for the evidence a project holds</td><td>it receives it, including who produced each piece</td></tr><tr><td><a href="#FR-21">FR-21</a></td><td></td><td>an agent the operator has granted acceptance decides evidence another agent produced</td><td>the decision is recorded</td></tr><tr><td><a href="#FR-21">FR-21</a></td><td></td><td>an agent decides evidence it produced itself</td><td>the system refuses says another agent or the operator decides</td></tr><tr><td><a href="#FR-21">FR-21</a></td><td></td><td>an agent without the grant decides evidence</td><td>the system refuses says the capability is the operator&#x27;s to confer</td></tr><tr><td><a href="#FR-21">FR-21</a></td><td></td><td>an agent with the grant rejects evidence</td><td>the rejection is recorded, as an acceptance would be</td></tr></tbody></table></section><section><h2 id="evidence">Evidence and coverage limits</h2><h3>Checked</h3><ul><li>Translated from openspec/specs/agent-capability-plane/spec.md (21 requirements, 78 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten.</li></ul><h3 class="aw-limits">Limits</h3><ul><li>scenario-had-multiple-cycles: &#x27;Answers to a batch whose asker has gone arrive together&#x27; states 2 WHEN/THEN cycles under one name; they are joined into one criterion because a criterion has one of each</li><li>scenarios-state-no-starting-state: 78 of 78 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed</li></ul></section><section><h2 id="open-questions">Open questions</h2><p class="aw-empty">None outstanding.</p></section>
+<script type="application/agentweave-spec+json" id="aw-spec-payload">
+{
+  "schema_version": 1,
+  "kind": "capability",
+  "title": "Agent capability plane",
+  "summary": "One least-privilege, run-authenticated application contract for agent-caused effects and scoped reads, shared identically by HTTP and MCP. Established by `openspec/changes/agent-capability-plane`. **Reconciled 2026-08-07.** The equal-capability requirement below previously named \"ordinary commands\" as a third adapter. No such command exists — the CLI was reduced to local instance management — and `openspec/explorations/2026-08-02-product-direction.md` states that the reduced CLI is not an agent capability adapter.",
+  "problem": "",
+  "scope": {
+    "in_scope": [],
+    "non_goals": []
+  },
+  "requirements": [
+    {
+      "key": "a-live-run-credential-is-the-only-agent-authentication",
+      "statement": "The system SHALL mint an unguessable credential for each Hub-owned run, store only a non-reversible digest, and accept the credential only while that exact run is active. Authentication SHALL derive the project, agent, and run from the matched row. The credential MUST NOT be exposed in output, events, command arguments, or API responses.",
+      "modal": "MUST",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "the-agent-api-is-a-least-privilege-allowlist",
+      "statement": "The agent application API SHALL expose only peer messaging, shared task-ledger reads/writes, operator questions and their answers, governed agent requests, and governed scheduled-work mutations. It MUST NOT expose inbound queue/history, roster, project settings, agent configuration, charter/scope, credentials, or other operator capabilities.",
+      "modal": "MUST",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "actor-identity-cannot-be-supplied-or-overridden",
+      "statement": "Agent-action payloads SHALL contain no project, agent, sender, assigner, requester, or run identity field. Every affected service SHALL use only the authenticated actor. Caller headers or extra body fields MUST NOT change attribution.",
+      "modal": "MUST",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "every-agent-caused-effect-retains-run-attribution",
+      "statement": "The system SHALL ensure every message, task creation/update, question, scheduled-work mutation, and agent request caused by the agent plane durably identifies the responsible agent and run. Event logs MUST NOT be the only source of that attribution. Historical/operator effects MAY remain unattributed where no run exists.",
+      "modal": "MUST",
+      "rationale": "For **task status** specifically, last-writer attribution is insufficient: approval is a judgement about work a different run performed, so a single mutable field cannot express the question of whether author and reviewer differ. Task status attribution SHALL therefore be an append-only sequence, one record per accepted transition, each naming its own responsible run. A materialised \"latest responsible run\" MAY be retained for convenience but MUST NOT be the only durable record.",
+      "party": null
+    },
+    {
+      "key": "http-and-mcp-access-have-equal-capability",
+      "statement": "Direct HTTP SHALL be the application contract. MCP SHALL be a thin adapter over that contract with the same operations, validation, governance, attribution, and typed failure meaning. An adapter MUST NOT duplicate queue, budget, identity, or lifecycle business rules and MUST NOT silently convert failures into empty or successful results.",
+      "modal": "MUST",
+      "rationale": "Two adapters exist rather than one because MCP is convenient where it is permitted and some environments forbid MCP servers while still allowing ordinary local API calls. The command-line interface is **not** one of them: it manages the local application instance and carries no agent capabilities.",
+      "party": null
+    },
+    {
+      "key": "a-turn-that-ends-on-an-unasked-question-is-surfaced-to-the-o",
+      "statement": "The system SHALL durably record, and show the operator, any run that completes having produced a trailing question without opening a question of record.",
+      "modal": "SHALL",
+      "rationale": "An agent that ends a turn on an unanswered question has stopped working and is waiting for an answer that cannot arrive, because nothing was ever asked. From the operator's side this is indistinguishable from a completed turn. Detection is the only available remedy: no provider protocol permits requiring that a turn end through a particular tool.",
+      "party": null
+    },
+    {
+      "key": "the-operator-can-convert-an-unasked-question-into-a-real-one",
+      "statement": "The system SHALL offer the operator, for each pending unasked question, an action that re-prompts the agent to ask that same question through the question tool, and an action that dismisses it.",
+      "modal": "SHALL",
+      "rationale": "Answering the detected question directly is not possible: the turn has ended and no tool call is waiting on a value. Re-prompting is the only action that restores the intended flow.",
+      "party": null
+    },
+    {
+      "key": "operator-facing-severity-values-are-the-ones-the-operator-s-",
+      "statement": "Events persisted for the operator's attention SHALL use the severity vocabulary the operator's views filter and style by.",
+      "modal": "SHALL",
+      "rationale": "A severity that no view recognises is worse than none: the row renders unmarked and is hidden by the filter intended to reveal it, so the events most needing attention are the ones least likely to be seen.",
+      "party": null
+    },
+    {
+      "key": "an-agent-can-ask-several-questions-in-one-turn",
+      "statement": "The question tool SHALL accept a list of questions and hold the turn until every one has been answered or the wait expires.",
+      "modal": "SHALL",
+      "rationale": "An agent needing several decisions before it can start would otherwise block its turn once per question and interrupt the operator once per question, or decide some of them itself. Asking together is one interruption and one wait. Where the asking run is no longer waiting — it expired, ended, or the question was not blocking — the answers SHALL reach the agent as **one** delivery for the batch rather than one per answer, and that delivery SHALL happen only once every question in the batch has been answered or declined. An answer delivered on its own has the agent act on part of a decision while the operator is still making the rest, which is the interruption asking together exists to prevent. The delivery SHALL carry every question in the batch, in the order they were asked, each with its answer or with the fact that the operator declined it. It SHALL include an answer that was recorded while the asking run was still waiting but which that run never received. Where the batch produced no answers at all, nothing SHALL be delivered. Recording an answer SHALL NOT wait for the batch. Each answer SHALL be persisted, reported, and SHALL release any task it had parked when the operator gives it.",
+      "party": null
+    },
+    {
+      "key": "the-operator-answers-a-batch-one-question-at-a-time",
+      "statement": "The operator SHALL be shown one question of a batch at a time, told which step they are on and how many there are, and advanced to the next once the current one is answered.",
+      "modal": "SHALL",
+      "rationale": "Showing a batch at once turns a conversation into a form, and a count of outstanding questions displayed where a step count belongs misrepresents how much is left. Where a batch's answers are held until it completes, the operator SHALL be told that the answers go to the agent together. Without it, a part-answered batch is indistinguishable from answers that were discarded: the operator answers, sees nothing happen, and has no way to tell that the agent is waiting on the rest. This statement is about what has been sent and is distinct from the step counter, which is about position.",
+      "party": null
+    },
+    {
+      "key": "how-long-an-agent-waits-for-the-operator-is-a-per-agent-sett",
+      "statement": "Each agent SHALL carry its own limit for how long it waits on a permission decision and on an answer to a question, and an agent with no limit set SHALL use the system default.",
+      "modal": "SHALL",
+      "rationale": "How long a wait is reasonable depends on the agent and on whether the operator is watching. A single compiled-in number serves neither the agent being supervised closely nor the one left running while the operator is elsewhere.",
+      "party": null
+    },
+    {
+      "key": "durable-per-agent-settings-are-edited-on-the-agent-not-in-th",
+      "statement": "Settings that belong to an agent rather than to one conversation SHALL be presented on the agent's own surface, reachable from a conversation without leaving it.",
+      "modal": "SHALL",
+      "rationale": "The composer's controls are per-conversation and chosen at the moment of sending. Mixing durable per-agent configuration into them would make it unclear which choices persist, and adding a third settings location would make it unclear where to look.",
+      "party": null
+    },
+    {
+      "key": "a-send-to-an-archived-conversation-fails-with-a-recoverable-",
+      "statement": "An agent's `send_message` SHALL fail when the recipient's target conversation is archived, and the failure response MUST carry three things: that the conversation is archived, an instruction to send to a new conversation instead, and the content the agent submitted, restated verbatim.",
+      "modal": "SHALL",
+      "rationale": "Restating the content is the point of the requirement, not a courtesy. A blocked send that returns only an error forces the agent to reconstruct its own message from a context it may have already moved past; returning the content makes the retry mechanical. The archived conversation MUST NOT receive the message, and no inbound queue entry MUST be created against it. The failure MUST NOT silently redirect the message to a different conversation — the agent decides where its message goes.",
+      "party": null
+    },
+    {
+      "key": "no-capability-may-exist-only-in-a-hook",
+      "statement": "Every rule the system enforces on agent behaviour SHALL be enforced at a boundary the system owns — the capability plane, the run boundary, or the data model — independently of any runner-specific hook mechanism.",
+      "modal": "SHALL",
+      "rationale": "A runner hook MAY make an already-enforced rule fire **sooner**, at the offending operation rather than at run end, or **more pleasantly**, as a message inside the agent's own transcript rather than a rejection after the fact. Removing every hook SHALL leave the identical rule in force, differing only in when and how it is reported. Hooks are per-machine, per-user, unevenly shaped across runners, and absent from runners that do not have them. A capability that lived only in a hook would be missing from a teammate's checkout, would have to be written twice and drift, and would make any future runner without hooks structurally second-class. The system already states runner configuration explicitly rather than reading whatever the host machine's settings say; this requirement holds that line for behavioural rules.",
+      "party": null
+    },
+    {
+      "key": "a-task-named-on-a-delegation-is-runtime-state-not-message-de",
+      "statement": "When an agent delegates work naming a task, the system SHALL treat that task as state governing the resulting run, not solely as a field on the delegated message. The named task SHALL be validated against the delegating run's project at the time of the call.",
+      "modal": "SHALL",
+      "rationale": "Attribution of the resulting binding SHALL derive from the authenticated run, as with every other agent-caused effect; a caller SHALL NOT be able to assert on whose behalf a binding is made.",
+      "party": null
+    },
+    {
+      "key": "an-agent-cannot-declare-its-own-work-blocked-or-unblocked",
+      "statement": "No agent-facing operation — over HTTP or MCP — SHALL move a task into or out of the status meaning it is waiting on a person. That status SHALL be reached only by the system observing an unanswered question, or by the operator.",
+      "modal": "SHALL",
+      "rationale": "This is the same rule, for the same reason, as an agent's inability to bind its own run or to set its own task's divergence policy: a state the subject can assert is not a state that constrains it. Of all the statuses, this is the one an agent under a completion gate has most reason to want — it is the account that excuses an unfinished task — so it is the one that must be earned by actually having asked a person something they have not yet answered.",
+      "party": null
+    },
+    {
+      "key": "the-operator-may-decline-a-question",
+      "statement": "The system SHALL let the operator close an outstanding question without answering it, and SHALL record that they did.",
+      "modal": "SHALL",
+      "rationale": "Declining SHALL be available to the operator only. An agent SHALL NOT decline a question, including one it asked itself: an agent able to close its own question could clear the record of having asked without anyone having decided anything. A question that has already been answered SHALL NOT be declinable.",
+      "party": null
+    },
+    {
+      "key": "a-waiting-agent-is-told-that-its-question-was-declined",
+      "statement": "Where an agent is waiting on a question, the system SHALL end that wait when the question is declined, rather than leaving it to expire, and SHALL report the decline distinctly from both an answer and an expiry.",
+      "modal": "SHALL",
+      "rationale": "A decline and an expiry mean different things. An expiry means nobody was there; a decline means someone was there and chose not to answer, which tells the agent the decision is now its own. An agent left to time out spends the interval waiting for something already decided and then arrives at a weaker conclusion than the one available. The report SHALL NOT present a decline as an answer. What an agent does with a decline is its own judgement, and the system SHALL NOT require any particular response to one.",
+      "party": null
+    },
+    {
+      "key": "an-agent-can-read-a-specification-document",
+      "statement": "The system SHALL provide an agent with a way to read a specification document, and that capability SHALL be described in the surface the agent is told it has.",
+      "modal": "SHALL",
+      "rationale": "Documents are written into the project's own directory, while a working agent's checkout is an isolated one branched before the document existed. An agent is therefore told which document governs its work and, without this, has no way to open it — leaving it to implement from another agent's paraphrase, with no way to detect divergence from what was approved. The document SHALL be returned as structured content rather than as its rendered form. The rendering exists for a person; returning it spends an agent's context on markup and leaves it to re-derive what the structure already states. Each requirement returned SHALL carry the identifier the system minted for it, so that an agent quotes the same identifier that tasks, evidence and gates use. Acceptance criteria SHALL be returned grouped under the requirement they demonstrate, rather than as a separate list to be joined by the reader. Reading SHALL be permitted in every phase. Reading is not authoring, and every gate in this area governs writing or approving. A capability that is refused depending on state is one an agent concludes it does not have. The document's phase SHALL be returned, so that how settled it is can be judged rather than assumed. Content that cannot be matched to a minted identifier SHALL still be returned, accompanied by a statement of the problem. A document carrying no structured content SHALL be reported as such rather than as a document with no requirements.",
+      "party": null
+    },
+    {
+      "key": "a-task-states-what-its-requirements-say",
+      "statement": "A task SHALL carry, for each requirement it serves, the wording of that requirement as the document currently states it, alongside its identifier.",
+      "modal": "SHALL",
+      "rationale": "An identifier and a location within a document are only actionable by a reader that can open the document. Carrying the wording makes a task independently actionable, and is what a task's own description must otherwise duplicate and can then contradict. The wording SHALL be read from the document rather than stored alongside the requirement's identity, so that it cannot come to disagree with what the document says. Reading the wording SHALL NOT be per task: a board serving many tasks from one document SHALL read that document once. Where the wording cannot be obtained, the task SHALL still be returned with its identifiers. A task board SHALL NOT fail because a project's directory is unavailable.",
+      "party": null
+    },
+    {
+      "key": "an-agent-can-record-read-and-decide-requirement-evidence",
+      "statement": "The system SHALL offer agents tools to record evidence against a requirement, to read the evidence a project holds, and to accept or reject it.",
+      "modal": "SHALL",
+      "rationale": "Evidence is what opens integration. A system that gates merging on accepted evidence and offers no way for an agent to produce any has built a pipeline only its operator can drive, one HTTP call at a time. Deciding SHALL be a single operation covering both acceptance and rejection. Offering only acceptance would make rejection unreachable from the agent plane while the underlying operation allows it, which is the surface disagreement this capability exists to prevent. Reading SHALL be offered alongside deciding. A decision names a specific piece of evidence, so an agent with no way to discover what evidence exists cannot decide anything, and the capability to decide is decorative without it. The evidence an agent reads SHALL identify who produced it. An agent may not decide evidence it produced itself, so one that cannot see the producer discovers that rule only by being refused. Recording SHALL state, where the agent will read it, that evidence is what allows approved work to merge. The consequence of recording nothing is reported to the operator and never to the agent that could have prevented it. Constrained values SHALL be constrained identically on both surfaces, and open ones SHALL stay open. A tool that accepts less than its route makes the plane narrower than the system, which this capability forbids in either direction.",
+      "party": null
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "key": "ac1",
+      "requirement": "a-live-run-credential-is-the-only-agent-authentication",
+      "given": "",
+      "when": "an agent request carries a valid credential for a running run",
+      "then": "the server derives that run's project and agent the request supplies no actor identity"
+    },
+    {
+      "key": "ac2",
+      "requirement": "a-live-run-credential-is-the-only-agent-authentication",
+      "given": "",
+      "when": "a credential belongs to a completed, failed, stopped, or interrupted run",
+      "then": "the agent request is refused"
+    },
+    {
+      "key": "ac3",
+      "requirement": "a-live-run-credential-is-the-only-agent-authentication",
+      "given": "",
+      "when": "a project API key is presented to the agent API or a run credential is presented to an",
+      "then": "authentication is refused"
+    },
+    {
+      "key": "ac4",
+      "requirement": "the-agent-api-is-a-least-privilege-allowlist",
+      "given": "",
+      "when": "an authenticated run messages a peer, works with the shared task ledger, or asks the",
+      "then": "the permitted effect or read succeeds under the same validation as the operator system"
+    },
+    {
+      "key": "ac5",
+      "requirement": "the-agent-api-is-a-least-privilege-allowlist",
+      "given": "",
+      "when": "an authenticated run tries to read undelivered input or alter project/agent configuration",
+      "then": "no agent API operation provides that capability"
+    },
+    {
+      "key": "ac6",
+      "requirement": "the-agent-api-is-a-least-privilege-allowlist",
+      "given": "",
+      "when": "an operator-only route is added without an explicit agent capability",
+      "then": "a run credential cannot call it"
+    },
+    {
+      "key": "ac7",
+      "requirement": "actor-identity-cannot-be-supplied-or-overridden",
+      "given": "",
+      "when": "an agent constructs a valid action request",
+      "then": "there is no supported field by which it can select another actor"
+    },
+    {
+      "key": "ac8",
+      "requirement": "actor-identity-cannot-be-supplied-or-overridden",
+      "given": "",
+      "when": "a caller adds identity-like headers or unknown body fields",
+      "then": "the effect is either rejected as invalid or remains attributed to the authenticated run"
+    },
+    {
+      "key": "ac9",
+      "requirement": "every-agent-caused-effect-retains-run-attribution",
+      "given": "",
+      "when": "an authenticated run causes an allowed effect",
+      "then": "the resulting durable record identifies that run its project and agent are consistent with the authenticated actor"
+    },
+    {
+      "key": "ac10",
+      "requirement": "every-agent-caused-effect-retains-run-attribution",
+      "given": "",
+      "when": "an authenticated run updates a mutable task or job",
+      "then": "the record identifies the run responsible for that update"
+    },
+    {
+      "key": "ac11",
+      "requirement": "every-agent-caused-effect-retains-run-attribution",
+      "given": "",
+      "when": "one authenticated run moves a task to `completed` and a later run moves it to another",
+      "then": "the run responsible for the earlier transition is still identifiable the later transition has not overwritten it"
+    },
+    {
+      "key": "ac12",
+      "requirement": "http-and-mcp-access-have-equal-capability",
+      "given": "",
+      "when": "equivalent valid actions are performed through HTTP and through MCP",
+      "then": "their persisted effects have equivalent content and attribution"
+    },
+    {
+      "key": "ac13",
+      "requirement": "http-and-mcp-access-have-equal-capability",
+      "given": "",
+      "when": "the application API returns validation, denied, not-found, or conflict failure",
+      "then": "MCP callers receive the same failure meaning"
+    },
+    {
+      "key": "ac14",
+      "requirement": "http-and-mcp-access-have-equal-capability",
+      "given": "",
+      "when": "an agent attempts to affect shared state through a command-line invocation",
+      "then": "no such command exists"
+    },
+    {
+      "key": "ac15",
+      "requirement": "http-and-mcp-access-have-equal-capability",
+      "given": "",
+      "when": "the Hub starts an agent with either adapter available",
+      "then": "the process receives its run credential it does not receive a project/operator API key"
+    },
+    {
+      "key": "ac16",
+      "requirement": "a-turn-that-ends-on-an-unasked-question-is-surfaced-to-the-o",
+      "given": "",
+      "when": "a run completes, its final assistant text ends in a question, and the run opened no",
+      "then": "a pending record of the unasked question is stored, carrying the agent, the run, the an event is broadcast so the operator's view updates without a reload"
+    },
+    {
+      "key": "ac17",
+      "requirement": "a-turn-that-ends-on-an-unasked-question-is-surfaced-to-the-o",
+      "given": "",
+      "when": "a run completes having opened a question of record",
+      "then": "no unasked-question record is created, regardless of how its final text ends"
+    },
+    {
+      "key": "ac18",
+      "requirement": "a-turn-that-ends-on-an-unasked-question-is-surfaced-to-the-o",
+      "given": "",
+      "when": "a run completes and its final assistant text does not end in a question",
+      "then": "no unasked-question record is created"
+    },
+    {
+      "key": "ac19",
+      "requirement": "a-turn-that-ends-on-an-unasked-question-is-surfaced-to-the-o",
+      "given": "",
+      "when": "a run completes ending in a question and the agent still has queued input",
+      "then": "no unasked-question record is created, because the next turn starts on its own"
+    },
+    {
+      "key": "ac20",
+      "requirement": "a-turn-that-ends-on-an-unasked-question-is-surfaced-to-the-o",
+      "given": "",
+      "when": "a run ends in any status other than completed",
+      "then": "no unasked-question record is created"
+    },
+    {
+      "key": "ac21",
+      "requirement": "the-operator-can-convert-an-unasked-question-into-a-real-one",
+      "given": "",
+      "when": "the operator chooses to have the question asked properly",
+      "then": "the record moves out of pending the agent is triggered with an instruction naming that question and requiring it be asked"
+    },
+    {
+      "key": "ac22",
+      "requirement": "the-operator-can-convert-an-unasked-question-into-a-real-one",
+      "given": "",
+      "when": "the operator dismisses a pending unasked question",
+      "then": "the record moves out of pending and the operator is not shown it again"
+    },
+    {
+      "key": "ac23",
+      "requirement": "the-operator-can-convert-an-unasked-question-into-a-real-one",
+      "given": "",
+      "when": "an action is taken on a record that is no longer pending",
+      "then": "the request is refused rather than silently repeated"
+    },
+    {
+      "key": "ac24",
+      "requirement": "operator-facing-severity-values-are-the-ones-the-operator-s-",
+      "given": "",
+      "when": "the system records that an agent's action was refused",
+      "then": "the stored severity is one the operator's activity view filters and styles by"
+    },
+    {
+      "key": "ac25",
+      "requirement": "an-agent-can-ask-several-questions-in-one-turn",
+      "given": "",
+      "when": "an agent asks several questions in one call the operator answers all of them",
+      "then": "the tool returns every answer, each identified with the question it answers"
+    },
+    {
+      "key": "ac26",
+      "requirement": "an-agent-can-ask-several-questions-in-one-turn",
+      "given": "",
+      "when": "the wait expires before every question in a batch is answered",
+      "then": "the tool returns without an answer for the unanswered ones and states plainly that they"
+    },
+    {
+      "key": "ac27",
+      "requirement": "an-agent-can-ask-several-questions-in-one-turn",
+      "given": "",
+      "when": "an agent asks one question",
+      "then": "it behaves exactly as an unbatched question does, with no extra step for the operator"
+    },
+    {
+      "key": "ac28",
+      "requirement": "an-agent-can-ask-several-questions-in-one-turn",
+      "given": "",
+      "when": "any question in a batch is submitted without its header, its options, or its",
+      "then": "the call is rejected rather than partially accepted"
+    },
+    {
+      "key": "ac29",
+      "requirement": "an-agent-can-ask-several-questions-in-one-turn",
+      "given": "",
+      "when": "the asking run is no longer waiting and the operator answers the first question of a the operator resolves the remaining questions",
+      "then": "nothing is delivered to the agent exactly one delivery reaches the agent, carrying every question and its answer in the"
+    },
+    {
+      "key": "ac30",
+      "requirement": "an-agent-can-ask-several-questions-in-one-turn",
+      "given": "",
+      "when": "the operator answers some questions of a batch and declines the rest",
+      "then": "the batch is delivered the declined questions are named as declined rather than omitted"
+    },
+    {
+      "key": "ac31",
+      "requirement": "an-agent-can-ask-several-questions-in-one-turn",
+      "given": "",
+      "when": "the operator answers a question while its asking run is waiting that run ends before the batch completes the operator then resolves the remaining questions",
+      "then": "the delivery carries the earlier answer as well as the later ones"
+    },
+    {
+      "key": "ac32",
+      "requirement": "an-agent-can-ask-several-questions-in-one-turn",
+      "given": "",
+      "when": "every question in a batch is declined and none is answered",
+      "then": "no delivery is made to the agent"
+    },
+    {
+      "key": "ac33",
+      "requirement": "an-agent-can-ask-several-questions-in-one-turn",
+      "given": "",
+      "when": "the operator answers one question of a batch and the batch is not yet complete",
+      "then": "that answer is recorded and any task it had parked is released it survives a reload of the operator's view"
+    },
+    {
+      "key": "ac34",
+      "requirement": "an-agent-can-ask-several-questions-in-one-turn",
+      "given": "",
+      "when": "the asking run is still waiting and the operator answers every question in the batch",
+      "then": "the tool call returns the answers no delivery is queued to the agent"
+    },
+    {
+      "key": "ac35",
+      "requirement": "the-operator-answers-a-batch-one-question-at-a-time",
+      "given": "",
+      "when": "the operator is answering a batch",
+      "then": "the displayed count is their position within that batch and its total, not the number of"
+    },
+    {
+      "key": "ac36",
+      "requirement": "the-operator-answers-a-batch-one-question-at-a-time",
+      "given": "",
+      "when": "the operator answers the question on screen and others in its batch remain",
+      "then": "the next unanswered question in that batch is shown"
+    },
+    {
+      "key": "ac37",
+      "requirement": "the-operator-answers-a-batch-one-question-at-a-time",
+      "given": "",
+      "when": "the operator answers",
+      "then": "the answer is recorded against the question they were shown"
+    },
+    {
+      "key": "ac38",
+      "requirement": "the-operator-answers-a-batch-one-question-at-a-time",
+      "given": "",
+      "when": "the operator answers part of a batch and their view is reloaded",
+      "then": "the answers already given are still recorded, and the batch resumes at the first"
+    },
+    {
+      "key": "ac39",
+      "requirement": "the-operator-answers-a-batch-one-question-at-a-time",
+      "given": "",
+      "when": "the operator has answered part of a batch whose asker is no longer waiting",
+      "then": "the panel states that the answers reach the agent together once the batch is finished"
+    },
+    {
+      "key": "ac40",
+      "requirement": "how-long-an-agent-waits-for-the-operator-is-a-per-agent-sett",
+      "given": "",
+      "when": "an agent with its own waiting limits starts a run",
+      "then": "that run waits for the operator for the configured time rather than the default"
+    },
+    {
+      "key": "ac41",
+      "requirement": "how-long-an-agent-waits-for-the-operator-is-a-per-agent-sett",
+      "given": "",
+      "when": "an agent with no waiting limits set starts a run",
+      "then": "it waits for the system default, exactly as it did before the setting existed"
+    },
+    {
+      "key": "ac42",
+      "requirement": "how-long-an-agent-waits-for-the-operator-is-a-per-agent-sett",
+      "given": "",
+      "when": "a waiting limit is set below the minimum or above the maximum",
+      "then": "the change is refused and the stored value is unchanged"
+    },
+    {
+      "key": "ac43",
+      "requirement": "how-long-an-agent-waits-for-the-operator-is-a-per-agent-sett",
+      "given": "",
+      "when": "a run's waiting limit cannot be read or understood",
+      "then": "the run uses the default rather than failing"
+    },
+    {
+      "key": "ac44",
+      "requirement": "how-long-an-agent-waits-for-the-operator-is-a-per-agent-sett",
+      "given": "",
+      "when": "an agent's waiting limit is changed while one of its runs is already in progress",
+      "then": "that run continues under the limit it started with"
+    },
+    {
+      "key": "ac45",
+      "requirement": "durable-per-agent-settings-are-edited-on-the-agent-not-in-th",
+      "given": "",
+      "when": "the operator opens the agent's settings from a conversation",
+      "then": "the setting is presented there the conversation is not discarded or reset"
+    },
+    {
+      "key": "ac46",
+      "requirement": "durable-per-agent-settings-are-edited-on-the-agent-not-in-th",
+      "given": "",
+      "when": "the operator views the composer's controls",
+      "then": "they offer only choices scoped to that conversation, not durable agent settings"
+    },
+    {
+      "key": "ac47",
+      "requirement": "a-send-to-an-archived-conversation-fails-with-a-recoverable-",
+      "given": "",
+      "when": "an agent sends a message whose recipient conversation is archived",
+      "then": "the send fails the response states that the conversation is archived and instructs the agent to send to a new conversation"
+    },
+    {
+      "key": "ac48",
+      "requirement": "a-send-to-an-archived-conversation-fails-with-a-recoverable-",
+      "given": "",
+      "when": "a send to an archived conversation has failed",
+      "then": "the response restates the content the agent submitted, verbatim"
+    },
+    {
+      "key": "ac49",
+      "requirement": "a-send-to-an-archived-conversation-fails-with-a-recoverable-",
+      "given": "",
+      "when": "a send to an archived conversation has failed",
+      "then": "that conversation has no new message and no new inbound queue entry"
+    },
+    {
+      "key": "ac50",
+      "requirement": "a-send-to-an-archived-conversation-fails-with-a-recoverable-",
+      "given": "",
+      "when": "a send to an archived conversation has failed",
+      "then": "no other conversation has received the message"
+    },
+    {
+      "key": "ac51",
+      "requirement": "a-send-to-an-archived-conversation-fails-with-a-recoverable-",
+      "given": "",
+      "when": "the send is attempted over the direct HTTP API and over the MCP adapter",
+      "then": "both fail both carry the cause, the instruction, and the restated content"
+    },
+    {
+      "key": "ac52",
+      "requirement": "no-capability-may-exist-only-in-a-hook",
+      "given": "",
+      "when": "a rule is enforced and every runner-specific hook is removed",
+      "then": "the rule is still enforced the only difference is when it fires or how it is reported"
+    },
+    {
+      "key": "ac53",
+      "requirement": "no-capability-may-exist-only-in-a-hook",
+      "given": "",
+      "when": "an agent runs under a runner that has no hook mechanism",
+      "then": "every rule that binds agents under other runners binds it identically"
+    },
+    {
+      "key": "ac54",
+      "requirement": "no-capability-may-exist-only-in-a-hook",
+      "given": "",
+      "when": "a capability is added whose enforcement exists only in a hook",
+      "then": "it does not satisfy this requirement"
+    },
+    {
+      "key": "ac55",
+      "requirement": "a-task-named-on-a-delegation-is-runtime-state-not-message-de",
+      "given": "",
+      "when": "an authenticated run delegates work naming a task in its project",
+      "then": "the task is carried to the run that receives the delegation it is not only recorded on the message"
+    },
+    {
+      "key": "ac56",
+      "requirement": "a-task-named-on-a-delegation-is-runtime-state-not-message-de",
+      "given": "",
+      "when": "an authenticated run names a task that does not belong to its project",
+      "then": "the call is refused no binding is created"
+    },
+    {
+      "key": "ac57",
+      "requirement": "a-task-named-on-a-delegation-is-runtime-state-not-message-de",
+      "given": "",
+      "when": "a binding results from a delegation",
+      "then": "the run and agent it is attributed to are the authenticated ones no value supplied by the caller can change that"
+    },
+    {
+      "key": "ac58",
+      "requirement": "an-agent-cannot-declare-its-own-work-blocked-or-unblocked",
+      "given": "",
+      "when": "an agent enumerates the operations available to it",
+      "then": "none of them moves a task into or out of the waiting status"
+    },
+    {
+      "key": "ac59",
+      "requirement": "an-agent-cannot-declare-its-own-work-blocked-or-unblocked",
+      "given": "",
+      "when": "an agent requests the waiting status for a task through any available operation",
+      "then": "the request is refused the task is unchanged"
+    },
+    {
+      "key": "ac60",
+      "requirement": "an-agent-cannot-declare-its-own-work-blocked-or-unblocked",
+      "given": "",
+      "when": "an agent asks the operator a blocking question and its run ends unanswered",
+      "then": "its bound task is recorded as waiting the record identifies the question it is waiting on"
+    },
+    {
+      "key": "ac61",
+      "requirement": "the-operator-may-decline-a-question",
+      "given": "",
+      "when": "the operator declines an outstanding question",
+      "then": "the question is no longer outstanding it carries no answer"
+    },
+    {
+      "key": "ac62",
+      "requirement": "the-operator-may-decline-a-question",
+      "given": "",
+      "when": "a question that has been answered is declined",
+      "then": "the request is refused the recorded answer is unchanged"
+    },
+    {
+      "key": "ac63",
+      "requirement": "the-operator-may-decline-a-question",
+      "given": "",
+      "when": "an agent enumerates the operations available to it",
+      "then": "none of them declines a question"
+    },
+    {
+      "key": "ac64",
+      "requirement": "a-waiting-agent-is-told-that-its-question-was-declined",
+      "given": "",
+      "when": "an agent is waiting on a question and the operator declines it",
+      "then": "the wait ends without waiting for the expiry the agent is told the question was declined"
+    },
+    {
+      "key": "ac65",
+      "requirement": "a-waiting-agent-is-told-that-its-question-was-declined",
+      "given": "",
+      "when": "an agent receives the outcome of a declined question",
+      "then": "the outcome states that no answer was given it is distinguishable from a question that expired unanswered"
+    },
+    {
+      "key": "ac66",
+      "requirement": "a-waiting-agent-is-told-that-its-question-was-declined",
+      "given": "",
+      "when": "an agent asked several questions together and the operator answers some and declines others",
+      "then": "each question's outcome is reported individually"
+    },
+    {
+      "key": "ac67",
+      "requirement": "an-agent-can-read-a-specification-document",
+      "given": "",
+      "when": "an agent reads a specification document by path",
+      "then": "it receives the requirements with their identifiers, statements and obligations each requirement carries its own acceptance criteria the document's phase is stated"
+    },
+    {
+      "key": "ac68",
+      "requirement": "an-agent-can-read-a-specification-document",
+      "given": "",
+      "when": "an agent reads a document that has not been approved",
+      "then": "the document is returned its phase says it is not approved"
+    },
+    {
+      "key": "ac69",
+      "requirement": "an-agent-can-read-a-specification-document",
+      "given": "",
+      "when": "an agent reads a document carrying no structured content",
+      "then": "the response states that, rather than reporting an empty set of requirements"
+    },
+    {
+      "key": "ac70",
+      "requirement": "an-agent-can-read-a-specification-document",
+      "given": "",
+      "when": "an agent is told what it can do",
+      "then": "reading a specification document is among the capabilities described"
+    },
+    {
+      "key": "ac71",
+      "requirement": "a-task-states-what-its-requirements-say",
+      "given": "",
+      "when": "a task serving requirements is read",
+      "then": "each requirement's current statement is present alongside its identifier"
+    },
+    {
+      "key": "ac72",
+      "requirement": "a-task-states-what-its-requirements-say",
+      "given": "",
+      "when": "tasks are read and the project's directory cannot be reached",
+      "then": "the tasks are returned with their identifiers no error is raised"
+    },
+    {
+      "key": "ac73",
+      "requirement": "an-agent-can-record-read-and-decide-requirement-evidence",
+      "given": "",
+      "when": "an agent records evidence against a requirement it has satisfied",
+      "then": "the evidence is held against that requirement it awaits a decision"
+    },
+    {
+      "key": "ac74",
+      "requirement": "an-agent-can-record-read-and-decide-requirement-evidence",
+      "given": "",
+      "when": "an agent asks for the evidence a project holds",
+      "then": "it receives it, including who produced each piece"
+    },
+    {
+      "key": "ac75",
+      "requirement": "an-agent-can-record-read-and-decide-requirement-evidence",
+      "given": "",
+      "when": "an agent the operator has granted acceptance decides evidence another agent produced",
+      "then": "the decision is recorded"
+    },
+    {
+      "key": "ac76",
+      "requirement": "an-agent-can-record-read-and-decide-requirement-evidence",
+      "given": "",
+      "when": "an agent decides evidence it produced itself",
+      "then": "the system refuses says another agent or the operator decides"
+    },
+    {
+      "key": "ac77",
+      "requirement": "an-agent-can-record-read-and-decide-requirement-evidence",
+      "given": "",
+      "when": "an agent without the grant decides evidence",
+      "then": "the system refuses says the capability is the operator's to confer"
+    },
+    {
+      "key": "ac78",
+      "requirement": "an-agent-can-record-read-and-decide-requirement-evidence",
+      "given": "",
+      "when": "an agent with the grant rejects evidence",
+      "then": "the rejection is recorded, as an acceptance would be"
+    }
+  ],
+  "tasks": [],
+  "algorithms": [],
+  "design": "",
+  "evidence": {
+    "checked": [
+      "Translated from openspec/specs/agent-capability-plane/spec.md (21 requirements, 78 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten."
+    ],
+    "limits": [
+      "scenario-had-multiple-cycles: 'Answers to a batch whose asker has gone arrive together' states 2 WHEN/THEN cycles under one name; they are joined into one criterion because a criterion has one of each",
+      "scenarios-state-no-starting-state: 78 of 78 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed"
+    ]
+  },
+  "lifecycle": "",
+  "open_questions": [],
+  "aw_identity": {
+    "requirements": {
+      "a-live-run-credential-is-the-only-agent-authentication": "FR-1",
+      "the-agent-api-is-a-least-privilege-allowlist": "FR-2",
+      "actor-identity-cannot-be-supplied-or-overridden": "FR-3",
+      "every-agent-caused-effect-retains-run-attribution": "FR-4",
+      "http-and-mcp-access-have-equal-capability": "FR-5",
+      "a-turn-that-ends-on-an-unasked-question-is-surfaced-to-the-o": "FR-6",
+      "the-operator-can-convert-an-unasked-question-into-a-real-one": "FR-7",
+      "operator-facing-severity-values-are-the-ones-the-operator-s-": "FR-8",
+      "an-agent-can-ask-several-questions-in-one-turn": "FR-9",
+      "the-operator-answers-a-batch-one-question-at-a-time": "FR-10",
+      "how-long-an-agent-waits-for-the-operator-is-a-per-agent-sett": "FR-11",
+      "durable-per-agent-settings-are-edited-on-the-agent-not-in-th": "FR-12",
+      "a-send-to-an-archived-conversation-fails-with-a-recoverable-": "FR-13",
+      "no-capability-may-exist-only-in-a-hook": "FR-14",
+      "a-task-named-on-a-delegation-is-runtime-state-not-message-de": "FR-15",
+      "an-agent-cannot-declare-its-own-work-blocked-or-unblocked": "FR-16",
+      "the-operator-may-decline-a-question": "FR-17",
+      "a-waiting-agent-is-told-that-its-question-was-declined": "FR-18",
+      "an-agent-can-read-a-specification-document": "FR-19",
+      "a-task-states-what-its-requirements-say": "FR-20",
+      "an-agent-can-record-read-and-decide-requirement-evidence": "FR-21"
+    },
+    "high_water": 21,
+    "retired": {},
+    "digests": {
+      "FR-1": "bb8873f571c4ecee99cdc98f2e304f14bf543718d8a1e03c9804031f9000c32d",
+      "FR-2": "70fc2df374e1fff004ef0e4fc567c1be3ee16f1e32315a5dd3ed84fb9662d5f5",
+      "FR-3": "63031b52063a347d3a0365b8418319a443b49bfa41fbfb4ee658d4231c545a9c",
+      "FR-4": "f3c2af050767d05262bcce8b7ba04224207ffd56e46ec23ab5418ab87b46140f",
+      "FR-5": "1a06f8d66b1c0f323c4fee4b73b26abdef249217609afb5d4f0863d3d129e38f",
+      "FR-6": "14a250e27dcbdd9a245fce16ae743c18326e2891803c944e760673e6fd2aee14",
+      "FR-7": "6730fae64b673cfdf001fcc4f023e3fa23332aa70177e59a4bb8096c8b2e4e17",
+      "FR-8": "5fd8f28f200bf16c34a18065a0c22f16e68934d82c1e7736132c0c8b1953e072",
+      "FR-9": "de943e4e3c9af2950cb46ecb541560da84223b8272c24ab2f44e2018a01d29fa",
+      "FR-10": "4808ea3d6f5f8be4e3add94f134cd040f21d0e402fc5acf127e737040d1a1d09",
+      "FR-11": "24ff6cd6c0fb7de4f0cc2bd8c515417e74c9d0366c66e53244d5aa58ff57ffa5",
+      "FR-12": "715c26dc3bf9005525afc34dd72dc3fbf3ea04f2b35397fe15363fd19091032d",
+      "FR-13": "d1299e828b954141d74d4b9b4547578fc3272b9581e40a6e142b714362b5e68d",
+      "FR-14": "1a855af2ed81dbfca0f84a901ae20c1f8cf417e77a91549726e70dbba49b6722",
+      "FR-15": "7201eac3b15c5d9e8e45b4f89ac675f1fd15a660af3263fe21f7eb1c25429ec1",
+      "FR-16": "3dbb9c1a7fe80574ab449de60d081f6c6704b87e363188c0cc946a00ffdfb0ec",
+      "FR-17": "77a601340e8060338002ec4ed07c0619062bf3faa1b11972edbe2abe1eb0ec63",
+      "FR-18": "f4a3e1367974dbfcc3d9475a19ffff631d2b31ca22607b4664c86718a0437e3f",
+      "FR-19": "10d5ae2acd8e9097ae4a43669c66cb1f96fffb0e891eb413fe2d76a80057631c",
+      "FR-20": "bde65f7c982215720f22de1c10f9938941752a48b67068bb844cc9d3062c52e3",
+      "FR-21": "192026e3a7231007bc34f3c044a98fae83fb656dd65dcc5af3a948b2716a87fa"
+    }
+  }
+}
+</script>
+</body>
+</html>

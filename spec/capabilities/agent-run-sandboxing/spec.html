@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent run sandboxing</title>
+<meta name="aw-spec-kind" content="capability">
+<meta name="aw-spec-status" content="current">
+<meta name="aw-spec-rigor" content="sketch">
+<meta name="aw-spec-schema-version" content="1">
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+    --surface-2: #21262d; --surface: #161b22;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+:root[data-theme="dark"] {
+  --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+  --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+  --surface-2: #21262d; --surface: #161b22;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 2rem 2.5rem 4rem; background: var(--bg); color: var(--fg);
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+h1 { font-size: 1.75rem; margin: 0 0 .25rem; }
+h2 { font-size: 1.15rem; margin: 2.5rem 0 .75rem; padding-bottom: .3rem;
+     border-bottom: 1px solid var(--border); }
+h3 { font-size: 1rem; margin: 1.5rem 0 .4rem; }
+p { margin: .5rem 0; }
+ul, ol { margin: .5rem 0; padding-left: 1.4rem; }
+li { margin: .25rem 0; }
+a { color: var(--aw-accent); }
+.aw-meta { color: var(--muted); font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-chip { display: inline-block; padding: .1rem .5rem; border-radius: 999px;
+           background: var(--surface-2); font-size: .78rem; margin-right: .4rem; }
+.aw-requirement { border-left: 3px solid var(--border); padding: .1rem 0 .1rem .9rem;
+                  margin: 1.1rem 0; }
+.aw-requirement-must { border-left-color: var(--aw-accent); }
+.aw-requirement-should { border-left-color: var(--aw-warn); }
+.aw-requirement-may { border-left-color: var(--border); }
+.aw-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8rem;
+         color: var(--muted); }
+.aw-modal { font-weight: 600; }
+.aw-modal-must { color: var(--aw-accent); }
+.aw-modal-should { color: var(--aw-warn); }
+.aw-modal-may { color: var(--fg); font-weight: 400; }
+.aw-chip-rigor-gate { color: var(--aw-accent); border: 1px solid var(--aw-accent); }
+.aw-chip-rigor-contract { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Phase is a lifecycle, and the question it answers is "can I rely on this?". `approved` and a
+   capability's `current` are settled and take the done tone; `proposed` is waiting on an operator
+   decision and takes warn; `exploring` and `archived` are quiet for opposite reasons — one has not
+   arrived yet, the other has been superseded. Deliberately NOT the accent: this document already
+   spends accent on links and on MUST, and a third meaning would empty it of any. `kind` keeps the
+   plain chip on purpose — it is a category, not a state, and hue there ranks nothing. */
+.aw-chip-phase-done { color: var(--aw-ok); border: 1px solid var(--aw-ok); }
+.aw-chip-phase-waiting { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+.aw-chip-phase-quiet { color: var(--muted); }
+.aw-chip-phase-archived { color: var(--muted); text-decoration: line-through; }
+/* An unresolved question blocks `propose`, so it is a real state and not a label. Resolved stays
+   the plain chip — the reader needs to find what is still open, not celebrate what is closed. */
+.aw-chip-open { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Limits is where a reader is most likely to be misled, and it read identically to Checked. */
+.aw-limits { color: var(--aw-warn); }
+/* The first screenful was entirely monochrome, so the document read as texty however the
+   requirements below were coloured. This puts the same modal scheme where the eye lands first,
+   carrying counts rather than decoration. */
+.aw-summary { margin: 0 0 1.5rem; font-size: .9rem; color: var(--muted); }
+.aw-summary .aw-count { font-weight: 600; }
+.aw-summary-sep { color: var(--border); margin: 0 .45rem; }
+.aw-rationale { color: var(--muted); font-size: .9rem; }
+.aw-refs { font-size: .82rem; color: var(--muted); }
+.aw-note { color: var(--muted); font-style: italic; }
+.aw-empty { color: var(--muted); }
+table { border-collapse: collapse; margin: .75rem 0; width: 100%; }
+th, td { border: 1px solid var(--border); padding: .4rem .6rem; text-align: left;
+         vertical-align: top; font-size: .92rem; }
+code, pre { background: var(--surface); border-radius: 4px; }
+code { padding: .1rem .3rem; font-size: .88em; }
+</style>
+</head>
+<body>
+<h1>Agent run sandboxing</h1>
+<p class="aw-meta"><span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><span class="aw-chip">sketch</span></p>
+<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">13</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">13</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">38</span> criteria</p>
+<section><h2 id="summary">Summary</h2><p>Defines the sandbox posture the Hub imposes on a spawned agent run, independent of whatever configuration happens to exist on the machine the Hub process runs on. Originated by `openspec/changes/2026-08-06-claude-non-yolo-permission-mode`.</p></section><section><h2 id="requirements">Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-1"><span class="aw-id">FR-1</span> <p><span class="aw-modal aw-modal-must">MUST</span> The Hub SHALL pass an explicit, non-bypass permission mode to every non-yolo Claude run it spawns. A non-yolo Claude run&#x27;s actual permission behavior MUST NOT depend on the config file of the machine the Hub process happens to run on.</p></div><div class="aw-requirement aw-requirement-must" id="FR-2"><span class="aw-id">FR-2</span> <p><span class="aw-modal aw-modal-must">SHALL</span> When a non-yolo Claude run has the Hub&#x27;s own MCP server configured, the Hub SHALL allowlist that server&#x27;s tools explicitly, so the agent&#x27;s general sandbox does not also block AgentWeave&#x27;s own tooling.</p></div><div class="aw-requirement aw-requirement-must" id="FR-3"><span class="aw-id">FR-3</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The permission posture the Hub imposes by default SHALL permit an agent to do work within its own workspace without further configuration.</p><p class="aw-rationale">The Hub MUST NOT impose by default a posture whose decisions can only be resolved by an operator prompt, unless a surface exists through which an operator can actually answer that prompt. A posture that defers every decision to an absent answerer denies everything and is indistinguishable from a broken run. Isolation SHALL continue to be carried by the agent&#x27;s workspace boundary, not by withholding permission inside it.</p></div><div class="aw-requirement aw-requirement-must" id="FR-4"><span class="aw-id">FR-4</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The operator SHALL be able to select the permission posture used for a conversation&#x27;s runs, from the postures the provider supports, and that selection SHALL take effect on the next run of that conversation.</p><p class="aw-rationale">The selection MUST reach the spawned command. A control that is displayed but does not change what the run receives is a defect, not a cosmetic issue. Postures SHALL be presented in terms of what they allow, not by the provider&#x27;s internal flag spelling.</p></div><div class="aw-requirement aw-requirement-must" id="FR-5"><span class="aw-id">FR-5</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL offer a permission posture under which each of a run&#x27;s tool calls is decided against the run&#x27;s own workspace, rather than permitted in advance.</p><p class="aw-rationale">Under that posture a tool call confined to the run&#x27;s workspace is allowed, and one reaching outside it is refused with a reason stating what was refused and why. The comparison SHALL be made on fully resolved paths, so that a relative traversal or a symbolic link cannot escape a boundary that an unresolved comparison would have accepted. The boundary enforced SHALL be the same one the agent is told it is working in. A boundary that is described in one place and enforced from another can disagree, and the agent is given no way to tell which is real. Where the boundary cannot be established, the posture SHALL refuse rather than permit. An unknown boundary is not an absent one.</p></div><div class="aw-requirement aw-requirement-must" id="FR-6"><span class="aw-id">FR-6</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL answer every permission request a run raises, including requests whose shape it does not recognise, for which the answer is refusal.</p><p class="aw-rationale">A decision SHALL be reached without requiring a response from any other process. An unanswered request does not fail a run, it suspends it indefinitely, so a decision path that can time out, be refused a connection, or wait on a restart is a decision path that can hang a turn forever.</p></div><div class="aw-requirement aw-requirement-must" id="FR-7"><span class="aw-id">FR-7</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Where a run&#x27;s action is refused by the enforced boundary, the Hub SHALL make that refusal visible to the operator.</p><p class="aw-rationale">An agent that is silently refused appears merely to have chosen differently. The operator is the only participant who can widen a boundary or redirect the work, and cannot do either without knowing a refusal happened. Reporting a refusal MUST NOT alter or delay the decision it reports. Visibility is an observation of a decision already reached, never a precondition of reaching it.</p></div><div class="aw-requirement aw-requirement-must" id="FR-8"><span class="aw-id">FR-8</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The default posture SHALL NOT change as a consequence of an enforced posture becoming available, and runs that do not select it SHALL be spawned exactly as before.</p><p class="aw-rationale">A posture that decides each tool call is new machinery on the path of every action. Adopting it is a deliberate choice, made per conversation, not a change imposed on every existing agent&#x27;s next run. Flags that serve the enforced posture SHALL be emitted only for that posture, and only where the mechanism answering them is present.</p></div><div class="aw-requirement aw-requirement-must" id="FR-9"><span class="aw-id">FR-9</span> <p><span class="aw-modal aw-modal-must">SHALL</span> A permission request SHALL reach a terminal status whenever the run that raised it stops waiting — by answering, by timing out, by being stopped, or by ending for any other reason. It SHALL NOT remain pending once nothing is waiting on it.</p><p class="aw-rationale">Reaching that terminal status SHALL NOT depend on the run successfully reporting it. A run that is killed, crashes, or cannot reach the Hub still stops waiting, and the request SHALL still be closed. Reporting that a wait has ended MUST NOT alter or delay the decision the run already reached. As with reporting a refusal, this is an observation of something already true.</p></div><div class="aw-requirement aw-requirement-must" id="FR-10"><span class="aw-id">FR-10</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL refuse an operator decision on a permission request that is no longer pending, and SHALL say that the run has moved on.</p><p class="aw-rationale">An accepted decision is a record that the operator authorised an action. Recording an approval for a call that already proceeded without it — or was already refused — states an authority that was never exercised, which is worse than refusing the decision outright.</p></div><div class="aw-requirement aw-requirement-must" id="FR-11"><span class="aw-id">FR-11</span> <p><span class="aw-modal aw-modal-must">SHALL</span> A permission request that ended without an operator decision SHALL remain visible to the operator and SHALL be presented as expired, distinctly from one they answered.</p><p class="aw-rationale">The operator is the only participant who can widen the wait or be present for the next one, and cannot do either without learning that an agent gave up. A request that disappears silently withholds exactly that. An expired request SHALL NOT be answerable.</p></div><div class="aw-requirement aw-requirement-must" id="FR-12"><span class="aw-id">FR-12</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL let the operator dismiss an expired permission request, after which it is no longer presented to them. Dismissing SHALL NOT change what the agent was told or who authorised what.</p><p class="aw-rationale">Expired requests accumulate deliberately, because a run of missed decisions is something the operator should see building up. A pile that cannot be cleared stops being a signal, so acknowledgement has to be possible without pretending a decision was made. A request that is still pending SHALL NOT be dismissable. The run is still waiting on it, and clearing it from view would refuse it by neglect while appearing to be housekeeping.</p></div><div class="aw-requirement aw-requirement-must" id="FR-13"><span class="aw-id">FR-13</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL record a durable event when it refuses an agent&#x27;s action, regardless of which runtime decided the refusal.</p><p class="aw-rationale">An operator reading the activity of a run needs to know an agent was blocked. A refusal that exists only in the agent&#x27;s own prose account is one the operator will not find, and the agent&#x27;s summary of its own failure is a claim rather than a record. Recording SHALL cover refusals a runtime decides on its own, not only those the operator was asked about. The refusals an operator never saw are precisely the ones they cannot otherwise learn of. A refusal SHALL be recorded once. A decision the operator already answered is already recorded, and recording it again tells them it happened twice. Only refusals SHALL be recorded. An allowed action is the ordinary case, and an event per allowed action buries the refusals among them. The recorded event SHALL name the refused action in terms the operator can read.</p></div></section><section><h2 id="acceptance">Acceptance criteria</h2><table><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>the Hub spawns a Claude agent whose run is not `yolo`</td><td>the spawned command line includes an explicit non-bypass permission mode flag</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>the Hub spawns a Claude agent whose run is `yolo`</td><td>the spawned command line includes `--dangerously-skip-permissions` does not include the non-yolo permission mode flag</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>the Hub spawns a non-yolo Claude agent with its own MCP server configured</td><td>the spawned command line allowlists that server&#x27;s tools an action outside that allowlist is still refused</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>the Hub spawns a non-yolo Claude agent with no MCP server configured</td><td>the spawned command line does not include an MCP tool allowlist flag</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>the Hub spawns a non-yolo agent that has been given no permission configuration that agent writes a file inside its own workspace</td><td>the write succeeds no approval was required from an operator</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>no operator-facing approval surface exists for a provider</td><td>the Hub does not default that provider&#x27;s runs to a posture that asks for approval</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>an agent acts under the default posture</td><td>its ability to affect anything outside its own workspace is unchanged by that posture</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>the operator selects a permission posture for a conversation and sends a message</td><td>the spawned command carries that posture does not also carry the default posture</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>the operator selects the posture that requires approval for every action the agent attempts a write</td><td>the write does not succeed</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>the permission postures are presented to the operator</td><td>each is labelled by the access it grants rather than by its provider flag value</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>a run under this posture acts on a path inside its own workspace</td><td>the action is allowed</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>a run under this posture acts on a path outside its own workspace</td><td>the action is refused the refusal states what was refused and why</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>a path reaches outside the workspace only after relative traversal or link resolution</td><td>it is refused</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>the run&#x27;s workspace cannot be determined</td><td>actions under this posture are refused</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>a run under this posture uses the Hub&#x27;s own tools</td><td>those calls are allowed</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>a permission request is raised whose shape is not recognised</td><td>it is refused rather than left unanswered</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>the Hub cannot be reached while a run is deciding a permission request</td><td>the request is still answered</td></tr><tr><td><a href="#FR-7">FR-7</a></td><td></td><td>an action is refused under the enforced boundary</td><td>the operator can see that the refusal happened</td></tr><tr><td><a href="#FR-7">FR-7</a></td><td></td><td>a refusal cannot be reported</td><td>the decision is unchanged the run continues</td></tr><tr><td><a href="#FR-8">FR-8</a></td><td></td><td>a non-yolo run is spawned with no posture selected</td><td>it uses the same default posture as before the enforced posture existed</td></tr><tr><td><a href="#FR-8">FR-8</a></td><td></td><td>a run selects a posture other than the enforced one</td><td>its command carries nothing referring to the enforcement mechanism</td></tr><tr><td><a href="#FR-8">FR-8</a></td><td></td><td>the enforced posture is selected but no mechanism is present to answer its requests</td><td>the command does not claim enforcement it cannot perform</td></tr><tr><td><a href="#FR-9">FR-9</a></td><td></td><td>a run&#x27;s wait for an operator decision runs out</td><td>the request reaches a terminal status rather than remaining pending</td></tr><tr><td><a href="#FR-9">FR-9</a></td><td></td><td>a run ends while a permission request it raised is still pending</td><td>that request reaches a terminal status</td></tr><tr><td><a href="#FR-9">FR-9</a></td><td></td><td>a run is stopped or dies without reporting that its wait ended</td><td>its pending permission requests are still closed</td></tr><tr><td><a href="#FR-9">FR-9</a></td><td></td><td>a request&#x27;s wait is reported as ended after the request has already been closed</td><td>the request is unchanged and no error is surfaced to the run</td></tr><tr><td><a href="#FR-10">FR-10</a></td><td></td><td>an operator submits a decision for a request that has already reached a terminal status</td><td>the decision is refused and the operator is told the run has moved on</td></tr><tr><td><a href="#FR-10">FR-10</a></td><td></td><td>a decision on a closed request is refused</td><td>the request&#x27;s status, decision time, and decider are unchanged</td></tr><tr><td><a href="#FR-11">FR-11</a></td><td></td><td>a permission request expires without an operator decision</td><td>it remains visible to the operator, marked as expired rather than removed</td></tr><tr><td><a href="#FR-11">FR-11</a></td><td></td><td>the operator views an expired permission request</td><td>it presents no way to allow or deny it</td></tr><tr><td><a href="#FR-11">FR-11</a></td><td></td><td>the operator views a permission request that expired and one they decided</td><td>the two are visibly different</td></tr><tr><td><a href="#FR-12">FR-12</a></td><td></td><td>the operator dismisses an expired permission request</td><td>it is no longer presented to them, and its status and decision record are unchanged</td></tr><tr><td><a href="#FR-12">FR-12</a></td><td></td><td>the operator attempts to dismiss a request that is still pending</td><td>the attempt is refused, and the request remains presented for a decision</td></tr><tr><td><a href="#FR-12">FR-12</a></td><td></td><td>an already-dismissed request is dismissed again</td><td>it is unchanged and no error is surfaced</td></tr><tr><td><a href="#FR-13">FR-13</a></td><td></td><td>a runtime refuses an agent&#x27;s action without asking the operator</td><td>the refusal appears in the project&#x27;s activity</td></tr><tr><td><a href="#FR-13">FR-13</a></td><td></td><td>the operator is asked about an action and refuses it</td><td>exactly one refusal is recorded</td></tr><tr><td><a href="#FR-13">FR-13</a></td><td></td><td>a runtime allows an agent&#x27;s action</td><td>no refusal is recorded</td></tr><tr><td><a href="#FR-13">FR-13</a></td><td></td><td>a refusal is recorded</td><td>the action it names is readable rather than an internal method name</td></tr></tbody></table></section><section><h2 id="evidence">Evidence and coverage limits</h2><h3>Checked</h3><ul><li>Translated from openspec/specs/agent-run-sandboxing/spec.md (13 requirements, 38 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten.</li></ul><h3 class="aw-limits">Limits</h3><ul><li>scenarios-state-no-starting-state: 38 of 38 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed</li></ul></section><section><h2 id="open-questions">Open questions</h2><p class="aw-empty">None outstanding.</p></section>
+<script type="application/agentweave-spec+json" id="aw-spec-payload">
+{
+  "schema_version": 1,
+  "kind": "capability",
+  "title": "Agent run sandboxing",
+  "summary": "Defines the sandbox posture the Hub imposes on a spawned agent run, independent of whatever configuration happens to exist on the machine the Hub process runs on. Originated by `openspec/changes/2026-08-06-claude-non-yolo-permission-mode`.",
+  "problem": "",
+  "scope": {
+    "in_scope": [],
+    "non_goals": []
+  },
+  "requirements": [
+    {
+      "key": "a-non-yolo-claude-run-s-sandbox-posture-is-set-by-the-hub-no",
+      "statement": "The Hub SHALL pass an explicit, non-bypass permission mode to every non-yolo Claude run it spawns. A non-yolo Claude run's actual permission behavior MUST NOT depend on the config file of the machine the Hub process happens to run on.",
+      "modal": "MUST",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "a-sandboxed-non-yolo-claude-agent-can-still-use-the-hub-s-ow",
+      "statement": "When a non-yolo Claude run has the Hub's own MCP server configured, the Hub SHALL allowlist that server's tools explicitly, so the agent's general sandbox does not also block AgentWeave's own tooling.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "the-default-posture-lets-an-agent-work-inside-its-own-worksp",
+      "statement": "The permission posture the Hub imposes by default SHALL permit an agent to do work within its own workspace without further configuration.",
+      "modal": "SHALL",
+      "rationale": "The Hub MUST NOT impose by default a posture whose decisions can only be resolved by an operator prompt, unless a surface exists through which an operator can actually answer that prompt. A posture that defers every decision to an absent answerer denies everything and is indistinguishable from a broken run. Isolation SHALL continue to be carried by the agent's workspace boundary, not by withholding permission inside it.",
+      "party": null
+    },
+    {
+      "key": "the-operator-chooses-a-conversation-s-permission-posture",
+      "statement": "The operator SHALL be able to select the permission posture used for a conversation's runs, from the postures the provider supports, and that selection SHALL take effect on the next run of that conversation.",
+      "modal": "SHALL",
+      "rationale": "The selection MUST reach the spawned command. A control that is displayed but does not change what the run receives is a defect, not a cosmetic issue. Postures SHALL be presented in terms of what they allow, not by the provider's internal flag spelling.",
+      "party": null
+    },
+    {
+      "key": "a-posture-exists-in-which-the-workspace-boundary-is-enforced",
+      "statement": "The Hub SHALL offer a permission posture under which each of a run's tool calls is decided against the run's own workspace, rather than permitted in advance.",
+      "modal": "SHALL",
+      "rationale": "Under that posture a tool call confined to the run's workspace is allowed, and one reaching outside it is refused with a reason stating what was refused and why. The comparison SHALL be made on fully resolved paths, so that a relative traversal or a symbolic link cannot escape a boundary that an unresolved comparison would have accepted. The boundary enforced SHALL be the same one the agent is told it is working in. A boundary that is described in one place and enforced from another can disagree, and the agent is given no way to tell which is real. Where the boundary cannot be established, the posture SHALL refuse rather than permit. An unknown boundary is not an absent one.",
+      "party": null
+    },
+    {
+      "key": "every-permission-decision-is-answered-and-answering-never-de",
+      "statement": "The Hub SHALL answer every permission request a run raises, including requests whose shape it does not recognise, for which the answer is refusal.",
+      "modal": "SHALL",
+      "rationale": "A decision SHALL be reached without requiring a response from any other process. An unanswered request does not fail a run, it suspends it indefinitely, so a decision path that can time out, be refused a connection, or wait on a restart is a decision path that can hang a turn forever.",
+      "party": null
+    },
+    {
+      "key": "a-refused-action-is-visible-to-the-operator",
+      "statement": "Where a run's action is refused by the enforced boundary, the Hub SHALL make that refusal visible to the operator.",
+      "modal": "SHALL",
+      "rationale": "An agent that is silently refused appears merely to have chosen differently. The operator is the only participant who can widen a boundary or redirect the work, and cannot do either without knowing a refusal happened. Reporting a refusal MUST NOT alter or delay the decision it reports. Visibility is an observation of a decision already reached, never a precondition of reaching it.",
+      "party": null
+    },
+    {
+      "key": "introducing-an-enforced-posture-does-not-change-existing-run",
+      "statement": "The default posture SHALL NOT change as a consequence of an enforced posture becoming available, and runs that do not select it SHALL be spawned exactly as before.",
+      "modal": "SHALL",
+      "rationale": "A posture that decides each tool call is new machinery on the path of every action. Adopting it is a deliberate choice, made per conversation, not a change imposed on every existing agent's next run. Flags that serve the enforced posture SHALL be emitted only for that posture, and only where the mechanism answering them is present.",
+      "party": null
+    },
+    {
+      "key": "a-permission-request-does-not-outlive-the-wait-it-represents",
+      "statement": "A permission request SHALL reach a terminal status whenever the run that raised it stops waiting — by answering, by timing out, by being stopped, or by ending for any other reason. It SHALL NOT remain pending once nothing is waiting on it.",
+      "modal": "SHALL",
+      "rationale": "Reaching that terminal status SHALL NOT depend on the run successfully reporting it. A run that is killed, crashes, or cannot reach the Hub still stops waiting, and the request SHALL still be closed. Reporting that a wait has ended MUST NOT alter or delay the decision the run already reached. As with reporting a refusal, this is an observation of something already true.",
+      "party": null
+    },
+    {
+      "key": "a-decision-is-refused-once-nobody-is-waiting-for-it",
+      "statement": "The Hub SHALL refuse an operator decision on a permission request that is no longer pending, and SHALL say that the run has moved on.",
+      "modal": "SHALL",
+      "rationale": "An accepted decision is a record that the operator authorised an action. Recording an approval for a call that already proceeded without it — or was already refused — states an authority that was never exercised, which is worse than refusing the decision outright.",
+      "party": null
+    },
+    {
+      "key": "the-operator-can-see-that-an-agent-stopped-waiting",
+      "statement": "A permission request that ended without an operator decision SHALL remain visible to the operator and SHALL be presented as expired, distinctly from one they answered.",
+      "modal": "SHALL",
+      "rationale": "The operator is the only participant who can widen the wait or be present for the next one, and cannot do either without learning that an agent gave up. A request that disappears silently withholds exactly that. An expired request SHALL NOT be answerable.",
+      "party": null
+    },
+    {
+      "key": "the-operator-can-clear-an-expired-request-they-have-seen",
+      "statement": "The Hub SHALL let the operator dismiss an expired permission request, after which it is no longer presented to them. Dismissing SHALL NOT change what the agent was told or who authorised what.",
+      "modal": "SHALL",
+      "rationale": "Expired requests accumulate deliberately, because a run of missed decisions is something the operator should see building up. A pile that cannot be cleared stops being a signal, so acknowledgement has to be possible without pretending a decision was made. A request that is still pending SHALL NOT be dismissable. The run is still waiting on it, and clearing it from view would refuse it by neglect while appearing to be housekeeping.",
+      "party": null
+    },
+    {
+      "key": "a-refusal-is-recorded-wherever-it-is-decided",
+      "statement": "The system SHALL record a durable event when it refuses an agent's action, regardless of which runtime decided the refusal.",
+      "modal": "SHALL",
+      "rationale": "An operator reading the activity of a run needs to know an agent was blocked. A refusal that exists only in the agent's own prose account is one the operator will not find, and the agent's summary of its own failure is a claim rather than a record. Recording SHALL cover refusals a runtime decides on its own, not only those the operator was asked about. The refusals an operator never saw are precisely the ones they cannot otherwise learn of. A refusal SHALL be recorded once. A decision the operator already answered is already recorded, and recording it again tells them it happened twice. Only refusals SHALL be recorded. An allowed action is the ordinary case, and an event per allowed action buries the refusals among them. The recorded event SHALL name the refused action in terms the operator can read.",
+      "party": null
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "key": "ac1",
+      "requirement": "a-non-yolo-claude-run-s-sandbox-posture-is-set-by-the-hub-no",
+      "given": "",
+      "when": "the Hub spawns a Claude agent whose run is not `yolo`",
+      "then": "the spawned command line includes an explicit non-bypass permission mode flag"
+    },
+    {
+      "key": "ac2",
+      "requirement": "a-non-yolo-claude-run-s-sandbox-posture-is-set-by-the-hub-no",
+      "given": "",
+      "when": "the Hub spawns a Claude agent whose run is `yolo`",
+      "then": "the spawned command line includes `--dangerously-skip-permissions` does not include the non-yolo permission mode flag"
+    },
+    {
+      "key": "ac3",
+      "requirement": "a-sandboxed-non-yolo-claude-agent-can-still-use-the-hub-s-ow",
+      "given": "",
+      "when": "the Hub spawns a non-yolo Claude agent with its own MCP server configured",
+      "then": "the spawned command line allowlists that server's tools an action outside that allowlist is still refused"
+    },
+    {
+      "key": "ac4",
+      "requirement": "a-sandboxed-non-yolo-claude-agent-can-still-use-the-hub-s-ow",
+      "given": "",
+      "when": "the Hub spawns a non-yolo Claude agent with no MCP server configured",
+      "then": "the spawned command line does not include an MCP tool allowlist flag"
+    },
+    {
+      "key": "ac5",
+      "requirement": "the-default-posture-lets-an-agent-work-inside-its-own-worksp",
+      "given": "",
+      "when": "the Hub spawns a non-yolo agent that has been given no permission configuration that agent writes a file inside its own workspace",
+      "then": "the write succeeds no approval was required from an operator"
+    },
+    {
+      "key": "ac6",
+      "requirement": "the-default-posture-lets-an-agent-work-inside-its-own-worksp",
+      "given": "",
+      "when": "no operator-facing approval surface exists for a provider",
+      "then": "the Hub does not default that provider's runs to a posture that asks for approval"
+    },
+    {
+      "key": "ac7",
+      "requirement": "the-default-posture-lets-an-agent-work-inside-its-own-worksp",
+      "given": "",
+      "when": "an agent acts under the default posture",
+      "then": "its ability to affect anything outside its own workspace is unchanged by that posture"
+    },
+    {
+      "key": "ac8",
+      "requirement": "the-operator-chooses-a-conversation-s-permission-posture",
+      "given": "",
+      "when": "the operator selects a permission posture for a conversation and sends a message",
+      "then": "the spawned command carries that posture does not also carry the default posture"
+    },
+    {
+      "key": "ac9",
+      "requirement": "the-operator-chooses-a-conversation-s-permission-posture",
+      "given": "",
+      "when": "the operator selects the posture that requires approval for every action the agent attempts a write",
+      "then": "the write does not succeed"
+    },
+    {
+      "key": "ac10",
+      "requirement": "the-operator-chooses-a-conversation-s-permission-posture",
+      "given": "",
+      "when": "the permission postures are presented to the operator",
+      "then": "each is labelled by the access it grants rather than by its provider flag value"
+    },
+    {
+      "key": "ac11",
+      "requirement": "a-posture-exists-in-which-the-workspace-boundary-is-enforced",
+      "given": "",
+      "when": "a run under this posture acts on a path inside its own workspace",
+      "then": "the action is allowed"
+    },
+    {
+      "key": "ac12",
+      "requirement": "a-posture-exists-in-which-the-workspace-boundary-is-enforced",
+      "given": "",
+      "when": "a run under this posture acts on a path outside its own workspace",
+      "then": "the action is refused the refusal states what was refused and why"
+    },
+    {
+      "key": "ac13",
+      "requirement": "a-posture-exists-in-which-the-workspace-boundary-is-enforced",
+      "given": "",
+      "when": "a path reaches outside the workspace only after relative traversal or link resolution",
+      "then": "it is refused"
+    },
+    {
+      "key": "ac14",
+      "requirement": "a-posture-exists-in-which-the-workspace-boundary-is-enforced",
+      "given": "",
+      "when": "the run's workspace cannot be determined",
+      "then": "actions under this posture are refused"
+    },
+    {
+      "key": "ac15",
+      "requirement": "a-posture-exists-in-which-the-workspace-boundary-is-enforced",
+      "given": "",
+      "when": "a run under this posture uses the Hub's own tools",
+      "then": "those calls are allowed"
+    },
+    {
+      "key": "ac16",
+      "requirement": "every-permission-decision-is-answered-and-answering-never-de",
+      "given": "",
+      "when": "a permission request is raised whose shape is not recognised",
+      "then": "it is refused rather than left unanswered"
+    },
+    {
+      "key": "ac17",
+      "requirement": "every-permission-decision-is-answered-and-answering-never-de",
+      "given": "",
+      "when": "the Hub cannot be reached while a run is deciding a permission request",
+      "then": "the request is still answered"
+    },
+    {
+      "key": "ac18",
+      "requirement": "a-refused-action-is-visible-to-the-operator",
+      "given": "",
+      "when": "an action is refused under the enforced boundary",
+      "then": "the operator can see that the refusal happened"
+    },
+    {
+      "key": "ac19",
+      "requirement": "a-refused-action-is-visible-to-the-operator",
+      "given": "",
+      "when": "a refusal cannot be reported",
+      "then": "the decision is unchanged the run continues"
+    },
+    {
+      "key": "ac20",
+      "requirement": "introducing-an-enforced-posture-does-not-change-existing-run",
+      "given": "",
+      "when": "a non-yolo run is spawned with no posture selected",
+      "then": "it uses the same default posture as before the enforced posture existed"
+    },
+    {
+      "key": "ac21",
+      "requirement": "introducing-an-enforced-posture-does-not-change-existing-run",
+      "given": "",
+      "when": "a run selects a posture other than the enforced one",
+      "then": "its command carries nothing referring to the enforcement mechanism"
+    },
+    {
+      "key": "ac22",
+      "requirement": "introducing-an-enforced-posture-does-not-change-existing-run",
+      "given": "",
+      "when": "the enforced posture is selected but no mechanism is present to answer its requests",
+      "then": "the command does not claim enforcement it cannot perform"
+    },
+    {
+      "key": "ac23",
+      "requirement": "a-permission-request-does-not-outlive-the-wait-it-represents",
+      "given": "",
+      "when": "a run's wait for an operator decision runs out",
+      "then": "the request reaches a terminal status rather than remaining pending"
+    },
+    {
+      "key": "ac24",
+      "requirement": "a-permission-request-does-not-outlive-the-wait-it-represents",
+      "given": "",
+      "when": "a run ends while a permission request it raised is still pending",
+      "then": "that request reaches a terminal status"
+    },
+    {
+      "key": "ac25",
+      "requirement": "a-permission-request-does-not-outlive-the-wait-it-represents",
+      "given": "",
+      "when": "a run is stopped or dies without reporting that its wait ended",
+      "then": "its pending permission requests are still closed"
+    },
+    {
+      "key": "ac26",
+      "requirement": "a-permission-request-does-not-outlive-the-wait-it-represents",
+      "given": "",
+      "when": "a request's wait is reported as ended after the request has already been closed",
+      "then": "the request is unchanged and no error is surfaced to the run"
+    },
+    {
+      "key": "ac27",
+      "requirement": "a-decision-is-refused-once-nobody-is-waiting-for-it",
+      "given": "",
+      "when": "an operator submits a decision for a request that has already reached a terminal status",
+      "then": "the decision is refused and the operator is told the run has moved on"
+    },
+    {
+      "key": "ac28",
+      "requirement": "a-decision-is-refused-once-nobody-is-waiting-for-it",
+      "given": "",
+      "when": "a decision on a closed request is refused",
+      "then": "the request's status, decision time, and decider are unchanged"
+    },
+    {
+      "key": "ac29",
+      "requirement": "the-operator-can-see-that-an-agent-stopped-waiting",
+      "given": "",
+      "when": "a permission request expires without an operator decision",
+      "then": "it remains visible to the operator, marked as expired rather than removed"
+    },
+    {
+      "key": "ac30",
+      "requirement": "the-operator-can-see-that-an-agent-stopped-waiting",
+      "given": "",
+      "when": "the operator views an expired permission request",
+      "then": "it presents no way to allow or deny it"
+    },
+    {
+      "key": "ac31",
+      "requirement": "the-operator-can-see-that-an-agent-stopped-waiting",
+      "given": "",
+      "when": "the operator views a permission request that expired and one they decided",
+      "then": "the two are visibly different"
+    },
+    {
+      "key": "ac32",
+      "requirement": "the-operator-can-clear-an-expired-request-they-have-seen",
+      "given": "",
+      "when": "the operator dismisses an expired permission request",
+      "then": "it is no longer presented to them, and its status and decision record are unchanged"
+    },
+    {
+      "key": "ac33",
+      "requirement": "the-operator-can-clear-an-expired-request-they-have-seen",
+      "given": "",
+      "when": "the operator attempts to dismiss a request that is still pending",
+      "then": "the attempt is refused, and the request remains presented for a decision"
+    },
+    {
+      "key": "ac34",
+      "requirement": "the-operator-can-clear-an-expired-request-they-have-seen",
+      "given": "",
+      "when": "an already-dismissed request is dismissed again",
+      "then": "it is unchanged and no error is surfaced"
+    },
+    {
+      "key": "ac35",
+      "requirement": "a-refusal-is-recorded-wherever-it-is-decided",
+      "given": "",
+      "when": "a runtime refuses an agent's action without asking the operator",
+      "then": "the refusal appears in the project's activity"
+    },
+    {
+      "key": "ac36",
+      "requirement": "a-refusal-is-recorded-wherever-it-is-decided",
+      "given": "",
+      "when": "the operator is asked about an action and refuses it",
+      "then": "exactly one refusal is recorded"
+    },
+    {
+      "key": "ac37",
+      "requirement": "a-refusal-is-recorded-wherever-it-is-decided",
+      "given": "",
+      "when": "a runtime allows an agent's action",
+      "then": "no refusal is recorded"
+    },
+    {
+      "key": "ac38",
+      "requirement": "a-refusal-is-recorded-wherever-it-is-decided",
+      "given": "",
+      "when": "a refusal is recorded",
+      "then": "the action it names is readable rather than an internal method name"
+    }
+  ],
+  "tasks": [],
+  "algorithms": [],
+  "design": "",
+  "evidence": {
+    "checked": [
+      "Translated from openspec/specs/agent-run-sandboxing/spec.md (13 requirements, 38 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten."
+    ],
+    "limits": [
+      "scenarios-state-no-starting-state: 38 of 38 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed"
+    ]
+  },
+  "lifecycle": "",
+  "open_questions": [],
+  "aw_identity": {
+    "requirements": {
+      "a-non-yolo-claude-run-s-sandbox-posture-is-set-by-the-hub-no": "FR-1",
+      "a-sandboxed-non-yolo-claude-agent-can-still-use-the-hub-s-ow": "FR-2",
+      "the-default-posture-lets-an-agent-work-inside-its-own-worksp": "FR-3",
+      "the-operator-chooses-a-conversation-s-permission-posture": "FR-4",
+      "a-posture-exists-in-which-the-workspace-boundary-is-enforced": "FR-5",
+      "every-permission-decision-is-answered-and-answering-never-de": "FR-6",
+      "a-refused-action-is-visible-to-the-operator": "FR-7",
+      "introducing-an-enforced-posture-does-not-change-existing-run": "FR-8",
+      "a-permission-request-does-not-outlive-the-wait-it-represents": "FR-9",
+      "a-decision-is-refused-once-nobody-is-waiting-for-it": "FR-10",
+      "the-operator-can-see-that-an-agent-stopped-waiting": "FR-11",
+      "the-operator-can-clear-an-expired-request-they-have-seen": "FR-12",
+      "a-refusal-is-recorded-wherever-it-is-decided": "FR-13"
+    },
+    "high_water": 13,
+    "retired": {},
+    "digests": {
+      "FR-1": "3310a048843690de7e6db0adde724c0d02b7ee0165ae7a46aaecf2a82298ed0d",
+      "FR-2": "5bcaf01ce6d4ceaede9579282c25c01698282a5c92f42366f55fef4c97ea2a43",
+      "FR-3": "883ab331151aecffb0103fabef915ef1c4452f4514823ace5f2dd1628bdd627b",
+      "FR-4": "2d59825f144d8dc06e62dde5c2c788dc8c794cf75b6d093e802c9f9a43aaa736",
+      "FR-5": "58c3e27c906b721b62ba4ee73bdc598ae05ae938a79aecc26faad48114539d46",
+      "FR-6": "87e53d05971aa4f701ee81636d8d8f956bdc58e520380238fbd511ca112e6ba2",
+      "FR-7": "86ae246c05aceab934db47167628f214d201d9ddf7fb87c16dbdd1bb79b5d578",
+      "FR-8": "8cfbe18bf3d8194ee817d7c2752711d6c5a3e8e6fc3922082df2174afb6c9b6b",
+      "FR-9": "a5c0f81c8f588bf29d92e1b3a74a62d6d163434e4c585386b682d19d2da296c0",
+      "FR-10": "479251abddc4a224b7c12dd57cc339ae9620cb72bd8c2dea1f801a24c17c107a",
+      "FR-11": "5511aed0248601a2a6f5cfd2c353a48e75ef05a389c39587fc0590dfaffeab4c",
+      "FR-12": "cceec9f664c486150a288cbf569bdc9aceef28080ac91ec91834a822f7f14adb",
+      "FR-13": "86540a492eabc11c9ea8069731096f092fac8c7cd5c102e2f8e77af790e146d8"
+    }
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent charter</title>
+<meta name="aw-spec-kind" content="capability">
+<meta name="aw-spec-status" content="current">
+<meta name="aw-spec-rigor" content="sketch">
+<meta name="aw-spec-schema-version" content="1">
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+    --surface-2: #21262d; --surface: #161b22;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+:root[data-theme="dark"] {
+  --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+  --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+  --surface-2: #21262d; --surface: #161b22;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 2rem 2.5rem 4rem; background: var(--bg); color: var(--fg);
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+h1 { font-size: 1.75rem; margin: 0 0 .25rem; }
+h2 { font-size: 1.15rem; margin: 2.5rem 0 .75rem; padding-bottom: .3rem;
+     border-bottom: 1px solid var(--border); }
+h3 { font-size: 1rem; margin: 1.5rem 0 .4rem; }
+p { margin: .5rem 0; }
+ul, ol { margin: .5rem 0; padding-left: 1.4rem; }
+li { margin: .25rem 0; }
+a { color: var(--aw-accent); }
+.aw-meta { color: var(--muted); font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-chip { display: inline-block; padding: .1rem .5rem; border-radius: 999px;
+           background: var(--surface-2); font-size: .78rem; margin-right: .4rem; }
+.aw-requirement { border-left: 3px solid var(--border); padding: .1rem 0 .1rem .9rem;
+                  margin: 1.1rem 0; }
+.aw-requirement-must { border-left-color: var(--aw-accent); }
+.aw-requirement-should { border-left-color: var(--aw-warn); }
+.aw-requirement-may { border-left-color: var(--border); }
+.aw-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8rem;
+         color: var(--muted); }
+.aw-modal { font-weight: 600; }
+.aw-modal-must { color: var(--aw-accent); }
+.aw-modal-should { color: var(--aw-warn); }
+.aw-modal-may { color: var(--fg); font-weight: 400; }
+.aw-chip-rigor-gate { color: var(--aw-accent); border: 1px solid var(--aw-accent); }
+.aw-chip-rigor-contract { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Phase is a lifecycle, and the question it answers is "can I rely on this?". `approved` and a
+   capability's `current` are settled and take the done tone; `proposed` is waiting on an operator
+   decision and takes warn; `exploring` and `archived` are quiet for opposite reasons — one has not
+   arrived yet, the other has been superseded. Deliberately NOT the accent: this document already
+   spends accent on links and on MUST, and a third meaning would empty it of any. `kind` keeps the
+   plain chip on purpose — it is a category, not a state, and hue there ranks nothing. */
+.aw-chip-phase-done { color: var(--aw-ok); border: 1px solid var(--aw-ok); }
+.aw-chip-phase-waiting { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+.aw-chip-phase-quiet { color: var(--muted); }
+.aw-chip-phase-archived { color: var(--muted); text-decoration: line-through; }
+/* An unresolved question blocks `propose`, so it is a real state and not a label. Resolved stays
+   the plain chip — the reader needs to find what is still open, not celebrate what is closed. */
+.aw-chip-open { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Limits is where a reader is most likely to be misled, and it read identically to Checked. */
+.aw-limits { color: var(--aw-warn); }
+/* The first screenful was entirely monochrome, so the document read as texty however the
+   requirements below were coloured. This puts the same modal scheme where the eye lands first,
+   carrying counts rather than decoration. */
+.aw-summary { margin: 0 0 1.5rem; font-size: .9rem; color: var(--muted); }
+.aw-summary .aw-count { font-weight: 600; }
+.aw-summary-sep { color: var(--border); margin: 0 .45rem; }
+.aw-rationale { color: var(--muted); font-size: .9rem; }
+.aw-refs { font-size: .82rem; color: var(--muted); }
+.aw-note { color: var(--muted); font-style: italic; }
+.aw-empty { color: var(--muted); }
+table { border-collapse: collapse; margin: .75rem 0; width: 100%; }
+th, td { border: 1px solid var(--border); padding: .4rem .6rem; text-align: left;
+         vertical-align: top; font-size: .92rem; }
+code, pre { background: var(--surface); border-radius: 4px; }
+code { padding: .1rem .3rem; font-size: .88em; }
+</style>
+</head>
+<body>
+<h1>Agent charter</h1>
+<p class="aw-meta"><span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><span class="aw-chip">sketch</span></p>
+<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">7</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">7</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">23</span> criteria</p>
+<section><h2 id="summary">Summary</h2><p>Define project-scoped, operator-authored behavior charters, their one-time migration seed from the legacy role guides, and the single explicit charter binding used to build each agent&#x27;s context.</p></section><section><h2 id="requirements">Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-1"><span class="aw-id">FR-1</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL persist charters as project-scoped database rows, each with a name and markdown behavior content. A charter SHALL NOT be represented as a file on disk or as a fixed, hardcoded list of personas.</p></div><div class="aw-requirement aw-requirement-must" id="FR-2"><span class="aw-id">FR-2</span> <p><span class="aw-modal aw-modal-must">SHALL</span> A project with zero charter records SHALL be seeded, on first Hub start, with the bundled starter charter set. This seeding SHALL run at most once per project.</p><p class="aw-rationale">The starter set SHALL be curated against the accountability test defined below, not derived one-for-one from the legacy role guides. A charter SHALL be included only if it names something an agent can be held answerable for. Seeding SHALL NOT modify, replace, or reconcile the charters of a project that already has them. A project seeded from an earlier starter set keeps that set, including any charter the operator has since edited.</p></div><div class="aw-requirement aw-requirement-must" id="FR-3"><span class="aw-id">FR-3</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Each Hub `Agent` record SHALL reference at most one charter record. An agent with no bound charter SHALL remain usable — its context response SHALL state plainly that no charter is assigned rather than erroring or fabricating behavior content.</p></div><div class="aw-requirement aw-requirement-must" id="FR-4"><span class="aw-id">FR-4</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The Hub UI SHALL provide a screen to list, read, create, edit, and delete charters, and to bind an agent to a charter from the agent&#x27;s detail view. This screen replaces any prior role-assignment command or interface.</p><p class="aw-rationale">Reading a charter&#x27;s full content SHALL be possible without opening any surface that can modify it. A charter&#x27;s content is the text injected into an agent&#x27;s turn, so an operator choosing which charter to bind SHALL be able to see all of it. The screen SHALL allow more than one charter to be open for reading at the same time, so that two can be compared without closing either.</p></div><div class="aw-requirement aw-requirement-must" id="FR-5"><span class="aw-id">FR-5</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Seeded charters SHALL describe only mechanisms the runtime actually offers. A charter&#x27;s content is injected into an agent&#x27;s context verbatim, so a charter is instruction, not documentation.</p><p class="aw-rationale">A seeded charter MUST NOT instruct an agent to read a file the system does not create, run a command that does not exist, or address a participant the roster does not contain. A roster is whatever agents the operator has created. No charter may therefore assume that any particular other charter, title, or specialism is present in the project. Where a seeded charter needs to escalate, hand off, or resolve an ambiguity, it SHALL direct the agent to the operator, which is the one participant always reachable. A seeded charter MUST NOT restate a rule that the system enforces in code. A gate the agent is subject to is not a gate the agent administers, and a prose copy of it can disagree with the enforced version while carrying no authority. Where a charter would once have told an agent to gather its orientation, it SHALL instead rely on the context it is given: the roster, the project instructions, and the charter itself all arrive with the turn, and nothing needs to be read before starting.</p></div><div class="aw-requirement aw-requirement-must" id="FR-6"><span class="aw-id">FR-6</span> <p><span class="aw-modal aw-modal-must">SHALL</span> A seeded charter SHALL describe what its holder is answerable for. It SHALL NOT be defined by the activity its holder performs, by the technology its holder works in, or by the phase of work it occurs in.</p><p class="aw-rationale">Two candidate charters that are answerable for the same thing and differ only in subject matter SHALL be one charter carrying an explicit scope, rather than two charters. Coordination that the system performs in code SHALL NOT also be expressed as a charter. A charter asking a model to guarantee in prose what a service guarantees in code creates an unenforced second authority.</p></div><div class="aw-requirement aw-requirement-must" id="FR-7"><span class="aw-id">FR-7</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The bundled starter set SHALL include at least one pair of charters from a non-software domain whose separation from each other is a control rather than a convenience — where one holder may not perform the other&#x27;s step.</p><p class="aw-rationale">This exists because the software case cannot demonstrate it. One capable model can perform every activity in a development workflow, which makes charters look like topic labels; a genuine separation of duties is what shows a charter carrying a guarantee.</p></div></section><section><h2 id="acceptance">Acceptance criteria</h2><table><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>an operator creates a charter with a name and content</td><td>the Hub persists it as a project-scoped record with a stable identifier</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>an operator edits an existing charter&#x27;s content and saves</td><td>subsequent context lookups for agents bound to that charter return the updated content</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>a project has no charter records and the Hub starts</td><td>the Hub creates one charter per entry in the bundled starter set, with matching name and</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>the Hub restarts after charters already exist for a project</td><td>no additional seed charters are created</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>the bundled starter set changes and the Hub starts on a project that was seeded earlier</td><td>that project&#x27;s charters are left exactly as they are, and none is added, removed, or</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>an agent with a bound charter begins a turn</td><td>the supplied context includes that charter&#x27;s content</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>an agent with no bound charter requests its context</td><td>the response includes project instructions and a clear no-charter notice, and does not</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>an operator expands a charter on the charter screen</td><td>its full content is shown, and no editable field, save action, or discard action is</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>an operator opens one charter for reading and then opens a second</td><td>both remain open, and the first is not closed by the second</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>the charter screen is first opened</td><td>every charter is collapsed to a short summary, and the list of charter names is readable</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>an operator opens the charter screen and creates a charter with custom content</td><td>the charter is available to bind to any agent in the project</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>an operator selects a different charter for an agent in the Hub UI</td><td>the agent&#x27;s charter binding updates and its next context response reflects the new</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>a seeded charter&#x27;s content is examined</td><td>it instructs the agent to read no file the system does not create</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>a seeded charter&#x27;s content is examined</td><td>it names no command the shipped runtime does not provide</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>a seeded charter&#x27;s content is examined for escalation, hand-off, or consultation</td><td>none of them names another charter&#x27;s title as the party to address</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>a seeded charter describes what to do about an ambiguity or a dispute it cannot settle</td><td>it directs the agent to ask the operator</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>a seeded charter&#x27;s content is examined against rules the system enforces</td><td>it does not instruct the agent to enforce a status transition or approval gate that the</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>a seeded charter describes how an agent should begin</td><td>it relies on the roster, instructions, and charter already supplied with the turn</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>the starter set is examined for charters answerable for the same outcome</td><td>they appear as a single charter with a scope the operator fills in, not as several</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>the starter set is examined</td><td>it contains no charter whose responsibility is to route work, assign tasks, select models,</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>the starter set is examined</td><td>no charter&#x27;s identity is the stage of work its holder is in</td></tr><tr><td><a href="#FR-7">FR-7</a></td><td></td><td>an operator views the charters seeded into a fresh project</td><td>at least one pair describes accountabilities from a domain other than software development</td></tr><tr><td><a href="#FR-7">FR-7</a></td><td></td><td>either charter of the non-software pair is read</td><td>it states which step belongs to the other holder and that it may not perform that step</td></tr></tbody></table></section><section><h2 id="evidence">Evidence and coverage limits</h2><h3>Checked</h3><ul><li>Translated from openspec/specs/agent-charter/spec.md (7 requirements, 23 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten.</li></ul><h3 class="aw-limits">Limits</h3><ul><li>scenarios-state-no-starting-state: 23 of 23 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed</li></ul></section><section><h2 id="open-questions">Open questions</h2><p class="aw-empty">None outstanding.</p></section>
+<script type="application/agentweave-spec+json" id="aw-spec-payload">
+{
+  "schema_version": 1,
+  "kind": "capability",
+  "title": "Agent charter",
+  "summary": "Define project-scoped, operator-authored behavior charters, their one-time migration seed from the legacy role guides, and the single explicit charter binding used to build each agent's context.",
+  "problem": "",
+  "scope": {
+    "in_scope": [],
+    "non_goals": []
+  },
+  "requirements": [
+    {
+      "key": "charters-are-project-scoped-authored-hub-records",
+      "statement": "The Hub SHALL persist charters as project-scoped database rows, each with a name and markdown behavior content. A charter SHALL NOT be represented as a file on disk or as a fixed, hardcoded list of personas.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "existing-role-guides-seed-initial-charters-once",
+      "statement": "A project with zero charter records SHALL be seeded, on first Hub start, with the bundled starter charter set. This seeding SHALL run at most once per project.",
+      "modal": "SHALL",
+      "rationale": "The starter set SHALL be curated against the accountability test defined below, not derived one-for-one from the legacy role guides. A charter SHALL be included only if it names something an agent can be held answerable for. Seeding SHALL NOT modify, replace, or reconcile the charters of a project that already has them. A project seeded from an earlier starter set keeps that set, including any charter the operator has since edited.",
+      "party": null
+    },
+    {
+      "key": "an-agent-is-bound-to-at-most-one-charter",
+      "statement": "Each Hub `Agent` record SHALL reference at most one charter record. An agent with no bound charter SHALL remain usable — its context response SHALL state plainly that no charter is assigned rather than erroring or fabricating behavior content.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "charter-management-is-available-through-the-hub-ui",
+      "statement": "The Hub UI SHALL provide a screen to list, read, create, edit, and delete charters, and to bind an agent to a charter from the agent's detail view. This screen replaces any prior role-assignment command or interface.",
+      "modal": "SHALL",
+      "rationale": "Reading a charter's full content SHALL be possible without opening any surface that can modify it. A charter's content is the text injected into an agent's turn, so an operator choosing which charter to bind SHALL be able to see all of it. The screen SHALL allow more than one charter to be open for reading at the same time, so that two can be compared without closing either.",
+      "party": null
+    },
+    {
+      "key": "seeded-charters-describe-only-what-the-runtime-provides",
+      "statement": "Seeded charters SHALL describe only mechanisms the runtime actually offers. A charter's content is injected into an agent's context verbatim, so a charter is instruction, not documentation.",
+      "modal": "SHALL",
+      "rationale": "A seeded charter MUST NOT instruct an agent to read a file the system does not create, run a command that does not exist, or address a participant the roster does not contain. A roster is whatever agents the operator has created. No charter may therefore assume that any particular other charter, title, or specialism is present in the project. Where a seeded charter needs to escalate, hand off, or resolve an ambiguity, it SHALL direct the agent to the operator, which is the one participant always reachable. A seeded charter MUST NOT restate a rule that the system enforces in code. A gate the agent is subject to is not a gate the agent administers, and a prose copy of it can disagree with the enforced version while carrying no authority. Where a charter would once have told an agent to gather its orientation, it SHALL instead rely on the context it is given: the roster, the project instructions, and the charter itself all arrive with the turn, and nothing needs to be read before starting.",
+      "party": null
+    },
+    {
+      "key": "a-charter-names-an-accountability-not-an-activity",
+      "statement": "A seeded charter SHALL describe what its holder is answerable for. It SHALL NOT be defined by the activity its holder performs, by the technology its holder works in, or by the phase of work it occurs in.",
+      "modal": "SHALL",
+      "rationale": "Two candidate charters that are answerable for the same thing and differ only in subject matter SHALL be one charter carrying an explicit scope, rather than two charters. Coordination that the system performs in code SHALL NOT also be expressed as a charter. A charter asking a model to guarantee in prose what a service guarantees in code creates an unenforced second authority.",
+      "party": null
+    },
+    {
+      "key": "the-starter-set-demonstrates-a-non-software-separation-of-du",
+      "statement": "The bundled starter set SHALL include at least one pair of charters from a non-software domain whose separation from each other is a control rather than a convenience — where one holder may not perform the other's step.",
+      "modal": "SHALL",
+      "rationale": "This exists because the software case cannot demonstrate it. One capable model can perform every activity in a development workflow, which makes charters look like topic labels; a genuine separation of duties is what shows a charter carrying a guarantee.",
+      "party": null
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "key": "ac1",
+      "requirement": "charters-are-project-scoped-authored-hub-records",
+      "given": "",
+      "when": "an operator creates a charter with a name and content",
+      "then": "the Hub persists it as a project-scoped record with a stable identifier"
+    },
+    {
+      "key": "ac2",
+      "requirement": "charters-are-project-scoped-authored-hub-records",
+      "given": "",
+      "when": "an operator edits an existing charter's content and saves",
+      "then": "subsequent context lookups for agents bound to that charter return the updated content"
+    },
+    {
+      "key": "ac3",
+      "requirement": "existing-role-guides-seed-initial-charters-once",
+      "given": "",
+      "when": "a project has no charter records and the Hub starts",
+      "then": "the Hub creates one charter per entry in the bundled starter set, with matching name and"
+    },
+    {
+      "key": "ac4",
+      "requirement": "existing-role-guides-seed-initial-charters-once",
+      "given": "",
+      "when": "the Hub restarts after charters already exist for a project",
+      "then": "no additional seed charters are created"
+    },
+    {
+      "key": "ac5",
+      "requirement": "existing-role-guides-seed-initial-charters-once",
+      "given": "",
+      "when": "the bundled starter set changes and the Hub starts on a project that was seeded earlier",
+      "then": "that project's charters are left exactly as they are, and none is added, removed, or"
+    },
+    {
+      "key": "ac6",
+      "requirement": "an-agent-is-bound-to-at-most-one-charter",
+      "given": "",
+      "when": "an agent with a bound charter begins a turn",
+      "then": "the supplied context includes that charter's content"
+    },
+    {
+      "key": "ac7",
+      "requirement": "an-agent-is-bound-to-at-most-one-charter",
+      "given": "",
+      "when": "an agent with no bound charter requests its context",
+      "then": "the response includes project instructions and a clear no-charter notice, and does not"
+    },
+    {
+      "key": "ac8",
+      "requirement": "charter-management-is-available-through-the-hub-ui",
+      "given": "",
+      "when": "an operator expands a charter on the charter screen",
+      "then": "its full content is shown, and no editable field, save action, or discard action is"
+    },
+    {
+      "key": "ac9",
+      "requirement": "charter-management-is-available-through-the-hub-ui",
+      "given": "",
+      "when": "an operator opens one charter for reading and then opens a second",
+      "then": "both remain open, and the first is not closed by the second"
+    },
+    {
+      "key": "ac10",
+      "requirement": "charter-management-is-available-through-the-hub-ui",
+      "given": "",
+      "when": "the charter screen is first opened",
+      "then": "every charter is collapsed to a short summary, and the list of charter names is readable"
+    },
+    {
+      "key": "ac11",
+      "requirement": "charter-management-is-available-through-the-hub-ui",
+      "given": "",
+      "when": "an operator opens the charter screen and creates a charter with custom content",
+      "then": "the charter is available to bind to any agent in the project"
+    },
+    {
+      "key": "ac12",
+      "requirement": "charter-management-is-available-through-the-hub-ui",
+      "given": "",
+      "when": "an operator selects a different charter for an agent in the Hub UI",
+      "then": "the agent's charter binding updates and its next context response reflects the new"
+    },
+    {
+      "key": "ac13",
+      "requirement": "seeded-charters-describe-only-what-the-runtime-provides",
+      "given": "",
+      "when": "a seeded charter's content is examined",
+      "then": "it instructs the agent to read no file the system does not create"
+    },
+    {
+      "key": "ac14",
+      "requirement": "seeded-charters-describe-only-what-the-runtime-provides",
+      "given": "",
+      "when": "a seeded charter's content is examined",
+      "then": "it names no command the shipped runtime does not provide"
+    },
+    {
+      "key": "ac15",
+      "requirement": "seeded-charters-describe-only-what-the-runtime-provides",
+      "given": "",
+      "when": "a seeded charter's content is examined for escalation, hand-off, or consultation",
+      "then": "none of them names another charter's title as the party to address"
+    },
+    {
+      "key": "ac16",
+      "requirement": "seeded-charters-describe-only-what-the-runtime-provides",
+      "given": "",
+      "when": "a seeded charter describes what to do about an ambiguity or a dispute it cannot settle",
+      "then": "it directs the agent to ask the operator"
+    },
+    {
+      "key": "ac17",
+      "requirement": "seeded-charters-describe-only-what-the-runtime-provides",
+      "given": "",
+      "when": "a seeded charter's content is examined against rules the system enforces",
+      "then": "it does not instruct the agent to enforce a status transition or approval gate that the"
+    },
+    {
+      "key": "ac18",
+      "requirement": "seeded-charters-describe-only-what-the-runtime-provides",
+      "given": "",
+      "when": "a seeded charter describes how an agent should begin",
+      "then": "it relies on the roster, instructions, and charter already supplied with the turn"
+    },
+    {
+      "key": "ac19",
+      "requirement": "a-charter-names-an-accountability-not-an-activity",
+      "given": "",
+      "when": "the starter set is examined for charters answerable for the same outcome",
+      "then": "they appear as a single charter with a scope the operator fills in, not as several"
+    },
+    {
+      "key": "ac20",
+      "requirement": "a-charter-names-an-accountability-not-an-activity",
+      "given": "",
+      "when": "the starter set is examined",
+      "then": "it contains no charter whose responsibility is to route work, assign tasks, select models,"
+    },
+    {
+      "key": "ac21",
+      "requirement": "a-charter-names-an-accountability-not-an-activity",
+      "given": "",
+      "when": "the starter set is examined",
+      "then": "no charter's identity is the stage of work its holder is in"
+    },
+    {
+      "key": "ac22",
+      "requirement": "the-starter-set-demonstrates-a-non-software-separation-of-du",
+      "given": "",
+      "when": "an operator views the charters seeded into a fresh project",
+      "then": "at least one pair describes accountabilities from a domain other than software development"
+    },
+    {
+      "key": "ac23",
+      "requirement": "the-starter-set-demonstrates-a-non-software-separation-of-du",
+      "given": "",
+      "when": "either charter of the non-software pair is read",
+      "then": "it states which step belongs to the other holder and that it may not perform that step"
+    }
+  ],
+  "tasks": [],
+  "algorithms": [],
+  "design": "",
+  "evidence": {
+    "checked": [
+      "Translated from openspec/specs/agent-charter/spec.md (7 requirements, 23 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten."
+    ],
+    "limits": [
+      "scenarios-state-no-starting-state: 23 of 23 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed"
+    ]
+  },
+  "lifecycle": "",
+  "open_questions": [],
+  "aw_identity": {
+    "requirements": {
+      "charters-are-project-scoped-authored-hub-records": "FR-1",
+      "existing-role-guides-seed-initial-charters-once": "FR-2",
+      "an-agent-is-bound-to-at-most-one-charter": "FR-3",
+      "charter-management-is-available-through-the-hub-ui": "FR-4",
+      "seeded-charters-describe-only-what-the-runtime-provides": "FR-5",
+      "a-charter-names-an-accountability-not-an-activity": "FR-6",
+      "the-starter-set-demonstrates-a-non-software-separation-of-du": "FR-7"
+    },
+    "high_water": 7,
+    "retired": {},
+    "digests": {
+      "FR-1": "f290b4c71f20ffe73f2da24238806953b72f944718519a26717eddc64dd4118e",
+      "FR-2": "5087143a8cff93624bcca6d951e0c7234e936e8c57e38c75ad885582f47dc9b4",
+      "FR-3": "0a506ce35634630e40433d429c5052c83c3007c707f55104d0f806acc56e13e3",
+      "FR-4": "7db4ee57d65149ed91165a15663a75ae335a7a0fbd1b4234068603297761223a",
+      "FR-5": "2dcf6015304c46b1b458c64d3b38948133d90e74410b92ed716d58f69cdb245f",
+      "FR-6": "d59f277e6e816c80479234135e8632456c75492be662ae0e9391b2e465646a2d",
+      "FR-7": "6b2c53dc0ccade7246b27baa0ac580701b3c3c759e126a0a6207a78a9bcdb644"
+    }
+  }
+}
+</script>
+</body>
+</html>

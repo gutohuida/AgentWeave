@@ -1,0 +1,1197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Task lifecycle governance</title>
+<meta name="aw-spec-kind" content="capability">
+<meta name="aw-spec-status" content="current">
+<meta name="aw-spec-rigor" content="sketch">
+<meta name="aw-spec-schema-version" content="1">
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+    --surface-2: #21262d; --surface: #161b22;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+:root[data-theme="dark"] {
+  --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+  --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+  --surface-2: #21262d; --surface: #161b22;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 2rem 2.5rem 4rem; background: var(--bg); color: var(--fg);
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+h1 { font-size: 1.75rem; margin: 0 0 .25rem; }
+h2 { font-size: 1.15rem; margin: 2.5rem 0 .75rem; padding-bottom: .3rem;
+     border-bottom: 1px solid var(--border); }
+h3 { font-size: 1rem; margin: 1.5rem 0 .4rem; }
+p { margin: .5rem 0; }
+ul, ol { margin: .5rem 0; padding-left: 1.4rem; }
+li { margin: .25rem 0; }
+a { color: var(--aw-accent); }
+.aw-meta { color: var(--muted); font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-chip { display: inline-block; padding: .1rem .5rem; border-radius: 999px;
+           background: var(--surface-2); font-size: .78rem; margin-right: .4rem; }
+.aw-requirement { border-left: 3px solid var(--border); padding: .1rem 0 .1rem .9rem;
+                  margin: 1.1rem 0; }
+.aw-requirement-must { border-left-color: var(--aw-accent); }
+.aw-requirement-should { border-left-color: var(--aw-warn); }
+.aw-requirement-may { border-left-color: var(--border); }
+.aw-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8rem;
+         color: var(--muted); }
+.aw-modal { font-weight: 600; }
+.aw-modal-must { color: var(--aw-accent); }
+.aw-modal-should { color: var(--aw-warn); }
+.aw-modal-may { color: var(--fg); font-weight: 400; }
+.aw-chip-rigor-gate { color: var(--aw-accent); border: 1px solid var(--aw-accent); }
+.aw-chip-rigor-contract { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Phase is a lifecycle, and the question it answers is "can I rely on this?". `approved` and a
+   capability's `current` are settled and take the done tone; `proposed` is waiting on an operator
+   decision and takes warn; `exploring` and `archived` are quiet for opposite reasons — one has not
+   arrived yet, the other has been superseded. Deliberately NOT the accent: this document already
+   spends accent on links and on MUST, and a third meaning would empty it of any. `kind` keeps the
+   plain chip on purpose — it is a category, not a state, and hue there ranks nothing. */
+.aw-chip-phase-done { color: var(--aw-ok); border: 1px solid var(--aw-ok); }
+.aw-chip-phase-waiting { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+.aw-chip-phase-quiet { color: var(--muted); }
+.aw-chip-phase-archived { color: var(--muted); text-decoration: line-through; }
+/* An unresolved question blocks `propose`, so it is a real state and not a label. Resolved stays
+   the plain chip — the reader needs to find what is still open, not celebrate what is closed. */
+.aw-chip-open { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Limits is where a reader is most likely to be misled, and it read identically to Checked. */
+.aw-limits { color: var(--aw-warn); }
+/* The first screenful was entirely monochrome, so the document read as texty however the
+   requirements below were coloured. This puts the same modal scheme where the eye lands first,
+   carrying counts rather than decoration. */
+.aw-summary { margin: 0 0 1.5rem; font-size: .9rem; color: var(--muted); }
+.aw-summary .aw-count { font-weight: 600; }
+.aw-summary-sep { color: var(--border); margin: 0 .45rem; }
+.aw-rationale { color: var(--muted); font-size: .9rem; }
+.aw-refs { font-size: .82rem; color: var(--muted); }
+.aw-note { color: var(--muted); font-style: italic; }
+.aw-empty { color: var(--muted); }
+table { border-collapse: collapse; margin: .75rem 0; width: 100%; }
+th, td { border: 1px solid var(--border); padding: .4rem .6rem; text-align: left;
+         vertical-align: top; font-size: .92rem; }
+code, pre { background: var(--surface); border-radius: 4px; }
+code { padding: .1rem .3rem; font-size: .88em; }
+</style>
+</head>
+<body>
+<h1>Task lifecycle governance</h1>
+<p class="aw-meta"><span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><span class="aw-chip">sketch</span></p>
+<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">32</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">32</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">110</span> criteria</p>
+<section><h2 id="summary">Summary</h2><p>Which task status transitions are legal, who may perform them, how an illegal one is refused, and the durable append-only record of every accepted transition. Established by `openspec/changes/2026-08-10-task-transition-machine` (roadmap change **B1**). Before it, a task&#x27;s status was whatever the last writer said: `update_task_for_actor` applied `task.status = body.status` with no adjacency and no actor rule, and the MCP `update_task` tool handed that to every bound agent — so a run could move its own work from `in_progress` to `approved` in one call, and `Task.updated_by_run_id`, being a single mutable column, could not even record that the author and the approver were the same. This capability governs **validity**: that a recorded transition is legal, attributed, and made by an entitled actor. It does not govern **liveness** — whether a transition happens at all when reality changes — which needs the run-to-task binding explored in `openspec/explorations/2026-08-10-enforcing-the-development-cycle.md`. The completion gates of B3 and B4 land inside this capability&#x27;s transition service rather than beside it.</p></section><section><h2 id="requirements">Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-1"><span class="aw-id">FR-1</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL define, in one place, the set of legal moves between task statuses, and SHALL refuse any status change that is not a member of that set. The eight statuses (`pending`, `assigned`, `in_progress`, `completed`, `under_review`, `revision_needed`, `approved`, `rejected`) remain as they are; what changes is that adjacency becomes declared rather than absent.</p><p class="aw-rationale">A refusal MUST name the task&#x27;s current status and the statuses reachable from it, so a caller can correct itself without guessing. A refused transition MUST leave the task and its history unchanged. Re-declaring the status a task already holds SHALL be accepted as a no-op and MUST NOT append a history entry, so a retried or duplicated call does not manufacture a transition that never happened.</p></div><div class="aw-requirement aw-requirement-must" id="FR-2"><span class="aw-id">FR-2</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL restrict the status a task may be created with to the declared entry statuses `pending` and `assigned`, and SHALL refuse creation in any other status. A lifecycle that can be entered anywhere is not a lifecycle: without this, a caller reaches `approved` by creating a task there rather than by transitioning to it, and no rule about transitions can prevent it.</p><p class="aw-rationale">This restriction SHALL hold identically over direct HTTP and MCP. Where one transport currently exposes a status field that the other does not, the transports are brought into agreement by narrowing the wider one, not by widening the narrower. Creation SHALL NOT record a transition — a task&#x27;s history begins with its first *move*, and its entry status is already stated by the task itself.</p></div><div class="aw-requirement aw-requirement-must" id="FR-3"><span class="aw-id">FR-3</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Every transition the map reserves to the operator SHALL be reachable by the operator through the application, not only through the API. A rule that grants the operator exclusive authority while providing no surface on which to exercise it grants nothing.</p><p class="aw-rationale">The control SHALL offer only those transitions legal for the operator from the task&#x27;s current status, so an illegal move is not presented and then refused.</p></div><div class="aw-requirement aw-requirement-must" id="FR-4"><span class="aw-id">FR-4</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The transition map SHALL declare, per edge, which kinds of actor may take it. The operator SHALL have edges no agent run has; the operator SHALL NOT have permission to make a move the map does not declare. Operator authority is expressed as additional legal transitions rather than as a bypass, so every recorded history describes a legal sequence.</p><p class="aw-rationale">Specifically: - Moving a task to `rejected` from any non-terminal status other than `under_review` SHALL be permitted to the operator only. An agent run MAY move a task to `rejected` from `under_review`, where rejection is a review outcome rather than a decision to abandon the work. - `approved` and `rejected` SHALL be reopenable — `approved` to `revision_needed`, `rejected` to `pending` — by the operator only. No agent run may leave either status.</p></div><div class="aw-requirement aw-requirement-must" id="FR-5"><span class="aw-id">FR-5</span> <p><span class="aw-modal aw-modal-must">MUST</span> The system SHALL persist one immutable record per accepted status transition, identifying the task, the status moved from, the status moved to, the responsible run and **agent** where they exist, the kind of actor (agent run or operator), **what caused the transition to be requested**, and the time. Records MUST NOT be updated or deleted by any application path; a correction is a further transition, not an edit.</p><p class="aw-rationale">`Task.status` MAY remain as the materialised current value for reads, but MUST NOT be the only durable statement of how the task reached it. The recorded cause SHALL distinguish a transition an actor asked for from one the system made on that actor&#x27;s behalf. Without that distinction, a transition the runtime performs automatically is indistinguishable from work the agent did, and any check asking &quot;did this run advance its task?&quot; is satisfied by the system&#x27;s own bookkeeping.</p></div><div class="aw-requirement aw-requirement-must" id="FR-6"><span class="aw-id">FR-6</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL refuse a transition to `approved` requested by an agent when that same **agent** recorded the task&#x27;s transition into `completed`. Author and reviewer MUST be distinct **agents**.</p><p class="aw-rationale">Distinctness is on agent identity, not run identity. Every turn an agent takes is a new run, so a rule requiring only &quot;a different run&quot; is satisfied by an agent continuing its own work and forbids nothing — observed in live use on 2026-08-10, when an agent completed a task on one run and approved it on the next. This rule binds agent runs only. The operator SHALL be permitted to approve work regardless of who produced it — a single-operator project would otherwise be unable to approve anything — and the history states that an operator did so.</p></div><div class="aw-requirement aw-requirement-must" id="FR-7"><span class="aw-id">FR-7</span> <p><span class="aw-modal aw-modal-must">MUST</span> Transition validation, actor separation, and history recording SHALL be enforced at the shared application layer, so the same rules apply whether a run acts over direct HTTP or through the MCP adapter. The adapter MUST surface a refusal as a typed failure and MUST NOT convert it into an empty or successful result.</p></div><div class="aw-requirement aw-requirement-must" id="FR-8"><span class="aw-id">FR-8</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL be able to move a task as a consequence of an event it observes, acting **as** the responsible run rather than as an actor of its own kind. Such a transition SHALL be subject to every legality and actor rule that governs a transition the run itself requests, and SHALL be refused on the same grounds.</p><p class="aw-rationale">There SHALL NOT be a third actor kind for the system. Actor kind is what the transition map and author/reviewer separation are keyed on; a system actor would require every edge to declare whether the system may take it, and would admit moves for which no one is accountable.</p></div><div class="aw-requirement aw-requirement-must" id="FR-9"><span class="aw-id">FR-9</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL let each task carry a policy describing what happens when work bound to it ends without the task moving, and the agent to route the work to when that policy escalates.</p><p class="aw-rationale">A task that states no policy SHALL be treated as stating the passive one, so that introducing this capability changes the behaviour of no existing task.</p></div><div class="aw-requirement aw-requirement-must" id="FR-10"><span class="aw-id">FR-10</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL provide a status meaning that work began and cannot proceed until someone outside the run supplies something. A task in that status SHALL be reachable only from the status meaning work is under way, so that a task nobody has started is never described as waiting.</p><p class="aw-rationale">The status SHALL NOT have a direct edge to any status meaning the work is finished. Work that was waiting and is now done SHALL pass back through the in-progress status first, so that no recorded history states a task was completed while still waiting on a person who never answered.</p></div><div class="aw-requirement aw-requirement-must" id="FR-11"><span class="aw-id">FR-11</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL move a task into the waiting status as a consequence of observing that the run working on it ended with an unanswered question outstanding, attributed to that run and recorded as system-caused.</p><p class="aw-rationale">The system SHALL move it back out when that question is answered. A task SHALL NOT enter or leave the waiting status because an agent asserted that it should. An agent that could declare itself blocked could claim to be waiting on a person it never asked, which is the one claim a completion gate would most reward.</p></div><div class="aw-requirement aw-requirement-must" id="FR-12"><span class="aw-id">FR-12</span> <p><span class="aw-modal aw-modal-must">SHALL</span> A task in the waiting status SHALL carry a human-readable statement of what it is waiting for. Where the system recorded the block, that statement SHALL be derived from the question asked. Where the operator sets it directly, the system SHALL require the statement and SHALL refuse the transition without one.</p><p class="aw-rationale">The statement SHALL be cleared whenever the task leaves the waiting status, by any route. A status alone leaves the operator working out what they are holding up, which is the position they were already in when the task said work was under way and nothing was happening. The status answers &quot;why is nothing moving&quot;; only the statement answers &quot;what do you need from me&quot;.</p></div><div class="aw-requirement aw-requirement-must" id="FR-13"><span class="aw-id">FR-13</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL record a task as waiting only on account of a question that is unanswered, marked as blocking, and asked by the run whose end is being evaluated.</p><p class="aw-rationale">A question that does not block is the agent leaving a note and continuing; a task parked on one would make the status mean that an agent mentioned something. A question left open by a different run is not evidence that this run stopped for it.</p></div><div class="aw-requirement aw-requirement-must" id="FR-14"><span class="aw-id">FR-14</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Where a question caused a task to be recorded as waiting, declining that question SHALL return the task to the in-progress status and clear what it was waiting for, as an operator-caused transition.</p><p class="aw-rationale">The operator has stated the answer is not coming, so the task is no longer waiting on them. A task left waiting would claim to be held up by a question that has been closed — a block with nothing behind it, which is the state the requirement that a block names what it is waiting for exists to prevent. A declined question SHALL NOT cause a task to be recorded as waiting. Otherwise the run-boundary check would park the task again on the question the operator just closed, and the release would be undone by the mechanism it was meant to satisfy.</p></div><div class="aw-requirement aw-requirement-must" id="FR-15"><span class="aw-id">FR-15</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The transition into `approved` SHALL merge the approved work into the project&#x27;s configured main branch, in the same operation that records the transition. Approval is what places work in the product, and a lifecycle whose terminal state carries no such meaning cannot answer whether anything it approved was ever shipped.</p><p class="aw-rationale">What is merged SHALL be the commit named by the task&#x27;s accepted evidence footprints — the newest such commit per distinct branch — and SHALL NOT be the agent&#x27;s branch. Agent branches are per agent, not per task, so merging a branch would integrate every other task&#x27;s work that happens to sit beside the approved one. Evidence that is awaiting review or has been rejected SHALL NOT contribute a commit to integrate. The merge SHALL be performed against the local repository only. The system SHALL NOT contact any remote, SHALL NOT push, and SHALL NOT require any credential. Integration SHALL occur regardless of the rigor of any document the task&#x27;s requirements belong to. Rigor governs who may bring a task to `approved`; integration is what reaching `approved` means. Were the two coupled, lowering a document&#x27;s rigor to get past a blocked task would also silently stop that work being shipped.</p></div><div class="aw-requirement aw-requirement-must" id="FR-16"><span class="aw-id">FR-16</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Where the work to be integrated would conflict with the project&#x27;s main branch, the system SHALL refuse the transition into `approved`.</p><p class="aw-rationale">The conflict SHALL be detected before the transition is recorded, by a test merge that modifies neither the working tree nor the index. A conflict discovered during the merge itself would leave a task recorded as approved and a repository in a state the operator did not ask for. The refusal SHALL be carried in the same typed refusal that reports unverified requirements, and SHALL name the conflicting paths. An operator learning that approval failed SHALL learn why in the same response, not by inspecting the repository. This refusal SHALL apply regardless of rigor. It is not an assertion about whether the work is verified; it is an assertion that the work cannot go where approval says it goes. The check SHALL live inside the single transition service, and SHALL NOT introduce a second enforcement point.</p></div><div class="aw-requirement aw-requirement-must" id="FR-17"><span class="aw-id">FR-17</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The transition into `approved` SHALL still succeed where integration cannot be attempted, and the integration SHALL be recorded as skipped together with the reason. Integration cannot be attempted when the project has no configured main branch, when the project is not a repository, when the primary checkout has uncommitted changes to tracked files, or when the primary checkout is not on the main branch.</p><p class="aw-rationale">Untracked files SHALL NOT prevent integration. The system writes specification documents into the project directory, so untracked content is the ordinary state of a working project rather than a signal that a merge is unsafe. Where integration is attempted and fails, the transition SHALL NOT be rolled back. The approval is a judgement that the work is good; a repository failure SHALL NOT reverse it. Coverage SHALL then report the requirement as `verified, not integrated`, which is a true statement of what happened. A project that is not a repository SHALL be no less approvable than before this capability existed.</p></div><div class="aw-requirement aw-requirement-must" id="FR-18"><span class="aw-id">FR-18</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL record each integration attempt: the task, the commit and branch integrated, the target branch, the outcome (`merged`, `skipped` or `failed`), the reason where it did not merge, the approving actor, and the time.</p><p class="aw-rationale">The record SHALL be append-only, with no update path and no delete path. An integration is a write to the operator&#x27;s repository performed by the system, and the account of what was written SHALL NOT be editable by the thing that wrote it. The record SHALL state how the integration was performed, so that a later mode which integrates by a different mechanism is distinguishable in the history rather than conflated with this one.</p></div><div class="aw-requirement aw-requirement-must" id="FR-19"><span class="aw-id">FR-19</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Where the work to integrate is already reachable from the target branch, the system SHALL record the integration as skipped, naming that as the reason, and SHALL NOT record it as merged.</p><p class="aw-rationale">Merging a commit that is already an ancestor of the target succeeds, reports success, and changes nothing. Recording that as a merge makes a no-op indistinguishable from work reaching the product, which is the one thing integration reporting exists to distinguish. This SHALL be determined before any precondition concerning the state of the working tree. Whether a commit is already present is a fact about the commit and the target alone, and an operator whose checkout is mid-edit is better told the true reason than told to tidy up for a merge that would change nothing.</p></div><div class="aw-requirement aw-requirement-must" id="FR-20"><span class="aw-id">FR-20</span> <p><span class="aw-modal aw-modal-must">SHALL</span> A document&#x27;s approval SHALL create the tasks that document declares, each linked to the requirements it declares that it serves.</p><p class="aw-rationale">A document that declares its own decomposition and produces nothing leaves the operator to re-describe by hand work the document already contains, and leaves no relationship between the two. Tasks SHALL be created unassigned and in the lifecycle&#x27;s entry status. The document states that the work exists; who performs it is not a decision a specification makes. Creation SHALL be idempotent per document and declared task, so that re-approving a document after revision creates only what is new. A task that already exists for a declared task SHALL NOT be modified, reassigned or reverted by a later approval. The document declares that work exists, not what has happened to it since. A document declaring no tasks SHALL create none, and this SHALL NOT be an error. Where a declared task names a requirement the document does not resolve, the task SHALL still be created and the unresolved reference SHALL be preserved rather than discarded.</p></div><div class="aw-requirement aw-requirement-must" id="FR-21"><span class="aw-id">FR-21</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL offer a way to attempt integration again for an approved task whose work has not been integrated, and SHALL name that way when it reports a skip the operator can put right.</p><p class="aw-rationale">Integration is attempted when a task becomes approved. Where it is skipped, the cause is usually something the operator can then put right — a main branch that was never named, a checkout with uncommitted changes, a checkout parked on another branch. Restating the approval does not attempt it again, because restating a status is deliberately a no-op, so without this the remediation the system asked for accomplishes nothing. A skip SHALL NOT instruct the operator to approve the task again. The task is already approved by the time the skip is read, and following that instruction provably does nothing: the request succeeds, the status is unchanged, no attempt is recorded, and nothing is merged. An instruction that fails silently is worse than none, because it spends the operator&#x27;s confidence as well as their time. Where a skip names a cause the operator can put right, it SHALL point at the remedy that works — retrying the integration, or the setting whose absence caused the skip. Retrying SHALL be available to the operator and to agents, and SHALL be refused for a task that is not approved. Retrying a task whose work has already been integrated SHALL be permitted and SHALL merge nothing. Whether work has reached the main line is a question about the repository, so it is asked again rather than inferred from what was previously attempted. Every retry SHALL be recorded exactly as a first attempt is. An agent able to retry SHALL be able to read what the attempts reported. An agent that can act on an outcome it cannot see is acting blind.</p></div><div class="aw-requirement aw-requirement-must" id="FR-22"><span class="aw-id">FR-22</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL attempt integration again, when a project&#x27;s main branch is set, for approved tasks whose most recent integration was skipped for want of one.</p><p class="aw-rationale">Skipping for want of a main branch tells the operator to choose one in the project&#x27;s settings. Discharging that instruction at the moment the operator follows it is what makes the sentence true; leaving it undischarged means the system asked for something and then ignored it. Only that cause SHALL be answered this way. Naming a branch says nothing about a checkout with uncommitted changes or one parked elsewhere, and a merge that failed outright wants a person rather than a repetition. Setting the branch SHALL succeed even where the attempt that follows it does not. The operator changed a setting, and that must stand or fall on its own terms.</p></div><div class="aw-requirement aw-requirement-must" id="FR-23"><span class="aw-id">FR-23</span> <p><span class="aw-modal aw-modal-must">SHALL</span> A task&#x27;s representation SHALL report the requirement identifiers linked to it, in the form those identifiers are supplied in.</p><p class="aw-rationale">Identifiers are accepted when a task is created and when it is updated. Reporting them nowhere makes the field write-only, so a caller cannot confirm what was recorded, and anyone diagnosing why work did not merge sees a task that appears to be tied to nothing while the links that govern the merge exist. The identifiers reported SHALL be the same ones accepted, not the system&#x27;s internal row identity, so that what is read back can be submitted again. Identifiers SHALL be reported in an order that reads as the operator numbered them, comparing the numeric parts of an identifier by value. Ordering them as plain text places an eleventh requirement between the first and the second, which reads as a defect in data that is correct and costs a diagnosis every time someone checks what a task is tied to. An identifier with no numeric part SHALL still be ordered deterministically. Identifiers are authored by the operator and nothing constrains their shape. References that resolved to no requirement SHALL NOT be reported among them. They are already reported as unresolved, and repeating them here would invite a caller to resubmit a reference that has already failed.</p></div><div class="aw-requirement aw-requirement-must" id="FR-24"><span class="aw-id">FR-24</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Where a task links requirements whose document rigor is `gate`, the system SHALL refuse the transition into `approved` while any of those requirements is not verified.</p><p class="aw-rationale">The check SHALL run inside the same transition service every status write already passes through, and SHALL NOT exist as a second enforcement point. A second point is a second thing to bypass, and the rule that no route may assign a task&#x27;s status directly is what makes one point sufficient. Verification SHALL be determined by the same coverage computation the document and project surfaces use. A gate that computed its own answer could refuse a task while the document beside it reported everything satisfied, and nothing would establish which was wrong. `sketch` and `contract` requirements SHALL report their state and SHALL NOT block the transition. A requirement that is structurally invalid or carries no identifier SHALL prevent a gate from passing, and SHALL be reported as the diagnostic it is rather than as an unverified requirement. The refusal SHALL be typed, and SHALL name each requirement that caused it together with what would satisfy it — no linked evidence, evidence awaiting review, or evidence that no longer applies to the current wording. A refusal that does not say what to do about it cannot be acted on, and an unactionable gate is turned off. The refusal SHALL hold identically across every access path: the operator&#x27;s interface, an agent&#x27;s HTTP action, the tool surface, and a scheduled job.</p></div><div class="aw-requirement aw-requirement-must" id="FR-25"><span class="aw-id">FR-25</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Every recorded transition SHALL carry the policy in force when it was decided.</p><p class="aw-rationale">Which rigor a document holds is editable by the operator. Without recording what governed a decision, a gate that passed last month cannot be explained today — and the policy being editable is what turns that from a theoretical concern into a live one.</p></div><div class="aw-requirement aw-requirement-must" id="FR-26"><span class="aw-id">FR-26</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL let a caller of the task list scope the result to exactly the tasks that name one loop, and SHALL apply no other filter to that scoped result — an explicit loop scope SHALL show every task naming it, regardless of that task&#x27;s own status.</p><p class="aw-rationale">A scope naming a loop with no queued tasks SHALL return an empty list, and this SHALL NOT be an error.</p></div><div class="aw-requirement aw-requirement-must" id="FR-27"><span class="aw-id">FR-27</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL let a caller of the task list scope the result to exactly the tasks one specification document declared, and SHALL apply no other filter to that scoped result — an explicit scope SHALL show every task the document declared, regardless of that task&#x27;s own status or its declaring document&#x27;s phase.</p><p class="aw-rationale">A scope naming a document with no declared tasks SHALL return an empty list, and this SHALL NOT be an error.</p></div><div class="aw-requirement aw-requirement-must" id="FR-28"><span class="aw-id">FR-28</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL offer a task list mode that excludes a task if, and only if, the task&#x27;s declaring document has reached the `archived` phase and the task&#x27;s own status is terminal. This exclusion SHALL NOT be applied unless the caller asks for it, so a caller that does not ask for it — including every caller that existed before this exclusion was added — SHALL see every task exactly as before.</p><p class="aw-rationale">A task with no declaring document SHALL NOT be excluded by this mode, regardless of its status. An open (non-terminal) task whose declaring document is archived SHALL NOT be excluded by this mode — work someone still has to do is not retired because the document that described it was tidied away. This exclusion SHALL NOT alter any task&#x27;s status, assignee, or any other field. It changes only what a request that asks for it is shown.</p></div><div class="aw-requirement aw-requirement-must" id="FR-29"><span class="aw-id">FR-29</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The interface presenting a task to the operator SHALL show which specification requirements, if any, the task is linked to, without requiring the operator to open the task&#x27;s full detail first.</p><p class="aw-rationale">Where a linked requirement&#x27;s only current evidence was rejected, that MUST be visually distinguished from a link to a requirement with no such rejection, so a task that looks approvable does not hide a refused claim inside it.</p></div><div class="aw-requirement aw-requirement-must" id="FR-30"><span class="aw-id">FR-30</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The interface SHALL present a task&#x27;s full detail — description, acceptance criteria, deliverables, notes, and requirement links — in a view sized independently of the task board&#x27;s column layout, not constrained to the width of a board column.</p></div><div class="aw-requirement aw-requirement-must" id="FR-31"><span class="aw-id">FR-31</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Following a task&#x27;s link to one of its requirements SHALL open the specification document that declares it, scrolled to that requirement, not merely to the top of the document.</p></div><div class="aw-requirement aw-requirement-must" id="FR-32"><span class="aw-id">FR-32</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL set a task&#x27;s loop only at creation, and only from one of two writers: the approval of a specification document bound to that loop, or the loop&#x27;s creator adding the task directly.</p><p class="aw-rationale">A task&#x27;s loop SHALL NOT be changed after creation, by any actor. Moving finished or in-flight work between loops would make a loop&#x27;s queue history — and therefore its stop condition, which is derived from that history — unable to answer what work the loop was ever given.</p></div></section><section><h2 id="acceptance">Acceptance criteria</h2><table><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>a caller moves a task from `in_progress` to `completed`</td><td>the task&#x27;s status becomes `completed` the transition is recorded</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>an agent run moves a task from `in_progress` directly to `approved`</td><td>the request is refused with a typed error the error names `in_progress` as the current status and the statuses reachable from it the task&#x27;s status is unchanged no transition is recorded</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>a caller sets a task&#x27;s status to the status it already holds</td><td>the request succeeds no transition is recorded</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>the legal-transition map is read by the API, the MCP adapter, or a test</td><td>all of them resolve to the same declaration adding a status in one place without declaring its transitions fails a test rather than</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>a caller creates a task with status `approved`, `completed`, `under_review`,</td><td>the request is refused no task is created</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>a caller creates a task with status `pending` or `assigned`, or states no status</td><td>the task is created no transition is recorded</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>creation in a non-entry status is attempted over direct HTTP and through MCP</td><td>neither transport creates the task neither exposes a status field the other lacks</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>the operator views a task in a given status</td><td>the transitions offered are exactly those the map declares legal for an operator from transitions reserved to no one, or legal only for agent runs, are not offered</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>the operator wishes to reject a task at `pending`, or reopen an `approved` task</td><td>the application provides a way to do it</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>an agent run moves a task from `in_progress` to `rejected`</td><td>the request is refused the task&#x27;s status is unchanged</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>the operator moves a task from `pending`, `assigned`, `in_progress`, `completed` or</td><td>the request succeeds the transition is recorded as an operator action</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>an agent run other than the one that completed the task moves it from `under_review` to</td><td>the request succeeds</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>the operator moves a task from `approved` to `revision_needed`, or from `rejected` to</td><td>the request succeeds the task&#x27;s earlier transitions remain in its history</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>an agent run attempts to move a task out of `approved` or `rejected`</td><td>the request is refused</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>the operator attempts a transition the map does not declare for any actor</td><td>the request is refused on the same grounds as it would be for an agent run</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>one run moves a task to `completed` and a different run later moves it to `approved`</td><td>the history contains both transitions each names its own responsible run neither record has been overwritten by the other</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>the operator changes a task&#x27;s status</td><td>a transition is recorded with an actor kind of operator and no responsible run it is distinguishable from a transition caused by an agent run</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>any application path attempts to modify or remove an existing transition record</td><td>no such path exists</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>a task that existed before this capability shipped undergoes its first transition</td><td>that transition is recorded no transitions are invented for the period before the capability existed</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>the system moves a task automatically as a consequence of an event it observed</td><td>the record identifies the cause as the system rather than the actor it still names the run and agent on whose behalf it was made</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>a transition recorded before this distinction existed is read</td><td>it reads as actor-caused no cause is invented for it</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>the agent that moved a task to `completed` requests the move to `approved`</td><td>the request is refused with a typed error stating that approval requires a different the task remains in its pre-request status no transition is recorded</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>the agent that completed a task requests `approved` on a later run</td><td>the request is refused the refusal states that starting a new run does not make it a different actor</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>an agent other than the one that completed the task requests `approved` the transition is otherwise legal</td><td>the request succeeds</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>the operator approves a task, including one they moved to `completed` themselves</td><td>the request succeeds the transition is recorded as an operator action</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>the agent that completed a task requests `rejected` or `revision_needed` on it</td><td>the request is refused on the same grounds as self-approval</td></tr><tr><td><a href="#FR-7">FR-7</a></td><td></td><td>an illegal transition is attempted over direct HTTP and the equivalent is attempted</td><td>both are refused both refusals carry the same meaning</td></tr><tr><td><a href="#FR-7">FR-7</a></td><td></td><td>the MCP adapter receives a refused transition</td><td>the tool call reports a failure naming the reason it does not return a success payload</td></tr><tr><td><a href="#FR-8">FR-8</a></td><td></td><td>the system would move a task automatically that move is not an edge available to the responsible run</td><td>no transition occurs the task is unchanged</td></tr><tr><td><a href="#FR-8">FR-8</a></td><td></td><td>a transition is made automatically on behalf of a run</td><td>the agent recorded is that run&#x27;s agent later review of that task is judged against that agent exactly as if the agent had asked</td></tr><tr><td><a href="#FR-8">FR-8</a></td><td></td><td>the set of actor kinds is enumerated</td><td>it contains agent run and operator, and nothing else</td></tr><tr><td><a href="#FR-9">FR-9</a></td><td></td><td>a task created before this capability existed is read</td><td>its policy is the passive one nothing was written to that task to make it so</td></tr><tr><td><a href="#FR-9">FR-9</a></td><td></td><td>two tasks in one project state different policies</td><td>each is answered according to its own</td></tr><tr><td><a href="#FR-10">FR-10</a></td><td></td><td>a task whose work is under way is moved to the waiting status</td><td>the transition is accepted and recorded</td></tr><tr><td><a href="#FR-10">FR-10</a></td><td></td><td>a task that has not been started is moved to the waiting status</td><td>the move is refused as illegal the refusal names what is reachable instead</td></tr><tr><td><a href="#FR-10">FR-10</a></td><td></td><td>a task in the waiting status is moved directly to completed</td><td>the move is refused the task must return to the in-progress status first</td></tr><tr><td><a href="#FR-10">FR-10</a></td><td></td><td>the operator reassigns or rejects a task that is waiting</td><td>the transition is accepted</td></tr><tr><td><a href="#FR-11">FR-11</a></td><td></td><td>a run bound to a task ends a blocking question it asked has not been answered</td><td>the task is recorded as waiting the transition names the run and is recorded as system-caused</td></tr><tr><td><a href="#FR-11">FR-11</a></td><td></td><td>the question that caused a task to be recorded as waiting is answered</td><td>the task returns to the in-progress status the transition is recorded</td></tr><tr><td><a href="#FR-11">FR-11</a></td><td></td><td>an agent requests the waiting status for its own task</td><td>the request is refused</td></tr><tr><td><a href="#FR-11">FR-11</a></td><td></td><td>the operator moves a task into or out of the waiting status</td><td>the transition is accepted and recorded as an operator action</td></tr><tr><td><a href="#FR-12">FR-12</a></td><td></td><td>a run ends with an unanswered question and its task is recorded as waiting</td><td>the task states what it is waiting for that statement identifies the question asked</td></tr><tr><td><a href="#FR-12">FR-12</a></td><td></td><td>the operator moves a task to the waiting status without saying what it is waiting for</td><td>the transition is refused the task is unchanged</td></tr><tr><td><a href="#FR-12">FR-12</a></td><td></td><td>a waiting task moves to any other status</td><td>it no longer states what it is waiting for</td></tr><tr><td><a href="#FR-12">FR-12</a></td><td></td><td>an operator surface offers a move to the waiting status</td><td>it obtains the statement before requesting the move</td></tr><tr><td><a href="#FR-13">FR-13</a></td><td></td><td>a run ends having asked a non-blocking question and without moving its task</td><td>the task is not recorded as waiting the run is divergent as normal</td></tr><tr><td><a href="#FR-13">FR-13</a></td><td></td><td>a run ends having asked a question that was answered, without moving its task</td><td>the task is not recorded as waiting</td></tr><tr><td><a href="#FR-13">FR-13</a></td><td></td><td>a run ends without moving its task the only unanswered blocking question was asked by a different run</td><td>the task is not recorded as waiting</td></tr><tr><td><a href="#FR-14">FR-14</a></td><td></td><td>the operator declines the question that caused a task to be recorded as waiting</td><td>the task returns to the in-progress status it no longer states what it is waiting for</td></tr><tr><td><a href="#FR-14">FR-14</a></td><td></td><td>a run ends without moving its task the only outstanding blocking question it asked has been declined</td><td>the task is not recorded as waiting</td></tr><tr><td><a href="#FR-14">FR-14</a></td><td></td><td>a task released by a decline is later dropped by a bound run</td><td>that run is divergent as normal</td></tr><tr><td><a href="#FR-14">FR-14</a></td><td></td><td>the operator declines a question that never caused a task to wait</td><td>no task changes status</td></tr><tr><td><a href="#FR-15">FR-15</a></td><td></td><td>a task with accepted evidence naming a git commit is approved, and the project has a</td><td>that commit is merged into the main branch coverage reports the served requirements as `integrated` rather than</td></tr><tr><td><a href="#FR-15">FR-15</a></td><td></td><td>a task is approved whose agent branch carries commits made after the commit its accepted</td><td>the later commits are not merged</td></tr><tr><td><a href="#FR-15">FR-15</a></td><td></td><td>a task whose linked requirements belong to a `sketch`-rigor document is approved</td><td>the work is integrated exactly as it would be for a `gate`-rigor document</td></tr><tr><td><a href="#FR-15">FR-15</a></td><td></td><td>any approval integrates work</td><td>no push occurs and no remote operation is attempted</td></tr><tr><td><a href="#FR-16">FR-16</a></td><td></td><td>approval is requested for a task whose evidence commit conflicts with the main branch</td><td>the transition is refused the refusal names the conflicting paths the task&#x27;s status is unchanged no merge is attempted</td></tr><tr><td><a href="#FR-16">FR-16</a></td><td></td><td>approval is requested for a task with conflicting work whose documents are all `sketch`</td><td>the transition is refused</td></tr><tr><td><a href="#FR-17">FR-17</a></td><td></td><td>a task is approved in a project with no configured main branch</td><td>the approval succeeds nothing is merged the skipped integration is recorded with its reason</td></tr><tr><td><a href="#FR-17">FR-17</a></td><td></td><td>a task is approved while the primary checkout has uncommitted changes to tracked files</td><td>the approval succeeds, no merge is attempted, and the reason is recorded</td></tr><tr><td><a href="#FR-17">FR-17</a></td><td></td><td>a task is approved while the project directory holds untracked files</td><td>the work is integrated</td></tr><tr><td><a href="#FR-17">FR-17</a></td><td></td><td>integration is attempted and the merge fails</td><td>the task remains `approved` coverage reports the served requirements as `verified, not integrated`</td></tr><tr><td><a href="#FR-17">FR-17</a></td><td></td><td>a task is approved in a project whose evidence footprints record paths rather than commits</td><td>the approval succeeds and no integration is attempted</td></tr><tr><td><a href="#FR-18">FR-18</a></td><td></td><td>an approval integrates work</td><td>a record names the commit, the source branch, the target branch, the outcome and the</td></tr><tr><td><a href="#FR-18">FR-18</a></td><td></td><td>any interface attempts to update or delete an integration record</td><td>no such path exists</td></tr><tr><td><a href="#FR-19">FR-19</a></td><td></td><td>a task is approved whose accepted evidence names a commit already reachable from the</td><td>the integration is recorded as skipped the reason states the work is already in the target branch the target branch is unchanged</td></tr><tr><td><a href="#FR-19">FR-19</a></td><td></td><td>the commit is already in the target branch and the project&#x27;s checkout also has</td><td>the reason given is that the work is already integrated</td></tr><tr><td><a href="#FR-20">FR-20</a></td><td></td><td>a document declaring tasks is approved</td><td>a task is created for each declared task each is linked to the requirements it declared it serves each is unassigned</td></tr><tr><td><a href="#FR-20">FR-20</a></td><td></td><td>a document is revised and approved again</td><td>tasks already created for its declared tasks are not duplicated tasks declared for the first time are created</td></tr><tr><td><a href="#FR-20">FR-20</a></td><td></td><td>a document is approved again after a task it declared has been moved out of its entry</td><td>that task&#x27;s status and assignee are unchanged</td></tr><tr><td><a href="#FR-20">FR-20</a></td><td></td><td>a document declaring no tasks is approved</td><td>no tasks are created the approval succeeds</td></tr><tr><td><a href="#FR-21">FR-21</a></td><td></td><td>an approved task&#x27;s integration was skipped the cause is put right and integration is retried</td><td>the work is merged into the project&#x27;s main branch the retry is recorded</td></tr><tr><td><a href="#FR-21">FR-21</a></td><td></td><td>integration is retried for a task that is not approved</td><td>the request is refused nothing is merged</td></tr><tr><td><a href="#FR-21">FR-21</a></td><td></td><td>integration is retried for a task whose work is already on the main branch</td><td>nothing is merged the attempt is recorded as skipped because the work is already there</td></tr><tr><td><a href="#FR-21">FR-21</a></td><td></td><td>an agent asks what a task&#x27;s integration attempts reported</td><td>it receives them it may retry the integration</td></tr><tr><td><a href="#FR-21">FR-21</a></td><td></td><td>integration is skipped because the checkout has uncommitted changes</td><td>the reason does not instruct the operator to approve the task again</td></tr><tr><td><a href="#FR-21">FR-21</a></td><td></td><td>integration is skipped because the checkout has uncommitted changes or is on another</td><td>the reason directs the operator to retry the integration once the cause is put right</td></tr><tr><td><a href="#FR-22">FR-22</a></td><td></td><td>an approved task&#x27;s integration was skipped because no main branch was set the operator sets the project&#x27;s main branch</td><td>the work is merged the task is not reopened to achieve it</td></tr><tr><td><a href="#FR-22">FR-22</a></td><td></td><td>an approved task&#x27;s integration was skipped because the checkout had uncommitted changes the operator sets the project&#x27;s main branch</td><td>that task&#x27;s integration is not attempted again</td></tr><tr><td><a href="#FR-22">FR-22</a></td><td></td><td>setting the main branch triggers an attempt that raises</td><td>the main branch is still saved</td></tr><tr><td><a href="#FR-23">FR-23</a></td><td></td><td>a task is created naming requirement identifiers the task is read back</td><td>it reports those identifiers</td></tr><tr><td><a href="#FR-23">FR-23</a></td><td></td><td>a task names a requirement identifier that matches nothing</td><td>the identifier is reported as unresolved it is not reported among the task&#x27;s linked identifiers</td></tr><tr><td><a href="#FR-23">FR-23</a></td><td></td><td>a task is linked to requirements numbered 1, 2 and 11</td><td>they are reported in that order</td></tr><tr><td><a href="#FR-23">FR-23</a></td><td></td><td>a task is linked to a requirement whose identifier has no numeric part</td><td>the reported order is deterministic</td></tr><tr><td><a href="#FR-24">FR-24</a></td><td></td><td>approval is requested for a task linking a `gate`-rigor requirement with no accepted</td><td>the transition is refused the task&#x27;s status is unchanged no transition is recorded</td></tr><tr><td><a href="#FR-24">FR-24</a></td><td></td><td>approval is refused by the gate</td><td>the response names each blocking requirement&#x27;s identifier and why it is not verified</td></tr><tr><td><a href="#FR-24">FR-24</a></td><td></td><td>the evidence for the blocking requirement is accepted approval is requested again</td><td>the transition succeeds</td></tr><tr><td><a href="#FR-24">FR-24</a></td><td></td><td>approval is requested for a task whose linked requirements are all `sketch` rigor and</td><td>the transition succeeds</td></tr><tr><td><a href="#FR-24">FR-24</a></td><td></td><td>approval is requested for a task whose linked requirements are `contract` rigor and</td><td>the transition succeeds their state is still reported</td></tr><tr><td><a href="#FR-24">FR-24</a></td><td></td><td>approval is requested for a task with no linked requirements</td><td>the transition succeeds</td></tr><tr><td><a href="#FR-24">FR-24</a></td><td></td><td>a task serving an unverified `gate` requirement is moved to `completed`</td><td>the transition succeeds</td></tr><tr><td><a href="#FR-24">FR-24</a></td><td></td><td>approval of a blocked task is attempted through the tool surface or a scheduled job</td><td>it is refused on the same terms as through the operator&#x27;s interface</td></tr><tr><td><a href="#FR-24">FR-24</a></td><td></td><td>a `gate`-rigor document contains a requirement with no identifier approval is requested for a task linking that document&#x27;s requirements</td><td>the transition is refused, reporting the diagnostic</td></tr><tr><td><a href="#FR-25">FR-25</a></td><td></td><td>a task is approved under a gate the document&#x27;s rigor is later changed</td><td>the recorded transition still states the policy that applied when it was approved</td></tr><tr><td><a href="#FR-26">FR-26</a></td><td></td><td>the task list is requested scoped to one loop</td><td>every task naming that loop is returned no task naming a different loop, or naming none, is returned</td></tr><tr><td><a href="#FR-26">FR-26</a></td><td></td><td>the task list is scoped to a loop that owns a task in a terminal status</td><td>that task is included in the scoped result</td></tr><tr><td><a href="#FR-27">FR-27</a></td><td></td><td>the task list is requested scoped to one specification document</td><td>every task whose declaring document is that document is returned no task whose declaring document is a different document is returned</td></tr><tr><td><a href="#FR-27">FR-27</a></td><td></td><td>the task list is scoped to a document that is itself archived that document declared a task whose own status is terminal</td><td>that task is included in the scoped result</td></tr><tr><td><a href="#FR-28">FR-28</a></td><td></td><td>the exclusion mode is requested a task&#x27;s declaring document is archived that task&#x27;s own status is terminal</td><td>that task is absent from the result</td></tr><tr><td><a href="#FR-28">FR-28</a></td><td></td><td>the exclusion mode is requested a task&#x27;s declaring document is archived that task&#x27;s own status is not terminal</td><td>that task is present in the result</td></tr><tr><td><a href="#FR-28">FR-28</a></td><td></td><td>the exclusion mode is requested a task has no declaring document</td><td>that task is present in the result regardless of its status</td></tr><tr><td><a href="#FR-28">FR-28</a></td><td></td><td>the task list is requested without asking for the exclusion mode</td><td>every task is returned, including ones the exclusion mode would have hidden</td></tr><tr><td><a href="#FR-28">FR-28</a></td><td></td><td>the exclusion mode causes a task to be absent from one request&#x27;s result</td><td>a subsequent unscoped request for that same task returns it with every field unchanged</td></tr><tr><td><a href="#FR-29">FR-29</a></td><td></td><td>a task linked to one or more specification requirements is shown on the task board</td><td>the identifiers of its linked requirements are visible without expanding the task</td></tr><tr><td><a href="#FR-29">FR-29</a></td><td></td><td>a task is linked to a requirement whose only current evidence was rejected</td><td>that link is shown with a treatment distinct from a link carrying no such rejection</td></tr><tr><td><a href="#FR-30">FR-30</a></td><td></td><td>the operator opens a task carrying a long description, multiple acceptance criteria, and</td><td>every one of those is rendered without being clipped or requiring the board column&#x27;s own</td></tr><tr><td><a href="#FR-31">FR-31</a></td><td></td><td>the operator follows a task&#x27;s link to a specific requirement</td><td>the specification document opens with that requirement in view</td></tr><tr><td><a href="#FR-32">FR-32</a></td><td></td><td>a task is created by any path other than a bound document&#x27;s approval or its loop&#x27;s creator</td><td>the task has no loop it does not appear in any loop&#x27;s queue</td></tr><tr><td><a href="#FR-32">FR-32</a></td><td>a task that belongs to a loop&#x27;s queue</td><td>any actor attempts to change which loop it belongs to</td><td>the attempt is refused the task&#x27;s loop is unchanged</td></tr><tr><td><a href="#FR-32">FR-32</a></td><td>a task in a loop&#x27;s queue that has reached a terminal status</td><td>the loop&#x27;s queue history is retrieved</td><td>the task is included</td></tr></tbody></table></section><section><h2 id="evidence">Evidence and coverage limits</h2><h3>Checked</h3><ul><li>Translated from openspec/specs/task-lifecycle-governance/spec.md (32 requirements, 110 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten.</li></ul><h3 class="aw-limits">Limits</h3><ul><li>scenarios-state-no-starting-state: 108 of 110 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed</li></ul></section><section><h2 id="open-questions">Open questions</h2><p class="aw-empty">None outstanding.</p></section>
+<script type="application/agentweave-spec+json" id="aw-spec-payload">
+{
+  "schema_version": 1,
+  "kind": "capability",
+  "title": "Task lifecycle governance",
+  "summary": "Which task status transitions are legal, who may perform them, how an illegal one is refused, and the durable append-only record of every accepted transition. Established by `openspec/changes/2026-08-10-task-transition-machine` (roadmap change **B1**). Before it, a task's status was whatever the last writer said: `update_task_for_actor` applied `task.status = body.status` with no adjacency and no actor rule, and the MCP `update_task` tool handed that to every bound agent — so a run could move its own work from `in_progress` to `approved` in one call, and `Task.updated_by_run_id`, being a single mutable column, could not even record that the author and the approver were the same. This capability governs **validity**: that a recorded transition is legal, attributed, and made by an entitled actor. It does not govern **liveness** — whether a transition happens at all when reality changes — which needs the run-to-task binding explored in `openspec/explorations/2026-08-10-enforcing-the-development-cycle.md`. The completion gates of B3 and B4 land inside this capability's transition service rather than beside it.",
+  "problem": "",
+  "scope": {
+    "in_scope": [],
+    "non_goals": []
+  },
+  "requirements": [
+    {
+      "key": "task-status-moves-only-along-declared-transitions",
+      "statement": "The system SHALL define, in one place, the set of legal moves between task statuses, and SHALL refuse any status change that is not a member of that set. The eight statuses (`pending`, `assigned`, `in_progress`, `completed`, `under_review`, `revision_needed`, `approved`, `rejected`) remain as they are; what changes is that adjacency becomes declared rather than absent.",
+      "modal": "SHALL",
+      "rationale": "A refusal MUST name the task's current status and the statuses reachable from it, so a caller can correct itself without guessing. A refused transition MUST leave the task and its history unchanged. Re-declaring the status a task already holds SHALL be accepted as a no-op and MUST NOT append a history entry, so a retried or duplicated call does not manufacture a transition that never happened.",
+      "party": null
+    },
+    {
+      "key": "a-task-may-only-be-created-in-an-entry-status",
+      "statement": "The system SHALL restrict the status a task may be created with to the declared entry statuses `pending` and `assigned`, and SHALL refuse creation in any other status. A lifecycle that can be entered anywhere is not a lifecycle: without this, a caller reaches `approved` by creating a task there rather than by transitioning to it, and no rule about transitions can prevent it.",
+      "modal": "SHALL",
+      "rationale": "This restriction SHALL hold identically over direct HTTP and MCP. Where one transport currently exposes a status field that the other does not, the transports are brought into agreement by narrowing the wider one, not by widening the narrower. Creation SHALL NOT record a transition — a task's history begins with its first *move*, and its entry status is already stated by the task itself.",
+      "party": null
+    },
+    {
+      "key": "the-operator-can-perform-every-transition-reserved-to-them",
+      "statement": "Every transition the map reserves to the operator SHALL be reachable by the operator through the application, not only through the API. A rule that grants the operator exclusive authority while providing no surface on which to exercise it grants nothing.",
+      "modal": "SHALL",
+      "rationale": "The control SHALL offer only those transitions legal for the operator from the task's current status, so an illegal move is not presented and then refused.",
+      "party": null
+    },
+    {
+      "key": "some-transitions-are-the-operator-s-alone",
+      "statement": "The transition map SHALL declare, per edge, which kinds of actor may take it. The operator SHALL have edges no agent run has; the operator SHALL NOT have permission to make a move the map does not declare. Operator authority is expressed as additional legal transitions rather than as a bypass, so every recorded history describes a legal sequence.",
+      "modal": "SHALL",
+      "rationale": "Specifically: - Moving a task to `rejected` from any non-terminal status other than `under_review` SHALL be permitted to the operator only. An agent run MAY move a task to `rejected` from `under_review`, where rejection is a review outcome rather than a decision to abandon the work. - `approved` and `rejected` SHALL be reopenable — `approved` to `revision_needed`, `rejected` to `pending` — by the operator only. No agent run may leave either status.",
+      "party": null
+    },
+    {
+      "key": "every-accepted-transition-is-recorded-append-only",
+      "statement": "The system SHALL persist one immutable record per accepted status transition, identifying the task, the status moved from, the status moved to, the responsible run and **agent** where they exist, the kind of actor (agent run or operator), **what caused the transition to be requested**, and the time. Records MUST NOT be updated or deleted by any application path; a correction is a further transition, not an edit.",
+      "modal": "MUST",
+      "rationale": "`Task.status` MAY remain as the materialised current value for reads, but MUST NOT be the only durable statement of how the task reached it. The recorded cause SHALL distinguish a transition an actor asked for from one the system made on that actor's behalf. Without that distinction, a transition the runtime performs automatically is indistinguishable from work the agent did, and any check asking \"did this run advance its task?\" is satisfied by the system's own bookkeeping.",
+      "party": null
+    },
+    {
+      "key": "an-agent-cannot-approve-the-work-it-produced",
+      "statement": "The system SHALL refuse a transition to `approved` requested by an agent when that same **agent** recorded the task's transition into `completed`. Author and reviewer MUST be distinct **agents**.",
+      "modal": "SHALL",
+      "rationale": "Distinctness is on agent identity, not run identity. Every turn an agent takes is a new run, so a rule requiring only \"a different run\" is satisfied by an agent continuing its own work and forbids nothing — observed in live use on 2026-08-10, when an agent completed a task on one run and approved it on the next. This rule binds agent runs only. The operator SHALL be permitted to approve work regardless of who produced it — a single-operator project would otherwise be unable to approve anything — and the history states that an operator did so.",
+      "party": null
+    },
+    {
+      "key": "governance-holds-identically-over-http-and-mcp",
+      "statement": "Transition validation, actor separation, and history recording SHALL be enforced at the shared application layer, so the same rules apply whether a run acts over direct HTTP or through the MCP adapter. The adapter MUST surface a refusal as a typed failure and MUST NOT convert it into an empty or successful result.",
+      "modal": "MUST",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "the-system-may-cause-a-transition-without-becoming-an-actor",
+      "statement": "The system SHALL be able to move a task as a consequence of an event it observes, acting **as** the responsible run rather than as an actor of its own kind. Such a transition SHALL be subject to every legality and actor rule that governs a transition the run itself requests, and SHALL be refused on the same grounds.",
+      "modal": "SHALL",
+      "rationale": "There SHALL NOT be a third actor kind for the system. Actor kind is what the transition map and author/reviewer separation are keyed on; a system actor would require every edge to declare whether the system may take it, and would admit moves for which no one is accountable.",
+      "party": null
+    },
+    {
+      "key": "a-task-carries-how-its-neglect-should-be-answered",
+      "statement": "The system SHALL let each task carry a policy describing what happens when work bound to it ends without the task moving, and the agent to route the work to when that policy escalates.",
+      "modal": "SHALL",
+      "rationale": "A task that states no policy SHALL be treated as stating the passive one, so that introducing this capability changes the behaviour of no existing task.",
+      "party": null
+    },
+    {
+      "key": "a-task-can-be-waiting-on-a-person",
+      "statement": "The system SHALL provide a status meaning that work began and cannot proceed until someone outside the run supplies something. A task in that status SHALL be reachable only from the status meaning work is under way, so that a task nobody has started is never described as waiting.",
+      "modal": "SHALL",
+      "rationale": "The status SHALL NOT have a direct edge to any status meaning the work is finished. Work that was waiting and is now done SHALL pass back through the in-progress status first, so that no recorded history states a task was completed while still waiting on a person who never answered.",
+      "party": null
+    },
+    {
+      "key": "a-task-is-recorded-as-waiting-because-the-system-observed-it",
+      "statement": "The system SHALL move a task into the waiting status as a consequence of observing that the run working on it ended with an unanswered question outstanding, attributed to that run and recorded as system-caused.",
+      "modal": "SHALL",
+      "rationale": "The system SHALL move it back out when that question is answered. A task SHALL NOT enter or leave the waiting status because an agent asserted that it should. An agent that could declare itself blocked could claim to be waiting on a person it never asked, which is the one claim a completion gate would most reward.",
+      "party": null
+    },
+    {
+      "key": "a-waiting-task-names-what-it-is-waiting-for",
+      "statement": "A task in the waiting status SHALL carry a human-readable statement of what it is waiting for. Where the system recorded the block, that statement SHALL be derived from the question asked. Where the operator sets it directly, the system SHALL require the statement and SHALL refuse the transition without one.",
+      "modal": "SHALL",
+      "rationale": "The statement SHALL be cleared whenever the task leaves the waiting status, by any route. A status alone leaves the operator working out what they are holding up, which is the position they were already in when the task said work was under way and nothing was happening. The status answers \"why is nothing moving\"; only the statement answers \"what do you need from me\".",
+      "party": null
+    },
+    {
+      "key": "only-an-unanswered-blocking-question-makes-a-task-wait",
+      "statement": "The system SHALL record a task as waiting only on account of a question that is unanswered, marked as blocking, and asked by the run whose end is being evaluated.",
+      "modal": "SHALL",
+      "rationale": "A question that does not block is the agent leaving a note and continuing; a task parked on one would make the status mean that an agent mentioned something. A question left open by a different run is not evidence that this run stopped for it.",
+      "party": null
+    },
+    {
+      "key": "declining-a-question-releases-the-task-it-parked",
+      "statement": "Where a question caused a task to be recorded as waiting, declining that question SHALL return the task to the in-progress status and clear what it was waiting for, as an operator-caused transition.",
+      "modal": "SHALL",
+      "rationale": "The operator has stated the answer is not coming, so the task is no longer waiting on them. A task left waiting would claim to be held up by a question that has been closed — a block with nothing behind it, which is the state the requirement that a block names what it is waiting for exists to prevent. A declined question SHALL NOT cause a task to be recorded as waiting. Otherwise the run-boundary check would park the task again on the question the operator just closed, and the release would be undone by the mechanism it was meant to satisfy.",
+      "party": null
+    },
+    {
+      "key": "approval-integrates-the-approved-work",
+      "statement": "The transition into `approved` SHALL merge the approved work into the project's configured main branch, in the same operation that records the transition. Approval is what places work in the product, and a lifecycle whose terminal state carries no such meaning cannot answer whether anything it approved was ever shipped.",
+      "modal": "SHALL",
+      "rationale": "What is merged SHALL be the commit named by the task's accepted evidence footprints — the newest such commit per distinct branch — and SHALL NOT be the agent's branch. Agent branches are per agent, not per task, so merging a branch would integrate every other task's work that happens to sit beside the approved one. Evidence that is awaiting review or has been rejected SHALL NOT contribute a commit to integrate. The merge SHALL be performed against the local repository only. The system SHALL NOT contact any remote, SHALL NOT push, and SHALL NOT require any credential. Integration SHALL occur regardless of the rigor of any document the task's requirements belong to. Rigor governs who may bring a task to `approved`; integration is what reaching `approved` means. Were the two coupled, lowering a document's rigor to get past a blocked task would also silently stop that work being shipped.",
+      "party": null
+    },
+    {
+      "key": "approval-is-refused-when-the-work-cannot-be-merged-cleanly",
+      "statement": "Where the work to be integrated would conflict with the project's main branch, the system SHALL refuse the transition into `approved`.",
+      "modal": "SHALL",
+      "rationale": "The conflict SHALL be detected before the transition is recorded, by a test merge that modifies neither the working tree nor the index. A conflict discovered during the merge itself would leave a task recorded as approved and a repository in a state the operator did not ask for. The refusal SHALL be carried in the same typed refusal that reports unverified requirements, and SHALL name the conflicting paths. An operator learning that approval failed SHALL learn why in the same response, not by inspecting the repository. This refusal SHALL apply regardless of rigor. It is not an assertion about whether the work is verified; it is an assertion that the work cannot go where approval says it goes. The check SHALL live inside the single transition service, and SHALL NOT introduce a second enforcement point.",
+      "party": null
+    },
+    {
+      "key": "an-integration-that-cannot-proceed-does-not-block-approval",
+      "statement": "The transition into `approved` SHALL still succeed where integration cannot be attempted, and the integration SHALL be recorded as skipped together with the reason. Integration cannot be attempted when the project has no configured main branch, when the project is not a repository, when the primary checkout has uncommitted changes to tracked files, or when the primary checkout is not on the main branch.",
+      "modal": "SHALL",
+      "rationale": "Untracked files SHALL NOT prevent integration. The system writes specification documents into the project directory, so untracked content is the ordinary state of a working project rather than a signal that a merge is unsafe. Where integration is attempted and fails, the transition SHALL NOT be rolled back. The approval is a judgement that the work is good; a repository failure SHALL NOT reverse it. Coverage SHALL then report the requirement as `verified, not integrated`, which is a true statement of what happened. A project that is not a repository SHALL be no less approvable than before this capability existed.",
+      "party": null
+    },
+    {
+      "key": "every-integration-attempt-is-recorded",
+      "statement": "The system SHALL record each integration attempt: the task, the commit and branch integrated, the target branch, the outcome (`merged`, `skipped` or `failed`), the reason where it did not merge, the approving actor, and the time.",
+      "modal": "SHALL",
+      "rationale": "The record SHALL be append-only, with no update path and no delete path. An integration is a write to the operator's repository performed by the system, and the account of what was written SHALL NOT be editable by the thing that wrote it. The record SHALL state how the integration was performed, so that a later mode which integrates by a different mechanism is distinguishable in the history rather than conflated with this one.",
+      "party": null
+    },
+    {
+      "key": "work-already-in-the-main-line-is-not-reported-as-merged",
+      "statement": "Where the work to integrate is already reachable from the target branch, the system SHALL record the integration as skipped, naming that as the reason, and SHALL NOT record it as merged.",
+      "modal": "SHALL",
+      "rationale": "Merging a commit that is already an ancestor of the target succeeds, reports success, and changes nothing. Recording that as a merge makes a no-op indistinguishable from work reaching the product, which is the one thing integration reporting exists to distinguish. This SHALL be determined before any precondition concerning the state of the working tree. Whether a commit is already present is a fact about the commit and the target alone, and an operator whose checkout is mid-edit is better told the true reason than told to tidy up for a merge that would change nothing.",
+      "party": null
+    },
+    {
+      "key": "approval-creates-the-work-its-document-declares",
+      "statement": "A document's approval SHALL create the tasks that document declares, each linked to the requirements it declares that it serves.",
+      "modal": "SHALL",
+      "rationale": "A document that declares its own decomposition and produces nothing leaves the operator to re-describe by hand work the document already contains, and leaves no relationship between the two. Tasks SHALL be created unassigned and in the lifecycle's entry status. The document states that the work exists; who performs it is not a decision a specification makes. Creation SHALL be idempotent per document and declared task, so that re-approving a document after revision creates only what is new. A task that already exists for a declared task SHALL NOT be modified, reassigned or reverted by a later approval. The document declares that work exists, not what has happened to it since. A document declaring no tasks SHALL create none, and this SHALL NOT be an error. Where a declared task names a requirement the document does not resolve, the task SHALL still be created and the unresolved reference SHALL be preserved rather than discarded.",
+      "party": null
+    },
+    {
+      "key": "an-integration-that-was-skipped-can-be-attempted-again",
+      "statement": "The system SHALL offer a way to attempt integration again for an approved task whose work has not been integrated, and SHALL name that way when it reports a skip the operator can put right.",
+      "modal": "SHALL",
+      "rationale": "Integration is attempted when a task becomes approved. Where it is skipped, the cause is usually something the operator can then put right — a main branch that was never named, a checkout with uncommitted changes, a checkout parked on another branch. Restating the approval does not attempt it again, because restating a status is deliberately a no-op, so without this the remediation the system asked for accomplishes nothing. A skip SHALL NOT instruct the operator to approve the task again. The task is already approved by the time the skip is read, and following that instruction provably does nothing: the request succeeds, the status is unchanged, no attempt is recorded, and nothing is merged. An instruction that fails silently is worse than none, because it spends the operator's confidence as well as their time. Where a skip names a cause the operator can put right, it SHALL point at the remedy that works — retrying the integration, or the setting whose absence caused the skip. Retrying SHALL be available to the operator and to agents, and SHALL be refused for a task that is not approved. Retrying a task whose work has already been integrated SHALL be permitted and SHALL merge nothing. Whether work has reached the main line is a question about the repository, so it is asked again rather than inferred from what was previously attempted. Every retry SHALL be recorded exactly as a first attempt is. An agent able to retry SHALL be able to read what the attempts reported. An agent that can act on an outcome it cannot see is acting blind.",
+      "party": null
+    },
+    {
+      "key": "naming-the-main-branch-attempts-the-integrations-that-wanted",
+      "statement": "The system SHALL attempt integration again, when a project's main branch is set, for approved tasks whose most recent integration was skipped for want of one.",
+      "modal": "SHALL",
+      "rationale": "Skipping for want of a main branch tells the operator to choose one in the project's settings. Discharging that instruction at the moment the operator follows it is what makes the sentence true; leaving it undischarged means the system asked for something and then ignored it. Only that cause SHALL be answered this way. Naming a branch says nothing about a checkout with uncommitted changes or one parked elsewhere, and a merge that failed outright wants a person rather than a repetition. Setting the branch SHALL succeed even where the attempt that follows it does not. The operator changed a setting, and that must stand or fall on its own terms.",
+      "party": null
+    },
+    {
+      "key": "a-task-reports-the-requirement-identifiers-it-was-given",
+      "statement": "A task's representation SHALL report the requirement identifiers linked to it, in the form those identifiers are supplied in.",
+      "modal": "SHALL",
+      "rationale": "Identifiers are accepted when a task is created and when it is updated. Reporting them nowhere makes the field write-only, so a caller cannot confirm what was recorded, and anyone diagnosing why work did not merge sees a task that appears to be tied to nothing while the links that govern the merge exist. The identifiers reported SHALL be the same ones accepted, not the system's internal row identity, so that what is read back can be submitted again. Identifiers SHALL be reported in an order that reads as the operator numbered them, comparing the numeric parts of an identifier by value. Ordering them as plain text places an eleventh requirement between the first and the second, which reads as a defect in data that is correct and costs a diagnosis every time someone checks what a task is tied to. An identifier with no numeric part SHALL still be ordered deterministically. Identifiers are authored by the operator and nothing constrains their shape. References that resolved to no requirement SHALL NOT be reported among them. They are already reported as unresolved, and repeating them here would invite a caller to resubmit a reference that has already failed.",
+      "party": null
+    },
+    {
+      "key": "approval-is-refused-while-a-gated-requirement-is-unverified",
+      "statement": "Where a task links requirements whose document rigor is `gate`, the system SHALL refuse the transition into `approved` while any of those requirements is not verified.",
+      "modal": "SHALL",
+      "rationale": "The check SHALL run inside the same transition service every status write already passes through, and SHALL NOT exist as a second enforcement point. A second point is a second thing to bypass, and the rule that no route may assign a task's status directly is what makes one point sufficient. Verification SHALL be determined by the same coverage computation the document and project surfaces use. A gate that computed its own answer could refuse a task while the document beside it reported everything satisfied, and nothing would establish which was wrong. `sketch` and `contract` requirements SHALL report their state and SHALL NOT block the transition. A requirement that is structurally invalid or carries no identifier SHALL prevent a gate from passing, and SHALL be reported as the diagnostic it is rather than as an unverified requirement. The refusal SHALL be typed, and SHALL name each requirement that caused it together with what would satisfy it — no linked evidence, evidence awaiting review, or evidence that no longer applies to the current wording. A refusal that does not say what to do about it cannot be acted on, and an unactionable gate is turned off. The refusal SHALL hold identically across every access path: the operator's interface, an agent's HTTP action, the tool surface, and a scheduled job.",
+      "party": null
+    },
+    {
+      "key": "a-transition-records-the-policy-that-governed-it",
+      "statement": "Every recorded transition SHALL carry the policy in force when it was decided.",
+      "modal": "SHALL",
+      "rationale": "Which rigor a document holds is editable by the operator. Without recording what governed a decision, a gate that passed last month cannot be explained today — and the policy being editable is what turns that from a theoretical concern into a live one.",
+      "party": null
+    },
+    {
+      "key": "a-task-list-can-be-scoped-to-one-loop-s-queue",
+      "statement": "The Hub SHALL let a caller of the task list scope the result to exactly the tasks that name one loop, and SHALL apply no other filter to that scoped result — an explicit loop scope SHALL show every task naming it, regardless of that task's own status.",
+      "modal": "SHALL",
+      "rationale": "A scope naming a loop with no queued tasks SHALL return an empty list, and this SHALL NOT be an error.",
+      "party": null
+    },
+    {
+      "key": "a-task-list-can-be-scoped-to-one-specification-document-s-de",
+      "statement": "The Hub SHALL let a caller of the task list scope the result to exactly the tasks one specification document declared, and SHALL apply no other filter to that scoped result — an explicit scope SHALL show every task the document declared, regardless of that task's own status or its declaring document's phase.",
+      "modal": "SHALL",
+      "rationale": "A scope naming a document with no declared tasks SHALL return an empty list, and this SHALL NOT be an error.",
+      "party": null
+    },
+    {
+      "key": "the-task-list-s-default-view-retires-completed-work-from-arc",
+      "statement": "The Hub SHALL offer a task list mode that excludes a task if, and only if, the task's declaring document has reached the `archived` phase and the task's own status is terminal. This exclusion SHALL NOT be applied unless the caller asks for it, so a caller that does not ask for it — including every caller that existed before this exclusion was added — SHALL see every task exactly as before.",
+      "modal": "SHALL",
+      "rationale": "A task with no declaring document SHALL NOT be excluded by this mode, regardless of its status. An open (non-terminal) task whose declaring document is archived SHALL NOT be excluded by this mode — work someone still has to do is not retired because the document that described it was tidied away. This exclusion SHALL NOT alter any task's status, assignee, or any other field. It changes only what a request that asks for it is shown.",
+      "party": null
+    },
+    {
+      "key": "a-task-s-requirement-links-are-visible-where-the-operator-ma",
+      "statement": "The interface presenting a task to the operator SHALL show which specification requirements, if any, the task is linked to, without requiring the operator to open the task's full detail first.",
+      "modal": "SHALL",
+      "rationale": "Where a linked requirement's only current evidence was rejected, that MUST be visually distinguished from a link to a requirement with no such rejection, so a task that looks approvable does not hide a refused claim inside it.",
+      "party": null
+    },
+    {
+      "key": "a-task-s-full-detail-opens-in-a-view-sized-to-hold-it",
+      "statement": "The interface SHALL present a task's full detail — description, acceptance criteria, deliverables, notes, and requirement links — in a view sized independently of the task board's column layout, not constrained to the width of a board column.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "navigating-from-a-task-s-requirement-link-reaches-that-requi",
+      "statement": "Following a task's link to one of its requirements SHALL open the specification document that declares it, scrolled to that requirement, not merely to the top of the document.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "a-task-s-loop-is-set-by-a-named-writer-when-the-task-is-crea",
+      "statement": "The Hub SHALL set a task's loop only at creation, and only from one of two writers: the approval of a specification document bound to that loop, or the loop's creator adding the task directly.",
+      "modal": "SHALL",
+      "rationale": "A task's loop SHALL NOT be changed after creation, by any actor. Moving finished or in-flight work between loops would make a loop's queue history — and therefore its stop condition, which is derived from that history — unable to answer what work the loop was ever given.",
+      "party": null
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "key": "ac1",
+      "requirement": "task-status-moves-only-along-declared-transitions",
+      "given": "",
+      "when": "a caller moves a task from `in_progress` to `completed`",
+      "then": "the task's status becomes `completed` the transition is recorded"
+    },
+    {
+      "key": "ac2",
+      "requirement": "task-status-moves-only-along-declared-transitions",
+      "given": "",
+      "when": "an agent run moves a task from `in_progress` directly to `approved`",
+      "then": "the request is refused with a typed error the error names `in_progress` as the current status and the statuses reachable from it the task's status is unchanged no transition is recorded"
+    },
+    {
+      "key": "ac3",
+      "requirement": "task-status-moves-only-along-declared-transitions",
+      "given": "",
+      "when": "a caller sets a task's status to the status it already holds",
+      "then": "the request succeeds no transition is recorded"
+    },
+    {
+      "key": "ac4",
+      "requirement": "task-status-moves-only-along-declared-transitions",
+      "given": "",
+      "when": "the legal-transition map is read by the API, the MCP adapter, or a test",
+      "then": "all of them resolve to the same declaration adding a status in one place without declaring its transitions fails a test rather than"
+    },
+    {
+      "key": "ac5",
+      "requirement": "a-task-may-only-be-created-in-an-entry-status",
+      "given": "",
+      "when": "a caller creates a task with status `approved`, `completed`, `under_review`,",
+      "then": "the request is refused no task is created"
+    },
+    {
+      "key": "ac6",
+      "requirement": "a-task-may-only-be-created-in-an-entry-status",
+      "given": "",
+      "when": "a caller creates a task with status `pending` or `assigned`, or states no status",
+      "then": "the task is created no transition is recorded"
+    },
+    {
+      "key": "ac7",
+      "requirement": "a-task-may-only-be-created-in-an-entry-status",
+      "given": "",
+      "when": "creation in a non-entry status is attempted over direct HTTP and through MCP",
+      "then": "neither transport creates the task neither exposes a status field the other lacks"
+    },
+    {
+      "key": "ac8",
+      "requirement": "the-operator-can-perform-every-transition-reserved-to-them",
+      "given": "",
+      "when": "the operator views a task in a given status",
+      "then": "the transitions offered are exactly those the map declares legal for an operator from transitions reserved to no one, or legal only for agent runs, are not offered"
+    },
+    {
+      "key": "ac9",
+      "requirement": "the-operator-can-perform-every-transition-reserved-to-them",
+      "given": "",
+      "when": "the operator wishes to reject a task at `pending`, or reopen an `approved` task",
+      "then": "the application provides a way to do it"
+    },
+    {
+      "key": "ac10",
+      "requirement": "some-transitions-are-the-operator-s-alone",
+      "given": "",
+      "when": "an agent run moves a task from `in_progress` to `rejected`",
+      "then": "the request is refused the task's status is unchanged"
+    },
+    {
+      "key": "ac11",
+      "requirement": "some-transitions-are-the-operator-s-alone",
+      "given": "",
+      "when": "the operator moves a task from `pending`, `assigned`, `in_progress`, `completed` or",
+      "then": "the request succeeds the transition is recorded as an operator action"
+    },
+    {
+      "key": "ac12",
+      "requirement": "some-transitions-are-the-operator-s-alone",
+      "given": "",
+      "when": "an agent run other than the one that completed the task moves it from `under_review` to",
+      "then": "the request succeeds"
+    },
+    {
+      "key": "ac13",
+      "requirement": "some-transitions-are-the-operator-s-alone",
+      "given": "",
+      "when": "the operator moves a task from `approved` to `revision_needed`, or from `rejected` to",
+      "then": "the request succeeds the task's earlier transitions remain in its history"
+    },
+    {
+      "key": "ac14",
+      "requirement": "some-transitions-are-the-operator-s-alone",
+      "given": "",
+      "when": "an agent run attempts to move a task out of `approved` or `rejected`",
+      "then": "the request is refused"
+    },
+    {
+      "key": "ac15",
+      "requirement": "some-transitions-are-the-operator-s-alone",
+      "given": "",
+      "when": "the operator attempts a transition the map does not declare for any actor",
+      "then": "the request is refused on the same grounds as it would be for an agent run"
+    },
+    {
+      "key": "ac16",
+      "requirement": "every-accepted-transition-is-recorded-append-only",
+      "given": "",
+      "when": "one run moves a task to `completed` and a different run later moves it to `approved`",
+      "then": "the history contains both transitions each names its own responsible run neither record has been overwritten by the other"
+    },
+    {
+      "key": "ac17",
+      "requirement": "every-accepted-transition-is-recorded-append-only",
+      "given": "",
+      "when": "the operator changes a task's status",
+      "then": "a transition is recorded with an actor kind of operator and no responsible run it is distinguishable from a transition caused by an agent run"
+    },
+    {
+      "key": "ac18",
+      "requirement": "every-accepted-transition-is-recorded-append-only",
+      "given": "",
+      "when": "any application path attempts to modify or remove an existing transition record",
+      "then": "no such path exists"
+    },
+    {
+      "key": "ac19",
+      "requirement": "every-accepted-transition-is-recorded-append-only",
+      "given": "",
+      "when": "a task that existed before this capability shipped undergoes its first transition",
+      "then": "that transition is recorded no transitions are invented for the period before the capability existed"
+    },
+    {
+      "key": "ac20",
+      "requirement": "every-accepted-transition-is-recorded-append-only",
+      "given": "",
+      "when": "the system moves a task automatically as a consequence of an event it observed",
+      "then": "the record identifies the cause as the system rather than the actor it still names the run and agent on whose behalf it was made"
+    },
+    {
+      "key": "ac21",
+      "requirement": "every-accepted-transition-is-recorded-append-only",
+      "given": "",
+      "when": "a transition recorded before this distinction existed is read",
+      "then": "it reads as actor-caused no cause is invented for it"
+    },
+    {
+      "key": "ac22",
+      "requirement": "an-agent-cannot-approve-the-work-it-produced",
+      "given": "",
+      "when": "the agent that moved a task to `completed` requests the move to `approved`",
+      "then": "the request is refused with a typed error stating that approval requires a different the task remains in its pre-request status no transition is recorded"
+    },
+    {
+      "key": "ac23",
+      "requirement": "an-agent-cannot-approve-the-work-it-produced",
+      "given": "",
+      "when": "the agent that completed a task requests `approved` on a later run",
+      "then": "the request is refused the refusal states that starting a new run does not make it a different actor"
+    },
+    {
+      "key": "ac24",
+      "requirement": "an-agent-cannot-approve-the-work-it-produced",
+      "given": "",
+      "when": "an agent other than the one that completed the task requests `approved` the transition is otherwise legal",
+      "then": "the request succeeds"
+    },
+    {
+      "key": "ac25",
+      "requirement": "an-agent-cannot-approve-the-work-it-produced",
+      "given": "",
+      "when": "the operator approves a task, including one they moved to `completed` themselves",
+      "then": "the request succeeds the transition is recorded as an operator action"
+    },
+    {
+      "key": "ac26",
+      "requirement": "an-agent-cannot-approve-the-work-it-produced",
+      "given": "",
+      "when": "the agent that completed a task requests `rejected` or `revision_needed` on it",
+      "then": "the request is refused on the same grounds as self-approval"
+    },
+    {
+      "key": "ac27",
+      "requirement": "governance-holds-identically-over-http-and-mcp",
+      "given": "",
+      "when": "an illegal transition is attempted over direct HTTP and the equivalent is attempted",
+      "then": "both are refused both refusals carry the same meaning"
+    },
+    {
+      "key": "ac28",
+      "requirement": "governance-holds-identically-over-http-and-mcp",
+      "given": "",
+      "when": "the MCP adapter receives a refused transition",
+      "then": "the tool call reports a failure naming the reason it does not return a success payload"
+    },
+    {
+      "key": "ac29",
+      "requirement": "the-system-may-cause-a-transition-without-becoming-an-actor",
+      "given": "",
+      "when": "the system would move a task automatically that move is not an edge available to the responsible run",
+      "then": "no transition occurs the task is unchanged"
+    },
+    {
+      "key": "ac30",
+      "requirement": "the-system-may-cause-a-transition-without-becoming-an-actor",
+      "given": "",
+      "when": "a transition is made automatically on behalf of a run",
+      "then": "the agent recorded is that run's agent later review of that task is judged against that agent exactly as if the agent had asked"
+    },
+    {
+      "key": "ac31",
+      "requirement": "the-system-may-cause-a-transition-without-becoming-an-actor",
+      "given": "",
+      "when": "the set of actor kinds is enumerated",
+      "then": "it contains agent run and operator, and nothing else"
+    },
+    {
+      "key": "ac32",
+      "requirement": "a-task-carries-how-its-neglect-should-be-answered",
+      "given": "",
+      "when": "a task created before this capability existed is read",
+      "then": "its policy is the passive one nothing was written to that task to make it so"
+    },
+    {
+      "key": "ac33",
+      "requirement": "a-task-carries-how-its-neglect-should-be-answered",
+      "given": "",
+      "when": "two tasks in one project state different policies",
+      "then": "each is answered according to its own"
+    },
+    {
+      "key": "ac34",
+      "requirement": "a-task-can-be-waiting-on-a-person",
+      "given": "",
+      "when": "a task whose work is under way is moved to the waiting status",
+      "then": "the transition is accepted and recorded"
+    },
+    {
+      "key": "ac35",
+      "requirement": "a-task-can-be-waiting-on-a-person",
+      "given": "",
+      "when": "a task that has not been started is moved to the waiting status",
+      "then": "the move is refused as illegal the refusal names what is reachable instead"
+    },
+    {
+      "key": "ac36",
+      "requirement": "a-task-can-be-waiting-on-a-person",
+      "given": "",
+      "when": "a task in the waiting status is moved directly to completed",
+      "then": "the move is refused the task must return to the in-progress status first"
+    },
+    {
+      "key": "ac37",
+      "requirement": "a-task-can-be-waiting-on-a-person",
+      "given": "",
+      "when": "the operator reassigns or rejects a task that is waiting",
+      "then": "the transition is accepted"
+    },
+    {
+      "key": "ac38",
+      "requirement": "a-task-is-recorded-as-waiting-because-the-system-observed-it",
+      "given": "",
+      "when": "a run bound to a task ends a blocking question it asked has not been answered",
+      "then": "the task is recorded as waiting the transition names the run and is recorded as system-caused"
+    },
+    {
+      "key": "ac39",
+      "requirement": "a-task-is-recorded-as-waiting-because-the-system-observed-it",
+      "given": "",
+      "when": "the question that caused a task to be recorded as waiting is answered",
+      "then": "the task returns to the in-progress status the transition is recorded"
+    },
+    {
+      "key": "ac40",
+      "requirement": "a-task-is-recorded-as-waiting-because-the-system-observed-it",
+      "given": "",
+      "when": "an agent requests the waiting status for its own task",
+      "then": "the request is refused"
+    },
+    {
+      "key": "ac41",
+      "requirement": "a-task-is-recorded-as-waiting-because-the-system-observed-it",
+      "given": "",
+      "when": "the operator moves a task into or out of the waiting status",
+      "then": "the transition is accepted and recorded as an operator action"
+    },
+    {
+      "key": "ac42",
+      "requirement": "a-waiting-task-names-what-it-is-waiting-for",
+      "given": "",
+      "when": "a run ends with an unanswered question and its task is recorded as waiting",
+      "then": "the task states what it is waiting for that statement identifies the question asked"
+    },
+    {
+      "key": "ac43",
+      "requirement": "a-waiting-task-names-what-it-is-waiting-for",
+      "given": "",
+      "when": "the operator moves a task to the waiting status without saying what it is waiting for",
+      "then": "the transition is refused the task is unchanged"
+    },
+    {
+      "key": "ac44",
+      "requirement": "a-waiting-task-names-what-it-is-waiting-for",
+      "given": "",
+      "when": "a waiting task moves to any other status",
+      "then": "it no longer states what it is waiting for"
+    },
+    {
+      "key": "ac45",
+      "requirement": "a-waiting-task-names-what-it-is-waiting-for",
+      "given": "",
+      "when": "an operator surface offers a move to the waiting status",
+      "then": "it obtains the statement before requesting the move"
+    },
+    {
+      "key": "ac46",
+      "requirement": "only-an-unanswered-blocking-question-makes-a-task-wait",
+      "given": "",
+      "when": "a run ends having asked a non-blocking question and without moving its task",
+      "then": "the task is not recorded as waiting the run is divergent as normal"
+    },
+    {
+      "key": "ac47",
+      "requirement": "only-an-unanswered-blocking-question-makes-a-task-wait",
+      "given": "",
+      "when": "a run ends having asked a question that was answered, without moving its task",
+      "then": "the task is not recorded as waiting"
+    },
+    {
+      "key": "ac48",
+      "requirement": "only-an-unanswered-blocking-question-makes-a-task-wait",
+      "given": "",
+      "when": "a run ends without moving its task the only unanswered blocking question was asked by a different run",
+      "then": "the task is not recorded as waiting"
+    },
+    {
+      "key": "ac49",
+      "requirement": "declining-a-question-releases-the-task-it-parked",
+      "given": "",
+      "when": "the operator declines the question that caused a task to be recorded as waiting",
+      "then": "the task returns to the in-progress status it no longer states what it is waiting for"
+    },
+    {
+      "key": "ac50",
+      "requirement": "declining-a-question-releases-the-task-it-parked",
+      "given": "",
+      "when": "a run ends without moving its task the only outstanding blocking question it asked has been declined",
+      "then": "the task is not recorded as waiting"
+    },
+    {
+      "key": "ac51",
+      "requirement": "declining-a-question-releases-the-task-it-parked",
+      "given": "",
+      "when": "a task released by a decline is later dropped by a bound run",
+      "then": "that run is divergent as normal"
+    },
+    {
+      "key": "ac52",
+      "requirement": "declining-a-question-releases-the-task-it-parked",
+      "given": "",
+      "when": "the operator declines a question that never caused a task to wait",
+      "then": "no task changes status"
+    },
+    {
+      "key": "ac53",
+      "requirement": "approval-integrates-the-approved-work",
+      "given": "",
+      "when": "a task with accepted evidence naming a git commit is approved, and the project has a",
+      "then": "that commit is merged into the main branch coverage reports the served requirements as `integrated` rather than"
+    },
+    {
+      "key": "ac54",
+      "requirement": "approval-integrates-the-approved-work",
+      "given": "",
+      "when": "a task is approved whose agent branch carries commits made after the commit its accepted",
+      "then": "the later commits are not merged"
+    },
+    {
+      "key": "ac55",
+      "requirement": "approval-integrates-the-approved-work",
+      "given": "",
+      "when": "a task whose linked requirements belong to a `sketch`-rigor document is approved",
+      "then": "the work is integrated exactly as it would be for a `gate`-rigor document"
+    },
+    {
+      "key": "ac56",
+      "requirement": "approval-integrates-the-approved-work",
+      "given": "",
+      "when": "any approval integrates work",
+      "then": "no push occurs and no remote operation is attempted"
+    },
+    {
+      "key": "ac57",
+      "requirement": "approval-is-refused-when-the-work-cannot-be-merged-cleanly",
+      "given": "",
+      "when": "approval is requested for a task whose evidence commit conflicts with the main branch",
+      "then": "the transition is refused the refusal names the conflicting paths the task's status is unchanged no merge is attempted"
+    },
+    {
+      "key": "ac58",
+      "requirement": "approval-is-refused-when-the-work-cannot-be-merged-cleanly",
+      "given": "",
+      "when": "approval is requested for a task with conflicting work whose documents are all `sketch`",
+      "then": "the transition is refused"
+    },
+    {
+      "key": "ac59",
+      "requirement": "an-integration-that-cannot-proceed-does-not-block-approval",
+      "given": "",
+      "when": "a task is approved in a project with no configured main branch",
+      "then": "the approval succeeds nothing is merged the skipped integration is recorded with its reason"
+    },
+    {
+      "key": "ac60",
+      "requirement": "an-integration-that-cannot-proceed-does-not-block-approval",
+      "given": "",
+      "when": "a task is approved while the primary checkout has uncommitted changes to tracked files",
+      "then": "the approval succeeds, no merge is attempted, and the reason is recorded"
+    },
+    {
+      "key": "ac61",
+      "requirement": "an-integration-that-cannot-proceed-does-not-block-approval",
+      "given": "",
+      "when": "a task is approved while the project directory holds untracked files",
+      "then": "the work is integrated"
+    },
+    {
+      "key": "ac62",
+      "requirement": "an-integration-that-cannot-proceed-does-not-block-approval",
+      "given": "",
+      "when": "integration is attempted and the merge fails",
+      "then": "the task remains `approved` coverage reports the served requirements as `verified, not integrated`"
+    },
+    {
+      "key": "ac63",
+      "requirement": "an-integration-that-cannot-proceed-does-not-block-approval",
+      "given": "",
+      "when": "a task is approved in a project whose evidence footprints record paths rather than commits",
+      "then": "the approval succeeds and no integration is attempted"
+    },
+    {
+      "key": "ac64",
+      "requirement": "every-integration-attempt-is-recorded",
+      "given": "",
+      "when": "an approval integrates work",
+      "then": "a record names the commit, the source branch, the target branch, the outcome and the"
+    },
+    {
+      "key": "ac65",
+      "requirement": "every-integration-attempt-is-recorded",
+      "given": "",
+      "when": "any interface attempts to update or delete an integration record",
+      "then": "no such path exists"
+    },
+    {
+      "key": "ac66",
+      "requirement": "work-already-in-the-main-line-is-not-reported-as-merged",
+      "given": "",
+      "when": "a task is approved whose accepted evidence names a commit already reachable from the",
+      "then": "the integration is recorded as skipped the reason states the work is already in the target branch the target branch is unchanged"
+    },
+    {
+      "key": "ac67",
+      "requirement": "work-already-in-the-main-line-is-not-reported-as-merged",
+      "given": "",
+      "when": "the commit is already in the target branch and the project's checkout also has",
+      "then": "the reason given is that the work is already integrated"
+    },
+    {
+      "key": "ac68",
+      "requirement": "approval-creates-the-work-its-document-declares",
+      "given": "",
+      "when": "a document declaring tasks is approved",
+      "then": "a task is created for each declared task each is linked to the requirements it declared it serves each is unassigned"
+    },
+    {
+      "key": "ac69",
+      "requirement": "approval-creates-the-work-its-document-declares",
+      "given": "",
+      "when": "a document is revised and approved again",
+      "then": "tasks already created for its declared tasks are not duplicated tasks declared for the first time are created"
+    },
+    {
+      "key": "ac70",
+      "requirement": "approval-creates-the-work-its-document-declares",
+      "given": "",
+      "when": "a document is approved again after a task it declared has been moved out of its entry",
+      "then": "that task's status and assignee are unchanged"
+    },
+    {
+      "key": "ac71",
+      "requirement": "approval-creates-the-work-its-document-declares",
+      "given": "",
+      "when": "a document declaring no tasks is approved",
+      "then": "no tasks are created the approval succeeds"
+    },
+    {
+      "key": "ac72",
+      "requirement": "an-integration-that-was-skipped-can-be-attempted-again",
+      "given": "",
+      "when": "an approved task's integration was skipped the cause is put right and integration is retried",
+      "then": "the work is merged into the project's main branch the retry is recorded"
+    },
+    {
+      "key": "ac73",
+      "requirement": "an-integration-that-was-skipped-can-be-attempted-again",
+      "given": "",
+      "when": "integration is retried for a task that is not approved",
+      "then": "the request is refused nothing is merged"
+    },
+    {
+      "key": "ac74",
+      "requirement": "an-integration-that-was-skipped-can-be-attempted-again",
+      "given": "",
+      "when": "integration is retried for a task whose work is already on the main branch",
+      "then": "nothing is merged the attempt is recorded as skipped because the work is already there"
+    },
+    {
+      "key": "ac75",
+      "requirement": "an-integration-that-was-skipped-can-be-attempted-again",
+      "given": "",
+      "when": "an agent asks what a task's integration attempts reported",
+      "then": "it receives them it may retry the integration"
+    },
+    {
+      "key": "ac76",
+      "requirement": "an-integration-that-was-skipped-can-be-attempted-again",
+      "given": "",
+      "when": "integration is skipped because the checkout has uncommitted changes",
+      "then": "the reason does not instruct the operator to approve the task again"
+    },
+    {
+      "key": "ac77",
+      "requirement": "an-integration-that-was-skipped-can-be-attempted-again",
+      "given": "",
+      "when": "integration is skipped because the checkout has uncommitted changes or is on another",
+      "then": "the reason directs the operator to retry the integration once the cause is put right"
+    },
+    {
+      "key": "ac78",
+      "requirement": "naming-the-main-branch-attempts-the-integrations-that-wanted",
+      "given": "",
+      "when": "an approved task's integration was skipped because no main branch was set the operator sets the project's main branch",
+      "then": "the work is merged the task is not reopened to achieve it"
+    },
+    {
+      "key": "ac79",
+      "requirement": "naming-the-main-branch-attempts-the-integrations-that-wanted",
+      "given": "",
+      "when": "an approved task's integration was skipped because the checkout had uncommitted changes the operator sets the project's main branch",
+      "then": "that task's integration is not attempted again"
+    },
+    {
+      "key": "ac80",
+      "requirement": "naming-the-main-branch-attempts-the-integrations-that-wanted",
+      "given": "",
+      "when": "setting the main branch triggers an attempt that raises",
+      "then": "the main branch is still saved"
+    },
+    {
+      "key": "ac81",
+      "requirement": "a-task-reports-the-requirement-identifiers-it-was-given",
+      "given": "",
+      "when": "a task is created naming requirement identifiers the task is read back",
+      "then": "it reports those identifiers"
+    },
+    {
+      "key": "ac82",
+      "requirement": "a-task-reports-the-requirement-identifiers-it-was-given",
+      "given": "",
+      "when": "a task names a requirement identifier that matches nothing",
+      "then": "the identifier is reported as unresolved it is not reported among the task's linked identifiers"
+    },
+    {
+      "key": "ac83",
+      "requirement": "a-task-reports-the-requirement-identifiers-it-was-given",
+      "given": "",
+      "when": "a task is linked to requirements numbered 1, 2 and 11",
+      "then": "they are reported in that order"
+    },
+    {
+      "key": "ac84",
+      "requirement": "a-task-reports-the-requirement-identifiers-it-was-given",
+      "given": "",
+      "when": "a task is linked to a requirement whose identifier has no numeric part",
+      "then": "the reported order is deterministic"
+    },
+    {
+      "key": "ac85",
+      "requirement": "approval-is-refused-while-a-gated-requirement-is-unverified",
+      "given": "",
+      "when": "approval is requested for a task linking a `gate`-rigor requirement with no accepted",
+      "then": "the transition is refused the task's status is unchanged no transition is recorded"
+    },
+    {
+      "key": "ac86",
+      "requirement": "approval-is-refused-while-a-gated-requirement-is-unverified",
+      "given": "",
+      "when": "approval is refused by the gate",
+      "then": "the response names each blocking requirement's identifier and why it is not verified"
+    },
+    {
+      "key": "ac87",
+      "requirement": "approval-is-refused-while-a-gated-requirement-is-unverified",
+      "given": "",
+      "when": "the evidence for the blocking requirement is accepted approval is requested again",
+      "then": "the transition succeeds"
+    },
+    {
+      "key": "ac88",
+      "requirement": "approval-is-refused-while-a-gated-requirement-is-unverified",
+      "given": "",
+      "when": "approval is requested for a task whose linked requirements are all `sketch` rigor and",
+      "then": "the transition succeeds"
+    },
+    {
+      "key": "ac89",
+      "requirement": "approval-is-refused-while-a-gated-requirement-is-unverified",
+      "given": "",
+      "when": "approval is requested for a task whose linked requirements are `contract` rigor and",
+      "then": "the transition succeeds their state is still reported"
+    },
+    {
+      "key": "ac90",
+      "requirement": "approval-is-refused-while-a-gated-requirement-is-unverified",
+      "given": "",
+      "when": "approval is requested for a task with no linked requirements",
+      "then": "the transition succeeds"
+    },
+    {
+      "key": "ac91",
+      "requirement": "approval-is-refused-while-a-gated-requirement-is-unverified",
+      "given": "",
+      "when": "a task serving an unverified `gate` requirement is moved to `completed`",
+      "then": "the transition succeeds"
+    },
+    {
+      "key": "ac92",
+      "requirement": "approval-is-refused-while-a-gated-requirement-is-unverified",
+      "given": "",
+      "when": "approval of a blocked task is attempted through the tool surface or a scheduled job",
+      "then": "it is refused on the same terms as through the operator's interface"
+    },
+    {
+      "key": "ac93",
+      "requirement": "approval-is-refused-while-a-gated-requirement-is-unverified",
+      "given": "",
+      "when": "a `gate`-rigor document contains a requirement with no identifier approval is requested for a task linking that document's requirements",
+      "then": "the transition is refused, reporting the diagnostic"
+    },
+    {
+      "key": "ac94",
+      "requirement": "a-transition-records-the-policy-that-governed-it",
+      "given": "",
+      "when": "a task is approved under a gate the document's rigor is later changed",
+      "then": "the recorded transition still states the policy that applied when it was approved"
+    },
+    {
+      "key": "ac95",
+      "requirement": "a-task-list-can-be-scoped-to-one-loop-s-queue",
+      "given": "",
+      "when": "the task list is requested scoped to one loop",
+      "then": "every task naming that loop is returned no task naming a different loop, or naming none, is returned"
+    },
+    {
+      "key": "ac96",
+      "requirement": "a-task-list-can-be-scoped-to-one-loop-s-queue",
+      "given": "",
+      "when": "the task list is scoped to a loop that owns a task in a terminal status",
+      "then": "that task is included in the scoped result"
+    },
+    {
+      "key": "ac97",
+      "requirement": "a-task-list-can-be-scoped-to-one-specification-document-s-de",
+      "given": "",
+      "when": "the task list is requested scoped to one specification document",
+      "then": "every task whose declaring document is that document is returned no task whose declaring document is a different document is returned"
+    },
+    {
+      "key": "ac98",
+      "requirement": "a-task-list-can-be-scoped-to-one-specification-document-s-de",
+      "given": "",
+      "when": "the task list is scoped to a document that is itself archived that document declared a task whose own status is terminal",
+      "then": "that task is included in the scoped result"
+    },
+    {
+      "key": "ac99",
+      "requirement": "the-task-list-s-default-view-retires-completed-work-from-arc",
+      "given": "",
+      "when": "the exclusion mode is requested a task's declaring document is archived that task's own status is terminal",
+      "then": "that task is absent from the result"
+    },
+    {
+      "key": "ac100",
+      "requirement": "the-task-list-s-default-view-retires-completed-work-from-arc",
+      "given": "",
+      "when": "the exclusion mode is requested a task's declaring document is archived that task's own status is not terminal",
+      "then": "that task is present in the result"
+    },
+    {
+      "key": "ac101",
+      "requirement": "the-task-list-s-default-view-retires-completed-work-from-arc",
+      "given": "",
+      "when": "the exclusion mode is requested a task has no declaring document",
+      "then": "that task is present in the result regardless of its status"
+    },
+    {
+      "key": "ac102",
+      "requirement": "the-task-list-s-default-view-retires-completed-work-from-arc",
+      "given": "",
+      "when": "the task list is requested without asking for the exclusion mode",
+      "then": "every task is returned, including ones the exclusion mode would have hidden"
+    },
+    {
+      "key": "ac103",
+      "requirement": "the-task-list-s-default-view-retires-completed-work-from-arc",
+      "given": "",
+      "when": "the exclusion mode causes a task to be absent from one request's result",
+      "then": "a subsequent unscoped request for that same task returns it with every field unchanged"
+    },
+    {
+      "key": "ac104",
+      "requirement": "a-task-s-requirement-links-are-visible-where-the-operator-ma",
+      "given": "",
+      "when": "a task linked to one or more specification requirements is shown on the task board",
+      "then": "the identifiers of its linked requirements are visible without expanding the task"
+    },
+    {
+      "key": "ac105",
+      "requirement": "a-task-s-requirement-links-are-visible-where-the-operator-ma",
+      "given": "",
+      "when": "a task is linked to a requirement whose only current evidence was rejected",
+      "then": "that link is shown with a treatment distinct from a link carrying no such rejection"
+    },
+    {
+      "key": "ac106",
+      "requirement": "a-task-s-full-detail-opens-in-a-view-sized-to-hold-it",
+      "given": "",
+      "when": "the operator opens a task carrying a long description, multiple acceptance criteria, and",
+      "then": "every one of those is rendered without being clipped or requiring the board column's own"
+    },
+    {
+      "key": "ac107",
+      "requirement": "navigating-from-a-task-s-requirement-link-reaches-that-requi",
+      "given": "",
+      "when": "the operator follows a task's link to a specific requirement",
+      "then": "the specification document opens with that requirement in view"
+    },
+    {
+      "key": "ac108",
+      "requirement": "a-task-s-loop-is-set-by-a-named-writer-when-the-task-is-crea",
+      "given": "",
+      "when": "a task is created by any path other than a bound document's approval or its loop's creator",
+      "then": "the task has no loop it does not appear in any loop's queue"
+    },
+    {
+      "key": "ac109",
+      "requirement": "a-task-s-loop-is-set-by-a-named-writer-when-the-task-is-crea",
+      "given": "a task that belongs to a loop's queue",
+      "when": "any actor attempts to change which loop it belongs to",
+      "then": "the attempt is refused the task's loop is unchanged"
+    },
+    {
+      "key": "ac110",
+      "requirement": "a-task-s-loop-is-set-by-a-named-writer-when-the-task-is-crea",
+      "given": "a task in a loop's queue that has reached a terminal status",
+      "when": "the loop's queue history is retrieved",
+      "then": "the task is included"
+    }
+  ],
+  "tasks": [],
+  "algorithms": [],
+  "design": "",
+  "evidence": {
+    "checked": [
+      "Translated from openspec/specs/task-lifecycle-governance/spec.md (32 requirements, 110 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten."
+    ],
+    "limits": [
+      "scenarios-state-no-starting-state: 108 of 110 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed"
+    ]
+  },
+  "lifecycle": "",
+  "open_questions": [],
+  "aw_identity": {
+    "requirements": {
+      "task-status-moves-only-along-declared-transitions": "FR-1",
+      "a-task-may-only-be-created-in-an-entry-status": "FR-2",
+      "the-operator-can-perform-every-transition-reserved-to-them": "FR-3",
+      "some-transitions-are-the-operator-s-alone": "FR-4",
+      "every-accepted-transition-is-recorded-append-only": "FR-5",
+      "an-agent-cannot-approve-the-work-it-produced": "FR-6",
+      "governance-holds-identically-over-http-and-mcp": "FR-7",
+      "the-system-may-cause-a-transition-without-becoming-an-actor": "FR-8",
+      "a-task-carries-how-its-neglect-should-be-answered": "FR-9",
+      "a-task-can-be-waiting-on-a-person": "FR-10",
+      "a-task-is-recorded-as-waiting-because-the-system-observed-it": "FR-11",
+      "a-waiting-task-names-what-it-is-waiting-for": "FR-12",
+      "only-an-unanswered-blocking-question-makes-a-task-wait": "FR-13",
+      "declining-a-question-releases-the-task-it-parked": "FR-14",
+      "approval-integrates-the-approved-work": "FR-15",
+      "approval-is-refused-when-the-work-cannot-be-merged-cleanly": "FR-16",
+      "an-integration-that-cannot-proceed-does-not-block-approval": "FR-17",
+      "every-integration-attempt-is-recorded": "FR-18",
+      "work-already-in-the-main-line-is-not-reported-as-merged": "FR-19",
+      "approval-creates-the-work-its-document-declares": "FR-20",
+      "an-integration-that-was-skipped-can-be-attempted-again": "FR-21",
+      "naming-the-main-branch-attempts-the-integrations-that-wanted": "FR-22",
+      "a-task-reports-the-requirement-identifiers-it-was-given": "FR-23",
+      "approval-is-refused-while-a-gated-requirement-is-unverified": "FR-24",
+      "a-transition-records-the-policy-that-governed-it": "FR-25",
+      "a-task-list-can-be-scoped-to-one-loop-s-queue": "FR-26",
+      "a-task-list-can-be-scoped-to-one-specification-document-s-de": "FR-27",
+      "the-task-list-s-default-view-retires-completed-work-from-arc": "FR-28",
+      "a-task-s-requirement-links-are-visible-where-the-operator-ma": "FR-29",
+      "a-task-s-full-detail-opens-in-a-view-sized-to-hold-it": "FR-30",
+      "navigating-from-a-task-s-requirement-link-reaches-that-requi": "FR-31",
+      "a-task-s-loop-is-set-by-a-named-writer-when-the-task-is-crea": "FR-32"
+    },
+    "high_water": 32,
+    "retired": {},
+    "digests": {
+      "FR-1": "1540763c4f190fcc9cfc17b20455571f6617ef485418462b8b9c8445bf88ac56",
+      "FR-2": "3a6b4d192e50c895ccfeeef154a8910f7d2c7be5cf89c4f106cd77815eea5e4f",
+      "FR-3": "ec6c0bd0ac08fd997ce3df0cb2ade2c127ce4b3b59258a3e7482764fd657b13f",
+      "FR-4": "22d30d6b74b288864656fc6298b40ccbf5a96cfeaf1ec77de28cc0f85f78361e",
+      "FR-5": "4fc5458bfb8707ee4488264e90e304b765fa8e490158b0bae41d732a3bbfe43b",
+      "FR-6": "79d56f912930bf13392036d449f738e0a6b5f80a9d0cad45c9be397300c17144",
+      "FR-7": "5e4e411fe8b9699bc21854e4f4ebda33b40e6aa680089b6936d42ad26c288d53",
+      "FR-8": "2b489f5c78811eab56963eb7c0244f43998c7d8be6edd7e296f5771ca68ccf2e",
+      "FR-9": "bef489eaea4170f33ae70f2fddd84780bfa94a9b28b5690e5a42bd13821e794a",
+      "FR-10": "f5af12bfcf28a2120f4fb34b797ddd8de9561fd28c78143738e1f7514e1c9064",
+      "FR-11": "bfe830e2b51576ebc23937cfdef90d8e5434201862566163be37cf7605e4e597",
+      "FR-12": "202310fe29b49ecfc5623d53032dad01a3c4740c75638bf6855c89ffceaa5e9e",
+      "FR-13": "b7ecb878f4e7629c2c1c4284bd9e5853d222e52f63140530812c495fc0fb187e",
+      "FR-14": "8c1f3a856b66a221b5d97126288eaaeede53e455088c285fc2163dbd11d90253",
+      "FR-15": "8a1da266ad804b6655d579703b0643113156a226c9312f821c9f783954666b0f",
+      "FR-16": "9ea96f3ef12eccba521309b7df074778921c4b8884327d720aac5a0f763473fb",
+      "FR-17": "c8fef4111b0cf2afdf04b905ef16b2eed8c2da53635a2ae0725447b830fca400",
+      "FR-18": "420f47f8e6328b1e37d1cebffbcb97049378c8902cface69fa5fc3391f3e37cc",
+      "FR-19": "b950462d650b28797ea18379839d0aa7bc547f0ae983f261dd47b304ba0f8078",
+      "FR-20": "39783180db391107cf353c31299d743f773b5cb6376196aef0e364ba4a5eab77",
+      "FR-21": "f0f6aba46d582f127785adc38a4a58041473b6661f6d3eb66e1120692fefd51a",
+      "FR-22": "a2f52aedab98d946bed19f286978e4f90cbf2135759ba17be7db077e0922185f",
+      "FR-23": "e75a1f556b7d561165f27178159c63ca664c77450c14fab51a02dafd29c05ae4",
+      "FR-24": "d3e884c922756176ea89b68fdb34582ca4aff6e90d4edd9f757aa1fb2abf8d09",
+      "FR-25": "9f283523b2daf1077295f829091c6729d66e7c47b98ca7ff3ce347d066eb8343",
+      "FR-26": "d4786385558d8b8641585ec0959b01034e3c0bd47b6537e15da4883392d11c86",
+      "FR-27": "5f568d34e13d111bd2ac268dac97baf515b164190a9d3b289153d4cc0cc84c5b",
+      "FR-28": "988e6fd92976e36e8c6f5c6c587af3ba776d0723a651518576c4c28716259b2c",
+      "FR-29": "58ef323cc41b0caff1583e49117fc43b03bff27e73bac2c3c9ad40afd0967d4a",
+      "FR-30": "a3345367b7c153569cd377d8e42211e271c946db885a0f6962f70e8919c4637e",
+      "FR-31": "6b54ec202a325df247677d9548c7697ff762620f78bce6b0ff5d3ec9f37ab8e1",
+      "FR-32": "8838845bd5071f4479186b71904ee33dea09cc8f93833f04f8710e41f939e493"
+    }
+  }
+}
+</script>
+</body>
+</html>

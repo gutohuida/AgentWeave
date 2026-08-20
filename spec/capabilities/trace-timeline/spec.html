@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trace timeline</title>
+<meta name="aw-spec-kind" content="capability">
+<meta name="aw-spec-status" content="current">
+<meta name="aw-spec-rigor" content="sketch">
+<meta name="aw-spec-schema-version" content="1">
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+    --surface-2: #21262d; --surface: #161b22;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+:root[data-theme="dark"] {
+  --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+  --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+  --surface-2: #21262d; --surface: #161b22;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 2rem 2.5rem 4rem; background: var(--bg); color: var(--fg);
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+h1 { font-size: 1.75rem; margin: 0 0 .25rem; }
+h2 { font-size: 1.15rem; margin: 2.5rem 0 .75rem; padding-bottom: .3rem;
+     border-bottom: 1px solid var(--border); }
+h3 { font-size: 1rem; margin: 1.5rem 0 .4rem; }
+p { margin: .5rem 0; }
+ul, ol { margin: .5rem 0; padding-left: 1.4rem; }
+li { margin: .25rem 0; }
+a { color: var(--aw-accent); }
+.aw-meta { color: var(--muted); font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-chip { display: inline-block; padding: .1rem .5rem; border-radius: 999px;
+           background: var(--surface-2); font-size: .78rem; margin-right: .4rem; }
+.aw-requirement { border-left: 3px solid var(--border); padding: .1rem 0 .1rem .9rem;
+                  margin: 1.1rem 0; }
+.aw-requirement-must { border-left-color: var(--aw-accent); }
+.aw-requirement-should { border-left-color: var(--aw-warn); }
+.aw-requirement-may { border-left-color: var(--border); }
+.aw-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8rem;
+         color: var(--muted); }
+.aw-modal { font-weight: 600; }
+.aw-modal-must { color: var(--aw-accent); }
+.aw-modal-should { color: var(--aw-warn); }
+.aw-modal-may { color: var(--fg); font-weight: 400; }
+.aw-chip-rigor-gate { color: var(--aw-accent); border: 1px solid var(--aw-accent); }
+.aw-chip-rigor-contract { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Phase is a lifecycle, and the question it answers is "can I rely on this?". `approved` and a
+   capability's `current` are settled and take the done tone; `proposed` is waiting on an operator
+   decision and takes warn; `exploring` and `archived` are quiet for opposite reasons — one has not
+   arrived yet, the other has been superseded. Deliberately NOT the accent: this document already
+   spends accent on links and on MUST, and a third meaning would empty it of any. `kind` keeps the
+   plain chip on purpose — it is a category, not a state, and hue there ranks nothing. */
+.aw-chip-phase-done { color: var(--aw-ok); border: 1px solid var(--aw-ok); }
+.aw-chip-phase-waiting { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+.aw-chip-phase-quiet { color: var(--muted); }
+.aw-chip-phase-archived { color: var(--muted); text-decoration: line-through; }
+/* An unresolved question blocks `propose`, so it is a real state and not a label. Resolved stays
+   the plain chip — the reader needs to find what is still open, not celebrate what is closed. */
+.aw-chip-open { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Limits is where a reader is most likely to be misled, and it read identically to Checked. */
+.aw-limits { color: var(--aw-warn); }
+/* The first screenful was entirely monochrome, so the document read as texty however the
+   requirements below were coloured. This puts the same modal scheme where the eye lands first,
+   carrying counts rather than decoration. */
+.aw-summary { margin: 0 0 1.5rem; font-size: .9rem; color: var(--muted); }
+.aw-summary .aw-count { font-weight: 600; }
+.aw-summary-sep { color: var(--border); margin: 0 .45rem; }
+.aw-rationale { color: var(--muted); font-size: .9rem; }
+.aw-refs { font-size: .82rem; color: var(--muted); }
+.aw-note { color: var(--muted); font-style: italic; }
+.aw-empty { color: var(--muted); }
+table { border-collapse: collapse; margin: .75rem 0; width: 100%; }
+th, td { border: 1px solid var(--border); padding: .4rem .6rem; text-align: left;
+         vertical-align: top; font-size: .92rem; }
+code, pre { background: var(--surface); border-radius: 4px; }
+code { padding: .1rem .3rem; font-size: .88em; }
+</style>
+</head>
+<body>
+<h1>Trace timeline</h1>
+<p class="aw-meta"><span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><span class="aw-chip">sketch</span></p>
+<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">7</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">7</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">15</span> criteria</p>
+<section><h2 id="summary">Summary</h2><p>Persistent trace/span timelines for multi-agent work in Hub-backed projects, including automatic correlation of tasks, messages, agent runs, and jobs, trace list/detail APIs, a Hub UI timeline view, and agent traceability instructions.</p></section><section><h2 id="requirements">Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-1"><span class="aw-id">FR-1</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL persist trace records that group related multi-agent activity under a system-assigned trace identifier.</p></div><div class="aw-requirement aw-requirement-must" id="FR-2"><span class="aw-id">FR-2</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL persist span records that describe ordered units of work inside a trace.</p></div><div class="aw-requirement aw-requirement-must" id="FR-3"><span class="aw-id">FR-3</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL correlate activity to traces using existing AgentWeave identifiers including task ID, session ID, message ID, and job run ID.</p></div><div class="aw-requirement aw-requirement-must" id="FR-4"><span class="aw-id">FR-4</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL expose an authenticated API that lists traces for the current project.</p></div><div class="aw-requirement aw-requirement-must" id="FR-5"><span class="aw-id">FR-5</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL expose an authenticated API that returns one trace with its spans and related source records.</p></div><div class="aw-requirement aw-requirement-must" id="FR-6"><span class="aw-id">FR-6</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The Hub UI SHALL render trace timelines that show correlated activity in chronological order.</p></div><div class="aw-requirement aw-requirement-must" id="FR-7"><span class="aw-id">FR-7</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Generated AgentWeave instructions SHALL explain how agents preserve trace continuity without manually creating trace identifiers.</p></div></section><section><h2 id="acceptance">Acceptance criteria</h2><table><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>a task-related activity is created without an existing trace</td><td>the Hub creates a trace with root type `task` and root ID equal to the task ID</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>an agent sends a message or updates a task</td><td>the Hub assigns or resolves the trace ID instead of requiring the agent to provide one</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>a task-linked message is created</td><td>the Hub records a message span linked to the task trace</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>an agent is triggered through the Hub for a traced message or session</td><td>the Hub records an agent-run span linked to the resolved trace</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>a message is created with a `task_id`</td><td>the message is linked to the trace rooted at that task</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>agent output is received with a `session_id` and no task trace can be resolved</td><td>the output is linked to a trace rooted at that session</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>a scheduled AI job fires</td><td>job-run activity is linked to a trace rooted at that job run</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>an authenticated user requests the trace list</td><td>the Hub returns traces for only the authenticated project</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>an authenticated user filters traces by root type, status, agent, or search text</td><td>the Hub returns only traces matching those filters</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>an authenticated user requests a trace by ID</td><td>the Hub returns the trace, ordered spans, related events, and source references for the authenticated project</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>an authenticated user requests a trace outside their project</td><td>the Hub denies access or returns not found</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>a user opens a trace detail page</td><td>the UI displays the trace summary and chronological timeline of spans and related activity</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>a user views a task, session, job run, log row, or agent activity that has trace context</td><td>the UI provides a way to open the related trace</td></tr><tr><td><a href="#FR-7">FR-7</a></td><td></td><td>AgentWeave generates AI context or collaboration protocol instructions</td><td>the instructions tell agents to pass task IDs for task-related messages, update task status at meaningful boundaries, use Hub/MCP tools when available, include verification commands, and not invent trace or span IDs</td></tr><tr><td><a href="#FR-7">FR-7</a></td><td></td><td>an agent delegates or completes task-related work using the instructed handoff format</td><td>the message remains linkable to the same task trace through the provided task ID</td></tr></tbody></table></section><section><h2 id="evidence">Evidence and coverage limits</h2><h3>Checked</h3><ul><li>Translated from openspec/specs/trace-timeline/spec.md (7 requirements, 15 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten.</li></ul><h3 class="aw-limits">Limits</h3><ul><li>scenarios-state-no-starting-state: 15 of 15 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed</li></ul></section><section><h2 id="open-questions">Open questions</h2><p class="aw-empty">None outstanding.</p></section>
+<script type="application/agentweave-spec+json" id="aw-spec-payload">
+{
+  "schema_version": 1,
+  "kind": "capability",
+  "title": "Trace timeline",
+  "summary": "Persistent trace/span timelines for multi-agent work in Hub-backed projects, including automatic correlation of tasks, messages, agent runs, and jobs, trace list/detail APIs, a Hub UI timeline view, and agent traceability instructions.",
+  "problem": "",
+  "scope": {
+    "in_scope": [],
+    "non_goals": []
+  },
+  "requirements": [
+    {
+      "key": "persistent-trace-records",
+      "statement": "The Hub SHALL persist trace records that group related multi-agent activity under a system-assigned trace identifier.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "persistent-span-records",
+      "statement": "The Hub SHALL persist span records that describe ordered units of work inside a trace.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "trace-correlation",
+      "statement": "The Hub SHALL correlate activity to traces using existing AgentWeave identifiers including task ID, session ID, message ID, and job run ID.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "trace-list-api",
+      "statement": "The Hub SHALL expose an authenticated API that lists traces for the current project.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "trace-detail-api",
+      "statement": "The Hub SHALL expose an authenticated API that returns one trace with its spans and related source records.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "timeline-ui",
+      "statement": "The Hub UI SHALL render trace timelines that show correlated activity in chronological order.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "agent-traceability-instructions",
+      "statement": "Generated AgentWeave instructions SHALL explain how agents preserve trace continuity without manually creating trace identifiers.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "key": "ac1",
+      "requirement": "persistent-trace-records",
+      "given": "",
+      "when": "a task-related activity is created without an existing trace",
+      "then": "the Hub creates a trace with root type `task` and root ID equal to the task ID"
+    },
+    {
+      "key": "ac2",
+      "requirement": "persistent-trace-records",
+      "given": "",
+      "when": "an agent sends a message or updates a task",
+      "then": "the Hub assigns or resolves the trace ID instead of requiring the agent to provide one"
+    },
+    {
+      "key": "ac3",
+      "requirement": "persistent-span-records",
+      "given": "",
+      "when": "a task-linked message is created",
+      "then": "the Hub records a message span linked to the task trace"
+    },
+    {
+      "key": "ac4",
+      "requirement": "persistent-span-records",
+      "given": "",
+      "when": "an agent is triggered through the Hub for a traced message or session",
+      "then": "the Hub records an agent-run span linked to the resolved trace"
+    },
+    {
+      "key": "ac5",
+      "requirement": "trace-correlation",
+      "given": "",
+      "when": "a message is created with a `task_id`",
+      "then": "the message is linked to the trace rooted at that task"
+    },
+    {
+      "key": "ac6",
+      "requirement": "trace-correlation",
+      "given": "",
+      "when": "agent output is received with a `session_id` and no task trace can be resolved",
+      "then": "the output is linked to a trace rooted at that session"
+    },
+    {
+      "key": "ac7",
+      "requirement": "trace-correlation",
+      "given": "",
+      "when": "a scheduled AI job fires",
+      "then": "job-run activity is linked to a trace rooted at that job run"
+    },
+    {
+      "key": "ac8",
+      "requirement": "trace-list-api",
+      "given": "",
+      "when": "an authenticated user requests the trace list",
+      "then": "the Hub returns traces for only the authenticated project"
+    },
+    {
+      "key": "ac9",
+      "requirement": "trace-list-api",
+      "given": "",
+      "when": "an authenticated user filters traces by root type, status, agent, or search text",
+      "then": "the Hub returns only traces matching those filters"
+    },
+    {
+      "key": "ac10",
+      "requirement": "trace-detail-api",
+      "given": "",
+      "when": "an authenticated user requests a trace by ID",
+      "then": "the Hub returns the trace, ordered spans, related events, and source references for the authenticated project"
+    },
+    {
+      "key": "ac11",
+      "requirement": "trace-detail-api",
+      "given": "",
+      "when": "an authenticated user requests a trace outside their project",
+      "then": "the Hub denies access or returns not found"
+    },
+    {
+      "key": "ac12",
+      "requirement": "timeline-ui",
+      "given": "",
+      "when": "a user opens a trace detail page",
+      "then": "the UI displays the trace summary and chronological timeline of spans and related activity"
+    },
+    {
+      "key": "ac13",
+      "requirement": "timeline-ui",
+      "given": "",
+      "when": "a user views a task, session, job run, log row, or agent activity that has trace context",
+      "then": "the UI provides a way to open the related trace"
+    },
+    {
+      "key": "ac14",
+      "requirement": "agent-traceability-instructions",
+      "given": "",
+      "when": "AgentWeave generates AI context or collaboration protocol instructions",
+      "then": "the instructions tell agents to pass task IDs for task-related messages, update task status at meaningful boundaries, use Hub/MCP tools when available, include verification commands, and not invent trace or span IDs"
+    },
+    {
+      "key": "ac15",
+      "requirement": "agent-traceability-instructions",
+      "given": "",
+      "when": "an agent delegates or completes task-related work using the instructed handoff format",
+      "then": "the message remains linkable to the same task trace through the provided task ID"
+    }
+  ],
+  "tasks": [],
+  "algorithms": [],
+  "design": "",
+  "evidence": {
+    "checked": [
+      "Translated from openspec/specs/trace-timeline/spec.md (7 requirements, 15 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten."
+    ],
+    "limits": [
+      "scenarios-state-no-starting-state: 15 of 15 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed"
+    ]
+  },
+  "lifecycle": "",
+  "open_questions": [],
+  "aw_identity": {
+    "requirements": {
+      "persistent-trace-records": "FR-1",
+      "persistent-span-records": "FR-2",
+      "trace-correlation": "FR-3",
+      "trace-list-api": "FR-4",
+      "trace-detail-api": "FR-5",
+      "timeline-ui": "FR-6",
+      "agent-traceability-instructions": "FR-7"
+    },
+    "high_water": 7,
+    "retired": {},
+    "digests": {
+      "FR-1": "779b630d9f4e60d06ca743bc6773910103bf46b9ef387dc2cb1a7ebac46964ee",
+      "FR-2": "8dc542e1422779434d10a36ccce88f32c8233340a467b9ba31ca5169557597a1",
+      "FR-3": "4dca16c0ab2ebedb3ed5cb58ee9f10ad066795023a8ec7ca2304c25f7a3940ae",
+      "FR-4": "c3d9ad39084e5ce87045223fc9b1c386d970d11fc9520a32d06c50af74661e49",
+      "FR-5": "c4867130637896694e4bdad716a73283f8b0a805dc9972dd623581df13d4d409",
+      "FR-6": "8e724ba02ed4f847383b01d6053a43838c5b5ab50707267e21b28703cf2db390",
+      "FR-7": "1a742bd79574a8433a87c43cf27089b9e48f870a0e93970b43811203710731e2"
+    }
+  }
+}
+</script>
+</body>
+</html>
