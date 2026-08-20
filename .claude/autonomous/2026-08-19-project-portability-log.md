@@ -713,3 +713,27 @@ Idle-checkpointing again: verify, confirm CI, extend the heartbeat, stop. `stop_
 2026-08-20T08:00:00+01:00; a little over four hours remain. Next iteration should repeat the same
 checks rather than assume this conclusion is permanent — the operator may act on the draft PR or
 add new work at any point before the window closes.
+
+## Iteration 15 — idle checkpoint, queue still empty (2026-08-20T04:08+01:00)
+
+Repeated the standing check from scratch, not trusted secondhand. `git branch --show-current` /
+`git log --oneline -5` / `git status` all match STATE.json exactly (`d078a51` "Release the branch
+to the driver" at HEAD, clean tree) — no reconciliation needed.
+
+`openspec list` — "No active changes found." `openspec validate --all --strict` — 33/33 passed,
+same count as iterations 8-14's post-archive baseline.
+
+`gh run list --branch autonomous/2026-08-19-project-portability --limit 5` — five most recent CI
+runs all `completed success`. Two runs at 2026-08-20T02:49Z were newer than what iteration 14's log
+recorded — checked whether that meant a new push had landed. It did not: `git log` shows iteration
+14's own two checkpoint commits (`ee3030b`, `d078a51`) landed at 03:49:00/03:49:12+01:00, which is
+02:49 UTC — the same instant as those two CI runs. They are iteration 14's own checkpoint-commit
+CI, not operator activity. `gh pr view 7 --json comments,reviews,mergeable,mergeStateStatus,state`
+— zero comments, zero reviews, `OPEN`, `MERGEABLE`, `CLEAN`. No operator activity on the draft PR.
+
+**Conclusion.** Nothing changed since iteration 14. Queue stays empty; no work manufactured.
+Idle-checkpointing again: verify, confirm CI, extend the heartbeat, stop. `stop_at` is
+2026-08-20T08:00:00+01:00; a little under four hours remain. Next iteration should repeat the same
+checks — including re-deriving whether any "newer" CI run is actually new operator activity or
+just the previous iteration's own checkpoint commit, as done here — rather than assume this
+conclusion is permanent.
