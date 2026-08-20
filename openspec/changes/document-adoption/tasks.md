@@ -1,9 +1,9 @@
 ## 1. Reading a document's identity from its file
 
-- [ ] 1.1 Add a function that, given workspace and path, returns a document's adoptable identity — title and kind from `extract_payload`, phase from `aw-spec-status` via the existing `_SpecHeadParser` — or a stated reason it cannot be adopted. Read-only; no write path.
-- [ ] 1.2 Apply the phase fallback from design D3: `current` for `kind == "capability"`, `exploring` otherwise, when the status metadata is absent or names no known phase. Return whether the phase was read or defaulted, and the unrecognised value where there was one.
-- [ ] 1.3 Return a distinct refusal for a file with no payload block versus one whose payload is present but unparseable, so the response can say which.
-- [ ] 1.4 Unit tests for 1.1–1.3 against fixture documents: payload present, payload absent, payload malformed, status absent, status unrecognised, capability versus change-spec defaulting.
+- [x] 1.1 Add a function that, given workspace and path, returns a document's adoptable identity — title and kind from `extract_payload`, phase from `aw-spec-status` via the existing `_SpecHeadParser` — or a stated reason it cannot be adopted. Read-only; no write path.
+- [x] 1.2 Apply the phase fallback from design D3: `current` for `kind == "capability"`, `exploring` otherwise, when the status metadata is absent or names no known phase. Return whether the phase was read or defaulted, and the unrecognised value where there was one.
+- [x] 1.3 Return a distinct refusal for a file with no payload block versus one whose payload is present but unparseable, so the response can say which.
+- [x] 1.4 Unit tests for 1.1–1.3 against fixture documents: payload present, payload absent, payload malformed, status absent, status unrecognised, capability versus change-spec defaulting.
 
 ## 2. Adopting one document
 

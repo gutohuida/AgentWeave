@@ -294,6 +294,17 @@ def embed_payload(data: Dict[str, Any]) -> str:
     return f'<script type="{PAYLOAD_MIME}" id="{PAYLOAD_ELEMENT_ID}">\n{encoded}\n</script>'
 
 
+def has_payload_block(document: str) -> bool:
+    """Whether a payload block is present at all, however well or badly it parses.
+
+    `extract_payload` returns None for two different situations — no block, or a
+    block that is not readable JSON — and a caller that must tell the operator
+    *which* cannot recover that from the None. This answers only the first half,
+    so `extract_payload` stays the single interpretation of the block's contents.
+    """
+    return _PAYLOAD_BLOCK_RE.search(document) is not None
+
+
 def extract_payload(document: str) -> Optional[Dict[str, Any]]:
     """The payload a rendered document carries, or None if it has none.
 
