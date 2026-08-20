@@ -971,3 +971,32 @@ heartbeat, stop. The next iteration should check the current time FIRST. If stil
 08:00:00+01:00, repeat this same cycle. If at or after 08:00:00+01:00, skip the checkpoint cycle
 entirely, confirm the tree is clean and pushed, set `session_stopped: true`, write a closing log
 entry, and end the run without extending the heartbeat again.
+
+## Iteration 26 — idle checkpoint, queue still empty (2026-08-20T07:48+01:00)
+
+Checked the current time first, per iteration 25's own instruction: 07:48:12+01:00, still before
+`stop_at` (2026-08-20T08:00:00+01:00) — about 12 minutes remained, so the checkpoint cycle runs
+once more rather than closing out.
+
+Repeated the standing check from scratch, not trusted secondhand. `git branch --show-current` /
+`git log --oneline -5` / `git status` all match STATE.json exactly (`b41717e` "Release the branch
+to the driver" at HEAD, clean tree) — no reconciliation needed.
+
+`npx openspec list` — "No active changes found." `npx openspec validate --all --strict` — 33/33
+passed, same count as iterations 8-25's post-archive baseline.
+
+`gh run list --branch autonomous/2026-08-19-project-portability --limit 5` — five most recent CI
+runs all `completed success`. The newest two (2026-08-20T06:29:22Z, 06:29:12Z) are not new
+activity — they trace to iteration 25's own two checkpoint commits (`c92af18` "Idle checkpoint:
+queue confirmed still empty (iteration 25)", `b41717e` "Release the branch to the driver"), each
+triggering its own pull_request CI run. `gh pr view 7 --json comments,reviews,mergeable,
+mergeStateStatus,state` — zero comments, zero reviews, `OPEN`, `MERGEABLE`, `CLEAN`. `git fetch
+origin master` + `git rev-parse origin/master` confirms master is unchanged at `a3439c4` — no new
+operator activity anywhere reachable from this branch.
+
+**Conclusion.** Nothing changed since iteration 25. Queue stays empty; no work manufactured.
+`stop_at` is 2026-08-20T08:00:00+01:00; only about 12 minutes remain. The next iteration should
+check the current time FIRST. If still before 08:00:00+01:00, repeat this same cycle once more. If
+at or after 08:00:00+01:00, skip the checkpoint cycle entirely, confirm the tree is clean and
+pushed, set `session_stopped: true`, write a closing log entry, and end the run without extending
+the heartbeat again — this is very likely the next firing, given the window's remaining size.
