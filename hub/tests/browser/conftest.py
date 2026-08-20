@@ -25,6 +25,15 @@ Run them:
 
 `AW_HUB_API_KEY` is only needed for the tests that seed or tear down state through the API;
 read one out of `api_keys` in whichever database the Hub is actually serving.
+
+`AW_HUB_PROJECT_ID` overrides the default fixture project (`proj-5e960453`, this repo's own
+registration on the machine this suite was written against) — set it to point the suite's
+`project_id` fixture at an equivalent project in a different database. `test_files_tab.py`,
+`test_panel_shell.py`, and `test_human_only_halves.py` use a *second*, distinct fixture identity
+(`proj-b44fac0c`, an operator disposable project with its own agent, conversation and spec
+document) via the `spec_project_id` fixture, overridden separately with
+`AW_HUB_SPEC_PROJECT_ID` — the two identities are not interchangeable, so they are not reached
+by the same variable.
 """
 
 from __future__ import annotations
@@ -52,6 +61,10 @@ FORBIDDEN_PROJECT_IDS = frozenset({"proj-ff695d96"})
 
 #: The project holding this suite's fixtures — the AgentWeave repo's own registration.
 DEFAULT_PROJECT_ID = "proj-5e960453"
+
+#: The disposable project carrying a real agent, conversation and specification document —
+#: used wherever a conversation destination is needed, since the default project above has none.
+DEFAULT_SPEC_PROJECT_ID = "proj-b44fac0c"
 
 #: `ProjectTabs` renders the active tab with `aria-current="page"`; these are its labels.
 TAB_LABELS = {
@@ -100,6 +113,17 @@ def api_key() -> str:
 @pytest.fixture(scope="session")
 def project_id() -> str:
     pid = os.environ.get("AW_HUB_PROJECT_ID", DEFAULT_PROJECT_ID)
+    if pid in FORBIDDEN_PROJECT_IDS:
+        pytest.fail(
+            f"refusing to run against {pid}: the operator keeps it intact for parked "
+            "judgement tasks (CLAUDE.md)"
+        )
+    return pid
+
+
+@pytest.fixture(scope="session")
+def spec_project_id() -> str:
+    pid = os.environ.get("AW_HUB_SPEC_PROJECT_ID", DEFAULT_SPEC_PROJECT_ID)
     if pid in FORBIDDEN_PROJECT_IDS:
         pytest.fail(
             f"refusing to run against {pid}: the operator keeps it intact for parked "

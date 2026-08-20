@@ -1,194 +1,184 @@
 {
-  "purpose": "SECOND RUN, same branch, continuing 2026-08-18's overnight work. Operator, 2026-08-19 ~08:15, verbatim: 'What I want you to do then is to review the work and create a new trigger to continue the work done here. Same branch same everything just with what's left, what need correction etc. This new one will run up to 13h.' So: fix what the morning review found broken FIRST, then finish the two changes' remaining agent-verifiable tasks, then app experience. The review is in the log entry 'Morning review (interactive, 2026-08-19 08:00-08:40)'.",
-  "branch": "autonomous/2026-08-18-panels-loops-and-app",
-  "parent_branch": "panel-shell/2026-08-18-tab-store",
-  "parent_sha": "8d52a93",
-  "parent_note": "Unchanged from run 1. Same branch, same parent — the operator asked for a continuation, not a new branch. HEAD at the start of run 2 is 82644cb (run 1's closing commit).",
-  "started_at": "2026-08-19T08:40:00+01:00",
-  "stop_at": "2026-08-19T13:00:00+01:00",
+  "purpose": "Overnight run of 2026-08-19/20, prepared interactively before the operator went to bed. The theme the operator named, in their own words: 'I should be able to open any agentweave project from any agentweave app that I want.' Tonight's session began as a support call — the operator could not add this repo to their own Hub — and the diagnosis found three distinct defects, two of them confirmed live. Items 1 and 2 are those defects. Items 3-6 are carried debt from handoff 0060 and tonight's commit. This is a NEW branch off master, not a continuation of the 2026-08-18 run.",
+  "branch": "autonomous/2026-08-19-project-portability",
+  "parent_branch": "master",
+  "parent_sha": "afb63f5",
+  "parent_note": "afb63f5 is the prepared-brief commit on master. It sits on top of 75c7685, tonight's interactive fix to the Add-project dialog. Neither is pushed. Everything this run does is a diff against afb63f5.",
+  "started_at": "2026-08-19T23:26:19+01:00",
+  "stop_at": "2026-08-20T08:00:00+01:00",
   "stop_when_queue_empties": false,
-  "run": 2,
-  "iteration": 13,
+  "run": 1,
+  "iteration": 26,
   "session_stopped": true,
-  "last_heartbeat": "2026-08-19T12:57:00+01:00",
-  "prepared_by": "Interactive review session 2026-08-19T07:58-08:40+01:00. Run 1's claims were re-verified rather than trusted: every suite re-run, the browser suite's failures reproduced and diagnosed to a named line, and CI's absence confirmed via `gh run list`.",
-
-  "what_run_1_achieved": {
-    "commits": 62,
-    "diff_vs_master": "91 files, +15078 / -1286, 5 new migrations",
-    "panel_change": "32/37 done — the 5 open are ALL human-only (7.1-7.5)",
-    "loop_change": "76/95 done — 19 open: 12 human-only (13.x, A6.x, B7.x) and 7 real (A4.5, A5.1-A5.3, B6.2-B6.4)",
-    "verified_green_on_review": "hub pytest 2440 passed / 12 skipped / 1 xpassed (10m56s); vitest 1070 passed / 105 files; eslint clean; tsc clean; ruff clean; black 416 unchanged; openspec strict 2/2; UI bundle stamp current AND actually served",
-    "discipline_held": "Not one human-only task was ticked. APP1/APP2 correctly never started, because the operator gated them behind finishing both specs."
-  },
-
-  "what_the_review_found_wrong": [
-    "THE BIG ONE — a real defect sitting on a task marked [x]. ConversationView.tsx:199-211 re-keys the attached document's tab when `inventory` finishes loading (the key changes from a path to a `spdoc-` id) and does it by calling `openTab`, which FORCES ACTIVATION. So a late inventory load steals the active tab back from whatever the operator selected in the meantime. Reproduced live: open the shell with a document attached, click plus -> Specs, and `panel-tab-specs` ends at aria-selected=false while `panel-tab-spec:spdoc-f89d5f6f` is true. The specs index flashes and vanishes. Tasks 3.2/3.3 are ticked; this is the behaviour they claim.",
-    "AND ITS TEST IS A FALSE GREEN. `test_the_specs_index_tab_opens_from_the_plus_affordance` PASSES because Playwright's `expect().to_have_attribute` auto-retries and catches the brief window before the override lands. The very next test then fails, because by the time it clicks, the tree is gone. This is the exact false-green class this repo has hit three times before.",
-    "Browser suite is RED: 8 of 53 in a full run, 7 reproducible in isolation. Run 1's own notes account for only 2.",
-    "Browser suite is ORDER-DEPENDENT AND FLAKY: two `test_files_tab` tests pass alone but fail in a full run, and the failing parametrization of `test_file_tab_header_at_the_measured_minimum_width` changed between two consecutive full runs ([240-True] then [260-False]).",
-    "CI HAS NEVER RUN on any of run 1's 62 commits. The draft PR that run 1's own pre_authorised entry allowed was never opened, and ci.yml only triggers on push-to-master or a PR to master. Confirmed via `gh run list --branch` (zero runs) and `gh pr list` (no PR).",
-    "One test now XPASSES (was `1 xfailed` in CI on master, now `1 xpassed`). Either a known-broken thing started working or the marker is stale; either way it is unexamined."
+  "prepared_by": "Interactive session 2026-08-19T22:55-23:25+01:00, via /autonomous-prep. Both headline defects were reproduced or traced to a named line before being queued — item 1 by reading the render path end to end, item 2 by exercising the live API against two databases. Runway verified rather than assumed: playwright present, `pytest tests/test_project_lifecycle.py tests/test_project_persistence.py` 17 passed, vitest 1152 passed, tsc clean, working tree clean.",
+  "operator_intent_verbatim": "Open any agentweave project with any agentweave app. Also: 'I think I clicked to create an agent in one project but it was actually creating into another project. Something weird there.'",
+  "limits": [
+    "Do NOT restart, stop, or reconfigure the Hub processes on ports 8000 (PID 28492) or 8010 (PID 26700). The operator is using both. A restart kills runs in flight and is the single thing most likely to make the morning worse than the evening.",
+    "Do NOT touch hub/data/agentweave.db, ~/.agentweave/hub/, or ~/.agentweave/hub/.env. The .env edit discussed tonight is DEFERRED to the operator — it is outside the repo.",
+    "Work on repo source and openspec only.",
+    "Do NOT delete .agentweave/ or spec/ at the repository root — they are the migration's, per CLAUDE.md, not stray test output. .agentweave/project.json currently reads proj-4190ae17; .agentweave/project.json.trial-8010-backup holds the previous identity proj-5e960453. Leave both alone.",
+    "Do not create agentweave.yml at the repository root. Test projects live outside the repo.",
+    "`pytest hub/tests/` takes ~7 minutes and exceeds the 600s command cap — run it in file chunks. `pytest hub/tests/ tests/` together fails collection; run them separately.",
+    "Commit hub/ui/src and hub/hub/static/ui TOGETHER, and only via `python scripts/refresh_ui_bundle.py` after `npm run build` (make is not on PATH in Git Bash here). Only that script writes the build stamp.",
+    "Never mark a task complete on the strength of a plan existing. Only real, verified implementation closes a task."
   ],
-
-  "queue": [
-    {"id": "C4", "title": "Open the draft PR so CI finally runs on all 62+ commits", "status": "done", "note": "PR #5, draft. CI green on the pre-fix commit (7m12s) — no cross-platform break found."},
-    {"id": "C1", "title": "FIX the active-tab steal (ConversationView.tsx:199-211) and de-vacuum its test", "status": "done", "note": "panelTabsStore.replaceTabId added; mutation-checked at both the store level and, harder, by reverting the UI build and watching the rewritten Playwright test fail by name before restoring the fix."},
-    {"id": "C2a", "title": "Fix the remaining real browser failures: test_files_tab (3 in isolation)", "status": "done", "note": "Resolved as a side effect of C1 — was the false-green cascade, not a files-tab defect. Confirmed clean in isolation and in the full run."},
-    {"id": "C2b", "title": "Fix the fixture-drift failures: test_job_loop_block (2), test_loops_index (1)", "status": "done", "note": "test_job_loop_block: job_counts fixture derives total/with-loop from the live API instead of hardcoded 3/2. test_loops_index: was actually a second C1-class race (raw text_content() read racing the loops query), fixed with expect().to_contain_text."},
-    {"id": "C3", "title": "Make the browser suite order-independent — it is currently state-coupled", "status": "done", "note": "Investigated rather than rewritten: conftest.py's `page` fixture is already function-scoped with a fresh browser context per test, so localStorage was never actually shared. Full suite ran 53/53 twice back to back post-fix. Recorded as the finding; no rewrite needed on current evidence."},
-    {"id": "C5", "title": "Examine the xpassed test; fix or remove the stale xfail marker", "status": "done", "note": "test_agent_trigger_overrides.py's xfail(strict=False) is a documented, intentional tolerance for a SQLite StaticPool fixture race. Ran 3x in isolation, xpassed all 3 (isolation removes the contention the race needs) — matches both this run's '1 xpassed' and CI-on-master's '1 xfailed': same coin flip. Not stale; no change made."},
-    {"id": "A45", "title": "A4.5 crash reconciliation — a crashed run must not leave a firing in progress", "status": "done", "note": "reconcile_stale_job_runs() in run_reconciliation.py, wired into main.py lifespan after reconcile_interrupted_runs(). Scope widened beyond the literal task title: also reconciles a JobRun in_progress with NO Run row ever created (the live job-0b490274 fixture — claude-1 has no runner bound), not just a Run that died. 4 new tests, mutation-checked. Live-restart smoke test against the trial Hub: firing_active true->false, 8 stuck rows -> failed."},
-    {"id": "LA5", "title": "A5.1-A5.3 write-once loop_id, and RECORD (do not fix) the D15 name gap", "status": "done", "note": "Found already implemented and uncommitted at iteration 3's start (a prior process's work, no matching log entry) — re-verified line by line (tests, ruff, black, mypy, openspec) rather than trusted, then committed."},
-    {"id": "B6X", "title": "B6.2-B6.4 the live active-now indicator, SSE updates, reduced motion", "status": "done", "note": "The recorded blocker (D13's helper) was stale — JobRun.status already had in_progress and firing_active was already computed server-side. Built LoopTab's badge (B6.2), Tailwind animate-pulse motion inheriting index.css's reduced-motion rule (B6.3), and SSE-driven invalidation (B6.4) — which surfaced and fixed a real gap: all six loop_* SSE event types were missing from useSSE.ts's client-side allowlist and were being silently dropped. Live-verified against a genuinely-true firing_active on the trial Hub (loop-8e86eb9f)."},
-    {"id": "APP1", "title": "App experience: a desktop icon/shortcut for AgentWeave", "status": "done", "note": "_create_desktop_shortcut() in cli.py, called once from _hub_native_start on is_first_run. Windows-only v1: drops ~/Desktop/AgentWeave.lnk targeting pythonw.exe -m agentweave (falls back to the agentweave.exe console script) with the packaged icon.ico, via PowerShell's WScript.Shell COM (no new pip dependency). 8 new tests incl. one real unmocked PowerShell invocation + header-byte check; mutation-checked the is_first_run wiring guard. Judged a full openspec proposal disproportionate for a small, contained, non-fatal addition with no new CLI surface — recorded as a decision below rather than assumed. macOS/Linux equivalents NOT attempted."},
-    {"id": "APP2", "title": "App experience: further improvements", "status": "done", "note": "Q6's own remaining items (desktop-app-global-state.md) were all either already fixed before this run (config.py's database_url default, docker-compose.yml's `name:` key — both landed in commit 44a1ae5/7cd6184, predating this branch), forbidden by this run's limits (Tauri/PyTauri needs Rust), or bigger than one iteration (code signing, Linux GTK/Qt packaging, platformdirs). Scoped instead from ui-gap-analysis.md (Q7) Gap 5: a per-turn token count now rides the existing 'Worked for Xs' line in AgentTimeline.tsx, sourced from the accounting API's already-turn-shaped recent_turns (no backend change, no new dependency). agentTimelineModel.ts gained tokensByRunId(); AgentOutputPanel.tsx now calls useAccounting() and threads recentTurns through. 6 new tests (4 pure-function, 2 component-level with a real TurnUsage fixture); fixed 7 pre-existing test files that broke because they mock every AgentOutputPanel API hook except the one this iteration added (added a matching @/api/accounting mock to each, caught by running the FULL suite, not just the changed files). vitest 1085/1085, tsc clean, eslint clean, UI bundle rebuilt/stamped/verified current, browser suite 54/54 live against the trial Hub. NOT live-verified: the actual on-screen token count against a real measured turn — proj-5e960453 has zero recent_turns (no real paid run has completed against it), so this rests on the component test's realistic fixture, not a browser observation. See iteration-6 log entry."},
-    {"id": "FREE", "title": "Free choice: outstanding fixes, findings, whatever is most needed", "status": "open"}
-  ],
-  "current": "FREE",
-  "next_action": "RUN 2 IS OVER — stop_at (13:00) was reached at iteration 13 (12:57+01:00). Iterations 11 and 12 already closed the queue and confirmed nothing left to do; iteration 13 repeated the live spot-check a third time (git log/status clean, trial Hub healthy, draft PR #5 open/mergeable/untouched), found it identical again, and is formally ending run 2 rather than ticking once more. Every queue item is done; both openspec changes' agent-verifiable tasks are complete; the only open threads are the five decisions_for_user items below, none of which are agent-decidable, plus Gap 4 and Gap 7's spend-limit half from ui-gap-analysis.md for whenever a new mandate arrives. WHOEVER PICKS THIS UP NEXT (operator interactively, or a fresh run given a new mandate): re-verify live first per 'verify on resume' rather than trusting this file, then either (a) resolve some of decisions_for_user and let a new run pick from Gap 7 / Gap 4 or the two design questions in decisions_for_user, or (b) merge/close draft PR #5 if the work is accepted. Do not just release the heartbeat and let this fire again unchanged — set session_stopped back to false, and stop_at forward, only once there is a real next action and a new window to hand it.",
-
   "pre_authorised": [
     {
-      "situation": "C1's fix: how to re-key the attached tab without stealing focus.",
-      "decision": "The re-key is a REPLACE-IN-PLACE, not an open. Add a store action (or extend the existing one) that swaps a tab's id while preserving both its strip position and — critically — the current `activeTabId` UNLESS the tab being re-keyed was already the active one. Do NOT solve it by removing the effect: it exists for a real reason (a path-keyed tab must become id-keyed once the inventory resolves, or it dangles). Unit-test the store action directly, and mutation-check it: make the action force activation and confirm the new test fails by name.",
-      "cost_if_wrong": "Low — it is contained to the store plus one effect, both well covered."
+      "situation": "Item 2: what the operator sees when a folder is adopted from another database",
+      "do": "Adopt silently — open the project without an interstitial — but record an event so the adoption is visible after the fact.",
+      "cost_if_wrong": "A follow-up commit to add a notice. Not rework."
     },
     {
-      "situation": "C1's Playwright test currently passes vacuously via expect() auto-retry.",
-      "decision": "Make it non-vacuous: after clicking Specs, WAIT for the inventory to have settled (or assert the state after a deliberate delay/network-idle) before asserting `aria-selected`. The assertion must fail against today's code. PROVE IT: run the new test against the unfixed code first, watch it fail by name, then fix and watch it pass. Do not accept a test that was green before the fix.",
-      "cost_if_wrong": "None — this is the discipline that was missing."
+      "situation": "Item 2: whether the register_copy_as_new affordance shipped tonight (75c7685) should be removed once adoption lands",
+      "do": "KEEP it. Adoption makes the identity conflict rarer, not gone — a genuine copy whose original is still registered in this database still hits _guard_relocation, and that operator still needs the remedy.",
+      "cost_if_wrong": "Dead UI behind a rarer error. Harmless."
     },
     {
-      "situation": "C2b, the fixture drift run 1 flagged as a judgement call: `test_job_loop_block` hardcodes 3 jobs, `proj-5e960453` now has 5 (LB2's and LB4's smoke loops, deliberately left as evidence).",
-      "decision": "DERIVE the expectation from the API rather than hardcoding a number, and do NOT delete the smoke jobs. The test's own name is 'loop blocks render only for jobs that HAVE a loop' — so fetch the jobs, compute how many have a loop, and assert the rendered count matches that. This keeps it a real regression check instead of a number that rots, and it honours LB2/LB4's 'leave it as evidence' precedent. Same principle for `test_loops_index`'s fixture-precondition assertion.",
-      "cost_if_wrong": "Low. If deriving proves impossible for a given assertion, state why in the test and use a hardcoded value with a comment naming what would make it rot."
+      "situation": "A queue item turns out to be blocked, wrong, or larger than described",
+      "do": "Record precisely why in decisions_for_user, move to the next item. Do NOT stall, and do NOT redefine the item into something easier and tick it.",
+      "cost_if_wrong": "None. This is the desired behaviour."
     },
     {
-      "situation": "C3: the browser suite shares Hub DB state and browser localStorage across tests.",
-      "decision": "Do not attempt a full fixture-isolation rewrite in this run — it is bigger than the runway. Do the cheap, high-value half: give each test a fresh browser context (so localStorage, and therefore SpecTree's persisted `aw.spec.treeCollapsed`, cannot leak between tests), and make any test that depends on Hub rows derive them rather than assume them. RECORD what was not isolated. If a full rewrite is needed, write it up as a finding rather than half-doing it.",
-      "cost_if_wrong": "Low, and the log will say what was left."
-    },
-    {
-      "situation": "The queue empties before 13:00.",
-      "decision": "Continue to APP1 (desktop icon — `src/agentweave/assets/icon.ico` already exists, reuse it) and APP2, then FREE. The operator gated app work behind finishing the specs; with C1-C5 and A45/LA5/B6X done, the agent-verifiable half of both changes IS finished, so APP1 is unlocked.",
-      "cost_if_wrong": "None."
-    },
-    {
-      "situation": "A4.5 needs a stale JobRun fixture. RESOLVED run 2 iteration 2 — see queue entry A45.",
-      "decision": "Used loop-8e86eb9f / job-0b490274 in proj-5e960453 as planned; it had grown to 8 stuck rows by the time this ran (job kept firing every 15 min). Reconciled cleanly on a real Hub restart. This fixture is now spent — a fresh iteration wanting a live crash-reconciliation demo would need to construct a new one (e.g. a job on an agent with no runner bound), not reuse this one.",
-      "cost_if_wrong": "N/A — done."
-    },
-    {
-      "situation": "Iteration 3 found LA5's four files already modified in the working tree at turn start, with no corresponding log entry — apparently a prior process's work that never got committed.",
-      "decision": "Did not discard or redo it. Read every diff line, then independently re-ran the tests, ruff, black, mypy, and openspec validate before committing it as this iteration's own output. This is the same discipline the review session already established for any unverified claim; an uncommitted diff gets exactly the same scrutiny as a claim in a log.",
-      "cost_if_wrong": "N/A — done, and verification would have caught a problem before commit."
-    },
-    {
-      "situation": "APP1 had no existing openspec change and next_action left the propose-vs-implement-directly call to this run's judgement.",
-      "decision": "Implemented directly rather than running openspec-propose first: one new private helper (_create_desktop_shortcut) plus a two-line gated call site in an existing function, no new CLI command, no new dependency, best-effort/non-fatal by construction. Recorded the reasoning in the iteration-5 log entry and flagged the macOS/Linux gap and 'should this become a formal app-lifecycle capability' as decisions_for_user rather than assumed.",
-      "cost_if_wrong": "Low — contained to one file pair, fully covered by tests including one real (unmocked) PowerShell invocation."
-    },
-    {
-      "situation": "B6X's own queue entry (and tasks.md's B6.2-B6.4 lines) recorded a blocker — D13's helper not existing yet — that iteration 4 found was already false by the time it read the code.",
-      "decision": "Verified the blocker was actually resolved (grepped for firing_active, read _batch_loop_summaries, confirmed LoopDetail extends LoopSummary) before proceeding, rather than trusting either the queue's or tasks.md's own prior note. Built B6.2-B6.4 as ordinary frontend work once confirmed. A blocker note in this file or in tasks.md is a claim like any other — verify against current code before treating it as still true.",
-      "cost_if_wrong": "N/A — done."
-    },
-    {
-      "situation": "APP2 had no existing openspec change either, and both named exploration docs' concrete Q6 items turned out already fixed or out of this run's reach (Rust toolchain, code signing, new-dependency questions the archived proposal deliberately left open).",
-      "decision": "Fell through to the OTHER named exploration doc (ui-gap-analysis.md, Q7) rather than inventing scope or going straight to FREE, since next_action explicitly listed both. Picked Gap 5 (per-turn token display) over Gaps 1/2/3/4/6 specifically because its own addendum had already confirmed the backend data was turn-shaped and needed zero new dependency or backend change — the same 'small, contained, no new surface -> implement directly' test APP1 used. Implemented directly, no openspec-propose.",
-      "cost_if_wrong": "Low — additive UI-only change, 6 new tests, full vitest+tsc+eslint+browser-suite green."
-    },
-    {
-      "situation": "FREE, iteration 7: `JobCard.tsx:121`'s `Icon name=\"all_inclusive\"` had no ICONS map entry (flagged, not queued, in run 2's own decisions_for_user).",
-      "decision": "Picked it as the cheapest FREE candidate — one map entry plus an import alias to dodge eslint's no-shadow-restricted-names on `Infinity`. Mutation-checked the new test assertion (removed the map entry, watched the test fail by name, restored it) per this run's standing C1-class discipline, then live-verified the rendered glyph against a real job on the trial Hub rather than trusting the component test alone.",
-      "cost_if_wrong": "None — done, one-line fix, fully covered."
-    },
-    {
-      "situation": "FREE, iteration 8: `next_action` pointed at Gap 6 ('all runs at a glance' agent grid) from ui-gap-analysis.md as a possible new-page build. Research (Explore agent) found the exploration doc's own premise was unverified — no `AgentsPage.tsx` grid exists, but `OverviewPage.tsx`'s `AgentHealthCard` grid already IS that concept, project-scoped, SSE-live for free via `useAgents()`.",
-      "decision": "Did not build a second, redundant page for the same concept, and did not widen scope to a cross-project view unasked (a real design question — see decisions_for_user). Instead read what the existing grid does today and found a real defect in it: its hand-rolled status-color ternary silently treated 'stalled' (heartbeat-dead but still-'running', hub/agent_status.py) the same as merely-'idle', hiding exactly the case an at-a-glance view exists to surface. Fixed by switching to the canonical getStatusConfig(). Same 'cheapest real thing found while reading, not the biggest plausible thing assumed' judgment this run made for iteration 7's icon gap.",
-      "cost_if_wrong": "Low — contained to one component's color mapping, mutation-checked, full suite green."
-    },
-    {
-      "situation": "FREE, iteration 9: went to build Gap 3 (command palette, `cmdk` dependency flagged as a trade-off to surface) and found it already built and wired in — the same 'doc says missing, code already has it' shape as iteration 8's Gap 6. Rather than build nothing and move straight to another gap, or worse, re-discover the remaining gaps one iteration at a time, checked the entire ui-gap-analysis.md list against the current tree in one pass.",
-      "decision": "Recorded the finding as a dated addendum IN the exploration doc itself (matching its own existing Gap 5 addendum pattern), not just in this log — the log is per-run, the doc is what any future session (this run or a later one) will actually consult before picking FREE work, so that is where the correction needed to live to be useful. Left the original 2026-08-16 per-gap text untouched as history rather than editing it in place. No source code was changed; this iteration's unit of work was the correction itself, verified by re-running the three most relevant vitest files (14/14 green) rather than trusting grep.",
-      "cost_if_wrong": "None — additive documentation change, verified against passing tests, no source touched."
-    },
-    {
-      "situation": "FREE, iteration 10: the working tree was already dirty at turn start with a complete, uncommitted implementation of Gap 5's per-conversation token rollup — no matching log entry, presumably a prior process that died before committing.",
-      "decision": "Same discipline as LA5 (run 2 iteration 3): did not discard or blind-trust it. Read every diff line, then independently ran the affected backend and frontend test suites, tsc, eslint, ruff, black, the UI bundle stamp check, and — going further than LA5 did — live-verified both the API and the rendered DOM against the trial Hub using a diagnostic script the same prior process had already left in testbed/scratch, confirming the exact numbers the diff's own drafted addendum claimed. Committed only after every check passed independently.",
-      "cost_if_wrong": "Low — additive, read-only, fully covered by tests re-run independently, and live-verified end to end before commit."
-    },
-    {
-      "situation": "Iteration 11: next_action called for a cold full-suite re-run with ~50 minutes of runway left, and it came back entirely clean (hub pytest 2449/12/1, vitest 1089/1089, browser 54/54 — no regressions vs. the 08:32 baseline).",
-      "decision": "Did not start a new FREE item this close to stop_at (13:00). stop_when_queue_empties is false, but the queue is not merely empty — every remaining real item (Gap 4, Gap 7) either needs an openspec-propose cycle or operator input per decisions_for_user, neither of which fits safely in the ~30 minutes left, and iteration 10's own next_action explicitly said to close cleanly if verification came back green. Recorded the clean result and ended the run rather than manufacturing scope.",
-      "cost_if_wrong": "None — no code changed this iteration; purely verification."
-    },
-    {
-      "situation": "Iteration 12: woke at 12:40 on the standard heartbeat-release schedule with only ~19 minutes left before stop_at (13:00). Tree was clean and identical to iteration 11's already-verified state; nothing had changed in the 15 minutes since.",
-      "decision": "Did not re-run the full suite (would re-confirm unchanged code for no new information) and did not start new FREE work (decisions_for_user items are the only real remaining threads and none are agent-decidable). Instead did a cheap live spot-check (git log/status, trial Hub /health, draft PR #5 state) and set session_stopped: true so the cron loop stops re-firing on an unchanged, fully-done queue every ~15 minutes until a human or a new mandate gives it something to do.",
-      "cost_if_wrong": "None — no code changed. If session_stopped=true incorrectly halts a driver that expected continuous heartbeat release, the fix is a one-line flip back to false; state and log make the reasoning explicit for whoever finds it."
-    },
-    {
-      "situation": "Iteration 13: driver woke at 12:55 (heartbeat aged past grace), 5 minutes before stop_at 13:00, onto a state already marked session_stopped: true with nothing changed since iteration 12.",
-      "decision": "Did not do a fourth full-suite run or start FREE work — same reasoning iteration 12 already applied, now with even less runway and a fresher confirmation to trust. Repeated only the live spot-check (Hub health, PR #5 state) for a third time, found it identical, and treated stop_at actually elapsing during this iteration as the formal end of run 2, not just another no-op tick. Deliberately did NOT perform the standard end-of-iteration heartbeat backdating (the generic driver instruction) — that step exists to hand off a next_action, and there isn't one; STATE.json's own next_action explicitly says not to release the heartbeat into a vacuum. Set last_heartbeat to the actual current time instead of backdating it.",
-      "cost_if_wrong": "None — no code changed. If leaving last_heartbeat at real-time instead of backdated stalls a driver that expects backdating every iteration, the fix is the same one-line flip noted above."
+      "situation": "CI never runs on the branch",
+      "do": "Open a DRAFT PR to master so ci.yml triggers. Last run learned this the hard way: ci.yml only fires on push-to-master or a PR to master, and 62 commits went unverified. Do this early, not at the end.",
+      "cost_if_wrong": "A draft PR the operator closes."
     }
   ],
-
+  "queue": [
+    {
+      "id": "P1",
+      "title": "Agent creation posts to the selected project, not the one you clicked",
+      "status": "done",
+      "severity": "high — silently creates agents in the wrong project",
+      "confirmed": "Yes, traced end to end tonight. Not a hypothesis.",
+      "evidence": "hub/ui/src/App.tsx:474 sets agentCreateProjectId from the rail's per-project add button. App.tsx:516-524 renders <AgentCreateDialog open onClose onCreated /> and NEVER passes it — the value is used only to gate the render and to pick the post-create navigation target at line 522. Inside the dialog, useCreateAgent (hub/ui/src/api/agents.ts:318-329) posts to `/api/v1/projects/${selectedProjectId}/agents`. useCharters() and useProviderLaunchability(), also used by the dialog (AgentCreateDialog.tsx:150-152), read selectedProjectId too — so the charter list offered belongs to the wrong project as well.",
+      "repro": "With project A selected in the rail, expand project B and click its add-agent button. The agent is created in A; you are then navigated to B's page for an agent that is not there. If A already has an agent of that name you get 409 'already exists in this project' — true, but about the wrong project. This is exactly what the operator hit with a 'Spec' agent.",
+      "operator_decision": "Create in the clicked project AND switch selection to it. Chosen over 'leave selection alone' because every hook in that dialog reads selectedProjectId, and threading an explicit id through all of them is precisely the kind of thing that silently regresses — which is how this bug happened.",
+      "do": "Make the rail's add-agent action select the clicked project before opening the dialog, reusing the existing open-project path (App.tsx:121 already calls setSelectedProject) rather than a second ad-hoc setter. Then verify the dialog's three hooks all resolve to the clicked project.",
+      "verify": "A vitest test that asserts the POST URL carries the CLICKED project id when it differs from the selected one. Mutation-check it: revert the fix and watch that test fail by name before restoring.",
+      "note": "Consider whether threading an explicit projectId prop is ALSO worth doing as defence in depth. If it is cheap, do both; the operator's choice was about behaviour, not about forbidding belt-and-braces.",
+      "outcome": "Fixed in App.tsx: onAddAgent now navigates to the clicked project before opening the dialog, using the same projectDestination call onOpenProject already uses. New test src/__tests__/agentCreateProjectScope.test.tsx mounts App over a two-project rail; mutation-checked (revert -> exactly that test fails by name). tsc clean, vitest 1155 passed, eslint clean, bundle refreshed. Defence-in-depth prop threading deliberately NOT done - see the log entry for why."
+    },
+    {
+      "id": "P2",
+      "title": "Open any AgentWeave project from any AgentWeave app — adopt an orphaned marker instead of refusing",
+      "status": "done",
+      "severity": "high — this is the item the operator named as the point of the night",
+      "system": "openspec — this is a behaviour change to a specified capability, so it gets a proper change with a spec delta and a design rationale. The operator chose this explicitly over fixing it directly.",
+      "evidence": "hub/hub/project_lifecycle.py open_existing has three cases. Case 1 (existing_by_path, lines 67-75) opens. Case 2 (marker names a project THIS database has, lines 78-85) runs _guard_relocation and opens or correctly refuses a copy. Case 3 (marker names a project this database does NOT have, lines 86-90) refuses with 'marked directory is a copied or orphaned project identity'. Case 3 is the defect.",
+      "why_adoption_is_safe": "At case 3 the Hub knows two things: no project in this database is bound to this path (existing_by_path is None), and no project in this database holds the marker's id (marked_project is None). Nothing collides — the primary key and the path_key unique constraint are both free. Real copy detection lives in _guard_relocation (project_lifecycle.py:190-208), which fires on case 2 and refuses with 'project marker was copied while the registered directory is still available'. That guard is unchanged by this work and MUST stay green. The only scenario case 3 currently 'protects' against is a copy whose original lives in a database this Hub cannot see, has no authority over, and would collide with on worktrees and runs regardless of which id is used.",
+      "also_fixes": "Delete-then-re-add. ProjectLifecycleService.delete (project_lifecycle.py:156-167) is explicitly documented never to touch the filesystem (design D4), so the marker survives a delete naming an id the database just dropped. Re-adding the same folder hits case 3 and is refused. With adoption it works AND restores the same project id. Do not change D4 to fix this — adoption is the fix.",
+      "do": "Propose the change (/openspec-propose), write the spec delta against local-multi-project-workspace with the rejection reason for the current behaviour recorded, then implement: case 3 creates the project row with the MARKER'S id, seeds it as _seed_new_project does (runners + starter charters), records an adoption event, and opens.",
+      "verify": "New tests: (a) an orphaned marker is adopted and the project keeps its original id; (b) delete-then-reopen returns the same id; (c) two directories carrying the same marker — the second is still refused by _guard_relocation. Existing test_copied_marker_conflicts_until_explicitly_registered_as_new (hub/tests/test_project_lifecycle.py:75) must stay green untouched — it exercises case 2, not case 3, and is the proof the copy guard survived.",
+      "note": "Case 3 appears to have no test of its own today. Confirm that while implementing; if true, say so in the change's design as part of why the behaviour went unquestioned.",
+      "outcome": "Confirmed: case 3 had no test before this change. Proposed and validated openspec change at openspec/changes/portable-project-identity/ (capability is local-project-workspace, not local-multi-project-workspace as this item's title implied -- that capability name does not exist). Implemented in hub/hub/project_lifecycle.py open_existing: marked_project is None + not register_copy_as_new now constructs the Project row with the marker's own id, seeds it via the existing _seed_new_project, observes/writes-marker/commits, logs an adoption event, and returns -- instead of raising ProjectIdentityConflict. Two new mutation-checked tests in hub/tests/test_project_lifecycle.py (test_orphaned_marker_is_adopted_under_its_own_id, test_deleted_project_directory_is_adopted_back_under_the_same_id). All 19 tests in test_project_lifecycle.py + test_project_persistence.py pass; the existing case-2 copy-guard test is untouched and green. ruff and black clean. openspec validate --changes --strict passes. Not verified live in a browser (blocked by the no-Hub-restart limit, same as P1)."
+    },
+    {
+      "id": "P3",
+      "title": "Tests for tonight's committed UI fixes",
+      "status": "done",
+      "evidence": "Commit 75c7685 added apiErrorCode (hub/ui/src/api/client.ts) and a register_copy_as_new affordance in hub/ui/src/components/projects/ProjectManagerModal.tsx. Both are green under tsc and the existing 1152 vitest tests, but neither has a test OF ITS OWN.",
+      "do": "Test apiErrorCode against the shapes readableApiError already has coverage for in hub/ui/src/__tests__/taskIntegration.test.ts (string detail, object detail with code+message, pydantic array, unparseable) and assert it returns null rather than throwing on each non-matching shape. Test that the modal renders the register-copy-as-new button ONLY on a project_identity_conflict code, and that clicking it re-submits with register_copy_as_new true.",
+      "note": "data-testid=\"register-copy-as-new\" already exists on the button for this purpose.",
+      "outcome": "New src/__tests__/apiErrorCode.test.ts (8 tests, mirrors taskIntegration.test.ts's readableApiError shapes plus code-matcher-specific cases) and src/__tests__/projectManagerIdentityConflict.test.tsx (4 tests, follows the projectManagerDirectoryPicker.test.tsx mock pattern; covers no-error, wrong-code, create-mode, and the matching-code click-resubmits-with-register_copy_as_new case). Both mutation-checked: breaking apiErrorCode to always return null fails exactly 1 test by name; breaking the modal's code comparison fails exactly 1 test by name; both reverted and reconfirmed green. tsc clean, vitest 1167 passed / 118 files (+12/+2), eslint clean. No bundle rebuild needed - hub/hub/main.py's ui_source_fingerprint excludes __tests__ from its git-ls-files pathspec, confirmed by reading the function."
+    },
+    {
+      "id": "P4",
+      "title": "Fix timestamps at the serialisation boundary",
+      "status": "done",
+      "evidence": "Handoff 0060 recorded this as 'the better fix' and left it open. Confirmed live: hub/hub/db/models.py declares every timestamp column DateTime(timezone=True), but SQLite has no timezone storage, so a value written aware comes back naive once actually round-tripped through the DBAPI — three call sites (agent_status.py:22, api/v1/agents.py:528, scheduler.py:83) already carried a manual tzinfo-is-None workaround for their own in-process comparisons, independent confirmation the bug is real.",
+      "do": "Move the correction to where the Hub serialises the value rather than where the UI reads it, and retire whatever client-side compensation that makes redundant. Keep the exemptions that are genuinely client-side concerns.",
+      "verify": "Server-side tests on the serialised shape, plus the existing UI timestamp tests still green.",
+      "outcome": "Added hub.db.models.UTCDateTime, a TypeDecorator wrapping DateTime(timezone=True) that relabels a naive process_result_value as UTC once, at the ORM boundary. All 77 mapped_column(DateTime(timezone=True)) declarations in models.py now use it, so every Pydantic response field and every raw .isoformat() call downstream (audited by grep across hub/hub) inherits the fix without individual changes — chosen over adding a UTCDateTime Pydantic field type to ~12 schema files because the TypeDecorator also covers the raw isoformat() call sites a schema-only fix could not reach. hub/ui/src/lib/hubTime.ts's hubDate() is now a thin new Date(value) pass-through (the ${value}Z-guessing hasTimezone() heuristic deleted); kept as a named function rather than inlined at its ~15 call sites because hubTime.test.ts's existing sweep test enforces exactly one seam. New hub/tests/test_timestamp_serialization.py (ORM round-trip through a second session, plus a GET against seeded runners) mutation-checked by reverting process_result_value to a no-op — both tests failed by name with the expected 'no UTC offset' message, then restored (note: git checkout -- on the first restore attempt wiped the whole file back to HEAD, not just the mutation; caught immediately via grep -c UTCDateTime and redone from the Edit calls). Measured: hub pytest full suite -n 4 — 2471 passed/75 skipped/1 xpassed in 174s (STATE.json's ~7min/600s-cap note was for the unparallelised run). vitest 1165/118 (-2, the two retired hubDate tests). tsc, eslint, ruff, black all clean. UI bundle rebuilt via scripts/refresh_ui_bundle.py and committed with its source. Not verified live in a browser — same no-restart limit as P1-P3. Open finding for a future iteration: no lint/test sweeps every DateTime(...) declaration in models.py the way hubTime.test.ts sweeps the client, so a future column bypassing UTCDateTime wouldn't be caught automatically."
+    },
+    {
+      "id": "P5",
+      "title": "Close the D15 name-reuse hole",
+      "status": "done",
+      "evidence": "A new agent taking an archived agent's name inherits the archived agent's creator privilege. Task A5.3 recorded this deliberately rather than fixing it.",
+      "operator_decision": "Strip the inherited privilege on reuse. Chosen over blocking reuse of archived names, because archiving and recreating under the same name is a thing the operator actually does and a permanent name reservation would be worse than the hole.",
+      "do": "A new agent taking a previously-archived name starts with no creator privilege over the old agent's artifacts. Names stay reusable.",
+      "verify": "A test that creates an agent, gives it a creator-privileged artifact, archives it, recreates the same name, and asserts the new agent cannot reach the old artifact.",
+      "outcome": "The literal scenario (archive + recreate the same name) does not reproduce today — reconfirmed independently, not just trusted from A5.3's 2026-08-19 note: `ix_agents_project_name` is an unconditional unique index on (project_id, name), and nothing renames an existing agent to free a name. The real, still-open gap A5.3 documented one layer down is what got closed: `_authorize_loop_task_creation` (hub/hub/api/v1/tasks.py) compared actor.agent to AIJob.agent as bare strings, never consulting the agents table, so a Run minted under an archived name kept that name's loop-creator authority. Fixed in two parts: (1) hub/hub/api/v1/agent_trigger.py's trigger_agent_directly (used by turn_scheduler and scheduler._do_fire_job) and the POST /agent/trigger route both now refuse with 409 if Agent.lifecycle == 'archived', closing 'nothing runs an archived agent' everywhere at once, not just the loop-authority angle; (2) _authorize_loop_task_creation now looks up the Agent row behind job.agent and refuses if it exists and reads archived — deliberately NOT refused when no Agent row exists at all, since that shape is the existing contract every _active_run-style test fixture in this codebase relies on (first version without that carve-out broke 4 unrelated tests, caught by insisting on the full suite rather than trusting the targeted files). The pre-existing D15 test in hub/tests/test_tasks.py was flipped per its own docstring's instruction, renamed to test_d15_an_archived_creators_run_no_longer_controls_its_loop, now asserting 403 — its old fixture had a latent bug (set archived_at but never lifecycle, so it was never actually archived by the model's own definition), fixed in the rewrite. New test_trigger_refuses_an_archived_agent added to test_agent_trigger.py. Both fixes mutation-checked (revert -> exact test fails by name -> restore). Full suite `pytest tests/ -n 4`: 2472 passed / 75 skipped / 1 xpassed (2471 before, +1 net — the D15 test was rewritten in place, not added). ruff, black clean; mypy zero errors attributable to either touched file. hub/hub/api/v1/jobs.py's _require_agent_job_allowance, the other function A5.3 named, was deliberately left untouched — it gates the CURRENT caller's own live run against a project-wide allowance, not a stored creator identity, so its exposure to an archived name closes as a side effect of fix (1) rather than needing its own change. No UI touched, no bundle rebuild. Not verified live in a browser, but this iteration is backend-only so the no-Hub-restart limit that blocked P1-P4's live checks doesn't apply — there is no UI surface to check."
+    },
+    {
+      "id": "P6",
+      "title": "Unpin the browser suite from one machine's project id",
+      "status": "done",
+      "evidence": "hub/tests/browser/conftest.py:54 hard-codes DEFAULT_PROJECT_ID = 'proj-5e960453' and its documented invocation is AW_HUB_URL=http://127.0.0.1:8010 — the trial Hub. The suite therefore only runs on this machine, against that one Hub.",
+      "operator_decision": "UNPIN the suite; do NOT run it tonight. Running it would mean seeding fixtures into the operator's live trial Hub, and exercising tonight's UI changes would need a bundle rebuild and a Hub restart — both forbidden by the limits above.",
+      "do": "Make the project id configurable (env var, defaulting to the current value so nothing breaks for the operator) alongside the existing AW_HUB_URL. Keep the FORBIDDEN_PROJECT_IDS guard at conftest.py:52 intact — proj-ff695d96 must stay untouchable.",
+      "verify": "Collection-only run (`pytest tests/browser --collect-only`) proves the suite still imports and still skips cleanly without AW_HUB_URL. Do NOT run it against a live Hub tonight.",
+      "note": "The pinning is the same disease as P2 — identity that should travel, hard-coded to one place. Worth saying so in the commit message.",
+      "outcome": "conftest.py's `project_id` fixture (`os.environ.get(\"AW_HUB_PROJECT_ID\", DEFAULT_PROJECT_ID)`) turned out to already exist — added in 7657c42, an ancestor of this branch's own parent_sha (afb63f5), well before tonight's run started. Confirmed via `git merge-base --is-ancestor`, not assumed. So the literal 'do' (make the project id configurable via an env var alongside AW_HUB_URL, keep FORBIDDEN_PROJECT_IDS intact) was already satisfied and the guard is untouched. But grepping all 7 files under hub/tests/browser/ for the bare id found the REAL remaining gap the prep evidence pointed at without naming precisely: only test_job_loop_block.py actually consumed the `project_id` fixture — test_loops_index.py (module constant `PROJECT_ID = \"proj-5e960453\"`) and test_human_only_halves.py (`LOOP_PROJECT = \"proj-5e960453\"`) each hardcoded their own second copy of the same default-project identity, bypassing the fixture entirely, so setting AW_HUB_PROJECT_ID changed nothing for 9 of the suite's 13 loops-related tests. Fixed: removed both hardcoded constants, threaded `project_id: str` (the fixture) through the two files' helper functions (`_open_bare`, `_open_loops_tab`, `_open_loops_index`) and all 9 call sites. Verified NOT a dead parameter by reading every edited call site's f-string. `pytest tests/browser --collect-only` — 63 collected, 0 errors (up from the 63 that collected before, unchanged count — confirms nothing was accidentally dropped). `pytest tests/browser` with no AW_HUB_URL — 63 skipped (the existing collection-time skip in conftest.py, untouched). ruff, black, mypy all clean on both files. Documented conftest.py's module docstring with the AW_HUB_PROJECT_ID knob (previously mentioned nowhere in prose) and the fact it does NOT reach the suite's second, distinct fixture identity, proj-b44fac0c ('Throwaway (taste pass)', the operator's disposable project with its own agent/conversation/spec-document) — used by test_panel_shell.py, test_files_tab.py, and test_human_only_halves.py's SPEC_PROJECT constant. That second identity is a genuinely separate fixture, not a duplicate of the default-project pinning P6 was written about, so deliberately left hardcoded rather than folded into this fix or silently expanded into a bigger rewrite — recorded as new queue item P7. Not run against a live Hub, per the standing limit."
+    },
+    {
+      "id": "P7",
+      "title": "Unpin the browser suite's second fixture identity, proj-b44fac0c",
+      "status": "done",
+      "severity": "low — the suite still runs fine on this machine; this only matters when running it against a genuinely different Hub/database",
+      "evidence": "Found while doing P6, not part of the original prep queue. `test_panel_shell.py:30`, `test_files_tab.py:30` (`PROJECT_ID = \"proj-b44fac0c\"`), and `test_human_only_halves.py:38` (`SPEC_PROJECT = \"proj-b44fac0c\"`) all hardcode a second, distinct fixture project — the operator's disposable 'Throwaway (taste pass)' project, which carries a real agent (`q2verify`), conversation (`conv-b77949d3`), and specification document (`spec/changes/teal-roc/spec.html`) that the default project (P6's `AW_HUB_PROJECT_ID`) does not have. P6's fix does not reach these three files' constants at all.",
+      "do": "Add a second env var (e.g. AW_HUB_SPEC_PROJECT_ID, defaulting to proj-b44fac0c) alongside AW_HUB_PROJECT_ID in conftest.py, expose it as a fixture (e.g. spec_project_id), and thread it through the three files' constants/call sites the same way P6 threaded project_id through test_loops_index.py and test_human_only_halves.py.",
+      "verify": "pytest tests/browser --collect-only still collects all 63 (or however many exist by then) with 0 errors; pytest tests/browser with no AW_HUB_URL still skips cleanly. Do NOT run against a live Hub.",
+      "note": "Same shape as P6 — copy its approach rather than re-deriving one. Low severity: nothing is broken today, this only matters the day someone actually points the suite at a second database, which per P6's own evidence has not happened yet.",
+      "outcome": "Added `spec_project_id` fixture to conftest.py (env `AW_HUB_SPEC_PROJECT_ID`, default `proj-b44fac0c`, same FORBIDDEN_PROJECT_IDS guard as project_id). Removed the independent `PROJECT_ID`/`SPEC_PROJECT` constants from all three files and threaded the fixture through every helper and test function. test_files_tab.py's two module-level compiled regexes (PATHS_ROUTE/FILE_ROUTE) depended on the old constant and couldn't stay module-level once the value became a fixture — moved into per-call functions taking project_id as an argument. `pytest tests/browser --collect-only` — 63 collected, 0 errors, same count as before. `pytest tests/browser` with no AW_HUB_URL — 63 skipped, unchanged. ruff clean; black flagged one line-length collapse in test_panel_shell.py's _open signature, applied. mypy: same 4 pre-existing no-untyped-def errors as the unmodified branch tip (confirmed via git stash + rerun), nothing new. Not run against a live Hub. Committed as b0c12e5."
+    }
+  ],
+  "current": "idle",
+  "next_action": "Iteration 26 re-verified iteration 25's conclusion rather than trusting it secondhand: branch/log/STATE.json all matched (HEAD b41717e, clean tree), `openspec list` still empty, `openspec validate --all --strict` 33/33 (unchanged), draft PR #7 still open, mergeable, CLEAN, zero comments/reviews, master unchanged at a3439c4. The two newest CI runs (2026-08-20T06:29:22Z, 06:29:12Z) trace to iteration 25's own two checkpoint commits, not new operator activity. The queue (P1-P7) is fully closed and stays closed. stop_at is 2026-08-20T08:00:00+01:00; only about 12 minutes remained when this iteration ran (started 07:48+01:00) — this is very likely the last checkpoint before the window closes. Next iteration: check the current time FIRST via PowerShell Get-Date. If it is before 2026-08-20T08:00:00+01:00, repeat the same check (branch state, `openspec list`, log grep, CI, PR activity) and idle-checkpoint again if nothing new surfaced. If it is at or after 08:00:00+01:00, do NOT start a new idle-checkpoint cycle — just verify final state is clean/pushed, set session_stopped true, write a closing log entry, and stop; do not extend the heartbeat again once stopped. Do NOT restart or reconfigure the Hubs on ports 8000/8010 even to 'just check' — that limit is still in force.",
   "decisions_for_user": [
-    "APP1's desktop shortcut is Windows-only. A macOS (.app wrapper or Automator alias) or Linux (.desktop file) equivalent was not researched or attempted — say if either matters to you and it becomes a scoped follow-up. Also unresolved: should this graduate into a formal app-lifecycle openspec requirement (with scenarios, like the archived native-window change has) now that it exists as code, or stay as an undocumented convenience? Judged the latter as proportionate for this run; your call if you want the former.",
-    "Run 1's nine decisions are preserved in the log's iteration entries and were NOT discarded. The two that are genuine design questions, still unanswered and NOT actioned by this run: (a) `POST /jobs/{job_id}/archive` lets a job be archived while its Loop is still actively firing, hiding a running loop from the default listing — arguably the governance failure D17 exists to prevent, but D17's text is scoped to the loop, so run 1 did not extend it unilaterally; (b) run 1 changed the panel shell's mount condition while implementing a LOOP task (LB5), which you may want attributed to the panel change instead.",
-    "Still open and untouched by either run: the D15 name-reuse hole (LA5 will RECORD it, not fix it — that is what the task asks for); whether an agent should be able to archive a bare job at all; and the two naming explorations, which may be a live question about renaming the product before more UI is built on the current name.",
-    "'Clear all projects from the test hub' — still interpreted conservatively across both runs. proj-ff695d96 (aw-loop10) and proj-5e960453 were NOT deleted. Say the word if you meant all of them.",
-    "Gap 6 ('all runs at a glance') from ui-gap-analysis.md is already substantially covered by OverviewPage.tsx's agent health grid, once its stalled-status color gap is fixed (iteration 8, this run). Whether it's worth building a SEPARATE, dedicated multi-agent dashboard route on top of that (closer to Cursor's 'Mission Control' framing the exploration doc cites), and whether such a view should be cross-project rather than the current project-scoped pattern every existing page follows, is an open design question this run did not decide — it would be a real scope expansion, not a bugfix."
+    {
+      "id": "D-env",
+      "question": "Strip AW_BOOTSTRAP_PROJECT_ID and AW_BOOTSTRAP_PROJECT_NAME from ~/.agentweave/hub/.env so 'Default Project' stops being seeded?",
+      "context": "The operator asked for this tonight ('we can get rid of default project, agentweave should come clean') and I confirmed the cause: their .env is dated 2026-08-01 and predates the decision at src/agentweave/cli.py:628-630 that a fresh native install starts with zero registered projects. The file is only written when absent, so their pre-1.0 copy was never updated. DEFERRED because the file is outside the repo and the limits forbid touching ~/.agentweave/. The operator does this themselves, plus deleting the project in the UI.",
+      "raised_by": "prep",
+      "resolution": "RESOLVED 2026-08-20. AW_BOOTSTRAP_PROJECT_ID and AW_BOOTSTRAP_PROJECT_NAME removed from ~/.agentweave/hub/.env (backup at .env.backup-2026-08-20). Takes effect on the next Hub restart; the existing 'Default Project' row must still be deleted in the UI."
+    },
+    {
+      "id": "D-identity",
+      "question": "Once P2 ships, should this repo go back to its original project identity proj-5e960453?",
+      "context": "Tonight the repo was re-registered on the 8000 Hub as proj-4190ae17, which rewrote the marker; the original is backed up at .agentweave/project.json.trial-8010-backup. With adoption implemented, restoring that backup file and opening the folder would adopt proj-5e960453 again — reuniting the repo with the trial Hub's fixtures. Worth doing, but it is the operator's call and it touches a running Hub.",
+      "raised_by": "prep",
+      "resolution": "OPERATOR CHOSE to restore proj-5e960453, walked through manually. Note the correction: restoring the id gives the 8000 Hub an EMPTY project under that id. It does not import the 8010 database's fixtures - what it restores is the 8010 Hub's ability to open this folder again, since its marker validation would pass."
+    },
+    {
+      "id": "D-a13",
+      "question": "A1.3's routed extension-request path — should the Hub carry an agent's 'please add this task' request and hand the operator a one-click accept?",
+      "context": "Open since the message-fix decision, carried in handoff 0060. Needs a product decision, so it is not in tonight's queue.",
+      "raised_by": "handoff 0060"
+    },
+    {
+      "id": "D-naming",
+      "question": "The two naming explorations (openspec/explorations/2026-08-18-candidate-names.md, 2026-08-18-does-the-name-still-fit.md) remain unresolved, with more UI built on the current name every session.",
+      "context": "Carried in handoff 0060. Operator-only.",
+      "raised_by": "handoff 0060"
+    },
+    {
+      "id": "D-agentbug",
+      "question": "A diagnostic agent 'Spec' (agent-0207c253) was created in proj-4190ae17 on the 8000 Hub to prove agent names are project-scoped. Keep or delete?",
+      "context": "The operator declined to have it deleted tonight. Harmless; noted so it is not mistaken for something the loop made.",
+      "raised_by": "prep",
+      "resolution": "Superseded by D-identity: proj-4190ae17 and its diagnostic Spec agent are to be deleted."
+    }
   ],
-
-  "limits": [
-    "No merging to master unattended — the operator's standing limit, carried forward from run 1 unchanged. A DRAFT PR is explicitly allowed (C4) and must never be marked ready or merged.",
-    "Stay on branch autonomous/2026-08-18-panels-loops-and-app. Same branch as run 1 — the operator asked for a continuation, not a new branch.",
-    "Never mark a task complete on the strength of a plan existing (CLAUDE.md).",
-    "Do NOT tick human-only sections: panel 7.1-7.5, loop 13.1-13.4, A6.1-A6.4, B7.1-B7.4. Run 1 held this line perfectly; hold it.",
-    "A test that was green BEFORE the fix is not evidence. For every correction in C1-C5, watch the test fail against the old behaviour first, by name.",
-    "Do not touch project proj-ff695d96 (aw-loop10) — CLAUDE.md, three handoffs, and FORBIDDEN_PROJECT_IDS in hub/tests/browser/conftest.py.",
-    "Do not delete project proj-5e960453 — this repo's registration and the browser suite's fixture.",
-    "Use openspec, never the aw-* collab skills. Stage paths explicitly, never `git add -A`. Always `py -3.11`.",
-    "T3 source under testbed/scratch/t3ref/ is design reference ONLY — study, never copy, never commit.",
-    "No force-push, no history rewriting, no release, no publish.",
-    "Every claim is measured or labelled unverified."
-  ],
-
-  "environment": {
-    "verified_at": "2026-08-19T08:35+01:00",
-    "trial_hub": "http://127.0.0.1:8010 — alive, /health ok. Restart it detached if a Python change needs picking up (see hub_restart).",
-    "hub_is_editable_install": "agentweave-hub is an EDITABLE install pointing at this repo, so the running Hub serves THIS code. Static assets are read from disk per request — a UI rebuild needs NO restart; Python changes DO.",
-    "api_key": "GET http://127.0.0.1:8010/api/v1/setup/token returns the instance key. api_keys rows are hashed — do not try to read a key out of the table.",
-    "ui_rebuild": "cd hub/ui && npm run build, then py -3.11 scripts/refresh_ui_bundle.py from the repo root. `git add` new source files BEFORE stamping — the fingerprint enumerates via `git ls-files`, so an untracked file is invisible to it. Verify with `--check`.",
-    "playwright": "cd hub && AW_HUB_URL=http://127.0.0.1:8010 AW_HUB_API_KEY=<key> py -3.11 -m pytest tests/browser -q. Full run takes ~2m47s.",
-    "hub_pytest": "py -3.11 -m pytest tests/ -q --ignore=tests/browser from hub/ — takes ~11 minutes, EXCEEDS the 600s foreground cap. Run it in the BACKGROUND. Baseline as of 08:32: 2440 passed, 12 skipped, 1 xpassed.",
-    "hub_restart": "Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{CommandLine='cmd.exe /c \"cd /d C:\\Users\\huida\\Documents\\projects\\AgentWeave\\hub && C:\\Users\\huida\\AppData\\Local\\Programs\\Python\\Python311\\python.exe -m uvicorn hub.main:app --host 127.0.0.1 --port 8010 > %TEMP%\\agentweave-hub.log 2>&1\"'}",
-    "ready_made_reproduction": "testbed/scratch/diag_panel_shell.py — a standalone Playwright script that reproduces C1's active-tab steal in about 20 seconds and prints every panel-* test id with its aria-selected value. Written during the review. testbed/scratch is its own git repo and is gitignored from this one, so it will never be committed here. Use it to confirm the fix rather than re-deriving the reproduction.",
-    "mypy_baseline": ".claude/autonomous/mypy-baseline.txt — 361 errors, 86 files. The bar is 'no NEW errors', never 'clean'."
+  "runway_verified_at_prep": {
+    "working_tree": "clean at 75c7685",
+    "vitest": "1152 passed / 115 files",
+    "tsc": "clean",
+    "pytest_targeted": "tests/test_project_lifecycle.py + tests/test_project_persistence.py — 17 passed",
+    "playwright": "present",
+    "openspec_changes_in_flight": "none — `ls openspec/changes/ | grep -v archive` is empty",
+    "not_run_at_prep": "Full hub/tests/ suite and eslint were NOT run tonight. The loop should establish its own baseline early so it can tell inherited breakage from its own."
   },
-
-  "traps": [
-    "Do NOT run two pytest invocations concurrently — it produces spurious 'no tests ran' and spurious mass-skips that read as green or as inherited breakage.",
-    "The Bash tool's cwd PERSISTS between calls and drifts silently. Use absolute paths; this cost several wasted commands during the review.",
-    "`pytest hub/tests/ tests/` together fails collection. Run them separately.",
-    "Playwright's `expect().to_have_*` AUTO-RETRIES. Against a race, that makes a broken behaviour pass — this is exactly how C1 hid. When asserting that something STAYS true, wait for the competing async work to settle first, then assert.",
-    "count() does not auto-wait, and neither do conditional guards.",
-    "page-jobs / page-tasks / page-spec do NOT exist in the running app — they are mocks in hub/ui/src/__tests__/App-mount.test.tsx.",
-    "PowerShell here-strings (@'...'@) are a syntax error in the Bash tool. Write commit messages to a file and use `git commit -F`.",
-    "Git Bash `date` prints UTC but labels it +0100 — a heartbeat written from it lands an hour in the future and stalls the driver. Stamp from PowerShell or Python.",
-    "Keep any .ps1 ASCII-only.",
-    "SpecTree persists collapsed folders to localStorage under `aw.spec.treeCollapsed`, SHARED between the Ctrl+K picker and the specs index tab, and it does NOT auto-expand to the current document. A test that leaves a folder collapsed can hide a document row from a later test."
+  "last_heartbeat": "2026-08-20T07:09:24+01:00",
+  "log_file": ".claude/autonomous/2026-08-19-project-portability-log.md",
+  "driver": "Windows Scheduled Task 'AgentWeaveAutonomousSession' -> .claude/skills/autonomous-session/scripts/run-iteration.ps1 -> headless `claude -p`. Each firing is a fresh process; all continuity is STATE.json + the log. Session-bound drivers (ScheduleWakeup, CronCreate) are NOT used - the 2026-08-15 run asked for nine hours and got forty minutes because the session went away.",
+  "heartbeat_note": "Deliberately stale. The process that ran iteration 24 has finished and released the branch, so the next scheduled firing takes over instead of standing down against a heartbeat nobody is refreshing.",
+  "draft_pr": "https://github.com/gutohuida/AgentWeave/pull/7",
+  "closed_out_by": "Interactive session 2026-08-20 morning. Driver unregistered itself at 08:00 as designed.",
+  "still_open_for_operator": [
+    "D-a13 (routed extension-request path)",
+    "D-naming (the two naming explorations)"
   ],
-
-  "read_first": [
-    ".claude/autonomous/2026-08-18-panels-loops-and-app-log.md — read the LAST entry ('Morning review') first; it is the review the operator asked for and it explains every queue item C1-C5.",
-    "hub/ui/src/components/agents/ConversationView.tsx:199-211 — C1's defect, exactly here.",
-    "hub/ui/src/store/panelTabsStore.ts — where C1's fix belongs (a replace-in-place action).",
-    "hub/tests/browser/test_panel_shell.py — the false-green test, and the one that fails right after it.",
-    "openspec/changes/2026-08-18-one-shell-three-panels/tasks.md and .../2026-08-18-a-loop-writes-its-own-queue/tasks.md — the remaining open boxes."
-  ]
+  "merge_decision": "Squash-merge PR #7. The 45 bookkeeping commits collapse; the branch stays as the audit trail."
 }

@@ -20,11 +20,14 @@ Python suite and are deliberately not duplicated here:
 **Nothing here ticks a human-only box.** A green run is evidence for the operator's judgement,
 never a substitute for it — every test below says which half it settled and which it did not.
 
-Fixtures. `proj-b44fac0c` has a real agent, conversation and specification document, so it is the
-only project where the spec-attach behaviour can be driven. `proj-5e960453` is the repo's own
-registration: it has no conversation but *does* have loops in all three ending states, and the
-shell mounts on a bare conversation (a header toggle, not an attached document), which is what
-makes the loops index reachable there at all.
+Fixtures. `spec_project_id` (`proj-b44fac0c` unless `AW_HUB_SPEC_PROJECT_ID` overrides it) has a
+real agent, conversation and specification document, so it is the only project where the
+spec-attach behaviour can be driven — a distinct fixture identity from the default project the
+`project_id` fixture parameterizes; see `test_files_tab.py`/`test_panel_shell.py` for the same
+reasoning. The default fixture project (`project_id`, `proj-5e960453` unless `AW_HUB_PROJECT_ID`
+overrides it) is the repo's own registration: it has no conversation but *does* have loops in
+all three ending states, and the shell mounts on a bare conversation (a header toggle, not an
+attached document), which is what makes the loops index reachable there at all.
 """
 
 from __future__ import annotations
@@ -35,13 +38,11 @@ import pytest
 from playwright.sync_api import Page, expect
 
 # --- the conversation-with-a-document fixture ---------------------------------------------------
-SPEC_PROJECT = "proj-b44fac0c"
 SPEC_AGENT = "q2verify"
 SPEC_CONVERSATION = "conv-b77949d3"
 DOCUMENT_PATH = "spec/changes/teal-roc/spec.html"
 
-# --- the project that actually has loops --------------------------------------------------------
-LOOP_PROJECT = "proj-5e960453"
+# --- the project that actually has loops (the default fixture project — see `project_id`) --------
 LOOP_AGENT = "claude-1"
 COMPLETED_LOOP = "loop-f1eab23e"  # ending_state = "completed"
 STOPPED_LOOP = "loop-2913d58b"  # ending_state = "stopped"
@@ -49,17 +50,17 @@ STOPPED_LOOP = "loop-2913d58b"  # ending_state = "stopped"
 PANEL_SHELL = '[data-testid="panel-shell"]'
 
 
-def _open_with_document(page: Page, hub_url: str) -> None:
+def _open_with_document(page: Page, hub_url: str, spec_project_id: str) -> None:
     query = (
-        f"project={SPEC_PROJECT}&agent={SPEC_AGENT}&conversation={SPEC_CONVERSATION}"
+        f"project={spec_project_id}&agent={SPEC_AGENT}&conversation={SPEC_CONVERSATION}"
         f"&document={quote(DOCUMENT_PATH, safe='')}"
     )
     page.goto(f"{hub_url}/?{query}", wait_until="load")
     page.wait_for_selector(PANEL_SHELL, timeout=20_000)
 
 
-def _open_loops_index(page: Page, hub_url: str) -> None:
-    page.goto(f"{hub_url}/?project={LOOP_PROJECT}&agent={LOOP_AGENT}", wait_until="load")
+def _open_loops_index(page: Page, hub_url: str, project_id: str) -> None:
+    page.goto(f"{hub_url}/?project={project_id}&agent={LOOP_AGENT}", wait_until="load")
     page.wait_for_selector('[data-testid="conversation-workspace"]', timeout=20_000)
     toggle = page.get_by_test_id("conversation-toggle-panel")
     expect(toggle).to_be_visible()
@@ -75,11 +76,13 @@ def _open_loops_index(page: Page, hub_url: str) -> None:
 # ================================================================================================
 
 
-def test_the_plus_affordance_is_labelled_as_adding_a_tab(page: Page, hub_url: str) -> None:
+def test_the_plus_affordance_is_labelled_as_adding_a_tab(
+    page: Page, hub_url: str, spec_project_id: str
+) -> None:
     """7.1's floor. Whether it *reads* as "add a tab" rather than "settings" is the operator's
     call; that it is **named** so, and carries the add glyph rather than a gear, is not. If this
     fails the taste question is moot, because the control is mislabelled."""
-    _open_with_document(page, hub_url)
+    _open_with_document(page, hub_url, spec_project_id)
 
     add = page.get_by_test_id("panel-tab-add")
     expect(add).to_be_visible()
@@ -88,14 +91,16 @@ def test_the_plus_affordance_is_labelled_as_adding_a_tab(page: Page, hub_url: st
     assert "setting" not in label.lower()
 
 
-def test_closing_a_spec_tab_does_not_detach_the_document(page: Page, hub_url: str) -> None:
+def test_closing_a_spec_tab_does_not_detach_the_document(
+    page: Page, hub_url: str, spec_project_id: str
+) -> None:
     """7.2's objective half, and design D9's whole guarantee: closing a *reader* must not change
     what the agent writes into. Whether that reads as obviously safe is the operator's half.
 
     The precondition is asserted first — a document really is attached — so this cannot pass on a
     conversation that never had one, which would make the whole assertion vacuous.
     """
-    _open_with_document(page, hub_url)
+    _open_with_document(page, hub_url, spec_project_id)
 
     assert "document=" in page.url, "precondition: a document must be attached to close its tab"
     pill = page.get_by_test_id("composer-spec-control")
@@ -116,7 +121,7 @@ def test_closing_a_spec_tab_does_not_detach_the_document(page: Page, hub_url: st
 
 @pytest.mark.parametrize("width", [1400, 900, 700, 560])
 def test_the_shell_stays_within_its_own_bounds_at_every_width(
-    page: Page, hub_url: str, width: int
+    page: Page, hub_url: str, spec_project_id: str, width: int
 ) -> None:
     """7.4's objective half: at each width the shell is *present and contained* — it never spills
     past the viewport and never overlaps the conversation. Whether it is **usable** rather than
@@ -124,7 +129,7 @@ def test_the_shell_stays_within_its_own_bounds_at_every_width(
     to the operator.
     """
     page.set_viewport_size({"width": width, "height": 900})
-    _open_with_document(page, hub_url)
+    _open_with_document(page, hub_url, spec_project_id)
     page.wait_for_timeout(600)
 
     shell = page.locator(PANEL_SHELL)
@@ -152,11 +157,11 @@ def test_the_shell_stays_within_its_own_bounds_at_every_width(
 
 
 def test_the_loops_index_states_what_is_running_without_a_drill_down(
-    page: Page, hub_url: str
+    page: Page, hub_url: str, project_id: str
 ) -> None:
     """B7.1's objective half: the running/complete/stopped split is legible from the index alone,
     with no drill-down open. Whether that counts as "at a glance" is the operator's half."""
-    _open_loops_index(page, hub_url)
+    _open_loops_index(page, hub_url, project_id)
 
     summary = page.get_by_test_id("loops-index-summary")
     # `expect().to_contain_text` and not a raw `inner_text()`: the panel renders "no loops" while
@@ -174,11 +179,13 @@ def test_the_loops_index_states_what_is_running_without_a_drill_down(
     expect(page.locator('[data-testid^="panel-tab-loop:"]')).to_have_count(0)
 
 
-def test_opening_a_drill_down_leaves_the_index_open(page: Page, hub_url: str) -> None:
+def test_opening_a_drill_down_leaves_the_index_open(
+    page: Page, hub_url: str, project_id: str
+) -> None:
     """B5.2/B7.1: the index is a governance glance, not a launcher — unlike the files tree, which
     a file replaces. The asymmetry is deliberate and stated in both changes, so it is worth an
     assertion rather than a comment."""
-    _open_loops_index(page, hub_url)
+    _open_loops_index(page, hub_url, project_id)
 
     page.get_by_test_id(f"loops-index-row-{COMPLETED_LOOP}").click()
 
@@ -186,7 +193,9 @@ def test_opening_a_drill_down_leaves_the_index_open(page: Page, hub_url: str) ->
     expect(page.get_by_test_id("panel-tab-loops")).to_be_visible()
 
 
-def test_complete_and_stopped_early_are_not_the_same_badge(page: Page, hub_url: str) -> None:
+def test_complete_and_stopped_early_are_not_the_same_badge(
+    page: Page, hub_url: str, project_id: str
+) -> None:
     """B7.3's objective half: "complete" and "stopped early" must not render as the same grey
     badge — if they did, `ending_state` bought nothing a sentence did not.
 
@@ -195,7 +204,7 @@ def test_complete_and_stopped_early_are_not_the_same_badge(page: Page, hub_url: 
     operator's half, and a test claiming to settle it would be marking its own homework — the same
     posture `board` 5.2a took in the earlier suite.
     """
-    _open_loops_index(page, hub_url)
+    _open_loops_index(page, hub_url, project_id)
 
     # Wait for the rows to actually carry their badges before reading any computed style.
     expect(page.get_by_test_id("loops-index-summary")).to_contain_text("running", timeout=15_000)

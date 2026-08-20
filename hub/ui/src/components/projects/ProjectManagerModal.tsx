@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ApiError } from '@/api/client'
+import { apiErrorCode, readableApiError } from '@/api/client'
 import { useCreateProject, useOpenProject, type ProjectSummary } from '@/api/projects'
 import { useNativeDialogAvailability, useOpenNativeDialog } from '@/api/nativeDialog'
 import { useDialogFocus } from '@/hooks/useDialogFocus'
@@ -96,16 +96,28 @@ export function ProjectManagerModal({
 
   if (!mode) return null
 
-  const submit = () => {
+  const submit = (registerAsNew = false) => {
     if (!canSubmit || !target) return
     mutation.mutate(
       // Create sends no name: the backend already takes the project's name from the folder
       // it creates, which is exactly the behaviour being made visible here.
-      isCreate ? { path: target } : { path: target, ...(name.trim() ? { name: name.trim() } : {}) },
+      isCreate
+        ? { path: target }
+        : {
+            path: target,
+            ...(name.trim() ? { name: name.trim() } : {}),
+            ...(registerAsNew ? { register_copy_as_new: true } : {}),
+          },
       { onSuccess: onComplete },
     )
   }
   const error = mutation.error
+  // The Hub refuses a folder whose marker names a project this database has never heard of, and
+  // the sentence it returns tells the operator to "register the copy explicitly as new" — which
+  // the API supports and, until this affordance existed, nothing in the UI could reach. An
+  // instruction with no button behind it is a dead end, so the remedy is offered where the
+  // refusal is read. Matched on the code, never the prose.
+  const isIdentityConflict = !isCreate && apiErrorCode(error) === 'project_identity_conflict'
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'var(--scrim)' }} role="dialog" aria-modal="true" aria-labelledby="project-manager-title">
@@ -201,12 +213,33 @@ export function ProjectManagerModal({
         )}
         {error && (
           <div role="alert" className="mt-3 rounded px-3 py-2 text-xs" style={{ background: 'var(--error-cont)', color: 'var(--red)' }}>
-            {error instanceof ApiError ? error.message : 'The project could not be registered.'}
+            {readableApiError(error, 'The project could not be registered.')}
+            {isIdentityConflict && (
+              <>
+                <p className="mt-2" style={{ color: 'var(--text-2)' }}>
+                  This folder is already bound to a different AgentWeave database — usually another
+                  Hub instance on this machine. Registering it as new gives it a fresh identity
+                  here; the other database keeps its records but can no longer open this folder.
+                </p>
+                <div className="mt-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => submit(true)}
+                    disabled={mutation.isPending}
+                    data-testid="register-copy-as-new"
+                  >
+                    Register as a new project
+                  </Button>
+                </div>
+              </>
+            )}
           </div>
         )}
         <div className="mt-5 flex justify-end gap-2">
           <button type="button" onClick={onClose}>Cancel</button>
-          <button type="button" onClick={submit} disabled={!canSubmit || mutation.isPending} data-testid="confirm-project-action">
+          <button type="button" onClick={() => submit()} disabled={!canSubmit || mutation.isPending} data-testid="confirm-project-action">
             {mutation.isPending ? 'Workingâ€¦' : mode === 'create' ? 'Create project' : 'Add project'}
           </button>
         </div>

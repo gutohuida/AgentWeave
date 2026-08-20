@@ -3,6 +3,7 @@
 from datetime import datetime, timezone
 
 import pytest
+from sqlalchemy import select
 
 from hub.agent_auth import hash_run_token
 from hub.db.engine import async_session_factory
@@ -370,41 +371,44 @@ async def test_task_loop_id_is_write_once_and_reassignment_leaves_the_task_uncha
 
 
 @pytest.mark.asyncio
-async def test_d15_a_run_claiming_an_archived_agents_name_inherits_its_loop_authority(app):
-    """Records, does not fix, the D15 gap (design `2026-08-18-a-loop-writes-its-own-queue`):
+async def test_d15_an_archived_creators_run_no_longer_controls_its_loop(app):
+    """Closes the D15 gap (design `2026-08-18-a-loop-writes-its-own-queue`'s A5.3), in the
+    2026-08-19/20 autonomous run's P5.
+
     `_authorize_loop_task_creation` (tasks.py) checks who may add a task to a loop's queue by
     comparing `actor.agent` (a string) to `AIJob.agent` (also a string) — and `actor.agent` is
-    itself just `Run.agent`, never looked up against the `agents` table at all
-    (`agent_auth.py::get_agent_actor`). Whoever the *name* belongs to now, not who currently holds
-    it as a live `Agent` row, controls the loop.
+    itself just `Run.agent`, never looked up against the `agents` table
+    (`agent_auth.py::get_agent_actor`). Before this fix, whoever the *name* belonged to now, not
+    who currently held it as a live `Agent` row, controlled the loop.
 
     D15's own text is "a new agent taking an archived agent's name" via the roster — but that
-    literal reproduction turns out to already be closed for the roster specifically: migration
+    literal reproduction was already closed for the roster specifically before this fix: migration
     `0063_unique_agent_name_per_project` put an unconditional unique index on `(project_id, name)`
     that does **not** exempt archived rows (confirmed empirically: inserting a second `Agent` with
     an already-archived name's value raises `sqlite3.IntegrityError`), and nothing in this codebase
     lets an existing agent be renamed to free a name up either. So the roster cannot literally
-    reproduce D15 today.
+    reproduce D15.
 
-    What this test shows instead is the same root cause one layer down, and it does not need a
-    duplicate `Agent` row at all: nothing between a `Run` and the authorization check ever consults
-    the `agents` table, so any `Run` minted with `.agent` set to a name that used to belong to a now
-    -archived agent inherits that name's loop authority just by matching the string — whether or
-    not any `Agent` row, archived or otherwise, currently exists under that name. This is a wider
-    hole than the roster-level one D15 describes, not a narrower one: it does not require the name
-    to have ever been re-registered, only for something to mint a `Run` carrying it.
+    What this test exercises instead is the same root cause one layer down, and does not need a
+    duplicate `Agent` row at all: this `Run` is inserted directly (as `run-d15-successor`) rather
+    than minted through `trigger_agent_directly` — that function now separately refuses to spawn
+    a *new* run for an archived agent at all (its own guard, `hub/hub/api/v1/agent_trigger.py`),
+    but this test's point is that the authorization check must not depend on runs only ever being
+    minted through that one path. Whatever path put a `Run` on the books with `.agent` set to a
+    name an `Agent` row currently holds archived, the check below now consults that row and
+    refuses — the name match is necessary but no longer sufficient.
 
-    D15 states this is not a live vulnerability — the Hub is local, single-operator, and the API
-    key is the real boundary — but it is a real consequence of a name being load-bearing for
-    permission, and this is the flip target for a future change that closes it (by joining the
-    authorization check to a stable `Agent.id` instead of a name). If this assertion ever starts
-    failing with a 403, the gap has been closed; update this test (and D15's "not resolved here")
-    to say so rather than treating the failure as a regression.
+    This was recorded as "not a live vulnerability" — the Hub is local, single-operator, and the
+    API key is the real boundary — but it was a real consequence of a name being load-bearing for
+    permission. Operator decision: archiving strips the privilege outright, and names stay
+    reusable (the roster still refuses literal reuse today, independently, via the unique index
+    above; this fix does not depend on that remaining true).
     """
     async with async_session_factory() as session:
         original = Agent(id="agent-d15-original", project_id="proj-test", name="reused-loop-name")
         session.add(original)
         await session.commit()
+        original.lifecycle = "archived"
         original.archived_at = datetime.now(timezone.utc)
         await session.commit()
 
@@ -442,8 +446,11 @@ async def test_d15_a_run_claiming_an_archived_agents_name_inherits_its_loop_auth
         json={"title": "Claimed via the reused name", "loop_id": "loop-d15"},
         headers={"Authorization": f"Bearer {token}"},
     )
-    assert resp.status_code == 201
+    assert resp.status_code == 403
+    assert "creator" in resp.json()["detail"].lower()
 
     async with async_session_factory() as session:
-        created = await session.get(Task, resp.json()["id"])
-        assert created.loop_id == "loop-d15"
+        remaining = await session.execute(
+            select(Task).where(Task.title == "Claimed via the reused name")
+        )
+        assert remaining.scalars().first() is None

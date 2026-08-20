@@ -14,6 +14,7 @@ from ...agent_status import effective_heartbeat_status
 from ...auth import get_project
 from ...db.engine import get_session
 from ...db.models import (
+    Agent,
     AgentHeartbeat,
     AIJob,
     EvidenceReview,
@@ -310,6 +311,18 @@ async def _authorize_loop_task_creation(
     The refusal echoes the submitted task back (A3.2) so the caller can resubmit it as one of a new
     loop's `initial_tasks` — D12 explicitly rejects reviving the stopped loop itself, so nothing is
     created automatically here.
+
+    D15 (`2026-08-18-a-loop-writes-its-own-queue`'s A5.3, closed by the 2026-08-19/20 autonomous
+    run's P5): matching `actor.agent` to `job.agent` as bare strings, with neither ever checked
+    against the `agents` table, meant whoever the *name* currently belonged to controlled the
+    loop — not whoever currently holds it as a live `Agent` row. An archived creator's own name
+    is still on `job.agent` forever (agent rows are never deleted or renamed), so a `Run` minted
+    under that name — however it came to be minted — kept the loop's creator authority after the
+    agent behind it was archived. The join below closes that: the name match is necessary but no
+    longer sufficient, the creator must also currently resolve to an open `Agent`. Operator
+    decision: archiving strips this privilege outright; it is not offered to whoever the name
+    might belong to next, because — per `agent-configuration`'s spec and the guard now in
+    `trigger_agent_directly` — no run can be minted under an archived name again anyway.
     """
     loop = await session.get(Loop, loop_id)
     if loop is None or loop.project_id != project_id:
@@ -345,14 +358,28 @@ async def _authorize_loop_task_creation(
     if actor.is_operator:
         return
     job = await session.get(AIJob, loop.job_id)
+    creator_denied = HTTPException(
+        status_code=403,
+        detail=(
+            "Only this loop's creator, or the operator, may add tasks to its queue "
+            "directly. Use send_message to ask the creator to add it instead."
+        ),
+    )
     if job is None or actor.agent != job.agent:
-        raise HTTPException(
-            status_code=403,
-            detail=(
-                "Only this loop's creator, or the operator, may add tasks to its queue "
-                "directly. Use send_message to ask the creator to add it instead."
-            ),
+        raise creator_denied
+    # A missing `Agent` row is deliberately NOT refused here — a `Run` carrying a name with no
+    # roster entry at all is the pre-existing, unrelated shape every other actor-derived test in
+    # this codebase already relies on (`_active_run`-style fixtures, and self-registered agents
+    # generally, never require a persisted `Agent` row to hold a run). Only a row that positively
+    # exists and reads archived strips the privilege — that is the one state D15 is actually
+    # about: a name whose original owner is provably gone.
+    creator_row = (
+        await session.execute(
+            select(Agent).where(Agent.project_id == project_id, Agent.name == job.agent)
         )
+    ).scalar_one_or_none()
+    if creator_row is not None and creator_row.lifecycle == "archived":
+        raise creator_denied
     delegated_to_creator = loop.control == "creator"
     if delegated_to_creator:
         return

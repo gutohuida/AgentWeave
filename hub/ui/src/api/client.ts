@@ -107,3 +107,24 @@ export function readableApiError(error: unknown, fallback: string): string {
   }
   return fallback
 }
+
+/**
+ * The machine-readable `code` from a structured refusal, or null.
+ *
+ * `readableApiError` deliberately returns only the sentence, which is all most callers need. A
+ * caller that offers a *remedy* needs to know which refusal it is looking at — matching on the
+ * sentence would tie the UI to prose that is free to be reworded.
+ */
+export function apiErrorCode(error: unknown): string | null {
+  if (!(error instanceof ApiError)) return null
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(error.message)
+  } catch {
+    return null
+  }
+  const detail = (parsed as { detail?: unknown })?.detail
+  if (!detail || typeof detail !== 'object' || Array.isArray(detail)) return null
+  const code = (detail as { code?: unknown }).code
+  return typeof code === 'string' && code ? code : null
+}

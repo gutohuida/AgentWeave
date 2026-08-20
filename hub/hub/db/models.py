@@ -14,6 +14,7 @@ from sqlalchemy import (
     PrimaryKeyConstraint,
     String,
     Text,
+    TypeDecorator,
     UniqueConstraint,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -21,6 +22,30 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+class UTCDateTime(TypeDecorator):
+    """`DateTime(timezone=True)`, corrected for SQLite.
+
+    SQLite has no timezone storage, so a value written aware comes back out of the DBAPI naive —
+    even though every column using this type is declared timezone-aware and every value this
+    codebase writes is already UTC (`_now()` above). Left alone, that naive value crosses the API
+    boundary with no offset, and every client that parses it (see `hub/ui/src/lib/hubTime.ts`)
+    reads a bare date-time string as *local* time — wrong by that machine's offset from UTC.
+
+    This relabels a naive result as UTC on the way out of the database, once, here, instead of at
+    each of the three call sites (`agent_status.py`, `api/v1/agents.py`, `scheduler.py`) that used
+    to do it themselves for values they needed to compare in-process, and instead of the every
+    place a `.isoformat()` or a Pydantic response schema turns a loaded column into a string.
+    """
+
+    impl = DateTime(timezone=True)
+    cache_ok = True
+
+    def process_result_value(self, value: Optional[datetime], dialect: Any) -> Optional[datetime]:
+        if value is not None and value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value
 
 
 class Base(DeclarativeBase):
@@ -42,9 +67,7 @@ class Project(Base):
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     name: Mapped[str] = mapped_column(String(256), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_now, nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
     hop_budget: Mapped[int] = mapped_column(Integer, default=6, server_default="6", nullable=False)
     turn_delivery_cap: Mapped[int] = mapped_column(
         Integer, default=10, server_default="10", nullable=False
@@ -64,10 +87,8 @@ class Project(Base):
     directory_state: Mapped[str] = mapped_column(
         String(32), default="unbound", server_default="unbound", nullable=False
     )
-    last_opened_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    last_seen_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_opened_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+    last_seen_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
     # "truncate" | "generate". Truncation is the floor and the default: a conversation is named
     # the moment its first message lands, so the rail never shows an identifier and a generation
     # failure changes nothing structural. Generating is an opt-in to spending tokens on titles.
@@ -257,12 +278,10 @@ class Agent(Base):
     lifecycle: Mapped[str] = mapped_column(
         String(16), default="open", server_default="open", nullable=False
     )
-    archived_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_now, nullable=False
-    )
+    archived_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
     updated: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_now, onupdate=_now, nullable=False
+        UTCDateTime(), default=_now, onupdate=_now, nullable=False
     )
 
     project: Mapped["Project"] = relationship(back_populates="agents")
@@ -298,11 +317,9 @@ class Runner(Base):
     cli: Mapped[str] = mapped_column(String(16), nullable=False)
     model: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
     flags: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_now, nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_now, onupdate=_now, nullable=False
+        UTCDateTime(), default=_now, onupdate=_now, nullable=False
     )
 
     project: Mapped["Project"] = relationship(back_populates="runners")
@@ -327,11 +344,9 @@ class Charter(Base):
     project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
     name: Mapped[str] = mapped_column(String(256), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False, default="")
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_now, nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_now, onupdate=_now, nullable=False
+        UTCDateTime(), default=_now, onupdate=_now, nullable=False
     )
 
     project: Mapped["Project"] = relationship(back_populates="charters")
@@ -346,9 +361,7 @@ class ApiKey(Base):
     project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
     label: Mapped[str] = mapped_column(String(128), default="", nullable=False)
     revoked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_now, nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
 
     project: Mapped["Project"] = relationship(back_populates="api_keys")
 
@@ -361,9 +374,7 @@ class OperatorCredential(Base):
     id: Mapped[str] = mapped_column(String(128), primary_key=True)
     label: Mapped[str] = mapped_column(String(128), default="", nullable=False)
     revoked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_now, nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
 
 
 CONVERSATION_LIFECYCLES = ("open", "archived")
@@ -459,13 +470,11 @@ class Conversation(Base):
     # meant. A successor is created NULL, so dismissing is final for a conversation and not for
     # a line of work.
     checkpoint_warning: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_now, nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_now, onupdate=_now, nullable=False
+        UTCDateTime(), default=_now, onupdate=_now, nullable=False
     )
-    archived_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    archived_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
 
     project: Mapped["Project"] = relationship(back_populates="conversations")
 
@@ -498,11 +507,9 @@ class Message(Base):
     subject: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
     content: Mapped[str] = mapped_column(Text, nullable=False, default="")
     type: Mapped[str] = mapped_column(String(32), default="message", nullable=False)
-    timestamp: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_now, nullable=False
-    )
+    timestamp: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
     read: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
-    read_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    read_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
     task_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     session_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     conversation_id: Mapped[Optional[str]] = mapped_column(
@@ -535,14 +542,12 @@ class InboundQueueEntry(Base):
     origin_type: Mapped[str] = mapped_column(String(16), nullable=False)
     origin_agent: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    arrived_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_now, nullable=False
-    )
+    arrived_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
     hop_depth: Mapped[int] = mapped_column(Integer, nullable=False)
     state: Mapped[str] = mapped_column(String(16), default="queued", nullable=False)
     delivered_in_run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
-    delivered_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    withdrawn_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    delivered_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+    withdrawn_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
     #: How many deliveries of this entry have failed. A failed run returns its input to the queue,
     #: where it keeps its place in arrival order — so an input whose delivery kills the runtime is
     #: served again immediately, and everything behind it waits on the one doing the killing.
@@ -627,11 +632,9 @@ class Task(Base):
     priority: Mapped[str] = mapped_column(String(16), default="medium", nullable=False)
     assignee: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     assigner: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_now, nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
     updated: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_now, onupdate=_now, nullable=False
+        UTCDateTime(), default=_now, onupdate=_now, nullable=False
     )
     requirements: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
     acceptance_criteria: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
@@ -774,9 +777,7 @@ class TaskTransition(Base):
     # document now says something else, and nothing records what it said then. Null on a transition
     # that no policy governed.
     policy_digest: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_now, nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
 
     # No CHECK on `origin`, matching `actor_kind` beside it, which has none either. Two reasons,
     # and the second is not merely pragmatic: a table-level CHECK naming a column makes that column
@@ -831,10 +832,8 @@ class RunDivergence(Base):
     # assignee is deliberate — leaving it pointing at the agent that just dropped the work would
     # make the board disagree with reality — and this is what makes it reversible (design D9).
     previous_assignee: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_now, nullable=False
-    )
-    resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+    resolved_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
 
     __table_args__ = (
         Index("ix_run_divergences_project_task", "project_id", "task_id"),
@@ -883,10 +882,8 @@ class Question(Base):
     # "2 of 3" without a second request for rows it has already finished with.
     batch_index: Mapped[int] = mapped_column(default=0, server_default="0", nullable=False)
     batch_size: Mapped[int] = mapped_column(default=1, server_default="1", nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_now, nullable=False
-    )
-    answered_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+    answered_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
     created_by_run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     # Denormalized from the opening run. Navigation reads the attention state of every
     # conversation on every SSE re-render, and a two-hop join through `Run` per row is the wrong
@@ -913,7 +910,7 @@ class Question(Base):
     declined: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="0", nullable=False
     )
-    declined_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    declined_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
 
     project: Mapped["Project"] = relationship(back_populates="questions")
 
@@ -934,9 +931,7 @@ class EventLog(Base):
     severity: Mapped[str] = mapped_column(
         String(10), nullable=False, server_default="info", index=True
     )
-    timestamp: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_now, nullable=False
-    )
+    timestamp: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
 
     __table_args__ = (
         Index("ix_event_logs_project_ts", "project_id", "timestamp"),
@@ -952,9 +947,7 @@ class AgentHeartbeat(Base):
     agent: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="active")
     message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    timestamp: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_now, nullable=False
-    )
+    timestamp: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
 
     __table_args__ = (Index("ix_agent_heartbeats_project_agent", "project_id", "agent"),)
 
@@ -971,9 +964,7 @@ class ProjectSession(Base):
 
     project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), primary_key=True)
     data: Mapped[Any] = mapped_column(JSON, nullable=False)
-    synced_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_now, nullable=False
-    )
+    synced_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
 
 
 class ProjectInstructions(Base):
@@ -988,7 +979,7 @@ class ProjectInstructions(Base):
     project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), primary_key=True)
     content: Mapped[str] = mapped_column(Text, nullable=False, default="")
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_now, onupdate=_now, nullable=False
+        UTCDateTime(), default=_now, onupdate=_now, nullable=False
     )
 
 
@@ -1032,13 +1023,9 @@ class Run(Base):
     pid: Mapped[Optional[int]] = mapped_column(nullable=True)
     exit_code: Mapped[Optional[int]] = mapped_column(nullable=True)
     error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    started_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_now, nullable=False
-    )
-    ended_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    last_heartbeat_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    started_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+    ended_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+    last_heartbeat_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
     turn_depth: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     initiator: Mapped[str] = mapped_column(
         String(16), default="operator", server_default="operator", nullable=False
@@ -1089,9 +1076,7 @@ class TurnUsage(Base):
     reasoning_tokens: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     api_equivalent_usd_micros: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     allowance: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
-    observed_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_now, nullable=False
-    )
+    observed_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
 
     project: Mapped["Project"] = relationship(back_populates="turn_usages")
 
@@ -1130,7 +1115,7 @@ class AgentOutput(Base):
     run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     sequence: Mapped[Optional[int]] = mapped_column(nullable=True)
     timestamp: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_now, nullable=False, index=True
+        UTCDateTime(), default=_now, nullable=False, index=True
     )
 
     __table_args__ = (
@@ -1162,11 +1147,9 @@ class AIJob(Base):
         String(16), default="new", nullable=False
     )  # "new" or "resume"
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_now, nullable=False
-    )
-    last_run: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    next_run: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+    last_run: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+    next_run: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
     run_count: Mapped[int] = mapped_column(default=0, nullable=False, server_default="0")
     last_session_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     source: Mapped[str] = mapped_column(
@@ -1178,7 +1161,7 @@ class AIJob(Base):
     # `Loop.archived_at` below, not a conditional one that only applies once a loop exists.
     # NULL means live; `DELETE /api/v1/jobs/{job_id}` refuses outright rather than reinterpreting
     # itself as an archive (B2.1) — this column is written only by the archive route.
-    archived_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    archived_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
 
     project: Mapped["Project"] = relationship(back_populates="jobs")
     runs: Mapped[List["JobRun"]] = relationship(back_populates="job", cascade="all, delete-orphan")
@@ -1199,9 +1182,7 @@ class JobRun(Base):
         String(64), ForeignKey("ai_jobs.id", ondelete="CASCADE"), nullable=False
     )
     project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
-    fired_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_now, nullable=False
-    )
+    fired_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
     status: Mapped[str] = mapped_column(
         String(16), default="fired", nullable=False
     )  # "fired" (enqueued, transient) | "in_progress" (queued entry now feeding a live agent
@@ -1254,7 +1235,7 @@ class Loop(Base):
     # that omits it reads as "purpose not yet stated" (`""`) rather than forcing every reader to
     # null-check it — the same reasoning `Charter.content` already uses for the identical shape.
     purpose: Mapped[str] = mapped_column(Text, default="", nullable=False)
-    stop_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    stop_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
     stop_when_queue_empties: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="0", nullable=False
     )
@@ -1264,10 +1245,8 @@ class Loop(Base):
     # "is this loop firing" is already answered by `AIJob.enabled` and a second field meaning almost
     # the same thing would only create drift between the two.
     stop_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    stopped_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_now, nullable=False
-    )
+    stopped_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
     created_by_run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     updated_by_run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     # Which document this loop draws its queue from, if any. `unique=True, index=True` — same shape
@@ -1282,7 +1261,7 @@ class Loop(Base):
     # (B2.3 refuses archiving a running loop), and archiving destroys nothing, so this is
     # orthogonal to `ending_state` below rather than a terminal value of the same axis. Mirrors
     # `Agent.archived_at`/`Conversation.archived_at`. NULL means visible in default listings.
-    archived_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    archived_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
     # D17: what happened, not housekeeping — the value a governance surface can count and filter
     # on ("4 complete · 1 stopped early · 2 running", B5.3) without string-matching `stop_reason`,
     # which stays exactly as free-text as it is today and keeps carrying the human explanation.
@@ -1310,9 +1289,7 @@ class Loop(Base):
     # mirroring `JobUpdate`'s own untouched-vs-explicit convention for the live columns above, so
     # an edit that only touches `purpose` leaves `stop_at`/`stop_when_queue_empties` alone.
     pending_purpose: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    pending_stop_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    pending_stop_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
     pending_stop_when_queue_empties: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
     # Task A2.5: who staged the pending edit and when — the agent name, or the literal string
     # "operator" (never NULL for an operator edit; NULL here means "no pending edit", the same
@@ -1321,9 +1298,7 @@ class Loop(Base):
     # The sentinel for "is there a pending edit at all" — non-NULL iff at least one of the three
     # pending_* fields above is set (an edit always touches at least one, mirroring
     # `_loop_opts_in`'s own "at least one field" rule for loop creation).
-    pending_edit_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    pending_edit_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
 
     __table_args__ = (Index("ix_loops_project", "project_id"),)
 
@@ -1345,9 +1320,7 @@ class AgentJobDeletion(Base):
     project_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     agent: Mapped[str] = mapped_column(String(64), nullable=False)
     run_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
-    deleted_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_now, nullable=False
-    )
+    deleted_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
 
 
 class PermissionRequest(Base):
@@ -1381,12 +1354,10 @@ class PermissionRequest(Base):
     dismissed: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="0", nullable=False
     )
-    dismissed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    dismissed_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
     decided_by: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_now, nullable=False
-    )
-    decided_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+    decided_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
 
     __table_args__ = (Index("ix_permission_requests_project_status", "project_id", "status"),)
 
@@ -1414,10 +1385,8 @@ class UnaskedQuestion(Base):
     question: Mapped[str] = mapped_column(Text, nullable=False)
     # "pending" | "asked" | "dismissed"
     status: Mapped[str] = mapped_column(String(16), default="pending", nullable=False, index=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_now, nullable=False
-    )
-    resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+    resolved_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
 
     __table_args__ = (Index("ix_unasked_questions_project_status", "project_id", "status"),)
 
@@ -1518,9 +1487,7 @@ class Checkpoint(Base):
     probe_status: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     probe_findings: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
 
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_now, nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
 
     __table_args__ = (
         CheckConstraint(
@@ -1576,9 +1543,7 @@ class CheckpointNote(Base):
     # What a successor should be steered away from.
     warnings: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
     consumed_by_checkpoint_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_now, nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
 
     __table_args__ = (
         Index("ix_checkpoint_notes_conversation_created", "conversation_id", "created_at"),
@@ -1636,9 +1601,7 @@ class WorkerInvocation(Base):
     reasoning_tokens: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     cost_usd_micros: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_now, nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
 
     __table_args__ = (
         CheckConstraint(
@@ -1712,14 +1675,10 @@ class SpecDocument(Base):
         String(16), default="sketch", server_default="sketch", nullable=False
     )
     # When the operator declared exploration finished. Null while exploring.
-    explore_closed_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_now, nullable=False
-    )
+    explore_closed_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_now, onupdate=_now, nullable=False
+        UTCDateTime(), default=_now, onupdate=_now, nullable=False
     )
 
     __table_args__ = (
@@ -1774,9 +1733,7 @@ class SpecDocumentMerge(Base):
     actor: Mapped[str] = mapped_column(String(128), nullable=False, default="")
     run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     note: Mapped[str] = mapped_column(String(2000), nullable=False, default="")
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_now, nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
 
     __table_args__ = (
         CheckConstraint(
@@ -1813,9 +1770,7 @@ class SpecRigorEvent(Base):
     # The document's content digest when the change was made. A rigor change is compare-and-swap
     # against this, so it cannot silently land on a document edited underneath it.
     digest: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_now, nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
 
     __table_args__ = (
         CheckConstraint(
@@ -1851,9 +1806,7 @@ class SpecDocumentEvent(Base):
     origin: Mapped[str] = mapped_column(String(16), nullable=False)
     run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     detail: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_now, nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
 
     __table_args__ = (
         CheckConstraint(
@@ -1914,10 +1867,8 @@ class SpecEditProposal(Base):
     proposer_actor_kind: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     proposer_actor_name: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     proposer_run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_now, nullable=False
-    )
-    resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+    resolved_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
     # Always an operator name when set — enforced in `spec_service.accept_proposal`/
     # `reject_proposal`, not by a constraint, mirroring how `spec_rigor.set_rigor`'s operator-only
     # check is enforced in code rather than in the schema.
@@ -1975,12 +1926,8 @@ class SpecRequirement(Base):
     # Where it sits in the rendered document, as a fragment reference.
     anchor: Mapped[str] = mapped_column(String(128), nullable=False, default="")
     # When the index last agreed with the file.
-    observed_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_now, nullable=False
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_now, nullable=False
-    )
+    observed_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
 
     __table_args__ = (
         UniqueConstraint(
@@ -2026,9 +1973,7 @@ class SpecRequirementRevision(Base):
     # Never accepted from a request body — it comes from the credential the run was minted with.
     actor: Mapped[str] = mapped_column(String(128), nullable=False, default="")
     run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_now, nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
 
     __table_args__ = (
         CheckConstraint(
@@ -2071,9 +2016,7 @@ class TaskRequirementLink(Base):
     actor_kind: Mapped[str] = mapped_column(String(16), nullable=False, default="system")
     actor: Mapped[str] = mapped_column(String(128), nullable=False, default="")
     run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_now, nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
 
     __table_args__ = (
         UniqueConstraint("task_id", "requirement_id", name="uq_task_requirement_links_pair"),
@@ -2104,9 +2047,7 @@ class TaskRequirementReference(Base):
     reference: Mapped[str] = mapped_column(Text, nullable=False)
     # Why it did not resolve: "unknown", "ambiguous", or "unparsed".
     reason: Mapped[str] = mapped_column(String(32), nullable=False, default="unknown")
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_now, nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
 
     __table_args__ = (Index("ix_task_requirement_references_task", "task_id"),)
 
@@ -2174,12 +2115,8 @@ class RequirementEvidence(Base):
     )
     # Set when retention removed the artifact. The record stays; this is how it says the attachment
     # is gone rather than pretending it is still there.
-    artifact_removed_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    produced_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_now, nullable=False
-    )
+    artifact_removed_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+    produced_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
 
     __table_args__ = (
         CheckConstraint(
@@ -2214,9 +2151,7 @@ class EvidenceReview(Base):
     actor: Mapped[str] = mapped_column(String(128), nullable=False, default="")
     run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_now, nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
 
     __table_args__ = (
         CheckConstraint(
@@ -2259,9 +2194,7 @@ class EvidenceFootprint(Base):
     # Whether this footprint is reachable from the project's main line of work, as last observed.
     # Null means not yet determined — distinct from False, which is an answer.
     reachable_from_main: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
-    observed_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_now, nullable=False
-    )
+    observed_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
 
     __table_args__ = (
         UniqueConstraint("evidence_id", name="uq_evidence_footprints_evidence"),
@@ -2298,13 +2231,11 @@ class RequirementDrift(Base):
     digest: Mapped[str] = mapped_column(String(64), nullable=False, default="")
     resolution: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     resolved_by: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
-    resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    resolved_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
     # The digest and fingerprint current when it was resolved, so the same change does not re-fire.
     resolved_digest: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     resolved_fingerprint: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_now, nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
 
     __table_args__ = (
         CheckConstraint(
@@ -2356,9 +2287,7 @@ class TaskIntegration(Base):
     mechanism: Mapped[str] = mapped_column(String(16), nullable=False, default="local")
     actor_kind: Mapped[str] = mapped_column(String(16), nullable=False)
     actor: Mapped[str] = mapped_column(String(128), nullable=False, default="")
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_now, nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
 
     __table_args__ = (
         CheckConstraint(

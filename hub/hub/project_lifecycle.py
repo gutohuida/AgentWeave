@@ -26,7 +26,7 @@ from .project_workspace import (
     configured_workspace_root,
 )
 from .repo_hygiene import seed_repo_excludes
-from .utils import short_id
+from .utils import persist_event, short_id
 
 logger = logging.getLogger(__name__)
 
@@ -77,17 +77,42 @@ class ProjectLifecycleService:
         marker = _read_marker(canonical.path)
         if marker is not None:
             marked_project = await self.session.get(Project, marker["project_id"])
-            if marked_project is not None and not register_copy_as_new:
-                await self._guard_relocation(marked_project, canonical)
-                _observe(marked_project, canonical)
-                await self.session.commit()
-                seed_repo_excludes(canonical.path)
-                return marked_project
-            if not register_copy_as_new:
-                raise ProjectIdentityConflict(
-                    "marked directory is a copied or orphaned project identity; "
-                    "register the copy explicitly as new"
+            if marked_project is not None:
+                if not register_copy_as_new:
+                    await self._guard_relocation(marked_project, canonical)
+                    _observe(marked_project, canonical)
+                    await self.session.commit()
+                    seed_repo_excludes(canonical.path)
+                    return marked_project
+            elif not register_copy_as_new:
+                project = Project(
+                    id=marker["project_id"],
+                    name=name or canonical.path.name,
+                    charters_seeded=False,
                 )
+                self.session.add(project)
+                await self._seed_new_project(project)
+                _observe(project, canonical)
+                await self._write_marker_and_commit(project, canonical.path)
+                seed_repo_excludes(canonical.path)
+                logger.info(
+                    "project_adopted project_id=%s path=%s",
+                    project.id,
+                    canonical.path,
+                )
+                # Adoption is deliberately silent at the time it happens — the operator asked to
+                # open a folder and it opened. But it is not nothing: this project was registered
+                # in some other database, and its id came from the folder rather than being minted
+                # here. A log line says that to whoever reads the server output; this row says it
+                # to the operator, in the app, afterwards. Written after the commit above, because
+                # the row carries a foreign key to the project it describes.
+                await persist_event(
+                    self.session,
+                    project.id,
+                    "project_adopted",
+                    {"path": str(canonical.path), "adopted_id": project.id},
+                )
+                return project
 
         project = None
         if marker is None and _allow_legacy_binding:

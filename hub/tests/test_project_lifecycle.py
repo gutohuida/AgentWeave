@@ -9,7 +9,7 @@ import pytest
 from sqlalchemy import func, select
 
 from hub.db.engine import async_session_factory
-from hub.db.models import Charter, Project, Run, Runner
+from hub.db.models import Charter, EventLog, Project, Run, Runner
 from hub.project_lifecycle import ProjectLifecycleService
 from hub.project_workspace import PROJECT_MARKER_PATH, ProjectIdentityConflict, ProjectPathError
 
@@ -95,6 +95,107 @@ async def test_copied_marker_conflicts_until_explicitly_registered_as_new(app, t
         )
     assert replacement.id != first_id
     assert _marker(copied)["project_id"] == replacement.id
+
+
+@pytest.mark.asyncio
+async def test_orphaned_marker_is_adopted_under_its_own_id(app, tmp_path) -> None:
+    """A marker naming a project id this database has never seen (case 3) must be
+    adopted under that same id rather than refused, and seeded like a new project.
+    """
+    directory = tmp_path / "orphan"
+    directory.mkdir()
+    orphan_id = "proj-orphanedid01"
+    marker_path = directory / PROJECT_MARKER_PATH
+    marker_path.parent.mkdir(parents=True)
+    marker_path.write_text(json.dumps({"version": 1, "project_id": orphan_id}), encoding="utf-8")
+
+    async with async_session_factory() as session:
+        adopted = await ProjectLifecycleService(session).open_existing(directory)
+
+    assert adopted.id == orphan_id
+    assert adopted.charters_seeded is True
+    assert _marker(directory)["project_id"] == orphan_id
+
+    async with async_session_factory() as session:
+        stored = await session.get(Project, orphan_id)
+        runner_count = await session.scalar(
+            select(func.count()).select_from(Runner).where(Runner.project_id == orphan_id)
+        )
+        charter_count = await session.scalar(
+            select(func.count()).select_from(Charter).where(Charter.project_id == orphan_id)
+        )
+    assert stored is not None
+    assert stored.working_directory == str(directory.resolve())
+    assert runner_count == 2
+    assert charter_count and charter_count > 0
+
+
+@pytest.mark.asyncio
+async def test_adoption_leaves_a_trace_the_operator_can_find(app, tmp_path) -> None:
+    """Adoption is silent while it happens, but must not be invisible afterwards.
+
+    A project reaching this database with an id it did not mint is worth being able to see later:
+    it means the folder was registered somewhere else first. A server log line reaches whoever
+    reads server output; this row is what reaches the operator in the app. Registering a plain
+    unmarked directory is ordinary and writes no such event, which is what the second half asserts
+    — an event every registration emits would say nothing.
+    """
+    adopted_dir = tmp_path / "adopted"
+    adopted_dir.mkdir()
+    orphan_id = "proj-tracecheck1"
+    marker_path = adopted_dir / PROJECT_MARKER_PATH
+    marker_path.parent.mkdir(parents=True)
+    marker_path.write_text(json.dumps({"version": 1, "project_id": orphan_id}), encoding="utf-8")
+
+    plain_dir = tmp_path / "plain"
+    plain_dir.mkdir()
+
+    async with async_session_factory() as session:
+        await ProjectLifecycleService(session).open_existing(adopted_dir)
+        plain = await ProjectLifecycleService(session).open_existing(plain_dir)
+
+    async with async_session_factory() as session:
+        events = (
+            (
+                await session.execute(
+                    select(EventLog).where(EventLog.event_type == "project_adopted")
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+    assert [event.project_id for event in events] == [orphan_id]
+    assert events[0].data["path"] == str(adopted_dir.resolve())
+    assert plain.id != orphan_id
+
+
+@pytest.mark.asyncio
+async def test_deleted_project_directory_is_adopted_back_under_the_same_id(app, tmp_path) -> None:
+    """`delete()` never touches the filesystem, so the marker survives. Reopening the
+    same directory afterward must restore the original id rather than being refused.
+    """
+    directory = tmp_path / "delete-then-reopen"
+    directory.mkdir()
+
+    async with async_session_factory() as session:
+        service = ProjectLifecycleService(session)
+        project = await service.open_existing(directory)
+        original_id = project.id
+        await service.delete(original_id)
+
+    async with async_session_factory() as session:
+        assert await session.get(Project, original_id) is None
+
+    async with async_session_factory() as session:
+        reopened = await ProjectLifecycleService(session).open_existing(directory)
+
+    assert reopened.id == original_id
+    async with async_session_factory() as session:
+        runner_count = await session.scalar(
+            select(func.count()).select_from(Runner).where(Runner.project_id == original_id)
+        )
+    assert runner_count == 2
 
 
 @pytest.mark.asyncio
