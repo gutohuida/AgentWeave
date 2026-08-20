@@ -276,6 +276,50 @@ Worth noting the boundary is *stated* in the docstring as "through a merge", so 
 conclude direct operator authoring is forbidden. The code says otherwise — it forbids only
 non-operators. The docstring is narrower than the check.
 
+## 14. AgentWeave requires a starting state the source format does not have
+
+**What happened.** `AcceptanceCriterion.given` is a required field. openspec scenarios are
+overwhelmingly WHEN/THEN only: **1,270 of 1,301 scenarios (97.6%) state no GIVEN.**
+
+Omitting `given` is rejected as `missing`. An **empty string is accepted**. So the migration has a
+faithful option — record what the source says and nothing more — and the whole corpus imported with
+`given: ""` on 1,270 criteria.
+
+**Why it matters, and why the alternative was refused.** The obvious "quality" move is to author a
+starting state for each. That would be **1,270 pieces of prose that exist in no source and that
+nobody reviewed**, written into documents whose entire purpose is to state current behaviour
+accurately. The earlier one-off translation of `project-instructions` did exactly this for seven
+criteria and flagged it as a limit worth an operator's eye; at 1,270 nobody will ever review them,
+and the corpus would quietly become part invention.
+
+Recorded per document in `evidence.limits`, so a reader of any imported document is told which of
+its criteria have an empty starting state and why.
+
+**What would be nice.** Make `given` optional with a default of `""` rather than required-but-
+emptyable. The current shape means every caller must supply a field the schema is happy to leave
+blank, which teaches importers to fill it with something — the opposite of what the requirement
+wants. Alternatively, render an empty `given` visibly as "no starting state stated" rather than an
+empty table cell, so the gap reads as recorded rather than forgotten.
+
+## 15. A 33-document corpus has no obvious home, and that is an editorial question nobody was asked
+
+**What happened.** The index requires a `home`, and with 33 sibling capability documents there is no
+natural answer. The dry run used `spec-document-authority` as a placeholder, which is arbitrary — it
+is one capability among 33, not an entry point to the corpus.
+
+**Why it matters.** `home` is what the shell resolves to display. Picking a capability at random
+makes the corpus open on an arbitrary document, and because the choice is recorded in a file that
+travels, the arbitrariness travels with it.
+
+**What would be nice.** The corpus wants a top-level document — a `system-map` or `baseline`
+describing AgentWeave as a whole and pointing at its capabilities — and *that* is home. The manifest
+already supports both kinds and a `parent` field to hang the 33 beneath it. Two things are missing:
+somewhere to author it (it is not a migration of anything, so it has no openspec source), and the
+`parent` arrangement UI from finding 8.
+
+Worth noting the shape this points to: **an imported corpus is not a finished corpus.** It has the
+content but none of the structure, and the structure is the part AgentWeave is supposed to add.
+
 ## 13. `propose` answers 200 with a list of reasons it did not propose
 
 **What happened.** Getting a document to `approved` in a test took four attempts, each failing on

@@ -27,6 +27,6 @@
 
 - [ ] 4.1 Run the full `hub/tests/` suite and confirm no regression against the 2521-passed baseline
 - [x] 4.2 Run `py -3.11 -m ruff check` and `py -3.11 -m black --check` on every changed file
-- [ ] 4.3 Import two real openspec capabilities end to end against a throwaway project, and confirm both render, index and read back with the requirements the source declared
+- [x] 4.3 Import two real openspec capabilities end to end against a throwaway project, and confirm both render, index and read back with the requirements the source declared
 - [x] 4.4 Perform one mutation check: revert the operator actor to an agent actor, watch a named test fail, restore it
-- [ ] 4.5 Record any friction this change surfaced in `openspec/explorations/2026-08-20-dogfooding-findings.md`
+- [x] 4.5 Record any friction this change surfaced in `openspec/explorations/2026-08-20-dogfooding-findings.md`
