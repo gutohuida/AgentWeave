@@ -283,6 +283,19 @@ class RetentionSetting(BaseModel):
     policy: str = Field(max_length=16)
 
 
+class ReindexRequest(BaseModel):
+    """Optional inputs to a reindex. The body itself is optional; all fields default.
+
+    `home` exists because the Hub refuses to choose one. `_select_home` treats a guess as
+    indistinguishable from an operator's decision, so a corpus with several documents and no
+    recorded home cannot be written until someone says which is home — and this is where the
+    operator says it. A home already recorded in a valid index is preserved without passing
+    anything.
+    """
+
+    home: Optional[str] = Field(default=None, max_length=255)
+
+
 async def _requirement(session: AsyncSession, project_id: str, identifier: str, document: str):
     document_row = None
     if document:
@@ -943,20 +956,51 @@ async def _latest_reviews_for(session: AsyncSession, evidence_ids) -> dict:
 
 @router.post("/spec/reindex")
 async def reindex(
+    body: Optional[ReindexRequest] = None,
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ):
-    """Rebuild the requirement index from the files, then retry unresolved references.
+    """Rebuild the requirement index and `spec/index.json` from the files.
 
     The operator's, not an agent's. Two things need it: a project whose documents
     predate the index, and a document edited outside the Hub. Both are cases where
     the index is behind the files, and neither can be detected without reading
     them — so this is offered rather than guessed at on a timer.
+
+    Two indexes are rebuilt here, and they are not the same thing. The *requirement*
+    index is database rows, and it does not travel. `spec/index.json` is a file, and it
+    is the only record of the corpus's home, hierarchy and ordering that survives the
+    project being copied to another machine. This route wrote only the first until
+    2026-08-20, which is why every corpus read as `unindexed`.
+
+    The manifest write is skipped, not failed, when there is no home to record — the
+    requirement index is still worth rebuilding, and `index.diagnostics` says why nothing
+    was written.
     """
     project_id, _ = project
     workspace = await _workspace(session, project_id)
     results = await spec_index.reindex_project(session, workspace, project_id)
     backfilled = await requirement_links.backfill_project(session, project_id)
+
+    on_disk, discovery_diagnostics = spec_documents.discover(workspace)
+    rows = await spec_lifecycle.list_documents(session, project_id)
+    existing, _, _ = spec_documents.read_index(workspace)
+    manifest, index_diagnostics = spec_documents.build_index(
+        on_disk,
+        [(row.path, row.title, row.kind, row.phase) for row in rows],
+        existing,
+        home=body.home if body is not None else None,
+    )
+
+    written = None
+    if manifest is not None:
+        spec_documents.write_index(workspace, manifest)
+        written = {
+            "path": spec_documents.INDEX_RELATIVE,
+            "documents": len(manifest.documents),
+            "home": manifest.home,
+        }
+
     await session.commit()
     return {
         "documents": {
@@ -974,6 +1018,10 @@ async def reindex(
             for path, result in results.items()
         },
         "references": backfilled,
+        "index": {
+            "written": written,
+            "diagnostics": list(discovery_diagnostics) + list(index_diagnostics),
+        },
     }
 
 

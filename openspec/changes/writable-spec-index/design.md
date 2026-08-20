@@ -176,10 +176,23 @@ to `index: absent`, which is exactly today's state and is already handled.
 
 ## Open Questions
 
-- **Should `home` default to the single document when a corpus has exactly one?** `_select_home`
-  already resolves that case on read (`spec_documents.py:284`). Writing it explicitly would make the
-  file self-describing; leaving it unset keeps the writer free of editorial choices. Currently
-  leaning to write it, since with one document there is no choice to make — but it is the operator's
-  call and it is deferred, not decided.
-- **Should the migration set a home for the 33-document corpus?** Out of scope here; recorded so it
-  is not discovered as a surprise mid-migration.
+- **RESOLVED during implementation — how does the operator name a home?** The two questions below
+  turned out to be one blocker, and it was worse than "deferred": with several documents and no
+  recorded home, `build_manifest` correctly refuses and the writer produces **nothing at all**. A
+  33-document corpus would have hit this on document two, so the change as originally scoped could
+  not have unblocked the migration it exists for.
+
+  `POST /spec/reindex` now accepts an optional `home`. An explicit home wins over a recorded one
+  (the operator is answering now); absent it, a recorded home is preserved and a single-document
+  corpus still resolves itself on read, as `_select_home` already did. Nothing is guessed.
+
+- **Still open: there is no way to set a home from the app.** The API can answer the question; the
+  UI cannot ask it. "Set as home" on a document in the spec tree is the obvious shape. Deliberately
+  not built here — it is a UI change and this slice was already deep — but it is the difference
+  between a corpus that indexes itself and one that needs a curl command. Recorded as finding 8 in
+  `openspec/explorations/2026-08-20-dogfooding-findings.md`.
+
+- **Should `parent` and `order` become columns?** The writer establishes that the index file is
+  currently the *only* copy of both, which makes it authoritative by accident rather than by design
+  (finding 10). Promoting them would make a rebuild safe by construction. Out of scope; it needs the
+  arranging UI to exist first, or there is nothing to store.

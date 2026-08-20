@@ -103,6 +103,52 @@ and MUST NOT invent a home it was never given.
 - **WHEN** the operator rebuilds the index
 - **THEN** no document is recorded as home
 - **AND** the operator is asked which is home
+- **AND** no index is written
+
+### Requirement: The operator can name the home the Hub refuses to guess
+
+Rebuilding SHALL accept a home named by the operator, and that answer MUST take precedence over any
+home already recorded. A named home that does not identify a document in the corpus SHALL be
+refused rather than substituted.
+
+This exists because the Hub's refusal to guess, on its own, leaves a corpus of more than one
+document permanently unindexable: a home is required, nothing may invent one, and so nothing could
+ever be written. The refusal is right; what was missing was a way to answer.
+
+#### Scenario: A named home is recorded and the index is written
+
+- **GIVEN** a project with several documents and no recorded home
+- **WHEN** the operator rebuilds the index naming one of them as home
+- **THEN** that document is recorded as home
+- **AND** every discovered document is reported as filed
+
+#### Scenario: A named home overrides a recorded one
+
+- **GIVEN** a valid index already recording a home
+- **WHEN** the operator rebuilds the index naming a different document as home
+- **THEN** the newly named document is home
+
+#### Scenario: A named home that identifies no document is refused
+
+- **WHEN** the operator rebuilds the index naming a home that is not in the corpus
+- **THEN** no index is written
+- **AND** no other document is substituted as home
+
+### Requirement: A failure to write the index does not abandon the requirement index
+
+When the document index cannot be written, the requirement index SHALL still be rebuilt, and the
+reason the file was not written SHALL be reported.
+
+Rebuilding covers two indexes — the requirement index held as records, and the document index held
+as a file — and only the file can be blocked on a decision that is the operator's to make.
+
+#### Scenario: A corpus with no home still rebuilds its requirements
+
+- **GIVEN** a project with several documents and no home
+- **WHEN** the operator rebuilds
+- **THEN** the requirement index is rebuilt
+- **AND** the response reports that no document index was written
+- **AND** the response states why
 
 #### Scenario: A home naming a document that no longer exists is not silently replaced
 

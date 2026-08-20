@@ -141,9 +141,13 @@ The CLI said so on every invocation — `Unknown artifact ID in rules: "spec". V
 test."* That is a quality gate that has been silently off for the entire life of the corpus.
 
 **Fixed** in this session. Worth carrying as a lesson rather than just a fix: a warning printed
-alongside valid output is a warning nobody sees. AgentWeave's own equivalent — the `diagnostics`
-array on document state — has the same hazard if the UI renders the documents and not the
-diagnostics.
+alongside valid output is a warning nobody sees — it went to stderr, above well-formed JSON, on
+every single invocation.
+
+*Checked before asserting the obvious parallel:* AgentWeave does **not** have this problem in the
+same place. `specNavigation.ts:200-208` separates `filed` documents from drifted ones and
+`SpecCoverageBar` renders coverage diagnostics, so index state does reach the operator. The lesson
+is about the openspec CLI's channel, not AgentWeave's.
 
 ---
 
@@ -161,6 +165,88 @@ direct contradiction, and the agent has no way to know which source wins.
 two places stating the project's standing instructions, and only one got updated.** AgentWeave has
 exactly this shape today — project instructions in the DB, charters in the DB, and `CLAUDE.md` on
 disk, all reaching an agent's context. Nothing reconciles them or notices when they disagree.
+
+---
+
+## 8. A corpus cannot be indexed until someone names a home — and no UI names one
+
+**What happened.** Found while implementing the writer, not while designing it. `_select_home`
+refuses to pick a home when several documents are candidates, on the stated grounds that a guess is
+indistinguishable from an operator's decision. That is right. But the writer then has nothing valid
+to write — `home` is a required manifest field — so a corpus of more than one document produces
+**no index at all** until a home is named.
+
+The 33-document migration hits this on document two.
+
+**Why it matters.** The refusal is correct and the consequence is a dead end, because nothing in
+the product lets the operator answer the question. `_select_home` emits `home_ambiguous`, which the
+UI can display, but there is no control that sets a home and no field to store the answer in
+outside the very file that cannot be written without it.
+
+**Partly addressed.** `POST /spec/reindex` now takes an optional `home`, so the operator *can*
+answer — via the API. That resolves the design's open question and unblocks the migration.
+
+**What is still missing:** a way to answer it in the app. "Set as home" on a document in the spec
+tree is the obvious shape, and it is the difference between a corpus that indexes itself and one
+that needs a curl command. Recorded rather than built — it is a UI change, and this change was
+already the deepest slice worth taking in one pass.
+
+## 9. The manifest tests never used a document the product had actually rendered
+
+**What happened.** Every existing test of `compute_intrinsic_conflicts` hand-wrote its HTML:
+
+```python
+'<meta name="aw-spec-kind" content="baseline">'
+'<meta name="aw-spec-status" content="living">'
+```
+
+`living` is a value `spec_render` has never emitted. The test asserted "no conflict when content
+matches" and passed — because it fabricated *both* sides of the comparison from the same wrong
+vocabulary.
+
+**Why it matters.** This is the mechanism by which finding 1 survived three weeks. The comparison
+under test was exactly the one that was broken, and it was green throughout, because nothing in the
+suite ever fed it output the renderer produced. A test that builds its own fixture from the same
+misconception as the code cannot fail.
+
+**What would be nice.** For a pipeline like this — payload → rendered HTML → parsed head → compared
+against an index — at least one test should run the real renderer end to end rather than assert
+against a handcrafted string. The new
+`test_the_written_index_reports_no_metadata_conflict` does this for the index; the rendering path
+would benefit from the same treatment.
+
+## 10. `spec/index.json` is where the *only* copy of the operator's arrangement lives
+
+**What happened.** Establishing what the writer must preserve made the exposure explicit: `parent`
+and `order` exist **nowhere else**. They have no column (finding 4), so the file is not a cache of
+database state — for those two fields it is the system of record.
+
+**Why it matters.** It changes what a rebuild is allowed to do. A rebuild that recomputed `parent`
+and `order` from the documents would not be "refreshing a derived artefact", it would be destroying
+data with no other copy. The writer therefore reads the existing index before writing and carries
+those two fields forward, and there is a test for it.
+
+**What would be nice.** Either promote them to columns (so the file becomes a projection and a
+rebuild is safe by construction), or state plainly in the schema that the file is authoritative for
+arrangement. Right now it is authoritative by accident, which is the kind of thing that survives
+until someone writes a well-meaning "just regenerate it" helper.
+
+## 11. openspec's "must contain SHALL or MUST" check only reads the requirement's first line
+
+**What happened.** A requirement whose normative sentence was on the *second* line of its block was
+rejected with `must contain SHALL or MUST` — while the block plainly contained two `SHALL`s. Moving
+the same sentence to the first line made it pass, with no other edit. Confirmed by doing exactly
+that and re-validating.
+
+**Why it matters.** The message names a condition that is visibly satisfied, so the natural
+response is to distrust the validator or start adding redundant modals. The real rule is
+positional and undocumented.
+
+**Relevance to AgentWeave.** Its equivalent check — `submit_spec_document` refusing a requirement
+with no `modal` — avoids this by making the modal a **separate field** rather than prose the
+validator has to find. That is the better design, and it is worth stating explicitly as a reason to
+keep it: a structured payload cannot have this class of bug, because there is nowhere else for the
+modal to hide. One more argument for "you supply structure; the Hub renders the document".
 
 ---
 

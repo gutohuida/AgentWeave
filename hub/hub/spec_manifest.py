@@ -15,7 +15,7 @@ import json
 import re
 from dataclasses import dataclass
 from html.parser import HTMLParser
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 MANIFEST_VERSION = 1
 MANIFEST_MAX_BYTES = 256 * 1024
@@ -23,10 +23,33 @@ MANIFEST_MAX_DOCUMENTS = 1000
 SPEC_PATH_MAX_LENGTH = 255
 HTML_HEAD_MAX_BYTES = 64 * 1024
 
-VALID_KINDS = {"baseline", "system-map", "roadmap", "change-spec"}
-LIVING_KINDS = {"baseline", "system-map", "roadmap"}
-CHANGE_SPEC_STATUSES = {"draft", "approved"}
-LIVING_STATUS = "living"
+# Every kind `submit_spec_document` accepts. The two vocabularies were introduced at different
+# times and diverged: `capability` shipped with the phase lifecycle on 2026-08-16 and was never
+# added here, so a capability document the Hub itself rendered could not be described by an index
+# the Hub itself validated. One list, deliberately.
+VALID_KINDS = {"baseline", "system-map", "roadmap", "change-spec", "capability"}
+
+# A document's index status is its lifecycle phase — the value `spec_render` writes into the
+# rendered document's own `aw-spec-status`, and therefore the value `compute_intrinsic_conflicts`
+# compares an entry against. These mirror `hub/hub/spec_lifecycle.py` and are restated rather than
+# imported: this module is carried verbatim in the CLI twin, which has no lifecycle module. The
+# twin-agreement test is what holds the two copies together.
+EXPLORING = "exploring"
+PROPOSED = "proposed"
+APPROVED = "approved"
+ARCHIVED = "archived"
+CURRENT = "current"
+
+#: Phases reached by walking `spec_lifecycle.TRANSITIONS` from a document's creation.
+LIFECYCLE_PHASES = {EXPLORING, PROPOSED, APPROVED, ARCHIVED}
+
+#: A capability document is created at `current` and never leaves it — `TRANSITIONS` holds no pair
+#: whose source is `current`, and `transition()` refuses it as a destination. So `current` is not
+#: one phase among five for a capability; it is the only one it can ever have.
+CAPABILITY_KIND = "capability"
+CAPABILITY_PHASES = {CURRENT}
+
+VALID_PHASES = LIFECYCLE_PHASES | CAPABILITY_PHASES
 
 _CONTROL_CHAR_RE = re.compile(r"[\x00-\x1f]")
 
@@ -97,8 +120,14 @@ class ManifestDiagnostic:
         }
 
 
-def _expected_status(kind: str) -> Optional[str]:
-    return LIVING_STATUS if kind in LIVING_KINDS else None
+def permitted_phases(kind: str) -> Set[str]:
+    """The phases a document of this kind can actually hold.
+
+    Validating the pair rather than each field independently is what catches an entry that is
+    individually well-formed but describes a document the product cannot produce — a capability
+    marked `approved`, say, which reads as plausible and is unreachable.
+    """
+    return set(CAPABILITY_PHASES) if kind == CAPABILITY_KIND else set(LIFECYCLE_PHASES)
 
 
 def load_manifest(raw_text: str) -> Tuple[Optional[Manifest], List[ManifestDiagnostic]]:
@@ -164,20 +193,32 @@ def load_manifest(raw_text: str) -> Tuple[Optional[Manifest], List[ManifestDiagn
             continue
 
         status = entry.get("status")
-        expected = _expected_status(kind)
-        valid_status = status == expected if expected else status in CHANGE_SPEC_STATUSES
-        if not valid_status:
+        if not isinstance(status, str) or status not in VALID_PHASES:
             diagnostics.append(
                 ManifestDiagnostic(
-                    code="manifest_kind_status_mismatch",
+                    code="manifest_invalid_phase",
                     path=path,
-                    expected=expected or "draft|approved",
+                    field="status",
+                    expected="|".join(sorted(VALID_PHASES)),
                     actual=str(status),
                 )
             )
             ok = False
             continue
-        assert isinstance(status, str)
+
+        allowed = permitted_phases(kind)
+        if status not in allowed:
+            diagnostics.append(
+                ManifestDiagnostic(
+                    code="manifest_kind_status_mismatch",
+                    path=path,
+                    field="status",
+                    expected="|".join(sorted(allowed)),
+                    actual=status,
+                )
+            )
+            ok = False
+            continue
 
         order = entry.get("order")
         if not isinstance(order, int) or isinstance(order, bool):
@@ -241,6 +282,54 @@ def load_manifest(raw_text: str) -> Tuple[Optional[Manifest], List[ManifestDiagn
         return None, diagnostics
 
     return Manifest(version=MANIFEST_VERSION, home=home, documents=tuple(documents)), diagnostics
+
+
+def dump_manifest(manifest: Manifest) -> str:
+    """Serialise a manifest to `spec/index.json` text.
+
+    Pure: manifest in, text out, no filesystem — `spec_documents.write_index` is the only thing
+    that touches disk. That split is what lets the round trip
+    (`load_manifest(dump_manifest(m)) == m`) be tested without a workspace, and lets the CLI twin
+    carry the same serialisation despite having no `ProjectWorkspace`.
+
+    Output is byte-stable for a given manifest: documents keep the manifest's own order and keys
+    are emitted in a fixed order. A rebuild that changed nothing must produce an identical file,
+    or every rebuild looks like an edit to whatever is watching the tree.
+    """
+    payload = {
+        "version": manifest.version,
+        "home": manifest.home,
+        "documents": [
+            {
+                "path": document.path,
+                "title": document.title,
+                "kind": document.kind,
+                "status": document.status,
+                "parent": document.parent,
+                "order": document.order,
+            }
+            for document in manifest.documents
+        ],
+    }
+    return json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=False) + "\n"
+
+
+def build_manifest(
+    documents: Iterable[ManifestDocument], home: Optional[str]
+) -> Optional[Manifest]:
+    """A manifest from entries already carrying their arrangement, or None with no usable home.
+
+    `home` is not defaulted here. `spec_documents._select_home` refuses to choose one on read,
+    on the grounds that a guess is indistinguishable from an operator's decision; a writer that
+    quietly picked one would smuggle in exactly the choice the reader declines to make.
+    """
+    ordered = tuple(documents)
+    if not ordered:
+        return None
+    paths = {document.path for document in ordered}
+    if home is None or home not in paths:
+        return None
+    return Manifest(version=MANIFEST_VERSION, home=home, documents=ordered)
 
 
 class _SpecHeadParser(HTMLParser):

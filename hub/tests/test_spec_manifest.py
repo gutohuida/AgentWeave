@@ -58,7 +58,7 @@ class TestLoadManifest:
                     "path": "spec/agentweave-spec.html",
                     "title": "Baseline",
                     "kind": "baseline",
-                    "status": "living",
+                    "status": "approved",
                     "parent": None,
                     "order": 10,
                 },
@@ -66,7 +66,7 @@ class TestLoadManifest:
                     "path": "spec/changes/add-thing/spec.html",
                     "title": "Add thing",
                     "kind": "change-spec",
-                    "status": "draft",
+                    "status": "exploring",
                     "parent": "spec/agentweave-spec.html",
                     "order": 20,
                 },
@@ -131,12 +131,64 @@ class TestLoadManifest:
         assert manifest is None
         assert any(d.code == "manifest_parent_cycle" for d in diagnostics)
 
-    def test_living_kind_rejects_draft_status(self):
+    def test_capability_document_can_be_indexed(self):
+        """The whole point of the change: a `capability` document the Hub renders is describable.
+
+        Before this, `VALID_KINDS` omitted `capability`, so the two capability documents in this
+        repo's own `spec/` could not be given an entry — and because any single violation nulls
+        the manifest, that dropped every document to `unindexed`.
+        """
         data = self._valid_manifest()
-        data["documents"][0]["status"] = "draft"
+        data["documents"].append(
+            {
+                "path": "spec/capabilities/thing/spec.html",
+                "title": "Thing",
+                "kind": "capability",
+                "status": "current",
+                "parent": None,
+                "order": 30,
+            }
+        )
+        manifest, diagnostics = load_manifest(json.dumps(data))
+        assert manifest is not None
+        assert diagnostics == []
+        assert manifest.by_path()["spec/capabilities/thing/spec.html"].kind == "capability"
+
+    def test_archived_change_spec_can_be_indexed(self):
+        """`archived` was unrepresentable: the old model allowed only draft|approved here."""
+        data = self._valid_manifest()
+        data["documents"][1]["status"] = "archived"
+        manifest, _ = load_manifest(json.dumps(data))
+        assert manifest is not None
+        assert manifest.documents[1].status == "archived"
+
+    @pytest.mark.parametrize("phase", ["exploring", "proposed", "approved", "archived"])
+    def test_capability_rejects_every_phase_but_current(self, phase):
+        """A capability is created at `current` and no transition moves it, so any other phase
+        describes a document the product cannot produce — plausible to a reader, unreachable."""
+        data = self._valid_manifest()
+        data["documents"][0]["kind"] = "capability"
+        data["documents"][0]["status"] = phase
         manifest, diagnostics = load_manifest(json.dumps(data))
         assert manifest is None
         assert any(d.code == "manifest_kind_status_mismatch" for d in diagnostics)
+
+    def test_non_capability_kind_rejects_current(self):
+        data = self._valid_manifest()
+        data["documents"][0]["status"] = "current"
+        manifest, diagnostics = load_manifest(json.dumps(data))
+        assert manifest is None
+        assert any(d.code == "manifest_kind_status_mismatch" for d in diagnostics)
+
+    @pytest.mark.parametrize("status", ["living", "draft", "", "APPROVED", None, 3])
+    def test_a_status_that_is_not_a_phase_is_refused(self, status):
+        """Includes the two values the retired model used: `living` and `draft` are no longer
+        phases, so an index written against the old schema fails loudly rather than half-parsing."""
+        data = self._valid_manifest()
+        data["documents"][0]["status"] = status
+        manifest, diagnostics = load_manifest(json.dumps(data))
+        assert manifest is None
+        assert any(d.code == "manifest_invalid_phase" for d in diagnostics)
 
     def test_diagnostic_serializes_to_dict(self):
         _, diagnostics = load_manifest("{not json")
@@ -153,7 +205,7 @@ class TestComputeIntrinsicConflicts:
                     "path": "spec/agentweave-spec.html",
                     "title": "Baseline",
                     "kind": "baseline",
-                    "status": "living",
+                    "status": "approved",
                     "parent": None,
                     "order": 10,
                 }
@@ -168,7 +220,7 @@ class TestComputeIntrinsicConflicts:
         content = (
             "<html><head><title>Baseline</title>"
             '<meta name="aw-spec-kind" content="baseline">'
-            '<meta name="aw-spec-status" content="living"></head></html>'
+            '<meta name="aw-spec-status" content="approved"></head></html>'
         )
         conflicts = compute_intrinsic_conflicts(manifest, {"spec/agentweave-spec.html": content})
         assert conflicts == []
@@ -190,7 +242,7 @@ class TestParseHtmlHead:
         html = (
             "<html><head><title>My Spec</title>"
             '<meta name="aw-spec-kind" content="baseline">'
-            '<meta name="aw-spec-status" content="living"></head></html>'
+            '<meta name="aw-spec-status" content="approved"></head></html>'
         )
         result = parse_html_head(html)
-        assert result == {"title": "My Spec", "kind": "baseline", "status": "living"}
+        assert result == {"title": "My Spec", "kind": "baseline", "status": "approved"}

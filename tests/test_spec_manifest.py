@@ -157,7 +157,7 @@ class TestLoadManifest:
                     "path": "spec/agentweave-spec.html",
                     "title": "Baseline",
                     "kind": "baseline",
-                    "status": "living",
+                    "status": "approved",
                     "parent": None,
                     "order": 10,
                 },
@@ -165,7 +165,7 @@ class TestLoadManifest:
                     "path": "spec/changes/add-thing/spec.html",
                     "title": "Add thing",
                     "kind": "change-spec",
-                    "status": "draft",
+                    "status": "exploring",
                     "parent": "spec/agentweave-spec.html",
                     "order": 20,
                 },
@@ -251,24 +251,42 @@ class TestLoadManifest:
         assert manifest is None
         assert any(d.code == "manifest_parent_cycle" for d in diagnostics)
 
-    @pytest.mark.parametrize(
-        "kind,status",
-        [("baseline", "draft"), ("system-map", "approved"), ("roadmap", "draft")],
-    )
-    def test_living_kind_rejects_non_living_status(self, kind, status):
+    @pytest.mark.parametrize("kind", ["baseline", "system-map", "roadmap", "change-spec"])
+    def test_a_non_capability_kind_rejects_current(self, kind):
+        """`current` is a capability document's phase and only a capability document's."""
         data = self._valid_manifest()
         data["documents"][0]["kind"] = kind
-        data["documents"][0]["status"] = status
+        data["documents"][0]["status"] = "current"
         manifest, diagnostics = load_manifest(json.dumps(data))
         assert manifest is None
         assert any(d.code == "manifest_kind_status_mismatch" for d in diagnostics)
 
-    def test_change_spec_rejects_living_status(self):
+    @pytest.mark.parametrize("phase", ["exploring", "proposed", "approved", "archived"])
+    def test_capability_rejects_every_phase_but_current(self, phase):
         data = self._valid_manifest()
-        data["documents"][1]["status"] = "living"
+        data["documents"][0]["kind"] = "capability"
+        data["documents"][0]["status"] = phase
         manifest, diagnostics = load_manifest(json.dumps(data))
         assert manifest is None
         assert any(d.code == "manifest_kind_status_mismatch" for d in diagnostics)
+
+    def test_capability_at_current_is_accepted(self):
+        data = self._valid_manifest()
+        data["documents"][0]["kind"] = "capability"
+        data["documents"][0]["status"] = "current"
+        manifest, diagnostics = load_manifest(json.dumps(data))
+        assert manifest is not None
+        assert diagnostics == []
+
+    @pytest.mark.parametrize("status", ["living", "draft"])
+    def test_the_retired_status_vocabulary_is_refused(self, status):
+        """`living` and `draft` were the old kind-derived model. An index written against it fails
+        loudly rather than half-parsing."""
+        data = self._valid_manifest()
+        data["documents"][0]["status"] = status
+        manifest, diagnostics = load_manifest(json.dumps(data))
+        assert manifest is None
+        assert any(d.code == "manifest_invalid_phase" for d in diagnostics)
 
     def test_invalid_kind(self):
         data = self._valid_manifest()
@@ -288,7 +306,7 @@ class TestComputeIntrinsicConflicts:
                     "path": "spec/agentweave-spec.html",
                     "title": "Baseline",
                     "kind": "baseline",
-                    "status": "living",
+                    "status": "approved",
                     "parent": None,
                     "order": 10,
                 }
@@ -305,7 +323,7 @@ class TestComputeIntrinsicConflicts:
             html_path,
             "<html><head><title>Baseline</title>"
             '<meta name="aw-spec-kind" content="baseline">'
-            '<meta name="aw-spec-status" content="living"></head></html>',
+            '<meta name="aw-spec-status" content="approved"></head></html>',
         )
         conflicts = compute_intrinsic_conflicts(manifest, {"spec/agentweave-spec.html": html_path})
         assert conflicts == []
@@ -333,13 +351,13 @@ class TestParseHtmlHead:
         <html><head>
             <title>My Spec</title>
             <meta name="aw-spec-kind" content="baseline">
-            <meta name="aw-spec-status" content="living">
+            <meta name="aw-spec-status" content="approved">
         </head><body>ignored</body></html>
         """
         result = parse_html_head(html)
         assert result["title"] == "My Spec"
         assert result["kind"] == "baseline"
-        assert result["status"] == "living"
+        assert result["status"] == "approved"
 
     def test_missing_metadata_returns_none_values(self):
         result = parse_html_head("<html><head><title>Only Title</title></head></html>")
