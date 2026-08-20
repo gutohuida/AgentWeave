@@ -264,6 +264,45 @@ async def _claim_loop_task(session: AsyncSession, loop: Loop) -> Optional[Task]:
     return result.scalars().first()
 
 
+async def _loop_stall_reason(session: AsyncSession, loop: Loop) -> Optional[str]:
+    """Why a firing that claimed nothing should be skipped rather than spawned, or `None`.
+
+    A loop's queue has three states, and until 2026-08-20 the firing distinguished none of them:
+
+        nothing ready YET   open work, none claimable   -> skip this firing, keep polling
+        nothing LEFT        every task terminal         -> `_loop_stop_reason`, stop for good
+        never filled        no tasks at all             -> fire; the agent's job is to fill it
+
+    Only the middle case had an answer. The first presented identically to the third, so a loop
+    whose tasks had all reached `completed` with nothing reviewing them spawned an agent on every
+    cron tick forever, claimed nothing, and never stopped -- `completed` and `under_review` are the
+    only two statuses in neither `CLAIMABLE_LOOP_TASK_STATUSES` nor `TERMINAL_FOR_BINDING`, so they
+    are invisible to the claim and counted as open by the stop condition at the same time.
+    Reproduced before it was fixed, in `test_loop_whose_tasks_are_all_completed_but_unapproved_spins`.
+
+    Skipping rather than stopping is deliberate: stalled is not finished. `_loop_stop_reason`'s
+    branch sets `job.enabled = False` and calls `remove_job`, which for a queue waiting on a review
+    that has simply not happened yet would kill the loop permanently -- and approving the task
+    afterwards would not bring it back. A skipped firing costs nothing and recovers by itself on the
+    next tick.
+
+    Returns `None` for a queue that has never been filled or is fully drained, so neither the
+    create-then-populate order nor `_loop_stop_reason`'s own territory is disturbed.
+    """
+    rows = (
+        await session.execute(
+            select(Task.status, func.count(Task.id))
+            .where(Task.loop_id == loop.id, Task.status.not_in(TERMINAL_FOR_BINDING))
+            .group_by(Task.status)
+        )
+    ).all()
+    if not rows:
+        return None
+    total = sum(count for _, count in rows)
+    breakdown = ", ".join(f"{count} {status}" for status, count in sorted(rows))
+    return f"loop queue is stalled: no claimable task among {total} open ({breakdown})"
+
+
 async def finalize_job_run_for_conversation(
     session: AsyncSession, conversation_id: Optional[str], final_status: str
 ) -> None:
@@ -807,6 +846,35 @@ class JobScheduler:
             content = job.message
             if loop is not None:
                 claimed_task = await _claim_loop_task(session, loop)
+                if claimed_task is None:
+                    stall_reason = await _loop_stall_reason(session, loop)
+                    if stall_reason:
+                        # Skipped, not stopped: the job stays enabled and stays in the live
+                        # scheduler, so the next tick picks the queue up the moment something
+                        # becomes claimable again. See `_loop_stall_reason` for why this is not
+                        # the `_loop_stop_reason` branch above.
+                        run.status = "skipped"
+                        run.error_summary = stall_reason
+                        await session.commit()
+                        if pending_edit_payload is not None:
+                            await _emit_loop_edit_applied(session, pending_edit_payload)
+                        await persist_event(
+                            session,
+                            job.project_id,
+                            "job_run_skipped",
+                            {
+                                "job_id": job.id,
+                                "job_name": job.name,
+                                "agent": job.agent,
+                                "trigger": trigger,
+                                "run_id": run_id,
+                                "reason": stall_reason,
+                            },
+                            agent=job.agent,
+                            loop_id=loop.id,
+                        )
+                        logger.info(f"Job {job.id} fire skipped: {stall_reason}")
+                        return False
                 if claimed_task is not None:
                     # Only a `pending` task is *entered*; `assigned`/`in_progress`/`blocked` are
                     # being resumed, so their status stays untouched (design D3). `assigned` became
