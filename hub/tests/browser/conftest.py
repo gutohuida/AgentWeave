@@ -25,6 +25,14 @@ Run them:
 
 `AW_HUB_API_KEY` is only needed for the tests that seed or tear down state through the API;
 read one out of `api_keys` in whichever database the Hub is actually serving.
+
+`AW_HUB_PROJECT_ID` overrides the default fixture project (`proj-5e960453`, this repo's own
+registration on the machine this suite was written against) — set it to point the suite's
+`project_id` fixture at an equivalent project in a different database. `test_files_tab.py`,
+`test_panel_shell.py`, and `test_human_only_halves.py`'s `SPEC_PROJECT` hardcode a *second*,
+distinct fixture identity (`proj-b44fac0c`, an operator disposable project with its own agent,
+conversation and spec document) that this variable does not reach — that fixture has no
+override today.
 """
 
 from __future__ import annotations

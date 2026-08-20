@@ -409,3 +409,63 @@ trial Hub. Operator decision already recorded: make it an env var defaulting to 
 keep the `FORBIDDEN_PROJECT_IDS` guard at line 52 intact, and do **not** run the suite against a
 live Hub tonight — `pytest tests/browser --collect-only` is enough to prove it still imports and
 skips cleanly.
+
+## Iteration 6 — P6, and the fixture-scoping gap it actually needed (2026-08-20T01:12+01:00)
+
+**The literal 'do' was already done, confirmed rather than assumed.** `conftest.py`'s
+`project_id` fixture (`os.environ.get("AW_HUB_PROJECT_ID", DEFAULT_PROJECT_ID)`, with the
+`FORBIDDEN_PROJECT_IDS` guard) already existed before this branch started —
+`git merge-base --is-ancestor 7657c42 afb63f5` confirms the commit that added it (2026-08-18,
+`7657c42`) is an ancestor of this run's own parent SHA. Per the pre-authorised guidance for a
+queue item that turns out to be blocked, wrong, or already done, this is recorded rather than
+worked around or silently ticked without checking further.
+
+**The real gap, found by grepping the fixture's actual usage.** Only `test_job_loop_block.py`
+consumed the `project_id` fixture. `test_loops_index.py` (`PROJECT_ID = "proj-5e960453"`,
+module-level) and `test_human_only_halves.py` (`LOOP_PROJECT = "proj-5e960453"`) each kept an
+independent hardcoded copy of the same identity and used it directly in their own `page.goto`
+calls, entirely bypassing the fixture — so setting `AW_HUB_PROJECT_ID` changed the URL for one
+test file and silently did nothing for the other nine loops-related tests across two files. This
+is exactly the "identity that should travel, hard-coded to one place" disease the queue item's
+own note named, just one layer deeper than the note's evidence (which only read `conftest.py:54`)
+had looked.
+
+**Fix.** Removed both hardcoded module constants. Threaded `project_id: str` (the existing
+fixture) through `test_loops_index.py`'s `_open_bare`/`_open_loops_tab` helpers and all 6 test
+functions that call them, and through `test_human_only_halves.py`'s `_open_loops_index` helper
+and the 3 test functions that call it. Verified each is a real, not dead, parameter by reading
+every edited call site's f-string — `project_id` lands in the `page.goto` query string in both
+files, not merely accepted and ignored.
+
+**What was deliberately left alone.** `test_panel_shell.py`, `test_files_tab.py`, and
+`test_human_only_halves.py`'s own `SPEC_PROJECT` all hardcode a *second*, genuinely distinct
+fixture identity — `proj-b44fac0c`, the operator's disposable "Throwaway (taste pass)" project,
+carrying its own agent (`q2verify`), conversation, and specification document that the default
+project does not have. Folding this into the same fix would have meant guessing at a second env
+var's name and default under time pressure rather than doing it deliberately; recorded instead as
+new queue item **P7**, same shape as P6, sized to reuse this iteration's approach directly.
+`conftest.py`'s module docstring now names both identities and states which env var reaches which
+— previously `AW_HUB_PROJECT_ID` was not documented in prose at all, only in the fixture's own
+one-line body.
+
+**Verified.** `pytest tests/browser --collect-only` — 63 collected, 0 errors (same count as
+before the edit — nothing was accidentally dropped). `pytest tests/browser` with no `AW_HUB_URL`
+set — 63 skipped, the existing collection-time skip in `conftest.py` (untouched this iteration).
+`ruff check`, `black --check`, and `mypy` all clean on the three touched files
+(`conftest.py`, `test_loops_index.py`, `test_human_only_halves.py`). Not run against a live Hub —
+forbidden by the standing limits and unnecessary for this change, which is pure test-file
+plumbing with no product code touched. No UI files touched, so no bundle rebuild.
+
+**What a reviewer should distrust.** This iteration's own scoping call — that `proj-b44fac0c` is
+a "genuinely distinct" identity rather than more of the same disease — rests on reading each
+file's docstring, not on running the suite against a second real Hub to confirm the two fixture
+projects really are independent in practice. If a future Hub happens to seed both identities from
+the same seed data, P7 might turn out simpler than its own `do` describes.
+
+**Next.** `current` set to `P7` — unpin the second hardcoded fixture identity, `proj-b44fac0c`,
+the same way this iteration unpinned the default project. Add a second env var (e.g.
+`AW_HUB_SPEC_PROJECT_ID`) alongside `AW_HUB_PROJECT_ID` in `conftest.py`, expose it as a fixture,
+thread it through `test_panel_shell.py`, `test_files_tab.py`, and `test_human_only_halves.py`'s
+`SPEC_PROJECT`. After P7 the queue is empty again; `stop_when_queue_empties` is `false`, so the
+next iteration needs to decide — and record — whether to idle-checkpoint or find/propose further
+work.
