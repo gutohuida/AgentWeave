@@ -2,10 +2,19 @@ schema: spec-driven
 
 # Project context — shown to AI when creating artifacts.
 context: |
-  This repository IS the AgentWeave framework's source code. It is not a project that uses
-  AgentWeave. Never run `agentweave init`/`switch`/`watch`, start a Hub, or invoke `aw-*` skills
-  against this repo — use `testbed/`. There is no `.agentweave/`, `agentweave.yml`, or `spec/`
-  here, and none should be created.
+  This repository IS the AgentWeave framework's source code — but since 2026-08-16 it is also,
+  deliberately, a project that uses AgentWeave. The blanket prohibition that used to open this
+  block is retired; see CLAUDE.md for the staged migration.
+
+  What that means concretely: `.agentweave/` (gitignored) and `spec/` (tracked) at the repo root
+  are the migration's own work product, not stray test output — do not propose deleting them.
+  Registering this repo against a TRIAL Hub is permitted. Still prohibited: pointing the Hub whose
+  code you are editing at this repo (a restart kills runs in flight), invoking the legacy `aw-*`
+  collab skills, and delegating this repo's work through AgentWeave messaging. Throwaway
+  experiments still belong in `testbed/`.
+
+  Specifications live in two systems during the migration. `openspec/` owns the accumulated
+  corpus; AgentWeave takes new changes chosen for the trial. Never carry one change in both.
 
   Product direction (decided 2026-08-02, full record in
   explorations/2026-08-02-product-direction.md):
@@ -34,7 +43,8 @@ context: |
   The organising constraint is EASE OF USE. The change programme exists because AgentWeave had too
   many barriers. Check every slice against that: does it remove a barrier or add one?
 
-  Tech stack: Python 3.8+ CLI (`src/agentweave/`, zero runtime deps), FastAPI + SQLAlchemy async
+  Tech stack: Python 3.11+ CLI (`src/agentweave/`, one runtime dep — `agentweave-hub`; the CLI's
+  own code imports nothing outside the stdlib), FastAPI + SQLAlchemy async
   backend (`hub/`), React + Vite + TypeScript + Tailwind + React Query + Zustand dashboard
   (`hub/ui/`), MkDocs Material docs (`docs/`). SSE for live state — never polling.
 
@@ -47,7 +57,7 @@ rules:
       closes a task.
     - Open each phase with the test task for the behaviour it adds. Several defects have survived
       "complete" phases because no test asserted the scenario.
-  spec:
+  specs:
     - Requirements use `### Requirement:` with `#### Scenario:` blocks and MUST/SHALL language.
     - Every requirement must be falsifiable — rewrite anything that cannot become a passing or
       failing test.
