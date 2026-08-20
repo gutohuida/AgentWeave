@@ -131,7 +131,7 @@ or purely the operator's to maintain?
 
 ## 5. Item 9 — agents creating documents
 
-**RECOMMENDED, NOT YET CONFIRMED.** Three options were considered:
+**DECIDED — option 1: agents create documents directly.** Three options were considered:
 
 | | gates the corpus | matches the ask | cost |
 |---|---|---|---|
@@ -145,7 +145,7 @@ unfiled document is *already visible*; and any agent-created document needs a ro
 does not exist. Manufacturing one means inventing a flag, which is a larger claim than the feature
 earns.
 
-**Option 1 is recommended because the thing worth protecting is already protected.**
+**Option 1 was chosen because the thing worth protecting is already protected.**
 `spec_service.save_document` (`spec_service.py:106`):
 
 > *"A capability document is written only by the operator — never by an agent, whatever its run."*
@@ -356,20 +356,64 @@ Ordered by dependency, not by appetite.
 | 5 | **Catalog as data + refresh worker** | Independent of all the above, and carries its own governance question. |
 
 **Adoption's own rules — DECIDED:** *"It should look at the file but it should compare with the
-database. But it should trust what we have on the file."*
+database. But it should trust what we have on the file."* Extended, when asked whether that reaches
+`phase` as well as content: *"yes trust the file… because this is something that gets committed and
+can be reproduced anywhere in any environment."*
 
-Worth naming what that overturns, because it is deliberate: `content_digest` currently treats an
-externally-edited file as **a conflict to report and never silently resolve**. The operator's rule
-keeps the reporting and drops the never-resolve. So adoption adopts from the file **and states in
-its response where the row disagreed**. Silent trust would be a different rule than the one given.
+So adoption adopts from the file — content **and** phase — and **states in its response where the
+row disagreed**. Silent trust would be a different rule than the one given.
+
+### The principle underneath, and the one place it collides
+
+The reasoning is broader than the decision it settled, and is worth stating as a rule of its own:
+
+> **The file is the portable truth. The database is machine-local state.**
+> The file is committed, travels, and reproduces anywhere. The row does not leave the machine that
+> made it. So anything that must survive a clone belongs in the file, and the row is a projection of
+> it — rebuildable, not authoritative-by-default.
+
+This is the same instinct that made `spec/index.json` a file: *"the only record of the corpus's home,
+hierarchy and ordering that survives the project being copied to another machine"*
+(`api/v1/spec.py:1050-1053`). The principle was already half-adopted; this names it.
+
+**It collides with exactly one existing rule**, stated twice in the code
+(`spec_lifecycle.py:130-139`, `spec_render.py:341-345`):
+
+> *"A gate whose value lives where the gated party can write it is not a gate."*
+
+That is why `phase` and `rigor` are database columns with only a display copy in the file. Both
+principles are sound and they disagree, so the collision should be resolved deliberately rather than
+by whichever code is written first.
+
+**The resolution that keeps both — proposed, not yet decided.** They only conflict if "trust the
+file" is read as *always*. Read as *at the boundary*, they compose:
+
+```
+   ADOPTION (a file arrives from outside; no row exists)
+        └──▶ the file is trusted, entirely. There is nothing else to trust,
+             and this is what makes a cloned repo come back whole.
+
+   OPERATION (a row exists; the Hub is running)
+        └──▶ the row is authoritative. A file that disagrees is drift —
+             reported, never silently resolved. The machinery already
+             exists: content_digest, POST /spec/drift/detect, GET /spec/drift.
+
+   RE-ADOPTION (the operator says "the file is right")
+        └──▶ an explicit act that re-crosses the boundary and re-trusts the file.
+```
+
+Full portability, no self-servable gate. **The risk of the unrestricted reading** is worth stating
+once: agents have filesystem access, and *"never write specification HTML yourself"*
+(`mcp_server.py:902`) is an instruction, not an enforcement. If the file always wins, an agent that
+writes `aw-spec-status: approved` into a file has approved its own document.
+
+**This does not block adoption**, which sits entirely on the boundary-crossing side where the file
+wins under either reading. It needs deciding before drift resolution or re-adoption is built.
 
 **Still open for adoption:**
 
 - A file with **no payload block** — refuse, or derive a minimal row from the `aw-spec-*` meta tags?
   `extract_payload` deliberately does not guess. (Academic for the 34; the rule outlives them.)
-- What `phase` an adopted document lands in. A file can claim any `aw-spec-status`, and the row
-  exists precisely so phase does not live where the gated party writes it. "Trust the file" was
-  decided for *content* — whether it extends to *phase* was not asked.
 - One document at a time, or a directory sweep? The corpus wants the sweep; §5's agent case wants
   the single.
 - Whether `content_digest` is set from the file as found — which asserts "this file is as the Hub
