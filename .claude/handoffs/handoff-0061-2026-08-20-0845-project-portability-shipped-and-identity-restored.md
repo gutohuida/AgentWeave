@@ -1,9 +1,11 @@
 # Handoff: project portability shipped, and this repo's original identity restored
 
-**Date:** 2026-08-20T08:45:47+01:00 · **Branch:** `autonomous/2026-08-19-project-portability` · **HEAD:** `770a51d`
+**Date:** 2026-08-20T08:45:47+01:00 · **Branch:** `master` · **HEAD:** `158c917`
+*(Written on `autonomous/2026-08-19-project-portability` at `770a51d`, then cherry-picked onto
+`master` so the chain stays where the next session will look for it.)*
 **Agent:** Claude Opus 5 (1M context) (Claude Code, interactive + an unattended overnight driver)
 **Previous handoff:** `.claude/handoffs/handoff-0060-2026-08-19-2255-loop-traceability-shipped-and-v1-1-0-published.md`
-**Status:** chunk complete. PR #7 **merged** to master as `13dd6e0`. Working tree clean, nothing
+**Status:** chunk complete. PR #7 **merged** to master as `13dd6e0`. This handoff sits on `master`. Working tree clean, nothing
 unpushed, no openspec changes in flight.
 
 ## Goal
@@ -24,9 +26,9 @@ where that principle had leaked.
 (P1–P7; P7 was found by the loop itself). 25 files, **+1,219 / −373** excluding the committed UI
 bundle and the run's own logs.
 
-**Local `master` is STALE** — it sits at `afb63f5` while `origin/master` is at `13dd6e0`. The next
-session must `git checkout master && git pull` before doing anything, or it will branch from a
-world two commits behind.
+**You are on `master`, and it is current.** It was two commits behind during the session; that was
+resolved at the end, when this handoff was cherry-picked onto it. The work branch
+`autonomous/2026-08-19-project-portability` is merged and can be deleted whenever you like.
 
 **The merge was a real merge commit, not a squash** (`parents: a3439c4 770a51d`), despite the plan
 being to squash. Consequence: master's history now contains all 58 branch commits, including **19
@@ -235,7 +237,8 @@ Everything below is **committed and merged**; the working tree is clean.
 
 - **Branch:** `autonomous/2026-08-19-project-portability` at `770a51d`. Clean, fully pushed.
 - **`origin/master`:** `13dd6e0` (merge commit, parents `a3439c4` and `770a51d`).
-- **Local `master`:** `afb63f5` — **two commits behind origin. Pull before branching.**
+- **Local `master`:** up to date with origin and carrying this handoff. It was two commits behind
+  during the session; that was resolved when this handoff was moved onto it.
 - Uncommitted paths: none. Unpushed commits: none.
 - **Untracked and outside the repo** (will not appear in `git status`, and are real changes to the
   operator's machine): `~/.agentweave/hub/start-hub-8000.bat`,
@@ -245,19 +248,17 @@ Everything below is **committed and merged**; the working tree is clean.
 
 ## Next steps
 
-1. **`git checkout master && git pull`** — local master is at `afb63f5`, origin is at `13dd6e0`.
-   Do this before creating any branch, or the branch starts two commits behind.
-2. **Delete the "Default Project" row** in the 8000 Hub UI (`proj-default`, working directory
+1. **Delete the "Default Project" row** in the 8000 Hub UI (`proj-default`, working directory
    `C:\Users\huida\Documents`). The `.env` edit stops it being re-seeded but does not remove it.
    This is the last step of the operator's *"agentweave should come clean"*.
-3. **Resolve the dual-claim hazard.** Both databases now have `proj-5e960453` bound to this repo:
+2. **Resolve the dual-claim hazard.** Both databases now have `proj-5e960453` bound to this repo:
    `~/.agentweave/hub/data/agentweave.db` (port 8000) and `hub/data/agentweave.db` (port 8010).
    Reading from both is harmless; running agents from both would collide on `.agentweave/worktrees`
    and run state. Decide which Hub is the real one and retire the other.
-4. **Run the browser suite.** `cd hub && AW_HUB_URL=http://127.0.0.1:8000 py -3.11 -m pytest
+3. **Run the browser suite.** `cd hub && AW_HUB_URL=http://127.0.0.1:8000 py -3.11 -m pytest
    tests/browser -v`. It is now unpinned, so it can point at 8000. Expect fallout: it has not run
    since the 1.1.0 merge and five of its files were edited blind.
-5. **Look at the adoption event in the Activity view** and confirm it reads sensibly.
+4. **Look at the adoption event in the Activity view** and confirm it reads sensibly.
 
 ## Findings not acted on
 
