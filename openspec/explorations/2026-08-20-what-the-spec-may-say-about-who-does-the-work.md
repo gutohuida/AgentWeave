@@ -19,6 +19,11 @@ Decisions the operator took are marked **DECIDED**. Every claim was checked agai
 
 The last one is the significant one, and §7 is what replaced it.
 
+One decision was taken and **reversed within the review itself** — that the operator could edit
+dependency edges on the board. It is recorded in §7 rather than quietly deleted, because the reason
+for the reversal is the more useful half: an edge that exists only on the board is a fact the
+specification does not contain.
+
 ---
 
 ## 1. The principle this item collides with
@@ -143,7 +148,7 @@ overloading a status whose narrowness is load-bearing.
 card — stuck or not. A dependency layout carries the whole wave structure, which is strictly more
 than `blocked` could ever have shown.
 
-## 4. Where dependencies live, and the one thing that makes it cheap
+## 4. Where dependencies live, what an unmet one does, and how one crosses a document
 
 `key` is already *"a stable handle for this task, unique within the document"* (`spec_payload.py:99`).
 So a dependency is a list of sibling keys, and the DAG needs no new identifier scheme:
@@ -169,12 +174,126 @@ the requirements. It gains the ability to say a decomposition declares a cycle, 
 dependency key that does not exist — the same class of check it already performs against requirement
 keys.
 
-**Open — and it matters more than it looks.** Dependencies are scoped *within one document*, because
-`key` is only unique within a document. Real work crosses documents: "the landing page needs adoption
-to land first" is exactly the dependency between two of the five carve-up items, and it cannot be
-expressed. Cross-document dependencies need a task-level edge (`Task.depends_on_task_id` or a join
-table), not a payload field. **Recommendation: ship within-document only, and say so explicitly as a
-non-goal rather than leaving the reader to discover the limit.**
+### DECIDED — an unmet dependency prevents starting; it does not stop anything
+
+The operator's rule, and it is a sharper claim than "readiness":
+
+> *"A task won't be stopped by a dependency… it should never start if a dependency is not met."*
+
+This matters because *stopped* and *never started* are different states, and the transition machine
+already distinguishes them. A dependency is a **precondition on an edge**, not a property of a task.
+
+And the shape already exists — twice, in the same function. `task_transition_service.py:208-217`:
+
+```python
+await _guard_author_is_not_reviewer(session, task, to_status, actor)   # guard, on the review edges
+
+# "The gate, on this one edge. Inside the service and before the history row, so it cannot be
+#  bypassed by a caller reaching the row a different way — which is also why every surface
+#  (operator route, agent HTTP, the tool surface, jobs) gets it without knowing it exists."
+if to_status == "approved":
+    refusal, policy = await evaluate(session, task)                    # requirement_gate
+    if refusal.refuses:
+        raise GateUnsatisfiedError(refusal)
+```
+
+A dependency gate is a **third guard in the same place**, on a different edge:
+
+```
+   pending ──▶ in_progress     ← GATED. every named dependency must be complete.
+           ──▶ assigned        ← NOT gated. assigning future work is legitimate.
+           ──▶ rejected        ← NOT gated. work never started can still be rejected.
+```
+
+No new status. No stored readiness column. No new enforcement surface — the comment above says why
+every caller inherits it for free.
+
+**Leaving `assigned` ungated is load-bearing for §8's 4d.** Routing can assign an entire wave up
+front, and each agent starts when its own dependencies clear. The gate is what makes assigning ahead
+safe rather than misleading.
+
+**This dissolves an open question the earlier draft raised.** It asked what happens to a task that is
+both `blocked` and dependency-unmet. Nothing does: `blocked` is reachable only from `in_progress`
+(§3), and an unmet dependency prevents reaching `in_progress` at all. The two are mutually exclusive
+by construction.
+
+**DECIDED — a dependency that regresses after a dependent started flags, it does not halt.** `A` can
+go `completed → under_review → revision_needed → in_progress` while `C`, which depends on it, is
+already running. A precondition checked on an edge says nothing about this, so `C` continues — and
+the board marks it as running on a regressed dependency so the operator can decide.
+
+Enforcement is a guard; awareness is a display. Keeping them apart is what stops an agent having its
+task pulled out from under it mid-turn, which is what a continuous invariant would do.
+
+### DECIDED — a dependency crosses documents by importing the foreign task
+
+The earlier draft called this out of scope and proposed a derived off-board stub. The operator's
+answer is better because it is **declared**:
+
+> *"We can put in the document tasks from another document just linking that task there saying it's a
+> dependence."*
+
+```
+   document B's payload
+   ┌──────────────────────────────────────────────────────┐
+   │  tasks:                                               │
+   │    - key: adopt-corpus            ← IMPORTED entry    │
+   │      from: <approved document A>, key: adopt-corpus   │
+   │                                                       │
+   │    - key: render-map                                  │
+   │      depends_on: [adopt-corpus]   ← an ordinary       │
+   │                                     local key         │
+   └──────────────────────────────────────────────────────┘
+```
+
+Three properties follow, and the second is why this is the right answer rather than merely a workable
+one:
+
+**`depends_on` stays a list of local keys.** No qualified-reference grammar, no second field, no new
+resolution rule for an authoring agent to learn.
+
+**The per-document board becomes closed.** Everything it must draw is declared in the single document
+it is scoped to; it never queries another document at layout time. §7's per-document scoping stops
+being a limitation that needed softening and becomes a property that holds.
+
+**The dependency is visible to a reader of the document**, not only to the board — which is the whole
+point of putting it in the specification rather than in the UI.
+
+`materialise()` needs exactly one new rule: **an imported entry resolves to the existing task and
+never creates one.** That is a small addition to a function that already dedupes by
+`(document, key)`.
+
+**DECIDED — only an approved document may be imported from.** This turns the rename problem into a
+rule instead of a failure mode: `rename_document` refuses on an approved document — *"this document
+is approved; its path is part of what was approved"* (`spec_service.py:638-641`) — so a
+`(path, key)` reference to one is permanently stable, and it travels with the repository.
+
+The cost is stated rather than hidden: **a dependency cannot be declared on work still being
+explored.** Two things make that survivable, and the second is a design detail that must not be got
+wrong.
+
+*Order.* Imports resolve at approval, when `materialise()` runs. `B` depends on `A` because `A` is
+the prerequisite, so `A` is approved first in the ordinary course of events. The restriction mostly
+describes what would happen anyway.
+
+*Timing of the check.* An agent authoring `B` may well write the import while `A` is still
+exploring — and refusing the *submission* would make the document unwritable until its prerequisite
+was settled. The existing rule covers this exactly (`spec_service.py:98-101`):
+
+> *"Incompleteness is reported, not refused: a document under discussion is incomplete by definition,
+> and it is the transition to `proposed` that cares."*
+
+So: an import naming a non-approved document is **reported in `blocking`**, and refused at propose or
+approval. Same pattern, same place, nothing new.
+
+**Open:** an import naming a document that has since been **archived**. Archived is downstream of
+approved, so the reference should hold — but nothing has been checked, and `archived` was added late
+(2026-08-16).
+
+**Open:** cross-document cycles. `spec_completeness` checks within one document (`:106`, `:130`);
+`A ↔ B` needs the corpus, and only part of it may be adopted on this machine. A dangling import has a
+precedent to follow rather than invent — unresolvable requirement names are *"preserved rather than
+dropped… the unrecognised name is the evidence of what went wrong"* (`spec_tasks.py:204-206`).
 
 ## 5. Routing — the six open questions, answered where the code answers them
 
@@ -404,39 +523,45 @@ counts, choosing a board and seeing what remains become one act:
   ▸ (no document)                4 open
 ```
 
-### DECIDED — the spec declares edges and the operator may edit them
+### DECIDED — the document is the only writer of edges. The board draws; it never authors.
 
-`depends_on` in the payload covers tasks materialised from a document. The operator also makes tasks
-by hand, and those would otherwise all be roots. Both, then: declared dependencies arrive with the
-task, and the operator can add or remove edges on the board.
+**This reverses a decision taken earlier in the same review**, and the operator's reason for
+reversing it is the stronger one:
 
-This is the first place the payload and the board both write the same fact, and the rule needs
-stating when it is designed: the document declares the decomposition's *intent*, the board holds what
-is *true now*, and re-approving a document must not silently redraw edges the operator changed —
-consistent with `spec_tasks.py:19-21`, *"a task that already exists is never touched."*
+> *"I can't edit existing edges. Only if the document is changed those edges are changed. This would
+> break protocol and the documentation."*
 
-### The cost of per-document scoping, and one way to soften it
+An edge that exists only on the board is a fact the specification does not contain — so the
+specification is no longer true, and the artefact that is supposed to be the record has been quietly
+demoted to a suggestion. Changing a dependency means editing the document.
 
-A dependency crossing two documents cannot be drawn on either board. That shape is immediate: this
-project's own carve-up is five items depending on each other across five documents.
+This removes rather than answers the question the earlier draft left open. There is no *"which fact
+wins when a re-approved document disagrees with the operator's edges"*, because there is one writer.
 
-An edge leaving the board can be shown as an off-board reference rather than dropped:
+**The cost, named rather than discovered: a hand-made task can never have a dependency.** It belongs
+to no document, so nothing can declare its edges, and the "no document" board is a flat set of cards
+with no lines. That is consistent rather than broken — a dependency is a property of a declared
+decomposition, and a hand-made task is by definition not part of one — but an operator who tries to
+draw a line and cannot should find the refusal says so.
+
+### Edges that leave the document
+
+Superseded by §4's imported-task decision, and the per-document board is better for it. A foreign
+dependency is **declared in this document** as an imported entry, so:
 
 ```
-        ┌──────────────────────────────┐
-        │  ⇡ document-adoption          │  ← names the document and the
-        │    task: "adopt a corpus"     │    task. not a card to act on.
-        └───────────────┬───────────────┘
-                        │
-                       [A]   [B]
-                        └──┬──┘
-                          [C]
+        ┌──────────────────────────────────────┐
+        │  ⇡ adopt-corpus                       │  ← an IMPORTED entry in this
+        │    from: document-adoption (approved) │    document's own payload.
+        └──────────────────┬────────────────────┘    resolves to the real task;
+                           │                          never creates one.
+                          [A]   [B]
+                           └──┬──┘
+                             [C]
 ```
 
-The blocker stays visible and reachable without the board becoming the whole project. **Open:**
-whether that requires a task-level edge (`Task.depends_on_task_id` or a join table) in addition to
-the within-document payload field. §4 recommended within-document only; the off-board stub is what
-makes that recommendation survivable rather than merely cheap.
+The board never has to query another document to lay itself out. What looked like the price of
+per-document scoping turned out to be a property it gains.
 
 ## 8. What this becomes
 
@@ -445,8 +570,8 @@ was max concurrent runs and is gone — §6 — and what stood behind it became 
 
 | # | Change | Depends on | Size |
 |---|---|---|---|
-| **4b** | **Dependencies in the payload** — `depends_on` on `spec_payload.Task`, `spec_completeness` checking cycles and unknown keys, `materialise()` carrying them onto the task, readiness computed rather than stored. | nothing | medium |
-| **4b′** | **The dependency board** — per-document, top-to-bottom layered DAG, status on the card, operator-editable edges, document picker with open counts, off-board stubs for edges that leave. | 4b | medium, and the visible half |
+| **4b** | **Dependencies in the payload and the start gate** — `depends_on` on `spec_payload.Task`, imported entries for foreign tasks, `spec_completeness` checking cycles and unknown keys, `materialise()` carrying edges and resolving imports, and the third guard in `task_transition_service` on the `→ in_progress` edge. | nothing | medium |
+| **4b′** | **The dependency board** — per-document, top-to-bottom layered DAG, status on the card, read-only structure, document picker with open counts, imported entries drawn as off-board references, regressed-dependency flag. | 4b | medium, and the visible half |
 | **4c** | **Complexity and the tier table** — `complexity` on the payload; project-scoped tier→runners mapping, operator-editable, one-to-many, pointing at `Runner` rows so deletion fails loudly. | nothing (payload) / — | medium |
 | **4d** | **Auto-assignment** — `materialise()` fills `assignee` from the tier mapping. | 4c | small |
 
@@ -465,19 +590,24 @@ written. Auto-assignment is filling in two `None`s at `spec_tasks.py:192-193` �
 
 - **Does a tier name a model, or a (model, effort) pair?** The second is better and costs building
   `Runner.flags` support that nothing has yet. (The tier *names* are decided — §5.)
-- **Cross-document dependencies** (§4, §7). Recommended out of scope, but per-document boards make
-  the limit structural rather than merely present, and this project's own carve-up is exactly that
-  shape. The off-board stub in §7 is the proposed softening, and it may still need a task-level edge.
-- **Which fact wins when a re-approved document's declared edges disagree with the operator's** (§7).
-  `spec_tasks.py:19-21` — *"a task that already exists is never touched"* — points at the answer but
-  does not cover edges, which did not exist when it was written.
+- **An import naming a document that has since been archived** (§4). `archived` is downstream of
+  `approved` so the reference should hold, but nothing has been checked and the phase shipped late.
+- **Cross-document cycles** (§4). Within-document cycle detection is a small addition to
+  `spec_completeness`; across documents it needs the corpus, and only part of it may be adopted here.
 - **Least-loaded or round-robin** (§5, Q2).
 - **Should assignment ever start work?** Recommended as a firm non-goal, but it is the question
   behind "does approving a document make eight agents wake up", and leaving it unanswered means
-  someone answers it by accident later.
-- **Does the dependency board need its own readiness rule for `blocked` tasks?** A task that is
-  `blocked` (waiting on a person) and also has unmet dependencies is stopped for two unrelated
-  reasons. The board shows one; the badge shows the other. Probably fine, unexamined.
+  someone answers it by accident later. §4's gate makes the accidental version harmless — an
+  assigned task with unmet dependencies still cannot start — which lowers the stakes without
+  answering it.
+
+**Two questions the earlier draft carried are now closed rather than open**, and are recorded here so
+they are not reopened by someone reading only the section they lived in:
+
+- *Which fact wins when a re-approved document's edges disagree with the operator's?* — no longer
+  reachable. The document is the only writer (§7).
+- *What happens to a task that is both `blocked` and dependency-unmet?* — no longer reachable. An
+  unmet dependency prevents reaching `in_progress`, and `blocked` is only reachable from it (§4).
 
 ## 10. Not covered
 
