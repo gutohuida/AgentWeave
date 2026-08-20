@@ -190,6 +190,22 @@ class TestLoadManifest:
         assert manifest is None
         assert any(d.code == "manifest_invalid_phase" for d in diagnostics)
 
+    def test_two_documents_cannot_hold_the_same_order(self):
+        """`order` exists only to be compared against the other documents' orders, so a duplicate
+        makes the arrangement undefined while each entry stays individually well-formed. This was a
+        live defect: the writer placed a newly added document at an order the corpus already used.
+        """
+        data = self._valid_manifest()
+        data["documents"][1]["order"] = data["documents"][0]["order"]
+        manifest, diagnostics = load_manifest(json.dumps(data))
+        assert manifest is None
+        conflict = next(d for d in diagnostics if d.code == "manifest_duplicate_order")
+        assert "spec/changes/add-thing/spec.html" in conflict.actual
+
+    def test_distinct_orders_are_accepted(self):
+        manifest, _ = load_manifest(json.dumps(self._valid_manifest()))
+        assert manifest is not None
+
     def test_diagnostic_serializes_to_dict(self):
         _, diagnostics = load_manifest("{not json")
         assert diagnostics[0].to_dict()["code"] == "manifest_invalid_json"

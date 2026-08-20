@@ -69,6 +69,12 @@ made a correct corpus indistinguishable from a corrupt one.
 - **WHEN** an index entry pairs a kind with a phase that kind can never hold
 - **THEN** the index is reported as invalid
 
+#### Scenario: Two documents cannot claim the same position
+
+- **WHEN** two entries in the index record the same order
+- **THEN** the index is reported as invalid
+- **AND** the diagnostic names both documents
+
 ### Requirement: Rebuilding the index preserves what the operator arranged
 
 Rebuilding the index SHALL carry forward the presentation choices already recorded in a valid index

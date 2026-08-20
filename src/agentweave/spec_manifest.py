@@ -318,6 +318,31 @@ def load_manifest(raw_text: str) -> Tuple[Optional[Manifest], List[ManifestDiagn
     if not ok:
         return None, diagnostics
 
+    # `order` exists only to be compared against the other documents' orders, so a duplicate makes
+    # the arrangement undefined for exactly the documents that collide — and it is invisible
+    # otherwise, because each entry is individually well-formed. Checked last, with paths and
+    # parents already known good, so the diagnostic names a real document.
+    #
+    # This was a live defect rather than a hypothetical: the writer placed a document added to an
+    # already-arranged corpus at an order the corpus was using, and nothing caught it.
+    by_order: Dict[int, List[str]] = {}
+    for doc in documents:
+        by_order.setdefault(doc.order, []).append(doc.path)
+    for order, paths in sorted(by_order.items()):
+        if len(paths) > 1:
+            diagnostics.append(
+                ManifestDiagnostic(
+                    code="manifest_duplicate_order",
+                    path=paths[0],
+                    field="order",
+                    expected="an order no other document holds",
+                    actual=f"{order} is also held by {', '.join(sorted(paths[1:]))}",
+                )
+            )
+            ok = False
+    if not ok:
+        return None, diagnostics
+
     home = raw.get("home")
     if not isinstance(home, str) or home not in doc_paths:
         diagnostics.append(ManifestDiagnostic(code="manifest_invalid_home", actual=str(home)))
