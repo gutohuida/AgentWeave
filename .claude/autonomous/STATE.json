@@ -9,7 +9,7 @@
   "stop_when_queue_empties": false,
   "run": 1,
   "iteration": 26,
-  "session_stopped": false,
+  "session_stopped": true,
   "prepared_by": "Interactive session 2026-08-19T22:55-23:25+01:00, via /autonomous-prep. Both headline defects were reproduced or traced to a named line before being queued — item 1 by reading the render path end to end, item 2 by exercising the live API against two databases. Runway verified rather than assumed: playwright present, `pytest tests/test_project_lifecycle.py tests/test_project_persistence.py` 17 passed, vitest 1152 passed, tsc clean, working tree clean.",
   "operator_intent_verbatim": "Open any agentweave project with any agentweave app. Also: 'I think I clicked to create an agent in one project but it was actually creating into another project. Something weird there.'",
   "limits": [
@@ -131,13 +131,15 @@
       "id": "D-env",
       "question": "Strip AW_BOOTSTRAP_PROJECT_ID and AW_BOOTSTRAP_PROJECT_NAME from ~/.agentweave/hub/.env so 'Default Project' stops being seeded?",
       "context": "The operator asked for this tonight ('we can get rid of default project, agentweave should come clean') and I confirmed the cause: their .env is dated 2026-08-01 and predates the decision at src/agentweave/cli.py:628-630 that a fresh native install starts with zero registered projects. The file is only written when absent, so their pre-1.0 copy was never updated. DEFERRED because the file is outside the repo and the limits forbid touching ~/.agentweave/. The operator does this themselves, plus deleting the project in the UI.",
-      "raised_by": "prep"
+      "raised_by": "prep",
+      "resolution": "RESOLVED 2026-08-20. AW_BOOTSTRAP_PROJECT_ID and AW_BOOTSTRAP_PROJECT_NAME removed from ~/.agentweave/hub/.env (backup at .env.backup-2026-08-20). Takes effect on the next Hub restart; the existing 'Default Project' row must still be deleted in the UI."
     },
     {
       "id": "D-identity",
       "question": "Once P2 ships, should this repo go back to its original project identity proj-5e960453?",
       "context": "Tonight the repo was re-registered on the 8000 Hub as proj-4190ae17, which rewrote the marker; the original is backed up at .agentweave/project.json.trial-8010-backup. With adoption implemented, restoring that backup file and opening the folder would adopt proj-5e960453 again — reuniting the repo with the trial Hub's fixtures. Worth doing, but it is the operator's call and it touches a running Hub.",
-      "raised_by": "prep"
+      "raised_by": "prep",
+      "resolution": "OPERATOR CHOSE to restore proj-5e960453, walked through manually. Note the correction: restoring the id gives the 8000 Hub an EMPTY project under that id. It does not import the 8010 database's fixtures - what it restores is the 8010 Hub's ability to open this folder again, since its marker validation would pass."
     },
     {
       "id": "D-a13",
@@ -155,7 +157,8 @@
       "id": "D-agentbug",
       "question": "A diagnostic agent 'Spec' (agent-0207c253) was created in proj-4190ae17 on the 8000 Hub to prove agent names are project-scoped. Keep or delete?",
       "context": "The operator declined to have it deleted tonight. Harmless; noted so it is not mistaken for something the loop made.",
-      "raised_by": "prep"
+      "raised_by": "prep",
+      "resolution": "Superseded by D-identity: proj-4190ae17 and its diagnostic Spec agent are to be deleted."
     }
   ],
   "runway_verified_at_prep": {
@@ -171,5 +174,11 @@
   "log_file": ".claude/autonomous/2026-08-19-project-portability-log.md",
   "driver": "Windows Scheduled Task 'AgentWeaveAutonomousSession' -> .claude/skills/autonomous-session/scripts/run-iteration.ps1 -> headless `claude -p`. Each firing is a fresh process; all continuity is STATE.json + the log. Session-bound drivers (ScheduleWakeup, CronCreate) are NOT used - the 2026-08-15 run asked for nine hours and got forty minutes because the session went away.",
   "heartbeat_note": "Deliberately stale. The process that ran iteration 24 has finished and released the branch, so the next scheduled firing takes over instead of standing down against a heartbeat nobody is refreshing.",
-  "draft_pr": "https://github.com/gutohuida/AgentWeave/pull/7"
+  "draft_pr": "https://github.com/gutohuida/AgentWeave/pull/7",
+  "closed_out_by": "Interactive session 2026-08-20 morning. Driver unregistered itself at 08:00 as designed.",
+  "still_open_for_operator": [
+    "D-a13 (routed extension-request path)",
+    "D-naming (the two naming explorations)"
+  ],
+  "merge_decision": "Squash-merge PR #7. The 45 bookkeeping commits collapse; the branch stays as the audit trail."
 }
