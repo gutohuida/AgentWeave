@@ -15,7 +15,7 @@ contract, rather than trusting a caller's classification.
 
 from __future__ import annotations
 
-from typing import Optional, Tuple
+from typing import Any, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
@@ -283,6 +283,19 @@ class RetentionSetting(BaseModel):
     policy: str = Field(max_length=16)
 
 
+class ReindexRequest(BaseModel):
+    """Optional inputs to a reindex. The body itself is optional; all fields default.
+
+    `home` exists because the Hub refuses to choose one. `_select_home` treats a guess as
+    indistinguishable from an operator's decision, so a corpus with several documents and no
+    recorded home cannot be written until someone says which is home — and this is where the
+    operator says it. A home already recorded in a valid index is preserved without passing
+    anything.
+    """
+
+    home: Optional[str] = Field(default=None, max_length=255)
+
+
 async def _requirement(session: AsyncSession, project_id: str, identifier: str, document: str):
     document_row = None
     if document:
@@ -306,6 +319,19 @@ async def _requirement(session: AsyncSession, project_id: str, identifier: str, 
     if row is None:
         raise HTTPException(status_code=404, detail=f"this project has no requirement {identifier}")
     return row
+
+
+class DocumentContent(BaseModel):
+    """The operator's equivalent of an agent submission's body, minus the path.
+
+    The path is in the URL, matching every other operator document route. There is deliberately no
+    actor field: identity comes from the credential, and a body that could name one would be a way
+    to assert an identity the caller does not hold.
+    """
+
+    document: Any
+
+    model_config = {"extra": "forbid"}
 
 
 class RigorRequest(BaseModel):
@@ -366,6 +392,72 @@ async def set_document_rigor(
         project_id, "spec_updated", {"path": document.path, "rigor": document.rigor}
     )
     return _document_view(document)
+
+
+@router.put("/documents/{path:path}/content")
+async def write_document_content(
+    path: str,
+    body: DocumentContent,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Write a document's content as the operator, without an agent and without a merge.
+
+    This reaches a branch of `spec_service.save_document` that has always existed and has never
+    been callable: the service refuses a capability write from any actor that is not the operator,
+    and `spec-document-authority` already requires that the same submission *from* the operator
+    succeeds. The only caller was the agent route, which binds the actor to a run and so can never
+    be the operator — leaving that requirement exercisable only by importing the module in a test.
+
+    `PUT`, because the payload names a document that already exists and writing it twice must leave
+    the same content. An import that stops halfway is then safe to re-run.
+
+    No rule is relaxed for the operator. Every refusal comes from the service, unchanged: an
+    invalid payload names its field, a mismatched `kind` is refused, an approved document is
+    refused until reopened, and a document at `contract` or `gate` rigor records a pending proposal
+    instead of being written — the operator accepts their own proposal, which is not a bypass.
+    """
+    project_id, _ = project
+    document = await _require_document(session, project_id, path)
+    workspace = await _workspace(session, project_id)
+
+    try:
+        result = await spec_service.save_document(
+            session,
+            workspace,
+            document,
+            body.document,
+            # Established from the credential the route already required, never from the body.
+            # There is no run id: an operator is not acting under one.
+            actor=_operator(),
+        )
+    except spec_service.SaveRefusedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"message": str(exc), "code": exc.code, "field": exc.field_path},
+        ) from exc
+
+    await session.commit()
+    await sse_manager.broadcast(
+        project_id, "spec_updated", {"path": result.path, "phase": result.phase}
+    )
+
+    if isinstance(result, spec_service.ProposeResult):
+        # Same shape the agent route returns at `contract`/`gate` rigor, and different from a write
+        # on purpose, so a caller cannot mistake "pending" for "live".
+        return {
+            "path": result.path,
+            "phase": result.phase,
+            "proposals": result.proposals,
+            "unchanged": result.unchanged,
+        }
+    return {
+        "path": result.path,
+        "phase": result.phase,
+        "identifiers": result.identifiers,
+        "divergence": result.divergence,
+        "blocking": result.blocking,
+    }
 
 
 @router.get("/documents/{path:path}/rigor-history")
@@ -943,20 +1035,51 @@ async def _latest_reviews_for(session: AsyncSession, evidence_ids) -> dict:
 
 @router.post("/spec/reindex")
 async def reindex(
+    body: Optional[ReindexRequest] = None,
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ):
-    """Rebuild the requirement index from the files, then retry unresolved references.
+    """Rebuild the requirement index and `spec/index.json` from the files.
 
     The operator's, not an agent's. Two things need it: a project whose documents
     predate the index, and a document edited outside the Hub. Both are cases where
     the index is behind the files, and neither can be detected without reading
     them — so this is offered rather than guessed at on a timer.
+
+    Two indexes are rebuilt here, and they are not the same thing. The *requirement*
+    index is database rows, and it does not travel. `spec/index.json` is a file, and it
+    is the only record of the corpus's home, hierarchy and ordering that survives the
+    project being copied to another machine. This route wrote only the first until
+    2026-08-20, which is why every corpus read as `unindexed`.
+
+    The manifest write is skipped, not failed, when there is no home to record — the
+    requirement index is still worth rebuilding, and `index.diagnostics` says why nothing
+    was written.
     """
     project_id, _ = project
     workspace = await _workspace(session, project_id)
     results = await spec_index.reindex_project(session, workspace, project_id)
     backfilled = await requirement_links.backfill_project(session, project_id)
+
+    on_disk, discovery_diagnostics = spec_documents.discover(workspace)
+    rows = await spec_lifecycle.list_documents(session, project_id)
+    existing, _, _ = spec_documents.read_index(workspace)
+    manifest, index_diagnostics = spec_documents.build_index(
+        on_disk,
+        [(row.path, row.title, row.kind, row.phase) for row in rows],
+        existing,
+        home=body.home if body is not None else None,
+    )
+
+    written = None
+    if manifest is not None:
+        spec_documents.write_index(workspace, manifest)
+        written = {
+            "path": spec_documents.INDEX_RELATIVE,
+            "documents": len(manifest.documents),
+            "home": manifest.home,
+        }
+
     await session.commit()
     return {
         "documents": {
@@ -974,6 +1097,10 @@ async def reindex(
             for path, result in results.items()
         },
         "references": backfilled,
+        "index": {
+            "written": written,
+            "diagnostics": list(discovery_diagnostics) + list(index_diagnostics),
+        },
     }
 
 

@@ -58,8 +58,6 @@ const SSE_EVENT_TYPES = [
   'permission_denied',
   'permission_requested',
   'permission_decided',
-  'question_not_asked',
-  'unasked_question_resolved',
   'project_created',
   'project_opened',
   'project_relocated',

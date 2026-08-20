@@ -11,6 +11,9 @@ export function summaryForEvent(type: string, data: Record<string, unknown>): st
     // Both of these carry the only detail worth reading in a field the default branch does not
     // look at, so without a case they render as their own event name twice over.
     case 'permission_denied': return `${data.agent ?? ''} refused ${data.tool_name ?? 'an action'}${data.reason ? `: ${data.reason}` : ''}`
+    // Retired: nothing emits `question_not_asked` any more (the unasked-question backstop was
+    // removed and its table dropped in 0082). Kept because `event_logs` rows written before then
+    // still exist, and the alternative is an old timeline rendering its own event name twice.
     case 'question_not_asked': return `${data.agent} ended a turn on a question it never asked: ${String(data.question ?? '').slice(0, 80)}`
     // CLI-pushed events
     case 'msg_sent': return `${data.from} → ${data.to}${data.subject ? `: "${data.subject}"` : ''} (${data.msg_id})`

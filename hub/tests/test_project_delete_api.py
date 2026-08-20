@@ -55,7 +55,6 @@ from hub.db.models import (
     TaskRequirementReference,
     TaskTransition,
     TurnUsage,
-    UnaskedQuestion,
     WorkerInvocation,
 )
 from hub.project_lifecycle import ProjectLifecycleService
@@ -91,7 +90,6 @@ PROJECT_SCOPED_TABLE_NAMES = [
     "agents",
     "agent_outputs",
     "worker_invocations",
-    "unasked_questions",
     "tasks",
     "spec_documents",
     "runners",
@@ -239,11 +237,6 @@ async def _seed_full_project(session, project_id: str, tag: str) -> None:
             project_id=project_id,
             from_agent=f"agent-{tag}",
             question="why?",
-        )
-    )
-    session.add(
-        UnaskedQuestion(
-            id=f"unasked-{tag}", project_id=project_id, agent=f"agent-{tag}", question="why not?"
         )
     )
     session.add(

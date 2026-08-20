@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Conversation side panel</title>
+<meta name="aw-spec-kind" content="capability">
+<meta name="aw-spec-status" content="current">
+<meta name="aw-spec-rigor" content="sketch">
+<meta name="aw-spec-schema-version" content="1">
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+    --surface-2: #21262d; --surface: #161b22;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+:root[data-theme="dark"] {
+  --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+  --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+  --surface-2: #21262d; --surface: #161b22;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 2rem 2.5rem 4rem; background: var(--bg); color: var(--fg);
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+h1 { font-size: 1.75rem; margin: 0 0 .25rem; }
+h2 { font-size: 1.15rem; margin: 2.5rem 0 .75rem; padding-bottom: .3rem;
+     border-bottom: 1px solid var(--border); }
+h3 { font-size: 1rem; margin: 1.5rem 0 .4rem; }
+p { margin: .5rem 0; }
+ul, ol { margin: .5rem 0; padding-left: 1.4rem; }
+li { margin: .25rem 0; }
+a { color: var(--aw-accent); }
+.aw-meta { color: var(--muted); font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-chip { display: inline-block; padding: .1rem .5rem; border-radius: 999px;
+           background: var(--surface-2); font-size: .78rem; margin-right: .4rem; }
+.aw-requirement { border-left: 3px solid var(--border); padding: .1rem 0 .1rem .9rem;
+                  margin: 1.1rem 0; }
+.aw-requirement-must { border-left-color: var(--aw-accent); }
+.aw-requirement-should { border-left-color: var(--aw-warn); }
+.aw-requirement-may { border-left-color: var(--border); }
+.aw-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8rem;
+         color: var(--muted); }
+.aw-modal { font-weight: 600; }
+.aw-modal-must { color: var(--aw-accent); }
+.aw-modal-should { color: var(--aw-warn); }
+.aw-modal-may { color: var(--fg); font-weight: 400; }
+.aw-chip-rigor-gate { color: var(--aw-accent); border: 1px solid var(--aw-accent); }
+.aw-chip-rigor-contract { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Phase is a lifecycle, and the question it answers is "can I rely on this?". `approved` and a
+   capability's `current` are settled and take the done tone; `proposed` is waiting on an operator
+   decision and takes warn; `exploring` and `archived` are quiet for opposite reasons — one has not
+   arrived yet, the other has been superseded. Deliberately NOT the accent: this document already
+   spends accent on links and on MUST, and a third meaning would empty it of any. `kind` keeps the
+   plain chip on purpose — it is a category, not a state, and hue there ranks nothing. */
+.aw-chip-phase-done { color: var(--aw-ok); border: 1px solid var(--aw-ok); }
+.aw-chip-phase-waiting { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+.aw-chip-phase-quiet { color: var(--muted); }
+.aw-chip-phase-archived { color: var(--muted); text-decoration: line-through; }
+/* An unresolved question blocks `propose`, so it is a real state and not a label. Resolved stays
+   the plain chip — the reader needs to find what is still open, not celebrate what is closed. */
+.aw-chip-open { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Limits is where a reader is most likely to be misled, and it read identically to Checked. */
+.aw-limits { color: var(--aw-warn); }
+/* The first screenful was entirely monochrome, so the document read as texty however the
+   requirements below were coloured. This puts the same modal scheme where the eye lands first,
+   carrying counts rather than decoration. */
+.aw-summary { margin: 0 0 1.5rem; font-size: .9rem; color: var(--muted); }
+.aw-summary .aw-count { font-weight: 600; }
+.aw-summary-sep { color: var(--border); margin: 0 .45rem; }
+.aw-rationale { color: var(--muted); font-size: .9rem; }
+.aw-refs { font-size: .82rem; color: var(--muted); }
+.aw-note { color: var(--muted); font-style: italic; }
+.aw-empty { color: var(--muted); }
+table { border-collapse: collapse; margin: .75rem 0; width: 100%; }
+th, td { border: 1px solid var(--border); padding: .4rem .6rem; text-align: left;
+         vertical-align: top; font-size: .92rem; }
+code, pre { background: var(--surface); border-radius: 4px; }
+code { padding: .1rem .3rem; font-size: .88em; }
+</style>
+</head>
+<body>
+<h1>Conversation side panel</h1>
+<p class="aw-meta"><span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><span class="aw-chip">sketch</span></p>
+<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">14</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">14</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">31</span> criteria</p>
+<section><h2 id="summary">Summary</h2><p>One shell beside a conversation, hosting one tab at a time. Specification documents, the workspace file tree and the loops index each used to mean something different by &quot;open on the right&quot;. This capability makes them one surface with one set of rules: a tab strip the operator controls, index tabs that launch keyed detail tabs, per-project tab configuration with a single global width, and one resize/overlay rule that does not vary by what is being shown.</p></section><section><h2 id="requirements">Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-1"><span class="aw-id">FR-1</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The conversation surface SHALL host at most one panel shell beside it. The shell SHALL present a strip containing only the tabs currently open, and SHALL display the content of exactly one of them at a time. Every open tab SHALL be closable, and closing the last one SHALL close the shell.</p><p class="aw-rationale">Tab kinds SHALL come from a fixed set defined in the Hub UI&#x27;s own source. The Hub UI MUST NOT construct a tab kind at runtime from external or dynamic input.</p></div><div class="aw-requirement aw-requirement-must" id="FR-2"><span class="aw-id">FR-2</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The shell SHALL present an affordance that opens a new tab. Choosing a kind that is already open as a single-instance tab SHALL bring that tab into focus rather than opening a second one.</p></div><div class="aw-requirement aw-requirement-must" id="FR-3"><span class="aw-id">FR-3</span> <p><span class="aw-modal aw-modal-must">MUST</span> Selecting an item from an index tab SHALL open a detail tab for that item. Selecting an item whose detail tab is already open SHALL bring that tab into focus and re-reveal the selected item within it, and MUST NOT open a second tab for the same item.</p></div><div class="aw-requirement aw-requirement-must" id="FR-4"><span class="aw-id">FR-4</span> <p><span class="aw-modal aw-modal-must">SHALL</span> A detail tab SHALL be keyed by an identifier that survives the item being renamed, whenever the item has such an identifier. A specification document&#x27;s detail tab SHALL be keyed by the document&#x27;s identifier, not by its path. A file&#x27;s detail tab SHALL be keyed by its path, a file having no other identifier.</p></div><div class="aw-requirement aw-requirement-must" id="FR-5"><span class="aw-id">FR-5</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Opening a file from the tree SHALL close the tree tab as the file&#x27;s detail tab opens, so that navigation does not occupy a tab of its own once it has been used.</p></div><div class="aw-requirement aw-requirement-must" id="FR-6"><span class="aw-id">FR-6</span> <p><span class="aw-modal aw-modal-must">MUST</span> Which tabs are open, which is visible, and whether the shell is open at all SHALL be remembered per project, and restored when the operator returns to that project. This state MUST NOT be shared between projects.</p><p class="aw-rationale">The shell&#x27;s width SHALL persist as a single value shared across every project and conversation, extending the same preference the specification document panel already persists.</p></div><div class="aw-requirement aw-requirement-must" id="FR-7"><span class="aw-id">FR-7</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The persisted tab state SHALL carry a version, and SHALL be migrated on load when that version is older than the current one. On load, a detail tab whose item no longer exists SHALL be dropped.</p><p class="aw-rationale">If migration or reconciliation removes every tab, the shell MUST NOT be restored as open. If it removes the tab that was visible while others survive, one of the survivors SHALL be made visible rather than restoring an open shell with nothing shown.</p></div><div class="aw-requirement aw-requirement-must" id="FR-8"><span class="aw-id">FR-8</span> <p><span class="aw-modal aw-modal-must">MUST</span> The boundary between the conversation and the shell SHALL be the operator&#x27;s to move, bounded only by each side&#x27;s own measured minimum width, with no maximum on either side that prevents the other from being made smaller. Below the combined minimum width of the conversation and the visible tab, the shell SHALL become an overlay rather than resize below either minimum, and dismissing that overlay MUST NOT discard the open tabs — a control SHALL remain available to bring the shell back.</p><p class="aw-rationale">The combined minimum SHALL be derived from the visible tab&#x27;s own minimum rather than a single hardcoded value, so that the threshold and the layout cannot disagree.</p></div><div class="aw-requirement aw-requirement-must" id="FR-9"><span class="aw-id">FR-9</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The file tree tab SHALL present the project&#x27;s workspace paths as a navigable tree, sourced from the same path listing already used elsewhere in the Hub UI, and selecting a path SHALL open that file for reading.</p></div><div class="aw-requirement aw-requirement-must" id="FR-10"><span class="aw-id">FR-10</span> <p><span class="aw-modal aw-modal-must">MUST</span> The Hub SHALL serve a file&#x27;s content only for a path that is, byte-for-byte, a member of what the workspace path listing returns for the same project. The Hub MUST NOT serve content for any path reachable only through a separate, independently reasoned containment or traversal check.</p></div><div class="aw-requirement aw-requirement-must" id="FR-11"><span class="aw-id">FR-11</span> <p><span class="aw-modal aw-modal-must">MUST</span> A file&#x27;s content SHALL be served in full up to a fixed size bound. A file exceeding the bound SHALL be refused with a response stating its size and the bound, and MUST NOT be served as a silently truncated partial file.</p></div><div class="aw-requirement aw-requirement-must" id="FR-12"><span class="aw-id">FR-12</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL determine whether a requested file is text or binary before it is rendered, and a binary file SHALL be identified as such rather than rendered as garbled text.</p></div><div class="aw-requirement aw-requirement-must" id="FR-13"><span class="aw-id">FR-13</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Referencing a file from the file tree or a file&#x27;s detail tab SHALL insert the same mention format the composer&#x27;s own path-completion trigger produces, so a mention inserted from either surface is indistinguishable in the composed message.</p></div><div class="aw-requirement aw-requirement-must" id="FR-14"><span class="aw-id">FR-14</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Every open tab, its close control, and the plus affordance SHALL be reachable and operable using only the keyboard: reachable by sequential focus navigation, activatable with `Enter` or `Space`, and — once the strip has focus — navigable between tabs using the arrow keys.</p></div></section><section><h2 id="acceptance">Acceptance criteria</h2><table><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>the operator has opened two tabs</td><td>the strip shows exactly those two, and no tab for a kind that is not open</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>the operator selects a different open tab</td><td>the shell shows that tab&#x27;s content in the whole panel, replacing what was shown</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>the operator closes the only open tab</td><td>the shell closes and the conversation occupies the full available width</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>the operator opens the plus affordance and chooses a kind that is not open</td><td>a tab of that kind is added to the strip and becomes the visible tab</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>the operator chooses a kind whose single-instance tab is already open</td><td>that tab becomes the visible tab, and no second tab of that kind is created</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>the operator selects an item from an index tab</td><td>a detail tab for that item opens and becomes the visible tab</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td>a detail tab already open for an item</td><td>the operator selects that same item from the index again</td><td>the existing tab becomes visible, its content is re-revealed, and no second tab exists for</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td>an open detail tab for a specification document</td><td>that document is renamed</td><td>the tab still shows the same document</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td>the file tree tab is open</td><td>the operator opens a file from it</td><td>the file&#x27;s detail tab is open and visible, and the tree tab is no longer in the strip</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>the operator closes the shell in a project and later reopens it in that same project</td><td>the tabs that were open are open again, with the same one visible</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td>two projects with different tabs open</td><td>the operator switches from one to the other</td><td>each shows its own tab configuration</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>the operator resizes the shell in one project and opens the shell in another</td><td>the shell opens at the width remembered from the first</td></tr><tr><td><a href="#FR-7">FR-7</a></td><td>persisted state naming an open detail tab for a file that no longer exists in the</td><td>the shell loads that state</td><td>that tab is not restored, and the remaining tabs are</td></tr><tr><td><a href="#FR-7">FR-7</a></td><td></td><td>reconciliation or migration removes every persisted tab</td><td>the shell is restored closed, not open and empty</td></tr><tr><td><a href="#FR-7">FR-7</a></td><td></td><td>reconciliation removes the tab that was visible, and other tabs survive</td><td>one of the surviving tabs is shown, and the shell is not open with nothing displayed</td></tr><tr><td><a href="#FR-8">FR-8</a></td><td></td><td>the operator drags the boundary between the conversation and the shell</td><td>either side can be made the larger one, down to its own measured minimum</td></tr><tr><td><a href="#FR-8">FR-8</a></td><td></td><td>the combined minimum width of the conversation and the visible tab exceeds the available</td><td>the shell is shown as an overlay rather than a resized column</td></tr><tr><td><a href="#FR-8">FR-8</a></td><td></td><td>the operator dismisses the shell overlay at a narrow viewport</td><td>a control remains to bring it back with the same tabs open and the same one visible</td></tr><tr><td><a href="#FR-9">FR-9</a></td><td></td><td>the operator opens the file tree tab</td><td>every path the workspace path listing returns for the project is shown as a navigable tree</td></tr><tr><td><a href="#FR-9">FR-9</a></td><td></td><td>the operator selects a text file from the tree</td><td>its content is shown in that file&#x27;s detail tab</td></tr><tr><td><a href="#FR-10">FR-10</a></td><td></td><td>a path the workspace path listing returns is requested for content</td><td>the Hub returns that file&#x27;s content</td></tr><tr><td><a href="#FR-10">FR-10</a></td><td></td><td>a path attempting traversal outside the project&#x27;s workspace, or a path the listing would</td><td>the request is refused</td></tr><tr><td><a href="#FR-11">FR-11</a></td><td></td><td>a file at or under the size bound is requested</td><td>its complete content is returned</td></tr><tr><td><a href="#FR-11">FR-11</a></td><td></td><td>a file exceeding the size bound is requested</td><td>the response refuses it and states the file&#x27;s size and the bound no partial content is returned in its place</td></tr><tr><td><a href="#FR-12">FR-12</a></td><td></td><td>a text file is requested</td><td>its content is rendered as text in its tab</td></tr><tr><td><a href="#FR-12">FR-12</a></td><td></td><td>a binary file is requested</td><td>the tab states that the file is binary and does not render its bytes as text</td></tr><tr><td><a href="#FR-13">FR-13</a></td><td></td><td>the operator inserts a file reference from the shell into the composer</td><td>the inserted text is the same mention format the composer&#x27;s path trigger produces for that</td></tr><tr><td><a href="#FR-14">FR-14</a></td><td></td><td>the operator reaches a tab using only the keyboard and activates it</td><td>that tab becomes the visible tab, identically to a pointer click</td></tr><tr><td><a href="#FR-14">FR-14</a></td><td></td><td>the strip has keyboard focus and the operator presses an arrow key</td><td>focus moves to the adjacent tab in that direction</td></tr><tr><td><a href="#FR-14">FR-14</a></td><td></td><td>the operator reaches an open tab&#x27;s close control by keyboard and activates it</td><td>that tab closes</td></tr><tr><td><a href="#FR-14">FR-14</a></td><td></td><td>the operator reaches the plus affordance by keyboard and activates it</td><td>its menu opens and each entry is itself keyboard reachable and activatable</td></tr></tbody></table></section><section><h2 id="evidence">Evidence and coverage limits</h2><h3>Checked</h3><ul><li>Translated from openspec/specs/conversation-side-panel/spec.md (14 requirements, 31 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten.</li></ul><h3 class="aw-limits">Limits</h3><ul><li>scenarios-state-no-starting-state: 26 of 31 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed</li></ul></section><section><h2 id="open-questions">Open questions</h2><p class="aw-empty">None outstanding.</p></section>
+<script type="application/agentweave-spec+json" id="aw-spec-payload">
+{
+  "schema_version": 1,
+  "kind": "capability",
+  "title": "Conversation side panel",
+  "summary": "One shell beside a conversation, hosting one tab at a time. Specification documents, the workspace file tree and the loops index each used to mean something different by \"open on the right\". This capability makes them one surface with one set of rules: a tab strip the operator controls, index tabs that launch keyed detail tabs, per-project tab configuration with a single global width, and one resize/overlay rule that does not vary by what is being shown.",
+  "problem": "",
+  "scope": {
+    "in_scope": [],
+    "non_goals": []
+  },
+  "requirements": [
+    {
+      "key": "a-conversation-hosts-one-panel-shell-showing-one-tab-at-a-ti",
+      "statement": "The conversation surface SHALL host at most one panel shell beside it. The shell SHALL present a strip containing only the tabs currently open, and SHALL display the content of exactly one of them at a time. Every open tab SHALL be closable, and closing the last one SHALL close the shell.",
+      "modal": "SHALL",
+      "rationale": "Tab kinds SHALL come from a fixed set defined in the Hub UI's own source. The Hub UI MUST NOT construct a tab kind at runtime from external or dynamic input.",
+      "party": null
+    },
+    {
+      "key": "the-plus-affordance-opens-a-tab-that-is-not-already-open",
+      "statement": "The shell SHALL present an affordance that opens a new tab. Choosing a kind that is already open as a single-instance tab SHALL bring that tab into focus rather than opening a second one.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "an-index-tab-opens-a-keyed-detail-tab-for-the-item-selected-",
+      "statement": "Selecting an item from an index tab SHALL open a detail tab for that item. Selecting an item whose detail tab is already open SHALL bring that tab into focus and re-reveal the selected item within it, and MUST NOT open a second tab for the same item.",
+      "modal": "MUST",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "a-detail-tab-is-keyed-by-its-item-s-durable-identifier-where",
+      "statement": "A detail tab SHALL be keyed by an identifier that survives the item being renamed, whenever the item has such an identifier. A specification document's detail tab SHALL be keyed by the document's identifier, not by its path. A file's detail tab SHALL be keyed by its path, a file having no other identifier.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "opening-a-file-replaces-the-file-tree-tab",
+      "statement": "Opening a file from the tree SHALL close the tree tab as the file's detail tab opens, so that navigation does not occupy a tab of its own once it has been used.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "tab-configuration-is-remembered-per-project-width-is-one-glo",
+      "statement": "Which tabs are open, which is visible, and whether the shell is open at all SHALL be remembered per project, and restored when the operator returns to that project. This state MUST NOT be shared between projects.",
+      "modal": "MUST",
+      "rationale": "The shell's width SHALL persist as a single value shared across every project and conversation, extending the same preference the specification document panel already persists.",
+      "party": null
+    },
+    {
+      "key": "persisted-tab-state-is-versioned-reconciled-and-never-restor",
+      "statement": "The persisted tab state SHALL carry a version, and SHALL be migrated on load when that version is older than the current one. On load, a detail tab whose item no longer exists SHALL be dropped.",
+      "modal": "SHALL",
+      "rationale": "If migration or reconciliation removes every tab, the shell MUST NOT be restored as open. If it removes the tab that was visible while others survive, one of the survivors SHALL be made visible rather than restoring an open shell with nothing shown.",
+      "party": null
+    },
+    {
+      "key": "the-panel-shell-resizes-and-overlays-using-the-same-rule-for",
+      "statement": "The boundary between the conversation and the shell SHALL be the operator's to move, bounded only by each side's own measured minimum width, with no maximum on either side that prevents the other from being made smaller. Below the combined minimum width of the conversation and the visible tab, the shell SHALL become an overlay rather than resize below either minimum, and dismissing that overlay MUST NOT discard the open tabs — a control SHALL remain available to bring the shell back.",
+      "modal": "MUST",
+      "rationale": "The combined minimum SHALL be derived from the visible tab's own minimum rather than a single hardcoded value, so that the threshold and the layout cannot disagree.",
+      "party": null
+    },
+    {
+      "key": "the-file-tree-lists-the-project-s-workspace-and-opens-a-file",
+      "statement": "The file tree tab SHALL present the project's workspace paths as a navigable tree, sourced from the same path listing already used elsewhere in the Hub UI, and selecting a path SHALL open that file for reading.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "the-file-content-endpoint-s-allowlist-matches-the-workspace-",
+      "statement": "The Hub SHALL serve a file's content only for a path that is, byte-for-byte, a member of what the workspace path listing returns for the same project. The Hub MUST NOT serve content for any path reachable only through a separate, independently reasoned containment or traversal check.",
+      "modal": "MUST",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "the-file-content-endpoint-bounds-size-and-refuses-rather-tha",
+      "statement": "A file's content SHALL be served in full up to a fixed size bound. A file exceeding the bound SHALL be refused with a response stating its size and the bound, and MUST NOT be served as a silently truncated partial file.",
+      "modal": "MUST",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "the-file-content-endpoint-distinguishes-binary-content-befor",
+      "statement": "The Hub SHALL determine whether a requested file is text or binary before it is rendered, and a binary file SHALL be identified as such rather than rendered as garbled text.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "a-file-can-be-inserted-into-the-composer-in-the-format-the-c",
+      "statement": "Referencing a file from the file tree or a file's detail tab SHALL insert the same mention format the composer's own path-completion trigger produces, so a mention inserted from either surface is indistinguishable in the composed message.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "the-tab-strip-and-plus-affordance-are-fully-keyboard-operabl",
+      "statement": "Every open tab, its close control, and the plus affordance SHALL be reachable and operable using only the keyboard: reachable by sequential focus navigation, activatable with `Enter` or `Space`, and — once the strip has focus — navigable between tabs using the arrow keys.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "key": "ac1",
+      "requirement": "a-conversation-hosts-one-panel-shell-showing-one-tab-at-a-ti",
+      "given": "",
+      "when": "the operator has opened two tabs",
+      "then": "the strip shows exactly those two, and no tab for a kind that is not open"
+    },
+    {
+      "key": "ac2",
+      "requirement": "a-conversation-hosts-one-panel-shell-showing-one-tab-at-a-ti",
+      "given": "",
+      "when": "the operator selects a different open tab",
+      "then": "the shell shows that tab's content in the whole panel, replacing what was shown"
+    },
+    {
+      "key": "ac3",
+      "requirement": "a-conversation-hosts-one-panel-shell-showing-one-tab-at-a-ti",
+      "given": "",
+      "when": "the operator closes the only open tab",
+      "then": "the shell closes and the conversation occupies the full available width"
+    },
+    {
+      "key": "ac4",
+      "requirement": "the-plus-affordance-opens-a-tab-that-is-not-already-open",
+      "given": "",
+      "when": "the operator opens the plus affordance and chooses a kind that is not open",
+      "then": "a tab of that kind is added to the strip and becomes the visible tab"
+    },
+    {
+      "key": "ac5",
+      "requirement": "the-plus-affordance-opens-a-tab-that-is-not-already-open",
+      "given": "",
+      "when": "the operator chooses a kind whose single-instance tab is already open",
+      "then": "that tab becomes the visible tab, and no second tab of that kind is created"
+    },
+    {
+      "key": "ac6",
+      "requirement": "an-index-tab-opens-a-keyed-detail-tab-for-the-item-selected-",
+      "given": "",
+      "when": "the operator selects an item from an index tab",
+      "then": "a detail tab for that item opens and becomes the visible tab"
+    },
+    {
+      "key": "ac7",
+      "requirement": "an-index-tab-opens-a-keyed-detail-tab-for-the-item-selected-",
+      "given": "a detail tab already open for an item",
+      "when": "the operator selects that same item from the index again",
+      "then": "the existing tab becomes visible, its content is re-revealed, and no second tab exists for"
+    },
+    {
+      "key": "ac8",
+      "requirement": "a-detail-tab-is-keyed-by-its-item-s-durable-identifier-where",
+      "given": "an open detail tab for a specification document",
+      "when": "that document is renamed",
+      "then": "the tab still shows the same document"
+    },
+    {
+      "key": "ac9",
+      "requirement": "opening-a-file-replaces-the-file-tree-tab",
+      "given": "the file tree tab is open",
+      "when": "the operator opens a file from it",
+      "then": "the file's detail tab is open and visible, and the tree tab is no longer in the strip"
+    },
+    {
+      "key": "ac10",
+      "requirement": "tab-configuration-is-remembered-per-project-width-is-one-glo",
+      "given": "",
+      "when": "the operator closes the shell in a project and later reopens it in that same project",
+      "then": "the tabs that were open are open again, with the same one visible"
+    },
+    {
+      "key": "ac11",
+      "requirement": "tab-configuration-is-remembered-per-project-width-is-one-glo",
+      "given": "two projects with different tabs open",
+      "when": "the operator switches from one to the other",
+      "then": "each shows its own tab configuration"
+    },
+    {
+      "key": "ac12",
+      "requirement": "tab-configuration-is-remembered-per-project-width-is-one-glo",
+      "given": "",
+      "when": "the operator resizes the shell in one project and opens the shell in another",
+      "then": "the shell opens at the width remembered from the first"
+    },
+    {
+      "key": "ac13",
+      "requirement": "persisted-tab-state-is-versioned-reconciled-and-never-restor",
+      "given": "persisted state naming an open detail tab for a file that no longer exists in the",
+      "when": "the shell loads that state",
+      "then": "that tab is not restored, and the remaining tabs are"
+    },
+    {
+      "key": "ac14",
+      "requirement": "persisted-tab-state-is-versioned-reconciled-and-never-restor",
+      "given": "",
+      "when": "reconciliation or migration removes every persisted tab",
+      "then": "the shell is restored closed, not open and empty"
+    },
+    {
+      "key": "ac15",
+      "requirement": "persisted-tab-state-is-versioned-reconciled-and-never-restor",
+      "given": "",
+      "when": "reconciliation removes the tab that was visible, and other tabs survive",
+      "then": "one of the surviving tabs is shown, and the shell is not open with nothing displayed"
+    },
+    {
+      "key": "ac16",
+      "requirement": "the-panel-shell-resizes-and-overlays-using-the-same-rule-for",
+      "given": "",
+      "when": "the operator drags the boundary between the conversation and the shell",
+      "then": "either side can be made the larger one, down to its own measured minimum"
+    },
+    {
+      "key": "ac17",
+      "requirement": "the-panel-shell-resizes-and-overlays-using-the-same-rule-for",
+      "given": "",
+      "when": "the combined minimum width of the conversation and the visible tab exceeds the available",
+      "then": "the shell is shown as an overlay rather than a resized column"
+    },
+    {
+      "key": "ac18",
+      "requirement": "the-panel-shell-resizes-and-overlays-using-the-same-rule-for",
+      "given": "",
+      "when": "the operator dismisses the shell overlay at a narrow viewport",
+      "then": "a control remains to bring it back with the same tabs open and the same one visible"
+    },
+    {
+      "key": "ac19",
+      "requirement": "the-file-tree-lists-the-project-s-workspace-and-opens-a-file",
+      "given": "",
+      "when": "the operator opens the file tree tab",
+      "then": "every path the workspace path listing returns for the project is shown as a navigable tree"
+    },
+    {
+      "key": "ac20",
+      "requirement": "the-file-tree-lists-the-project-s-workspace-and-opens-a-file",
+      "given": "",
+      "when": "the operator selects a text file from the tree",
+      "then": "its content is shown in that file's detail tab"
+    },
+    {
+      "key": "ac21",
+      "requirement": "the-file-content-endpoint-s-allowlist-matches-the-workspace-",
+      "given": "",
+      "when": "a path the workspace path listing returns is requested for content",
+      "then": "the Hub returns that file's content"
+    },
+    {
+      "key": "ac22",
+      "requirement": "the-file-content-endpoint-s-allowlist-matches-the-workspace-",
+      "given": "",
+      "when": "a path attempting traversal outside the project's workspace, or a path the listing would",
+      "then": "the request is refused"
+    },
+    {
+      "key": "ac23",
+      "requirement": "the-file-content-endpoint-bounds-size-and-refuses-rather-tha",
+      "given": "",
+      "when": "a file at or under the size bound is requested",
+      "then": "its complete content is returned"
+    },
+    {
+      "key": "ac24",
+      "requirement": "the-file-content-endpoint-bounds-size-and-refuses-rather-tha",
+      "given": "",
+      "when": "a file exceeding the size bound is requested",
+      "then": "the response refuses it and states the file's size and the bound no partial content is returned in its place"
+    },
+    {
+      "key": "ac25",
+      "requirement": "the-file-content-endpoint-distinguishes-binary-content-befor",
+      "given": "",
+      "when": "a text file is requested",
+      "then": "its content is rendered as text in its tab"
+    },
+    {
+      "key": "ac26",
+      "requirement": "the-file-content-endpoint-distinguishes-binary-content-befor",
+      "given": "",
+      "when": "a binary file is requested",
+      "then": "the tab states that the file is binary and does not render its bytes as text"
+    },
+    {
+      "key": "ac27",
+      "requirement": "a-file-can-be-inserted-into-the-composer-in-the-format-the-c",
+      "given": "",
+      "when": "the operator inserts a file reference from the shell into the composer",
+      "then": "the inserted text is the same mention format the composer's path trigger produces for that"
+    },
+    {
+      "key": "ac28",
+      "requirement": "the-tab-strip-and-plus-affordance-are-fully-keyboard-operabl",
+      "given": "",
+      "when": "the operator reaches a tab using only the keyboard and activates it",
+      "then": "that tab becomes the visible tab, identically to a pointer click"
+    },
+    {
+      "key": "ac29",
+      "requirement": "the-tab-strip-and-plus-affordance-are-fully-keyboard-operabl",
+      "given": "",
+      "when": "the strip has keyboard focus and the operator presses an arrow key",
+      "then": "focus moves to the adjacent tab in that direction"
+    },
+    {
+      "key": "ac30",
+      "requirement": "the-tab-strip-and-plus-affordance-are-fully-keyboard-operabl",
+      "given": "",
+      "when": "the operator reaches an open tab's close control by keyboard and activates it",
+      "then": "that tab closes"
+    },
+    {
+      "key": "ac31",
+      "requirement": "the-tab-strip-and-plus-affordance-are-fully-keyboard-operabl",
+      "given": "",
+      "when": "the operator reaches the plus affordance by keyboard and activates it",
+      "then": "its menu opens and each entry is itself keyboard reachable and activatable"
+    }
+  ],
+  "tasks": [],
+  "algorithms": [],
+  "design": "",
+  "evidence": {
+    "checked": [
+      "Translated from openspec/specs/conversation-side-panel/spec.md (14 requirements, 31 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten."
+    ],
+    "limits": [
+      "scenarios-state-no-starting-state: 26 of 31 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed"
+    ]
+  },
+  "lifecycle": "",
+  "open_questions": [],
+  "aw_identity": {
+    "requirements": {
+      "a-conversation-hosts-one-panel-shell-showing-one-tab-at-a-ti": "FR-1",
+      "the-plus-affordance-opens-a-tab-that-is-not-already-open": "FR-2",
+      "an-index-tab-opens-a-keyed-detail-tab-for-the-item-selected-": "FR-3",
+      "a-detail-tab-is-keyed-by-its-item-s-durable-identifier-where": "FR-4",
+      "opening-a-file-replaces-the-file-tree-tab": "FR-5",
+      "tab-configuration-is-remembered-per-project-width-is-one-glo": "FR-6",
+      "persisted-tab-state-is-versioned-reconciled-and-never-restor": "FR-7",
+      "the-panel-shell-resizes-and-overlays-using-the-same-rule-for": "FR-8",
+      "the-file-tree-lists-the-project-s-workspace-and-opens-a-file": "FR-9",
+      "the-file-content-endpoint-s-allowlist-matches-the-workspace-": "FR-10",
+      "the-file-content-endpoint-bounds-size-and-refuses-rather-tha": "FR-11",
+      "the-file-content-endpoint-distinguishes-binary-content-befor": "FR-12",
+      "a-file-can-be-inserted-into-the-composer-in-the-format-the-c": "FR-13",
+      "the-tab-strip-and-plus-affordance-are-fully-keyboard-operabl": "FR-14"
+    },
+    "high_water": 14,
+    "retired": {},
+    "digests": {
+      "FR-1": "978a58799ac1b82abd24a2af1c856e8792bbe7c10e6a725d211d1b306d62eb5c",
+      "FR-2": "dbba628000327c5707ec05d6d9354c92188f96feadeeb89cb7126c98ef357c08",
+      "FR-3": "e337f3d0a08df3c174b4396311d00a0c37b96a37c1f789e291437504fbb1e7ec",
+      "FR-4": "f7955bf7d1a1017d91805fcaba4ce604014a3d7fd9171d1dbb0b5fd6c381733d",
+      "FR-5": "38647546fb77c55818a90d409172fccab2b57a64a94f1939f1370020c5d9cce0",
+      "FR-6": "05185e5595162ab4ab427e6912637f418fbea7fe17ec1f22fef610bed138e566",
+      "FR-7": "f475bdc336964cf811953cc1a182df56e23edd5b9e48b014997be290d0c1a0c8",
+      "FR-8": "12eea18369714f906d52b73d47df82a568e260245a1585840644277b81719b68",
+      "FR-9": "c9970ef0aa414f4baee57cbc86d4fb07600afe6a42747c670d8e5ec801552238",
+      "FR-10": "73b0945222b443fa4349374f13eed4a28886796c829fc44e25505eeceede3ace",
+      "FR-11": "e51805457667fc9e65c4c7194474543b63b4dc23216cd7601e7eec620a69140a",
+      "FR-12": "64b05ce63f0585c6b9e740854ed7ff0d5a94949bd1cf1c8e452e03872e563db5",
+      "FR-13": "19c3a1f25c6b0964d1520bbf8abb65c58d4c72c6675f466f1b50c021778c12df",
+      "FR-14": "cc427f590f7c3c89fe15ba0b48f2b94a99ca1863caddf410da3474b096320be7"
+    }
+  }
+}
+</script>
+</body>
+</html>

@@ -103,11 +103,17 @@ async def save_document(
     What *is* refused is a submission against an approved document — silently
     rewriting what an operator approved would make the approval meaningless.
 
-    A capability document is written only by the operator, through a merge — never by an ordinary
-    submission, whoever the caller — and a document's `kind` is fixed at creation: nothing here may
-    reclassify what a document *is*. Both are checked before the approved-document refusal, the
-    same way that refusal is checked before anything else, because none of the three depend on the
-    document's phase to make sense.
+    A capability document is written only by the operator — never by an agent, whatever its run —
+    and a document's `kind` is fixed at creation: nothing here may reclassify what a document *is*.
+    Both are checked before the approved-document refusal, the same way that refusal is checked
+    before anything else, because none of the three depend on the document's phase to make sense.
+
+    The operator reaches this through two paths, and the check below distinguishes neither: a merge
+    absorbing an approved change, and a direct write. This docstring used to say "through a merge",
+    which was narrower than the check it described — it forbids non-operators, and says nothing
+    about mechanism. That wording is why the operator's direct-write route went unbuilt for long
+    enough that `spec-document-authority`'s own scenario ("the same submission from the operator
+    succeeds") could only be exercised by calling this function in-process.
 
     Returns a `SaveResult` at `sketch` rigor (unchanged from before this function gained a second
     branch) or a `ProposeResult` at `contract`/`gate` — `openspec/changes/2026-08-17-authoring-rigor-and-scope`
@@ -128,7 +134,7 @@ async def save_document(
 
     if document.kind == "capability" and actor.kind != "operator":
         raise SaveRefusedError(
-            "capability documents are written by the operator, through a merge",
+            "capability documents are written by the operator",
             code="capability_write_is_the_operators",
         )
 

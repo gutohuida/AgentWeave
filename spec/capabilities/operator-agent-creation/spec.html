@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Operator agent creation</title>
+<meta name="aw-spec-kind" content="capability">
+<meta name="aw-spec-status" content="current">
+<meta name="aw-spec-rigor" content="sketch">
+<meta name="aw-spec-schema-version" content="1">
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+    --surface-2: #21262d; --surface: #161b22;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+:root[data-theme="dark"] {
+  --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+  --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+  --surface-2: #21262d; --surface: #161b22;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 2rem 2.5rem 4rem; background: var(--bg); color: var(--fg);
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+h1 { font-size: 1.75rem; margin: 0 0 .25rem; }
+h2 { font-size: 1.15rem; margin: 2.5rem 0 .75rem; padding-bottom: .3rem;
+     border-bottom: 1px solid var(--border); }
+h3 { font-size: 1rem; margin: 1.5rem 0 .4rem; }
+p { margin: .5rem 0; }
+ul, ol { margin: .5rem 0; padding-left: 1.4rem; }
+li { margin: .25rem 0; }
+a { color: var(--aw-accent); }
+.aw-meta { color: var(--muted); font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-chip { display: inline-block; padding: .1rem .5rem; border-radius: 999px;
+           background: var(--surface-2); font-size: .78rem; margin-right: .4rem; }
+.aw-requirement { border-left: 3px solid var(--border); padding: .1rem 0 .1rem .9rem;
+                  margin: 1.1rem 0; }
+.aw-requirement-must { border-left-color: var(--aw-accent); }
+.aw-requirement-should { border-left-color: var(--aw-warn); }
+.aw-requirement-may { border-left-color: var(--border); }
+.aw-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8rem;
+         color: var(--muted); }
+.aw-modal { font-weight: 600; }
+.aw-modal-must { color: var(--aw-accent); }
+.aw-modal-should { color: var(--aw-warn); }
+.aw-modal-may { color: var(--fg); font-weight: 400; }
+.aw-chip-rigor-gate { color: var(--aw-accent); border: 1px solid var(--aw-accent); }
+.aw-chip-rigor-contract { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Phase is a lifecycle, and the question it answers is "can I rely on this?". `approved` and a
+   capability's `current` are settled and take the done tone; `proposed` is waiting on an operator
+   decision and takes warn; `exploring` and `archived` are quiet for opposite reasons — one has not
+   arrived yet, the other has been superseded. Deliberately NOT the accent: this document already
+   spends accent on links and on MUST, and a third meaning would empty it of any. `kind` keeps the
+   plain chip on purpose — it is a category, not a state, and hue there ranks nothing. */
+.aw-chip-phase-done { color: var(--aw-ok); border: 1px solid var(--aw-ok); }
+.aw-chip-phase-waiting { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+.aw-chip-phase-quiet { color: var(--muted); }
+.aw-chip-phase-archived { color: var(--muted); text-decoration: line-through; }
+/* An unresolved question blocks `propose`, so it is a real state and not a label. Resolved stays
+   the plain chip — the reader needs to find what is still open, not celebrate what is closed. */
+.aw-chip-open { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Limits is where a reader is most likely to be misled, and it read identically to Checked. */
+.aw-limits { color: var(--aw-warn); }
+/* The first screenful was entirely monochrome, so the document read as texty however the
+   requirements below were coloured. This puts the same modal scheme where the eye lands first,
+   carrying counts rather than decoration. */
+.aw-summary { margin: 0 0 1.5rem; font-size: .9rem; color: var(--muted); }
+.aw-summary .aw-count { font-weight: 600; }
+.aw-summary-sep { color: var(--border); margin: 0 .45rem; }
+.aw-rationale { color: var(--muted); font-size: .9rem; }
+.aw-refs { font-size: .82rem; color: var(--muted); }
+.aw-note { color: var(--muted); font-style: italic; }
+.aw-empty { color: var(--muted); }
+table { border-collapse: collapse; margin: .75rem 0; width: 100%; }
+th, td { border: 1px solid var(--border); padding: .4rem .6rem; text-align: left;
+         vertical-align: top; font-size: .92rem; }
+code, pre { background: var(--surface); border-radius: 4px; }
+code { padding: .1rem .3rem; font-size: .88em; }
+</style>
+</head>
+<body>
+<h1>Operator agent creation</h1>
+<p class="aw-meta"><span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><span class="aw-chip">sketch</span></p>
+<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">7</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">7</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">26</span> criteria</p>
+<section><h2 id="summary">Summary</h2><p>Define how an operator creates a project-scoped, runner-bound agent from the Hub while preserving launchability truth, optional charter guidance, stable identity, and lazy worktree isolation.</p></section><section><h2 id="requirements">Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-1"><span class="aw-id">FR-1</span> <p><span class="aw-modal aw-modal-must">MUST</span> Each project workspace SHALL expose an **Add agent** action. Creating an agent SHALL require a valid project-unique name, a launchable provider, and a model that provider&#x27;s catalog entry declares. A charter MAY be selected but MUST NOT be required. The operator MUST NOT be asked to choose a persona or organizational role.</p><p class="aw-rationale">The operator MUST NOT be required to have configured a runner beforehand. Selecting a provider and a model SHALL be sufficient to create a working agent.</p></div><div class="aw-requirement aw-requirement-must" id="FR-2"><span class="aw-id">FR-2</span> <p><span class="aw-modal aw-modal-must">MUST</span> The creation journey SHALL display every provider it offers with that provider&#x27;s current launchability. An unlaunchable provider SHALL remain visible with the reason it cannot run and MUST NOT be selectable as ready. The server SHALL repeat launchability validation when creation is submitted.</p></div><div class="aw-requirement aw-requirement-must" id="FR-3"><span class="aw-id">FR-3</span> <p><span class="aw-modal aw-modal-must">SHALL</span> An operator-created agent SHALL be a Hub-owned project participant with its own queue, conversation identity, and stable color. Creation SHALL NOT provision or mutate a Git worktree. The existing scheduler SHALL provision the isolated worktree only when the agent first begins writing work, and only where the project directory is a Git repository.</p><p class="aw-rationale">Where the project directory is a Git repository and the isolated worktree cannot be provisioned, the Hub SHALL refuse the turn and state why. It MUST NOT run the agent in the primary checkout instead: a project that has isolation SHALL NOT lose it silently.</p></div><div class="aw-requirement aw-requirement-must" id="FR-4"><span class="aw-id">FR-4</span> <p><span class="aw-modal aw-modal-must">SHALL</span> When agent creation requires a runner that does not exist, the Hub SHALL create the runner and the agent as one atomic operation. A failure at any point SHALL leave neither record behind.</p><p class="aw-rationale">The Hub SHALL reuse an existing same-project runner whose provider and model match the operator&#x27;s selection rather than creating a duplicate.</p></div><div class="aw-requirement aw-requirement-must" id="FR-5"><span class="aw-id">FR-5</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Where the operator chooses an agent&#x27;s provider, each provider SHALL be presented with its own visual mark alongside its name.</p><p class="aw-rationale">A provider for which no mark is available SHALL be presented with its name alone and MUST NOT be given another provider&#x27;s mark. A mark MUST NOT be the only thing distinguishing one provider from another — the provider&#x27;s name SHALL always be present. Provider marks MUST NOT introduce a second icon system, a webfont, or a network request to render. Presenting a provider&#x27;s mark MUST NOT change which providers are offered. Launchability remains the sole determinant of whether a provider can be chosen.</p></div><div class="aw-requirement aw-requirement-must" id="FR-6"><span class="aw-id">FR-6</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Agent creation SHALL offer a setting when the agent&#x27;s first turn would be materially different without it, and SHALL leave every other setting to the agent&#x27;s configuration destination.</p><p class="aw-rationale">This capability already fixes *what* creation collects — a project-unique name, a launchable provider, a model the catalog declares, and an optional charter. What it does not state is the rule by which anything new is placed, so each future setting would be argued individually and creation would grow by accretion. The rule governs what is **offered**, not what is **required**. A charter is offered because it shapes the first turn, and remains optional under the existing no-charter contract; nothing here tightens that. A setting with a workable default, which can be changed before it takes effect, MUST NOT be added to creation. Lengthening creation is friction at the first moment an operator uses the product, and buys nothing that the configuration destination cannot provide later.</p></div><div class="aw-requirement aw-requirement-must" id="FR-7"><span class="aw-id">FR-7</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Where a project&#x27;s directory is not a Git repository, the Hub SHALL run a writing agent in that directory rather than refusing the turn. Absence of a repository SHALL NOT be reported as a condition the operator must resolve before working.</p><p class="aw-rationale">The Hub SHALL state the resulting posture rather than leave it to be discovered. The agent&#x27;s canonical turn context SHALL say that it is working in the project&#x27;s shared directory and that no isolated checkout is available, and the agent&#x27;s workspace report SHALL distinguish an agent sharing the project directory because no repository exists from one sharing it by configuration. Concurrent writing agents in such a project SHALL be permitted. The Hub SHALL NOT serialize them, lock the directory, or refuse a second writer. Because their edits can overwrite one another with no conflict to resolve, and no mechanism for producing a conflict exists without a repository, the Hub SHALL tell each agent that it shares the directory. That statement is the whole of the mitigation and SHALL NOT be removed while the permission stands. The Hub SHALL NOT create, initialize, or modify a Git repository in the project directory in order to satisfy this requirement.</p></div></section><section><h2 id="acceptance">Acceptance criteria</h2><table><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>the operator supplies a valid unused name and selects a launchable provider and a model</td><td>the agent is created with a stable project color and runner binding it appears in the project rail without a reload its conversation opens ready for input</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>the operator selects a provider and model for which the project has no runner</td><td>creation succeeds and the agent is bound to a runner for that provider and model</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>the operator selects a provider</td><td>the models offered are those the catalog declares for that provider</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>the operator creates an agent without selecting a charter</td><td>creation succeeds with full project scope under the existing no-charter contract</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>the supplied name already identifies an agent in that project</td><td>creation is refused with a field-specific reason the dialog preserves the operator&#x27;s other selections for correction</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>a provider&#x27;s CLI or authorization is unavailable</td><td>the provider is displayed disabled with the current reason submitting that provider cannot create an apparently ready agent</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>provider launchability changes after the dialog loads but before submission</td><td>the server refuses creation with the current typed reason</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>an operator creates an agent but sends it no work</td><td>no agent worktree exists</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>the new agent begins its first writing turn</td><td>the scheduler provisions that agent&#x27;s isolated worktree under the existing project guard other agents&#x27; worktrees and the primary checkout remain unchanged</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>a writing agent&#x27;s turn begins in a project that is a Git repository and provisioning its</td><td>the turn does not start the reason names the provisioning failure the agent is not run in the primary checkout</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>the operator creates a second agent on a provider and model that an existing runner in</td><td>the new agent is bound to that existing runner no additional runner is created</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>agent creation fails after a runner would have been provisioned</td><td>no runner record remains from the attempt</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>a runner has been provisioned through agent creation</td><td>it appears in runner management and can be inspected, edited, and deleted like any other</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>the operator opens the provider choice</td><td>each provider is shown with its mark and its name</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>a provider has no available mark</td><td>it is shown with its name is not given another provider&#x27;s mark</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>a provider is launchable but has no mark</td><td>it remains selectable</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>provider marks are rendered</td><td>they resolve without a second icon system, a webfont, or a network request</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>a setting would materially change how the agent&#x27;s first turn behaves</td><td>creation offers it</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>a setting has a workable default and can be changed before it takes effect</td><td>creation does not offer it it is available on the agent&#x27;s configuration destination</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>a setting is offered at creation</td><td>it may still be optional an existing optional contract for it is preserved</td></tr><tr><td><a href="#FR-7">FR-7</a></td><td></td><td>a writing agent is triggered in a project whose directory is not a Git repository</td><td>the turn starts with the project directory as its working directory no repository, worktree, or branch is created</td></tr><tr><td><a href="#FR-7">FR-7</a></td><td></td><td>the operator inspects the queue status for an agent in a project with no repository</td><td>no waiting reason names the absent repository</td></tr><tr><td><a href="#FR-7">FR-7</a></td><td></td><td>a turn&#x27;s canonical context is built for an agent running in a project with no repository</td><td>the context states that the working directory is the project&#x27;s shared directory and that it states that another agent in the project works in that same directory and that their</td></tr><tr><td><a href="#FR-7">FR-7</a></td><td></td><td>two writing agents are triggered in the same project with no repository</td><td>both run, in that project&#x27;s directory neither is refused, queued, or delayed on account of the other</td></tr><tr><td><a href="#FR-7">FR-7</a></td><td></td><td>the operator views the workspace of an agent in a project with no repository</td><td>it reports the project directory as the working directory, with no branch, and states that an agent that shares the project directory by configuration is reported without that</td></tr><tr><td><a href="#FR-7">FR-7</a></td><td></td><td>a writing agent&#x27;s turn requests a working directory within a project that is a Git the same request is made within a project that is not a Git repository</td><td>the request is refused as overriding isolation it is resolved as a project-relative path under the existing containment guard</td></tr></tbody></table></section><section><h2 id="evidence">Evidence and coverage limits</h2><h3>Checked</h3><ul><li>Translated from openspec/specs/operator-agent-creation/spec.md (7 requirements, 26 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten.</li></ul><h3 class="aw-limits">Limits</h3><ul><li>scenario-had-multiple-cycles: &#x27;A working directory override is refused only where isolation exists&#x27; states 2 WHEN/THEN cycles under one name; they are joined into one criterion because a criterion has one of each</li><li>scenarios-state-no-starting-state: 26 of 26 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed</li></ul></section><section><h2 id="open-questions">Open questions</h2><p class="aw-empty">None outstanding.</p></section>
+<script type="application/agentweave-spec+json" id="aw-spec-payload">
+{
+  "schema_version": 1,
+  "kind": "capability",
+  "title": "Operator agent creation",
+  "summary": "Define how an operator creates a project-scoped, runner-bound agent from the Hub while preserving launchability truth, optional charter guidance, stable identity, and lazy worktree isolation.",
+  "problem": "",
+  "scope": {
+    "in_scope": [],
+    "non_goals": []
+  },
+  "requirements": [
+    {
+      "key": "an-operator-can-create-an-agent-from-the-project-workspace",
+      "statement": "Each project workspace SHALL expose an **Add agent** action. Creating an agent SHALL require a valid project-unique name, a launchable provider, and a model that provider's catalog entry declares. A charter MAY be selected but MUST NOT be required. The operator MUST NOT be asked to choose a persona or organizational role.",
+      "modal": "MUST",
+      "rationale": "The operator MUST NOT be required to have configured a runner beforehand. Selecting a provider and a model SHALL be sufficient to create a working agent.",
+      "party": null
+    },
+    {
+      "key": "agent-creation-exposes-real-runner-launchability",
+      "statement": "The creation journey SHALL display every provider it offers with that provider's current launchability. An unlaunchable provider SHALL remain visible with the reason it cannot run and MUST NOT be selectable as ready. The server SHALL repeat launchability validation when creation is submitted.",
+      "modal": "MUST",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "operator-created-agents-preserve-runtime-isolation",
+      "statement": "An operator-created agent SHALL be a Hub-owned project participant with its own queue, conversation identity, and stable color. Creation SHALL NOT provision or mutate a Git worktree. The existing scheduler SHALL provision the isolated worktree only when the agent first begins writing work, and only where the project directory is a Git repository.",
+      "modal": "SHALL",
+      "rationale": "Where the project directory is a Git repository and the isolated worktree cannot be provisioned, the Hub SHALL refuse the turn and state why. It MUST NOT run the agent in the primary checkout instead: a project that has isolation SHALL NOT lose it silently.",
+      "party": null
+    },
+    {
+      "key": "agent-creation-provisions-its-runner-atomically",
+      "statement": "When agent creation requires a runner that does not exist, the Hub SHALL create the runner and the agent as one atomic operation. A failure at any point SHALL leave neither record behind.",
+      "modal": "SHALL",
+      "rationale": "The Hub SHALL reuse an existing same-project runner whose provider and model match the operator's selection rather than creating a duplicate.",
+      "party": null
+    },
+    {
+      "key": "provider-choice-is-presented-by-provider-identity",
+      "statement": "Where the operator chooses an agent's provider, each provider SHALL be presented with its own visual mark alongside its name.",
+      "modal": "SHALL",
+      "rationale": "A provider for which no mark is available SHALL be presented with its name alone and MUST NOT be given another provider's mark. A mark MUST NOT be the only thing distinguishing one provider from another — the provider's name SHALL always be present. Provider marks MUST NOT introduce a second icon system, a webfont, or a network request to render. Presenting a provider's mark MUST NOT change which providers are offered. Launchability remains the sole determinant of whether a provider can be chosen.",
+      "party": null
+    },
+    {
+      "key": "what-creation-collects-is-decided-by-whether-it-changes-the-",
+      "statement": "Agent creation SHALL offer a setting when the agent's first turn would be materially different without it, and SHALL leave every other setting to the agent's configuration destination.",
+      "modal": "SHALL",
+      "rationale": "This capability already fixes *what* creation collects — a project-unique name, a launchable provider, a model the catalog declares, and an optional charter. What it does not state is the rule by which anything new is placed, so each future setting would be argued individually and creation would grow by accretion. The rule governs what is **offered**, not what is **required**. A charter is offered because it shapes the first turn, and remains optional under the existing no-charter contract; nothing here tightens that. A setting with a workable default, which can be changed before it takes effect, MUST NOT be added to creation. Lengthening creation is friction at the first moment an operator uses the product, and buys nothing that the configuration destination cannot provide later.",
+      "party": null
+    },
+    {
+      "key": "a-project-that-is-not-a-git-repository-still-runs-its-agents",
+      "statement": "Where a project's directory is not a Git repository, the Hub SHALL run a writing agent in that directory rather than refusing the turn. Absence of a repository SHALL NOT be reported as a condition the operator must resolve before working.",
+      "modal": "SHALL",
+      "rationale": "The Hub SHALL state the resulting posture rather than leave it to be discovered. The agent's canonical turn context SHALL say that it is working in the project's shared directory and that no isolated checkout is available, and the agent's workspace report SHALL distinguish an agent sharing the project directory because no repository exists from one sharing it by configuration. Concurrent writing agents in such a project SHALL be permitted. The Hub SHALL NOT serialize them, lock the directory, or refuse a second writer. Because their edits can overwrite one another with no conflict to resolve, and no mechanism for producing a conflict exists without a repository, the Hub SHALL tell each agent that it shares the directory. That statement is the whole of the mitigation and SHALL NOT be removed while the permission stands. The Hub SHALL NOT create, initialize, or modify a Git repository in the project directory in order to satisfy this requirement.",
+      "party": null
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "key": "ac1",
+      "requirement": "an-operator-can-create-an-agent-from-the-project-workspace",
+      "given": "",
+      "when": "the operator supplies a valid unused name and selects a launchable provider and a model",
+      "then": "the agent is created with a stable project color and runner binding it appears in the project rail without a reload its conversation opens ready for input"
+    },
+    {
+      "key": "ac2",
+      "requirement": "an-operator-can-create-an-agent-from-the-project-workspace",
+      "given": "",
+      "when": "the operator selects a provider and model for which the project has no runner",
+      "then": "creation succeeds and the agent is bound to a runner for that provider and model"
+    },
+    {
+      "key": "ac3",
+      "requirement": "an-operator-can-create-an-agent-from-the-project-workspace",
+      "given": "",
+      "when": "the operator selects a provider",
+      "then": "the models offered are those the catalog declares for that provider"
+    },
+    {
+      "key": "ac4",
+      "requirement": "an-operator-can-create-an-agent-from-the-project-workspace",
+      "given": "",
+      "when": "the operator creates an agent without selecting a charter",
+      "then": "creation succeeds with full project scope under the existing no-charter contract"
+    },
+    {
+      "key": "ac5",
+      "requirement": "an-operator-can-create-an-agent-from-the-project-workspace",
+      "given": "",
+      "when": "the supplied name already identifies an agent in that project",
+      "then": "creation is refused with a field-specific reason the dialog preserves the operator's other selections for correction"
+    },
+    {
+      "key": "ac6",
+      "requirement": "agent-creation-exposes-real-runner-launchability",
+      "given": "",
+      "when": "a provider's CLI or authorization is unavailable",
+      "then": "the provider is displayed disabled with the current reason submitting that provider cannot create an apparently ready agent"
+    },
+    {
+      "key": "ac7",
+      "requirement": "agent-creation-exposes-real-runner-launchability",
+      "given": "",
+      "when": "provider launchability changes after the dialog loads but before submission",
+      "then": "the server refuses creation with the current typed reason"
+    },
+    {
+      "key": "ac8",
+      "requirement": "operator-created-agents-preserve-runtime-isolation",
+      "given": "",
+      "when": "an operator creates an agent but sends it no work",
+      "then": "no agent worktree exists"
+    },
+    {
+      "key": "ac9",
+      "requirement": "operator-created-agents-preserve-runtime-isolation",
+      "given": "",
+      "when": "the new agent begins its first writing turn",
+      "then": "the scheduler provisions that agent's isolated worktree under the existing project guard other agents' worktrees and the primary checkout remain unchanged"
+    },
+    {
+      "key": "ac10",
+      "requirement": "operator-created-agents-preserve-runtime-isolation",
+      "given": "",
+      "when": "a writing agent's turn begins in a project that is a Git repository and provisioning its",
+      "then": "the turn does not start the reason names the provisioning failure the agent is not run in the primary checkout"
+    },
+    {
+      "key": "ac11",
+      "requirement": "agent-creation-provisions-its-runner-atomically",
+      "given": "",
+      "when": "the operator creates a second agent on a provider and model that an existing runner in",
+      "then": "the new agent is bound to that existing runner no additional runner is created"
+    },
+    {
+      "key": "ac12",
+      "requirement": "agent-creation-provisions-its-runner-atomically",
+      "given": "",
+      "when": "agent creation fails after a runner would have been provisioned",
+      "then": "no runner record remains from the attempt"
+    },
+    {
+      "key": "ac13",
+      "requirement": "agent-creation-provisions-its-runner-atomically",
+      "given": "",
+      "when": "a runner has been provisioned through agent creation",
+      "then": "it appears in runner management and can be inspected, edited, and deleted like any other"
+    },
+    {
+      "key": "ac14",
+      "requirement": "provider-choice-is-presented-by-provider-identity",
+      "given": "",
+      "when": "the operator opens the provider choice",
+      "then": "each provider is shown with its mark and its name"
+    },
+    {
+      "key": "ac15",
+      "requirement": "provider-choice-is-presented-by-provider-identity",
+      "given": "",
+      "when": "a provider has no available mark",
+      "then": "it is shown with its name is not given another provider's mark"
+    },
+    {
+      "key": "ac16",
+      "requirement": "provider-choice-is-presented-by-provider-identity",
+      "given": "",
+      "when": "a provider is launchable but has no mark",
+      "then": "it remains selectable"
+    },
+    {
+      "key": "ac17",
+      "requirement": "provider-choice-is-presented-by-provider-identity",
+      "given": "",
+      "when": "provider marks are rendered",
+      "then": "they resolve without a second icon system, a webfont, or a network request"
+    },
+    {
+      "key": "ac18",
+      "requirement": "what-creation-collects-is-decided-by-whether-it-changes-the-",
+      "given": "",
+      "when": "a setting would materially change how the agent's first turn behaves",
+      "then": "creation offers it"
+    },
+    {
+      "key": "ac19",
+      "requirement": "what-creation-collects-is-decided-by-whether-it-changes-the-",
+      "given": "",
+      "when": "a setting has a workable default and can be changed before it takes effect",
+      "then": "creation does not offer it it is available on the agent's configuration destination"
+    },
+    {
+      "key": "ac20",
+      "requirement": "what-creation-collects-is-decided-by-whether-it-changes-the-",
+      "given": "",
+      "when": "a setting is offered at creation",
+      "then": "it may still be optional an existing optional contract for it is preserved"
+    },
+    {
+      "key": "ac21",
+      "requirement": "a-project-that-is-not-a-git-repository-still-runs-its-agents",
+      "given": "",
+      "when": "a writing agent is triggered in a project whose directory is not a Git repository",
+      "then": "the turn starts with the project directory as its working directory no repository, worktree, or branch is created"
+    },
+    {
+      "key": "ac22",
+      "requirement": "a-project-that-is-not-a-git-repository-still-runs-its-agents",
+      "given": "",
+      "when": "the operator inspects the queue status for an agent in a project with no repository",
+      "then": "no waiting reason names the absent repository"
+    },
+    {
+      "key": "ac23",
+      "requirement": "a-project-that-is-not-a-git-repository-still-runs-its-agents",
+      "given": "",
+      "when": "a turn's canonical context is built for an agent running in a project with no repository",
+      "then": "the context states that the working directory is the project's shared directory and that it states that another agent in the project works in that same directory and that their"
+    },
+    {
+      "key": "ac24",
+      "requirement": "a-project-that-is-not-a-git-repository-still-runs-its-agents",
+      "given": "",
+      "when": "two writing agents are triggered in the same project with no repository",
+      "then": "both run, in that project's directory neither is refused, queued, or delayed on account of the other"
+    },
+    {
+      "key": "ac25",
+      "requirement": "a-project-that-is-not-a-git-repository-still-runs-its-agents",
+      "given": "",
+      "when": "the operator views the workspace of an agent in a project with no repository",
+      "then": "it reports the project directory as the working directory, with no branch, and states that an agent that shares the project directory by configuration is reported without that"
+    },
+    {
+      "key": "ac26",
+      "requirement": "a-project-that-is-not-a-git-repository-still-runs-its-agents",
+      "given": "",
+      "when": "a writing agent's turn requests a working directory within a project that is a Git the same request is made within a project that is not a Git repository",
+      "then": "the request is refused as overriding isolation it is resolved as a project-relative path under the existing containment guard"
+    }
+  ],
+  "tasks": [],
+  "algorithms": [],
+  "design": "",
+  "evidence": {
+    "checked": [
+      "Translated from openspec/specs/operator-agent-creation/spec.md (7 requirements, 26 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten."
+    ],
+    "limits": [
+      "scenario-had-multiple-cycles: 'A working directory override is refused only where isolation exists' states 2 WHEN/THEN cycles under one name; they are joined into one criterion because a criterion has one of each",
+      "scenarios-state-no-starting-state: 26 of 26 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed"
+    ]
+  },
+  "lifecycle": "",
+  "open_questions": [],
+  "aw_identity": {
+    "requirements": {
+      "an-operator-can-create-an-agent-from-the-project-workspace": "FR-1",
+      "agent-creation-exposes-real-runner-launchability": "FR-2",
+      "operator-created-agents-preserve-runtime-isolation": "FR-3",
+      "agent-creation-provisions-its-runner-atomically": "FR-4",
+      "provider-choice-is-presented-by-provider-identity": "FR-5",
+      "what-creation-collects-is-decided-by-whether-it-changes-the-": "FR-6",
+      "a-project-that-is-not-a-git-repository-still-runs-its-agents": "FR-7"
+    },
+    "high_water": 7,
+    "retired": {},
+    "digests": {
+      "FR-1": "2294922c88fc9680c4c87c3f9427e3c3be1a64334aaa10ec4800d3ba4e2a4c34",
+      "FR-2": "364196386a9fb76f67f7da4f2f229842dc70bfd5ec6f001c4376e361db66025a",
+      "FR-3": "a765f481e497e9583eeab2e05e8412bdd2a736714acbc3af873954f933b59280",
+      "FR-4": "11996ff9e322b9400308785e9a243243e2d2a48341c877abdd811f7a40a94020",
+      "FR-5": "cf8986bbe2745b73bb7e19e477ac629e13fb33e7c4d209b727a028aa3a8eae80",
+      "FR-6": "2b1fe09ff50d56a235481621ab7bf7e12adff67def2184d1cd75ce2be7881f1f",
+      "FR-7": "cdad7c538a2f8491f34f40f092c6bc169ed17753e407a0e0f0db24361ddbff2c"
+    }
+  }
+}
+</script>
+</body>
+</html>

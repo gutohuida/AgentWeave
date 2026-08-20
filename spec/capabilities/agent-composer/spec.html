@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent composer</title>
+<meta name="aw-spec-kind" content="capability">
+<meta name="aw-spec-status" content="current">
+<meta name="aw-spec-rigor" content="sketch">
+<meta name="aw-spec-schema-version" content="1">
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+    --surface-2: #21262d; --surface: #161b22;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+:root[data-theme="dark"] {
+  --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+  --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+  --surface-2: #21262d; --surface: #161b22;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 2rem 2.5rem 4rem; background: var(--bg); color: var(--fg);
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+h1 { font-size: 1.75rem; margin: 0 0 .25rem; }
+h2 { font-size: 1.15rem; margin: 2.5rem 0 .75rem; padding-bottom: .3rem;
+     border-bottom: 1px solid var(--border); }
+h3 { font-size: 1rem; margin: 1.5rem 0 .4rem; }
+p { margin: .5rem 0; }
+ul, ol { margin: .5rem 0; padding-left: 1.4rem; }
+li { margin: .25rem 0; }
+a { color: var(--aw-accent); }
+.aw-meta { color: var(--muted); font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-chip { display: inline-block; padding: .1rem .5rem; border-radius: 999px;
+           background: var(--surface-2); font-size: .78rem; margin-right: .4rem; }
+.aw-requirement { border-left: 3px solid var(--border); padding: .1rem 0 .1rem .9rem;
+                  margin: 1.1rem 0; }
+.aw-requirement-must { border-left-color: var(--aw-accent); }
+.aw-requirement-should { border-left-color: var(--aw-warn); }
+.aw-requirement-may { border-left-color: var(--border); }
+.aw-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8rem;
+         color: var(--muted); }
+.aw-modal { font-weight: 600; }
+.aw-modal-must { color: var(--aw-accent); }
+.aw-modal-should { color: var(--aw-warn); }
+.aw-modal-may { color: var(--fg); font-weight: 400; }
+.aw-chip-rigor-gate { color: var(--aw-accent); border: 1px solid var(--aw-accent); }
+.aw-chip-rigor-contract { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Phase is a lifecycle, and the question it answers is "can I rely on this?". `approved` and a
+   capability's `current` are settled and take the done tone; `proposed` is waiting on an operator
+   decision and takes warn; `exploring` and `archived` are quiet for opposite reasons — one has not
+   arrived yet, the other has been superseded. Deliberately NOT the accent: this document already
+   spends accent on links and on MUST, and a third meaning would empty it of any. `kind` keeps the
+   plain chip on purpose — it is a category, not a state, and hue there ranks nothing. */
+.aw-chip-phase-done { color: var(--aw-ok); border: 1px solid var(--aw-ok); }
+.aw-chip-phase-waiting { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+.aw-chip-phase-quiet { color: var(--muted); }
+.aw-chip-phase-archived { color: var(--muted); text-decoration: line-through; }
+/* An unresolved question blocks `propose`, so it is a real state and not a label. Resolved stays
+   the plain chip — the reader needs to find what is still open, not celebrate what is closed. */
+.aw-chip-open { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Limits is where a reader is most likely to be misled, and it read identically to Checked. */
+.aw-limits { color: var(--aw-warn); }
+/* The first screenful was entirely monochrome, so the document read as texty however the
+   requirements below were coloured. This puts the same modal scheme where the eye lands first,
+   carrying counts rather than decoration. */
+.aw-summary { margin: 0 0 1.5rem; font-size: .9rem; color: var(--muted); }
+.aw-summary .aw-count { font-weight: 600; }
+.aw-summary-sep { color: var(--border); margin: 0 .45rem; }
+.aw-rationale { color: var(--muted); font-size: .9rem; }
+.aw-refs { font-size: .82rem; color: var(--muted); }
+.aw-note { color: var(--muted); font-style: italic; }
+.aw-empty { color: var(--muted); }
+table { border-collapse: collapse; margin: .75rem 0; width: 100%; }
+th, td { border: 1px solid var(--border); padding: .4rem .6rem; text-align: left;
+         vertical-align: top; font-size: .92rem; }
+code, pre { background: var(--surface); border-radius: 4px; }
+code { padding: .1rem .3rem; font-size: .88em; }
+</style>
+</head>
+<body>
+<h1>Agent composer</h1>
+<p class="aw-meta"><span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><span class="aw-chip">sketch</span></p>
+<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">13</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">13</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">41</span> criteria</p>
+<section><h2 id="summary">Summary</h2><p>The conversation composer helps operators reference workspace files and skills, invoke built-in commands, and redirect the next turn to another configured agent without leaving the conversation surface or violating immutable conversation scope.</p></section><section><h2 id="requirements">Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-1"><span class="aw-id">FR-1</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The composer SHALL detect three trigger kinds from the current text and cursor position: `path` (`@`), `skill` (`$`), and `slash-command` (`/`). Detection SHALL return `{kind, query, rangeStart, rangeEnd}` on a match and `null` otherwise.</p><p class="aw-rationale">`slash-command` SHALL only match when the trigger character is the first character of the current line. `path` and `skill` SHALL be detected by walking backward from the cursor to the nearest whitespace boundary and inspecting that token&#x27;s first character; they SHALL match at any position within a line, not only at line start.</p></div><div class="aw-requirement aw-requirement-must" id="FR-2"><span class="aw-id">FR-2</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Accepting a menu result SHALL replace exactly the matched `[rangeStart, rangeEnd)` span with the selected value and SHALL return both the resulting text and the new cursor position, placed immediately after the inserted value. A value containing whitespace SHALL be quote-escaped in the inserted text.</p></div><div class="aw-requirement aw-requirement-must" id="FR-3"><span class="aw-id">FR-3</span> <p><span class="aw-modal aw-modal-must">SHALL</span> While a trigger is open, the composer SHALL render a menu of matching results that supports moving the active selection with the arrow keys, accepting the active result with Enter or Tab, and dismissing the menu with Escape. Dismissal SHALL leave the typed text unmodified and SHALL return keyboard focus to the composer input.</p></div><div class="aw-requirement aw-requirement-must" id="FR-4"><span class="aw-id">FR-4</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL expose an endpoint that lists workspace paths under the Hub process&#x27;s working directory, honoring `.gitignore`, nested `.gitignore` files, and global excludes. If the working directory is not a git repository, the endpoint SHALL return an empty list rather than an error.</p></div><div class="aw-requirement aw-requirement-must" id="FR-5"><span class="aw-id">FR-5</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The `path` trigger SHALL source results from the workspace path listing endpoint. The `skill` trigger SHALL use the same endpoint filtered to `.claude/skills/`, stripping that prefix and any `.md` suffix. For `.claude/skills/&lt;name&gt;/SKILL.md`, the displayed value SHALL be `&lt;name&gt;` rather than `&lt;name&gt;/SKILL`. The `slash-command` trigger SHALL use a fixed composer-defined list requiring no backend request.</p></div><div class="aw-requirement aw-requirement-must" id="FR-6"><span class="aw-id">FR-6</span> <p><span class="aw-modal aw-modal-must">MUST</span> A composer control (model, effort, conversation routing, target agent) SHALL draw no border or fill at rest. Hovering it MUST NOT draw a border or fill; emphasis SHALL be expressed as background, text, or icon prominence instead.</p><p class="aw-rationale">Gaining emphasis MUST NOT change a control&#x27;s box dimensions.</p></div><div class="aw-requirement aw-requirement-must" id="FR-7"><span class="aw-id">FR-7</span> <p><span class="aw-modal aw-modal-must">SHALL</span> A composer selection control&#x27;s trigger and its option list SHALL each be sized to their own content, not to a fixed minimum. The trigger SHALL be fully rounded at its own height.</p><p class="aw-rationale">An option list MAY declare a maximum width; a label exceeding it SHALL truncate rather than widen the list.</p></div><div class="aw-requirement aw-requirement-must" id="FR-8"><span class="aw-id">FR-8</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The composer&#x27;s own surface SHALL NOT change its border, shadow, or ring in response to focus moving into it or text being typed within it. The surface&#x27;s resting treatment SHALL be sufficient to read as a distinct surface without a focus reaction.</p><p class="aw-rationale">Controls within the composer are unaffected by this requirement and keep their own focus indicators.</p></div><div class="aw-requirement aw-requirement-must" id="FR-9"><span class="aw-id">FR-9</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The composer&#x27;s model control SHALL show the mark of the model&#x27;s provider, both for the currently selected model and for each offered option. Where a provider has no known mark, its name SHALL be shown as a text label instead.</p><p class="aw-rationale">This SHALL NOT require hardcoding a provider&#x27;s identity into the composer: the mark SHALL be resolved by the catalog&#x27;s provider identity, keeping the composer provider-agnostic per the existing model catalog contract.</p></div><div class="aw-requirement aw-requirement-must" id="FR-10"><span class="aw-id">FR-10</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The composer&#x27;s model picker SHALL support finding a model by typing part of its name, its identifier, or its provider&#x27;s name — not only a leading match. Results SHALL be grouped so that every entry is attributable to its provider at a glance.</p><p class="aw-rationale">Searching MUST NOT surface a model that would not otherwise be selectable. An empty result SHALL state that nothing matched and offer a way back to the full list.</p></div><div class="aw-requirement aw-requirement-must" id="FR-11"><span class="aw-id">FR-11</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The operator SHALL be able to mark and unmark a model as a favourite from within the picker. A favourited model SHALL be presented before non-favourited ones. This marking SHALL persist across conversations and across reloads.</p><p class="aw-rationale">Favouriting MUST NOT change which model is an agent&#x27;s default or currently resolved model — it SHALL affect presentation order only.</p></div><div class="aw-requirement aw-requirement-must" id="FR-12"><span class="aw-id">FR-12</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The operator SHALL be able to open the model picker, narrow it by typing, move between results, and select or dismiss it, using only the keyboard. Dismissing SHALL leave the current selection unchanged.</p></div><div class="aw-requirement aw-requirement-must" id="FR-13"><span class="aw-id">FR-13</span> <p><span class="aw-modal aw-modal-must">MUST</span> A message submitted from a conversation SHALL be delivered to that conversation&#x27;s agent. The composer MUST NOT offer a control that redirects a submission to a different agent.</p></div></section><section><h2 id="acceptance">Acceptance criteria</h2><table><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>the composer text is `&quot;see https://example.com/foo&quot;` with the cursor placed immediately after `/foo`</td><td>detection returns `null` — `/` is not the first character of its line</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>the composer text is `&quot;/mod&quot;` with the cursor at the end</td><td>detection returns `{kind: &quot;slash-command&quot;, query: &quot;mod&quot;, rangeStart: 0, rangeEnd: 4}`</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>the composer text is `&quot;see @src/comp&quot;` with the cursor at the end</td><td>detection returns `{kind: &quot;path&quot;, query: &quot;src/comp&quot;, rangeStart: 4, rangeEnd: 13}`</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>the composer text is `&quot;@src/composer.tsx looks good&quot;` with the cursor at the end</td><td>detection returns `null` — the `@`-token ended at the first whitespace after it</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>the composer text is `&quot;@src/comp then check the tests&quot;`, the open trigger spans `[0, 9)`, and the accepted value is `src/components/agents/Composer.tsx`</td><td>the cursor is immediately after `Composer.tsx`, not at the end of the whole string</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>the accepted value is a path `docs/release notes.md`</td><td>the inserted text is the quoted, escaped form, not the raw unquoted path</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>a trigger menu is open over the text `&quot;@src/comp&quot;` and the user presses Escape</td><td>the menu closes, the text is unchanged, and the composer input retains focus</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>a trigger menu has more than one result and the user presses the down arrow</td><td>the next result becomes active and no text is inserted</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>`.gitignore` excludes `node_modules/` and that directory exists</td><td>the response includes no path under `node_modules/`</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>the Hub&#x27;s working directory contains no `.git`</td><td>the endpoint responds successfully with an empty path list</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>paths include `.claude/skills/aw-status.md` and `src/index.ts`</td><td>`$` results include `aw-status` and exclude `src/index.ts`</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>no listed path is under `.claude/skills/`</td><td>a `$` trigger returns zero results and the normal empty state</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>paths include `.claude/skills/aw-status/SKILL.md`</td><td>a `$` trigger displays `aw-status`, not `aw-status/SKILL`</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>a composer control is displayed without interaction</td><td>it draws no border and no fill</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>the operator hovers a composer control</td><td>no border appears the control&#x27;s background, text, or icon becomes more prominent instead</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>a composer control gains hover or active emphasis</td><td>its box dimensions are unchanged neighbouring controls do not shift</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>a composer control receives keyboard focus</td><td>its focus indicator is shown regardless of the borderless resting/hover treatment</td></tr><tr><td><a href="#FR-7">FR-7</a></td><td></td><td>a composer control&#x27;s current value is a short label</td><td>the control&#x27;s width reflects that label, not a larger fixed minimum</td></tr><tr><td><a href="#FR-7">FR-7</a></td><td></td><td>a control&#x27;s option list is shown</td><td>its width is derived from its content, not a fixed minimum width</td></tr><tr><td><a href="#FR-7">FR-7</a></td><td></td><td>a composer control&#x27;s label length changes</td><td>its ends remain fully rounded at its own height</td></tr><tr><td><a href="#FR-7">FR-7</a></td><td></td><td>an option list declares a maximum width and an item&#x27;s label exceeds it</td><td>the label truncates the list does not widen past its maximum</td></tr><tr><td><a href="#FR-8">FR-8</a></td><td></td><td>the operator clicks into the composer&#x27;s text input</td><td>the composer surface&#x27;s border, shadow, and ring are unchanged</td></tr><tr><td><a href="#FR-8">FR-8</a></td><td></td><td>the operator types into the composer</td><td>the composer surface&#x27;s border, shadow, and ring remain unchanged</td></tr><tr><td><a href="#FR-8">FR-8</a></td><td></td><td>a control inside the composer receives keyboard focus</td><td>that control&#x27;s own focus indicator is shown</td></tr><tr><td><a href="#FR-9">FR-9</a></td><td></td><td>the composer displays the currently selected model</td><td>that model&#x27;s provider mark is shown alongside it</td></tr><tr><td><a href="#FR-9">FR-9</a></td><td></td><td>a model&#x27;s provider has no known mark</td><td>the provider&#x27;s name is shown as text instead no broken or incorrect mark is shown</td></tr><tr><td><a href="#FR-9">FR-9</a></td><td></td><td>a provider mark is rendered</td><td>it is implemented within the application&#x27;s existing icon system, not a second one</td></tr><tr><td><a href="#FR-9">FR-9</a></td><td></td><td>the composer&#x27;s source is inspected</td><td>it contains no hardcoded provider name, model identifier, or control value</td></tr><tr><td><a href="#FR-10">FR-10</a></td><td></td><td>the operator types a substring that appears in the middle of a model&#x27;s name</td><td>that model is found</td></tr><tr><td><a href="#FR-10">FR-10</a></td><td></td><td>the operator types a provider&#x27;s name</td><td>that provider&#x27;s models are found</td></tr><tr><td><a href="#FR-10">FR-10</a></td><td></td><td>the model picker is open</td><td>each entry&#x27;s provider is identifiable without further interaction</td></tr><tr><td><a href="#FR-10">FR-10</a></td><td></td><td>a search is active</td><td>only models otherwise selectable are shown</td></tr><tr><td><a href="#FR-10">FR-10</a></td><td></td><td>a search matches nothing</td><td>the picker states that nothing matched offers a way to return to the full list</td></tr><tr><td><a href="#FR-11">FR-11</a></td><td></td><td>the operator opens the model picker</td><td>any favourited model appears before non-favourited ones</td></tr><tr><td><a href="#FR-11">FR-11</a></td><td></td><td>the operator favourites a model and reloads</td><td>that model is still presented as a favourite</td></tr><tr><td><a href="#FR-11">FR-11</a></td><td></td><td>the operator favourites a model</td><td>no agent&#x27;s default or resolved model changes as a result</td></tr><tr><td><a href="#FR-11">FR-11</a></td><td></td><td>the operator unmarks a favourited model</td><td>it returns to its unfavourited presentation order</td></tr><tr><td><a href="#FR-12">FR-12</a></td><td></td><td>the operator uses only the keyboard</td><td>they can open the picker, narrow results by typing, move between them, and select one</td></tr><tr><td><a href="#FR-12">FR-12</a></td><td></td><td>the operator dismisses the picker via the keyboard</td><td>the previously selected model is unchanged</td></tr><tr><td><a href="#FR-13">FR-13</a></td><td></td><td>the operator submits a message from agent `A`&#x27;s conversation</td><td>the submission targets `A`</td></tr><tr><td><a href="#FR-13">FR-13</a></td><td></td><td>the composer&#x27;s control row is displayed</td><td>it contains no control for selecting a different recipient agent</td></tr></tbody></table></section><section><h2 id="evidence">Evidence and coverage limits</h2><h3>Checked</h3><ul><li>Translated from openspec/specs/agent-composer/spec.md (13 requirements, 41 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten.</li></ul><h3 class="aw-limits">Limits</h3><ul><li>scenarios-state-no-starting-state: 41 of 41 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed</li></ul></section><section><h2 id="open-questions">Open questions</h2><p class="aw-empty">None outstanding.</p></section>
+<script type="application/agentweave-spec+json" id="aw-spec-payload">
+{
+  "schema_version": 1,
+  "kind": "capability",
+  "title": "Agent composer",
+  "summary": "The conversation composer helps operators reference workspace files and skills, invoke built-in commands, and redirect the next turn to another configured agent without leaving the conversation surface or violating immutable conversation scope.",
+  "problem": "",
+  "scope": {
+    "in_scope": [],
+    "non_goals": []
+  },
+  "requirements": [
+    {
+      "key": "composer-trigger-detection",
+      "statement": "The composer SHALL detect three trigger kinds from the current text and cursor position: `path` (`@`), `skill` (`$`), and `slash-command` (`/`). Detection SHALL return `{kind, query, rangeStart, rangeEnd}` on a match and `null` otherwise.",
+      "modal": "SHALL",
+      "rationale": "`slash-command` SHALL only match when the trigger character is the first character of the current line. `path` and `skill` SHALL be detected by walking backward from the cursor to the nearest whitespace boundary and inspecting that token's first character; they SHALL match at any position within a line, not only at line start.",
+      "party": null
+    },
+    {
+      "key": "trigger-range-replacement",
+      "statement": "Accepting a menu result SHALL replace exactly the matched `[rangeStart, rangeEnd)` span with the selected value and SHALL return both the resulting text and the new cursor position, placed immediately after the inserted value. A value containing whitespace SHALL be quote-escaped in the inserted text.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "keyboard-navigable-trigger-menu",
+      "statement": "While a trigger is open, the composer SHALL render a menu of matching results that supports moving the active selection with the arrow keys, accepting the active result with Enter or Tab, and dismissing the menu with Escape. Dismissal SHALL leave the typed text unmodified and SHALL return keyboard focus to the composer input.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "workspace-path-listing-endpoint",
+      "statement": "The Hub SHALL expose an endpoint that lists workspace paths under the Hub process's working directory, honoring `.gitignore`, nested `.gitignore` files, and global excludes. If the working directory is not a git repository, the endpoint SHALL return an empty list rather than an error.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "trigger-result-sources",
+      "statement": "The `path` trigger SHALL source results from the workspace path listing endpoint. The `skill` trigger SHALL use the same endpoint filtered to `.claude/skills/`, stripping that prefix and any `.md` suffix. For `.claude/skills/\u003cname>/SKILL.md`, the displayed value SHALL be `\u003cname>` rather than `\u003cname>/SKILL`. The `slash-command` trigger SHALL use a fixed composer-defined list requiring no backend request.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "composer-controls-are-unbounded",
+      "statement": "A composer control (model, effort, conversation routing, target agent) SHALL draw no border or fill at rest. Hovering it MUST NOT draw a border or fill; emphasis SHALL be expressed as background, text, or icon prominence instead.",
+      "modal": "MUST",
+      "rationale": "Gaining emphasis MUST NOT change a control's box dimensions.",
+      "party": null
+    },
+    {
+      "key": "selection-controls-are-pill-shaped-and-sized-to-their-conten",
+      "statement": "A composer selection control's trigger and its option list SHALL each be sized to their own content, not to a fixed minimum. The trigger SHALL be fully rounded at its own height.",
+      "modal": "SHALL",
+      "rationale": "An option list MAY declare a maximum width; a label exceeding it SHALL truncate rather than widen the list.",
+      "party": null
+    },
+    {
+      "key": "the-composer-surface-does-not-react-to-focus",
+      "statement": "The composer's own surface SHALL NOT change its border, shadow, or ring in response to focus moving into it or text being typed within it. The surface's resting treatment SHALL be sufficient to read as a distinct surface without a focus reaction.",
+      "modal": "SHALL",
+      "rationale": "Controls within the composer are unaffected by this requirement and keep their own focus indicators.",
+      "party": null
+    },
+    {
+      "key": "model-selection-shows-which-provider-a-model-belongs-to",
+      "statement": "The composer's model control SHALL show the mark of the model's provider, both for the currently selected model and for each offered option. Where a provider has no known mark, its name SHALL be shown as a text label instead.",
+      "modal": "SHALL",
+      "rationale": "This SHALL NOT require hardcoding a provider's identity into the composer: the mark SHALL be resolved by the catalog's provider identity, keeping the composer provider-agnostic per the existing model catalog contract.",
+      "party": null
+    },
+    {
+      "key": "the-model-picker-is-searchable-and-organised-by-provider",
+      "statement": "The composer's model picker SHALL support finding a model by typing part of its name, its identifier, or its provider's name — not only a leading match. Results SHALL be grouped so that every entry is attributable to its provider at a glance.",
+      "modal": "SHALL",
+      "rationale": "Searching MUST NOT surface a model that would not otherwise be selectable. An empty result SHALL state that nothing matched and offer a way back to the full list.",
+      "party": null
+    },
+    {
+      "key": "frequently-used-models-are-reachable-without-searching",
+      "statement": "The operator SHALL be able to mark and unmark a model as a favourite from within the picker. A favourited model SHALL be presented before non-favourited ones. This marking SHALL persist across conversations and across reloads.",
+      "modal": "SHALL",
+      "rationale": "Favouriting MUST NOT change which model is an agent's default or currently resolved model — it SHALL affect presentation order only.",
+      "party": null
+    },
+    {
+      "key": "the-model-picker-is-fully-operable-from-the-keyboard",
+      "statement": "The operator SHALL be able to open the model picker, narrow it by typing, move between results, and select or dismiss it, using only the keyboard. Dismissing SHALL leave the current selection unchanged.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "the-composer-addresses-the-conversation-it-belongs-to",
+      "statement": "A message submitted from a conversation SHALL be delivered to that conversation's agent. The composer MUST NOT offer a control that redirects a submission to a different agent.",
+      "modal": "MUST",
+      "rationale": null,
+      "party": null
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "key": "ac1",
+      "requirement": "composer-trigger-detection",
+      "given": "",
+      "when": "the composer text is `\"see https://example.com/foo\"` with the cursor placed immediately after `/foo`",
+      "then": "detection returns `null` — `/` is not the first character of its line"
+    },
+    {
+      "key": "ac2",
+      "requirement": "composer-trigger-detection",
+      "given": "",
+      "when": "the composer text is `\"/mod\"` with the cursor at the end",
+      "then": "detection returns `{kind: \"slash-command\", query: \"mod\", rangeStart: 0, rangeEnd: 4}`"
+    },
+    {
+      "key": "ac3",
+      "requirement": "composer-trigger-detection",
+      "given": "",
+      "when": "the composer text is `\"see @src/comp\"` with the cursor at the end",
+      "then": "detection returns `{kind: \"path\", query: \"src/comp\", rangeStart: 4, rangeEnd: 13}`"
+    },
+    {
+      "key": "ac4",
+      "requirement": "composer-trigger-detection",
+      "given": "",
+      "when": "the composer text is `\"@src/composer.tsx looks good\"` with the cursor at the end",
+      "then": "detection returns `null` — the `@`-token ended at the first whitespace after it"
+    },
+    {
+      "key": "ac5",
+      "requirement": "trigger-range-replacement",
+      "given": "",
+      "when": "the composer text is `\"@src/comp then check the tests\"`, the open trigger spans `[0, 9)`, and the accepted value is `src/components/agents/Composer.tsx`",
+      "then": "the cursor is immediately after `Composer.tsx`, not at the end of the whole string"
+    },
+    {
+      "key": "ac6",
+      "requirement": "trigger-range-replacement",
+      "given": "",
+      "when": "the accepted value is a path `docs/release notes.md`",
+      "then": "the inserted text is the quoted, escaped form, not the raw unquoted path"
+    },
+    {
+      "key": "ac7",
+      "requirement": "keyboard-navigable-trigger-menu",
+      "given": "",
+      "when": "a trigger menu is open over the text `\"@src/comp\"` and the user presses Escape",
+      "then": "the menu closes, the text is unchanged, and the composer input retains focus"
+    },
+    {
+      "key": "ac8",
+      "requirement": "keyboard-navigable-trigger-menu",
+      "given": "",
+      "when": "a trigger menu has more than one result and the user presses the down arrow",
+      "then": "the next result becomes active and no text is inserted"
+    },
+    {
+      "key": "ac9",
+      "requirement": "workspace-path-listing-endpoint",
+      "given": "",
+      "when": "`.gitignore` excludes `node_modules/` and that directory exists",
+      "then": "the response includes no path under `node_modules/`"
+    },
+    {
+      "key": "ac10",
+      "requirement": "workspace-path-listing-endpoint",
+      "given": "",
+      "when": "the Hub's working directory contains no `.git`",
+      "then": "the endpoint responds successfully with an empty path list"
+    },
+    {
+      "key": "ac11",
+      "requirement": "trigger-result-sources",
+      "given": "",
+      "when": "paths include `.claude/skills/aw-status.md` and `src/index.ts`",
+      "then": "`$` results include `aw-status` and exclude `src/index.ts`"
+    },
+    {
+      "key": "ac12",
+      "requirement": "trigger-result-sources",
+      "given": "",
+      "when": "no listed path is under `.claude/skills/`",
+      "then": "a `$` trigger returns zero results and the normal empty state"
+    },
+    {
+      "key": "ac13",
+      "requirement": "trigger-result-sources",
+      "given": "",
+      "when": "paths include `.claude/skills/aw-status/SKILL.md`",
+      "then": "a `$` trigger displays `aw-status`, not `aw-status/SKILL`"
+    },
+    {
+      "key": "ac14",
+      "requirement": "composer-controls-are-unbounded",
+      "given": "",
+      "when": "a composer control is displayed without interaction",
+      "then": "it draws no border and no fill"
+    },
+    {
+      "key": "ac15",
+      "requirement": "composer-controls-are-unbounded",
+      "given": "",
+      "when": "the operator hovers a composer control",
+      "then": "no border appears the control's background, text, or icon becomes more prominent instead"
+    },
+    {
+      "key": "ac16",
+      "requirement": "composer-controls-are-unbounded",
+      "given": "",
+      "when": "a composer control gains hover or active emphasis",
+      "then": "its box dimensions are unchanged neighbouring controls do not shift"
+    },
+    {
+      "key": "ac17",
+      "requirement": "composer-controls-are-unbounded",
+      "given": "",
+      "when": "a composer control receives keyboard focus",
+      "then": "its focus indicator is shown regardless of the borderless resting/hover treatment"
+    },
+    {
+      "key": "ac18",
+      "requirement": "selection-controls-are-pill-shaped-and-sized-to-their-conten",
+      "given": "",
+      "when": "a composer control's current value is a short label",
+      "then": "the control's width reflects that label, not a larger fixed minimum"
+    },
+    {
+      "key": "ac19",
+      "requirement": "selection-controls-are-pill-shaped-and-sized-to-their-conten",
+      "given": "",
+      "when": "a control's option list is shown",
+      "then": "its width is derived from its content, not a fixed minimum width"
+    },
+    {
+      "key": "ac20",
+      "requirement": "selection-controls-are-pill-shaped-and-sized-to-their-conten",
+      "given": "",
+      "when": "a composer control's label length changes",
+      "then": "its ends remain fully rounded at its own height"
+    },
+    {
+      "key": "ac21",
+      "requirement": "selection-controls-are-pill-shaped-and-sized-to-their-conten",
+      "given": "",
+      "when": "an option list declares a maximum width and an item's label exceeds it",
+      "then": "the label truncates the list does not widen past its maximum"
+    },
+    {
+      "key": "ac22",
+      "requirement": "the-composer-surface-does-not-react-to-focus",
+      "given": "",
+      "when": "the operator clicks into the composer's text input",
+      "then": "the composer surface's border, shadow, and ring are unchanged"
+    },
+    {
+      "key": "ac23",
+      "requirement": "the-composer-surface-does-not-react-to-focus",
+      "given": "",
+      "when": "the operator types into the composer",
+      "then": "the composer surface's border, shadow, and ring remain unchanged"
+    },
+    {
+      "key": "ac24",
+      "requirement": "the-composer-surface-does-not-react-to-focus",
+      "given": "",
+      "when": "a control inside the composer receives keyboard focus",
+      "then": "that control's own focus indicator is shown"
+    },
+    {
+      "key": "ac25",
+      "requirement": "model-selection-shows-which-provider-a-model-belongs-to",
+      "given": "",
+      "when": "the composer displays the currently selected model",
+      "then": "that model's provider mark is shown alongside it"
+    },
+    {
+      "key": "ac26",
+      "requirement": "model-selection-shows-which-provider-a-model-belongs-to",
+      "given": "",
+      "when": "a model's provider has no known mark",
+      "then": "the provider's name is shown as text instead no broken or incorrect mark is shown"
+    },
+    {
+      "key": "ac27",
+      "requirement": "model-selection-shows-which-provider-a-model-belongs-to",
+      "given": "",
+      "when": "a provider mark is rendered",
+      "then": "it is implemented within the application's existing icon system, not a second one"
+    },
+    {
+      "key": "ac28",
+      "requirement": "model-selection-shows-which-provider-a-model-belongs-to",
+      "given": "",
+      "when": "the composer's source is inspected",
+      "then": "it contains no hardcoded provider name, model identifier, or control value"
+    },
+    {
+      "key": "ac29",
+      "requirement": "the-model-picker-is-searchable-and-organised-by-provider",
+      "given": "",
+      "when": "the operator types a substring that appears in the middle of a model's name",
+      "then": "that model is found"
+    },
+    {
+      "key": "ac30",
+      "requirement": "the-model-picker-is-searchable-and-organised-by-provider",
+      "given": "",
+      "when": "the operator types a provider's name",
+      "then": "that provider's models are found"
+    },
+    {
+      "key": "ac31",
+      "requirement": "the-model-picker-is-searchable-and-organised-by-provider",
+      "given": "",
+      "when": "the model picker is open",
+      "then": "each entry's provider is identifiable without further interaction"
+    },
+    {
+      "key": "ac32",
+      "requirement": "the-model-picker-is-searchable-and-organised-by-provider",
+      "given": "",
+      "when": "a search is active",
+      "then": "only models otherwise selectable are shown"
+    },
+    {
+      "key": "ac33",
+      "requirement": "the-model-picker-is-searchable-and-organised-by-provider",
+      "given": "",
+      "when": "a search matches nothing",
+      "then": "the picker states that nothing matched offers a way to return to the full list"
+    },
+    {
+      "key": "ac34",
+      "requirement": "frequently-used-models-are-reachable-without-searching",
+      "given": "",
+      "when": "the operator opens the model picker",
+      "then": "any favourited model appears before non-favourited ones"
+    },
+    {
+      "key": "ac35",
+      "requirement": "frequently-used-models-are-reachable-without-searching",
+      "given": "",
+      "when": "the operator favourites a model and reloads",
+      "then": "that model is still presented as a favourite"
+    },
+    {
+      "key": "ac36",
+      "requirement": "frequently-used-models-are-reachable-without-searching",
+      "given": "",
+      "when": "the operator favourites a model",
+      "then": "no agent's default or resolved model changes as a result"
+    },
+    {
+      "key": "ac37",
+      "requirement": "frequently-used-models-are-reachable-without-searching",
+      "given": "",
+      "when": "the operator unmarks a favourited model",
+      "then": "it returns to its unfavourited presentation order"
+    },
+    {
+      "key": "ac38",
+      "requirement": "the-model-picker-is-fully-operable-from-the-keyboard",
+      "given": "",
+      "when": "the operator uses only the keyboard",
+      "then": "they can open the picker, narrow results by typing, move between them, and select one"
+    },
+    {
+      "key": "ac39",
+      "requirement": "the-model-picker-is-fully-operable-from-the-keyboard",
+      "given": "",
+      "when": "the operator dismisses the picker via the keyboard",
+      "then": "the previously selected model is unchanged"
+    },
+    {
+      "key": "ac40",
+      "requirement": "the-composer-addresses-the-conversation-it-belongs-to",
+      "given": "",
+      "when": "the operator submits a message from agent `A`'s conversation",
+      "then": "the submission targets `A`"
+    },
+    {
+      "key": "ac41",
+      "requirement": "the-composer-addresses-the-conversation-it-belongs-to",
+      "given": "",
+      "when": "the composer's control row is displayed",
+      "then": "it contains no control for selecting a different recipient agent"
+    }
+  ],
+  "tasks": [],
+  "algorithms": [],
+  "design": "",
+  "evidence": {
+    "checked": [
+      "Translated from openspec/specs/agent-composer/spec.md (13 requirements, 41 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten."
+    ],
+    "limits": [
+      "scenarios-state-no-starting-state: 41 of 41 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed"
+    ]
+  },
+  "lifecycle": "",
+  "open_questions": [],
+  "aw_identity": {
+    "requirements": {
+      "composer-trigger-detection": "FR-1",
+      "trigger-range-replacement": "FR-2",
+      "keyboard-navigable-trigger-menu": "FR-3",
+      "workspace-path-listing-endpoint": "FR-4",
+      "trigger-result-sources": "FR-5",
+      "composer-controls-are-unbounded": "FR-6",
+      "selection-controls-are-pill-shaped-and-sized-to-their-conten": "FR-7",
+      "the-composer-surface-does-not-react-to-focus": "FR-8",
+      "model-selection-shows-which-provider-a-model-belongs-to": "FR-9",
+      "the-model-picker-is-searchable-and-organised-by-provider": "FR-10",
+      "frequently-used-models-are-reachable-without-searching": "FR-11",
+      "the-model-picker-is-fully-operable-from-the-keyboard": "FR-12",
+      "the-composer-addresses-the-conversation-it-belongs-to": "FR-13"
+    },
+    "high_water": 13,
+    "retired": {},
+    "digests": {
+      "FR-1": "36fe27d7ad2e61da7224858f08b41dec7b04967d6a55cd31b51b0b080d01c13f",
+      "FR-2": "7c8b5e99c3c9a2dac40243854ca42db986c4658481506acc75d842baa9aa83a3",
+      "FR-3": "706f45f907c6d6e7bd146bf33c2643cc941203d94bf343f7f69dd6017f2764df",
+      "FR-4": "2eb11aad12e599bd1d9a676489bb8035ce9c411b8c00fa86ccf8af13a403032b",
+      "FR-5": "518115fa63d4b75714a5e8fcc202736120e78b6cf99f624e0df515af60532db5",
+      "FR-6": "85333a7482a680cb104e88b1df60742b941b49085e05296cef784210c45cb808",
+      "FR-7": "0c9a681af389c31488f402ddcd3becab7abb7f1a37d64a780719bc75f31dd621",
+      "FR-8": "d45f1a2dda815a36dfb00aa2b5051d442b0a2153aa09c2b4dbfe1cad566f05da",
+      "FR-9": "8e0d2e90c76df5715f197b54b13bf04d17b2796fb234645f520ff6c5a55720cd",
+      "FR-10": "b86095cbaf667f2435dd4ae4a5c3edea042c3f43a7024b6ade17973fe6a3c0f8",
+      "FR-11": "3fe9024e28615c8d82fd5da1d59451187bee52365dffab4d989c5df75f7905c5",
+      "FR-12": "b007401872fd4d49e8ace644d3816bb401df6d1decdc6de8e3aefcb52dc2002b",
+      "FR-13": "dd42b2150836b31fa0ddf771602acce06d0d13ff8583fc2d2f883cae79c8d443"
+    }
+  }
+}
+</script>
+</body>
+</html>

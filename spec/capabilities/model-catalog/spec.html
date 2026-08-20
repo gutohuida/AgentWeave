@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Model catalog</title>
+<meta name="aw-spec-kind" content="capability">
+<meta name="aw-spec-status" content="current">
+<meta name="aw-spec-rigor" content="sketch">
+<meta name="aw-spec-schema-version" content="1">
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+    --surface-2: #21262d; --surface: #161b22;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+:root[data-theme="dark"] {
+  --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+  --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+  --surface-2: #21262d; --surface: #161b22;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 2rem 2.5rem 4rem; background: var(--bg); color: var(--fg);
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+h1 { font-size: 1.75rem; margin: 0 0 .25rem; }
+h2 { font-size: 1.15rem; margin: 2.5rem 0 .75rem; padding-bottom: .3rem;
+     border-bottom: 1px solid var(--border); }
+h3 { font-size: 1rem; margin: 1.5rem 0 .4rem; }
+p { margin: .5rem 0; }
+ul, ol { margin: .5rem 0; padding-left: 1.4rem; }
+li { margin: .25rem 0; }
+a { color: var(--aw-accent); }
+.aw-meta { color: var(--muted); font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-chip { display: inline-block; padding: .1rem .5rem; border-radius: 999px;
+           background: var(--surface-2); font-size: .78rem; margin-right: .4rem; }
+.aw-requirement { border-left: 3px solid var(--border); padding: .1rem 0 .1rem .9rem;
+                  margin: 1.1rem 0; }
+.aw-requirement-must { border-left-color: var(--aw-accent); }
+.aw-requirement-should { border-left-color: var(--aw-warn); }
+.aw-requirement-may { border-left-color: var(--border); }
+.aw-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8rem;
+         color: var(--muted); }
+.aw-modal { font-weight: 600; }
+.aw-modal-must { color: var(--aw-accent); }
+.aw-modal-should { color: var(--aw-warn); }
+.aw-modal-may { color: var(--fg); font-weight: 400; }
+.aw-chip-rigor-gate { color: var(--aw-accent); border: 1px solid var(--aw-accent); }
+.aw-chip-rigor-contract { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Phase is a lifecycle, and the question it answers is "can I rely on this?". `approved` and a
+   capability's `current` are settled and take the done tone; `proposed` is waiting on an operator
+   decision and takes warn; `exploring` and `archived` are quiet for opposite reasons — one has not
+   arrived yet, the other has been superseded. Deliberately NOT the accent: this document already
+   spends accent on links and on MUST, and a third meaning would empty it of any. `kind` keeps the
+   plain chip on purpose — it is a category, not a state, and hue there ranks nothing. */
+.aw-chip-phase-done { color: var(--aw-ok); border: 1px solid var(--aw-ok); }
+.aw-chip-phase-waiting { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+.aw-chip-phase-quiet { color: var(--muted); }
+.aw-chip-phase-archived { color: var(--muted); text-decoration: line-through; }
+/* An unresolved question blocks `propose`, so it is a real state and not a label. Resolved stays
+   the plain chip — the reader needs to find what is still open, not celebrate what is closed. */
+.aw-chip-open { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Limits is where a reader is most likely to be misled, and it read identically to Checked. */
+.aw-limits { color: var(--aw-warn); }
+/* The first screenful was entirely monochrome, so the document read as texty however the
+   requirements below were coloured. This puts the same modal scheme where the eye lands first,
+   carrying counts rather than decoration. */
+.aw-summary { margin: 0 0 1.5rem; font-size: .9rem; color: var(--muted); }
+.aw-summary .aw-count { font-weight: 600; }
+.aw-summary-sep { color: var(--border); margin: 0 .45rem; }
+.aw-rationale { color: var(--muted); font-size: .9rem; }
+.aw-refs { font-size: .82rem; color: var(--muted); }
+.aw-note { color: var(--muted); font-style: italic; }
+.aw-empty { color: var(--muted); }
+table { border-collapse: collapse; margin: .75rem 0; width: 100%; }
+th, td { border: 1px solid var(--border); padding: .4rem .6rem; text-align: left;
+         vertical-align: top; font-size: .92rem; }
+code, pre { background: var(--surface); border-radius: 4px; }
+code { padding: .1rem .3rem; font-size: .88em; }
+</style>
+</head>
+<body>
+<h1>Model catalog</h1>
+<p class="aw-meta"><span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><span class="aw-chip">sketch</span></p>
+<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">5</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">5</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">11</span> criteria</p>
+<section><h2 id="summary">Summary</h2><p>TBD - created by syncing change 2026-08-04-hub-model-control-and-provisioning. Update Purpose after archive.</p></section><section><h2 id="requirements">Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-1"><span class="aw-id">FR-1</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL maintain a catalog describing, for each provider it can spawn, the models available to that provider and the runtime controls that provider accepts.</p><p class="aw-rationale">Each model entry SHALL carry the identifier passed to the provider&#x27;s command line, a human-readable label, any shorthand aliases the provider accepts, and the size of that model&#x27;s context window where it is known. A model whose context window is not known SHALL declare it as unknown rather than declaring a substitute value. The catalog SHALL cover exactly the providers the Hub can spawn. A provider the Hub cannot spawn MUST NOT appear in the catalog.</p></div><div class="aw-requirement aw-requirement-must" id="FR-2"><span class="aw-id">FR-2</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Each provider entry SHALL declare its runtime controls. A control declaration SHALL carry its identity, a human-readable label, its kind, its permitted values where the kind is enumerated, its default where one exists, and how the control is applied to that provider&#x27;s invocation.</p><p class="aw-rationale">The application specification SHALL express whether the control is applied as a command-line flag or as a provider configuration override, together with the form it takes. Adding a control to a provider MUST NOT require changes to command construction, to request validation, or to the operator interface.</p></div><div class="aw-requirement aw-requirement-must" id="FR-3"><span class="aw-id">FR-3</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Permitted values for a control SHALL be declared on that provider&#x27;s control. Two providers offering a control of the same identity MAY declare different permitted values.</p><p class="aw-rationale">A value permitted for one provider MUST NOT be accepted for another provider that does not permit it.</p></div><div class="aw-requirement aw-requirement-must" id="FR-4"><span class="aw-id">FR-4</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL expose the catalog over its API so the operator interface can present models and controls without embedding provider knowledge of its own.</p><p class="aw-rationale">The interface SHALL render controls from the catalog. It MUST NOT hardcode a provider&#x27;s models, control identities, or permitted values.</p></div><div class="aw-requirement aw-requirement-must" id="FR-5"><span class="aw-id">FR-5</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL validate every requested runtime override against the catalog before constructing a provider invocation. An override naming an unknown control, or carrying a value the provider does not permit, SHALL be refused with a stated reason and the turn SHALL NOT start.</p><p class="aw-rationale">The Hub MUST NOT rely on the provider to reject an invalid value. A provider that accepts an invalid value and silently proceeds at its default would otherwise run a turn under settings the operator did not choose, without reporting it.</p></div></section><section><h2 id="acceptance">Acceptance criteria</h2><table><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>the catalog is read</td><td>it contains an entry for each provider the Hub can spawn contains no entry for a provider the Hub cannot spawn</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>a model&#x27;s context window is not known to the Hub</td><td>the catalog declares that window as unknown does not substitute a default value in its place</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>a control is declared for a provider</td><td>its declaration states whether it applies as a flag or as a configuration override states the form that application takes</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>a further control is added to a provider&#x27;s catalog entry</td><td>that control is accepted on a turn, validated, applied to the invocation, and offered to</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>two providers each declare an effort control</td><td>each declares its own permitted values neither provider&#x27;s values constrain the other&#x27;s</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>a turn requests a control value that its provider does not permit, but another provider</td><td>the request is refused with a stated reason</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>the operator is offered model or control choices</td><td>those choices are the ones the catalog declares for the relevant provider</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>a model or control is added to the catalog</td><td>the operator interface offers it without any change to the interface</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>a turn requests an override for a control the provider does not declare</td><td>the request is refused with a stated reason and no provider process starts</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>a turn requests a control value outside the provider&#x27;s permitted values</td><td>the request is refused with a stated reason and no provider process starts the value is not passed to the provider</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>a provider would accept an invalid control value by warning and using its default</td><td>the Hub has already refused the request, so no turn runs under an unrequested setting</td></tr></tbody></table></section><section><h2 id="evidence">Evidence and coverage limits</h2><h3>Checked</h3><ul><li>Translated from openspec/specs/model-catalog/spec.md (5 requirements, 11 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten.</li></ul><h3 class="aw-limits">Limits</h3><ul><li>scenarios-state-no-starting-state: 11 of 11 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed</li></ul></section><section><h2 id="open-questions">Open questions</h2><p class="aw-empty">None outstanding.</p></section>
+<script type="application/agentweave-spec+json" id="aw-spec-payload">
+{
+  "schema_version": 1,
+  "kind": "capability",
+  "title": "Model catalog",
+  "summary": "TBD - created by syncing change 2026-08-04-hub-model-control-and-provisioning. Update Purpose after archive.",
+  "problem": "",
+  "scope": {
+    "in_scope": [],
+    "non_goals": []
+  },
+  "requirements": [
+    {
+      "key": "the-hub-declares-a-model-catalog-for-every-supported-provide",
+      "statement": "The Hub SHALL maintain a catalog describing, for each provider it can spawn, the models available to that provider and the runtime controls that provider accepts.",
+      "modal": "SHALL",
+      "rationale": "Each model entry SHALL carry the identifier passed to the provider's command line, a human-readable label, any shorthand aliases the provider accepts, and the size of that model's context window where it is known. A model whose context window is not known SHALL declare it as unknown rather than declaring a substitute value. The catalog SHALL cover exactly the providers the Hub can spawn. A provider the Hub cannot spawn MUST NOT appear in the catalog.",
+      "party": null
+    },
+    {
+      "key": "runtime-controls-are-declared-not-coded",
+      "statement": "Each provider entry SHALL declare its runtime controls. A control declaration SHALL carry its identity, a human-readable label, its kind, its permitted values where the kind is enumerated, its default where one exists, and how the control is applied to that provider's invocation.",
+      "modal": "SHALL",
+      "rationale": "The application specification SHALL express whether the control is applied as a command-line flag or as a provider configuration override, together with the form it takes. Adding a control to a provider MUST NOT require changes to command construction, to request validation, or to the operator interface.",
+      "party": null
+    },
+    {
+      "key": "control-values-are-per-provider",
+      "statement": "Permitted values for a control SHALL be declared on that provider's control. Two providers offering a control of the same identity MAY declare different permitted values.",
+      "modal": "SHALL",
+      "rationale": "A value permitted for one provider MUST NOT be accepted for another provider that does not permit it.",
+      "party": null
+    },
+    {
+      "key": "the-catalog-is-served-to-the-operator-interface",
+      "statement": "The Hub SHALL expose the catalog over its API so the operator interface can present models and controls without embedding provider knowledge of its own.",
+      "modal": "SHALL",
+      "rationale": "The interface SHALL render controls from the catalog. It MUST NOT hardcode a provider's models, control identities, or permitted values.",
+      "party": null
+    },
+    {
+      "key": "the-hub-validates-overrides-before-spawning",
+      "statement": "The Hub SHALL validate every requested runtime override against the catalog before constructing a provider invocation. An override naming an unknown control, or carrying a value the provider does not permit, SHALL be refused with a stated reason and the turn SHALL NOT start.",
+      "modal": "SHALL",
+      "rationale": "The Hub MUST NOT rely on the provider to reject an invalid value. A provider that accepts an invalid value and silently proceeds at its default would otherwise run a turn under settings the operator did not choose, without reporting it.",
+      "party": null
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "key": "ac1",
+      "requirement": "the-hub-declares-a-model-catalog-for-every-supported-provide",
+      "given": "",
+      "when": "the catalog is read",
+      "then": "it contains an entry for each provider the Hub can spawn contains no entry for a provider the Hub cannot spawn"
+    },
+    {
+      "key": "ac2",
+      "requirement": "the-hub-declares-a-model-catalog-for-every-supported-provide",
+      "given": "",
+      "when": "a model's context window is not known to the Hub",
+      "then": "the catalog declares that window as unknown does not substitute a default value in its place"
+    },
+    {
+      "key": "ac3",
+      "requirement": "runtime-controls-are-declared-not-coded",
+      "given": "",
+      "when": "a control is declared for a provider",
+      "then": "its declaration states whether it applies as a flag or as a configuration override states the form that application takes"
+    },
+    {
+      "key": "ac4",
+      "requirement": "runtime-controls-are-declared-not-coded",
+      "given": "",
+      "when": "a further control is added to a provider's catalog entry",
+      "then": "that control is accepted on a turn, validated, applied to the invocation, and offered to"
+    },
+    {
+      "key": "ac5",
+      "requirement": "control-values-are-per-provider",
+      "given": "",
+      "when": "two providers each declare an effort control",
+      "then": "each declares its own permitted values neither provider's values constrain the other's"
+    },
+    {
+      "key": "ac6",
+      "requirement": "control-values-are-per-provider",
+      "given": "",
+      "when": "a turn requests a control value that its provider does not permit, but another provider",
+      "then": "the request is refused with a stated reason"
+    },
+    {
+      "key": "ac7",
+      "requirement": "the-catalog-is-served-to-the-operator-interface",
+      "given": "",
+      "when": "the operator is offered model or control choices",
+      "then": "those choices are the ones the catalog declares for the relevant provider"
+    },
+    {
+      "key": "ac8",
+      "requirement": "the-catalog-is-served-to-the-operator-interface",
+      "given": "",
+      "when": "a model or control is added to the catalog",
+      "then": "the operator interface offers it without any change to the interface"
+    },
+    {
+      "key": "ac9",
+      "requirement": "the-hub-validates-overrides-before-spawning",
+      "given": "",
+      "when": "a turn requests an override for a control the provider does not declare",
+      "then": "the request is refused with a stated reason and no provider process starts"
+    },
+    {
+      "key": "ac10",
+      "requirement": "the-hub-validates-overrides-before-spawning",
+      "given": "",
+      "when": "a turn requests a control value outside the provider's permitted values",
+      "then": "the request is refused with a stated reason and no provider process starts the value is not passed to the provider"
+    },
+    {
+      "key": "ac11",
+      "requirement": "the-hub-validates-overrides-before-spawning",
+      "given": "",
+      "when": "a provider would accept an invalid control value by warning and using its default",
+      "then": "the Hub has already refused the request, so no turn runs under an unrequested setting"
+    }
+  ],
+  "tasks": [],
+  "algorithms": [],
+  "design": "",
+  "evidence": {
+    "checked": [
+      "Translated from openspec/specs/model-catalog/spec.md (5 requirements, 11 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten."
+    ],
+    "limits": [
+      "scenarios-state-no-starting-state: 11 of 11 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed"
+    ]
+  },
+  "lifecycle": "",
+  "open_questions": [],
+  "aw_identity": {
+    "requirements": {
+      "the-hub-declares-a-model-catalog-for-every-supported-provide": "FR-1",
+      "runtime-controls-are-declared-not-coded": "FR-2",
+      "control-values-are-per-provider": "FR-3",
+      "the-catalog-is-served-to-the-operator-interface": "FR-4",
+      "the-hub-validates-overrides-before-spawning": "FR-5"
+    },
+    "high_water": 5,
+    "retired": {},
+    "digests": {
+      "FR-1": "6a46c0c3416963ee49c8604aa34e2ea3061b3efa9d7ebf4f2e5e92b50ba63cfb",
+      "FR-2": "225e33cedebbc7273e55d2a90880081b81baf2940e08ac2ec3f370bbffcf56d7",
+      "FR-3": "b190ea182a5d9b9798ea4a1646f45b65b1bc528de6662db92a5cf36bf8f98e92",
+      "FR-4": "3b535add119aa7ee3179157d5cdaea58f2e00d1cd44e00ff6108fa763e126b35",
+      "FR-5": "8a0e176bc728df3a9487272ca5616f0645ae741f74fe48ee0d81840018ef798a"
+    }
+  }
+}
+</script>
+</body>
+</html>

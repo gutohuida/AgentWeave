@@ -98,11 +98,6 @@ vi.mock('@/api/permissions', async (importOriginal) => ({
   useDecidePermissionRequest: () => ({ mutate: decide, isPending: false }),
 }))
 
-vi.mock('@/api/unaskedQuestions', () => ({
-  usePendingUnaskedQuestions: () => ({ data: [] }),
-  useResolveUnaskedQuestion: () => ({ mutate: vi.fn(), isPending: false }),
-}))
-
 vi.mock('@/api/checkpoints', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/checkpoints')>()
   return { ...actual, useCheckpoints: () => ({ data: [] }) }

@@ -150,8 +150,11 @@ async def test_a_single_option_is_still_refused_inside_a_batch(app):
 
 @pytest.mark.asyncio
 async def test_batched_questions_are_bound_to_the_asking_run(app):
-    """The unasked-question backstop keys off `created_by_run_id`; a batch must set it the same
-    way a lone question does, or asking three things would look like asking none."""
+    """A batch must bind its questions to the asking run the same way a lone question does.
+
+    `created_by_run_id` is what ties an answer back to the turn that is waiting on it, and what
+    lets a run's questions be found without scanning the project's.
+    """
     await app.post(
         BATCH_URL,
         headers=await active_run(),

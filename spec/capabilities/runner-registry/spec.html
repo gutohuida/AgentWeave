@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Runner registry</title>
+<meta name="aw-spec-kind" content="capability">
+<meta name="aw-spec-status" content="current">
+<meta name="aw-spec-rigor" content="sketch">
+<meta name="aw-spec-schema-version" content="1">
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+    --surface-2: #21262d; --surface: #161b22;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+:root[data-theme="dark"] {
+  --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+  --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+  --surface-2: #21262d; --surface: #161b22;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 2rem 2.5rem 4rem; background: var(--bg); color: var(--fg);
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+h1 { font-size: 1.75rem; margin: 0 0 .25rem; }
+h2 { font-size: 1.15rem; margin: 2.5rem 0 .75rem; padding-bottom: .3rem;
+     border-bottom: 1px solid var(--border); }
+h3 { font-size: 1rem; margin: 1.5rem 0 .4rem; }
+p { margin: .5rem 0; }
+ul, ol { margin: .5rem 0; padding-left: 1.4rem; }
+li { margin: .25rem 0; }
+a { color: var(--aw-accent); }
+.aw-meta { color: var(--muted); font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-chip { display: inline-block; padding: .1rem .5rem; border-radius: 999px;
+           background: var(--surface-2); font-size: .78rem; margin-right: .4rem; }
+.aw-requirement { border-left: 3px solid var(--border); padding: .1rem 0 .1rem .9rem;
+                  margin: 1.1rem 0; }
+.aw-requirement-must { border-left-color: var(--aw-accent); }
+.aw-requirement-should { border-left-color: var(--aw-warn); }
+.aw-requirement-may { border-left-color: var(--border); }
+.aw-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8rem;
+         color: var(--muted); }
+.aw-modal { font-weight: 600; }
+.aw-modal-must { color: var(--aw-accent); }
+.aw-modal-should { color: var(--aw-warn); }
+.aw-modal-may { color: var(--fg); font-weight: 400; }
+.aw-chip-rigor-gate { color: var(--aw-accent); border: 1px solid var(--aw-accent); }
+.aw-chip-rigor-contract { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Phase is a lifecycle, and the question it answers is "can I rely on this?". `approved` and a
+   capability's `current` are settled and take the done tone; `proposed` is waiting on an operator
+   decision and takes warn; `exploring` and `archived` are quiet for opposite reasons — one has not
+   arrived yet, the other has been superseded. Deliberately NOT the accent: this document already
+   spends accent on links and on MUST, and a third meaning would empty it of any. `kind` keeps the
+   plain chip on purpose — it is a category, not a state, and hue there ranks nothing. */
+.aw-chip-phase-done { color: var(--aw-ok); border: 1px solid var(--aw-ok); }
+.aw-chip-phase-waiting { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+.aw-chip-phase-quiet { color: var(--muted); }
+.aw-chip-phase-archived { color: var(--muted); text-decoration: line-through; }
+/* An unresolved question blocks `propose`, so it is a real state and not a label. Resolved stays
+   the plain chip — the reader needs to find what is still open, not celebrate what is closed. */
+.aw-chip-open { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Limits is where a reader is most likely to be misled, and it read identically to Checked. */
+.aw-limits { color: var(--aw-warn); }
+/* The first screenful was entirely monochrome, so the document read as texty however the
+   requirements below were coloured. This puts the same modal scheme where the eye lands first,
+   carrying counts rather than decoration. */
+.aw-summary { margin: 0 0 1.5rem; font-size: .9rem; color: var(--muted); }
+.aw-summary .aw-count { font-weight: 600; }
+.aw-summary-sep { color: var(--border); margin: 0 .45rem; }
+.aw-rationale { color: var(--muted); font-size: .9rem; }
+.aw-refs { font-size: .82rem; color: var(--muted); }
+.aw-note { color: var(--muted); font-style: italic; }
+.aw-empty { color: var(--muted); }
+table { border-collapse: collapse; margin: .75rem 0; width: 100%; }
+th, td { border: 1px solid var(--border); padding: .4rem .6rem; text-align: left;
+         vertical-align: top; font-size: .92rem; }
+code, pre { background: var(--surface); border-radius: 4px; }
+code { padding: .1rem .3rem; font-size: .88em; }
+</style>
+</head>
+<body>
+<h1>Runner registry</h1>
+<p class="aw-meta"><span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><span class="aw-chip">sketch</span></p>
+<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">6</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">6</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">13</span> criteria</p>
+<section><h2 id="summary">Summary</h2><p>Define project-scoped, Hub-owned runner records that separate reusable execution capability from agent identity and provide explicit, operator-managed agent bindings.</p></section><section><h2 id="requirements">Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-1"><span class="aw-id">FR-1</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL persist runner definitions as project-scoped database rows, each identifying a supported CLI (`claude` or `codex`), optional launch flags, and an optional default model. A runner SHALL NOT be represented only as an in-memory or hardcoded mapping.</p></div><div class="aw-requirement aw-requirement-must" id="FR-2"><span class="aw-id">FR-2</span> <p><span class="aw-modal aw-modal-must">SHALL</span> A project with zero runner records SHALL be seeded with one default runner per supported CLI before any agent can be bound to a runner.</p></div><div class="aw-requirement aw-requirement-must" id="FR-3"><span class="aw-id">FR-3</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Each Hub `Agent` record SHALL reference at most one runner record. Triggering an agent with no bound runner SHALL fail with a typed, actionable error rather than falling back to an undeclared default.</p></div><div class="aw-requirement aw-requirement-must" id="FR-4"><span class="aw-id">FR-4</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The Hub UI SHALL provide a screen to list, create, edit, and delete runner records, and to bind an agent to a runner from the agent&#x27;s detail view.</p></div><div class="aw-requirement aw-requirement-must" id="FR-5"><span class="aw-id">FR-5</span> <p><span class="aw-modal aw-modal-must">SHALL</span> A runner&#x27;s model SHALL be a model the catalog declares for that runner&#x27;s provider. The Hub SHALL refuse a runner carrying a model its provider does not declare.</p><p class="aw-rationale">Runner management SHALL offer the catalog&#x27;s models for the chosen provider rather than accepting free-typed text.</p></div><div class="aw-requirement aw-requirement-must" id="FR-6"><span class="aw-id">FR-6</span> <p><span class="aw-modal aw-modal-must">SHALL</span> A runner&#x27;s flags MUST be allowed to carry sentinel values that select how the Hub starts a run rather than arguments passed to the runner&#x27;s CLI. A sentinel SHALL NOT be forwarded to the CLI as an argument.</p><p class="aw-rationale">A runner whose flags are unset SHALL receive the Hub&#x27;s default transport for its CLI, and that default SHALL be the one whose tool surface the agent can actually call. Selecting a degraded transport SHALL require an explicit sentinel.</p></div></section><section><h2 id="acceptance">Acceptance criteria</h2><table><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>an operator creates a runner naming a supported CLI</td><td>the Hub persists it as a project-scoped record with a stable identifier</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>an operator attempts to create a runner naming a CLI other than `claude` or `codex`</td><td>the Hub rejects the request</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>a project has no runner records and the Hub starts</td><td>the Hub creates a default `claude` runner and a default `codex` runner for that project</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>the Hub triggers an agent that has a bound runner</td><td>it spawns the CLI, flags, and model that runner record specifies</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>the Hub receives a trigger for an agent with no runner bound</td><td>it refuses the launch and returns a typed error naming the missing binding</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>an operator creates a second `claude` runner with a different default model</td><td>both runners are available for binding to any agent independently</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>an operator selects a runner for an agent in the Hub UI</td><td>the agent&#x27;s runner binding updates and subsequent triggers use the newly bound runner</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>the operator creates or edits a runner and selects its provider</td><td>the models offered are those the catalog declares for that provider</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>a runner is submitted with a model its provider does not declare</td><td>the request is refused with a stated reason</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>a runner already records a model the catalog does not declare</td><td>that runner remains readable and its agents remain listable the operator is told the model is unrecognised when editing it</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>a runner is created with no flags</td><td>runs it backs use the Hub&#x27;s default transport for that CLI</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>a runner&#x27;s flags contain a transport sentinel</td><td>the command the Hub builds does not contain that sentinel as an argument</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>a runner&#x27;s flags contain the opt-out sentinel for its CLI&#x27;s default transport</td><td>runs it backs use the alternative transport</td></tr></tbody></table></section><section><h2 id="evidence">Evidence and coverage limits</h2><h3>Checked</h3><ul><li>Translated from openspec/specs/runner-registry/spec.md (6 requirements, 13 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten.</li></ul><h3 class="aw-limits">Limits</h3><ul><li>scenarios-state-no-starting-state: 13 of 13 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed</li></ul></section><section><h2 id="open-questions">Open questions</h2><p class="aw-empty">None outstanding.</p></section>
+<script type="application/agentweave-spec+json" id="aw-spec-payload">
+{
+  "schema_version": 1,
+  "kind": "capability",
+  "title": "Runner registry",
+  "summary": "Define project-scoped, Hub-owned runner records that separate reusable execution capability from agent identity and provide explicit, operator-managed agent bindings.",
+  "problem": "",
+  "scope": {
+    "in_scope": [],
+    "non_goals": []
+  },
+  "requirements": [
+    {
+      "key": "runners-are-project-scoped-hub-records",
+      "statement": "The Hub SHALL persist runner definitions as project-scoped database rows, each identifying a supported CLI (`claude` or `codex`), optional launch flags, and an optional default model. A runner SHALL NOT be represented only as an in-memory or hardcoded mapping.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "built-in-runners-are-seeded-on-first-use",
+      "statement": "A project with zero runner records SHALL be seeded with one default runner per supported CLI before any agent can be bound to a runner.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "an-agent-is-bound-to-at-most-one-runner",
+      "statement": "Each Hub `Agent` record SHALL reference at most one runner record. Triggering an agent with no bound runner SHALL fail with a typed, actionable error rather than falling back to an undeclared default.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "runner-management-is-available-through-the-hub-ui",
+      "statement": "The Hub UI SHALL provide a screen to list, create, edit, and delete runner records, and to bind an agent to a runner from the agent's detail view.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "a-runner-s-model-is-drawn-from-the-catalog",
+      "statement": "A runner's model SHALL be a model the catalog declares for that runner's provider. The Hub SHALL refuse a runner carrying a model its provider does not declare.",
+      "modal": "SHALL",
+      "rationale": "Runner management SHALL offer the catalog's models for the chosen provider rather than accepting free-typed text.",
+      "party": null
+    },
+    {
+      "key": "a-runner-s-flags-may-select-a-transport-and-unset-means-the-",
+      "statement": "A runner's flags MUST be allowed to carry sentinel values that select how the Hub starts a run rather than arguments passed to the runner's CLI. A sentinel SHALL NOT be forwarded to the CLI as an argument.",
+      "modal": "SHALL",
+      "rationale": "A runner whose flags are unset SHALL receive the Hub's default transport for its CLI, and that default SHALL be the one whose tool surface the agent can actually call. Selecting a degraded transport SHALL require an explicit sentinel.",
+      "party": null
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "key": "ac1",
+      "requirement": "runners-are-project-scoped-hub-records",
+      "given": "",
+      "when": "an operator creates a runner naming a supported CLI",
+      "then": "the Hub persists it as a project-scoped record with a stable identifier"
+    },
+    {
+      "key": "ac2",
+      "requirement": "runners-are-project-scoped-hub-records",
+      "given": "",
+      "when": "an operator attempts to create a runner naming a CLI other than `claude` or `codex`",
+      "then": "the Hub rejects the request"
+    },
+    {
+      "key": "ac3",
+      "requirement": "built-in-runners-are-seeded-on-first-use",
+      "given": "",
+      "when": "a project has no runner records and the Hub starts",
+      "then": "the Hub creates a default `claude` runner and a default `codex` runner for that project"
+    },
+    {
+      "key": "ac4",
+      "requirement": "an-agent-is-bound-to-at-most-one-runner",
+      "given": "",
+      "when": "the Hub triggers an agent that has a bound runner",
+      "then": "it spawns the CLI, flags, and model that runner record specifies"
+    },
+    {
+      "key": "ac5",
+      "requirement": "an-agent-is-bound-to-at-most-one-runner",
+      "given": "",
+      "when": "the Hub receives a trigger for an agent with no runner bound",
+      "then": "it refuses the launch and returns a typed error naming the missing binding"
+    },
+    {
+      "key": "ac6",
+      "requirement": "runner-management-is-available-through-the-hub-ui",
+      "given": "",
+      "when": "an operator creates a second `claude` runner with a different default model",
+      "then": "both runners are available for binding to any agent independently"
+    },
+    {
+      "key": "ac7",
+      "requirement": "runner-management-is-available-through-the-hub-ui",
+      "given": "",
+      "when": "an operator selects a runner for an agent in the Hub UI",
+      "then": "the agent's runner binding updates and subsequent triggers use the newly bound runner"
+    },
+    {
+      "key": "ac8",
+      "requirement": "a-runner-s-model-is-drawn-from-the-catalog",
+      "given": "",
+      "when": "the operator creates or edits a runner and selects its provider",
+      "then": "the models offered are those the catalog declares for that provider"
+    },
+    {
+      "key": "ac9",
+      "requirement": "a-runner-s-model-is-drawn-from-the-catalog",
+      "given": "",
+      "when": "a runner is submitted with a model its provider does not declare",
+      "then": "the request is refused with a stated reason"
+    },
+    {
+      "key": "ac10",
+      "requirement": "a-runner-s-model-is-drawn-from-the-catalog",
+      "given": "",
+      "when": "a runner already records a model the catalog does not declare",
+      "then": "that runner remains readable and its agents remain listable the operator is told the model is unrecognised when editing it"
+    },
+    {
+      "key": "ac11",
+      "requirement": "a-runner-s-flags-may-select-a-transport-and-unset-means-the-",
+      "given": "",
+      "when": "a runner is created with no flags",
+      "then": "runs it backs use the Hub's default transport for that CLI"
+    },
+    {
+      "key": "ac12",
+      "requirement": "a-runner-s-flags-may-select-a-transport-and-unset-means-the-",
+      "given": "",
+      "when": "a runner's flags contain a transport sentinel",
+      "then": "the command the Hub builds does not contain that sentinel as an argument"
+    },
+    {
+      "key": "ac13",
+      "requirement": "a-runner-s-flags-may-select-a-transport-and-unset-means-the-",
+      "given": "",
+      "when": "a runner's flags contain the opt-out sentinel for its CLI's default transport",
+      "then": "runs it backs use the alternative transport"
+    }
+  ],
+  "tasks": [],
+  "algorithms": [],
+  "design": "",
+  "evidence": {
+    "checked": [
+      "Translated from openspec/specs/runner-registry/spec.md (6 requirements, 13 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten."
+    ],
+    "limits": [
+      "scenarios-state-no-starting-state: 13 of 13 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed"
+    ]
+  },
+  "lifecycle": "",
+  "open_questions": [],
+  "aw_identity": {
+    "requirements": {
+      "runners-are-project-scoped-hub-records": "FR-1",
+      "built-in-runners-are-seeded-on-first-use": "FR-2",
+      "an-agent-is-bound-to-at-most-one-runner": "FR-3",
+      "runner-management-is-available-through-the-hub-ui": "FR-4",
+      "a-runner-s-model-is-drawn-from-the-catalog": "FR-5",
+      "a-runner-s-flags-may-select-a-transport-and-unset-means-the-": "FR-6"
+    },
+    "high_water": 6,
+    "retired": {},
+    "digests": {
+      "FR-1": "5bf2d7171eb5aa031800506566c6c8394eb15d0918a0b92fb8573b0de6eabad3",
+      "FR-2": "37e13a5edd6768cbd3d5fa8e050ffcf0a307a0e3d6309600a5cb917c69cbd344",
+      "FR-3": "4c90c7b078b85961d6ea9901fd090882a76f1ec16e80c48ecbdd461b0196076c",
+      "FR-4": "b062437dbbc8e2a1784d486b9478c92b37a49a28bab5384449d95d7536f3a708",
+      "FR-5": "40bd71dcae2520a8ef39091187c0994f47ac64c886024708d69819cd528a2098",
+      "FR-6": "9a84585f7ec8525e51f4233e7efe924be1e0ffe866e7492dd7a810af9fbeaf2a"
+    }
+  }
+}
+</script>
+</body>
+</html>

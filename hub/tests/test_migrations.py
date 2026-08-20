@@ -36,7 +36,7 @@ ALEMBIC_INI = Path(__file__).parent.parent / "hub" / "alembic.ini"
 # The revision `alembic upgrade head` must land on. Named once so the assertion and its failure
 # message cannot disagree — they did, for two head bumps, telling anyone debugging a failure to go
 # read the wrong migration.
-HEAD_REVISION = "0081"
+HEAD_REVISION = "0082"
 
 
 # ---------------------------------------------------------------------------
@@ -344,6 +344,10 @@ def test_migration_0036_indexes_conversation_id_on_blocking_tables(tmp_path) -> 
 
     `unasked_questions.conversation_id` predates this revision, so the migration must add its
     index without trying to add the column a second time.
+
+    Upgrades to 0036 rather than head deliberately: `0082` drops `unasked_questions` when the
+    unasked-question backstop was retired, so running to head would leave nothing to assert
+    about the very table this revision's third branch exists to handle.
     """
     db_file = tmp_path / "old_0034_blocking.db"
     _create_0034_conversations_state(db_file)
@@ -365,7 +369,7 @@ def test_migration_0036_indexes_conversation_id_on_blocking_tables(tmp_path) -> 
         )
 
     db_url = f"sqlite+aiosqlite:///{db_file}"
-    _run_alembic_with(db_url)
+    _run_alembic_with(db_url, "0036")
 
     for table in ("questions", "permission_requests", "unasked_questions"):
         columns = {column["name"] for column in _inspect_columns(db_url, table)}
@@ -463,16 +467,24 @@ async def test_init_db_skips_alembic_for_in_memory(tmp_path, monkeypatch) -> Non
 
 
 @pytest.mark.asyncio
-async def test_init_db_creates_zero_projects_without_legacy_bootstrap_env(monkeypatch) -> None:
-    """A genuinely fresh install (no AW_BOOTSTRAP_PROJECT_ID in the environment) starts
-    with zero projects — local-multi-project-workspace design decision 6: "Startup no
-    longer bootstraps proj-default unconditionally." Only an explicit env value (as
-    conftest.py sets for the rest of this suite) requests the legacy back-compat project.
-    The instance operator credential must still exist so the local app can authenticate.
+async def test_init_db_creates_no_project_even_with_the_legacy_bootstrap_env_set(
+    monkeypatch,
+) -> None:
+    """Startup creates no project, and setting the retired variables cannot change that.
+
+    They are set here deliberately. `init_db` used to read AW_BOOTSTRAP_PROJECT_ID and
+    create a project named by AW_BOOTSTRAP_PROJECT_NAME, which is how operators carrying
+    an older .env forward kept finding a "Default Project" bound to no working directory.
+    Registering a project is now only reachable by opening a directory, so the gate and
+    the settings behind it are gone — and an old .env is inert rather than obeyed.
+
+    The instance operator credential must still be minted, so the local app can
+    authenticate against a Hub that holds nothing yet.
     """
     from sqlalchemy import func, select
 
-    monkeypatch.delenv("AW_BOOTSTRAP_PROJECT_ID", raising=False)
+    monkeypatch.setenv("AW_BOOTSTRAP_PROJECT_ID", "proj-default")
+    monkeypatch.setenv("AW_BOOTSTRAP_PROJECT_NAME", "Default Project")
     monkeypatch.setattr(settings, "aw_bootstrap_api_key", "")
 
     async with engine.begin() as connection:
@@ -1088,8 +1100,13 @@ def _seed_minimum(session) -> tuple[str, str, str, str]:
     return project_id, key_id, job_id, run_id
 
 
-def _run_alembic_with(db_url: str) -> None:
-    """Configure alembic for the given URL and run `upgrade head` synchronously."""
+def _run_alembic_with(db_url: str, revision: str = "head") -> None:
+    """Configure alembic for the given URL and run `upgrade` synchronously.
+
+    *revision* defaults to head. Pass an explicit one when the test is about what a
+    particular migration did to a table a later migration goes on to drop — upgrading to
+    head would then assert against a schema the chain has deliberately moved past.
+    """
     from alembic import command
     from alembic.config import Config
 
@@ -1099,7 +1116,7 @@ def _run_alembic_with(db_url: str) -> None:
     # async engine. Temporarily override so alembic uses the same file
     # as the test's standalone engine.
     with patch.object(settings, "database_url", db_url):
-        command.upgrade(cfg, "head")
+        command.upgrade(cfg, revision)
 
 
 def _inspect_columns(db_url: str, table: str) -> list[dict]:
@@ -2658,7 +2675,11 @@ def test_migration_0081_downgrade_then_upgrade_round_trips(tmp_path) -> None:
     cfg = Config(str(ALEMBIC_INI))
     cfg.set_main_option("sqlalchemy.url", db_url)
     with patch.object(settings, "database_url", db_url):
-        command.downgrade(cfg, "-1")
+        # Absolute target, not "-1": head has moved past 0081 since this test was written (0082
+        # drops the unasked_questions table on top), so a relative one-step-back would only undo
+        # 0082 and leave event_logs.loop_id in place — the same correction 0079 and 0080 already
+        # carry above.
+        command.downgrade(cfg, "0080")
 
         with sqlite3.connect(db_file) as conn:
             event_columns = {row[1] for row in conn.execute("PRAGMA table_info(event_logs)")}

@@ -1,0 +1,1654 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent conversation workspace</title>
+<meta name="aw-spec-kind" content="capability">
+<meta name="aw-spec-status" content="current">
+<meta name="aw-spec-rigor" content="sketch">
+<meta name="aw-spec-schema-version" content="1">
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+    --surface-2: #21262d; --surface: #161b22;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+:root[data-theme="dark"] {
+  --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+  --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+  --surface-2: #21262d; --surface: #161b22;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 2rem 2.5rem 4rem; background: var(--bg); color: var(--fg);
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+h1 { font-size: 1.75rem; margin: 0 0 .25rem; }
+h2 { font-size: 1.15rem; margin: 2.5rem 0 .75rem; padding-bottom: .3rem;
+     border-bottom: 1px solid var(--border); }
+h3 { font-size: 1rem; margin: 1.5rem 0 .4rem; }
+p { margin: .5rem 0; }
+ul, ol { margin: .5rem 0; padding-left: 1.4rem; }
+li { margin: .25rem 0; }
+a { color: var(--aw-accent); }
+.aw-meta { color: var(--muted); font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-chip { display: inline-block; padding: .1rem .5rem; border-radius: 999px;
+           background: var(--surface-2); font-size: .78rem; margin-right: .4rem; }
+.aw-requirement { border-left: 3px solid var(--border); padding: .1rem 0 .1rem .9rem;
+                  margin: 1.1rem 0; }
+.aw-requirement-must { border-left-color: var(--aw-accent); }
+.aw-requirement-should { border-left-color: var(--aw-warn); }
+.aw-requirement-may { border-left-color: var(--border); }
+.aw-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8rem;
+         color: var(--muted); }
+.aw-modal { font-weight: 600; }
+.aw-modal-must { color: var(--aw-accent); }
+.aw-modal-should { color: var(--aw-warn); }
+.aw-modal-may { color: var(--fg); font-weight: 400; }
+.aw-chip-rigor-gate { color: var(--aw-accent); border: 1px solid var(--aw-accent); }
+.aw-chip-rigor-contract { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Phase is a lifecycle, and the question it answers is "can I rely on this?". `approved` and a
+   capability's `current` are settled and take the done tone; `proposed` is waiting on an operator
+   decision and takes warn; `exploring` and `archived` are quiet for opposite reasons — one has not
+   arrived yet, the other has been superseded. Deliberately NOT the accent: this document already
+   spends accent on links and on MUST, and a third meaning would empty it of any. `kind` keeps the
+   plain chip on purpose — it is a category, not a state, and hue there ranks nothing. */
+.aw-chip-phase-done { color: var(--aw-ok); border: 1px solid var(--aw-ok); }
+.aw-chip-phase-waiting { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+.aw-chip-phase-quiet { color: var(--muted); }
+.aw-chip-phase-archived { color: var(--muted); text-decoration: line-through; }
+/* An unresolved question blocks `propose`, so it is a real state and not a label. Resolved stays
+   the plain chip — the reader needs to find what is still open, not celebrate what is closed. */
+.aw-chip-open { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Limits is where a reader is most likely to be misled, and it read identically to Checked. */
+.aw-limits { color: var(--aw-warn); }
+/* The first screenful was entirely monochrome, so the document read as texty however the
+   requirements below were coloured. This puts the same modal scheme where the eye lands first,
+   carrying counts rather than decoration. */
+.aw-summary { margin: 0 0 1.5rem; font-size: .9rem; color: var(--muted); }
+.aw-summary .aw-count { font-weight: 600; }
+.aw-summary-sep { color: var(--border); margin: 0 .45rem; }
+.aw-rationale { color: var(--muted); font-size: .9rem; }
+.aw-refs { font-size: .82rem; color: var(--muted); }
+.aw-note { color: var(--muted); font-style: italic; }
+.aw-empty { color: var(--muted); }
+table { border-collapse: collapse; margin: .75rem 0; width: 100%; }
+th, td { border: 1px solid var(--border); padding: .4rem .6rem; text-align: left;
+         vertical-align: top; font-size: .92rem; }
+code, pre { background: var(--surface); border-radius: 4px; }
+code { padding: .1rem .3rem; font-size: .88em; }
+</style>
+</head>
+<body>
+<h1>Agent conversation workspace</h1>
+<p class="aw-meta"><span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><span class="aw-chip">sketch</span></p>
+<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">47</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">47</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">156</span> criteria</p>
+<section><h2 id="summary">Summary</h2><p>The AgentWeave conversation is the primary workspace surface: navigation reaches an agent&#x27;s conversation directly, the operator can keep talking to an agent while it is running, and the composer is a bounded, draft-persisting input with a minimal always-visible control set. Everything that is not a per-conversation control has left the composer. Navigation is a tree of project → agent → conversation, and it is where conversations are selected, started, and acted on; agent settings are reached from the agent&#x27;s row; handoff and fold-all sit on the conversation header. The conversation-actions overflow menu is gone, and no menu on the conversation surface serves as a conversation switcher. AgentWeave owns a durable `conversation_id` that exists before any provider process starts and never changes across runs, retries, stops, or provider-session binding; the provider session is nullable continuation data beneath it, never the operator-facing identity. Conversations are labelled by title, never by identifier — the title, origin, rename and archival rules themselves belong to `conversation-lifecycle`.</p></section><section><h2 id="requirements">Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-1"><span class="aw-id">FR-1</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL allocate a stable `conversation_id` before starting a provider process. A conversation SHALL belong to exactly one project and one immutable target agent, SHALL remain the same across runs, retries, stops, failures, and provider-session binding, and SHALL treat provider session identity as nullable continuation data rather than as the conversation&#x27;s identity.</p><p class="aw-rationale">Every newly created run, inbound queue entry, and recorded agent output SHALL carry its `conversation_id`. An outbound peer message SHALL carry its sender conversation, and its recipient queue entry SHALL carry the recipient conversation selected by the queue-routing contract.</p></div><div class="aw-requirement aw-requirement-must" id="FR-2"><span class="aw-id">FR-2</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Selecting an agent from the navigation rail or from the project overview&#x27;s agent roster SHALL open that agent&#x27;s conversation occupying the full content area.</p><p class="aw-rationale">There MUST NOT be an intermediate agent list, filter tab bar, or detail-panel selection step between choosing an agent and reading its conversation.</p></div><div class="aw-requirement aw-requirement-must" id="FR-3"><span class="aw-id">FR-3</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Navigation SHALL present the current project as a named entry whose children are its agents, and each agent as an entry whose children are its conversations.</p><p class="aw-rationale">Activating the project&#x27;s name SHALL navigate to the project overview. Activating its expander SHALL toggle the agent list without navigating. The two MUST be separately activatable. An agent entry SHALL follow the same rule: its name navigates, its expander toggles.</p></div><div class="aw-requirement aw-requirement-must" id="FR-4"><span class="aw-id">FR-4</span> <p><span class="aw-modal aw-modal-must">SHALL</span> From an open agent conversation, the containing project&#x27;s overview SHALL be reachable in a single action.</p></div><div class="aw-requirement aw-requirement-must" id="FR-5"><span class="aw-id">FR-5</span> <p><span class="aw-modal aw-modal-must">MUST</span> Navigation MUST NOT offer an *Agents* destination or a *Messages* destination.</p><p class="aw-rationale">Message records, the messages API, agent records, and the agents API MUST remain unchanged. They are still the source data for routing, attribution, and history, and peer traffic in both directions is already merged into the conversation timeline, so the destinations are redundant rather than the records.</p></div><div class="aw-requirement aw-requirement-must" id="FR-6"><span class="aw-id">FR-6</span> <p><span class="aw-modal aw-modal-must">SHALL</span> WHEN the operator submits composer input while the agent is running, THE SYSTEM SHALL enqueue that input and SHALL display it in the conversation timeline in the undelivered state without requiring a manual refresh.</p><p class="aw-rationale">The composer&#x27;s text input and its submit control MUST NOT be disabled on account of the agent&#x27;s running state. They MAY be disabled only while a submission of their own is in flight. The interface MUST NOT branch on the agent&#x27;s running state when deciding whether to submit. The trigger endpoint reports whether a turn started or the input was queued, and that report is the only source of truth for the outcome.</p></div><div class="aw-requirement aw-requirement-must" id="FR-7"><span class="aw-id">FR-7</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The composer SHALL present at least 3 text rows at rest, SHALL grow with its content to at least 12 rows, and SHALL scroll rather than grow beyond its maximum.</p></div><div class="aw-requirement aw-requirement-must" id="FR-8"><span class="aw-id">FR-8</span> <p><span class="aw-modal aw-modal-must">MUST</span> Unsent composer text SHALL be retained per project and AgentWeave conversation across navigation away and back and across a page reload, SHALL be cleared on successful submission, and MUST NOT be visible in or overwritten by another project, agent, or conversation.</p><p class="aw-rationale">Where persistent storage is unavailable, the composer SHALL remain fully functional; only persistence is lost.</p></div><div class="aw-requirement aw-requirement-must" id="FR-9"><span class="aw-id">FR-9</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The conversation header SHALL expose fold-all and, while the agent is running, stop beside the current turn&#x27;s state. The resting composer SHALL expose only submit, the active-agent indicator, and context usage.</p><p class="aw-rationale">New conversation, conversation selection, durable handoff, and agent details SHALL be reachable from one overflow menu that is fully operable by keyboard. An action that is unavailable SHALL be presented disabled with its reason rather than omitted, so that the menu&#x27;s contents do not shift between agents.</p></div><div class="aw-requirement aw-requirement-must" id="FR-10"><span class="aw-id">FR-10</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The provider-session selection control SHALL be removed from the conversation surface. The current AgentWeave conversation&#x27;s continuity state SHALL remain visible as human-readable text, and conversation selection SHALL be performed from navigation. Normal navigation, URLs, history, and drafts MUST use `conversation_id`; provider session IDs MAY appear only in details or diagnostic surfaces.</p><p class="aw-rationale">A conversation SHALL be labelled by its title wherever it is listed or named. Its identifier MUST NOT be presented as its label.</p></div><div class="aw-requirement aw-requirement-must" id="FR-11"><span class="aw-id">FR-11</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The manual pause/resume-scroll control SHALL be removed. Following of new output SHALL be determined by scroll position: pinned while the operator is at the bottom, suspended once they scroll away, and resumed when they return to the bottom.</p><p class="aw-rationale">The scroll position already expresses the intent the removed control duplicated.</p></div><div class="aw-requirement aw-requirement-must" id="FR-12"><span class="aw-id">FR-12</span> <p><span class="aw-modal aw-modal-must">SHALL</span> A banner region directly above the composer SHALL display run failure, stream loss, and blocked-queue conditions. Simultaneous conditions SHALL stack in a stable order, each stating its own condition.</p></div><div class="aw-requirement aw-requirement-must" id="FR-13"><span class="aw-id">FR-13</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The composer SHALL display the agent&#x27;s context-window consumption using the existing indicator, derived from the most recent context-usage event reported for that agent.</p><p class="aw-rationale">Where no context-usage event has been received, the composer SHALL render no indicator rather than a zero value, because a zero would assert a measurement that was never taken.</p></div><div class="aw-requirement aw-requirement-must" id="FR-14"><span class="aw-id">FR-14</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Provider continuity, durable handoff, stop, withdraw, and deliver-now SHALL CONTINUE TO behave as specified after the stable-conversation migration, including successor-conversation handoff.</p><p class="aw-rationale">Queue semantics — hop budget, per-turn delivery cap, and delivery ordering — SHALL CONTINUE TO be unchanged by this change.</p></div><div class="aw-requirement aw-requirement-must" id="FR-15"><span class="aw-id">FR-15</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Navigation SHALL read its project and agent tree from one adapter containing every registered project the local operator can reach. The operator SHALL be able to open an existing project directory, explicitly create a new one, and switch projects without changing credentials.</p><p class="aw-rationale">The adapter SHALL preserve project and agent live state for inactive projects. Project switching MUST NOT leak conversations, drafts, cached server state, or in-flight mutation results across project identifiers.</p></div><div class="aw-requirement aw-requirement-must" id="FR-16"><span class="aw-id">FR-16</span> <p><span class="aw-modal aw-modal-must">MUST</span> Normal project, agent, and conversation navigation SHALL be represented in the browser URL using stable project and AgentWeave conversation identity. Reload and back/forward navigation SHALL restore the represented destination. Provider session identifiers MUST NOT be used as URL identity.</p></div><div class="aw-requirement aw-requirement-must" id="FR-17"><span class="aw-id">FR-17</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The composer SHALL present the model and the runtime controls declared by the target agent&#x27;s provider, and SHALL allow the operator to change them without leaving the conversation.</p><p class="aw-rationale">The controls presented SHALL be those the catalog declares for that provider. When the target agent changes to one on a different provider, the presented controls SHALL change with it.</p></div><div class="aw-requirement aw-requirement-must" id="FR-18"><span class="aw-id">FR-18</span> <p><span class="aw-modal aw-modal-must">SHALL</span> A conversation SHALL retain the runtime overrides chosen for it. Subsequent turns in that conversation SHALL run under those overrides until the operator changes them.</p><p class="aw-rationale">Overrides SHALL be stored keyed by control identity, so that a newly declared control requires no change to how a conversation is stored. A new conversation SHALL begin with no overrides, inheriting the values from its agent&#x27;s bound runner and the catalog&#x27;s declared defaults.</p></div><div class="aw-requirement aw-requirement-must" id="FR-19"><span class="aw-id">FR-19</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The composer SHALL let the operator state whether a message continues the current conversation or begins a new one with the target agent.</p><p class="aw-rationale">The routing choice SHALL be visible before the message is sent.</p></div><div class="aw-requirement aw-requirement-must" id="FR-20"><span class="aw-id">FR-20</span> <p><span class="aw-modal aw-modal-must">MUST</span> Every queued input the Hub marks as delivered SHALL reach the agent&#x27;s model in full. The Hub MUST NOT report an input as delivered when the mechanism used to start the run cannot carry it.</p><p class="aw-rationale">Where a platform&#x27;s process-launch path can alter, truncate, or reinterpret a run&#x27;s arguments — for example a command interpreter that parses a command line before the target program receives it — the Hub SHALL use a launch path that preserves them exactly, including argument content that spans multiple lines.</p></div><div class="aw-requirement aw-requirement-must" id="FR-21"><span class="aw-id">FR-21</span> <p><span class="aw-modal aw-modal-must">MUST</span> A turn SHALL render expanded unless the operator has folded it. Foldedness MUST NOT be derived from a turn&#x27;s position in the conversation, and appending a new turn MUST NOT change the folded state of any existing turn.</p><p class="aw-rationale">Every turn SHALL be foldable, including the most recent one. A turn the operator has folded SHALL stay folded, and a turn the operator has expanded SHALL stay expanded, as the conversation grows.</p></div><div class="aw-requirement aw-requirement-must" id="FR-22"><span class="aw-id">FR-22</span> <p><span class="aw-modal aw-modal-must">MUST</span> An operator message SHALL be distinguished from an agent message by placement and by neutral surface treatment. It MUST NOT be tinted with the interface&#x27;s chromatic accent colour, which is reserved for focus and selection state.</p></div><div class="aw-requirement aw-requirement-must" id="FR-23"><span class="aw-id">FR-23</span> <p><span class="aw-modal aw-modal-must">MUST</span> The composer surface SHALL be distinguished from the page ground plane by its border and its own surface colour. It MUST NOT be surrounded by a shadow, gradient, or fill that reads as a second, darker region enclosing it.</p></div><div class="aw-requirement aw-requirement-must" id="FR-24"><span class="aw-id">FR-24</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Opening or switching to a conversation SHALL place the view at its newest entry, and SHALL resume following new output.</p><p class="aw-rationale">The most recent activity is what an operator opening a conversation is looking for; landing on the oldest entry of a long history buries it.</p></div><div class="aw-requirement aw-requirement-must" id="FR-25"><span class="aw-id">FR-25</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Whether the view follows new output SHALL be determined by the conversation entries actually displayed, not by any other stream.</p><p class="aw-rationale">Following that observes a different source than the one being rendered will either fail to move when content arrives or move when nothing visible has changed.</p></div><div class="aw-requirement aw-requirement-must" id="FR-26"><span class="aw-id">FR-26</span> <p><span class="aw-modal aw-modal-must">SHALL</span> While following is suspended, the conversation SHALL offer a control that returns the view to the newest entry and resumes following.</p><p class="aw-rationale">That control SHALL appear only while following is suspended. It is not a toggle: it expresses &quot;return me to the newest entry&quot;, and following remains governed by scroll position.</p></div><div class="aw-requirement aw-requirement-must" id="FR-27"><span class="aw-id">FR-27</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Navigation SHALL list an agent&#x27;s open conversations as that agent&#x27;s children, ordered by most recent activity first, each labelled by its title.</p><p class="aw-rationale">Activating the agent&#x27;s expander SHALL toggle its conversation list without navigating. Activating the agent&#x27;s name SHALL open that agent&#x27;s most recent conversation, matching the behaviour that existed before conversations were listed. The two MUST be separately activatable, as they already are for the project entry. Beyond a fixed number of conversations, the remainder SHALL be reachable through an explicit expander that states how many are hidden, rather than being omitted silently or scrolling unbounded.</p></div><div class="aw-requirement aw-requirement-must" id="FR-28"><span class="aw-id">FR-28</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Navigation SHALL offer a view listing the project&#x27;s conversations across all of its agents, ordered by most recent activity first, as an alternative to the agent tree. The agent tree SHALL be the default, and the chosen view SHALL persist across reloads.</p><p class="aw-rationale">In the recency view each conversation SHALL carry its agent&#x27;s assigned identity colour as a persistent leading edge, so the owning agent is readable without hovering or opening the conversation. The colour MUST match the one used for that agent in the tree and in the conversation timeline. Archived conversations SHALL be excluded from the recency list, and SHALL be reachable from it through an explicit control stating how many exist — the same affordance the tree offers per agent, offered here across the project. Hiding them without saying they are there reads as data loss to an operator who archives often. Beyond a fixed number of conversations, the recency list SHALL place the remainder behind an explicit expander that states how many are hidden, and SHALL offer a way back to the capped list once expanded. The limit applies per project, since this view has no agent to apply it per.</p></div><div class="aw-requirement aw-requirement-must" id="FR-29"><span class="aw-id">FR-29</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Navigation SHALL show, for each listed conversation, whether it is running, waiting on the operator, or idle. A conversation is waiting on the operator when it holds an unanswered question, an undecided permission request, or an undismissed unasked-question flag.</p><p class="aw-rationale">The waiting state MUST be distinguishable from the running state, because a waiting run consumes its configured timeout while the operator is unaware of it.</p></div><div class="aw-requirement aw-requirement-must" id="FR-30"><span class="aw-id">FR-30</span> <p><span class="aw-modal aw-modal-must">MUST</span> Every agent row and every conversation row in navigation SHALL expose its actions through a menu opened from a control on the row itself. That control MUST be reachable by keyboard and MUST NOT require a pointer gesture that has no visible affordance.</p><p class="aw-rationale">A conversation row&#x27;s menu SHALL offer rename and archive. An agent row&#x27;s menu SHALL offer new conversation, agent settings, and the archived-conversation listing. Agent settings SHALL open as the agent&#x27;s configuration destination. This replaces the previous rule that settings open &quot;without unmounting or navigating away from the conversation that is currently open&quot;. That rule was written when settings were a dialog the rail hosted, and its purpose was to stop the conversation being destroyed by opening settings — a real hazard when the only alternative on offer was a panel inside the conversation surface. A destination does not carry that hazard, and it answers what the dialog could not. Configuration outgrew a modal; it now has sections, and it must be linkable, survive a reload, and be somewhere the operator can be *sent*. None of that is expressible as a dialog. The conversation is not lost by navigating to configuration any more than it is lost by navigating to the project overview: it is a durable record, and the destination carries a fixed way back to it.</p></div><div class="aw-requirement aw-requirement-must" id="FR-31"><span class="aw-id">FR-31</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Starting a new conversation SHALL be initiated from navigation and SHALL open a surface whose composer is the primary element, rather than an empty transcript.</p><p class="aw-rationale">A conversation started from an agent&#x27;s row SHALL open with that agent already selected. That selection is a default and not a binding: the surface SHALL let the operator retarget the unsent message to any other agent in the project, and the message SHALL then go to the agent they chose. A conversation started from the recency view, where no agent is implied, SHALL require the operator to choose the agent on that surface before the first message can be sent. The surface SHALL lead with a prominent question naming the bound agent. Where no agent is bound that question SHALL instead ask which agent should take the work, so the line states what has to happen next rather than sitting above a separate instruction. No conversation record SHALL be created until the first message is sent, so an abandoned start leaves nothing behind.</p></div><div class="aw-requirement aw-requirement-must" id="FR-32"><span class="aw-id">FR-32</span> <p><span class="aw-modal aw-modal-must">MUST</span> The durable handoff control SHALL be present on the open conversation&#x27;s own header, labelled, and visible at rest. It MUST NOT be placed behind a menu, and it MUST NOT be a row action in navigation.</p><p class="aw-rationale">When the control is unavailable, it SHALL be presented disabled with its reason rather than omitted, so its position does not change between agents.</p></div><div class="aw-requirement aw-requirement-must" id="FR-33"><span class="aw-id">FR-33</span> <p><span class="aw-modal aw-modal-must">SHALL</span> A peer message that names no recipient conversation SHALL be delivered to the recipient conversation bound to the sending conversation, creating that binding on first use.</p><p class="aw-rationale">This capability already requires that *&quot;an outbound peer message SHALL carry its sender conversation, and its recipient queue entry SHALL carry the recipient conversation selected by the queue-routing contract&quot;*, but the queue-routing contract is defined nowhere. This requirement defines it. The binding is keyed on the sending conversation and the recipient agent. It is durable: every later message from the same sending conversation to the same recipient reaches the same recipient conversation. Delivery MUST NOT be selected by recency. Omitting a recipient conversation is the ordinary path, because a sender does not hold the recipient&#x27;s conversation identifiers, so a recency rule governs almost all peer traffic rather than an exceptional case. Observed consequence: three messages of one exchange between two agents were delivered into three unrelated conversations of the recipient, one of them titled for an unrelated file-creation task. A recipient conversation created by this contract carries `origin: peer`.</p></div><div class="aw-requirement aw-requirement-must" id="FR-34"><span class="aw-id">FR-34</span> <p><span class="aw-modal aw-modal-must">SHALL</span> A message originating from a source that has no conversation SHALL be delivered to a recipient conversation bound to that source&#x27;s identity.</p><p class="aw-rationale">Hub-originated and scheduler-originated messages have no sending conversation, so the binding above has no key. Binding them to the sender&#x27;s identity gives one durable thread per source and recipient, and leaves no path on which recency routing survives.</p></div><div class="aw-requirement aw-requirement-must" id="FR-35"><span class="aw-id">FR-35</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Delivery to an archived recipient conversation SHALL be refused when the sender named it, and SHALL continue into a successor when the binding resolved it.</p><p class="aw-rationale">An agent that explicitly names an archived conversation has made an error it can correct, and is already refused with its content returned so it need not reconstruct the message. An agent whose message was routed to a thread the operator archived made no such choice, and refusing it would penalise the sender for an operator action.</p></div><div class="aw-requirement aw-requirement-must" id="FR-36"><span class="aw-id">FR-36</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Peer bindings SHALL be established when a conversation next sends, and historical traffic SHALL NOT be reassigned.</p><p class="aw-rationale">Traffic delivered under recency routing is already distributed across unrelated conversations, so reconstructing which recipient conversation a past message &quot;belonged&quot; to would be a guess. Leaving it in place keeps the record honest.</p></div><div class="aw-requirement aw-requirement-must" id="FR-37"><span class="aw-id">FR-37</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The composer SHALL present its text area on its own row, occupying the full width of the composer surface. No control SHALL precede the text area on that row.</p><p class="aw-rationale">Controls belonging to the composer SHALL occupy a control row beneath the text area.</p></div><div class="aw-requirement aw-requirement-must" id="FR-38"><span class="aw-id">FR-38</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The composer&#x27;s control row SHALL be composed of a leading slot and a trailing slot. The trailing slot SHALL hold the send control. The leading slot SHALL hold target and per-turn controls.</p><p class="aw-rationale">Adding a control to either slot MUST NOT require changing the composer&#x27;s layout.</p></div><div class="aw-requirement aw-requirement-must" id="FR-39"><span class="aw-id">FR-39</span> <p><span class="aw-modal aw-modal-must">MUST</span> The conversation SHALL read as one continuous surface. Its header and the region containing its composer MUST NOT be drawn as filled bands closed by dividing rules.</p><p class="aw-rationale">The header SHALL sit on the same ground plane as the stream, separating itself from scrolled content by translucency rather than by a fill and a border. The transition from the stream to the composer region SHALL be a fade to the ground plane rather than a drawn edge.</p></div><div class="aw-requirement aw-requirement-must" id="FR-40"><span class="aw-id">FR-40</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The composer SHALL be presented as a surface lifted above the ground plane: its own fill, its own outline, a soft shadow, and the application&#x27;s content radius. It SHALL indicate focus by treating the whole surface, not only its text area.</p><p class="aw-rationale">No other element of the conversation region SHALL be lifted in the same way.</p></div><div class="aw-requirement aw-requirement-must" id="FR-41"><span class="aw-id">FR-41</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Turn-level controls SHALL be presented in the conversation header, beside the agent&#x27;s identity and run state. These are the controls that fold the conversation&#x27;s turns and stop a running turn.</p><p class="aw-rationale">Lower-frequency conversation actions — switching or starting a conversation, preparing a handoff, and opening agent details — SHALL remain in an overflow menu.</p></div><div class="aw-requirement aw-requirement-must" id="FR-42"><span class="aw-id">FR-42</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Conversation entries SHALL be laid out in a centred column bounded to the measure and gutters of the approved design mock, with the mock&#x27;s spacing between entries.</p></div><div class="aw-requirement aw-requirement-must" id="FR-43"><span class="aw-id">FR-43</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The work disclosure and the folded-turn control SHALL present the hover and pressed treatments required of every activatable element, and the work disclosure SHALL be drawn as a bounded surface rather than as an outline alone.</p></div><div class="aw-requirement aw-requirement-must" id="FR-44"><span class="aw-id">FR-44</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL return a failed run&#x27;s input to the queue however that run failed, SHALL count how many times a queued input has failed to be delivered, and SHALL stop retrying it before it can block an agent indefinitely.</p><p class="aw-rationale">When a run fails before it completes, the input it was carrying returns to the queue so nothing is lost. This SHALL hold for every abnormal ending, not only for those where the runtime never started. A runtime that dies once the turn is under way is the failure most likely to occur, and returning input only for the failures that happen earlier means the operator&#x27;s message is consumed, never retried, never given up on, and never reported — indistinguishable from never having been sent. A run the operator deliberately stopped SHALL NOT return its input. The operator stopped the turn knowing what it was carrying. A run failed because the runtime reported a different provider session than the one the conversation is bound to SHALL NOT return its input either. That failure is raised after the turn has run: the work was done and its output delivered, so the input was processed rather than lost, and handing it back would make the agent repeat a completed turn. Returning it would also defeat the check that raised it — repeated failure gives up the conversation&#x27;s provider session, so a later attempt would adopt the very session the check refused, and a runtime that reports the wrong session would overwrite the binding by being retried. A returned input keeps its place in the queue and its binding to the conversation it arrived on, and the queue is served in arrival order — so an input whose delivery kills the runtime is served again immediately, and every later input, including a request to start a fresh conversation, waits behind the one doing the killing. Nothing distinguishes an input returned five times from one that has never been tried. After repeated failure the system SHALL stop resuming the conversation&#x27;s existing provider session and start a new one, so that a provider session which cannot be resumed does not make the input undeliverable forever. After further failure the system SHALL stop attempting delivery, record why it gave up, and report it to the operator. Retrying without limit is indistinguishable from being stuck, and an agent that never accepts new input is worse than a message that was dropped loudly. An input the system has given up on SHALL still name the run that was carrying it, so the operator can find what happened to their message. An input that is still being retried SHALL remain bound to its conversation. An input belonging to no conversation cannot be scheduled at all, which would replace a visible wedge with a silent one. Returning an input to the queue SHALL cause the system to attempt its delivery again without requiring any further operator action. A limit on attempts protects nobody if nothing consumes the attempts; an input left queued until an unrelated request happens to drain it is retried by coincidence rather than by design. Where a run&#x27;s input has been returned, the system SHALL NOT report that run as having abandoned the work it was bound to. The work is about to be handed to another run, so nothing has been dropped. Where nothing else explains why an agent is not working, the wait SHALL be reported in terms of the failed attempts.</p></div><div class="aw-requirement aw-requirement-must" id="FR-45"><span class="aw-id">FR-45</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Input delivered to an agent after an earlier delivery failed SHALL say so, naming which attempt this is.</p><p class="aw-rationale">An agent handed the same instruction a second time has no way to tell that it is a second time. It may find its own half-finished work in the checkout and read it as someone else&#x27;s, or repeat work that is already done, or treat a partial state as the starting state. The system knows the attempt count and the agent does not, and the cost of that asymmetry is paid in wasted turns. What to do about half-finished work SHALL be left to the agent. It depends on what the work was, and a general instruction to check or to redo would be wrong often enough to be worse than the bare fact. Input on its first delivery SHALL carry no such note, so that the ordinary case is unchanged.</p></div><div class="aw-requirement aw-requirement-must" id="FR-46"><span class="aw-id">FR-46</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Operator input, agent text output, and peer traffic SHALL be rendered as Markdown — fenced code, emphasis, lists, links, and tables render as their formatted equivalents rather than as literal syntax characters. A single newline with no following blank line SHALL render as a line break within the same paragraph, not be collapsed into it.</p><p class="aw-rationale">The renderer MUST NOT interpret raw HTML found in entry content as markup. Content that is not valid or recognized Markdown SHALL render as plain text, visually equivalent to rendering it with no Markdown syntax present at all. This requirement covers message-level text only. Tool-call content (a tool&#x27;s input or output, and its summary label) is governed by the tool-call formatting requirement below and is unaffected by this one.</p></div><div class="aw-requirement aw-requirement-must" id="FR-47"><span class="aw-id">FR-47</span> <p><span class="aw-modal aw-modal-must">SHALL</span> A tool-call entry in the conversation timeline SHALL be presented with an icon and a label specific to the tool it names, drawn from a fixed mapping keyed on the tool&#x27;s recorded name. A tool name the mapping does not recognize SHALL fall back to a generic icon and label rather than rendering no icon or throwing.</p><p class="aw-rationale">Where a tool call&#x27;s recorded input can be parsed as carrying both a prior and a new value for the same content — the shape a file-editing tool call carries — its expanded view SHALL render that change as a diff, distinguishing added and removed content, rather than as two independent blocks of raw text. Where a tool call&#x27;s recorded input cannot be parsed this way, was truncated before being recorded, or does not carry both values, its expanded view SHALL render the existing raw input and output text unchanged. A diff MUST NOT be attempted against content known to have been truncated.</p></div></section><section><h2 id="acceptance">Acceptance criteria</h2><table><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>the operator submits input without a `conversation_id`</td><td>the server creates a conversation and its first queue entry atomically the response contains the new `conversation_id` whether its status is `running` or `queued` the response does not wait for a provider session ID</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>the operator submits another input with the returned `conversation_id` before provider binding completes</td><td>the new queue entry carries that `conversation_id` no second provider session is started for that conversation while its first run is active</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>runner output first reports a provider session ID for an unbound conversation</td><td>the run and conversation are bound to that provider session before the output is recorded the conversation retains its original `conversation_id`</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>runner output reports a provider session ID different from the conversation&#x27;s existing binding</td><td>the existing binding is not overwritten the run fails with a recorded binding-conflict event</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>a trigger supplies a conversation belonging to another project, another agent, or an archived conversation</td><td>the request is rejected no queue entry or run is created</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>a run completes, fails, is interrupted, or is stopped</td><td>the conversation remains open a retry creates another run carrying the same `conversation_id`</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>one agent has eligible queued entries for multiple conversations</td><td>the scheduler chooses the conversation of the oldest eligible entry the resulting run drains only entries for that conversation in arrival order up to the existing cap</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>the selected conversation history is requested</td><td>runs, output, peer traffic, delivered input, and still-queued input are selected by recorded `conversation_id` neither provider session matching nor timestamp proximity determines membership</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>existing session-based records are migrated</td><td>records with the same non-null project, agent, and provider session are attached to one conversation each unbound legacy run receives its own conversation ambiguous orphan records remain available to migration diagnostics rather than being guessed or deleted</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>AgentWeave starts, migrates, stops a run, archives a conversation, or reopens a project</td><td>conversation records and history are retained they are deleted only through the existing explicitly confirmed reset operation</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>the operator activates an agent in the navigation rail</td><td>that agent&#x27;s conversation is rendered as the whole content area no agent list, filter tab bar, or &quot;select an agent&quot; placeholder is present</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>the operator activates an agent in the project overview&#x27;s roster</td><td>that agent&#x27;s conversation opens directly, in the same state as if opened from the rail</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>an agent conversation is open</td><td>the agent&#x27;s name appears in exactly one header region no second header or status strip repeating it is present</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>the operator activates the project&#x27;s expander</td><td>the agent list collapses the active destination is unchanged</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>the operator activates the project&#x27;s name</td><td>the project overview opens</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>the rail lists a project&#x27;s agents</td><td>each entry shows that agent&#x27;s assigned colour together with its name in text the colour matches the one used for that agent in the conversation timeline</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>the operator activates an agent&#x27;s expander</td><td>that agent&#x27;s conversation list toggles the active destination is unchanged</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>the operator activates the back-to-project control from a conversation</td><td>the project overview opens no intermediate destination is passed through</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>the Hub is loaded</td><td>navigation offers no *Agents* destination and no *Messages* destination</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>the messages and agents endpoints are exercised by their existing tests</td><td>every test passes unmodified</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>the operator submits input to a running agent</td><td>the trigger endpoint is called on a queued outcome the input appears in the timeline in the undelivered state without a refresh</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>the operator submits a second input while the first is still queued</td><td>it is also queued it appears in arrival order after the first</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>the operator starts a new conversation and submits further input before the runner reports its provider session ID</td><td>the further input is associated with the same AgentWeave conversation it MUST NOT start a second provider session merely because the first session ID is not known yet</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>an agent&#x27;s status is running</td><td>neither the composer text input nor the submit control carries a disabled state attributable to that status</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>a submission is in flight</td><td>the submit control may be disabled until that submission settles it is enabled again afterwards</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>a submission fails</td><td>the typed text is restored into the composer the failure is reported in the banner region</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>input is queued</td><td>the timeline entry shown for it originates from the server&#x27;s recorded queue entry no locally synthesized entry is added</td></tr><tr><td><a href="#FR-7">FR-7</a></td><td></td><td>the composer is empty</td><td>its rendered height is at least 3 text rows</td></tr><tr><td><a href="#FR-7">FR-7</a></td><td></td><td>the operator enters content exceeding the maximum height</td><td>the composer stops growing the content scrolls within it</td></tr><tr><td><a href="#FR-8">FR-8</a></td><td></td><td>the operator types unsent text for one agent, navigates to another agent, and returns</td><td>the first agent&#x27;s text is present the second agent&#x27;s composer was empty</td></tr><tr><td><a href="#FR-8">FR-8</a></td><td></td><td>the page is reloaded with an unsent draft present</td><td>the draft is still present</td></tr><tr><td><a href="#FR-8">FR-8</a></td><td></td><td>one agent has unsent drafts in two different conversations</td><td>each conversation shows only its own draft</td></tr><tr><td><a href="#FR-8">FR-8</a></td><td></td><td>a draft is submitted successfully</td><td>the stored draft for that conversation is cleared no delayed persistence write restores the submitted text</td></tr><tr><td><a href="#FR-8">FR-8</a></td><td></td><td>persistent storage cannot be written</td><td>the composer still accepts and submits input only draft retention is lost</td></tr><tr><td><a href="#FR-9">FR-9</a></td><td></td><td>a conversation is open and the agent is idle</td><td>the composer exposes submit, the active-agent indicator, and context usage the header exposes fold-all when the conversation has more than one turn no provider-session selector, handoff button, or scroll toggle is exposed on the surface</td></tr><tr><td><a href="#FR-9">FR-9</a></td><td></td><td>the agent is running</td><td>a stop control is visible in the header beside the running-state indication no stop control is duplicated in the composer</td></tr><tr><td><a href="#FR-9">FR-9</a></td><td></td><td>the operator opens the overflow menu and moves through it using the keyboard</td><td>new conversation, conversation selection, handoff, and agent details are each reachable dismissing the menu returns focus to its trigger</td></tr><tr><td><a href="#FR-9">FR-9</a></td><td></td><td>an action such as handoff is unavailable for the current agent</td><td>the action remains in the overflow menu in a disabled state its reason is available to the operator</td></tr><tr><td><a href="#FR-9">FR-9</a></td><td></td><td>the operator activates agent details from the overflow menu</td><td>details for the current agent open without unmounting or navigating away from the closing the details returns focus to the invoking control</td></tr><tr><td><a href="#FR-10">FR-10</a></td><td></td><td>a conversation is continuing an existing session</td><td>its continuity state is readable as text on the resting surface</td></tr><tr><td><a href="#FR-10">FR-10</a></td><td></td><td>the operator selects a different AgentWeave conversation from navigation</td><td>the conversation switches to it with the same effect the removed selector had</td></tr><tr><td><a href="#FR-10">FR-10</a></td><td></td><td>the operator inspects the resting surface and navigation</td><td>no provider session ID is shown as a conversation label or selection value provider binding remains available in agent details or diagnostics</td></tr><tr><td><a href="#FR-10">FR-10</a></td><td></td><td>navigation lists an agent&#x27;s conversations</td><td>each is labelled by its title no conversation identifier is shown as a label</td></tr><tr><td><a href="#FR-11">FR-11</a></td><td></td><td>the conversation is scrolled to the bottom and new output arrives</td><td>the view stays pinned to the newest entry no scroll toggle control is present</td></tr><tr><td><a href="#FR-11">FR-11</a></td><td></td><td>the operator scrolls up and new output arrives</td><td>the viewport does not move</td></tr><tr><td><a href="#FR-11">FR-11</a></td><td></td><td>the operator scrolls back to the bottom</td><td>following of new output resumes</td></tr><tr><td><a href="#FR-12">FR-12</a></td><td></td><td>the last run failed and the event stream is disconnected</td><td>two banners are shown above the composer in a stable order each names its own condition</td></tr><tr><td><a href="#FR-12">FR-12</a></td><td></td><td>one condition clears</td><td>its banner is removed the remaining banner keeps its position</td></tr><tr><td><a href="#FR-13">FR-13</a></td><td></td><td>a context-usage event has been received for the displayed agent</td><td>the composer shows the usage indicator reflecting that event</td></tr><tr><td><a href="#FR-13">FR-13</a></td><td></td><td>no context-usage event has been received for the displayed agent</td><td>no usage indicator and no zero value is rendered</td></tr><tr><td><a href="#FR-14">FR-14</a></td><td></td><td>the existing conversation, timeline, handoff, and status suites are run against the reworked surface</td><td>every assertion about continuity, handoff, stop, withdraw, and deliver-now passes the only changes to those suites are to how the surface is mounted and queried</td></tr><tr><td><a href="#FR-14">FR-14</a></td><td></td><td>an undelivered entry or hop-budget-blocked chain is shown</td><td>the operator can still withdraw the undelivered entry or deliver the blocked chain now</td></tr><tr><td><a href="#FR-15">FR-15</a></td><td></td><td>the local instance has two registered projects</td><td>the adapter returns both projects with their agents the unchanged collection rail renders both</td></tr><tr><td><a href="#FR-15">FR-15</a></td><td></td><td>the operator inspects the project collection controls</td><td>distinct actions to open an existing directory and create a new directory are available</td></tr><tr><td><a href="#FR-15">FR-15</a></td><td></td><td>the operator switches projects while a request or agent run remains active in the first</td><td>the first project&#x27;s state continues under its identity none of it is rendered as belonging to the selected project</td></tr><tr><td><a href="#FR-16">FR-16</a></td><td></td><td>the operator reloads an agent conversation in one project</td><td>the same project, agent, and AgentWeave conversation are restored</td></tr><tr><td><a href="#FR-16">FR-16</a></td><td></td><td>the operator visits project A, then project B, then activates Back</td><td>project A and its prior destination are restored without changing credentials</td></tr><tr><td><a href="#FR-17">FR-17</a></td><td></td><td>the operator changes the model or an effort control in the composer</td><td>the next message runs under the chosen values the operator has not navigated away from the conversation</td></tr><tr><td><a href="#FR-17">FR-17</a></td><td></td><td>the operator changes the target agent to one on a different provider</td><td>the composer presents that provider&#x27;s models and controls</td></tr><tr><td><a href="#FR-17">FR-17</a></td><td></td><td>a conversation is open</td><td>the model and control values that the next message will use are visible without opening a</td></tr><tr><td><a href="#FR-18">FR-18</a></td><td></td><td>the operator sets a model for a conversation and sends several messages</td><td>every one of those turns runs under that model</td></tr><tr><td><a href="#FR-18">FR-18</a></td><td></td><td>the operator reloads the application and reopens the conversation</td><td>the conversation&#x27;s chosen model and controls are still in effect and still displayed</td></tr><tr><td><a href="#FR-18">FR-18</a></td><td></td><td>the operator starts a new conversation with an agent</td><td>it runs under that agent&#x27;s runner model and the catalog&#x27;s control defaults it does not inherit the previous conversation&#x27;s overrides</td></tr><tr><td><a href="#FR-18">FR-18</a></td><td></td><td>the operator changes the model for one conversation</td><td>the agent&#x27;s bound runner is unchanged the agent&#x27;s other conversations are unaffected</td></tr><tr><td><a href="#FR-19">FR-19</a></td><td></td><td>the operator sends a message with the current conversation selected</td><td>the message is delivered into that conversation</td></tr><tr><td><a href="#FR-19">FR-19</a></td><td></td><td>the operator selects a new conversation and sends a message</td><td>a new conversation is created for the target agent and the message is delivered into it the previous conversation is left intact</td></tr><tr><td><a href="#FR-19">FR-19</a></td><td></td><td>the composer is displayed</td><td>the conversation the next message will reach is identifiable without sending it</td></tr><tr><td><a href="#FR-20">FR-20</a></td><td></td><td>the Hub starts a run whose turn prompt spans several lines</td><td>the agent receives every line of that prompt</td></tr><tr><td><a href="#FR-20">FR-20</a></td><td></td><td>a queued input is marked delivered against a run</td><td>that input&#x27;s full content formed part of the prompt that run was started with</td></tr><tr><td><a href="#FR-21">FR-21</a></td><td></td><td>the operator is reading an expanded turn and submits a new message</td><td>that turn remains expanded when the new turn appears</td></tr><tr><td><a href="#FR-21">FR-21</a></td><td></td><td>a conversation contains a single turn</td><td>a control to fold that turn is available</td></tr><tr><td><a href="#FR-21">FR-21</a></td><td></td><td>the operator folds a turn and a new turn is then appended</td><td>the folded turn remains folded</td></tr><tr><td><a href="#FR-22">FR-22</a></td><td></td><td>an operator message is rendered in the conversation</td><td>its background and border derive from the neutral surface and border scales neither derives from the accent colour</td></tr><tr><td><a href="#FR-23">FR-23</a></td><td></td><td>the composer is displayed against the conversation background</td><td>no shadow or gradient draws a darker area around it its separation is carried by its border and surface colour</td></tr><tr><td><a href="#FR-24">FR-24</a></td><td></td><td>the operator opens a conversation that already has entries</td><td>the view is positioned at the newest entry</td></tr><tr><td><a href="#FR-24">FR-24</a></td><td></td><td>the operator switches from one conversation to another</td><td>the newly shown conversation is positioned at its newest entry following of new output is active</td></tr><tr><td><a href="#FR-25">FR-25</a></td><td></td><td>the view is at the bottom and a new entry is added to the conversation</td><td>the view moves to keep the newest entry visible</td></tr><tr><td><a href="#FR-26">FR-26</a></td><td></td><td>the view is following new output</td><td>no return-to-newest control is shown</td></tr><tr><td><a href="#FR-26">FR-26</a></td><td></td><td>following is suspended and the operator activates the return-to-newest control</td><td>the view moves to the newest entry following resumes</td></tr><tr><td><a href="#FR-27">FR-27</a></td><td></td><td>the operator activates an agent&#x27;s expander</td><td>that agent&#x27;s open conversations are listed beneath it, newest activity first the active destination is unchanged</td></tr><tr><td><a href="#FR-27">FR-27</a></td><td></td><td>the operator activates an agent&#x27;s name</td><td>that agent&#x27;s most recent conversation opens</td></tr><tr><td><a href="#FR-27">FR-27</a></td><td></td><td>the operator activates a conversation in navigation</td><td>that conversation opens in the content area the destination records the project, agent, and conversation</td></tr><tr><td><a href="#FR-27">FR-27</a></td><td></td><td>an agent has more conversations than the display limit</td><td>an expander states how many further conversations exist activating it lists them</td></tr><tr><td><a href="#FR-27">FR-27</a></td><td></td><td>a conversation was created because a peer agent addressed this agent</td><td>it appears in that agent&#x27;s conversation list its origin is distinguishable from a conversation the operator started</td></tr><tr><td><a href="#FR-28">FR-28</a></td><td></td><td>the operator loads the Hub having never chosen a view</td><td>navigation shows the agent tree</td></tr><tr><td><a href="#FR-28">FR-28</a></td><td></td><td>the operator switches to the recency view</td><td>conversations from every agent in the project are listed together, most recent activity first</td></tr><tr><td><a href="#FR-28">FR-28</a></td><td></td><td>the recency view is shown</td><td>each conversation carries its agent&#x27;s identity colour without requiring hover that colour is the same one the agent carries in the tree and the timeline</td></tr><tr><td><a href="#FR-28">FR-28</a></td><td></td><td>the recency view is shown</td><td>archived conversations are not listed among the open ones a control states how many archived conversations the project has activating it lists them</td></tr><tr><td><a href="#FR-28">FR-28</a></td><td></td><td>a project has more conversations than the recency view&#x27;s display limit</td><td>an expander states how many further conversations exist activating it lists them a control returns the list to its capped length</td></tr><tr><td><a href="#FR-28">FR-28</a></td><td></td><td>the operator switches view and reloads</td><td>the chosen view is still shown</td></tr><tr><td><a href="#FR-29">FR-29</a></td><td></td><td>a run in one conversation opens a question and blocks the operator is looking at a different conversation</td><td>navigation shows that conversation as waiting on the operator</td></tr><tr><td><a href="#FR-29">FR-29</a></td><td></td><td>one conversation is running and another is waiting on the operator</td><td>navigation presents the two states differently</td></tr><tr><td><a href="#FR-29">FR-29</a></td><td></td><td>the operator answers the outstanding question</td><td>navigation no longer shows that conversation as waiting</td></tr><tr><td><a href="#FR-29">FR-29</a></td><td></td><td>a run opens a permission request and blocks</td><td>navigation shows that conversation as waiting on the operator</td></tr><tr><td><a href="#FR-30">FR-30</a></td><td></td><td>the operator opens a conversation row&#x27;s menu</td><td>rename and archive are offered</td></tr><tr><td><a href="#FR-30">FR-30</a></td><td></td><td>the operator opens an agent row&#x27;s menu</td><td>new conversation, agent settings, and the archived listing are offered</td></tr><tr><td><a href="#FR-30">FR-30</a></td><td></td><td>the operator reaches a row&#x27;s menu control by keyboard and opens it</td><td>every action in the menu is reachable and activatable by keyboard dismissing the menu returns focus to its trigger</td></tr><tr><td><a href="#FR-30">FR-30</a></td><td></td><td>the operator opens agent settings from an agent row&#x27;s menu</td><td>the agent&#x27;s configuration destination opens no dialog is presented</td></tr><tr><td><a href="#FR-30">FR-30</a></td><td></td><td>the operator opens agent settings and then activates the back control</td><td>the agent&#x27;s most recent conversation opens its history is unchanged</td></tr><tr><td><a href="#FR-31">FR-31</a></td><td></td><td>the operator starts a conversation from an agent&#x27;s row menu</td><td>the new-conversation surface opens with that agent already selected no agent choice is required</td></tr><tr><td><a href="#FR-31">FR-31</a></td><td></td><td>the operator started from one agent&#x27;s row menu and then chooses a different agent</td><td>the surface retargets to the agent they chose the first message goes to that agent anything already typed is kept</td></tr><tr><td><a href="#FR-31">FR-31</a></td><td></td><td>the new-conversation surface opens bound to an agent</td><td>its leading question names that agent</td></tr><tr><td><a href="#FR-31">FR-31</a></td><td></td><td>the new-conversation surface opens with no agent bound</td><td>its leading question asks which agent should take the work choosing one changes the question to name that agent</td></tr><tr><td><a href="#FR-31">FR-31</a></td><td></td><td>the operator starts a conversation from the recency view</td><td>the new-conversation surface requires an agent to be chosen the message cannot be sent until one is</td></tr><tr><td><a href="#FR-31">FR-31</a></td><td></td><td>the operator opens the new-conversation surface and navigates away without sending</td><td>no conversation record exists navigation lists no additional conversation</td></tr><tr><td><a href="#FR-31">FR-31</a></td><td></td><td>the operator sends the first message from the new-conversation surface</td><td>a conversation is created, titled, and listed in navigation the destination moves to it</td></tr><tr><td><a href="#FR-32">FR-32</a></td><td></td><td>a conversation is open</td><td>a labelled handoff control is visible on its header</td></tr><tr><td><a href="#FR-32">FR-32</a></td><td></td><td>handoff is unavailable for the current agent or conversation</td><td>the control is present, disabled, with its reason stated</td></tr><tr><td><a href="#FR-33">FR-33</a></td><td></td><td>an agent sends a peer message from a conversation that has no binding to that recipient</td><td>a recipient conversation is created and bound to the sending conversation the queue entry carries that recipient conversation</td></tr><tr><td><a href="#FR-33">FR-33</a></td><td></td><td>the same sending conversation sends another message to the same recipient</td><td>the queue entry carries the previously bound recipient conversation no further recipient conversation is created</td></tr><tr><td><a href="#FR-33">FR-33</a></td><td></td><td>one agent sends peer messages to the same recipient from two different conversations</td><td>each is delivered to a different recipient conversation neither is selected by which conversation the recipient touched most recently</td></tr><tr><td><a href="#FR-33">FR-33</a></td><td></td><td>the recipient becomes active in a conversation unrelated to the binding the sender then sends another message from the bound sending conversation</td><td>delivery still reaches the bound recipient conversation</td></tr><tr><td><a href="#FR-34">FR-34</a></td><td></td><td>the Hub or the scheduler sends a message to an agent</td><td>it is delivered to the recipient conversation bound to that source later messages from that source reach the same conversation</td></tr><tr><td><a href="#FR-35">FR-35</a></td><td></td><td>a sender names a recipient conversation that is archived</td><td>the send is refused the refusal returns the message content</td></tr><tr><td><a href="#FR-35">FR-35</a></td><td></td><td>the binding resolves to a recipient conversation the operator archived</td><td>a successor recipient conversation is created with `origin: peer` the binding moves to that successor the message is delivered rather than refused</td></tr><tr><td><a href="#FR-36">FR-36</a></td><td></td><td>a conversation that sent peer messages before this contract sends another</td><td>a binding is established at that point previously delivered messages remain in the conversations that received them</td></tr><tr><td><a href="#FR-37">FR-37</a></td><td></td><td>the operator focuses the composer and types</td><td>the text begins at the composer surface&#x27;s leading edge, inset only by the surface&#x27;s own</td></tr><tr><td><a href="#FR-37">FR-37</a></td><td></td><td>the conversation is displayed at a narrow viewport</td><td>the text area&#x27;s width is the composer surface&#x27;s width less its padding no control reduces the width available to text</td></tr><tr><td><a href="#FR-37">FR-37</a></td><td></td><td>the composer is displayed</td><td>the agent target control and the send control are presented in a row beneath the text</td></tr><tr><td><a href="#FR-38">FR-38</a></td><td></td><td>a further per-turn control is added to the leading slot</td><td>the composer&#x27;s text area, autogrow behaviour, and send control are unchanged</td></tr><tr><td><a href="#FR-38">FR-38</a></td><td></td><td>the composer is presented as a column</td><td>draft persistence, autogrow within bounds, the trigger menu, submission on Enter, and</td></tr><tr><td><a href="#FR-39">FR-39</a></td><td></td><td>an agent conversation is open</td><td>the header carries no fill distinct from the ground plane and no dividing rule beneath it</td></tr><tr><td><a href="#FR-39">FR-39</a></td><td></td><td>an agent conversation is open</td><td>the region containing the composer carries no fill distinct from the ground plane and no</td></tr><tr><td><a href="#FR-39">FR-39</a></td><td></td><td>the operator scrolls the stream upward beneath the header</td><td>the header remains readable and the content passing behind it does not compete with it</td></tr><tr><td><a href="#FR-40">FR-40</a></td><td></td><td>an agent conversation is open</td><td>the composer is bounded by its own surface, outline, shadow, and content radius</td></tr><tr><td><a href="#FR-40">FR-40</a></td><td></td><td>the operator focuses the composer&#x27;s text area</td><td>the composer surface indicates focus</td></tr><tr><td><a href="#FR-40">FR-40</a></td><td></td><td>the conversation region is displayed</td><td>the header, banners, and continuity line are not drawn as lifted surfaces</td></tr><tr><td><a href="#FR-41">FR-41</a></td><td></td><td>a turn is running</td><td>a control to stop it is visible in the header beside the running-state indication reaching it requires no menu</td></tr><tr><td><a href="#FR-41">FR-41</a></td><td></td><td>a conversation has more than one turn</td><td>a control to fold its turns is visible in the header</td></tr><tr><td><a href="#FR-41">FR-41</a></td><td></td><td>the operator looks for conversation switching, handoff, or agent details</td><td>they are found in the overflow menu rather than on the surface</td></tr><tr><td><a href="#FR-42">FR-42</a></td><td></td><td>the conversation is displayed at a wide viewport</td><td>entries are centred within the mock&#x27;s bounded measure rather than filling the viewport the spacing between entries matches the mock</td></tr><tr><td><a href="#FR-43">FR-43</a></td><td></td><td>the operator hovers the work disclosure&#x27;s summary</td><td>it takes on a hover treatment its expanded and collapsed states are distinguishable at a glance</td></tr><tr><td><a href="#FR-43">FR-43</a></td><td></td><td>the operator hovers a folded turn</td><td>it takes on a hover treatment indicating it can be reopened</td></tr><tr><td><a href="#FR-44">FR-44</a></td><td></td><td>a run fails and its input returns to the queue</td><td>the input records that a delivery attempt failed</td></tr><tr><td><a href="#FR-44">FR-44</a></td><td></td><td>a run&#x27;s runtime ends abnormally after the turn has begun</td><td>the input it was carrying returns to the queue the attempt is counted</td></tr><tr><td><a href="#FR-44">FR-44</a></td><td></td><td>a run completes</td><td>its input is not returned to the queue</td></tr><tr><td><a href="#FR-44">FR-44</a></td><td></td><td>the operator stops a run</td><td>its input is not returned to the queue</td></tr><tr><td><a href="#FR-44">FR-44</a></td><td></td><td>a run fails because the runtime reported a different provider session than the one bound</td><td>its input is not returned to the queue the conversation&#x27;s binding is unchanged</td></tr><tr><td><a href="#FR-44">FR-44</a></td><td></td><td>an input has failed to be delivered twice</td><td>the next delivery starts a new provider session rather than resuming the old one</td></tr><tr><td><a href="#FR-44">FR-44</a></td><td></td><td>an input has failed to be delivered three times</td><td>it is no longer delivered the reason it was given up on is recorded the operator is told</td></tr><tr><td><a href="#FR-44">FR-44</a></td><td></td><td>an input the system has given up on was blocking the queue</td><td>a later input for the same agent is delivered</td></tr><tr><td><a href="#FR-44">FR-44</a></td><td></td><td>the system gives up on an input</td><td>the record still names the run it was last delivered to</td></tr><tr><td><a href="#FR-44">FR-44</a></td><td></td><td>a run fails and its input returns to the queue</td><td>the system attempts to deliver it again no operator action is required to make that happen</td></tr><tr><td><a href="#FR-44">FR-44</a></td><td></td><td>a run bound to a task fails and its input returns to the queue</td><td>the run is not reported as having left that task&#x27;s work behind</td></tr><tr><td><a href="#FR-44">FR-44</a></td><td></td><td>a run bound to a task fails and none of its input returns to the queue</td><td>the run is reported as having left that task&#x27;s work behind</td></tr><tr><td><a href="#FR-45">FR-45</a></td><td></td><td>input is delivered to an agent after one failed attempt</td><td>the delivered turn states that an earlier attempt did not finish it names which attempt this is</td></tr><tr><td><a href="#FR-45">FR-45</a></td><td></td><td>input is delivered to an agent for the first time</td><td>the delivered turn says nothing about earlier attempts</td></tr><tr><td><a href="#FR-45">FR-45</a></td><td></td><td>a turn carries both a retried input and one never tried before</td><td>only the retried one states that an earlier attempt did not finish</td></tr><tr><td><a href="#FR-46">FR-46</a></td><td></td><td>a conversation entry&#x27;s content contains Markdown syntax (a fenced code block, a bulleted</td><td>it is rendered as the corresponding formatted element no literal Markdown syntax character is visible in the rendered output</td></tr><tr><td><a href="#FR-46">FR-46</a></td><td></td><td>an entry&#x27;s content contains two lines separated by exactly one newline, with no blank</td><td>both lines are rendered with a visible break between them they are not collapsed into a single unbroken line</td></tr><tr><td><a href="#FR-46">FR-46</a></td><td></td><td>an entry&#x27;s content contains a literal HTML tag</td><td>the tag&#x27;s characters are rendered as visible text no corresponding DOM element is created from it</td></tr><tr><td><a href="#FR-46">FR-46</a></td><td></td><td>an entry&#x27;s content contains no Markdown syntax</td><td>its rendered appearance is unchanged from rendering it as plain text</td></tr><tr><td><a href="#FR-47">FR-47</a></td><td></td><td>a tool-call entry names a tool the mapping recognizes</td><td>it is rendered with that tool&#x27;s icon and label a different recognized tool in the same conversation renders with a different icon and</td></tr><tr><td><a href="#FR-47">FR-47</a></td><td></td><td>a tool-call entry names a tool the mapping does not recognize</td><td>it is rendered with the fallback icon and label rendering does not fail</td></tr><tr><td><a href="#FR-47">FR-47</a></td><td></td><td>a tool-call entry&#x27;s recorded input parses to an object carrying both a prior and a new</td><td>its expanded view renders the change as a diff added and removed content are visually distinguished from each other and from unchanged</td></tr><tr><td><a href="#FR-47">FR-47</a></td><td></td><td>a tool-call entry&#x27;s recorded input cannot be parsed as carrying both a prior and a new</td><td>its expanded view renders the existing raw input and output text no diff is attempted against it</td></tr></tbody></table></section><section><h2 id="evidence">Evidence and coverage limits</h2><h3>Checked</h3><ul><li>Translated from openspec/specs/agent-conversation-workspace/spec.md (47 requirements, 156 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten.</li></ul><h3 class="aw-limits">Limits</h3><ul><li>scenarios-state-no-starting-state: 156 of 156 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed</li></ul></section><section><h2 id="open-questions">Open questions</h2><p class="aw-empty">None outstanding.</p></section>
+<script type="application/agentweave-spec+json" id="aw-spec-payload">
+{
+  "schema_version": 1,
+  "kind": "capability",
+  "title": "Agent conversation workspace",
+  "summary": "The AgentWeave conversation is the primary workspace surface: navigation reaches an agent's conversation directly, the operator can keep talking to an agent while it is running, and the composer is a bounded, draft-persisting input with a minimal always-visible control set. Everything that is not a per-conversation control has left the composer. Navigation is a tree of project → agent → conversation, and it is where conversations are selected, started, and acted on; agent settings are reached from the agent's row; handoff and fold-all sit on the conversation header. The conversation-actions overflow menu is gone, and no menu on the conversation surface serves as a conversation switcher. AgentWeave owns a durable `conversation_id` that exists before any provider process starts and never changes across runs, retries, stops, or provider-session binding; the provider session is nullable continuation data beneath it, never the operator-facing identity. Conversations are labelled by title, never by identifier — the title, origin, rename and archival rules themselves belong to `conversation-lifecycle`.",
+  "problem": "",
+  "scope": {
+    "in_scope": [],
+    "non_goals": []
+  },
+  "requirements": [
+    {
+      "key": "agentweave-owns-the-durable-conversation-identity",
+      "statement": "The system SHALL allocate a stable `conversation_id` before starting a provider process. A conversation SHALL belong to exactly one project and one immutable target agent, SHALL remain the same across runs, retries, stops, failures, and provider-session binding, and SHALL treat provider session identity as nullable continuation data rather than as the conversation's identity.",
+      "modal": "SHALL",
+      "rationale": "Every newly created run, inbound queue entry, and recorded agent output SHALL carry its `conversation_id`. An outbound peer message SHALL carry its sender conversation, and its recipient queue entry SHALL carry the recipient conversation selected by the queue-routing contract.",
+      "party": null
+    },
+    {
+      "key": "an-agent-conversation-is-reached-directly-without-an-interme",
+      "statement": "Selecting an agent from the navigation rail or from the project overview's agent roster SHALL open that agent's conversation occupying the full content area.",
+      "modal": "SHALL",
+      "rationale": "There MUST NOT be an intermediate agent list, filter tab bar, or detail-panel selection step between choosing an agent and reading its conversation.",
+      "party": null
+    },
+    {
+      "key": "navigation-lists-the-project-and-its-agents-as-a-tree",
+      "statement": "Navigation SHALL present the current project as a named entry whose children are its agents, and each agent as an entry whose children are its conversations.",
+      "modal": "SHALL",
+      "rationale": "Activating the project's name SHALL navigate to the project overview. Activating its expander SHALL toggle the agent list without navigating. The two MUST be separately activatable. An agent entry SHALL follow the same rule: its name navigates, its expander toggles.",
+      "party": null
+    },
+    {
+      "key": "the-containing-project-is-reachable-from-a-conversation",
+      "statement": "From an open agent conversation, the containing project's overview SHALL be reachable in a single action.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "agents-and-messages-are-removed-as-navigation-destinations",
+      "statement": "Navigation MUST NOT offer an *Agents* destination or a *Messages* destination.",
+      "modal": "MUST",
+      "rationale": "Message records, the messages API, agent records, and the agents API MUST remain unchanged. They are still the source data for routing, attribution, and history, and peer traffic in both directions is already merged into the conversation timeline, so the destinations are redundant rather than the records.",
+      "party": null
+    },
+    {
+      "key": "the-composer-accepts-input-while-the-agent-is-running",
+      "statement": "WHEN the operator submits composer input while the agent is running, THE SYSTEM SHALL enqueue that input and SHALL display it in the conversation timeline in the undelivered state without requiring a manual refresh.",
+      "modal": "SHALL",
+      "rationale": "The composer's text input and its submit control MUST NOT be disabled on account of the agent's running state. They MAY be disabled only while a submission of their own is in flight. The interface MUST NOT branch on the agent's running state when deciding whether to submit. The trigger endpoint reports whether a turn started or the input was queued, and that report is the only source of truth for the outcome.",
+      "party": null
+    },
+    {
+      "key": "the-composer-grows-with-its-content-within-bounds",
+      "statement": "The composer SHALL present at least 3 text rows at rest, SHALL grow with its content to at least 12 rows, and SHALL scroll rather than grow beyond its maximum.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "unsent-composer-text-survives-navigation-and-reload",
+      "statement": "Unsent composer text SHALL be retained per project and AgentWeave conversation across navigation away and back and across a page reload, SHALL be cleared on successful submission, and MUST NOT be visible in or overwritten by another project, agent, or conversation.",
+      "modal": "MUST",
+      "rationale": "Where persistent storage is unavailable, the composer SHALL remain fully functional; only persistence is lost.",
+      "party": null
+    },
+    {
+      "key": "only-high-frequency-controls-remain-visible",
+      "statement": "The conversation header SHALL expose fold-all and, while the agent is running, stop beside the current turn's state. The resting composer SHALL expose only submit, the active-agent indicator, and context usage.",
+      "modal": "SHALL",
+      "rationale": "New conversation, conversation selection, durable handoff, and agent details SHALL be reachable from one overflow menu that is fully operable by keyboard. An action that is unavailable SHALL be presented disabled with its reason rather than omitted, so that the menu's contents do not shift between agents.",
+      "party": null
+    },
+    {
+      "key": "conversation-identity-is-readable-without-exposing-provider-",
+      "statement": "The provider-session selection control SHALL be removed from the conversation surface. The current AgentWeave conversation's continuity state SHALL remain visible as human-readable text, and conversation selection SHALL be performed from navigation. Normal navigation, URLs, history, and drafts MUST use `conversation_id`; provider session IDs MAY appear only in details or diagnostic surfaces.",
+      "modal": "SHALL",
+      "rationale": "A conversation SHALL be labelled by its title wherever it is listed or named. Its identifier MUST NOT be presented as its label.",
+      "party": null
+    },
+    {
+      "key": "autoscroll-follows-the-operator-s-scroll-position",
+      "statement": "The manual pause/resume-scroll control SHALL be removed. Following of new output SHALL be determined by scroll position: pinned while the operator is at the bottom, suspended once they scroll away, and resumed when they return to the bottom.",
+      "modal": "SHALL",
+      "rationale": "The scroll position already expresses the intent the removed control duplicated.",
+      "party": null
+    },
+    {
+      "key": "conditions-are-reported-in-a-banner-stack-above-the-composer",
+      "statement": "A banner region directly above the composer SHALL display run failure, stream loss, and blocked-queue conditions. Simultaneous conditions SHALL stack in a stable order, each stating its own condition.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "context-window-usage-is-shown-in-the-composer",
+      "statement": "The composer SHALL display the agent's context-window consumption using the existing indicator, derived from the most recent context-usage event reported for that agent.",
+      "modal": "SHALL",
+      "rationale": "Where no context-usage event has been received, the composer SHALL render no indicator rather than a zero value, because a zero would assert a measurement that was never taken.",
+      "party": null
+    },
+    {
+      "key": "existing-conversation-behaviour-is-preserved",
+      "statement": "Provider continuity, durable handoff, stop, withdraw, and deliver-now SHALL CONTINUE TO behave as specified after the stable-conversation migration, including successor-conversation handoff.",
+      "modal": "SHALL",
+      "rationale": "Queue semantics — hop budget, per-turn delivery cap, and delivery ordering — SHALL CONTINUE TO be unchanged by this change.",
+      "party": null
+    },
+    {
+      "key": "navigation-reads-from-the-registered-project-collection",
+      "statement": "Navigation SHALL read its project and agent tree from one adapter containing every registered project the local operator can reach. The operator SHALL be able to open an existing project directory, explicitly create a new one, and switch projects without changing credentials.",
+      "modal": "SHALL",
+      "rationale": "The adapter SHALL preserve project and agent live state for inactive projects. Project switching MUST NOT leak conversations, drafts, cached server state, or in-flight mutation results across project identifiers.",
+      "party": null
+    },
+    {
+      "key": "conversation-navigation-is-url-backed-and-project-scoped",
+      "statement": "Normal project, agent, and conversation navigation SHALL be represented in the browser URL using stable project and AgentWeave conversation identity. Reload and back/forward navigation SHALL restore the represented destination. Provider session identifiers MUST NOT be used as URL identity.",
+      "modal": "MUST",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "the-operator-sets-model-and-effort-from-the-conversation",
+      "statement": "The composer SHALL present the model and the runtime controls declared by the target agent's provider, and SHALL allow the operator to change them without leaving the conversation.",
+      "modal": "SHALL",
+      "rationale": "The controls presented SHALL be those the catalog declares for that provider. When the target agent changes to one on a different provider, the presented controls SHALL change with it.",
+      "party": null
+    },
+    {
+      "key": "a-conversation-remembers-its-runtime-overrides",
+      "statement": "A conversation SHALL retain the runtime overrides chosen for it. Subsequent turns in that conversation SHALL run under those overrides until the operator changes them.",
+      "modal": "SHALL",
+      "rationale": "Overrides SHALL be stored keyed by control identity, so that a newly declared control requires no change to how a conversation is stored. A new conversation SHALL begin with no overrides, inheriting the values from its agent's bound runner and the catalog's declared defaults.",
+      "party": null
+    },
+    {
+      "key": "a-message-is-routed-to-a-stated-conversation",
+      "statement": "The composer SHALL let the operator state whether a message continues the current conversation or begins a new one with the target agent.",
+      "modal": "SHALL",
+      "rationale": "The routing choice SHALL be visible before the message is sent.",
+      "party": null
+    },
+    {
+      "key": "a-delivered-turn-reaches-the-model-intact",
+      "statement": "Every queued input the Hub marks as delivered SHALL reach the agent's model in full. The Hub MUST NOT report an input as delivered when the mechanism used to start the run cannot carry it.",
+      "modal": "MUST",
+      "rationale": "Where a platform's process-launch path can alter, truncate, or reinterpret a run's arguments — for example a command interpreter that parses a command line before the target program receives it — the Hub SHALL use a launch path that preserves them exactly, including argument content that spans multiple lines.",
+      "party": null
+    },
+    {
+      "key": "a-turn-s-folded-state-is-set-by-the-operator-never-by-its-po",
+      "statement": "A turn SHALL render expanded unless the operator has folded it. Foldedness MUST NOT be derived from a turn's position in the conversation, and appending a new turn MUST NOT change the folded state of any existing turn.",
+      "modal": "MUST",
+      "rationale": "Every turn SHALL be foldable, including the most recent one. A turn the operator has folded SHALL stay folded, and a turn the operator has expanded SHALL stay expanded, as the conversation grows.",
+      "party": null
+    },
+    {
+      "key": "the-operator-s-own-messages-are-neutral-not-accented",
+      "statement": "An operator message SHALL be distinguished from an agent message by placement and by neutral surface treatment. It MUST NOT be tinted with the interface's chromatic accent colour, which is reserved for focus and selection state.",
+      "modal": "MUST",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "the-composer-is-separated-from-the-conversation-by-its-borde",
+      "statement": "The composer surface SHALL be distinguished from the page ground plane by its border and its own surface colour. It MUST NOT be surrounded by a shadow, gradient, or fill that reads as a second, darker region enclosing it.",
+      "modal": "MUST",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "a-conversation-opens-at-its-most-recent-activity",
+      "statement": "Opening or switching to a conversation SHALL place the view at its newest entry, and SHALL resume following new output.",
+      "modal": "SHALL",
+      "rationale": "The most recent activity is what an operator opening a conversation is looking for; landing on the oldest entry of a long history buries it.",
+      "party": null
+    },
+    {
+      "key": "following-tracks-the-entries-the-conversation-renders",
+      "statement": "Whether the view follows new output SHALL be determined by the conversation entries actually displayed, not by any other stream.",
+      "modal": "SHALL",
+      "rationale": "Following that observes a different source than the one being rendered will either fail to move when content arrives or move when nothing visible has changed.",
+      "party": null
+    },
+    {
+      "key": "a-suspended-conversation-offers-a-way-back-to-the-newest-ent",
+      "statement": "While following is suspended, the conversation SHALL offer a control that returns the view to the newest entry and resumes following.",
+      "modal": "SHALL",
+      "rationale": "That control SHALL appear only while following is suspended. It is not a toggle: it expresses \"return me to the newest entry\", and following remains governed by scroll position.",
+      "party": null
+    },
+    {
+      "key": "an-agent-s-conversations-are-listed-beneath-it-in-navigation",
+      "statement": "Navigation SHALL list an agent's open conversations as that agent's children, ordered by most recent activity first, each labelled by its title.",
+      "modal": "SHALL",
+      "rationale": "Activating the agent's expander SHALL toggle its conversation list without navigating. Activating the agent's name SHALL open that agent's most recent conversation, matching the behaviour that existed before conversations were listed. The two MUST be separately activatable, as they already are for the project entry. Beyond a fixed number of conversations, the remainder SHALL be reachable through an explicit expander that states how many are hidden, rather than being omitted silently or scrolling unbounded.",
+      "party": null
+    },
+    {
+      "key": "navigation-offers-a-recency-view-across-agents",
+      "statement": "Navigation SHALL offer a view listing the project's conversations across all of its agents, ordered by most recent activity first, as an alternative to the agent tree. The agent tree SHALL be the default, and the chosen view SHALL persist across reloads.",
+      "modal": "SHALL",
+      "rationale": "In the recency view each conversation SHALL carry its agent's assigned identity colour as a persistent leading edge, so the owning agent is readable without hovering or opening the conversation. The colour MUST match the one used for that agent in the tree and in the conversation timeline. Archived conversations SHALL be excluded from the recency list, and SHALL be reachable from it through an explicit control stating how many exist — the same affordance the tree offers per agent, offered here across the project. Hiding them without saying they are there reads as data loss to an operator who archives often. Beyond a fixed number of conversations, the recency list SHALL place the remainder behind an explicit expander that states how many are hidden, and SHALL offer a way back to the capped list once expanded. The limit applies per project, since this view has no agent to apply it per.",
+      "party": null
+    },
+    {
+      "key": "a-conversation-s-attention-state-is-visible-in-navigation",
+      "statement": "Navigation SHALL show, for each listed conversation, whether it is running, waiting on the operator, or idle. A conversation is waiting on the operator when it holds an unanswered question, an undecided permission request, or an undismissed unasked-question flag.",
+      "modal": "SHALL",
+      "rationale": "The waiting state MUST be distinguishable from the running state, because a waiting run consumes its configured timeout while the operator is unaware of it.",
+      "party": null
+    },
+    {
+      "key": "navigation-rows-expose-their-actions-through-a-visible-menu",
+      "statement": "Every agent row and every conversation row in navigation SHALL expose its actions through a menu opened from a control on the row itself. That control MUST be reachable by keyboard and MUST NOT require a pointer gesture that has no visible affordance.",
+      "modal": "MUST",
+      "rationale": "A conversation row's menu SHALL offer rename and archive. An agent row's menu SHALL offer new conversation, agent settings, and the archived-conversation listing. Agent settings SHALL open as the agent's configuration destination. This replaces the previous rule that settings open \"without unmounting or navigating away from the conversation that is currently open\". That rule was written when settings were a dialog the rail hosted, and its purpose was to stop the conversation being destroyed by opening settings — a real hazard when the only alternative on offer was a panel inside the conversation surface. A destination does not carry that hazard, and it answers what the dialog could not. Configuration outgrew a modal; it now has sections, and it must be linkable, survive a reload, and be somewhere the operator can be *sent*. None of that is expressible as a dialog. The conversation is not lost by navigating to configuration any more than it is lost by navigating to the project overview: it is a durable record, and the destination carries a fixed way back to it.",
+      "party": null
+    },
+    {
+      "key": "starting-a-conversation-is-a-navigation-action-with-a-dedica",
+      "statement": "Starting a new conversation SHALL be initiated from navigation and SHALL open a surface whose composer is the primary element, rather than an empty transcript.",
+      "modal": "SHALL",
+      "rationale": "A conversation started from an agent's row SHALL open with that agent already selected. That selection is a default and not a binding: the surface SHALL let the operator retarget the unsent message to any other agent in the project, and the message SHALL then go to the agent they chose. A conversation started from the recency view, where no agent is implied, SHALL require the operator to choose the agent on that surface before the first message can be sent. The surface SHALL lead with a prominent question naming the bound agent. Where no agent is bound that question SHALL instead ask which agent should take the work, so the line states what has to happen next rather than sitting above a separate instruction. No conversation record SHALL be created until the first message is sent, so an abandoned start leaves nothing behind.",
+      "party": null
+    },
+    {
+      "key": "durable-handoff-has-a-persistent-place-on-the-conversation",
+      "statement": "The durable handoff control SHALL be present on the open conversation's own header, labelled, and visible at rest. It MUST NOT be placed behind a menu, and it MUST NOT be a row action in navigation.",
+      "modal": "MUST",
+      "rationale": "When the control is unavailable, it SHALL be presented disabled with its reason rather than omitted, so its position does not change between agents.",
+      "party": null
+    },
+    {
+      "key": "the-queue-routing-contract-binds-peer-delivery-to-the-sender",
+      "statement": "A peer message that names no recipient conversation SHALL be delivered to the recipient conversation bound to the sending conversation, creating that binding on first use.",
+      "modal": "SHALL",
+      "rationale": "This capability already requires that *\"an outbound peer message SHALL carry its sender conversation, and its recipient queue entry SHALL carry the recipient conversation selected by the queue-routing contract\"*, but the queue-routing contract is defined nowhere. This requirement defines it. The binding is keyed on the sending conversation and the recipient agent. It is durable: every later message from the same sending conversation to the same recipient reaches the same recipient conversation. Delivery MUST NOT be selected by recency. Omitting a recipient conversation is the ordinary path, because a sender does not hold the recipient's conversation identifiers, so a recency rule governs almost all peer traffic rather than an exceptional case. Observed consequence: three messages of one exchange between two agents were delivered into three unrelated conversations of the recipient, one of them titled for an unrelated file-creation task. A recipient conversation created by this contract carries `origin: peer`.",
+      "party": null
+    },
+    {
+      "key": "traffic-with-no-sending-conversation-binds-to-its-sender-ide",
+      "statement": "A message originating from a source that has no conversation SHALL be delivered to a recipient conversation bound to that source's identity.",
+      "modal": "SHALL",
+      "rationale": "Hub-originated and scheduler-originated messages have no sending conversation, so the binding above has no key. Binding them to the sender's identity gives one durable thread per source and recipient, and leaves no path on which recency routing survives.",
+      "party": null
+    },
+    {
+      "key": "an-archived-thread-is-handled-according-to-who-selected-it",
+      "statement": "Delivery to an archived recipient conversation SHALL be refused when the sender named it, and SHALL continue into a successor when the binding resolved it.",
+      "modal": "SHALL",
+      "rationale": "An agent that explicitly names an archived conversation has made an error it can correct, and is already refused with its content returned so it need not reconstruct the message. An agent whose message was routed to a thread the operator archived made no such choice, and refusing it would penalise the sender for an operator action.",
+      "party": null
+    },
+    {
+      "key": "existing-conversations-bind-on-next-use-rather-than-by-backf",
+      "statement": "Peer bindings SHALL be established when a conversation next sends, and historical traffic SHALL NOT be reassigned.",
+      "modal": "SHALL",
+      "rationale": "Traffic delivered under recency routing is already distributed across unrelated conversations, so reconstructing which recipient conversation a past message \"belonged\" to would be a guess. Leaving it in place keeps the record honest.",
+      "party": null
+    },
+    {
+      "key": "composed-text-begins-at-the-composer-s-leading-edge",
+      "statement": "The composer SHALL present its text area on its own row, occupying the full width of the composer surface. No control SHALL precede the text area on that row.",
+      "modal": "SHALL",
+      "rationale": "Controls belonging to the composer SHALL occupy a control row beneath the text area.",
+      "party": null
+    },
+    {
+      "key": "the-composer-control-row-is-an-extensible-pair-of-slots",
+      "statement": "The composer's control row SHALL be composed of a leading slot and a trailing slot. The trailing slot SHALL hold the send control. The leading slot SHALL hold target and per-turn controls.",
+      "modal": "SHALL",
+      "rationale": "Adding a control to either slot MUST NOT require changing the composer's layout.",
+      "party": null
+    },
+    {
+      "key": "the-conversation-is-a-single-plane-not-stacked-boxes",
+      "statement": "The conversation SHALL read as one continuous surface. Its header and the region containing its composer MUST NOT be drawn as filled bands closed by dividing rules.",
+      "modal": "MUST",
+      "rationale": "The header SHALL sit on the same ground plane as the stream, separating itself from scrolled content by translucency rather than by a fill and a border. The transition from the stream to the composer region SHALL be a fade to the ground plane rather than a drawn edge.",
+      "party": null
+    },
+    {
+      "key": "the-composer-is-the-conversation-s-only-lifted-surface",
+      "statement": "The composer SHALL be presented as a surface lifted above the ground plane: its own fill, its own outline, a soft shadow, and the application's content radius. It SHALL indicate focus by treating the whole surface, not only its text area.",
+      "modal": "SHALL",
+      "rationale": "No other element of the conversation region SHALL be lifted in the same way.",
+      "party": null
+    },
+    {
+      "key": "turn-level-controls-sit-with-the-turn-s-state",
+      "statement": "Turn-level controls SHALL be presented in the conversation header, beside the agent's identity and run state. These are the controls that fold the conversation's turns and stop a running turn.",
+      "modal": "SHALL",
+      "rationale": "Lower-frequency conversation actions — switching or starting a conversation, preparing a handoff, and opening agent details — SHALL remain in an overflow menu.",
+      "party": null
+    },
+    {
+      "key": "the-stream-is-bounded-to-the-reference-measure",
+      "statement": "Conversation entries SHALL be laid out in a centred column bounded to the measure and gutters of the approved design mock, with the mock's spacing between entries.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "conversation-disclosures-respond-to-the-pointer",
+      "statement": "The work disclosure and the folded-turn control SHALL present the hover and pressed treatments required of every activatable element, and the work disclosure SHALL be drawn as a bounded surface rather than as an outline alone.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "repeated-delivery-failure-does-not-wedge-an-agent",
+      "statement": "The system SHALL return a failed run's input to the queue however that run failed, SHALL count how many times a queued input has failed to be delivered, and SHALL stop retrying it before it can block an agent indefinitely.",
+      "modal": "SHALL",
+      "rationale": "When a run fails before it completes, the input it was carrying returns to the queue so nothing is lost. This SHALL hold for every abnormal ending, not only for those where the runtime never started. A runtime that dies once the turn is under way is the failure most likely to occur, and returning input only for the failures that happen earlier means the operator's message is consumed, never retried, never given up on, and never reported — indistinguishable from never having been sent. A run the operator deliberately stopped SHALL NOT return its input. The operator stopped the turn knowing what it was carrying. A run failed because the runtime reported a different provider session than the one the conversation is bound to SHALL NOT return its input either. That failure is raised after the turn has run: the work was done and its output delivered, so the input was processed rather than lost, and handing it back would make the agent repeat a completed turn. Returning it would also defeat the check that raised it — repeated failure gives up the conversation's provider session, so a later attempt would adopt the very session the check refused, and a runtime that reports the wrong session would overwrite the binding by being retried. A returned input keeps its place in the queue and its binding to the conversation it arrived on, and the queue is served in arrival order — so an input whose delivery kills the runtime is served again immediately, and every later input, including a request to start a fresh conversation, waits behind the one doing the killing. Nothing distinguishes an input returned five times from one that has never been tried. After repeated failure the system SHALL stop resuming the conversation's existing provider session and start a new one, so that a provider session which cannot be resumed does not make the input undeliverable forever. After further failure the system SHALL stop attempting delivery, record why it gave up, and report it to the operator. Retrying without limit is indistinguishable from being stuck, and an agent that never accepts new input is worse than a message that was dropped loudly. An input the system has given up on SHALL still name the run that was carrying it, so the operator can find what happened to their message. An input that is still being retried SHALL remain bound to its conversation. An input belonging to no conversation cannot be scheduled at all, which would replace a visible wedge with a silent one. Returning an input to the queue SHALL cause the system to attempt its delivery again without requiring any further operator action. A limit on attempts protects nobody if nothing consumes the attempts; an input left queued until an unrelated request happens to drain it is retried by coincidence rather than by design. Where a run's input has been returned, the system SHALL NOT report that run as having abandoned the work it was bound to. The work is about to be handed to another run, so nothing has been dropped. Where nothing else explains why an agent is not working, the wait SHALL be reported in terms of the failed attempts.",
+      "party": null
+    },
+    {
+      "key": "a-re-delivered-turn-says-the-earlier-attempt-was-cut-off",
+      "statement": "Input delivered to an agent after an earlier delivery failed SHALL say so, naming which attempt this is.",
+      "modal": "SHALL",
+      "rationale": "An agent handed the same instruction a second time has no way to tell that it is a second time. It may find its own half-finished work in the checkout and read it as someone else's, or repeat work that is already done, or treat a partial state as the starting state. The system knows the attempt count and the agent does not, and the cost of that asymmetry is paid in wasted turns. What to do about half-finished work SHALL be left to the agent. It depends on what the work was, and a general instruction to check or to redo would be wrong often enough to be worse than the bare fact. Input on its first delivery SHALL carry no such note, so that the ordinary case is unchanged.",
+      "party": null
+    },
+    {
+      "key": "message-level-conversation-entries-render-markdown-safely",
+      "statement": "Operator input, agent text output, and peer traffic SHALL be rendered as Markdown — fenced code, emphasis, lists, links, and tables render as their formatted equivalents rather than as literal syntax characters. A single newline with no following blank line SHALL render as a line break within the same paragraph, not be collapsed into it.",
+      "modal": "SHALL",
+      "rationale": "The renderer MUST NOT interpret raw HTML found in entry content as markup. Content that is not valid or recognized Markdown SHALL render as plain text, visually equivalent to rendering it with no Markdown syntax present at all. This requirement covers message-level text only. Tool-call content (a tool's input or output, and its summary label) is governed by the tool-call formatting requirement below and is unaffected by this one.",
+      "party": null
+    },
+    {
+      "key": "a-tool-call-is-formatted-by-what-kind-of-tool-it-was",
+      "statement": "A tool-call entry in the conversation timeline SHALL be presented with an icon and a label specific to the tool it names, drawn from a fixed mapping keyed on the tool's recorded name. A tool name the mapping does not recognize SHALL fall back to a generic icon and label rather than rendering no icon or throwing.",
+      "modal": "SHALL",
+      "rationale": "Where a tool call's recorded input can be parsed as carrying both a prior and a new value for the same content — the shape a file-editing tool call carries — its expanded view SHALL render that change as a diff, distinguishing added and removed content, rather than as two independent blocks of raw text. Where a tool call's recorded input cannot be parsed this way, was truncated before being recorded, or does not carry both values, its expanded view SHALL render the existing raw input and output text unchanged. A diff MUST NOT be attempted against content known to have been truncated.",
+      "party": null
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "key": "ac1",
+      "requirement": "agentweave-owns-the-durable-conversation-identity",
+      "given": "",
+      "when": "the operator submits input without a `conversation_id`",
+      "then": "the server creates a conversation and its first queue entry atomically the response contains the new `conversation_id` whether its status is `running` or `queued` the response does not wait for a provider session ID"
+    },
+    {
+      "key": "ac2",
+      "requirement": "agentweave-owns-the-durable-conversation-identity",
+      "given": "",
+      "when": "the operator submits another input with the returned `conversation_id` before provider binding completes",
+      "then": "the new queue entry carries that `conversation_id` no second provider session is started for that conversation while its first run is active"
+    },
+    {
+      "key": "ac3",
+      "requirement": "agentweave-owns-the-durable-conversation-identity",
+      "given": "",
+      "when": "runner output first reports a provider session ID for an unbound conversation",
+      "then": "the run and conversation are bound to that provider session before the output is recorded the conversation retains its original `conversation_id`"
+    },
+    {
+      "key": "ac4",
+      "requirement": "agentweave-owns-the-durable-conversation-identity",
+      "given": "",
+      "when": "runner output reports a provider session ID different from the conversation's existing binding",
+      "then": "the existing binding is not overwritten the run fails with a recorded binding-conflict event"
+    },
+    {
+      "key": "ac5",
+      "requirement": "agentweave-owns-the-durable-conversation-identity",
+      "given": "",
+      "when": "a trigger supplies a conversation belonging to another project, another agent, or an archived conversation",
+      "then": "the request is rejected no queue entry or run is created"
+    },
+    {
+      "key": "ac6",
+      "requirement": "agentweave-owns-the-durable-conversation-identity",
+      "given": "",
+      "when": "a run completes, fails, is interrupted, or is stopped",
+      "then": "the conversation remains open a retry creates another run carrying the same `conversation_id`"
+    },
+    {
+      "key": "ac7",
+      "requirement": "agentweave-owns-the-durable-conversation-identity",
+      "given": "",
+      "when": "one agent has eligible queued entries for multiple conversations",
+      "then": "the scheduler chooses the conversation of the oldest eligible entry the resulting run drains only entries for that conversation in arrival order up to the existing cap"
+    },
+    {
+      "key": "ac8",
+      "requirement": "agentweave-owns-the-durable-conversation-identity",
+      "given": "",
+      "when": "the selected conversation history is requested",
+      "then": "runs, output, peer traffic, delivered input, and still-queued input are selected by recorded `conversation_id` neither provider session matching nor timestamp proximity determines membership"
+    },
+    {
+      "key": "ac9",
+      "requirement": "agentweave-owns-the-durable-conversation-identity",
+      "given": "",
+      "when": "existing session-based records are migrated",
+      "then": "records with the same non-null project, agent, and provider session are attached to one conversation each unbound legacy run receives its own conversation ambiguous orphan records remain available to migration diagnostics rather than being guessed or deleted"
+    },
+    {
+      "key": "ac10",
+      "requirement": "agentweave-owns-the-durable-conversation-identity",
+      "given": "",
+      "when": "AgentWeave starts, migrates, stops a run, archives a conversation, or reopens a project",
+      "then": "conversation records and history are retained they are deleted only through the existing explicitly confirmed reset operation"
+    },
+    {
+      "key": "ac11",
+      "requirement": "an-agent-conversation-is-reached-directly-without-an-interme",
+      "given": "",
+      "when": "the operator activates an agent in the navigation rail",
+      "then": "that agent's conversation is rendered as the whole content area no agent list, filter tab bar, or \"select an agent\" placeholder is present"
+    },
+    {
+      "key": "ac12",
+      "requirement": "an-agent-conversation-is-reached-directly-without-an-interme",
+      "given": "",
+      "when": "the operator activates an agent in the project overview's roster",
+      "then": "that agent's conversation opens directly, in the same state as if opened from the rail"
+    },
+    {
+      "key": "ac13",
+      "requirement": "an-agent-conversation-is-reached-directly-without-an-interme",
+      "given": "",
+      "when": "an agent conversation is open",
+      "then": "the agent's name appears in exactly one header region no second header or status strip repeating it is present"
+    },
+    {
+      "key": "ac14",
+      "requirement": "navigation-lists-the-project-and-its-agents-as-a-tree",
+      "given": "",
+      "when": "the operator activates the project's expander",
+      "then": "the agent list collapses the active destination is unchanged"
+    },
+    {
+      "key": "ac15",
+      "requirement": "navigation-lists-the-project-and-its-agents-as-a-tree",
+      "given": "",
+      "when": "the operator activates the project's name",
+      "then": "the project overview opens"
+    },
+    {
+      "key": "ac16",
+      "requirement": "navigation-lists-the-project-and-its-agents-as-a-tree",
+      "given": "",
+      "when": "the rail lists a project's agents",
+      "then": "each entry shows that agent's assigned colour together with its name in text the colour matches the one used for that agent in the conversation timeline"
+    },
+    {
+      "key": "ac17",
+      "requirement": "navigation-lists-the-project-and-its-agents-as-a-tree",
+      "given": "",
+      "when": "the operator activates an agent's expander",
+      "then": "that agent's conversation list toggles the active destination is unchanged"
+    },
+    {
+      "key": "ac18",
+      "requirement": "the-containing-project-is-reachable-from-a-conversation",
+      "given": "",
+      "when": "the operator activates the back-to-project control from a conversation",
+      "then": "the project overview opens no intermediate destination is passed through"
+    },
+    {
+      "key": "ac19",
+      "requirement": "agents-and-messages-are-removed-as-navigation-destinations",
+      "given": "",
+      "when": "the Hub is loaded",
+      "then": "navigation offers no *Agents* destination and no *Messages* destination"
+    },
+    {
+      "key": "ac20",
+      "requirement": "agents-and-messages-are-removed-as-navigation-destinations",
+      "given": "",
+      "when": "the messages and agents endpoints are exercised by their existing tests",
+      "then": "every test passes unmodified"
+    },
+    {
+      "key": "ac21",
+      "requirement": "the-composer-accepts-input-while-the-agent-is-running",
+      "given": "",
+      "when": "the operator submits input to a running agent",
+      "then": "the trigger endpoint is called on a queued outcome the input appears in the timeline in the undelivered state without a refresh"
+    },
+    {
+      "key": "ac22",
+      "requirement": "the-composer-accepts-input-while-the-agent-is-running",
+      "given": "",
+      "when": "the operator submits a second input while the first is still queued",
+      "then": "it is also queued it appears in arrival order after the first"
+    },
+    {
+      "key": "ac23",
+      "requirement": "the-composer-accepts-input-while-the-agent-is-running",
+      "given": "",
+      "when": "the operator starts a new conversation and submits further input before the runner reports its provider session ID",
+      "then": "the further input is associated with the same AgentWeave conversation it MUST NOT start a second provider session merely because the first session ID is not known yet"
+    },
+    {
+      "key": "ac24",
+      "requirement": "the-composer-accepts-input-while-the-agent-is-running",
+      "given": "",
+      "when": "an agent's status is running",
+      "then": "neither the composer text input nor the submit control carries a disabled state attributable to that status"
+    },
+    {
+      "key": "ac25",
+      "requirement": "the-composer-accepts-input-while-the-agent-is-running",
+      "given": "",
+      "when": "a submission is in flight",
+      "then": "the submit control may be disabled until that submission settles it is enabled again afterwards"
+    },
+    {
+      "key": "ac26",
+      "requirement": "the-composer-accepts-input-while-the-agent-is-running",
+      "given": "",
+      "when": "a submission fails",
+      "then": "the typed text is restored into the composer the failure is reported in the banner region"
+    },
+    {
+      "key": "ac27",
+      "requirement": "the-composer-accepts-input-while-the-agent-is-running",
+      "given": "",
+      "when": "input is queued",
+      "then": "the timeline entry shown for it originates from the server's recorded queue entry no locally synthesized entry is added"
+    },
+    {
+      "key": "ac28",
+      "requirement": "the-composer-grows-with-its-content-within-bounds",
+      "given": "",
+      "when": "the composer is empty",
+      "then": "its rendered height is at least 3 text rows"
+    },
+    {
+      "key": "ac29",
+      "requirement": "the-composer-grows-with-its-content-within-bounds",
+      "given": "",
+      "when": "the operator enters content exceeding the maximum height",
+      "then": "the composer stops growing the content scrolls within it"
+    },
+    {
+      "key": "ac30",
+      "requirement": "unsent-composer-text-survives-navigation-and-reload",
+      "given": "",
+      "when": "the operator types unsent text for one agent, navigates to another agent, and returns",
+      "then": "the first agent's text is present the second agent's composer was empty"
+    },
+    {
+      "key": "ac31",
+      "requirement": "unsent-composer-text-survives-navigation-and-reload",
+      "given": "",
+      "when": "the page is reloaded with an unsent draft present",
+      "then": "the draft is still present"
+    },
+    {
+      "key": "ac32",
+      "requirement": "unsent-composer-text-survives-navigation-and-reload",
+      "given": "",
+      "when": "one agent has unsent drafts in two different conversations",
+      "then": "each conversation shows only its own draft"
+    },
+    {
+      "key": "ac33",
+      "requirement": "unsent-composer-text-survives-navigation-and-reload",
+      "given": "",
+      "when": "a draft is submitted successfully",
+      "then": "the stored draft for that conversation is cleared no delayed persistence write restores the submitted text"
+    },
+    {
+      "key": "ac34",
+      "requirement": "unsent-composer-text-survives-navigation-and-reload",
+      "given": "",
+      "when": "persistent storage cannot be written",
+      "then": "the composer still accepts and submits input only draft retention is lost"
+    },
+    {
+      "key": "ac35",
+      "requirement": "only-high-frequency-controls-remain-visible",
+      "given": "",
+      "when": "a conversation is open and the agent is idle",
+      "then": "the composer exposes submit, the active-agent indicator, and context usage the header exposes fold-all when the conversation has more than one turn no provider-session selector, handoff button, or scroll toggle is exposed on the surface"
+    },
+    {
+      "key": "ac36",
+      "requirement": "only-high-frequency-controls-remain-visible",
+      "given": "",
+      "when": "the agent is running",
+      "then": "a stop control is visible in the header beside the running-state indication no stop control is duplicated in the composer"
+    },
+    {
+      "key": "ac37",
+      "requirement": "only-high-frequency-controls-remain-visible",
+      "given": "",
+      "when": "the operator opens the overflow menu and moves through it using the keyboard",
+      "then": "new conversation, conversation selection, handoff, and agent details are each reachable dismissing the menu returns focus to its trigger"
+    },
+    {
+      "key": "ac38",
+      "requirement": "only-high-frequency-controls-remain-visible",
+      "given": "",
+      "when": "an action such as handoff is unavailable for the current agent",
+      "then": "the action remains in the overflow menu in a disabled state its reason is available to the operator"
+    },
+    {
+      "key": "ac39",
+      "requirement": "only-high-frequency-controls-remain-visible",
+      "given": "",
+      "when": "the operator activates agent details from the overflow menu",
+      "then": "details for the current agent open without unmounting or navigating away from the closing the details returns focus to the invoking control"
+    },
+    {
+      "key": "ac40",
+      "requirement": "conversation-identity-is-readable-without-exposing-provider-",
+      "given": "",
+      "when": "a conversation is continuing an existing session",
+      "then": "its continuity state is readable as text on the resting surface"
+    },
+    {
+      "key": "ac41",
+      "requirement": "conversation-identity-is-readable-without-exposing-provider-",
+      "given": "",
+      "when": "the operator selects a different AgentWeave conversation from navigation",
+      "then": "the conversation switches to it with the same effect the removed selector had"
+    },
+    {
+      "key": "ac42",
+      "requirement": "conversation-identity-is-readable-without-exposing-provider-",
+      "given": "",
+      "when": "the operator inspects the resting surface and navigation",
+      "then": "no provider session ID is shown as a conversation label or selection value provider binding remains available in agent details or diagnostics"
+    },
+    {
+      "key": "ac43",
+      "requirement": "conversation-identity-is-readable-without-exposing-provider-",
+      "given": "",
+      "when": "navigation lists an agent's conversations",
+      "then": "each is labelled by its title no conversation identifier is shown as a label"
+    },
+    {
+      "key": "ac44",
+      "requirement": "autoscroll-follows-the-operator-s-scroll-position",
+      "given": "",
+      "when": "the conversation is scrolled to the bottom and new output arrives",
+      "then": "the view stays pinned to the newest entry no scroll toggle control is present"
+    },
+    {
+      "key": "ac45",
+      "requirement": "autoscroll-follows-the-operator-s-scroll-position",
+      "given": "",
+      "when": "the operator scrolls up and new output arrives",
+      "then": "the viewport does not move"
+    },
+    {
+      "key": "ac46",
+      "requirement": "autoscroll-follows-the-operator-s-scroll-position",
+      "given": "",
+      "when": "the operator scrolls back to the bottom",
+      "then": "following of new output resumes"
+    },
+    {
+      "key": "ac47",
+      "requirement": "conditions-are-reported-in-a-banner-stack-above-the-composer",
+      "given": "",
+      "when": "the last run failed and the event stream is disconnected",
+      "then": "two banners are shown above the composer in a stable order each names its own condition"
+    },
+    {
+      "key": "ac48",
+      "requirement": "conditions-are-reported-in-a-banner-stack-above-the-composer",
+      "given": "",
+      "when": "one condition clears",
+      "then": "its banner is removed the remaining banner keeps its position"
+    },
+    {
+      "key": "ac49",
+      "requirement": "context-window-usage-is-shown-in-the-composer",
+      "given": "",
+      "when": "a context-usage event has been received for the displayed agent",
+      "then": "the composer shows the usage indicator reflecting that event"
+    },
+    {
+      "key": "ac50",
+      "requirement": "context-window-usage-is-shown-in-the-composer",
+      "given": "",
+      "when": "no context-usage event has been received for the displayed agent",
+      "then": "no usage indicator and no zero value is rendered"
+    },
+    {
+      "key": "ac51",
+      "requirement": "existing-conversation-behaviour-is-preserved",
+      "given": "",
+      "when": "the existing conversation, timeline, handoff, and status suites are run against the reworked surface",
+      "then": "every assertion about continuity, handoff, stop, withdraw, and deliver-now passes the only changes to those suites are to how the surface is mounted and queried"
+    },
+    {
+      "key": "ac52",
+      "requirement": "existing-conversation-behaviour-is-preserved",
+      "given": "",
+      "when": "an undelivered entry or hop-budget-blocked chain is shown",
+      "then": "the operator can still withdraw the undelivered entry or deliver the blocked chain now"
+    },
+    {
+      "key": "ac53",
+      "requirement": "navigation-reads-from-the-registered-project-collection",
+      "given": "",
+      "when": "the local instance has two registered projects",
+      "then": "the adapter returns both projects with their agents the unchanged collection rail renders both"
+    },
+    {
+      "key": "ac54",
+      "requirement": "navigation-reads-from-the-registered-project-collection",
+      "given": "",
+      "when": "the operator inspects the project collection controls",
+      "then": "distinct actions to open an existing directory and create a new directory are available"
+    },
+    {
+      "key": "ac55",
+      "requirement": "navigation-reads-from-the-registered-project-collection",
+      "given": "",
+      "when": "the operator switches projects while a request or agent run remains active in the first",
+      "then": "the first project's state continues under its identity none of it is rendered as belonging to the selected project"
+    },
+    {
+      "key": "ac56",
+      "requirement": "conversation-navigation-is-url-backed-and-project-scoped",
+      "given": "",
+      "when": "the operator reloads an agent conversation in one project",
+      "then": "the same project, agent, and AgentWeave conversation are restored"
+    },
+    {
+      "key": "ac57",
+      "requirement": "conversation-navigation-is-url-backed-and-project-scoped",
+      "given": "",
+      "when": "the operator visits project A, then project B, then activates Back",
+      "then": "project A and its prior destination are restored without changing credentials"
+    },
+    {
+      "key": "ac58",
+      "requirement": "the-operator-sets-model-and-effort-from-the-conversation",
+      "given": "",
+      "when": "the operator changes the model or an effort control in the composer",
+      "then": "the next message runs under the chosen values the operator has not navigated away from the conversation"
+    },
+    {
+      "key": "ac59",
+      "requirement": "the-operator-sets-model-and-effort-from-the-conversation",
+      "given": "",
+      "when": "the operator changes the target agent to one on a different provider",
+      "then": "the composer presents that provider's models and controls"
+    },
+    {
+      "key": "ac60",
+      "requirement": "the-operator-sets-model-and-effort-from-the-conversation",
+      "given": "",
+      "when": "a conversation is open",
+      "then": "the model and control values that the next message will use are visible without opening a"
+    },
+    {
+      "key": "ac61",
+      "requirement": "a-conversation-remembers-its-runtime-overrides",
+      "given": "",
+      "when": "the operator sets a model for a conversation and sends several messages",
+      "then": "every one of those turns runs under that model"
+    },
+    {
+      "key": "ac62",
+      "requirement": "a-conversation-remembers-its-runtime-overrides",
+      "given": "",
+      "when": "the operator reloads the application and reopens the conversation",
+      "then": "the conversation's chosen model and controls are still in effect and still displayed"
+    },
+    {
+      "key": "ac63",
+      "requirement": "a-conversation-remembers-its-runtime-overrides",
+      "given": "",
+      "when": "the operator starts a new conversation with an agent",
+      "then": "it runs under that agent's runner model and the catalog's control defaults it does not inherit the previous conversation's overrides"
+    },
+    {
+      "key": "ac64",
+      "requirement": "a-conversation-remembers-its-runtime-overrides",
+      "given": "",
+      "when": "the operator changes the model for one conversation",
+      "then": "the agent's bound runner is unchanged the agent's other conversations are unaffected"
+    },
+    {
+      "key": "ac65",
+      "requirement": "a-message-is-routed-to-a-stated-conversation",
+      "given": "",
+      "when": "the operator sends a message with the current conversation selected",
+      "then": "the message is delivered into that conversation"
+    },
+    {
+      "key": "ac66",
+      "requirement": "a-message-is-routed-to-a-stated-conversation",
+      "given": "",
+      "when": "the operator selects a new conversation and sends a message",
+      "then": "a new conversation is created for the target agent and the message is delivered into it the previous conversation is left intact"
+    },
+    {
+      "key": "ac67",
+      "requirement": "a-message-is-routed-to-a-stated-conversation",
+      "given": "",
+      "when": "the composer is displayed",
+      "then": "the conversation the next message will reach is identifiable without sending it"
+    },
+    {
+      "key": "ac68",
+      "requirement": "a-delivered-turn-reaches-the-model-intact",
+      "given": "",
+      "when": "the Hub starts a run whose turn prompt spans several lines",
+      "then": "the agent receives every line of that prompt"
+    },
+    {
+      "key": "ac69",
+      "requirement": "a-delivered-turn-reaches-the-model-intact",
+      "given": "",
+      "when": "a queued input is marked delivered against a run",
+      "then": "that input's full content formed part of the prompt that run was started with"
+    },
+    {
+      "key": "ac70",
+      "requirement": "a-turn-s-folded-state-is-set-by-the-operator-never-by-its-po",
+      "given": "",
+      "when": "the operator is reading an expanded turn and submits a new message",
+      "then": "that turn remains expanded when the new turn appears"
+    },
+    {
+      "key": "ac71",
+      "requirement": "a-turn-s-folded-state-is-set-by-the-operator-never-by-its-po",
+      "given": "",
+      "when": "a conversation contains a single turn",
+      "then": "a control to fold that turn is available"
+    },
+    {
+      "key": "ac72",
+      "requirement": "a-turn-s-folded-state-is-set-by-the-operator-never-by-its-po",
+      "given": "",
+      "when": "the operator folds a turn and a new turn is then appended",
+      "then": "the folded turn remains folded"
+    },
+    {
+      "key": "ac73",
+      "requirement": "the-operator-s-own-messages-are-neutral-not-accented",
+      "given": "",
+      "when": "an operator message is rendered in the conversation",
+      "then": "its background and border derive from the neutral surface and border scales neither derives from the accent colour"
+    },
+    {
+      "key": "ac74",
+      "requirement": "the-composer-is-separated-from-the-conversation-by-its-borde",
+      "given": "",
+      "when": "the composer is displayed against the conversation background",
+      "then": "no shadow or gradient draws a darker area around it its separation is carried by its border and surface colour"
+    },
+    {
+      "key": "ac75",
+      "requirement": "a-conversation-opens-at-its-most-recent-activity",
+      "given": "",
+      "when": "the operator opens a conversation that already has entries",
+      "then": "the view is positioned at the newest entry"
+    },
+    {
+      "key": "ac76",
+      "requirement": "a-conversation-opens-at-its-most-recent-activity",
+      "given": "",
+      "when": "the operator switches from one conversation to another",
+      "then": "the newly shown conversation is positioned at its newest entry following of new output is active"
+    },
+    {
+      "key": "ac77",
+      "requirement": "following-tracks-the-entries-the-conversation-renders",
+      "given": "",
+      "when": "the view is at the bottom and a new entry is added to the conversation",
+      "then": "the view moves to keep the newest entry visible"
+    },
+    {
+      "key": "ac78",
+      "requirement": "a-suspended-conversation-offers-a-way-back-to-the-newest-ent",
+      "given": "",
+      "when": "the view is following new output",
+      "then": "no return-to-newest control is shown"
+    },
+    {
+      "key": "ac79",
+      "requirement": "a-suspended-conversation-offers-a-way-back-to-the-newest-ent",
+      "given": "",
+      "when": "following is suspended and the operator activates the return-to-newest control",
+      "then": "the view moves to the newest entry following resumes"
+    },
+    {
+      "key": "ac80",
+      "requirement": "an-agent-s-conversations-are-listed-beneath-it-in-navigation",
+      "given": "",
+      "when": "the operator activates an agent's expander",
+      "then": "that agent's open conversations are listed beneath it, newest activity first the active destination is unchanged"
+    },
+    {
+      "key": "ac81",
+      "requirement": "an-agent-s-conversations-are-listed-beneath-it-in-navigation",
+      "given": "",
+      "when": "the operator activates an agent's name",
+      "then": "that agent's most recent conversation opens"
+    },
+    {
+      "key": "ac82",
+      "requirement": "an-agent-s-conversations-are-listed-beneath-it-in-navigation",
+      "given": "",
+      "when": "the operator activates a conversation in navigation",
+      "then": "that conversation opens in the content area the destination records the project, agent, and conversation"
+    },
+    {
+      "key": "ac83",
+      "requirement": "an-agent-s-conversations-are-listed-beneath-it-in-navigation",
+      "given": "",
+      "when": "an agent has more conversations than the display limit",
+      "then": "an expander states how many further conversations exist activating it lists them"
+    },
+    {
+      "key": "ac84",
+      "requirement": "an-agent-s-conversations-are-listed-beneath-it-in-navigation",
+      "given": "",
+      "when": "a conversation was created because a peer agent addressed this agent",
+      "then": "it appears in that agent's conversation list its origin is distinguishable from a conversation the operator started"
+    },
+    {
+      "key": "ac85",
+      "requirement": "navigation-offers-a-recency-view-across-agents",
+      "given": "",
+      "when": "the operator loads the Hub having never chosen a view",
+      "then": "navigation shows the agent tree"
+    },
+    {
+      "key": "ac86",
+      "requirement": "navigation-offers-a-recency-view-across-agents",
+      "given": "",
+      "when": "the operator switches to the recency view",
+      "then": "conversations from every agent in the project are listed together, most recent activity first"
+    },
+    {
+      "key": "ac87",
+      "requirement": "navigation-offers-a-recency-view-across-agents",
+      "given": "",
+      "when": "the recency view is shown",
+      "then": "each conversation carries its agent's identity colour without requiring hover that colour is the same one the agent carries in the tree and the timeline"
+    },
+    {
+      "key": "ac88",
+      "requirement": "navigation-offers-a-recency-view-across-agents",
+      "given": "",
+      "when": "the recency view is shown",
+      "then": "archived conversations are not listed among the open ones a control states how many archived conversations the project has activating it lists them"
+    },
+    {
+      "key": "ac89",
+      "requirement": "navigation-offers-a-recency-view-across-agents",
+      "given": "",
+      "when": "a project has more conversations than the recency view's display limit",
+      "then": "an expander states how many further conversations exist activating it lists them a control returns the list to its capped length"
+    },
+    {
+      "key": "ac90",
+      "requirement": "navigation-offers-a-recency-view-across-agents",
+      "given": "",
+      "when": "the operator switches view and reloads",
+      "then": "the chosen view is still shown"
+    },
+    {
+      "key": "ac91",
+      "requirement": "a-conversation-s-attention-state-is-visible-in-navigation",
+      "given": "",
+      "when": "a run in one conversation opens a question and blocks the operator is looking at a different conversation",
+      "then": "navigation shows that conversation as waiting on the operator"
+    },
+    {
+      "key": "ac92",
+      "requirement": "a-conversation-s-attention-state-is-visible-in-navigation",
+      "given": "",
+      "when": "one conversation is running and another is waiting on the operator",
+      "then": "navigation presents the two states differently"
+    },
+    {
+      "key": "ac93",
+      "requirement": "a-conversation-s-attention-state-is-visible-in-navigation",
+      "given": "",
+      "when": "the operator answers the outstanding question",
+      "then": "navigation no longer shows that conversation as waiting"
+    },
+    {
+      "key": "ac94",
+      "requirement": "a-conversation-s-attention-state-is-visible-in-navigation",
+      "given": "",
+      "when": "a run opens a permission request and blocks",
+      "then": "navigation shows that conversation as waiting on the operator"
+    },
+    {
+      "key": "ac95",
+      "requirement": "navigation-rows-expose-their-actions-through-a-visible-menu",
+      "given": "",
+      "when": "the operator opens a conversation row's menu",
+      "then": "rename and archive are offered"
+    },
+    {
+      "key": "ac96",
+      "requirement": "navigation-rows-expose-their-actions-through-a-visible-menu",
+      "given": "",
+      "when": "the operator opens an agent row's menu",
+      "then": "new conversation, agent settings, and the archived listing are offered"
+    },
+    {
+      "key": "ac97",
+      "requirement": "navigation-rows-expose-their-actions-through-a-visible-menu",
+      "given": "",
+      "when": "the operator reaches a row's menu control by keyboard and opens it",
+      "then": "every action in the menu is reachable and activatable by keyboard dismissing the menu returns focus to its trigger"
+    },
+    {
+      "key": "ac98",
+      "requirement": "navigation-rows-expose-their-actions-through-a-visible-menu",
+      "given": "",
+      "when": "the operator opens agent settings from an agent row's menu",
+      "then": "the agent's configuration destination opens no dialog is presented"
+    },
+    {
+      "key": "ac99",
+      "requirement": "navigation-rows-expose-their-actions-through-a-visible-menu",
+      "given": "",
+      "when": "the operator opens agent settings and then activates the back control",
+      "then": "the agent's most recent conversation opens its history is unchanged"
+    },
+    {
+      "key": "ac100",
+      "requirement": "starting-a-conversation-is-a-navigation-action-with-a-dedica",
+      "given": "",
+      "when": "the operator starts a conversation from an agent's row menu",
+      "then": "the new-conversation surface opens with that agent already selected no agent choice is required"
+    },
+    {
+      "key": "ac101",
+      "requirement": "starting-a-conversation-is-a-navigation-action-with-a-dedica",
+      "given": "",
+      "when": "the operator started from one agent's row menu and then chooses a different agent",
+      "then": "the surface retargets to the agent they chose the first message goes to that agent anything already typed is kept"
+    },
+    {
+      "key": "ac102",
+      "requirement": "starting-a-conversation-is-a-navigation-action-with-a-dedica",
+      "given": "",
+      "when": "the new-conversation surface opens bound to an agent",
+      "then": "its leading question names that agent"
+    },
+    {
+      "key": "ac103",
+      "requirement": "starting-a-conversation-is-a-navigation-action-with-a-dedica",
+      "given": "",
+      "when": "the new-conversation surface opens with no agent bound",
+      "then": "its leading question asks which agent should take the work choosing one changes the question to name that agent"
+    },
+    {
+      "key": "ac104",
+      "requirement": "starting-a-conversation-is-a-navigation-action-with-a-dedica",
+      "given": "",
+      "when": "the operator starts a conversation from the recency view",
+      "then": "the new-conversation surface requires an agent to be chosen the message cannot be sent until one is"
+    },
+    {
+      "key": "ac105",
+      "requirement": "starting-a-conversation-is-a-navigation-action-with-a-dedica",
+      "given": "",
+      "when": "the operator opens the new-conversation surface and navigates away without sending",
+      "then": "no conversation record exists navigation lists no additional conversation"
+    },
+    {
+      "key": "ac106",
+      "requirement": "starting-a-conversation-is-a-navigation-action-with-a-dedica",
+      "given": "",
+      "when": "the operator sends the first message from the new-conversation surface",
+      "then": "a conversation is created, titled, and listed in navigation the destination moves to it"
+    },
+    {
+      "key": "ac107",
+      "requirement": "durable-handoff-has-a-persistent-place-on-the-conversation",
+      "given": "",
+      "when": "a conversation is open",
+      "then": "a labelled handoff control is visible on its header"
+    },
+    {
+      "key": "ac108",
+      "requirement": "durable-handoff-has-a-persistent-place-on-the-conversation",
+      "given": "",
+      "when": "handoff is unavailable for the current agent or conversation",
+      "then": "the control is present, disabled, with its reason stated"
+    },
+    {
+      "key": "ac109",
+      "requirement": "the-queue-routing-contract-binds-peer-delivery-to-the-sender",
+      "given": "",
+      "when": "an agent sends a peer message from a conversation that has no binding to that recipient",
+      "then": "a recipient conversation is created and bound to the sending conversation the queue entry carries that recipient conversation"
+    },
+    {
+      "key": "ac110",
+      "requirement": "the-queue-routing-contract-binds-peer-delivery-to-the-sender",
+      "given": "",
+      "when": "the same sending conversation sends another message to the same recipient",
+      "then": "the queue entry carries the previously bound recipient conversation no further recipient conversation is created"
+    },
+    {
+      "key": "ac111",
+      "requirement": "the-queue-routing-contract-binds-peer-delivery-to-the-sender",
+      "given": "",
+      "when": "one agent sends peer messages to the same recipient from two different conversations",
+      "then": "each is delivered to a different recipient conversation neither is selected by which conversation the recipient touched most recently"
+    },
+    {
+      "key": "ac112",
+      "requirement": "the-queue-routing-contract-binds-peer-delivery-to-the-sender",
+      "given": "",
+      "when": "the recipient becomes active in a conversation unrelated to the binding the sender then sends another message from the bound sending conversation",
+      "then": "delivery still reaches the bound recipient conversation"
+    },
+    {
+      "key": "ac113",
+      "requirement": "traffic-with-no-sending-conversation-binds-to-its-sender-ide",
+      "given": "",
+      "when": "the Hub or the scheduler sends a message to an agent",
+      "then": "it is delivered to the recipient conversation bound to that source later messages from that source reach the same conversation"
+    },
+    {
+      "key": "ac114",
+      "requirement": "an-archived-thread-is-handled-according-to-who-selected-it",
+      "given": "",
+      "when": "a sender names a recipient conversation that is archived",
+      "then": "the send is refused the refusal returns the message content"
+    },
+    {
+      "key": "ac115",
+      "requirement": "an-archived-thread-is-handled-according-to-who-selected-it",
+      "given": "",
+      "when": "the binding resolves to a recipient conversation the operator archived",
+      "then": "a successor recipient conversation is created with `origin: peer` the binding moves to that successor the message is delivered rather than refused"
+    },
+    {
+      "key": "ac116",
+      "requirement": "existing-conversations-bind-on-next-use-rather-than-by-backf",
+      "given": "",
+      "when": "a conversation that sent peer messages before this contract sends another",
+      "then": "a binding is established at that point previously delivered messages remain in the conversations that received them"
+    },
+    {
+      "key": "ac117",
+      "requirement": "composed-text-begins-at-the-composer-s-leading-edge",
+      "given": "",
+      "when": "the operator focuses the composer and types",
+      "then": "the text begins at the composer surface's leading edge, inset only by the surface's own"
+    },
+    {
+      "key": "ac118",
+      "requirement": "composed-text-begins-at-the-composer-s-leading-edge",
+      "given": "",
+      "when": "the conversation is displayed at a narrow viewport",
+      "then": "the text area's width is the composer surface's width less its padding no control reduces the width available to text"
+    },
+    {
+      "key": "ac119",
+      "requirement": "composed-text-begins-at-the-composer-s-leading-edge",
+      "given": "",
+      "when": "the composer is displayed",
+      "then": "the agent target control and the send control are presented in a row beneath the text"
+    },
+    {
+      "key": "ac120",
+      "requirement": "the-composer-control-row-is-an-extensible-pair-of-slots",
+      "given": "",
+      "when": "a further per-turn control is added to the leading slot",
+      "then": "the composer's text area, autogrow behaviour, and send control are unchanged"
+    },
+    {
+      "key": "ac121",
+      "requirement": "the-composer-control-row-is-an-extensible-pair-of-slots",
+      "given": "",
+      "when": "the composer is presented as a column",
+      "then": "draft persistence, autogrow within bounds, the trigger menu, submission on Enter, and"
+    },
+    {
+      "key": "ac122",
+      "requirement": "the-conversation-is-a-single-plane-not-stacked-boxes",
+      "given": "",
+      "when": "an agent conversation is open",
+      "then": "the header carries no fill distinct from the ground plane and no dividing rule beneath it"
+    },
+    {
+      "key": "ac123",
+      "requirement": "the-conversation-is-a-single-plane-not-stacked-boxes",
+      "given": "",
+      "when": "an agent conversation is open",
+      "then": "the region containing the composer carries no fill distinct from the ground plane and no"
+    },
+    {
+      "key": "ac124",
+      "requirement": "the-conversation-is-a-single-plane-not-stacked-boxes",
+      "given": "",
+      "when": "the operator scrolls the stream upward beneath the header",
+      "then": "the header remains readable and the content passing behind it does not compete with it"
+    },
+    {
+      "key": "ac125",
+      "requirement": "the-composer-is-the-conversation-s-only-lifted-surface",
+      "given": "",
+      "when": "an agent conversation is open",
+      "then": "the composer is bounded by its own surface, outline, shadow, and content radius"
+    },
+    {
+      "key": "ac126",
+      "requirement": "the-composer-is-the-conversation-s-only-lifted-surface",
+      "given": "",
+      "when": "the operator focuses the composer's text area",
+      "then": "the composer surface indicates focus"
+    },
+    {
+      "key": "ac127",
+      "requirement": "the-composer-is-the-conversation-s-only-lifted-surface",
+      "given": "",
+      "when": "the conversation region is displayed",
+      "then": "the header, banners, and continuity line are not drawn as lifted surfaces"
+    },
+    {
+      "key": "ac128",
+      "requirement": "turn-level-controls-sit-with-the-turn-s-state",
+      "given": "",
+      "when": "a turn is running",
+      "then": "a control to stop it is visible in the header beside the running-state indication reaching it requires no menu"
+    },
+    {
+      "key": "ac129",
+      "requirement": "turn-level-controls-sit-with-the-turn-s-state",
+      "given": "",
+      "when": "a conversation has more than one turn",
+      "then": "a control to fold its turns is visible in the header"
+    },
+    {
+      "key": "ac130",
+      "requirement": "turn-level-controls-sit-with-the-turn-s-state",
+      "given": "",
+      "when": "the operator looks for conversation switching, handoff, or agent details",
+      "then": "they are found in the overflow menu rather than on the surface"
+    },
+    {
+      "key": "ac131",
+      "requirement": "the-stream-is-bounded-to-the-reference-measure",
+      "given": "",
+      "when": "the conversation is displayed at a wide viewport",
+      "then": "entries are centred within the mock's bounded measure rather than filling the viewport the spacing between entries matches the mock"
+    },
+    {
+      "key": "ac132",
+      "requirement": "conversation-disclosures-respond-to-the-pointer",
+      "given": "",
+      "when": "the operator hovers the work disclosure's summary",
+      "then": "it takes on a hover treatment its expanded and collapsed states are distinguishable at a glance"
+    },
+    {
+      "key": "ac133",
+      "requirement": "conversation-disclosures-respond-to-the-pointer",
+      "given": "",
+      "when": "the operator hovers a folded turn",
+      "then": "it takes on a hover treatment indicating it can be reopened"
+    },
+    {
+      "key": "ac134",
+      "requirement": "repeated-delivery-failure-does-not-wedge-an-agent",
+      "given": "",
+      "when": "a run fails and its input returns to the queue",
+      "then": "the input records that a delivery attempt failed"
+    },
+    {
+      "key": "ac135",
+      "requirement": "repeated-delivery-failure-does-not-wedge-an-agent",
+      "given": "",
+      "when": "a run's runtime ends abnormally after the turn has begun",
+      "then": "the input it was carrying returns to the queue the attempt is counted"
+    },
+    {
+      "key": "ac136",
+      "requirement": "repeated-delivery-failure-does-not-wedge-an-agent",
+      "given": "",
+      "when": "a run completes",
+      "then": "its input is not returned to the queue"
+    },
+    {
+      "key": "ac137",
+      "requirement": "repeated-delivery-failure-does-not-wedge-an-agent",
+      "given": "",
+      "when": "the operator stops a run",
+      "then": "its input is not returned to the queue"
+    },
+    {
+      "key": "ac138",
+      "requirement": "repeated-delivery-failure-does-not-wedge-an-agent",
+      "given": "",
+      "when": "a run fails because the runtime reported a different provider session than the one bound",
+      "then": "its input is not returned to the queue the conversation's binding is unchanged"
+    },
+    {
+      "key": "ac139",
+      "requirement": "repeated-delivery-failure-does-not-wedge-an-agent",
+      "given": "",
+      "when": "an input has failed to be delivered twice",
+      "then": "the next delivery starts a new provider session rather than resuming the old one"
+    },
+    {
+      "key": "ac140",
+      "requirement": "repeated-delivery-failure-does-not-wedge-an-agent",
+      "given": "",
+      "when": "an input has failed to be delivered three times",
+      "then": "it is no longer delivered the reason it was given up on is recorded the operator is told"
+    },
+    {
+      "key": "ac141",
+      "requirement": "repeated-delivery-failure-does-not-wedge-an-agent",
+      "given": "",
+      "when": "an input the system has given up on was blocking the queue",
+      "then": "a later input for the same agent is delivered"
+    },
+    {
+      "key": "ac142",
+      "requirement": "repeated-delivery-failure-does-not-wedge-an-agent",
+      "given": "",
+      "when": "the system gives up on an input",
+      "then": "the record still names the run it was last delivered to"
+    },
+    {
+      "key": "ac143",
+      "requirement": "repeated-delivery-failure-does-not-wedge-an-agent",
+      "given": "",
+      "when": "a run fails and its input returns to the queue",
+      "then": "the system attempts to deliver it again no operator action is required to make that happen"
+    },
+    {
+      "key": "ac144",
+      "requirement": "repeated-delivery-failure-does-not-wedge-an-agent",
+      "given": "",
+      "when": "a run bound to a task fails and its input returns to the queue",
+      "then": "the run is not reported as having left that task's work behind"
+    },
+    {
+      "key": "ac145",
+      "requirement": "repeated-delivery-failure-does-not-wedge-an-agent",
+      "given": "",
+      "when": "a run bound to a task fails and none of its input returns to the queue",
+      "then": "the run is reported as having left that task's work behind"
+    },
+    {
+      "key": "ac146",
+      "requirement": "a-re-delivered-turn-says-the-earlier-attempt-was-cut-off",
+      "given": "",
+      "when": "input is delivered to an agent after one failed attempt",
+      "then": "the delivered turn states that an earlier attempt did not finish it names which attempt this is"
+    },
+    {
+      "key": "ac147",
+      "requirement": "a-re-delivered-turn-says-the-earlier-attempt-was-cut-off",
+      "given": "",
+      "when": "input is delivered to an agent for the first time",
+      "then": "the delivered turn says nothing about earlier attempts"
+    },
+    {
+      "key": "ac148",
+      "requirement": "a-re-delivered-turn-says-the-earlier-attempt-was-cut-off",
+      "given": "",
+      "when": "a turn carries both a retried input and one never tried before",
+      "then": "only the retried one states that an earlier attempt did not finish"
+    },
+    {
+      "key": "ac149",
+      "requirement": "message-level-conversation-entries-render-markdown-safely",
+      "given": "",
+      "when": "a conversation entry's content contains Markdown syntax (a fenced code block, a bulleted",
+      "then": "it is rendered as the corresponding formatted element no literal Markdown syntax character is visible in the rendered output"
+    },
+    {
+      "key": "ac150",
+      "requirement": "message-level-conversation-entries-render-markdown-safely",
+      "given": "",
+      "when": "an entry's content contains two lines separated by exactly one newline, with no blank",
+      "then": "both lines are rendered with a visible break between them they are not collapsed into a single unbroken line"
+    },
+    {
+      "key": "ac151",
+      "requirement": "message-level-conversation-entries-render-markdown-safely",
+      "given": "",
+      "when": "an entry's content contains a literal HTML tag",
+      "then": "the tag's characters are rendered as visible text no corresponding DOM element is created from it"
+    },
+    {
+      "key": "ac152",
+      "requirement": "message-level-conversation-entries-render-markdown-safely",
+      "given": "",
+      "when": "an entry's content contains no Markdown syntax",
+      "then": "its rendered appearance is unchanged from rendering it as plain text"
+    },
+    {
+      "key": "ac153",
+      "requirement": "a-tool-call-is-formatted-by-what-kind-of-tool-it-was",
+      "given": "",
+      "when": "a tool-call entry names a tool the mapping recognizes",
+      "then": "it is rendered with that tool's icon and label a different recognized tool in the same conversation renders with a different icon and"
+    },
+    {
+      "key": "ac154",
+      "requirement": "a-tool-call-is-formatted-by-what-kind-of-tool-it-was",
+      "given": "",
+      "when": "a tool-call entry names a tool the mapping does not recognize",
+      "then": "it is rendered with the fallback icon and label rendering does not fail"
+    },
+    {
+      "key": "ac155",
+      "requirement": "a-tool-call-is-formatted-by-what-kind-of-tool-it-was",
+      "given": "",
+      "when": "a tool-call entry's recorded input parses to an object carrying both a prior and a new",
+      "then": "its expanded view renders the change as a diff added and removed content are visually distinguished from each other and from unchanged"
+    },
+    {
+      "key": "ac156",
+      "requirement": "a-tool-call-is-formatted-by-what-kind-of-tool-it-was",
+      "given": "",
+      "when": "a tool-call entry's recorded input cannot be parsed as carrying both a prior and a new",
+      "then": "its expanded view renders the existing raw input and output text no diff is attempted against it"
+    }
+  ],
+  "tasks": [],
+  "algorithms": [],
+  "design": "",
+  "evidence": {
+    "checked": [
+      "Translated from openspec/specs/agent-conversation-workspace/spec.md (47 requirements, 156 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten."
+    ],
+    "limits": [
+      "scenarios-state-no-starting-state: 156 of 156 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed"
+    ]
+  },
+  "lifecycle": "",
+  "open_questions": [],
+  "aw_identity": {
+    "requirements": {
+      "agentweave-owns-the-durable-conversation-identity": "FR-1",
+      "an-agent-conversation-is-reached-directly-without-an-interme": "FR-2",
+      "navigation-lists-the-project-and-its-agents-as-a-tree": "FR-3",
+      "the-containing-project-is-reachable-from-a-conversation": "FR-4",
+      "agents-and-messages-are-removed-as-navigation-destinations": "FR-5",
+      "the-composer-accepts-input-while-the-agent-is-running": "FR-6",
+      "the-composer-grows-with-its-content-within-bounds": "FR-7",
+      "unsent-composer-text-survives-navigation-and-reload": "FR-8",
+      "only-high-frequency-controls-remain-visible": "FR-9",
+      "conversation-identity-is-readable-without-exposing-provider-": "FR-10",
+      "autoscroll-follows-the-operator-s-scroll-position": "FR-11",
+      "conditions-are-reported-in-a-banner-stack-above-the-composer": "FR-12",
+      "context-window-usage-is-shown-in-the-composer": "FR-13",
+      "existing-conversation-behaviour-is-preserved": "FR-14",
+      "navigation-reads-from-the-registered-project-collection": "FR-15",
+      "conversation-navigation-is-url-backed-and-project-scoped": "FR-16",
+      "the-operator-sets-model-and-effort-from-the-conversation": "FR-17",
+      "a-conversation-remembers-its-runtime-overrides": "FR-18",
+      "a-message-is-routed-to-a-stated-conversation": "FR-19",
+      "a-delivered-turn-reaches-the-model-intact": "FR-20",
+      "a-turn-s-folded-state-is-set-by-the-operator-never-by-its-po": "FR-21",
+      "the-operator-s-own-messages-are-neutral-not-accented": "FR-22",
+      "the-composer-is-separated-from-the-conversation-by-its-borde": "FR-23",
+      "a-conversation-opens-at-its-most-recent-activity": "FR-24",
+      "following-tracks-the-entries-the-conversation-renders": "FR-25",
+      "a-suspended-conversation-offers-a-way-back-to-the-newest-ent": "FR-26",
+      "an-agent-s-conversations-are-listed-beneath-it-in-navigation": "FR-27",
+      "navigation-offers-a-recency-view-across-agents": "FR-28",
+      "a-conversation-s-attention-state-is-visible-in-navigation": "FR-29",
+      "navigation-rows-expose-their-actions-through-a-visible-menu": "FR-30",
+      "starting-a-conversation-is-a-navigation-action-with-a-dedica": "FR-31",
+      "durable-handoff-has-a-persistent-place-on-the-conversation": "FR-32",
+      "the-queue-routing-contract-binds-peer-delivery-to-the-sender": "FR-33",
+      "traffic-with-no-sending-conversation-binds-to-its-sender-ide": "FR-34",
+      "an-archived-thread-is-handled-according-to-who-selected-it": "FR-35",
+      "existing-conversations-bind-on-next-use-rather-than-by-backf": "FR-36",
+      "composed-text-begins-at-the-composer-s-leading-edge": "FR-37",
+      "the-composer-control-row-is-an-extensible-pair-of-slots": "FR-38",
+      "the-conversation-is-a-single-plane-not-stacked-boxes": "FR-39",
+      "the-composer-is-the-conversation-s-only-lifted-surface": "FR-40",
+      "turn-level-controls-sit-with-the-turn-s-state": "FR-41",
+      "the-stream-is-bounded-to-the-reference-measure": "FR-42",
+      "conversation-disclosures-respond-to-the-pointer": "FR-43",
+      "repeated-delivery-failure-does-not-wedge-an-agent": "FR-44",
+      "a-re-delivered-turn-says-the-earlier-attempt-was-cut-off": "FR-45",
+      "message-level-conversation-entries-render-markdown-safely": "FR-46",
+      "a-tool-call-is-formatted-by-what-kind-of-tool-it-was": "FR-47"
+    },
+    "high_water": 47,
+    "retired": {},
+    "digests": {
+      "FR-1": "c1746aef965c8aea81eac5ba451436447da2e4976bc958fc5bbbf46811e85ad2",
+      "FR-2": "bad084767a48c3b06c956e160c52125716049599ecc8d2ed3b623d16523ffc8b",
+      "FR-3": "874fdbd8c73522b2e1c773dd8c7905f1e2e63e43a74066da9a26bd029de5251a",
+      "FR-4": "243a1e78bc8424871b3df3b612cd41cb3a8d61748e0ab5cfb2d10154b592c91d",
+      "FR-5": "6fe81236b48c8819c8325f1acbaf177c1e50bfb24f4ced0430bad25532fb7aee",
+      "FR-6": "25728d8fcbe1a08bf5e42bebaf0025095237588603a1dcb8b1e78a5eba62ad3f",
+      "FR-7": "3124204faae946c9e5978fe98372c8b5d17982c4dcbc860a51369819c0bde0bd",
+      "FR-8": "5d8aa212c1ec439aab5d9627422df48433e29bc2310a865cb1f5dbf35be5b4a0",
+      "FR-9": "080d80a31b7415903087ac5ddbac4fb547cd52e2f6591b09b36aded583407e06",
+      "FR-10": "a686cb749f6a0ff1ca2b27fefa6ee419296edcb23c93fcb896df4ecd4edd4a2c",
+      "FR-11": "f14cb590967ad4931a1ddbb589bcdf1bac9c76fe9d3395d657e7510cbdd6f817",
+      "FR-12": "71993ba329ea1bfd5808d6837a3a494f2bd763e18717710e7835a143dd2cde79",
+      "FR-13": "8cae771804ab98a1edecfc04374e2c74ee2d4acb2d4bac06760ace9a27a1809e",
+      "FR-14": "97f7e06d78949fb487f58bf405840a2ea78dc3318984f214e4a34422d048f6e0",
+      "FR-15": "5aefdbdbd80696039df16c52f4d0b25411f729ca5ea17b09ca2e1dfd5ce5f6e9",
+      "FR-16": "762daae9e7b258bff360d74883ae32734329c18b49cc72b2aded215db7926c00",
+      "FR-17": "5a3a9b0ea363765c2ddaeb70503b623f5d2a6060861133351c8daf1cddfb3d83",
+      "FR-18": "bdecbcd5666cfd094a5c6b7cdd97a3b49f1eca47e78484d6aca3658921dd0889",
+      "FR-19": "f47e1fd2cdde08060fad560532e277d70274e3389376dff5ffd10fa949457960",
+      "FR-20": "a4cfc1e8faa37a82493aa43db4d89ecdd4aeb13c6401f34a68cbe403d6f25192",
+      "FR-21": "55020249ee9e60ad5d122ecaa21c340506c09cdbb81d3d8fc0666dbb86a8679e",
+      "FR-22": "6f96297889f3d54255c514f2987a50142527033243ba54a1aff177aa396b5e38",
+      "FR-23": "12658108051d8af4f2eeb3e9320d1b2de8df87f1db073838f942082ff69420f3",
+      "FR-24": "89b5132c3e115acaa320919a41f3fefa86754d99ec3117b0cc2576ccadd718a6",
+      "FR-25": "23bdeb7e9edcc301002939323c4d3d2efa560a375473b67c4209c43e4308404c",
+      "FR-26": "52fae5f87c5e98d9feed31cefcbb003f2f3b0a372f5ae35d0267a5efce595edf",
+      "FR-27": "b8377488951e56f1ea397d429afb2c284bd78bc28379f491972603c82faa393a",
+      "FR-28": "630408659b2ad6024cd93aa6224274cde2b050a202b10180313adee8bd4adf03",
+      "FR-29": "b40f54a807f4b419b853592f5db9e1f7140f313dcdb5e1e6c91176d1d0942c09",
+      "FR-30": "974a1c9222e50603c4ade07ebef1e6f50d971bdd663f631fc45f3a5b43812eab",
+      "FR-31": "f11391d792abbccb349c36d24b09a8f6c5cbf119a95a57368e90c102c1cc1b2b",
+      "FR-32": "fb592f389d6b6e3e0674770004eabe8586c491f711b0f0ba5439085956c51814",
+      "FR-33": "5b50b4c0f93d66f303e32fdb7c739e0726e058d434d719682053d526f8b67c1c",
+      "FR-34": "b10a9380d782b9160331af96ec046b4a957449efcc038ecb1bbb4e8627ae8f02",
+      "FR-35": "ca3f18ce10f2068a014667a9330a5be7d974aaa3cdc90eeefd98ac80d1d1f929",
+      "FR-36": "c42b5c93a52912b3ad33a2e0046c684c5a04d1037bd32893c3155a39e4a5673f",
+      "FR-37": "2e000fe6f5de6221615524ecdad32f5ecf276298ae7719126d2812b9f927d44f",
+      "FR-38": "8a776fdd8f1e9e2c9142fe4f37b6fcfe88d16beca6095cac6ba560985a499766",
+      "FR-39": "48ac00a7b13a4b6765389277ce34377b67d3fbd533642a24c016a851ab94da03",
+      "FR-40": "4f5546fc64c29fb15281eacba4796f4aa8d62399a0734fbbf60be66c87a97f81",
+      "FR-41": "8a003c49ef1ba87414d3fea69425ce7f56242ed8e6783f2659b7202a512ef6c7",
+      "FR-42": "f5d4c5bfb1530a9d120b8ce56b968ea1227a7d656af7d635597a36583a719484",
+      "FR-43": "92758fc17dc7d5b95af71f5a244f4b6434e0e747f831f8ebe6f700bfdd5a2655",
+      "FR-44": "9666d8cfc4e540df6cf604f53b5a5fbccf9fe86b5248a12d3708c7f9b0d76808",
+      "FR-45": "00763927773d5bb6ad71b62d0fa6fff6ffaf7f1349df81dbd72b2ef3cf89e611",
+      "FR-46": "48fd7f456ec24c1711d01d39ff0ba661863c047c8257492f4e9a7b8a59d65a3a",
+      "FR-47": "de2159d20609d258cb2f7656210e92010176c151b93fa9048a42a77d8c886060"
+    }
+  }
+}
+</script>
+</body>
+</html>

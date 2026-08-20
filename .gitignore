@@ -148,3 +148,6 @@ hub/agentweave.db
 # Working files for the autonomous loop's own API-driving (request/response bodies), not
 # durable output - the findings/log files next to it are.
 .claude/autonomous/scratch/
+
+# Staging output from scripts/migrate_openspec_corpus.py — derived, regenerate with --out
+.migration/

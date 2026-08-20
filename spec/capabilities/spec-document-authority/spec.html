@@ -1,0 +1,1309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spec document authority</title>
+<meta name="aw-spec-kind" content="capability">
+<meta name="aw-spec-status" content="current">
+<meta name="aw-spec-rigor" content="sketch">
+<meta name="aw-spec-schema-version" content="1">
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+    --surface-2: #21262d; --surface: #161b22;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+:root[data-theme="dark"] {
+  --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+  --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+  --surface-2: #21262d; --surface: #161b22;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 2rem 2.5rem 4rem; background: var(--bg); color: var(--fg);
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+h1 { font-size: 1.75rem; margin: 0 0 .25rem; }
+h2 { font-size: 1.15rem; margin: 2.5rem 0 .75rem; padding-bottom: .3rem;
+     border-bottom: 1px solid var(--border); }
+h3 { font-size: 1rem; margin: 1.5rem 0 .4rem; }
+p { margin: .5rem 0; }
+ul, ol { margin: .5rem 0; padding-left: 1.4rem; }
+li { margin: .25rem 0; }
+a { color: var(--aw-accent); }
+.aw-meta { color: var(--muted); font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-chip { display: inline-block; padding: .1rem .5rem; border-radius: 999px;
+           background: var(--surface-2); font-size: .78rem; margin-right: .4rem; }
+.aw-requirement { border-left: 3px solid var(--border); padding: .1rem 0 .1rem .9rem;
+                  margin: 1.1rem 0; }
+.aw-requirement-must { border-left-color: var(--aw-accent); }
+.aw-requirement-should { border-left-color: var(--aw-warn); }
+.aw-requirement-may { border-left-color: var(--border); }
+.aw-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8rem;
+         color: var(--muted); }
+.aw-modal { font-weight: 600; }
+.aw-modal-must { color: var(--aw-accent); }
+.aw-modal-should { color: var(--aw-warn); }
+.aw-modal-may { color: var(--fg); font-weight: 400; }
+.aw-chip-rigor-gate { color: var(--aw-accent); border: 1px solid var(--aw-accent); }
+.aw-chip-rigor-contract { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Phase is a lifecycle, and the question it answers is "can I rely on this?". `approved` and a
+   capability's `current` are settled and take the done tone; `proposed` is waiting on an operator
+   decision and takes warn; `exploring` and `archived` are quiet for opposite reasons — one has not
+   arrived yet, the other has been superseded. Deliberately NOT the accent: this document already
+   spends accent on links and on MUST, and a third meaning would empty it of any. `kind` keeps the
+   plain chip on purpose — it is a category, not a state, and hue there ranks nothing. */
+.aw-chip-phase-done { color: var(--aw-ok); border: 1px solid var(--aw-ok); }
+.aw-chip-phase-waiting { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+.aw-chip-phase-quiet { color: var(--muted); }
+.aw-chip-phase-archived { color: var(--muted); text-decoration: line-through; }
+/* An unresolved question blocks `propose`, so it is a real state and not a label. Resolved stays
+   the plain chip — the reader needs to find what is still open, not celebrate what is closed. */
+.aw-chip-open { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Limits is where a reader is most likely to be misled, and it read identically to Checked. */
+.aw-limits { color: var(--aw-warn); }
+/* The first screenful was entirely monochrome, so the document read as texty however the
+   requirements below were coloured. This puts the same modal scheme where the eye lands first,
+   carrying counts rather than decoration. */
+.aw-summary { margin: 0 0 1.5rem; font-size: .9rem; color: var(--muted); }
+.aw-summary .aw-count { font-weight: 600; }
+.aw-summary-sep { color: var(--border); margin: 0 .45rem; }
+.aw-rationale { color: var(--muted); font-size: .9rem; }
+.aw-refs { font-size: .82rem; color: var(--muted); }
+.aw-note { color: var(--muted); font-style: italic; }
+.aw-empty { color: var(--muted); }
+table { border-collapse: collapse; margin: .75rem 0; width: 100%; }
+th, td { border: 1px solid var(--border); padding: .4rem .6rem; text-align: left;
+         vertical-align: top; font-size: .92rem; }
+code, pre { background: var(--surface); border-radius: 4px; }
+code { padding: .1rem .3rem; font-size: .88em; }
+</style>
+</head>
+<body>
+<h1>Spec document authority</h1>
+<p class="aw-meta"><span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><span class="aw-chip">sketch</span></p>
+<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">39</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">39</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">117</span> criteria</p>
+<section><h2 id="summary">Summary</h2><p>Where a specification document lives, who may write it, how its requirements are identified, what phase it is in, and who may move it between phases. The document is the file in the project&#x27;s working directory — there is no cached copy and nothing to reconcile. An agent submits a structured payload and the Hub renders the markup, so the format is a schema the agent cannot violate rather than a contract it is asked to honour. Phase is Hub-owned: the status in the file is a copy for whoever reads it, and approval is a decision only the operator can take.</p></section><section><h2 id="requirements">Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-1"><span class="aw-id">FR-1</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Specification documents SHALL be stored as files beneath the project&#x27;s working directory and read from there. The Hub MUST resolve every document path through the project workspace, which refuses absolute paths, traversal segments, control characters, and symlink escapes.</p><p class="aw-rationale">The Hub SHALL NOT maintain a second copy of a document&#x27;s content. There MUST be no endpoint by which a client pushes document content to the Hub, and no stored snapshot of another source&#x27;s inventory.</p></div><div class="aw-requirement aw-requirement-must" id="FR-2"><span class="aw-id">FR-2</span> <p><span class="aw-modal aw-modal-must">SHALL</span> An agent SHALL author a specification by submitting a structured payload through a tool. The Hub MUST validate the payload and render the document itself.</p><p class="aw-rationale">An agent MUST NOT write specification markup directly, and the Hub MUST NOT accept agent-authored markup as a document&#x27;s content. When a payload fails validation the Hub SHALL refuse it with an error naming the offending field, and MUST NOT write a partial document.</p></div><div class="aw-requirement aw-requirement-must" id="FR-3"><span class="aw-id">FR-3</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Every payload SHALL declare a schema version. The Hub MUST preserve fields it does not recognise across a read and re-write of the same document, and MUST re-emit them unchanged.</p><p class="aw-rationale">The contract MUST NOT be declared final while gate and traceability behaviour has not stated its requirements on it.</p></div><div class="aw-requirement aw-requirement-must" id="FR-4"><span class="aw-id">FR-4</span> <p><span class="aw-modal aw-modal-must">MUST</span> The Hub SHALL assign every requirement its identifier. An identifier supplied by an agent MUST NOT be used.</p><p class="aw-rationale">A submission SHALL carry a **key** for each requirement: a handle, unique within the document, by which the Hub correlates a requirement across submissions. A key MUST NOT be used as an identifier and MUST NOT appear in any link. An identifier SHALL remain attached to the requirement whose key it was minted for, regardless of changes to that requirement&#x27;s text, its position in the document, or the schema version the document is rendered under. An identifier that has been used MUST NOT be reassigned to a different requirement, including after the requirement it belonged to is removed. Correlating by position would make inserting a requirement renumber every requirement after it, and identifiers are what tasks and evidence point at — a renumber silently re-targets them.</p></div><div class="aw-requirement aw-requirement-must" id="FR-5"><span class="aw-id">FR-5</span> <p><span class="aw-modal aw-modal-must">SHALL</span> A specification document SHALL carry a phase the Hub alone assigns and transitions: `exploring`, `proposed`, `approved`, `archived`, or `current`. The phase SHALL be read from a database row the Hub controls, never from content in the file itself, which the operator or an agent can edit.</p><p class="aw-rationale">`current` SHALL be reachable only at document creation, for a document of `kind` `capability`, and SHALL have no transition into or out of it through the ordinary phase-transition operation. Every other phase SHALL be reachable only through the transitions this capability declares, and an attempted move outside them SHALL be refused, naming why.</p></div><div class="aw-requirement aw-requirement-must" id="FR-6"><span class="aw-id">FR-6</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Approving a document, and archiving one, SHALL be decisions only the operator can make. Both SHALL be enforced at the point the Hub actually changes a document&#x27;s phase, not only at whichever surface a caller happens to reach it through — a rule checked in one place only survives until a second caller of that place is added.</p></div><div class="aw-requirement aw-requirement-must" id="FR-7"><span class="aw-id">FR-7</span> <p><span class="aw-modal aw-modal-must">MUST</span> The Hub SHALL evaluate a document&#x27;s structural and consistency checks itself. A check MUST NOT be satisfied by the author reporting that it passed.</p><p class="aw-rationale">At minimum the Hub SHALL refuse a transition to `proposed` when: a requirement is referenced by no acceptance criterion; a requirement is referenced by no task; a task references no requirement; a requirement states no modal obligation; the non-goals are empty; or an unresolved clarification marker remains.</p></div><div class="aw-requirement aw-requirement-must" id="FR-8"><span class="aw-id">FR-8</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL append an event for every change to a document&#x27;s content or phase. Each event MUST record the actor, whether the change originated from an operator control or an agent submission, the run it belongs to where one exists, and what changed.</p><p class="aw-rationale">The event history SHALL be append-only. A recorded event MUST NOT be edited or removed.</p></div><div class="aw-requirement aw-requirement-must" id="FR-9"><span class="aw-id">FR-9</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL store a content digest for every document it writes, and a digest for each requirement&#x27;s text.</p><p class="aw-rationale">When a document on disk differs from the digest recorded for it, the Hub SHALL report the divergence and MUST NOT resolve it. It MUST NOT overwrite the file, merge the versions, or select one on the operator&#x27;s behalf.</p></div><div class="aw-requirement aw-requirement-must" id="FR-10"><span class="aw-id">FR-10</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The canonical turn context SHALL state which document is open, what phase it is in, and what the agent&#x27;s obligation is in that phase.</p><p class="aw-rationale">This statement MUST NOT depend on a charter. A project whose agent has no charter bound SHALL still be able to produce a valid document. The turn context SHALL further state that the Hub&#x27;s procedure is the one that governs the open document, and that no other specification workflow, skill, command, or tool applies to it — including one installed on the machine the runner is running on, and including one the agent has used before. Stating how to author a document does not settle which authority governs it, and a procedure the agent already has, whose trigger matches the operator&#x27;s own phrasing, is evaluated against that phrasing before any standing context is weighed. The Hub SHALL NOT detect, enumerate, or disable a competing procedure in order to satisfy this. Doing so requires reading the private layout of other tools and cannot cover a runner that does not exist yet. The context SHALL instead direct the agent to raise a competing workflow with the operator rather than follow it silently: the tool belongs to the operator, and an agent told only what not to do has nowhere to put what it found. This statement SHALL be part of the code-owned floor rather than the charter, and SHALL appear only where a document is open. A project with no charter bound is the case most exposed — mechanism without judgement — so precedence carried by a charter would be absent exactly where it is needed most.</p></div><div class="aw-requirement aw-requirement-must" id="FR-11"><span class="aw-id">FR-11</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL discover every document beneath the project&#x27;s specification directory whose path is safe, not only those in a single expected location. Nested archives, roadmaps, and system maps are documents.</p><p class="aw-rationale">A document whose path is unsafe MUST be excluded and reported rather than silently skipped.</p></div><div class="aw-requirement aw-requirement-must" id="FR-12"><span class="aw-id">FR-12</span> <p><span class="aw-modal aw-modal-must">MUST</span> The document tree SHALL have an explicit home document. The Hub MUST NOT change an existing home selection without being asked.</p><p class="aw-rationale">When no home is recorded and exactly one candidate exists, the Hub MAY record it. When there are none or several, the Hub SHALL ask rather than choose.</p></div><div class="aw-requirement aw-requirement-must" id="FR-13"><span class="aw-id">FR-13</span> <p><span class="aw-modal aw-modal-must">SHALL</span> When the document index is absent, unreadable, or invalid, the Hub SHALL continue to list the documents it discovered and SHALL report the index&#x27;s state.</p><p class="aw-rationale">It MUST NOT present a degraded tree as a healthy one, and MUST NOT discard an index entry it cannot explain.</p></div><div class="aw-requirement aw-requirement-must" id="FR-14"><span class="aw-id">FR-14</span> <p><span class="aw-modal aw-modal-must">SHALL</span> A change to a document&#x27;s content, phase, or index state SHALL be broadcast to the project&#x27;s subscribers, so an open surface reflects it without a manual refresh.</p></div><div class="aw-requirement aw-requirement-must" id="FR-15"><span class="aw-id">FR-15</span> <p><span class="aw-modal aw-modal-must">SHALL</span> An implementation footprint SHALL be captured from the working tree that holds the work the evidence is about, not from a fixed location, and SHALL name the commit that contains that work.</p><p class="aw-rationale">Evidence recorded by an agent SHALL be footprinted from that agent&#x27;s own checkout where the system has provisioned one. Evidence recorded by the operator SHALL be footprinted from the project&#x27;s own checkout. Agents are given isolated checkouts on their own branches, so a footprint taken from the project directory names whatever the operator&#x27;s checkout is on and never names the agent&#x27;s work. Determining whether an agent has a checkout SHALL be answered by the version control system, not by the presence of a directory. A version control command run inside a directory the system does not track answers about the enclosing repository instead, so an abandoned or partially created directory would otherwise produce the project&#x27;s own commit while appearing to have been checked. Establishing the footprint SHALL NOT create a checkout that does not already exist. Where no checkout for the agent exists, or the project is not under version control, the footprint SHALL fall back to the project&#x27;s own directory rather than failing. Where the system commits an agent&#x27;s work after the turn that produced it, the footprints that turn recorded SHALL be re-pointed at the resulting commit. Evidence is recorded while the work is still uncommitted, so the commit named at that moment is necessarily the one the turn started from — it does not contain the work, and on a new project it is frequently already on the main line, so the evidence reads as already integrated. Correcting the record after the commit exists is the only point at which the right answer is knowable. Re-pointing SHALL apply to every piece of evidence the turn recorded, whatever decision has since been taken on it. The stored commit is a fact about where the work is, not a judgement about the work; leaving a decided piece of evidence pointing at a commit that does not contain the work would make what gets merged depend on how quickly it was reviewed. Re-pointing SHALL re-answer whether the work has reached the main line, and SHALL be free to answer that it has not. It concerns a different commit from the one first recorded, so an answer carried over from the old commit would be an assertion about work that was never examined. Re-pointing SHALL establish a footprint for evidence that has none.</p></div><div class="aw-requirement aw-requirement-must" id="FR-16"><span class="aw-id">FR-16</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The recorded answer to whether a footprint has reached the project&#x27;s main line SHALL be re-evaluated after work is integrated, and SHALL NOT remain fixed at the value observed when the evidence was recorded.</p><p class="aw-rationale">Work is demonstrated before it is integrated, so an answer captured at that moment is necessarily &quot;not yet&quot; for every piece of agent evidence. Left unrevised, a requirement would report as unintegrated permanently, including immediately after its work was merged. Re-evaluation SHALL consider the project&#x27;s configured main branch where one is set, in preference to any inferred name. Re-evaluation SHALL be bounded, and SHALL revise only those answers that changed.</p></div><div class="aw-requirement aw-requirement-must" id="FR-17"><span class="aw-id">FR-17</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Drift SHALL be assessed by comparing a footprint against the line of work it names, and SHALL NOT be assessed by comparing every footprint against a single location.</p><p class="aw-rationale">Comparing an agent&#x27;s footprint against the project&#x27;s main line would report every file that agent added as a change, making every demonstrated requirement a drift candidate. That the work is not on the main line is already reported as an integration answer; raising it again as drift asks the operator one question in two vocabularies. A footprint that names no line of work, or names one that no longer exists, SHALL raise nothing. Being unable to tell is not evidence of drift. Footprints of different kinds SHALL be compared against their own kind of observation.</p></div><div class="aw-requirement aw-requirement-must" id="FR-18"><span class="aw-id">FR-18</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Where a document is renamed to reflect its subject, that subject SHALL become the document&#x27;s title.</p><p class="aw-rationale">A document is renamed precisely because its subject became clear. Leaving the previous title in place means every surface that lists documents shows a name contradicting the document&#x27;s own location until some later save happens to correct it.</p></div><div class="aw-requirement aw-requirement-must" id="FR-19"><span class="aw-id">FR-19</span> <p><span class="aw-modal aw-modal-must">SHALL</span> A document declaring a task SHALL be able to state that task&#x27;s title, and the system SHALL use it when the task is created.</p><p class="aw-rationale">A declared task carries a description of the work — a sentence of intent, written to be read in the document. A board shows names. Deriving one from the other produces a title that is the whole sentence, which is not a name, and a board of them cannot be scanned. Where no title is declared, the system SHALL derive one, and SHALL keep it short enough to read as a name. A derived title SHALL NOT end mid-word: a truncation that splits a word reads as a defect in the board rather than as an abbreviation. A description short enough to serve as a name SHALL be used unchanged. Shortening what is already short would be a change with no reader.</p></div><div class="aw-requirement aw-requirement-must" id="FR-20"><span class="aw-id">FR-20</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Where a specification document is open, the Hub SHALL state the governing procedure in the turn&#x27;s own prompt, alongside the operator&#x27;s message, in addition to the canonical context.</p><p class="aw-rationale">The canonical context is assembled and read before the operator&#x27;s message exists, and is weighed once, generally. A competing procedure the agent already holds is matched against the operator&#x27;s own words at the moment they arrive. Delivering the countermeasure only as standing context puts it in a different channel from the thing it competes with, and it loses: with the phase block, the precedence statement, the conversational floor and the tool list all verified present in the delivered context, an agent announced it would use a different workflow, ran a questionnaire the floor had just forbidden, and invented answers to questions it had asked and not received. The statement SHALL name no particular product, for the same reason the canonical one does not. It SHALL be short: it competes for attention rather than explaining, and the explanation already exists in the context. Where the document is in the exploring phase it SHALL also direct the agent to interview in that reply and stop, SHALL forbid answering its own unanswered questions, and SHALL direct it to rename the document as soon as the interview establishes what the document is about. A question asked in prose does not block the turn the way a structured question does, so nothing but the instruction prevents an agent proceeding on invented answers. The rename is likewise an action taken on information acquired during a particular turn, which is why it is stated with the turn rather than only in standing context. The prompt notice MUST NOT be merged into the operator&#x27;s message as recorded. What the operator said is a durable record, and it must not come to contain something they did not say. A turn with no document open SHALL carry no such statement.</p></div><div class="aw-requirement aw-requirement-must" id="FR-21"><span class="aw-id">FR-21</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Where a document is created without an explicit path, the Hub SHALL mint one, and that path SHALL carry no information about the document&#x27;s subject.</p><p class="aw-rationale">A document enters the exploring phase precisely because its subject is not yet known. A path derived from the operator&#x27;s opening sentence records the guess that preceded the interview and then outlives it, while looking — to every later reader — like a considered name. A name that is obviously arbitrary cannot be misread as one that was chosen. The minted name SHALL be a colour and a mythic animal joined by a hyphen, beneath the exploration root, and SHALL be drawn at random for each document. It SHALL NOT be derived from the title, the operator&#x27;s message, the conversation, a counter, or anything else about the document, and it SHALL NOT be reproducible from them. The Hub SHALL NOT mint a path that is already taken by another document in the project or by an existing file, and its search for a free name SHALL be bounded — a namespace that has filled up must produce an answer or a refusal, never an unbounded search. The minted path SHALL satisfy the specification path contract by construction rather than by subsequent rejection. The creating caller SHALL receive the minted path in the response.</p></div><div class="aw-requirement aw-requirement-must" id="FR-22"><span class="aw-id">FR-22</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL provide a rename operation that takes a *subject* in prose and derives the document&#x27;s new path from it, and the agent exploring a document SHALL be directed to use it as soon as the interview establishes what the document is about.</p><p class="aw-rationale">The caller SHALL NOT supply a path. Path validation is the single control preventing a document being written to an arbitrary location beneath the specification root; a rename accepting a target path would expose that control to the least trusted caller in the system as its only guard. Deriving the slug from a subject makes a traversal, a hidden segment or a different filename unexpressible rather than merely rejected. A rename SHALL move the document&#x27;s file, update the document&#x27;s recorded path, and update every inbound queue entry that names the old path and has not yet been delivered. A delivered entry SHALL NOT be rewritten: it records what was open when its turn ran. A rename SHALL NOT change the document&#x27;s identity, its requirement identifiers, its content, its digests, or its recorded events. Identity is the document&#x27;s identifier and never was its path. A rename SHALL be recorded as an event naming both the old and the new path. The Hub SHALL refuse a rename where the document is approved, where the subject yields no usable slug, or where the resulting path is already occupied by another document or an existing file. Every such refusal SHALL occur before anything is moved, and SHALL state which condition applied. The Hub SHALL NOT rewrite the document index in response to a rename. The index is a file the operator owns and the Hub has only ever read; an entry naming a moved document becomes a missing entry, which existing diagnostics report truthfully.</p></div><div class="aw-requirement aw-requirement-must" id="FR-23"><span class="aw-id">FR-23</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The rendered document SHALL present acceptance criteria grouped in the order of the requirements they belong to, and SHALL state explicitly when there are no outstanding open questions.</p><p class="aw-rationale">Both defects were found by reading the first agent-authored document rather than by any check. Criteria were rendered in submission order, so a reader scanning the table by requirement met `FR-8, FR-8, FR-7` and lost their place. An empty open-questions list rendered as no section at all, leaving a reader unable to distinguish questions asked and resolved from questions never asked — which is the difference between a document that has been through an interview and one that has not. Ordering SHALL be stable: criteria belonging to the same requirement keep the order in which they were submitted, because that order is the author&#x27;s and carries their emphasis.</p></div><div class="aw-requirement aw-requirement-must" id="FR-24"><span class="aw-id">FR-24</span> <p><span class="aw-modal aw-modal-must">SHALL</span> A specification document SHALL carry a rigor level of `sketch`, `contract` or `gate`, stated in the document itself, defaulting to `sketch`.</p><p class="aw-rationale">Rigor says what happens to work that ignores the document. `sketch` reports its state and blocks nothing. `contract` reports its state, including drift, and blocks nothing. `gate` refuses the approval of work serving its requirements while any of them is unverified. **Rigor is not phase.** Phase asks whether the operator has agreed to the document; rigor asks what follows for work that does not satisfy it. A document may be approved and remain a sketch, or be a gate while still exploring. Making approval imply enforcement would turn every agreed document into a barrier. The Hub SHALL own rigor transitions. A change SHALL be written against the document&#x27;s current content digest, so a rigor change cannot land on a document that was edited underneath it, and each change SHALL be recorded append-only with the actor, the reason, and the digest current at that moment.</p></div><div class="aw-requirement aw-requirement-must" id="FR-25"><span class="aw-id">FR-25</span> <p><span class="aw-modal aw-modal-must">SHALL</span> An agent SHALL NOT promote or demote a document&#x27;s rigor. There SHALL be no argument, tool or route by which it can express either.</p><p class="aw-rationale">A gate an agent can lower is not a gate. The blocked party would remove the obstacle, and the enforcement would exist only for agents that did not think to try. Promotion is refused for a related reason: raising rigor blocks other work, which is a decision about how the project is run. This is the same construction as approval, and for the same reason: enforced by the absence of a route rather than by instructing agents not to attempt it. The mechanism it replaces was a charter instructing an agent to enforce a gate on itself, which is honour-system by construction. The operator MAY lower rigor, and doing so SHALL be recorded and attributed. An operator who needs to get past a gate has an explicit, visible way through; what there SHALL NOT be is an unrecorded override, which is the same act without the evidence that it happened.</p></div><div class="aw-requirement aw-requirement-must" id="FR-26"><span class="aw-id">FR-26</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Promotion to `contract` or `gate` SHALL be refused while the document has unresolved requirement identifiers, duplicate references, or content that does not parse.</p><p class="aw-rationale">Rigor is a claim about enforceability. A document that cannot be read cannot be enforced, and promoting one would produce a gate whose refusals are parse diagnostics rather than judgements about the work. Demotion SHALL NOT be subject to that condition, and SHALL change enforcement only: links, revisions, evidence and reviews all survive it. A demotion that destroyed the record would be a way to launder unverified work rather than a way to unblock it.</p></div><div class="aw-requirement aw-requirement-must" id="FR-27"><span class="aw-id">FR-27</span> <p><span class="aw-modal aw-modal-must">SHALL</span> A specification document whose rigor is `contract` or `gate` SHALL NOT apply an agent&#x27;s submitted edit directly to the live document. Instead, the Hub SHALL compute the difference between the submitted content and the document&#x27;s currently stored content, and SHALL record one pending, individually addressable proposal per changed unit — each added, modified, or removed requirement, identified by its key (the document-scoped handle an agent&#x27;s submission carries; a requirement newly added by a proposal has no Hub-minted public identifier until the proposal is accepted), plus one proposal covering the document&#x27;s non-requirement content (summary, problem, scope, design, tasks, algorithms, open questions) as a single unit when any of it changes. The live document SHALL remain exactly as it was until an operator accepts a specific proposal. A document at `sketch` rigor is unaffected: an agent&#x27;s submission continues to apply immediately.</p></div><div class="aw-requirement aw-requirement-must" id="FR-28"><span class="aw-id">FR-28</span> <p><span class="aw-modal aw-modal-must">SHALL</span> A pending proposal targeting a requirement SHALL be discoverable at that requirement when the document is read, not only in a separate list. A pending proposal targeting the document&#x27;s non-requirement content SHALL be discoverable at the document&#x27;s summary. Accepting or rejecting one proposal SHALL NOT alter the status of any other pending proposal on the same document.</p></div><div class="aw-requirement aw-requirement-must" id="FR-29"><span class="aw-id">FR-29</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The record of an accepted proposal SHALL name both the actor whose submission created the proposal and the operator who accepted it, as distinct fields, in a shape that does not let one overwrite the other.</p></div><div class="aw-requirement aw-requirement-must" id="FR-30"><span class="aw-id">FR-30</span> <p><span class="aw-modal aw-modal-must">SHALL</span> An agent-authenticated actor SHALL NOT accept or reject a proposal, mirroring the existing rule that approving or archiving a specification document is reserved to the operator. This SHALL be enforced in the functions that perform acceptance and rejection, not only at the API boundary.</p></div><div class="aw-requirement aw-requirement-must" id="FR-31"><span class="aw-id">FR-31</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Accepting a proposal SHALL be refused, rather than applied against content it was never compared against, if the document&#x27;s stored content has changed since the proposal was created — through another accepted proposal, a direct edit while still at `sketch` rigor before promotion, or a rigor change. A refused-as-stale proposal SHALL be marked distinctly from a pending or accepted one so it is not mistaken for either.</p></div><div class="aw-requirement aw-requirement-must" id="FR-32"><span class="aw-id">FR-32</span> <p><span class="aw-modal aw-modal-must">SHALL</span> WHEN an agent&#x27;s turn is triggered with a specification document open, THEN the spawned run SHALL NOT be granted the ability to write or edit files in the project workspace for that turn, regardless of the document&#x27;s phase or rigor, and regardless of the run&#x27;s configured permission posture (including a posture that would otherwise skip permission prompts entirely). The turn&#x27;s context SHALL state that discovered implementation work is to be proposed — for example, by creating a task — rather than performed directly. A turn triggered with no specification document open is unaffected.</p></div><div class="aw-requirement aw-requirement-must" id="FR-33"><span class="aw-id">FR-33</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Where an approved document&#x27;s work is done, the Hub SHALL let the operator move it to an `archived` phase, and SHALL refuse that move from any other actor, enforced in the same function that already refuses approval to anyone but the operator.</p><p class="aw-rationale">Archiving SHALL change only the document&#x27;s phase. It SHALL NOT alter the document&#x27;s requirements, digests, recorded events, or any task the document previously declared. The Hub SHALL refuse to archive a document that is not currently `approved`. Archiving SHALL NOT be reachable from `exploring` or `proposed` — an unfinished document is abandoned or reopened through the means that already exist for that, not archived. An `archived` document SHALL have no further phase transition available to it.</p></div><div class="aw-requirement aw-requirement-must" id="FR-34"><span class="aw-id">FR-34</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Where a document is created with `kind` `capability`, the Hub SHALL place it directly in a `current` phase rather than `exploring`, and SHALL refuse every phase transition attempted against it, including one naming `current` itself.</p><p class="aw-rationale">A capability document&#x27;s content SHALL be written only by the operator. A submission from any other actor SHALL be refused, regardless of the document&#x27;s phase, because a capability document is never in a phase a submission would otherwise be blocked by. A document&#x27;s `kind` SHALL be fixed at creation. A subsequent content submission whose `kind` disagrees with the document&#x27;s recorded `kind` SHALL be refused, and SHALL NOT change what the document is classified as. This applies to every document, not only capability documents — the document a submission targets is not the submission&#x27;s to reclassify.</p></div><div class="aw-requirement aw-requirement-must" id="FR-35"><span class="aw-id">FR-35</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL let the operator merge a reviewed, approved or archived change document into one or more capability documents: writing new content into a named capability document and recording, for each source change named, who performed the merge and when.</p><p class="aw-rationale">The Hub SHALL refuse a merge whose target is not a capability document. The Hub SHALL refuse a merge naming a source document that is not `approved` or `archived` — a merge cites finished work, not work still being decided about. A merge record SHALL be attributable only to the operator. Merging SHALL NOT be a precondition for archiving a change document, and archiving SHALL NOT be a precondition for merging one — the Hub SHALL allow either to happen first, or a change to be archived having never been merged. Every merge SHALL be retrievable both by the capability document it changed and by the change document it came from.</p></div><div class="aw-requirement aw-requirement-must" id="FR-36"><span class="aw-id">FR-36</span> <p><span class="aw-modal aw-modal-must">MUST</span> The document the Hub renders SHALL take its neutral colours (background, foreground, muted text, borders, and the two lifted-surface tones used for chips and code) from the same set of inherited CSS custom properties the embedding shell already sets when it stamps the Hub&#x27;s active theme onto the document. The document MUST NOT define a second, independently-named set of neutral tokens that the shell&#x27;s theming has no way to reach.</p><p class="aw-rationale">The document&#x27;s own semantic hues — used to carry meaning within the specification itself, such as distinguishing a mandatory requirement from an optional one — remain the document&#x27;s own and are not overridden by the embedding shell. This MUST continue to be achieved without any external resource reference (no stylesheet link, no network fetch) — inherited custom properties and inline styles only.</p></div><div class="aw-requirement aw-requirement-must" id="FR-37"><span class="aw-id">FR-37</span> <p><span class="aw-modal aw-modal-must">SHALL</span> A rendered document SHALL give a requirement&#x27;s modal obligation (mandatory, recommended, optional) a visually distinct treatment, not uniform styling, so a reader can distinguish requirement strength by scanning rather than by reading every word.</p></div><div class="aw-requirement aw-requirement-must" id="FR-38"><span class="aw-id">FR-38</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Coverage reporting SHALL report a requirement whose only evidence against its current wording was rejected as a distinct state from a requirement with no evidence, and distinct from a requirement whose linked work is still under way. This state SHALL rank below `verified` and above the states that describe the absence of an attempt, so that a subsequent, accepted submission against the same wording is reported as `verified`, not shadowed by an earlier rejection.</p></div><div class="aw-requirement aw-requirement-must" id="FR-39"><span class="aw-id">FR-39</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL refuse a document&#x27;s transition to `proposed` when any task it declares names more requirements than a stated ceiling. The ceiling MUST be named in the refusal.</p></div></section><section><h2 id="acceptance">Acceptance criteria</h2><table><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>the operator opens a specification document in a registered project</td><td>its content is read from the project&#x27;s working directory at request time no cached copy is consulted</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>any caller supplies a document path that is absolute, contains a traversal segment, or</td><td>the request is refused no file outside the workspace is read or written</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>the Hub runs with a configured workspace root and a project&#x27;s directory lies beneath it</td><td>documents resolve normally within that root a path outside the root is refused rather than guessed at</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>an agent submits a payload that satisfies the schema</td><td>the Hub renders the document and writes it to the project working directory the rendered markup is produced by the Hub, not supplied by the agent</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>an agent submits a payload that omits a required field or violates a declared constraint</td><td>the submission is refused with an error identifying the field the document on disk is unchanged</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>an agent writes specification markup to the working directory by any other means</td><td>the Hub does not treat that content as an authored document the document&#x27;s authority remains the last validated payload</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>a document containing fields the current schema version does not define is read and</td><td>those fields are present and unchanged in the result no validation error is raised on their account</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>a payload omits its schema version</td><td>the submission is refused the error names the missing version rather than a downstream field</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>an agent resubmits a document in which one requirement&#x27;s text has changed and its key has</td><td>that requirement keeps the identifier it already had</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>an agent resubmits a document with the same keys in a different order, or inserts a new</td><td>every previously known key keeps the identifier it already had only the new key receives a newly minted one</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>a submitted payload contains an identifier for a requirement</td><td>the Hub assigns its own identifier the submitted value does not appear as that requirement&#x27;s identity</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>a requirement is removed and a new requirement is added in a later submission</td><td>the new requirement receives an identifier that has never been used in this document</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>a transition names a phase this capability does not define</td><td>it is refused</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>a transition is attempted between two phases with no direct move between them</td><td>it is refused, naming the phases involved</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>any caller attempts to move a document to or from `current` through the transition operation</td><td>it is refused</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>an agent attempts to move a document to `approved`</td><td>it is refused, and the refusal says approval is the operator&#x27;s</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>an agent attempts to move a document to `archived`</td><td>it is refused, and the refusal says archiving is the operator&#x27;s</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>either transition is attempted through any code path that ultimately calls the Hub&#x27;s phase</td><td>the same refusal applies, because the check is made there and not duplicated per caller</td></tr><tr><td><a href="#FR-7">FR-7</a></td><td></td><td>a document contains a requirement that no acceptance criterion references</td><td>the transition to `proposed` is refused the offending requirement is named</td></tr><tr><td><a href="#FR-7">FR-7</a></td><td></td><td>a document contains a task that references no requirement</td><td>the transition to `proposed` is refused the offending task is named</td></tr><tr><td><a href="#FR-7">FR-7</a></td><td></td><td>a document still carries a clarification marker that has not been resolved</td><td>the transition to `proposed` is refused</td></tr><tr><td><a href="#FR-8">FR-8</a></td><td></td><td>an agent submits a document payload during a run</td><td>an event records the agent as actor, the submission as origin, and that run&#x27;s identifier</td></tr><tr><td><a href="#FR-8">FR-8</a></td><td></td><td>the operator changes a document through a Hub control</td><td>an event records the operator as actor and the control as origin</td></tr><tr><td><a href="#FR-8">FR-8</a></td><td></td><td>any caller attempts to modify or delete a recorded event</td><td>the attempt is refused the existing history is unchanged</td></tr><tr><td><a href="#FR-9">FR-9</a></td><td></td><td>a document&#x27;s content on disk no longer matches its stored digest</td><td>the divergence is reported to the operator the file is left as it is found</td></tr><tr><td><a href="#FR-9">FR-9</a></td><td></td><td>a requirement&#x27;s text is changed</td><td>the digest recorded for that requirement changes the digest for an unmodified requirement does not</td></tr><tr><td><a href="#FR-10">FR-10</a></td><td></td><td>a run is triggered while a specification document is open</td><td>the turn context names the document, its phase, and the obligation that phase carries</td></tr><tr><td><a href="#FR-10">FR-10</a></td><td></td><td>an agent with no charter bound authors a document</td><td>the document is subject to the same validation and the same phase conditions its validity does not depend on charter content</td></tr><tr><td><a href="#FR-10">FR-10</a></td><td></td><td>a run is triggered while a specification document is open</td><td>the turn context states that no specification workflow other than the Hub&#x27;s applies to it does so without naming a particular product, so a workflow it has never heard of is</td></tr><tr><td><a href="#FR-10">FR-10</a></td><td></td><td>the agent has another specification workflow available to it</td><td>the turn context directs it to tell the operator what it found to author the document through the Hub regardless</td></tr><tr><td><a href="#FR-10">FR-10</a></td><td></td><td>a run is triggered with a document open and no charter bound</td><td>the precedence statement is present</td></tr><tr><td><a href="#FR-10">FR-10</a></td><td></td><td>a run is triggered with no specification document open</td><td>the turn context makes no statement about specification procedure</td></tr><tr><td><a href="#FR-11">FR-11</a></td><td></td><td>the specification tree contains documents in nested directories</td><td>all of them are listed</td></tr><tr><td><a href="#FR-11">FR-11</a></td><td></td><td>a discovered path fails path validation</td><td>it is not listed as a document the exclusion is reported rather than passed over silently</td></tr><tr><td><a href="#FR-12">FR-12</a></td><td></td><td>the index records a home document that still exists</td><td>it remains the home document</td></tr><tr><td><a href="#FR-12">FR-12</a></td><td></td><td>no home is recorded and several candidates exist</td><td>the operator is asked which is home none is selected in the meantime</td></tr><tr><td><a href="#FR-13">FR-13</a></td><td></td><td>the index cannot be parsed</td><td>discovered documents are still listed the index&#x27;s state is reported as invalid</td></tr><tr><td><a href="#FR-13">FR-13</a></td><td></td><td>the index names a document with no file on disk and no evidence of deliberate deletion</td><td>the entry is retained and reported as unresolved it is not silently discarded</td></tr><tr><td><a href="#FR-14">FR-14</a></td><td></td><td>an agent&#x27;s submission is accepted</td><td>subscribers to that project receive an event identifying the document</td></tr><tr><td><a href="#FR-14">FR-14</a></td><td></td><td>a document&#x27;s phase changes</td><td>subscribers receive an event carrying the document and its new phase</td></tr><tr><td><a href="#FR-15">FR-15</a></td><td></td><td>an agent records evidence while its checkout holds work not present in the project&#x27;s</td><td>the footprint names the agent&#x27;s branch and the commit in that checkout the footprint does not name the project checkout&#x27;s commit</td></tr><tr><td><a href="#FR-15">FR-15</a></td><td></td><td>the operator records evidence</td><td>the footprint names the project checkout&#x27;s branch and commit</td></tr><tr><td><a href="#FR-15">FR-15</a></td><td></td><td>an agent records evidence and a directory exists at the agent&#x27;s checkout location that</td><td>the footprint falls back to the project&#x27;s own directory no error is raised</td></tr><tr><td><a href="#FR-15">FR-15</a></td><td></td><td>an agent with no provisioned checkout records evidence</td><td>the footprint falls back to the project&#x27;s own directory no checkout is created</td></tr><tr><td><a href="#FR-15">FR-15</a></td><td></td><td>an agent records evidence for work it has not yet committed the system commits that work when the turn ends</td><td>the evidence names the commit the system made it does not name the commit the turn started from</td></tr><tr><td><a href="#FR-15">FR-15</a></td><td></td><td>a turn&#x27;s evidence has been accepted before the turn&#x27;s work was committed</td><td>the accepted evidence names the commit containing the work the decision recorded against it is unchanged</td></tr><tr><td><a href="#FR-15">FR-15</a></td><td></td><td>a turn&#x27;s evidence is re-pointed at a commit that has not reached the main line</td><td>the evidence reports that the work has not reached the main line an earlier answer of reached is not carried over</td></tr><tr><td><a href="#FR-16">FR-16</a></td><td></td><td>a requirement&#x27;s work is integrated into the project&#x27;s main branch</td><td>coverage reports that requirement as integrated it did not report so before the integration</td></tr><tr><td><a href="#FR-16">FR-16</a></td><td></td><td>integrating one requirement&#x27;s commit also brings an earlier commit on the same branch into</td><td>the earlier work&#x27;s recorded answer is revised as well</td></tr><tr><td><a href="#FR-17">FR-17</a></td><td></td><td>the main branch changes and an agent&#x27;s demonstrated work is unchanged</td><td>no drift candidate is raised for that work</td></tr><tr><td><a href="#FR-17">FR-17</a></td><td></td><td>the branch a footprint names changes after the evidence was accepted</td><td>a drift candidate is raised</td></tr><tr><td><a href="#FR-17">FR-17</a></td><td></td><td>the branch a footprint names no longer exists</td><td>no drift candidate is raised no error is reported</td></tr><tr><td><a href="#FR-18">FR-18</a></td><td></td><td>a document is renamed to a new subject</td><td>its title is that subject its path reflects that subject</td></tr><tr><td><a href="#FR-19">FR-19</a></td><td></td><td>a document declares a task with a title the document is approved</td><td>the created task carries that title</td></tr><tr><td><a href="#FR-19">FR-19</a></td><td></td><td>a declared task states only its description</td><td>the created task carries a title derived from it that title is short enough to read as a name</td></tr><tr><td><a href="#FR-19">FR-19</a></td><td></td><td>a description is too long to serve as a title</td><td>the derived title ends on a word boundary</td></tr><tr><td><a href="#FR-19">FR-19</a></td><td></td><td>a declared task&#x27;s description is already short enough to be a name</td><td>the created task&#x27;s title is that description</td></tr><tr><td><a href="#FR-20">FR-20</a></td><td></td><td>a run is triggered with a specification document open</td><td>the prompt delivered with the operator&#x27;s message states that the Hub&#x27;s procedure governs</td></tr><tr><td><a href="#FR-20">FR-20</a></td><td></td><td>a run is triggered with a document in the exploring phase</td><td>the prompt directs the agent to interview in that reply and stop for the operator&#x27;s answer directs it not to answer its own unanswered questions</td></tr><tr><td><a href="#FR-20">FR-20</a></td><td></td><td>a run is triggered with a document in the exploring phase</td><td>the prompt directs the agent to rename the document once it knows what it is about</td></tr><tr><td><a href="#FR-20">FR-20</a></td><td></td><td>a turn carries the notice</td><td>the message stored for that turn is what the operator wrote, without it</td></tr><tr><td><a href="#FR-20">FR-20</a></td><td></td><td>a run is triggered with no specification document open</td><td>the prompt carries no specification notice</td></tr><tr><td><a href="#FR-20">FR-20</a></td><td></td><td>a run is triggered with an approved document open</td><td>the prompt names how to write the document but does not direct an interview</td></tr><tr><td><a href="#FR-21">FR-21</a></td><td></td><td>a document is created without a path</td><td>the Hub mints a path of the form `spec/changes/&lt;colour&gt;-&lt;animal&gt;/spec.html` returns that path to the caller</td></tr><tr><td><a href="#FR-21">FR-21</a></td><td></td><td>two documents are created without a path, with different titles and different opening</td><td>neither minted path contains any word from its title or its opening message</td></tr><tr><td><a href="#FR-21">FR-21</a></td><td></td><td>a document is created without a path and the first candidate name is already in use in</td><td>the Hub mints a different one and the created document occupies it</td></tr><tr><td><a href="#FR-21">FR-21</a></td><td></td><td>a document is created with a path</td><td>that path is used and nothing is minted</td></tr><tr><td><a href="#FR-22">FR-22</a></td><td></td><td>a document at a minted placeholder path is renamed with the subject</td><td>the document&#x27;s path becomes `spec/changes/personal-houseplant-watering-tracker/spec.html` the file exists at the new path and no longer exists at the old one</td></tr><tr><td><a href="#FR-22">FR-22</a></td><td></td><td>a document with minted requirement identifiers is renamed</td><td>its identifier, its rendered content, its requirement identifiers and its recorded events</td></tr><tr><td><a href="#FR-22">FR-22</a></td><td></td><td>an inbound queue entry naming the old path has not been delivered and the document is</td><td>that entry names the new path</td></tr><tr><td><a href="#FR-22">FR-22</a></td><td></td><td>an inbound queue entry naming the old path has already been delivered and the document is</td><td>that entry still names the old path</td></tr><tr><td><a href="#FR-22">FR-22</a></td><td></td><td>a rename is attempted on an approved document</td><td>it is refused, and the refusal says the document is approved</td></tr><tr><td><a href="#FR-22">FR-22</a></td><td></td><td>a rename is attempted with a subject that yields an empty slug</td><td>it is refused, and no placeholder is minted in its place</td></tr><tr><td><a href="#FR-22">FR-22</a></td><td></td><td>a rename would move a document onto a path another document already occupies</td><td>it is refused and neither document is changed</td></tr><tr><td><a href="#FR-23">FR-23</a></td><td></td><td>a document is rendered whose acceptance criteria were submitted out of requirement order</td><td>the rendered table lists every criterion for a requirement before any criterion for a</td></tr><tr><td><a href="#FR-23">FR-23</a></td><td></td><td>a requirement has several acceptance criteria</td><td>they appear in the order they were submitted</td></tr><tr><td><a href="#FR-23">FR-23</a></td><td></td><td>a written document has an empty open-questions list</td><td>the rendered document states that none are outstanding</td></tr><tr><td><a href="#FR-24">FR-24</a></td><td></td><td>a document is created</td><td>its rigor is `sketch` it blocks no work</td></tr><tr><td><a href="#FR-24">FR-24</a></td><td></td><td>a document&#x27;s rigor is set</td><td>the rendered document states it</td></tr><tr><td><a href="#FR-24">FR-24</a></td><td></td><td>rigor moves from one level to another</td><td>the previous level, the new level, the actor and the reason are recorded and never</td></tr><tr><td><a href="#FR-24">FR-24</a></td><td></td><td>a rigor change is submitted against a digest that is no longer current</td><td>it is refused rather than applied</td></tr><tr><td><a href="#FR-25">FR-25</a></td><td></td><td>an agent attempts to promote a document&#x27;s rigor</td><td>it is refused</td></tr><tr><td><a href="#FR-25">FR-25</a></td><td></td><td>an agent blocked by a gate attempts to demote the document</td><td>it is refused the document&#x27;s rigor is unchanged</td></tr><tr><td><a href="#FR-25">FR-25</a></td><td></td><td>the operator demotes a document</td><td>the demotion is applied and recorded with their attribution</td></tr><tr><td><a href="#FR-26">FR-26</a></td><td></td><td>promotion is attempted on a document with an unresolved identifier</td><td>it is refused, naming what is unresolved</td></tr><tr><td><a href="#FR-26">FR-26</a></td><td></td><td>a `gate` document is demoted to `sketch`</td><td>its requirement links, evidence and reviews are unchanged</td></tr><tr><td><a href="#FR-26">FR-26</a></td><td></td><td>the operator demotes a document that does not currently parse</td><td>the demotion succeeds</td></tr><tr><td><a href="#FR-27">FR-27</a></td><td></td><td>an agent submits an edit against a document whose rigor is `gate`, changing two</td><td>neither requirement&#x27;s live content changes exactly two pending proposals are recorded, each naming the requirement it targets</td></tr><tr><td><a href="#FR-27">FR-27</a></td><td></td><td>an agent submits the same shape of edit against a document whose rigor is `sketch`</td><td>the live document is updated immediately, with no proposal recorded, unchanged from a</td></tr><tr><td><a href="#FR-27">FR-27</a></td><td></td><td>an agent submits a `contract`- or `gate`-rigor document&#x27;s content unchanged from what is</td><td>no proposal is created the submission is not reported as a failure</td></tr><tr><td><a href="#FR-28">FR-28</a></td><td></td><td>a document has one pending proposal against requirement FR-3 and another against its</td><td>an operator can accept the FR-3 proposal without the metadata proposal changing state the metadata proposal remains pending and unapplied</td></tr><tr><td><a href="#FR-28">FR-28</a></td><td></td><td>an operator rejects a pending proposal</td><td>the live document&#x27;s content is unchanged reading the requirement or metadata section the proposal targeted shows no trace of the</td></tr><tr><td><a href="#FR-29">FR-29</a></td><td></td><td>a proposal created by agent run `run-123` is accepted by operator `alex`</td><td>a later read of that document&#x27;s history reports `run-123` as the proposer and `alex` as the neither identity is lost or merged into a single field</td></tr><tr><td><a href="#FR-30">FR-30</a></td><td></td><td>an actor of kind `agent` attempts to accept a pending proposal, including one it created</td><td>the attempt is refused the proposal&#x27;s status is unchanged</td></tr><tr><td><a href="#FR-31">FR-31</a></td><td></td><td>an operator attempts to accept a proposal whose captured digest no longer matches the</td><td>the attempt is refused with a stated reason the proposal is reported as stale, not accepted</td></tr><tr><td><a href="#FR-32">FR-32</a></td><td></td><td>an agent is triggered with a specification document open and, in the course of the turn,</td><td>the run has no file-write tool available to make that change directly the turn&#x27;s context states that the discovery should be recorded as a proposed task instead</td></tr><tr><td><a href="#FR-32">FR-32</a></td><td></td><td>an agent is triggered with a specification document open and a permission posture that</td><td>the run still has no file-write tool available for that turn</td></tr><tr><td><a href="#FR-32">FR-32</a></td><td></td><td>an agent is triggered with no specification document open</td><td>its tool surface is exactly what it would be without this requirement in effect</td></tr><tr><td><a href="#FR-33">FR-33</a></td><td></td><td>the operator moves an approved document to `archived`</td><td>the document&#x27;s phase becomes `archived` its requirements, digests, events and declared tasks are unchanged</td></tr><tr><td><a href="#FR-33">FR-33</a></td><td></td><td>an agent attempts to move a document to `archived`</td><td>it is refused, and the refusal says archiving is the operator&#x27;s</td></tr><tr><td><a href="#FR-33">FR-33</a></td><td></td><td>archiving is attempted on a document that is `exploring` or `proposed`</td><td>it is refused as an illegal transition</td></tr><tr><td><a href="#FR-33">FR-33</a></td><td></td><td>any phase transition is attempted on an archived document</td><td>it is refused</td></tr><tr><td><a href="#FR-34">FR-34</a></td><td></td><td>a document is created with `kind` `capability`</td><td>its phase is `current` no phase transition, including one naming `current`, succeeds against it</td></tr><tr><td><a href="#FR-34">FR-34</a></td><td></td><td>an agent submits content against a capability document</td><td>it is refused the same submission from the operator succeeds</td></tr><tr><td><a href="#FR-34">FR-34</a></td><td></td><td>a submission&#x27;s `kind` differs from the document&#x27;s recorded `kind`</td><td>it is refused, and the document&#x27;s recorded `kind` is unchanged</td></tr><tr><td><a href="#FR-35">FR-35</a></td><td></td><td>the operator merges a change document into a capability document</td><td>the capability document&#x27;s content becomes what was submitted a merge record links the two documents, attributed to the operator</td></tr><tr><td><a href="#FR-35">FR-35</a></td><td></td><td>a merge names a target document that is not a capability document</td><td>it is refused</td></tr><tr><td><a href="#FR-35">FR-35</a></td><td></td><td>a merge names a source document that is `exploring` or `proposed`</td><td>it is refused</td></tr><tr><td><a href="#FR-35">FR-35</a></td><td></td><td>a change document is merged into a capability document before it is archived, or archived</td><td>neither act blocks or requires the other</td></tr><tr><td><a href="#FR-35">FR-35</a></td><td></td><td>a change document has been merged into a capability document</td><td>the merge is retrievable by querying either document</td></tr><tr><td><a href="#FR-36">FR-36</a></td><td></td><td>the Hub is in light mode and a specification document is opened</td><td>the document&#x27;s rendered background is the Hub&#x27;s light neutral background, not a colour the switching the Hub to dark mode changes the document&#x27;s rendered background to match</td></tr><tr><td><a href="#FR-36">FR-36</a></td><td></td><td>the document renders a mandatory requirement with distinct colour from an optional one</td><td>that distinction is visible identically in both the Hub&#x27;s light and dark modes</td></tr><tr><td><a href="#FR-37">FR-37</a></td><td></td><td>a document contains requirements with different modal obligations</td><td>each is rendered with a treatment distinct to its obligation the treatment is consistent for every requirement sharing that obligation</td></tr><tr><td><a href="#FR-38">FR-38</a></td><td></td><td>a requirement&#x27;s only evidence against its current wording was rejected, and no other</td><td>its coverage state is reported as rejected, not as work in progress or as unserved</td></tr><tr><td><a href="#FR-38">FR-38</a></td><td></td><td>a requirement whose only prior evidence was rejected later receives evidence against the</td><td>its coverage state is reported as verified</td></tr><tr><td><a href="#FR-39">FR-39</a></td><td></td><td>a document contains a declared task naming more requirements than the ceiling permits</td><td>the transition to `proposed` is refused the offending task and the ceiling are named</td></tr><tr><td><a href="#FR-39">FR-39</a></td><td></td><td>a document contains a declared task naming exactly the ceiling&#x27;s number of requirements</td><td>that task does not, on its own, block the transition</td></tr></tbody></table></section><section><h2 id="evidence">Evidence and coverage limits</h2><h3>Checked</h3><ul><li>Translated from openspec/specs/spec-document-authority/spec.md (39 requirements, 117 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten.</li></ul><h3 class="aw-limits">Limits</h3><ul><li>scenarios-state-no-starting-state: 117 of 117 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed</li></ul></section><section><h2 id="open-questions">Open questions</h2><p class="aw-empty">None outstanding.</p></section>
+<script type="application/agentweave-spec+json" id="aw-spec-payload">
+{
+  "schema_version": 1,
+  "kind": "capability",
+  "title": "Spec document authority",
+  "summary": "Where a specification document lives, who may write it, how its requirements are identified, what phase it is in, and who may move it between phases. The document is the file in the project's working directory — there is no cached copy and nothing to reconcile. An agent submits a structured payload and the Hub renders the markup, so the format is a schema the agent cannot violate rather than a contract it is asked to honour. Phase is Hub-owned: the status in the file is a copy for whoever reads it, and approval is a decision only the operator can take.",
+  "problem": "",
+  "scope": {
+    "in_scope": [],
+    "non_goals": []
+  },
+  "requirements": [
+    {
+      "key": "a-specification-document-is-a-file-in-the-project-working-di",
+      "statement": "Specification documents SHALL be stored as files beneath the project's working directory and read from there. The Hub MUST resolve every document path through the project workspace, which refuses absolute paths, traversal segments, control characters, and symlink escapes.",
+      "modal": "SHALL",
+      "rationale": "The Hub SHALL NOT maintain a second copy of a document's content. There MUST be no endpoint by which a client pushes document content to the Hub, and no stored snapshot of another source's inventory.",
+      "party": null
+    },
+    {
+      "key": "the-agent-submits-a-structured-payload-and-the-hub-renders-t",
+      "statement": "An agent SHALL author a specification by submitting a structured payload through a tool. The Hub MUST validate the payload and render the document itself.",
+      "modal": "SHALL",
+      "rationale": "An agent MUST NOT write specification markup directly, and the Hub MUST NOT accept agent-authored markup as a document's content. When a payload fails validation the Hub SHALL refuse it with an error naming the offending field, and MUST NOT write a partial document.",
+      "party": null
+    },
+    {
+      "key": "the-payload-contract-is-versioned-and-forward-compatible",
+      "statement": "Every payload SHALL declare a schema version. The Hub MUST preserve fields it does not recognise across a read and re-write of the same document, and MUST re-emit them unchanged.",
+      "modal": "SHALL",
+      "rationale": "The contract MUST NOT be declared final while gate and traceability behaviour has not stated its requirements on it.",
+      "party": null
+    },
+    {
+      "key": "the-hub-mints-requirement-identifiers-and-they-are-stable",
+      "statement": "The Hub SHALL assign every requirement its identifier. An identifier supplied by an agent MUST NOT be used.",
+      "modal": "MUST",
+      "rationale": "A submission SHALL carry a **key** for each requirement: a handle, unique within the document, by which the Hub correlates a requirement across submissions. A key MUST NOT be used as an identifier and MUST NOT appear in any link. An identifier SHALL remain attached to the requirement whose key it was minted for, regardless of changes to that requirement's text, its position in the document, or the schema version the document is rendered under. An identifier that has been used MUST NOT be reassigned to a different requirement, including after the requirement it belonged to is removed. Correlating by position would make inserting a requirement renumber every requirement after it, and identifiers are what tasks and evidence point at — a renumber silently re-targets them.",
+      "party": null
+    },
+    {
+      "key": "a-document-has-a-phase-and-the-hub-owns-its-transitions",
+      "statement": "A specification document SHALL carry a phase the Hub alone assigns and transitions: `exploring`, `proposed`, `approved`, `archived`, or `current`. The phase SHALL be read from a database row the Hub controls, never from content in the file itself, which the operator or an agent can edit.",
+      "modal": "SHALL",
+      "rationale": "`current` SHALL be reachable only at document creation, for a document of `kind` `capability`, and SHALL have no transition into or out of it through the ordinary phase-transition operation. Every other phase SHALL be reachable only through the transitions this capability declares, and an attempted move outside them SHALL be refused, naming why.",
+      "party": null
+    },
+    {
+      "key": "approval-is-the-operator-s-decision-and-no-agent-can-express",
+      "statement": "Approving a document, and archiving one, SHALL be decisions only the operator can make. Both SHALL be enforced at the point the Hub actually changes a document's phase, not only at whichever surface a caller happens to reach it through — a rule checked in one place only survives until a second caller of that place is added.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "document-validity-is-checked-by-the-hub-not-asserted-by-its-",
+      "statement": "The Hub SHALL evaluate a document's structural and consistency checks itself. A check MUST NOT be satisfied by the author reporting that it passed.",
+      "modal": "MUST",
+      "rationale": "At minimum the Hub SHALL refuse a transition to `proposed` when: a requirement is referenced by no acceptance criterion; a requirement is referenced by no task; a task references no requirement; a requirement states no modal obligation; the non-goals are empty; or an unresolved clarification marker remains.",
+      "party": null
+    },
+    {
+      "key": "every-change-to-a-document-is-recorded-as-an-attributed-even",
+      "statement": "The Hub SHALL append an event for every change to a document's content or phase. Each event MUST record the actor, whether the change originated from an operator control or an agent submission, the run it belongs to where one exists, and what changed.",
+      "modal": "SHALL",
+      "rationale": "The event history SHALL be append-only. A recorded event MUST NOT be edited or removed.",
+      "party": null
+    },
+    {
+      "key": "a-document-s-digest-is-stored-on-write-and-divergence-is-rep",
+      "statement": "The Hub SHALL store a content digest for every document it writes, and a digest for each requirement's text.",
+      "modal": "SHALL",
+      "rationale": "When a document on disk differs from the digest recorded for it, the Hub SHALL report the divergence and MUST NOT resolve it. It MUST NOT overwrite the file, merge the versions, or select one on the operator's behalf.",
+      "party": null
+    },
+    {
+      "key": "the-turn-context-states-the-phase-and-holds-without-a-charte",
+      "statement": "The canonical turn context SHALL state which document is open, what phase it is in, and what the agent's obligation is in that phase.",
+      "modal": "SHALL",
+      "rationale": "This statement MUST NOT depend on a charter. A project whose agent has no charter bound SHALL still be able to produce a valid document. The turn context SHALL further state that the Hub's procedure is the one that governs the open document, and that no other specification workflow, skill, command, or tool applies to it — including one installed on the machine the runner is running on, and including one the agent has used before. Stating how to author a document does not settle which authority governs it, and a procedure the agent already has, whose trigger matches the operator's own phrasing, is evaluated against that phrasing before any standing context is weighed. The Hub SHALL NOT detect, enumerate, or disable a competing procedure in order to satisfy this. Doing so requires reading the private layout of other tools and cannot cover a runner that does not exist yet. The context SHALL instead direct the agent to raise a competing workflow with the operator rather than follow it silently: the tool belongs to the operator, and an agent told only what not to do has nowhere to put what it found. This statement SHALL be part of the code-owned floor rather than the charter, and SHALL appear only where a document is open. A project with no charter bound is the case most exposed — mechanism without judgement — so precedence carried by a charter would be absent exactly where it is needed most.",
+      "party": null
+    },
+    {
+      "key": "document-discovery-covers-every-safe-document",
+      "statement": "The Hub SHALL discover every document beneath the project's specification directory whose path is safe, not only those in a single expected location. Nested archives, roadmaps, and system maps are documents.",
+      "modal": "SHALL",
+      "rationale": "A document whose path is unsafe MUST be excluded and reported rather than silently skipped.",
+      "party": null
+    },
+    {
+      "key": "home-document-selection-is-explicit-and-resilient",
+      "statement": "The document tree SHALL have an explicit home document. The Hub MUST NOT change an existing home selection without being asked.",
+      "modal": "MUST",
+      "rationale": "When no home is recorded and exactly one candidate exists, the Hub MAY record it. When there are none or several, the Hub SHALL ask rather than choose.",
+      "party": null
+    },
+    {
+      "key": "an-unreadable-or-absent-index-degrades-visibly",
+      "statement": "When the document index is absent, unreadable, or invalid, the Hub SHALL continue to list the documents it discovered and SHALL report the index's state.",
+      "modal": "SHALL",
+      "rationale": "It MUST NOT present a degraded tree as a healthy one, and MUST NOT discard an index entry it cannot explain.",
+      "party": null
+    },
+    {
+      "key": "document-state-changes-refresh-subscribers",
+      "statement": "A change to a document's content, phase, or index state SHALL be broadcast to the project's subscribers, so an open surface reflects it without a manual refresh.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "evidence-is-footprinted-against-the-work-it-describes",
+      "statement": "An implementation footprint SHALL be captured from the working tree that holds the work the evidence is about, not from a fixed location, and SHALL name the commit that contains that work.",
+      "modal": "SHALL",
+      "rationale": "Evidence recorded by an agent SHALL be footprinted from that agent's own checkout where the system has provisioned one. Evidence recorded by the operator SHALL be footprinted from the project's own checkout. Agents are given isolated checkouts on their own branches, so a footprint taken from the project directory names whatever the operator's checkout is on and never names the agent's work. Determining whether an agent has a checkout SHALL be answered by the version control system, not by the presence of a directory. A version control command run inside a directory the system does not track answers about the enclosing repository instead, so an abandoned or partially created directory would otherwise produce the project's own commit while appearing to have been checked. Establishing the footprint SHALL NOT create a checkout that does not already exist. Where no checkout for the agent exists, or the project is not under version control, the footprint SHALL fall back to the project's own directory rather than failing. Where the system commits an agent's work after the turn that produced it, the footprints that turn recorded SHALL be re-pointed at the resulting commit. Evidence is recorded while the work is still uncommitted, so the commit named at that moment is necessarily the one the turn started from — it does not contain the work, and on a new project it is frequently already on the main line, so the evidence reads as already integrated. Correcting the record after the commit exists is the only point at which the right answer is knowable. Re-pointing SHALL apply to every piece of evidence the turn recorded, whatever decision has since been taken on it. The stored commit is a fact about where the work is, not a judgement about the work; leaving a decided piece of evidence pointing at a commit that does not contain the work would make what gets merged depend on how quickly it was reviewed. Re-pointing SHALL re-answer whether the work has reached the main line, and SHALL be free to answer that it has not. It concerns a different commit from the one first recorded, so an answer carried over from the old commit would be an assertion about work that was never examined. Re-pointing SHALL establish a footprint for evidence that has none.",
+      "party": null
+    },
+    {
+      "key": "whether-work-has-reached-the-main-line-is-re-answered",
+      "statement": "The recorded answer to whether a footprint has reached the project's main line SHALL be re-evaluated after work is integrated, and SHALL NOT remain fixed at the value observed when the evidence was recorded.",
+      "modal": "SHALL",
+      "rationale": "Work is demonstrated before it is integrated, so an answer captured at that moment is necessarily \"not yet\" for every piece of agent evidence. Left unrevised, a requirement would report as unintegrated permanently, including immediately after its work was merged. Re-evaluation SHALL consider the project's configured main branch where one is set, in preference to any inferred name. Re-evaluation SHALL be bounded, and SHALL revise only those answers that changed.",
+      "party": null
+    },
+    {
+      "key": "drift-is-assessed-against-the-line-of-work-a-footprint-names",
+      "statement": "Drift SHALL be assessed by comparing a footprint against the line of work it names, and SHALL NOT be assessed by comparing every footprint against a single location.",
+      "modal": "SHALL",
+      "rationale": "Comparing an agent's footprint against the project's main line would report every file that agent added as a change, making every demonstrated requirement a drift candidate. That the work is not on the main line is already reported as an integration answer; raising it again as drift asks the operator one question in two vocabularies. A footprint that names no line of work, or names one that no longer exists, SHALL raise nothing. Being unable to tell is not evidence of drift. Footprints of different kinds SHALL be compared against their own kind of observation.",
+      "party": null
+    },
+    {
+      "key": "a-renamed-document-carries-its-new-subject",
+      "statement": "Where a document is renamed to reflect its subject, that subject SHALL become the document's title.",
+      "modal": "SHALL",
+      "rationale": "A document is renamed precisely because its subject became clear. Leaving the previous title in place means every surface that lists documents shows a name contradicting the document's own location until some later save happens to correct it.",
+      "party": null
+    },
+    {
+      "key": "a-declared-task-can-state-the-name-the-board-shows",
+      "statement": "A document declaring a task SHALL be able to state that task's title, and the system SHALL use it when the task is created.",
+      "modal": "SHALL",
+      "rationale": "A declared task carries a description of the work — a sentence of intent, written to be read in the document. A board shows names. Deriving one from the other produces a title that is the whole sentence, which is not a name, and a board of them cannot be scanned. Where no title is declared, the system SHALL derive one, and SHALL keep it short enough to read as a name. A derived title SHALL NOT end mid-word: a truncation that splits a word reads as a defect in the board rather than as an abbreviation. A description short enough to serve as a name SHALL be used unchanged. Shortening what is already short would be a change with no reader.",
+      "party": null
+    },
+    {
+      "key": "a-specification-turn-is-announced-with-the-turn-not-only-bef",
+      "statement": "Where a specification document is open, the Hub SHALL state the governing procedure in the turn's own prompt, alongside the operator's message, in addition to the canonical context.",
+      "modal": "SHALL",
+      "rationale": "The canonical context is assembled and read before the operator's message exists, and is weighed once, generally. A competing procedure the agent already holds is matched against the operator's own words at the moment they arrive. Delivering the countermeasure only as standing context puts it in a different channel from the thing it competes with, and it loses: with the phase block, the precedence statement, the conversational floor and the tool list all verified present in the delivered context, an agent announced it would use a different workflow, ran a questionnaire the floor had just forbidden, and invented answers to questions it had asked and not received. The statement SHALL name no particular product, for the same reason the canonical one does not. It SHALL be short: it competes for attention rather than explaining, and the explanation already exists in the context. Where the document is in the exploring phase it SHALL also direct the agent to interview in that reply and stop, SHALL forbid answering its own unanswered questions, and SHALL direct it to rename the document as soon as the interview establishes what the document is about. A question asked in prose does not block the turn the way a structured question does, so nothing but the instruction prevents an agent proceeding on invented answers. The rename is likewise an action taken on information acquired during a particular turn, which is why it is stated with the turn rather than only in standing context. The prompt notice MUST NOT be merged into the operator's message as recorded. What the operator said is a durable record, and it must not come to contain something they did not say. A turn with no document open SHALL carry no such statement.",
+      "party": null
+    },
+    {
+      "key": "a-new-document-is-given-a-name-that-means-nothing",
+      "statement": "Where a document is created without an explicit path, the Hub SHALL mint one, and that path SHALL carry no information about the document's subject.",
+      "modal": "SHALL",
+      "rationale": "A document enters the exploring phase precisely because its subject is not yet known. A path derived from the operator's opening sentence records the guess that preceded the interview and then outlives it, while looking — to every later reader — like a considered name. A name that is obviously arbitrary cannot be misread as one that was chosen. The minted name SHALL be a colour and a mythic animal joined by a hyphen, beneath the exploration root, and SHALL be drawn at random for each document. It SHALL NOT be derived from the title, the operator's message, the conversation, a counter, or anything else about the document, and it SHALL NOT be reproducible from them. The Hub SHALL NOT mint a path that is already taken by another document in the project or by an existing file, and its search for a free name SHALL be bounded — a namespace that has filled up must produce an answer or a refusal, never an unbounded search. The minted path SHALL satisfy the specification path contract by construction rather than by subsequent rejection. The creating caller SHALL receive the minted path in the response.",
+      "party": null
+    },
+    {
+      "key": "a-document-is-renamed-once-its-subject-is-established",
+      "statement": "The Hub SHALL provide a rename operation that takes a *subject* in prose and derives the document's new path from it, and the agent exploring a document SHALL be directed to use it as soon as the interview establishes what the document is about.",
+      "modal": "SHALL",
+      "rationale": "The caller SHALL NOT supply a path. Path validation is the single control preventing a document being written to an arbitrary location beneath the specification root; a rename accepting a target path would expose that control to the least trusted caller in the system as its only guard. Deriving the slug from a subject makes a traversal, a hidden segment or a different filename unexpressible rather than merely rejected. A rename SHALL move the document's file, update the document's recorded path, and update every inbound queue entry that names the old path and has not yet been delivered. A delivered entry SHALL NOT be rewritten: it records what was open when its turn ran. A rename SHALL NOT change the document's identity, its requirement identifiers, its content, its digests, or its recorded events. Identity is the document's identifier and never was its path. A rename SHALL be recorded as an event naming both the old and the new path. The Hub SHALL refuse a rename where the document is approved, where the subject yields no usable slug, or where the resulting path is already occupied by another document or an existing file. Every such refusal SHALL occur before anything is moved, and SHALL state which condition applied. The Hub SHALL NOT rewrite the document index in response to a rename. The index is a file the operator owns and the Hub has only ever read; an entry naming a moved document becomes a missing entry, which existing diagnostics report truthfully.",
+      "party": null
+    },
+    {
+      "key": "a-rendered-document-is-ordered-and-complete-for-a-reader",
+      "statement": "The rendered document SHALL present acceptance criteria grouped in the order of the requirements they belong to, and SHALL state explicitly when there are no outstanding open questions.",
+      "modal": "SHALL",
+      "rationale": "Both defects were found by reading the first agent-authored document rather than by any check. Criteria were rendered in submission order, so a reader scanning the table by requirement met `FR-8, FR-8, FR-7` and lost their place. An empty open-questions list rendered as no section at all, leaving a reader unable to distinguish questions asked and resolved from questions never asked — which is the difference between a document that has been through an interview and one that has not. Ordering SHALL be stable: criteria belonging to the same requirement keep the order in which they were submitted, because that order is the author's and carries their emphasis.",
+      "party": null
+    },
+    {
+      "key": "a-document-declares-how-strictly-it-is-enforced",
+      "statement": "A specification document SHALL carry a rigor level of `sketch`, `contract` or `gate`, stated in the document itself, defaulting to `sketch`.",
+      "modal": "SHALL",
+      "rationale": "Rigor says what happens to work that ignores the document. `sketch` reports its state and blocks nothing. `contract` reports its state, including drift, and blocks nothing. `gate` refuses the approval of work serving its requirements while any of them is unverified. **Rigor is not phase.** Phase asks whether the operator has agreed to the document; rigor asks what follows for work that does not satisfy it. A document may be approved and remain a sketch, or be a gate while still exploring. Making approval imply enforcement would turn every agreed document into a barrier. The Hub SHALL own rigor transitions. A change SHALL be written against the document's current content digest, so a rigor change cannot land on a document that was edited underneath it, and each change SHALL be recorded append-only with the actor, the reason, and the digest current at that moment.",
+      "party": null
+    },
+    {
+      "key": "only-the-operator-changes-rigor",
+      "statement": "An agent SHALL NOT promote or demote a document's rigor. There SHALL be no argument, tool or route by which it can express either.",
+      "modal": "SHALL",
+      "rationale": "A gate an agent can lower is not a gate. The blocked party would remove the obstacle, and the enforcement would exist only for agents that did not think to try. Promotion is refused for a related reason: raising rigor blocks other work, which is a decision about how the project is run. This is the same construction as approval, and for the same reason: enforced by the absence of a route rather than by instructing agents not to attempt it. The mechanism it replaces was a charter instructing an agent to enforce a gate on itself, which is honour-system by construction. The operator MAY lower rigor, and doing so SHALL be recorded and attributed. An operator who needs to get past a gate has an explicit, visible way through; what there SHALL NOT be is an unrecorded override, which is the same act without the evidence that it happened.",
+      "party": null
+    },
+    {
+      "key": "rigor-is-only-raised-on-a-document-that-can-be-enforced",
+      "statement": "Promotion to `contract` or `gate` SHALL be refused while the document has unresolved requirement identifiers, duplicate references, or content that does not parse.",
+      "modal": "SHALL",
+      "rationale": "Rigor is a claim about enforceability. A document that cannot be read cannot be enforced, and promoting one would produce a gate whose refusals are parse diagnostics rather than judgements about the work. Demotion SHALL NOT be subject to that condition, and SHALL change enforcement only: links, revisions, evidence and reviews all survive it. A demotion that destroyed the record would be a way to launder unverified work rather than a way to unblock it.",
+      "party": null
+    },
+    {
+      "key": "a-document-at-contract-or-gate-rigor-gates-edits-behind-an-o",
+      "statement": "A specification document whose rigor is `contract` or `gate` SHALL NOT apply an agent's submitted edit directly to the live document. Instead, the Hub SHALL compute the difference between the submitted content and the document's currently stored content, and SHALL record one pending, individually addressable proposal per changed unit — each added, modified, or removed requirement, identified by its key (the document-scoped handle an agent's submission carries; a requirement newly added by a proposal has no Hub-minted public identifier until the proposal is accepted), plus one proposal covering the document's non-requirement content (summary, problem, scope, design, tasks, algorithms, open questions) as a single unit when any of it changes. The live document SHALL remain exactly as it was until an operator accepts a specific proposal. A document at `sketch` rigor is unaffected: an agent's submission continues to apply immediately.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "a-pending-proposal-is-discoverable-in-position-and-is-indivi",
+      "statement": "A pending proposal targeting a requirement SHALL be discoverable at that requirement when the document is read, not only in a separate list. A pending proposal targeting the document's non-requirement content SHALL be discoverable at the document's summary. Accepting or rejecting one proposal SHALL NOT alter the status of any other pending proposal on the same document.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "an-accepted-proposal-is-attributed-to-both-its-proposer-and-",
+      "statement": "The record of an accepted proposal SHALL name both the actor whose submission created the proposal and the operator who accepted it, as distinct fields, in a shape that does not let one overwrite the other.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "accepting-or-rejecting-a-proposal-is-reserved-to-the-operato",
+      "statement": "An agent-authenticated actor SHALL NOT accept or reject a proposal, mirroring the existing rule that approving or archiving a specification document is reserved to the operator. This SHALL be enforced in the functions that perform acceptance and rejection, not only at the API boundary.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "a-proposal-that-no-longer-matches-the-document-s-current-con",
+      "statement": "Accepting a proposal SHALL be refused, rather than applied against content it was never compared against, if the document's stored content has changed since the proposal was created — through another accepted proposal, a direct edit while still at `sketch` rigor before promotion, or a rigor change. A refused-as-stale proposal SHALL be marked distinctly from a pending or accepted one so it is not mistaken for either.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "authoring-assistance-is-scoped-away-from-performing-discover",
+      "statement": "WHEN an agent's turn is triggered with a specification document open, THEN the spawned run SHALL NOT be granted the ability to write or edit files in the project workspace for that turn, regardless of the document's phase or rigor, and regardless of the run's configured permission posture (including a posture that would otherwise skip permission prompts entirely). The turn's context SHALL state that discovered implementation work is to be proposed — for example, by creating a task — rather than performed directly. A turn triggered with no specification document open is unaffected.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "a-finished-change-is-archived-by-the-operator",
+      "statement": "Where an approved document's work is done, the Hub SHALL let the operator move it to an `archived` phase, and SHALL refuse that move from any other actor, enforced in the same function that already refuses approval to anyone but the operator.",
+      "modal": "SHALL",
+      "rationale": "Archiving SHALL change only the document's phase. It SHALL NOT alter the document's requirements, digests, recorded events, or any task the document previously declared. The Hub SHALL refuse to archive a document that is not currently `approved`. Archiving SHALL NOT be reachable from `exploring` or `proposed` — an unfinished document is abandoned or reopened through the means that already exist for that, not archived. An `archived` document SHALL have no further phase transition available to it.",
+      "party": null
+    },
+    {
+      "key": "a-capability-document-sits-outside-the-phase-machine",
+      "statement": "Where a document is created with `kind` `capability`, the Hub SHALL place it directly in a `current` phase rather than `exploring`, and SHALL refuse every phase transition attempted against it, including one naming `current` itself.",
+      "modal": "SHALL",
+      "rationale": "A capability document's content SHALL be written only by the operator. A submission from any other actor SHALL be refused, regardless of the document's phase, because a capability document is never in a phase a submission would otherwise be blocked by. A document's `kind` SHALL be fixed at creation. A subsequent content submission whose `kind` disagrees with the document's recorded `kind` SHALL be refused, and SHALL NOT change what the document is classified as. This applies to every document, not only capability documents — the document a submission targets is not the submission's to reclassify.",
+      "party": null
+    },
+    {
+      "key": "a-change-s-delta-is-absorbed-into-the-corpus-by-an-authored-",
+      "statement": "The Hub SHALL let the operator merge a reviewed, approved or archived change document into one or more capability documents: writing new content into a named capability document and recording, for each source change named, who performed the merge and when.",
+      "modal": "SHALL",
+      "rationale": "The Hub SHALL refuse a merge whose target is not a capability document. The Hub SHALL refuse a merge naming a source document that is not `approved` or `archived` — a merge cites finished work, not work still being decided about. A merge record SHALL be attributable only to the operator. Merging SHALL NOT be a precondition for archiving a change document, and archiving SHALL NOT be a precondition for merging one — the Hub SHALL allow either to happen first, or a change to be archived having never been merged. Every merge SHALL be retrievable both by the capability document it changed and by the change document it came from.",
+      "party": null
+    },
+    {
+      "key": "the-rendered-document-shares-the-hub-s-theme-not-a-colour-sc",
+      "statement": "The document the Hub renders SHALL take its neutral colours (background, foreground, muted text, borders, and the two lifted-surface tones used for chips and code) from the same set of inherited CSS custom properties the embedding shell already sets when it stamps the Hub's active theme onto the document. The document MUST NOT define a second, independently-named set of neutral tokens that the shell's theming has no way to reach.",
+      "modal": "MUST",
+      "rationale": "The document's own semantic hues — used to carry meaning within the specification itself, such as distinguishing a mandatory requirement from an optional one — remain the document's own and are not overridden by the embedding shell. This MUST continue to be achieved without any external resource reference (no stylesheet link, no network fetch) — inherited custom properties and inline styles only.",
+      "party": null
+    },
+    {
+      "key": "the-rendered-document-visually-distinguishes-requirement-str",
+      "statement": "A rendered document SHALL give a requirement's modal obligation (mandatory, recommended, optional) a visually distinct treatment, not uniform styling, so a reader can distinguish requirement strength by scanning rather than by reading every word.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "coverage-distinguishes-rejected-evidence-from-work-that-has-",
+      "statement": "Coverage reporting SHALL report a requirement whose only evidence against its current wording was rejected as a distinct state from a requirement with no evidence, and distinct from a requirement whose linked work is still under way. This state SHALL rank below `verified` and above the states that describe the absence of an attempt, so that a subsequent, accepted submission against the same wording is reported as `verified`, not shadowed by an earlier rejection.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "a-declared-task-s-requirement-span-is-capped-and-the-hub-enf",
+      "statement": "The Hub SHALL refuse a document's transition to `proposed` when any task it declares names more requirements than a stated ceiling. The ceiling MUST be named in the refusal.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "key": "ac1",
+      "requirement": "a-specification-document-is-a-file-in-the-project-working-di",
+      "given": "",
+      "when": "the operator opens a specification document in a registered project",
+      "then": "its content is read from the project's working directory at request time no cached copy is consulted"
+    },
+    {
+      "key": "ac2",
+      "requirement": "a-specification-document-is-a-file-in-the-project-working-di",
+      "given": "",
+      "when": "any caller supplies a document path that is absolute, contains a traversal segment, or",
+      "then": "the request is refused no file outside the workspace is read or written"
+    },
+    {
+      "key": "ac3",
+      "requirement": "a-specification-document-is-a-file-in-the-project-working-di",
+      "given": "",
+      "when": "the Hub runs with a configured workspace root and a project's directory lies beneath it",
+      "then": "documents resolve normally within that root a path outside the root is refused rather than guessed at"
+    },
+    {
+      "key": "ac4",
+      "requirement": "the-agent-submits-a-structured-payload-and-the-hub-renders-t",
+      "given": "",
+      "when": "an agent submits a payload that satisfies the schema",
+      "then": "the Hub renders the document and writes it to the project working directory the rendered markup is produced by the Hub, not supplied by the agent"
+    },
+    {
+      "key": "ac5",
+      "requirement": "the-agent-submits-a-structured-payload-and-the-hub-renders-t",
+      "given": "",
+      "when": "an agent submits a payload that omits a required field or violates a declared constraint",
+      "then": "the submission is refused with an error identifying the field the document on disk is unchanged"
+    },
+    {
+      "key": "ac6",
+      "requirement": "the-agent-submits-a-structured-payload-and-the-hub-renders-t",
+      "given": "",
+      "when": "an agent writes specification markup to the working directory by any other means",
+      "then": "the Hub does not treat that content as an authored document the document's authority remains the last validated payload"
+    },
+    {
+      "key": "ac7",
+      "requirement": "the-payload-contract-is-versioned-and-forward-compatible",
+      "given": "",
+      "when": "a document containing fields the current schema version does not define is read and",
+      "then": "those fields are present and unchanged in the result no validation error is raised on their account"
+    },
+    {
+      "key": "ac8",
+      "requirement": "the-payload-contract-is-versioned-and-forward-compatible",
+      "given": "",
+      "when": "a payload omits its schema version",
+      "then": "the submission is refused the error names the missing version rather than a downstream field"
+    },
+    {
+      "key": "ac9",
+      "requirement": "the-hub-mints-requirement-identifiers-and-they-are-stable",
+      "given": "",
+      "when": "an agent resubmits a document in which one requirement's text has changed and its key has",
+      "then": "that requirement keeps the identifier it already had"
+    },
+    {
+      "key": "ac10",
+      "requirement": "the-hub-mints-requirement-identifiers-and-they-are-stable",
+      "given": "",
+      "when": "an agent resubmits a document with the same keys in a different order, or inserts a new",
+      "then": "every previously known key keeps the identifier it already had only the new key receives a newly minted one"
+    },
+    {
+      "key": "ac11",
+      "requirement": "the-hub-mints-requirement-identifiers-and-they-are-stable",
+      "given": "",
+      "when": "a submitted payload contains an identifier for a requirement",
+      "then": "the Hub assigns its own identifier the submitted value does not appear as that requirement's identity"
+    },
+    {
+      "key": "ac12",
+      "requirement": "the-hub-mints-requirement-identifiers-and-they-are-stable",
+      "given": "",
+      "when": "a requirement is removed and a new requirement is added in a later submission",
+      "then": "the new requirement receives an identifier that has never been used in this document"
+    },
+    {
+      "key": "ac13",
+      "requirement": "a-document-has-a-phase-and-the-hub-owns-its-transitions",
+      "given": "",
+      "when": "a transition names a phase this capability does not define",
+      "then": "it is refused"
+    },
+    {
+      "key": "ac14",
+      "requirement": "a-document-has-a-phase-and-the-hub-owns-its-transitions",
+      "given": "",
+      "when": "a transition is attempted between two phases with no direct move between them",
+      "then": "it is refused, naming the phases involved"
+    },
+    {
+      "key": "ac15",
+      "requirement": "a-document-has-a-phase-and-the-hub-owns-its-transitions",
+      "given": "",
+      "when": "any caller attempts to move a document to or from `current` through the transition operation",
+      "then": "it is refused"
+    },
+    {
+      "key": "ac16",
+      "requirement": "approval-is-the-operator-s-decision-and-no-agent-can-express",
+      "given": "",
+      "when": "an agent attempts to move a document to `approved`",
+      "then": "it is refused, and the refusal says approval is the operator's"
+    },
+    {
+      "key": "ac17",
+      "requirement": "approval-is-the-operator-s-decision-and-no-agent-can-express",
+      "given": "",
+      "when": "an agent attempts to move a document to `archived`",
+      "then": "it is refused, and the refusal says archiving is the operator's"
+    },
+    {
+      "key": "ac18",
+      "requirement": "approval-is-the-operator-s-decision-and-no-agent-can-express",
+      "given": "",
+      "when": "either transition is attempted through any code path that ultimately calls the Hub's phase",
+      "then": "the same refusal applies, because the check is made there and not duplicated per caller"
+    },
+    {
+      "key": "ac19",
+      "requirement": "document-validity-is-checked-by-the-hub-not-asserted-by-its-",
+      "given": "",
+      "when": "a document contains a requirement that no acceptance criterion references",
+      "then": "the transition to `proposed` is refused the offending requirement is named"
+    },
+    {
+      "key": "ac20",
+      "requirement": "document-validity-is-checked-by-the-hub-not-asserted-by-its-",
+      "given": "",
+      "when": "a document contains a task that references no requirement",
+      "then": "the transition to `proposed` is refused the offending task is named"
+    },
+    {
+      "key": "ac21",
+      "requirement": "document-validity-is-checked-by-the-hub-not-asserted-by-its-",
+      "given": "",
+      "when": "a document still carries a clarification marker that has not been resolved",
+      "then": "the transition to `proposed` is refused"
+    },
+    {
+      "key": "ac22",
+      "requirement": "every-change-to-a-document-is-recorded-as-an-attributed-even",
+      "given": "",
+      "when": "an agent submits a document payload during a run",
+      "then": "an event records the agent as actor, the submission as origin, and that run's identifier"
+    },
+    {
+      "key": "ac23",
+      "requirement": "every-change-to-a-document-is-recorded-as-an-attributed-even",
+      "given": "",
+      "when": "the operator changes a document through a Hub control",
+      "then": "an event records the operator as actor and the control as origin"
+    },
+    {
+      "key": "ac24",
+      "requirement": "every-change-to-a-document-is-recorded-as-an-attributed-even",
+      "given": "",
+      "when": "any caller attempts to modify or delete a recorded event",
+      "then": "the attempt is refused the existing history is unchanged"
+    },
+    {
+      "key": "ac25",
+      "requirement": "a-document-s-digest-is-stored-on-write-and-divergence-is-rep",
+      "given": "",
+      "when": "a document's content on disk no longer matches its stored digest",
+      "then": "the divergence is reported to the operator the file is left as it is found"
+    },
+    {
+      "key": "ac26",
+      "requirement": "a-document-s-digest-is-stored-on-write-and-divergence-is-rep",
+      "given": "",
+      "when": "a requirement's text is changed",
+      "then": "the digest recorded for that requirement changes the digest for an unmodified requirement does not"
+    },
+    {
+      "key": "ac27",
+      "requirement": "the-turn-context-states-the-phase-and-holds-without-a-charte",
+      "given": "",
+      "when": "a run is triggered while a specification document is open",
+      "then": "the turn context names the document, its phase, and the obligation that phase carries"
+    },
+    {
+      "key": "ac28",
+      "requirement": "the-turn-context-states-the-phase-and-holds-without-a-charte",
+      "given": "",
+      "when": "an agent with no charter bound authors a document",
+      "then": "the document is subject to the same validation and the same phase conditions its validity does not depend on charter content"
+    },
+    {
+      "key": "ac29",
+      "requirement": "the-turn-context-states-the-phase-and-holds-without-a-charte",
+      "given": "",
+      "when": "a run is triggered while a specification document is open",
+      "then": "the turn context states that no specification workflow other than the Hub's applies to it does so without naming a particular product, so a workflow it has never heard of is"
+    },
+    {
+      "key": "ac30",
+      "requirement": "the-turn-context-states-the-phase-and-holds-without-a-charte",
+      "given": "",
+      "when": "the agent has another specification workflow available to it",
+      "then": "the turn context directs it to tell the operator what it found to author the document through the Hub regardless"
+    },
+    {
+      "key": "ac31",
+      "requirement": "the-turn-context-states-the-phase-and-holds-without-a-charte",
+      "given": "",
+      "when": "a run is triggered with a document open and no charter bound",
+      "then": "the precedence statement is present"
+    },
+    {
+      "key": "ac32",
+      "requirement": "the-turn-context-states-the-phase-and-holds-without-a-charte",
+      "given": "",
+      "when": "a run is triggered with no specification document open",
+      "then": "the turn context makes no statement about specification procedure"
+    },
+    {
+      "key": "ac33",
+      "requirement": "document-discovery-covers-every-safe-document",
+      "given": "",
+      "when": "the specification tree contains documents in nested directories",
+      "then": "all of them are listed"
+    },
+    {
+      "key": "ac34",
+      "requirement": "document-discovery-covers-every-safe-document",
+      "given": "",
+      "when": "a discovered path fails path validation",
+      "then": "it is not listed as a document the exclusion is reported rather than passed over silently"
+    },
+    {
+      "key": "ac35",
+      "requirement": "home-document-selection-is-explicit-and-resilient",
+      "given": "",
+      "when": "the index records a home document that still exists",
+      "then": "it remains the home document"
+    },
+    {
+      "key": "ac36",
+      "requirement": "home-document-selection-is-explicit-and-resilient",
+      "given": "",
+      "when": "no home is recorded and several candidates exist",
+      "then": "the operator is asked which is home none is selected in the meantime"
+    },
+    {
+      "key": "ac37",
+      "requirement": "an-unreadable-or-absent-index-degrades-visibly",
+      "given": "",
+      "when": "the index cannot be parsed",
+      "then": "discovered documents are still listed the index's state is reported as invalid"
+    },
+    {
+      "key": "ac38",
+      "requirement": "an-unreadable-or-absent-index-degrades-visibly",
+      "given": "",
+      "when": "the index names a document with no file on disk and no evidence of deliberate deletion",
+      "then": "the entry is retained and reported as unresolved it is not silently discarded"
+    },
+    {
+      "key": "ac39",
+      "requirement": "document-state-changes-refresh-subscribers",
+      "given": "",
+      "when": "an agent's submission is accepted",
+      "then": "subscribers to that project receive an event identifying the document"
+    },
+    {
+      "key": "ac40",
+      "requirement": "document-state-changes-refresh-subscribers",
+      "given": "",
+      "when": "a document's phase changes",
+      "then": "subscribers receive an event carrying the document and its new phase"
+    },
+    {
+      "key": "ac41",
+      "requirement": "evidence-is-footprinted-against-the-work-it-describes",
+      "given": "",
+      "when": "an agent records evidence while its checkout holds work not present in the project's",
+      "then": "the footprint names the agent's branch and the commit in that checkout the footprint does not name the project checkout's commit"
+    },
+    {
+      "key": "ac42",
+      "requirement": "evidence-is-footprinted-against-the-work-it-describes",
+      "given": "",
+      "when": "the operator records evidence",
+      "then": "the footprint names the project checkout's branch and commit"
+    },
+    {
+      "key": "ac43",
+      "requirement": "evidence-is-footprinted-against-the-work-it-describes",
+      "given": "",
+      "when": "an agent records evidence and a directory exists at the agent's checkout location that",
+      "then": "the footprint falls back to the project's own directory no error is raised"
+    },
+    {
+      "key": "ac44",
+      "requirement": "evidence-is-footprinted-against-the-work-it-describes",
+      "given": "",
+      "when": "an agent with no provisioned checkout records evidence",
+      "then": "the footprint falls back to the project's own directory no checkout is created"
+    },
+    {
+      "key": "ac45",
+      "requirement": "evidence-is-footprinted-against-the-work-it-describes",
+      "given": "",
+      "when": "an agent records evidence for work it has not yet committed the system commits that work when the turn ends",
+      "then": "the evidence names the commit the system made it does not name the commit the turn started from"
+    },
+    {
+      "key": "ac46",
+      "requirement": "evidence-is-footprinted-against-the-work-it-describes",
+      "given": "",
+      "when": "a turn's evidence has been accepted before the turn's work was committed",
+      "then": "the accepted evidence names the commit containing the work the decision recorded against it is unchanged"
+    },
+    {
+      "key": "ac47",
+      "requirement": "evidence-is-footprinted-against-the-work-it-describes",
+      "given": "",
+      "when": "a turn's evidence is re-pointed at a commit that has not reached the main line",
+      "then": "the evidence reports that the work has not reached the main line an earlier answer of reached is not carried over"
+    },
+    {
+      "key": "ac48",
+      "requirement": "whether-work-has-reached-the-main-line-is-re-answered",
+      "given": "",
+      "when": "a requirement's work is integrated into the project's main branch",
+      "then": "coverage reports that requirement as integrated it did not report so before the integration"
+    },
+    {
+      "key": "ac49",
+      "requirement": "whether-work-has-reached-the-main-line-is-re-answered",
+      "given": "",
+      "when": "integrating one requirement's commit also brings an earlier commit on the same branch into",
+      "then": "the earlier work's recorded answer is revised as well"
+    },
+    {
+      "key": "ac50",
+      "requirement": "drift-is-assessed-against-the-line-of-work-a-footprint-names",
+      "given": "",
+      "when": "the main branch changes and an agent's demonstrated work is unchanged",
+      "then": "no drift candidate is raised for that work"
+    },
+    {
+      "key": "ac51",
+      "requirement": "drift-is-assessed-against-the-line-of-work-a-footprint-names",
+      "given": "",
+      "when": "the branch a footprint names changes after the evidence was accepted",
+      "then": "a drift candidate is raised"
+    },
+    {
+      "key": "ac52",
+      "requirement": "drift-is-assessed-against-the-line-of-work-a-footprint-names",
+      "given": "",
+      "when": "the branch a footprint names no longer exists",
+      "then": "no drift candidate is raised no error is reported"
+    },
+    {
+      "key": "ac53",
+      "requirement": "a-renamed-document-carries-its-new-subject",
+      "given": "",
+      "when": "a document is renamed to a new subject",
+      "then": "its title is that subject its path reflects that subject"
+    },
+    {
+      "key": "ac54",
+      "requirement": "a-declared-task-can-state-the-name-the-board-shows",
+      "given": "",
+      "when": "a document declares a task with a title the document is approved",
+      "then": "the created task carries that title"
+    },
+    {
+      "key": "ac55",
+      "requirement": "a-declared-task-can-state-the-name-the-board-shows",
+      "given": "",
+      "when": "a declared task states only its description",
+      "then": "the created task carries a title derived from it that title is short enough to read as a name"
+    },
+    {
+      "key": "ac56",
+      "requirement": "a-declared-task-can-state-the-name-the-board-shows",
+      "given": "",
+      "when": "a description is too long to serve as a title",
+      "then": "the derived title ends on a word boundary"
+    },
+    {
+      "key": "ac57",
+      "requirement": "a-declared-task-can-state-the-name-the-board-shows",
+      "given": "",
+      "when": "a declared task's description is already short enough to be a name",
+      "then": "the created task's title is that description"
+    },
+    {
+      "key": "ac58",
+      "requirement": "a-specification-turn-is-announced-with-the-turn-not-only-bef",
+      "given": "",
+      "when": "a run is triggered with a specification document open",
+      "then": "the prompt delivered with the operator's message states that the Hub's procedure governs"
+    },
+    {
+      "key": "ac59",
+      "requirement": "a-specification-turn-is-announced-with-the-turn-not-only-bef",
+      "given": "",
+      "when": "a run is triggered with a document in the exploring phase",
+      "then": "the prompt directs the agent to interview in that reply and stop for the operator's answer directs it not to answer its own unanswered questions"
+    },
+    {
+      "key": "ac60",
+      "requirement": "a-specification-turn-is-announced-with-the-turn-not-only-bef",
+      "given": "",
+      "when": "a run is triggered with a document in the exploring phase",
+      "then": "the prompt directs the agent to rename the document once it knows what it is about"
+    },
+    {
+      "key": "ac61",
+      "requirement": "a-specification-turn-is-announced-with-the-turn-not-only-bef",
+      "given": "",
+      "when": "a turn carries the notice",
+      "then": "the message stored for that turn is what the operator wrote, without it"
+    },
+    {
+      "key": "ac62",
+      "requirement": "a-specification-turn-is-announced-with-the-turn-not-only-bef",
+      "given": "",
+      "when": "a run is triggered with no specification document open",
+      "then": "the prompt carries no specification notice"
+    },
+    {
+      "key": "ac63",
+      "requirement": "a-specification-turn-is-announced-with-the-turn-not-only-bef",
+      "given": "",
+      "when": "a run is triggered with an approved document open",
+      "then": "the prompt names how to write the document but does not direct an interview"
+    },
+    {
+      "key": "ac64",
+      "requirement": "a-new-document-is-given-a-name-that-means-nothing",
+      "given": "",
+      "when": "a document is created without a path",
+      "then": "the Hub mints a path of the form `spec/changes/\u003ccolour>-\u003canimal>/spec.html` returns that path to the caller"
+    },
+    {
+      "key": "ac65",
+      "requirement": "a-new-document-is-given-a-name-that-means-nothing",
+      "given": "",
+      "when": "two documents are created without a path, with different titles and different opening",
+      "then": "neither minted path contains any word from its title or its opening message"
+    },
+    {
+      "key": "ac66",
+      "requirement": "a-new-document-is-given-a-name-that-means-nothing",
+      "given": "",
+      "when": "a document is created without a path and the first candidate name is already in use in",
+      "then": "the Hub mints a different one and the created document occupies it"
+    },
+    {
+      "key": "ac67",
+      "requirement": "a-new-document-is-given-a-name-that-means-nothing",
+      "given": "",
+      "when": "a document is created with a path",
+      "then": "that path is used and nothing is minted"
+    },
+    {
+      "key": "ac68",
+      "requirement": "a-document-is-renamed-once-its-subject-is-established",
+      "given": "",
+      "when": "a document at a minted placeholder path is renamed with the subject",
+      "then": "the document's path becomes `spec/changes/personal-houseplant-watering-tracker/spec.html` the file exists at the new path and no longer exists at the old one"
+    },
+    {
+      "key": "ac69",
+      "requirement": "a-document-is-renamed-once-its-subject-is-established",
+      "given": "",
+      "when": "a document with minted requirement identifiers is renamed",
+      "then": "its identifier, its rendered content, its requirement identifiers and its recorded events"
+    },
+    {
+      "key": "ac70",
+      "requirement": "a-document-is-renamed-once-its-subject-is-established",
+      "given": "",
+      "when": "an inbound queue entry naming the old path has not been delivered and the document is",
+      "then": "that entry names the new path"
+    },
+    {
+      "key": "ac71",
+      "requirement": "a-document-is-renamed-once-its-subject-is-established",
+      "given": "",
+      "when": "an inbound queue entry naming the old path has already been delivered and the document is",
+      "then": "that entry still names the old path"
+    },
+    {
+      "key": "ac72",
+      "requirement": "a-document-is-renamed-once-its-subject-is-established",
+      "given": "",
+      "when": "a rename is attempted on an approved document",
+      "then": "it is refused, and the refusal says the document is approved"
+    },
+    {
+      "key": "ac73",
+      "requirement": "a-document-is-renamed-once-its-subject-is-established",
+      "given": "",
+      "when": "a rename is attempted with a subject that yields an empty slug",
+      "then": "it is refused, and no placeholder is minted in its place"
+    },
+    {
+      "key": "ac74",
+      "requirement": "a-document-is-renamed-once-its-subject-is-established",
+      "given": "",
+      "when": "a rename would move a document onto a path another document already occupies",
+      "then": "it is refused and neither document is changed"
+    },
+    {
+      "key": "ac75",
+      "requirement": "a-rendered-document-is-ordered-and-complete-for-a-reader",
+      "given": "",
+      "when": "a document is rendered whose acceptance criteria were submitted out of requirement order",
+      "then": "the rendered table lists every criterion for a requirement before any criterion for a"
+    },
+    {
+      "key": "ac76",
+      "requirement": "a-rendered-document-is-ordered-and-complete-for-a-reader",
+      "given": "",
+      "when": "a requirement has several acceptance criteria",
+      "then": "they appear in the order they were submitted"
+    },
+    {
+      "key": "ac77",
+      "requirement": "a-rendered-document-is-ordered-and-complete-for-a-reader",
+      "given": "",
+      "when": "a written document has an empty open-questions list",
+      "then": "the rendered document states that none are outstanding"
+    },
+    {
+      "key": "ac78",
+      "requirement": "a-document-declares-how-strictly-it-is-enforced",
+      "given": "",
+      "when": "a document is created",
+      "then": "its rigor is `sketch` it blocks no work"
+    },
+    {
+      "key": "ac79",
+      "requirement": "a-document-declares-how-strictly-it-is-enforced",
+      "given": "",
+      "when": "a document's rigor is set",
+      "then": "the rendered document states it"
+    },
+    {
+      "key": "ac80",
+      "requirement": "a-document-declares-how-strictly-it-is-enforced",
+      "given": "",
+      "when": "rigor moves from one level to another",
+      "then": "the previous level, the new level, the actor and the reason are recorded and never"
+    },
+    {
+      "key": "ac81",
+      "requirement": "a-document-declares-how-strictly-it-is-enforced",
+      "given": "",
+      "when": "a rigor change is submitted against a digest that is no longer current",
+      "then": "it is refused rather than applied"
+    },
+    {
+      "key": "ac82",
+      "requirement": "only-the-operator-changes-rigor",
+      "given": "",
+      "when": "an agent attempts to promote a document's rigor",
+      "then": "it is refused"
+    },
+    {
+      "key": "ac83",
+      "requirement": "only-the-operator-changes-rigor",
+      "given": "",
+      "when": "an agent blocked by a gate attempts to demote the document",
+      "then": "it is refused the document's rigor is unchanged"
+    },
+    {
+      "key": "ac84",
+      "requirement": "only-the-operator-changes-rigor",
+      "given": "",
+      "when": "the operator demotes a document",
+      "then": "the demotion is applied and recorded with their attribution"
+    },
+    {
+      "key": "ac85",
+      "requirement": "rigor-is-only-raised-on-a-document-that-can-be-enforced",
+      "given": "",
+      "when": "promotion is attempted on a document with an unresolved identifier",
+      "then": "it is refused, naming what is unresolved"
+    },
+    {
+      "key": "ac86",
+      "requirement": "rigor-is-only-raised-on-a-document-that-can-be-enforced",
+      "given": "",
+      "when": "a `gate` document is demoted to `sketch`",
+      "then": "its requirement links, evidence and reviews are unchanged"
+    },
+    {
+      "key": "ac87",
+      "requirement": "rigor-is-only-raised-on-a-document-that-can-be-enforced",
+      "given": "",
+      "when": "the operator demotes a document that does not currently parse",
+      "then": "the demotion succeeds"
+    },
+    {
+      "key": "ac88",
+      "requirement": "a-document-at-contract-or-gate-rigor-gates-edits-behind-an-o",
+      "given": "",
+      "when": "an agent submits an edit against a document whose rigor is `gate`, changing two",
+      "then": "neither requirement's live content changes exactly two pending proposals are recorded, each naming the requirement it targets"
+    },
+    {
+      "key": "ac89",
+      "requirement": "a-document-at-contract-or-gate-rigor-gates-edits-behind-an-o",
+      "given": "",
+      "when": "an agent submits the same shape of edit against a document whose rigor is `sketch`",
+      "then": "the live document is updated immediately, with no proposal recorded, unchanged from a"
+    },
+    {
+      "key": "ac90",
+      "requirement": "a-document-at-contract-or-gate-rigor-gates-edits-behind-an-o",
+      "given": "",
+      "when": "an agent submits a `contract`- or `gate`-rigor document's content unchanged from what is",
+      "then": "no proposal is created the submission is not reported as a failure"
+    },
+    {
+      "key": "ac91",
+      "requirement": "a-pending-proposal-is-discoverable-in-position-and-is-indivi",
+      "given": "",
+      "when": "a document has one pending proposal against requirement FR-3 and another against its",
+      "then": "an operator can accept the FR-3 proposal without the metadata proposal changing state the metadata proposal remains pending and unapplied"
+    },
+    {
+      "key": "ac92",
+      "requirement": "a-pending-proposal-is-discoverable-in-position-and-is-indivi",
+      "given": "",
+      "when": "an operator rejects a pending proposal",
+      "then": "the live document's content is unchanged reading the requirement or metadata section the proposal targeted shows no trace of the"
+    },
+    {
+      "key": "ac93",
+      "requirement": "an-accepted-proposal-is-attributed-to-both-its-proposer-and-",
+      "given": "",
+      "when": "a proposal created by agent run `run-123` is accepted by operator `alex`",
+      "then": "a later read of that document's history reports `run-123` as the proposer and `alex` as the neither identity is lost or merged into a single field"
+    },
+    {
+      "key": "ac94",
+      "requirement": "accepting-or-rejecting-a-proposal-is-reserved-to-the-operato",
+      "given": "",
+      "when": "an actor of kind `agent` attempts to accept a pending proposal, including one it created",
+      "then": "the attempt is refused the proposal's status is unchanged"
+    },
+    {
+      "key": "ac95",
+      "requirement": "a-proposal-that-no-longer-matches-the-document-s-current-con",
+      "given": "",
+      "when": "an operator attempts to accept a proposal whose captured digest no longer matches the",
+      "then": "the attempt is refused with a stated reason the proposal is reported as stale, not accepted"
+    },
+    {
+      "key": "ac96",
+      "requirement": "authoring-assistance-is-scoped-away-from-performing-discover",
+      "given": "",
+      "when": "an agent is triggered with a specification document open and, in the course of the turn,",
+      "then": "the run has no file-write tool available to make that change directly the turn's context states that the discovery should be recorded as a proposed task instead"
+    },
+    {
+      "key": "ac97",
+      "requirement": "authoring-assistance-is-scoped-away-from-performing-discover",
+      "given": "",
+      "when": "an agent is triggered with a specification document open and a permission posture that",
+      "then": "the run still has no file-write tool available for that turn"
+    },
+    {
+      "key": "ac98",
+      "requirement": "authoring-assistance-is-scoped-away-from-performing-discover",
+      "given": "",
+      "when": "an agent is triggered with no specification document open",
+      "then": "its tool surface is exactly what it would be without this requirement in effect"
+    },
+    {
+      "key": "ac99",
+      "requirement": "a-finished-change-is-archived-by-the-operator",
+      "given": "",
+      "when": "the operator moves an approved document to `archived`",
+      "then": "the document's phase becomes `archived` its requirements, digests, events and declared tasks are unchanged"
+    },
+    {
+      "key": "ac100",
+      "requirement": "a-finished-change-is-archived-by-the-operator",
+      "given": "",
+      "when": "an agent attempts to move a document to `archived`",
+      "then": "it is refused, and the refusal says archiving is the operator's"
+    },
+    {
+      "key": "ac101",
+      "requirement": "a-finished-change-is-archived-by-the-operator",
+      "given": "",
+      "when": "archiving is attempted on a document that is `exploring` or `proposed`",
+      "then": "it is refused as an illegal transition"
+    },
+    {
+      "key": "ac102",
+      "requirement": "a-finished-change-is-archived-by-the-operator",
+      "given": "",
+      "when": "any phase transition is attempted on an archived document",
+      "then": "it is refused"
+    },
+    {
+      "key": "ac103",
+      "requirement": "a-capability-document-sits-outside-the-phase-machine",
+      "given": "",
+      "when": "a document is created with `kind` `capability`",
+      "then": "its phase is `current` no phase transition, including one naming `current`, succeeds against it"
+    },
+    {
+      "key": "ac104",
+      "requirement": "a-capability-document-sits-outside-the-phase-machine",
+      "given": "",
+      "when": "an agent submits content against a capability document",
+      "then": "it is refused the same submission from the operator succeeds"
+    },
+    {
+      "key": "ac105",
+      "requirement": "a-capability-document-sits-outside-the-phase-machine",
+      "given": "",
+      "when": "a submission's `kind` differs from the document's recorded `kind`",
+      "then": "it is refused, and the document's recorded `kind` is unchanged"
+    },
+    {
+      "key": "ac106",
+      "requirement": "a-change-s-delta-is-absorbed-into-the-corpus-by-an-authored-",
+      "given": "",
+      "when": "the operator merges a change document into a capability document",
+      "then": "the capability document's content becomes what was submitted a merge record links the two documents, attributed to the operator"
+    },
+    {
+      "key": "ac107",
+      "requirement": "a-change-s-delta-is-absorbed-into-the-corpus-by-an-authored-",
+      "given": "",
+      "when": "a merge names a target document that is not a capability document",
+      "then": "it is refused"
+    },
+    {
+      "key": "ac108",
+      "requirement": "a-change-s-delta-is-absorbed-into-the-corpus-by-an-authored-",
+      "given": "",
+      "when": "a merge names a source document that is `exploring` or `proposed`",
+      "then": "it is refused"
+    },
+    {
+      "key": "ac109",
+      "requirement": "a-change-s-delta-is-absorbed-into-the-corpus-by-an-authored-",
+      "given": "",
+      "when": "a change document is merged into a capability document before it is archived, or archived",
+      "then": "neither act blocks or requires the other"
+    },
+    {
+      "key": "ac110",
+      "requirement": "a-change-s-delta-is-absorbed-into-the-corpus-by-an-authored-",
+      "given": "",
+      "when": "a change document has been merged into a capability document",
+      "then": "the merge is retrievable by querying either document"
+    },
+    {
+      "key": "ac111",
+      "requirement": "the-rendered-document-shares-the-hub-s-theme-not-a-colour-sc",
+      "given": "",
+      "when": "the Hub is in light mode and a specification document is opened",
+      "then": "the document's rendered background is the Hub's light neutral background, not a colour the switching the Hub to dark mode changes the document's rendered background to match"
+    },
+    {
+      "key": "ac112",
+      "requirement": "the-rendered-document-shares-the-hub-s-theme-not-a-colour-sc",
+      "given": "",
+      "when": "the document renders a mandatory requirement with distinct colour from an optional one",
+      "then": "that distinction is visible identically in both the Hub's light and dark modes"
+    },
+    {
+      "key": "ac113",
+      "requirement": "the-rendered-document-visually-distinguishes-requirement-str",
+      "given": "",
+      "when": "a document contains requirements with different modal obligations",
+      "then": "each is rendered with a treatment distinct to its obligation the treatment is consistent for every requirement sharing that obligation"
+    },
+    {
+      "key": "ac114",
+      "requirement": "coverage-distinguishes-rejected-evidence-from-work-that-has-",
+      "given": "",
+      "when": "a requirement's only evidence against its current wording was rejected, and no other",
+      "then": "its coverage state is reported as rejected, not as work in progress or as unserved"
+    },
+    {
+      "key": "ac115",
+      "requirement": "coverage-distinguishes-rejected-evidence-from-work-that-has-",
+      "given": "",
+      "when": "a requirement whose only prior evidence was rejected later receives evidence against the",
+      "then": "its coverage state is reported as verified"
+    },
+    {
+      "key": "ac116",
+      "requirement": "a-declared-task-s-requirement-span-is-capped-and-the-hub-enf",
+      "given": "",
+      "when": "a document contains a declared task naming more requirements than the ceiling permits",
+      "then": "the transition to `proposed` is refused the offending task and the ceiling are named"
+    },
+    {
+      "key": "ac117",
+      "requirement": "a-declared-task-s-requirement-span-is-capped-and-the-hub-enf",
+      "given": "",
+      "when": "a document contains a declared task naming exactly the ceiling's number of requirements",
+      "then": "that task does not, on its own, block the transition"
+    }
+  ],
+  "tasks": [],
+  "algorithms": [],
+  "design": "",
+  "evidence": {
+    "checked": [
+      "Translated from openspec/specs/spec-document-authority/spec.md (39 requirements, 117 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten."
+    ],
+    "limits": [
+      "scenarios-state-no-starting-state: 117 of 117 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed"
+    ]
+  },
+  "lifecycle": "",
+  "open_questions": [],
+  "aw_identity": {
+    "requirements": {
+      "a-specification-document-is-a-file-in-the-project-working-di": "FR-1",
+      "the-agent-submits-a-structured-payload-and-the-hub-renders-t": "FR-2",
+      "the-payload-contract-is-versioned-and-forward-compatible": "FR-3",
+      "the-hub-mints-requirement-identifiers-and-they-are-stable": "FR-4",
+      "a-document-has-a-phase-and-the-hub-owns-its-transitions": "FR-5",
+      "approval-is-the-operator-s-decision-and-no-agent-can-express": "FR-6",
+      "document-validity-is-checked-by-the-hub-not-asserted-by-its-": "FR-7",
+      "every-change-to-a-document-is-recorded-as-an-attributed-even": "FR-8",
+      "a-document-s-digest-is-stored-on-write-and-divergence-is-rep": "FR-9",
+      "the-turn-context-states-the-phase-and-holds-without-a-charte": "FR-10",
+      "document-discovery-covers-every-safe-document": "FR-11",
+      "home-document-selection-is-explicit-and-resilient": "FR-12",
+      "an-unreadable-or-absent-index-degrades-visibly": "FR-13",
+      "document-state-changes-refresh-subscribers": "FR-14",
+      "evidence-is-footprinted-against-the-work-it-describes": "FR-15",
+      "whether-work-has-reached-the-main-line-is-re-answered": "FR-16",
+      "drift-is-assessed-against-the-line-of-work-a-footprint-names": "FR-17",
+      "a-renamed-document-carries-its-new-subject": "FR-18",
+      "a-declared-task-can-state-the-name-the-board-shows": "FR-19",
+      "a-specification-turn-is-announced-with-the-turn-not-only-bef": "FR-20",
+      "a-new-document-is-given-a-name-that-means-nothing": "FR-21",
+      "a-document-is-renamed-once-its-subject-is-established": "FR-22",
+      "a-rendered-document-is-ordered-and-complete-for-a-reader": "FR-23",
+      "a-document-declares-how-strictly-it-is-enforced": "FR-24",
+      "only-the-operator-changes-rigor": "FR-25",
+      "rigor-is-only-raised-on-a-document-that-can-be-enforced": "FR-26",
+      "a-document-at-contract-or-gate-rigor-gates-edits-behind-an-o": "FR-27",
+      "a-pending-proposal-is-discoverable-in-position-and-is-indivi": "FR-28",
+      "an-accepted-proposal-is-attributed-to-both-its-proposer-and-": "FR-29",
+      "accepting-or-rejecting-a-proposal-is-reserved-to-the-operato": "FR-30",
+      "a-proposal-that-no-longer-matches-the-document-s-current-con": "FR-31",
+      "authoring-assistance-is-scoped-away-from-performing-discover": "FR-32",
+      "a-finished-change-is-archived-by-the-operator": "FR-33",
+      "a-capability-document-sits-outside-the-phase-machine": "FR-34",
+      "a-change-s-delta-is-absorbed-into-the-corpus-by-an-authored-": "FR-35",
+      "the-rendered-document-shares-the-hub-s-theme-not-a-colour-sc": "FR-36",
+      "the-rendered-document-visually-distinguishes-requirement-str": "FR-37",
+      "coverage-distinguishes-rejected-evidence-from-work-that-has-": "FR-38",
+      "a-declared-task-s-requirement-span-is-capped-and-the-hub-enf": "FR-39"
+    },
+    "high_water": 39,
+    "retired": {},
+    "digests": {
+      "FR-1": "cabca4bbe47cb8201e11bc41a6c5af1e574e5e950d5144f6b317c4bd914ee62c",
+      "FR-2": "e262f32fc94ce0c0918abdd87ad8016d4c5833f8abc9b2486861530113ced5ae",
+      "FR-3": "eb9ba6886c36a188759829a11ce14e3c9ed0dd646d5d51508aa83d1040437f0c",
+      "FR-4": "3dbff441150265cab1b2a5d1812c318b559b602b1d4a00ea5c63dc76215c5af7",
+      "FR-5": "d46183f4e5a3e6096909ca6ab9c88b589daefc7b1dfed0dcacb42c98cef53097",
+      "FR-6": "f6a2731c74975d8a83fb7026d16e5ae47400ee7a7dd4886a036d98ba91db6430",
+      "FR-7": "eb707b235203d74361ebe540c1de1fbcff2d47467247e86c68583f46b9731af9",
+      "FR-8": "22cc887a6f02c12e771b6329f3edb4252c9e5e91282ce5eb5588367259c8eefb",
+      "FR-9": "dc635f284c81525e6223106d191bf21cf8e0bbf67667fb7f5b2885129e34f4af",
+      "FR-10": "bde7d015febdf2b1fcc53775ee824636dfb1df047021549b3d15e682f7f68949",
+      "FR-11": "ac04dfc4e22ba68227d5d99d375141eacdd871c95bbab631de4d2fb0266fba42",
+      "FR-12": "91fd4e4d1cea4b56a09bd20a54f0cdc3731dbbc46487f0a0c23f626e5072090f",
+      "FR-13": "4a7c68d883110097652468c8b1affeeca8759133a34c0d23c3ceb2c10a3c074e",
+      "FR-14": "3cf5a7354e6776f2ef43b294fe684644cd8315408459a66d1b5532a15a624ca0",
+      "FR-15": "58769af1d2575fb6fbdb0b15fe7178546e6b7bb26cb5c2f2d88716f640619ace",
+      "FR-16": "dce1b4f67306ad9ab5dbfa7bd4386c3a055bb38620f7c903ef4513f2b3bd533b",
+      "FR-17": "cdaf1ca7f54b91f60e0d04d82ebe2626f4b852ccbbf0ab2457742acf8d860f09",
+      "FR-18": "7c18a72ba6de3d28b8c16a1756f01ab30e9c41f20fd1ff11be0acc6dcc88d701",
+      "FR-19": "edffc8c70034f1c3ffb320ebb8e421b10796ace6fe5a6015892f6a8bc681efe8",
+      "FR-20": "ace9f8263072a2eeee7bed63a758ddd958c045b0dc9d907dfffeaa9efacb23f8",
+      "FR-21": "edecd3c2f59850285ea975bb092db603068529110e92473ba62e247777f0016a",
+      "FR-22": "7b321728c6d9e4c25356f95e698a95c5785fa26bc0d945d69b25e1ed9f92d00e",
+      "FR-23": "4338a6f668ad4b74b8c81145caf319d4427978ca37fd7b70dfb5a7731aeb2f1e",
+      "FR-24": "194d393009e9adb9ffc0401a1a64b5506013a927aa613a8099bcbcf1068d19cb",
+      "FR-25": "6ccb87411c7348a7c342c612e958139cc910e6bb4caf37fbfc8d73b3615b440f",
+      "FR-26": "dd8e9ff54ab3762547e23f9ecf1032750d13513b6a0787d6060cd6682dc7b39f",
+      "FR-27": "ea0edf390ed249a38986a6b8a050464fdfe30593acde1e4ba0891ca34072811a",
+      "FR-28": "779c5ae1001e5bb56f440e127d81bb5c9e5bea65b38af934e895cb66e52b4191",
+      "FR-29": "240a0a960fa9bf05099715b63c968b62419e037bad9e6b01ae734abb0e9bd4a4",
+      "FR-30": "d733454e57d35fd27f4d9775eae26290e45b7a24109aa4c73184ecb3710414f4",
+      "FR-31": "29ca98d8d051a8b95ba40992314f9635aeb6560b6e0eb3bc85f92861b16d1054",
+      "FR-32": "25eae6f19343ba72af565c04068d0bfbb6e3b67d1985fbd4f476efedfc892e43",
+      "FR-33": "cfd61e503263c52007368d709129f7d2abb70a49ff3e90982233ae2201dfc863",
+      "FR-34": "49e51368cdb42ca356efd0a5f750999735d1edaf771e7bc8d395aec214df40ee",
+      "FR-35": "4fa9750cd9458438ef4fdc4efc132d510f2b185f70631539d1ec0c215a3847c3",
+      "FR-36": "3f6c19f723cc776e32dd4317e741c927e505cf1450c517c2cb9140f607a24e85",
+      "FR-37": "1c3a5405b39e14eca2799c5475ecbda32a40f9997cfceca204ea9dcb225775e0",
+      "FR-38": "51c3e69a9c2cc5b3ebd13a912d89abaa755987e1d622964b4add53c321fadfca",
+      "FR-39": "bbd4e97f468c77548f230f318d682f8d061e41f6cd8ddffd2863264e6715039b"
+    }
+  }
+}
+</script>
+</body>
+</html>

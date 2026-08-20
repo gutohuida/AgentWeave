@@ -110,12 +110,37 @@ export function AgentTimeline({
   const lastRunSettled =
     (lastTurn?.entries.some(isSuccessCompletionEntry) ?? false) ||
     (lastRunId !== null && TERMINAL_STATUSES.has(statusByRun[lastRunId]))
-  const runVisiblyActive = isRunning && !lastRunSettled
 
-  // Timed from the moment this pane saw the run begin. Only ever shown live; once the run ends,
-  // `durationByRun` (from persisted event timestamps) takes over, so a refresh does not change
-  // what a finished turn says it took.
-  const liveElapsed = useElapsedSeconds(runVisiblyActive)
+  // A run other than the newest loaded turn's, started and not yet ended. `run_started` reaches
+  // `timelineEvents` before that run's first entry has been grouped into a turn, so this is the
+  // only signal available in the window between the two.
+  //
+  // It is what makes stop-then-send work. Stopping settles run A; sending starts run B; and until
+  // B's own entries arrive, the newest turn on screen is still the stopped A. Gating on the last
+  // turn alone therefore hid the indicator for the whole of B (operator, 2026-08-20: "if I stop
+  // the turn and send a new message the working indicator do not show anymore").
+  //
+  // Excluding `lastRunId` is what keeps the lingering-tail fix above intact: during the tail the
+  // completed run's own status has not been refetched yet, so counting it here would show the
+  // indicator under a finished answer — precisely the complaint that motivated the entry-based
+  // signal in the first place.
+  const anotherRunIsUnderway = useMemo(
+    () =>
+      Object.entries(statusByRun).some(
+        ([runId, status]) => runId !== lastRunId && !TERMINAL_STATUSES.has(status)
+      ),
+    [statusByRun, lastRunId]
+  )
+
+  const runVisiblyActive = isRunning && (!lastRunSettled || anotherRunIsUnderway)
+
+  // Timed from the run's own first entry rather than from when this pane mounted, so leaving
+  // the conversation and returning does not restart the count. Only ever shown live; once the
+  // run ends, `durationByRun` (from persisted event timestamps) takes over, so a refresh does
+  // not change what a finished turn says it took.
+  const activeRunStartedAt =
+    runVisiblyActive && lastTurn?.entries.length ? lastTurn.entries[0].timestamp : null
+  const liveElapsed = useElapsedSeconds(runVisiblyActive, activeRunStartedAt)
   const [foldOverride, setFoldOverride] = useState<Record<string, boolean>>({})
 
   // The caller always passes a defined counter (never undefined) that starts

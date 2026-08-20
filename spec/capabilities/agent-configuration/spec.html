@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent configuration</title>
+<meta name="aw-spec-kind" content="capability">
+<meta name="aw-spec-status" content="current">
+<meta name="aw-spec-rigor" content="sketch">
+<meta name="aw-spec-schema-version" content="1">
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+    --surface-2: #21262d; --surface: #161b22;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+:root[data-theme="dark"] {
+  --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+  --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+  --surface-2: #21262d; --surface: #161b22;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 2rem 2.5rem 4rem; background: var(--bg); color: var(--fg);
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+h1 { font-size: 1.75rem; margin: 0 0 .25rem; }
+h2 { font-size: 1.15rem; margin: 2.5rem 0 .75rem; padding-bottom: .3rem;
+     border-bottom: 1px solid var(--border); }
+h3 { font-size: 1rem; margin: 1.5rem 0 .4rem; }
+p { margin: .5rem 0; }
+ul, ol { margin: .5rem 0; padding-left: 1.4rem; }
+li { margin: .25rem 0; }
+a { color: var(--aw-accent); }
+.aw-meta { color: var(--muted); font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-chip { display: inline-block; padding: .1rem .5rem; border-radius: 999px;
+           background: var(--surface-2); font-size: .78rem; margin-right: .4rem; }
+.aw-requirement { border-left: 3px solid var(--border); padding: .1rem 0 .1rem .9rem;
+                  margin: 1.1rem 0; }
+.aw-requirement-must { border-left-color: var(--aw-accent); }
+.aw-requirement-should { border-left-color: var(--aw-warn); }
+.aw-requirement-may { border-left-color: var(--border); }
+.aw-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8rem;
+         color: var(--muted); }
+.aw-modal { font-weight: 600; }
+.aw-modal-must { color: var(--aw-accent); }
+.aw-modal-should { color: var(--aw-warn); }
+.aw-modal-may { color: var(--fg); font-weight: 400; }
+.aw-chip-rigor-gate { color: var(--aw-accent); border: 1px solid var(--aw-accent); }
+.aw-chip-rigor-contract { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Phase is a lifecycle, and the question it answers is "can I rely on this?". `approved` and a
+   capability's `current` are settled and take the done tone; `proposed` is waiting on an operator
+   decision and takes warn; `exploring` and `archived` are quiet for opposite reasons — one has not
+   arrived yet, the other has been superseded. Deliberately NOT the accent: this document already
+   spends accent on links and on MUST, and a third meaning would empty it of any. `kind` keeps the
+   plain chip on purpose — it is a category, not a state, and hue there ranks nothing. */
+.aw-chip-phase-done { color: var(--aw-ok); border: 1px solid var(--aw-ok); }
+.aw-chip-phase-waiting { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+.aw-chip-phase-quiet { color: var(--muted); }
+.aw-chip-phase-archived { color: var(--muted); text-decoration: line-through; }
+/* An unresolved question blocks `propose`, so it is a real state and not a label. Resolved stays
+   the plain chip — the reader needs to find what is still open, not celebrate what is closed. */
+.aw-chip-open { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Limits is where a reader is most likely to be misled, and it read identically to Checked. */
+.aw-limits { color: var(--aw-warn); }
+/* The first screenful was entirely monochrome, so the document read as texty however the
+   requirements below were coloured. This puts the same modal scheme where the eye lands first,
+   carrying counts rather than decoration. */
+.aw-summary { margin: 0 0 1.5rem; font-size: .9rem; color: var(--muted); }
+.aw-summary .aw-count { font-weight: 600; }
+.aw-summary-sep { color: var(--border); margin: 0 .45rem; }
+.aw-rationale { color: var(--muted); font-size: .9rem; }
+.aw-refs { font-size: .82rem; color: var(--muted); }
+.aw-note { color: var(--muted); font-style: italic; }
+.aw-empty { color: var(--muted); }
+table { border-collapse: collapse; margin: .75rem 0; width: 100%; }
+th, td { border: 1px solid var(--border); padding: .4rem .6rem; text-align: left;
+         vertical-align: top; font-size: .92rem; }
+code, pre { background: var(--surface); border-radius: 4px; }
+code { padding: .1rem .3rem; font-size: .88em; }
+</style>
+</head>
+<body>
+<h1>Agent configuration</h1>
+<p class="aw-meta"><span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><span class="aw-chip">sketch</span></p>
+<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">10</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">10</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">31</span> criteria</p>
+<section><h2 id="summary">Summary</h2><p>An agent&#x27;s configuration is a destination of its own, not a dialog and not a panel inside a conversation. It divides into sections named for what an operator is trying to do — identity, execution, charter, interaction, context, access, workspace — and it holds only settings: observations about a running agent stay with the conversation, where they are useful. An agent is archived, never deleted, because every run the Hub records is attributed to one. What creation collects is bounded by whether it changes the first turn; everything else is here.</p></section><section><h2 id="requirements">Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-1"><span class="aw-id">FR-1</span> <p><span class="aw-modal aw-modal-must">MUST</span> The Hub SHALL present an agent&#x27;s configuration as its own addressable destination, and MUST NOT require an operator to open a conversation to reach it.</p><p class="aw-rationale">A conversation is transient and an agent may have many; its configuration is durable and singular. Reaching configuration through a conversation makes it depend on which conversation happens to be selected, and places durable settings behind a transient surface. The destination MUST be linkable and MUST survive a reload, so configuration can be returned to directly.</p></div><div class="aw-requirement aw-requirement-must" id="FR-2"><span class="aw-id">FR-2</span> <p><span class="aw-modal aw-modal-must">SHALL</span> An agent&#x27;s configuration SHALL present its sections in place of the surrounding navigation, and SHALL offer a control returning to the context the operator came from.</p><p class="aw-rationale">This follows the project&#x27;s own settings pattern, where a section list replaces the tab strip rather than nesting inside it. A settings surface is somewhere an operator goes and comes back from, not somewhere they browse laterally, so the lateral navigation is what gives way. Returning SHALL lead to a **fixed** target — the agent&#x27;s most recent conversation — regardless of where the operator entered from. This matches the return control the project&#x27;s own configuration already offers, which names one destination rather than describing where the operator has been. A remembered origin makes the same control mean different things on different visits, and there is nothing on screen that says which; a named, fixed target can be read before it is used. Both entry points therefore lead to the same place, which is the place the operator is going to work next in either case.</p></div><div class="aw-requirement aw-requirement-must" id="FR-3"><span class="aw-id">FR-3</span> <p><span class="aw-modal aw-modal-must">SHALL</span> An agent&#x27;s configuration destination SHALL present only settings, and observations about a running agent SHALL remain with the agent&#x27;s conversation.</p><p class="aw-rationale">Status, the latest status message, last-seen time and the session list change without anyone configuring anything, and they are useful while working rather than while configuring. Mixing them with settings produces a surface that changes under the reader and a conversation stripped of the context it needs. No setting SHALL be editable from more than one surface.</p></div><div class="aw-requirement aw-requirement-must" id="FR-4"><span class="aw-id">FR-4</span> <p><span class="aw-modal aw-modal-must">SHALL</span> An agent&#x27;s configuration SHALL be divided into sections named for what an operator is trying to do, covering identity, execution, charter, interaction, context, access, and workspace.</p><p class="aw-rationale">Naming sections after operator intent rather than after data shape is what allows a later capability to add settings without the section having to be renamed or restructured. *Context* and *Access* are defined here and are populated further by conversation checkpointing. A section MUST NOT be named for a concept the product no longer has.</p></div><div class="aw-requirement aw-requirement-must" id="FR-5"><span class="aw-id">FR-5</span> <p><span class="aw-modal aw-modal-must">SHALL</span> An agent SHALL carry an optional operator-written description of what it is for, editable from the identity section and returned with the agent&#x27;s summary.</p><p class="aw-rationale">The description MUST NOT be injected into any agent&#x27;s turn context. The charter is where an agent&#x27;s behaviour is stated; a second field that also shaped behaviour would leave two places to look when an agent acts wrongly, and only one of them would be a contract. A blank description SHALL be stored as no description, so that &quot;cleared&quot; and &quot;never written&quot; are one state rather than two a reader has to distinguish.</p></div><div class="aw-requirement aw-requirement-must" id="FR-6"><span class="aw-id">FR-6</span> <p><span class="aw-modal aw-modal-must">MUST</span> The Hub SHALL allow an agent to be archived and unarchived, and MUST NOT offer any means of permanently deleting one.</p><p class="aw-rationale">Everything the Hub records is attributed to the run that produced it, and every run is attributed to its agent. Deleting an agent would either cascade through that history, destroying the record of work that genuinely happened, or orphan it. This capability follows the position already taken for conversations, where archival is refused rather than allowed to strand something permanently. Archival MUST be reversible, and MUST preserve the agent&#x27;s history: its conversations remain readable, and its runs and messages retain their attribution. An agent with a run in progress MUST NOT be archived, nor one holding undelivered inbound queue entries. Both are refused with the reason rather than resolved: stopping a live run from a settings page destroys work with no undo, and archiving over a queued entry strands it permanently, because nothing delivers to an archived agent. An archived agent MUST NOT be offered wherever a working agent is offered, including for a new conversation, as a message recipient, and as a task assignee. It MUST nonetheless remain reachable when explicitly asked for, because its own configuration is where unarchiving happens — an agent that could be archived but never found again would be deleted in all but name. An agent MUST NOT be able to send a message to an archived agent. The send SHALL fail with a response carrying three things: that the recipient is archived, what to do instead, and the content the sender submitted, restated verbatim. This is the contract `agent-capability-plane` already states for an archived conversation, for the same reason — a blocked send that returns only an error forces the agent to reconstruct its own message from a context it may have moved past. Opening a new conversation instead would not help: nothing runs an archived agent, so the entry would sit queued forever.</p></div><div class="aw-requirement aw-requirement-must" id="FR-7"><span class="aw-id">FR-7</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The workspace section SHALL state the directory an agent&#x27;s turn runs in, and whether that directory is the agent&#x27;s own isolated checkout or the project checkout it shares.</p><p class="aw-rationale">Reading it MUST NOT provision anything. An agent that has never run SHALL be told where it will work rather than shown an empty section, because a section that renders blank is indistinguishable from one that failed to load. Where an agent&#x27;s isolation cannot be prepared, the section SHALL state the reason — the same condition that would otherwise surface only as a refused turn.</p></div><div class="aw-requirement aw-requirement-must" id="FR-8"><span class="aw-id">FR-8</span> <p><span class="aw-modal aw-modal-must">SHALL</span> An agent SHALL carry an optional default permission posture, chosen from the same postures the per-run permission control offers and presented with the same labels, editable from the execution section.</p><p class="aw-rationale">The Hub SHALL apply that default to any run whose conversation has not chosen a posture — including runs started by a peer message or a schedule, where no operator is present to choose one. A conversation&#x27;s own choice SHALL take precedence over it. An agent&#x27;s stored autonomy flag is the older two-valued spelling of this same setting, not a second setting. Writing the posture SHALL update that flag so the two cannot disagree, and clearing the posture SHALL clear it, since an agent left at full access after full access was cleared would contradict what the operator was told. Where the posture is shown at rest — the composer&#x27;s permission control — it SHALL show what the run will actually do, and showing it SHALL NOT record it as a choice made for that conversation.</p></div><div class="aw-requirement aw-requirement-must" id="FR-9"><span class="aw-id">FR-9</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The Hub SHALL NOT present an agent setting that has no state behind it, and SHALL NOT expose such a field on the agent&#x27;s API representation.</p><p class="aw-rationale">An agent&#x27;s stored record has no role state. It was nonetheless carried on the response schema and rendered. A field that no store can ever populate is a claim that something is configurable when it is not. The Hub SHALL also not present a setting as a **read-only badge** when that setting has an editable home elsewhere in the agent&#x27;s configuration. An autonomy flag is a real stored setting that selects the run&#x27;s permission posture, so it belongs where a posture is chosen and can be changed — not duplicated as an observation that reports a value the operator cannot act on. Reporting a setting without offering to change it is the mirror of the first failure: the first offers a control with no state, the second shows state with no control. The operator MUST NOT be asked to choose a persona or organizational role, which `operator-agent-creation` already requires of creation and which applies equally to configuration.</p></div><div class="aw-requirement aw-requirement-must" id="FR-10"><span class="aw-id">FR-10</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL let the operator confer, and withdraw, an agent&#x27;s authority to accept or reject requirement evidence.</p><p class="aw-rationale">Authority over what ships is the operator&#x27;s to give. A capability enforced in the system but settable nowhere is one no agent can ever hold, which makes the enforcement a refusal of everyone. The grant SHALL be presented separately from capabilities that only widen what an agent can read. Accepting evidence decides whether work is allowed to merge; grouping it with reading tells the operator it is a kind of reading. The surface SHALL say what the grant does not confer — that a granted agent still cannot accept evidence it produced itself. A project that has granted no agent SHALL still be able to accept evidence, as the operator.</p></div></section><section><h2 id="acceptance">Acceptance criteria</h2><table><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>the operator opens an agent&#x27;s configuration from navigation</td><td>the configuration destination opens no conversation is required to have been selected</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>the operator reloads while viewing an agent&#x27;s configuration</td><td>the same agent&#x27;s configuration is shown</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>an agent&#x27;s configuration is shown</td><td>its sections are presented in place of the surrounding navigation</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>the operator opens configuration from a conversation and then returns</td><td>the agent&#x27;s most recent conversation is shown</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>the operator opens configuration from navigation and then returns</td><td>the agent&#x27;s most recent conversation is shown, the same target as from a conversation</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>an agent&#x27;s configuration is shown</td><td>live status and session history are not presented there</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>the operator is working in an agent&#x27;s conversation</td><td>that agent&#x27;s status and sessions remain available there</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>a setting is presented on the configuration destination</td><td>it is not also editable elsewhere</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>a capability introduces an agent-level setting for automatic checkpointing</td><td>it is presented within the context section no section is renamed or restructured to accommodate it</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>the operator views the runner or charter an agent is bound to</td><td>the binding can be changed the runner or charter record itself is not edited from this destination</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>the operator writes a description in the identity section</td><td>it is saved against the agent and shown when the section is next opened the agent&#x27;s turn context is unchanged</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>the operator empties an agent&#x27;s description</td><td>the agent has no description it is indistinguishable from an agent whose description was never written</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>an operator archives an agent holding undelivered inbound queue entries</td><td>the request is refused with the reason the entries remain queued</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>an archived agent&#x27;s configuration is requested</td><td>the agent resolves unarchiving is offered there</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>an agent sends a message to an archived agent</td><td>the send fails the response states that the recipient is archived, says what to do instead, and restates the submitted content no queue entry is created for the archived agent</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>an agent is archived</td><td>it is not offered for a new conversation, as a message recipient, or as a task assignee</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>an agent is archived</td><td>its conversations remain readable its runs and messages retain their attribution</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>an operator archives an agent with a run in progress</td><td>the request is refused with the reason the agent remains active</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>an archived agent is unarchived</td><td>it is offered as a working agent again</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>an operator views an agent&#x27;s configuration</td><td>no action permanently deletes the agent</td></tr><tr><td><a href="#FR-7">FR-7</a></td><td></td><td>the operator opens the workspace section for an agent with no checkout yet</td><td>the directory it will work in is stated no checkout is created by opening the section</td></tr><tr><td><a href="#FR-7">FR-7</a></td><td></td><td>an agent&#x27;s project directory cannot provide an isolated checkout</td><td>the section states why it says so before a turn is refused over it</td></tr><tr><td><a href="#FR-8">FR-8</a></td><td></td><td>a peer message triggers an agent whose conversation states no posture the agent has a default posture</td><td>the run is spawned under that posture</td></tr><tr><td><a href="#FR-8">FR-8</a></td><td></td><td>the operator chooses a posture for one conversation</td><td>that posture is used for its runs the agent&#x27;s default is unchanged</td></tr><tr><td><a href="#FR-8">FR-8</a></td><td></td><td>an operator sets an agent&#x27;s default posture to full access</td><td>the agent&#x27;s stored autonomy flag reads as set clearing the posture clears the flag</td></tr><tr><td><a href="#FR-9">FR-9</a></td><td></td><td>an agent is returned by the API</td><td>no field is present that has no corresponding stored state</td></tr><tr><td><a href="#FR-9">FR-9</a></td><td></td><td>an agent&#x27;s configuration is shown</td><td>no persona or organizational role is offered</td></tr><tr><td><a href="#FR-9">FR-9</a></td><td></td><td>an agent whose stored configuration sets an autonomy flag is triggered</td><td>the flag still selects the run&#x27;s permission posture the flag is absent from the agent&#x27;s summary representation</td></tr><tr><td><a href="#FR-10">FR-10</a></td><td></td><td>the operator grants an agent the authority to accept evidence reads that agent&#x27;s configuration back</td><td>the grant is shown as held</td></tr><tr><td><a href="#FR-10">FR-10</a></td><td></td><td>the operator withdraws the grant</td><td>the agent is refused when it next decides evidence</td></tr><tr><td><a href="#FR-10">FR-10</a></td><td></td><td>an agent is bound to a charter describing a reviewer</td><td>it holds no acceptance authority until the operator grants it</td></tr></tbody></table></section><section><h2 id="evidence">Evidence and coverage limits</h2><h3>Checked</h3><ul><li>Translated from openspec/specs/agent-configuration/spec.md (10 requirements, 31 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten.</li></ul><h3 class="aw-limits">Limits</h3><ul><li>scenarios-state-no-starting-state: 31 of 31 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed</li></ul></section><section><h2 id="open-questions">Open questions</h2><p class="aw-empty">None outstanding.</p></section>
+<script type="application/agentweave-spec+json" id="aw-spec-payload">
+{
+  "schema_version": 1,
+  "kind": "capability",
+  "title": "Agent configuration",
+  "summary": "An agent's configuration is a destination of its own, not a dialog and not a panel inside a conversation. It divides into sections named for what an operator is trying to do — identity, execution, charter, interaction, context, access, workspace — and it holds only settings: observations about a running agent stay with the conversation, where they are useful. An agent is archived, never deleted, because every run the Hub records is attributed to one. What creation collects is bounded by whether it changes the first turn; everything else is here.",
+  "problem": "",
+  "scope": {
+    "in_scope": [],
+    "non_goals": []
+  },
+  "requirements": [
+    {
+      "key": "agent-configuration-is-a-destination-rather-than-a-surface-i",
+      "statement": "The Hub SHALL present an agent's configuration as its own addressable destination, and MUST NOT require an operator to open a conversation to reach it.",
+      "modal": "MUST",
+      "rationale": "A conversation is transient and an agent may have many; its configuration is durable and singular. Reaching configuration through a conversation makes it depend on which conversation happens to be selected, and places durable settings behind a transient surface. The destination MUST be linkable and MUST survive a reload, so configuration can be returned to directly.",
+      "party": null
+    },
+    {
+      "key": "configuration-navigation-replaces-the-surrounding-navigation",
+      "statement": "An agent's configuration SHALL present its sections in place of the surrounding navigation, and SHALL offer a control returning to the context the operator came from.",
+      "modal": "SHALL",
+      "rationale": "This follows the project's own settings pattern, where a section list replaces the tab strip rather than nesting inside it. A settings surface is somewhere an operator goes and comes back from, not somewhere they browse laterally, so the lateral navigation is what gives way. Returning SHALL lead to a **fixed** target — the agent's most recent conversation — regardless of where the operator entered from. This matches the return control the project's own configuration already offers, which names one destination rather than describing where the operator has been. A remembered origin makes the same control mean different things on different visits, and there is nothing on screen that says which; a named, fixed target can be read before it is used. Both entry points therefore lead to the same place, which is the place the operator is going to work next in either case.",
+      "party": null
+    },
+    {
+      "key": "configuration-is-separated-from-observation",
+      "statement": "An agent's configuration destination SHALL present only settings, and observations about a running agent SHALL remain with the agent's conversation.",
+      "modal": "SHALL",
+      "rationale": "Status, the latest status message, last-seen time and the session list change without anyone configuring anything, and they are useful while working rather than while configuring. Mixing them with settings produces a surface that changes under the reader and a conversation stripped of the context it needs. No setting SHALL be editable from more than one surface.",
+      "party": null
+    },
+    {
+      "key": "configuration-sections-are-named-for-operator-intent",
+      "statement": "An agent's configuration SHALL be divided into sections named for what an operator is trying to do, covering identity, execution, charter, interaction, context, access, and workspace.",
+      "modal": "SHALL",
+      "rationale": "Naming sections after operator intent rather than after data shape is what allows a later capability to add settings without the section having to be renamed or restructured. *Context* and *Access* are defined here and are populated further by conversation checkpointing. A section MUST NOT be named for a concept the product no longer has.",
+      "party": null
+    },
+    {
+      "key": "an-agent-carries-a-description-written-for-the-operator",
+      "statement": "An agent SHALL carry an optional operator-written description of what it is for, editable from the identity section and returned with the agent's summary.",
+      "modal": "SHALL",
+      "rationale": "The description MUST NOT be injected into any agent's turn context. The charter is where an agent's behaviour is stated; a second field that also shaped behaviour would leave two places to look when an agent acts wrongly, and only one of them would be a contract. A blank description SHALL be stored as no description, so that \"cleared\" and \"never written\" are one state rather than two a reader has to distinguish.",
+      "party": null
+    },
+    {
+      "key": "an-agent-is-archived-rather-than-deleted",
+      "statement": "The Hub SHALL allow an agent to be archived and unarchived, and MUST NOT offer any means of permanently deleting one.",
+      "modal": "MUST",
+      "rationale": "Everything the Hub records is attributed to the run that produced it, and every run is attributed to its agent. Deleting an agent would either cascade through that history, destroying the record of work that genuinely happened, or orphan it. This capability follows the position already taken for conversations, where archival is refused rather than allowed to strand something permanently. Archival MUST be reversible, and MUST preserve the agent's history: its conversations remain readable, and its runs and messages retain their attribution. An agent with a run in progress MUST NOT be archived, nor one holding undelivered inbound queue entries. Both are refused with the reason rather than resolved: stopping a live run from a settings page destroys work with no undo, and archiving over a queued entry strands it permanently, because nothing delivers to an archived agent. An archived agent MUST NOT be offered wherever a working agent is offered, including for a new conversation, as a message recipient, and as a task assignee. It MUST nonetheless remain reachable when explicitly asked for, because its own configuration is where unarchiving happens — an agent that could be archived but never found again would be deleted in all but name. An agent MUST NOT be able to send a message to an archived agent. The send SHALL fail with a response carrying three things: that the recipient is archived, what to do instead, and the content the sender submitted, restated verbatim. This is the contract `agent-capability-plane` already states for an archived conversation, for the same reason — a blocked send that returns only an error forces the agent to reconstruct its own message from a context it may have moved past. Opening a new conversation instead would not help: nothing runs an archived agent, so the entry would sit queued forever.",
+      "party": null
+    },
+    {
+      "key": "an-agent-s-workspace-states-where-it-works-and-whether-that-",
+      "statement": "The workspace section SHALL state the directory an agent's turn runs in, and whether that directory is the agent's own isolated checkout or the project checkout it shares.",
+      "modal": "SHALL",
+      "rationale": "Reading it MUST NOT provision anything. An agent that has never run SHALL be told where it will work rather than shown an empty section, because a section that renders blank is indistinguishable from one that failed to load. Where an agent's isolation cannot be prepared, the section SHALL state the reason — the same condition that would otherwise surface only as a refused turn.",
+      "party": null
+    },
+    {
+      "key": "an-agent-has-a-default-permission-posture",
+      "statement": "An agent SHALL carry an optional default permission posture, chosen from the same postures the per-run permission control offers and presented with the same labels, editable from the execution section.",
+      "modal": "SHALL",
+      "rationale": "The Hub SHALL apply that default to any run whose conversation has not chosen a posture — including runs started by a peer message or a schedule, where no operator is present to choose one. A conversation's own choice SHALL take precedence over it. An agent's stored autonomy flag is the older two-valued spelling of this same setting, not a second setting. Writing the posture SHALL update that flag so the two cannot disagree, and clearing the posture SHALL clear it, since an agent left at full access after full access was cleared would contradict what the operator was told. Where the posture is shown at rest — the composer's permission control — it SHALL show what the run will actually do, and showing it SHALL NOT record it as a choice made for that conversation.",
+      "party": null
+    },
+    {
+      "key": "a-setting-with-no-backing-state-is-not-presented",
+      "statement": "The Hub SHALL NOT present an agent setting that has no state behind it, and SHALL NOT expose such a field on the agent's API representation.",
+      "modal": "SHALL",
+      "rationale": "An agent's stored record has no role state. It was nonetheless carried on the response schema and rendered. A field that no store can ever populate is a claim that something is configurable when it is not. The Hub SHALL also not present a setting as a **read-only badge** when that setting has an editable home elsewhere in the agent's configuration. An autonomy flag is a real stored setting that selects the run's permission posture, so it belongs where a posture is chosen and can be changed — not duplicated as an observation that reports a value the operator cannot act on. Reporting a setting without offering to change it is the mirror of the first failure: the first offers a control with no state, the second shows state with no control. The operator MUST NOT be asked to choose a persona or organizational role, which `operator-agent-creation` already requires of creation and which applies equally to configuration.",
+      "party": null
+    },
+    {
+      "key": "the-operator-can-grant-an-agent-the-authority-to-accept-evid",
+      "statement": "The system SHALL let the operator confer, and withdraw, an agent's authority to accept or reject requirement evidence.",
+      "modal": "SHALL",
+      "rationale": "Authority over what ships is the operator's to give. A capability enforced in the system but settable nowhere is one no agent can ever hold, which makes the enforcement a refusal of everyone. The grant SHALL be presented separately from capabilities that only widen what an agent can read. Accepting evidence decides whether work is allowed to merge; grouping it with reading tells the operator it is a kind of reading. The surface SHALL say what the grant does not confer — that a granted agent still cannot accept evidence it produced itself. A project that has granted no agent SHALL still be able to accept evidence, as the operator.",
+      "party": null
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "key": "ac1",
+      "requirement": "agent-configuration-is-a-destination-rather-than-a-surface-i",
+      "given": "",
+      "when": "the operator opens an agent's configuration from navigation",
+      "then": "the configuration destination opens no conversation is required to have been selected"
+    },
+    {
+      "key": "ac2",
+      "requirement": "agent-configuration-is-a-destination-rather-than-a-surface-i",
+      "given": "",
+      "when": "the operator reloads while viewing an agent's configuration",
+      "then": "the same agent's configuration is shown"
+    },
+    {
+      "key": "ac3",
+      "requirement": "configuration-navigation-replaces-the-surrounding-navigation",
+      "given": "",
+      "when": "an agent's configuration is shown",
+      "then": "its sections are presented in place of the surrounding navigation"
+    },
+    {
+      "key": "ac4",
+      "requirement": "configuration-navigation-replaces-the-surrounding-navigation",
+      "given": "",
+      "when": "the operator opens configuration from a conversation and then returns",
+      "then": "the agent's most recent conversation is shown"
+    },
+    {
+      "key": "ac5",
+      "requirement": "configuration-navigation-replaces-the-surrounding-navigation",
+      "given": "",
+      "when": "the operator opens configuration from navigation and then returns",
+      "then": "the agent's most recent conversation is shown, the same target as from a conversation"
+    },
+    {
+      "key": "ac6",
+      "requirement": "configuration-is-separated-from-observation",
+      "given": "",
+      "when": "an agent's configuration is shown",
+      "then": "live status and session history are not presented there"
+    },
+    {
+      "key": "ac7",
+      "requirement": "configuration-is-separated-from-observation",
+      "given": "",
+      "when": "the operator is working in an agent's conversation",
+      "then": "that agent's status and sessions remain available there"
+    },
+    {
+      "key": "ac8",
+      "requirement": "configuration-is-separated-from-observation",
+      "given": "",
+      "when": "a setting is presented on the configuration destination",
+      "then": "it is not also editable elsewhere"
+    },
+    {
+      "key": "ac9",
+      "requirement": "configuration-sections-are-named-for-operator-intent",
+      "given": "",
+      "when": "a capability introduces an agent-level setting for automatic checkpointing",
+      "then": "it is presented within the context section no section is renamed or restructured to accommodate it"
+    },
+    {
+      "key": "ac10",
+      "requirement": "configuration-sections-are-named-for-operator-intent",
+      "given": "",
+      "when": "the operator views the runner or charter an agent is bound to",
+      "then": "the binding can be changed the runner or charter record itself is not edited from this destination"
+    },
+    {
+      "key": "ac11",
+      "requirement": "an-agent-carries-a-description-written-for-the-operator",
+      "given": "",
+      "when": "the operator writes a description in the identity section",
+      "then": "it is saved against the agent and shown when the section is next opened the agent's turn context is unchanged"
+    },
+    {
+      "key": "ac12",
+      "requirement": "an-agent-carries-a-description-written-for-the-operator",
+      "given": "",
+      "when": "the operator empties an agent's description",
+      "then": "the agent has no description it is indistinguishable from an agent whose description was never written"
+    },
+    {
+      "key": "ac13",
+      "requirement": "an-agent-is-archived-rather-than-deleted",
+      "given": "",
+      "when": "an operator archives an agent holding undelivered inbound queue entries",
+      "then": "the request is refused with the reason the entries remain queued"
+    },
+    {
+      "key": "ac14",
+      "requirement": "an-agent-is-archived-rather-than-deleted",
+      "given": "",
+      "when": "an archived agent's configuration is requested",
+      "then": "the agent resolves unarchiving is offered there"
+    },
+    {
+      "key": "ac15",
+      "requirement": "an-agent-is-archived-rather-than-deleted",
+      "given": "",
+      "when": "an agent sends a message to an archived agent",
+      "then": "the send fails the response states that the recipient is archived, says what to do instead, and restates the submitted content no queue entry is created for the archived agent"
+    },
+    {
+      "key": "ac16",
+      "requirement": "an-agent-is-archived-rather-than-deleted",
+      "given": "",
+      "when": "an agent is archived",
+      "then": "it is not offered for a new conversation, as a message recipient, or as a task assignee"
+    },
+    {
+      "key": "ac17",
+      "requirement": "an-agent-is-archived-rather-than-deleted",
+      "given": "",
+      "when": "an agent is archived",
+      "then": "its conversations remain readable its runs and messages retain their attribution"
+    },
+    {
+      "key": "ac18",
+      "requirement": "an-agent-is-archived-rather-than-deleted",
+      "given": "",
+      "when": "an operator archives an agent with a run in progress",
+      "then": "the request is refused with the reason the agent remains active"
+    },
+    {
+      "key": "ac19",
+      "requirement": "an-agent-is-archived-rather-than-deleted",
+      "given": "",
+      "when": "an archived agent is unarchived",
+      "then": "it is offered as a working agent again"
+    },
+    {
+      "key": "ac20",
+      "requirement": "an-agent-is-archived-rather-than-deleted",
+      "given": "",
+      "when": "an operator views an agent's configuration",
+      "then": "no action permanently deletes the agent"
+    },
+    {
+      "key": "ac21",
+      "requirement": "an-agent-s-workspace-states-where-it-works-and-whether-that-",
+      "given": "",
+      "when": "the operator opens the workspace section for an agent with no checkout yet",
+      "then": "the directory it will work in is stated no checkout is created by opening the section"
+    },
+    {
+      "key": "ac22",
+      "requirement": "an-agent-s-workspace-states-where-it-works-and-whether-that-",
+      "given": "",
+      "when": "an agent's project directory cannot provide an isolated checkout",
+      "then": "the section states why it says so before a turn is refused over it"
+    },
+    {
+      "key": "ac23",
+      "requirement": "an-agent-has-a-default-permission-posture",
+      "given": "",
+      "when": "a peer message triggers an agent whose conversation states no posture the agent has a default posture",
+      "then": "the run is spawned under that posture"
+    },
+    {
+      "key": "ac24",
+      "requirement": "an-agent-has-a-default-permission-posture",
+      "given": "",
+      "when": "the operator chooses a posture for one conversation",
+      "then": "that posture is used for its runs the agent's default is unchanged"
+    },
+    {
+      "key": "ac25",
+      "requirement": "an-agent-has-a-default-permission-posture",
+      "given": "",
+      "when": "an operator sets an agent's default posture to full access",
+      "then": "the agent's stored autonomy flag reads as set clearing the posture clears the flag"
+    },
+    {
+      "key": "ac26",
+      "requirement": "a-setting-with-no-backing-state-is-not-presented",
+      "given": "",
+      "when": "an agent is returned by the API",
+      "then": "no field is present that has no corresponding stored state"
+    },
+    {
+      "key": "ac27",
+      "requirement": "a-setting-with-no-backing-state-is-not-presented",
+      "given": "",
+      "when": "an agent's configuration is shown",
+      "then": "no persona or organizational role is offered"
+    },
+    {
+      "key": "ac28",
+      "requirement": "a-setting-with-no-backing-state-is-not-presented",
+      "given": "",
+      "when": "an agent whose stored configuration sets an autonomy flag is triggered",
+      "then": "the flag still selects the run's permission posture the flag is absent from the agent's summary representation"
+    },
+    {
+      "key": "ac29",
+      "requirement": "the-operator-can-grant-an-agent-the-authority-to-accept-evid",
+      "given": "",
+      "when": "the operator grants an agent the authority to accept evidence reads that agent's configuration back",
+      "then": "the grant is shown as held"
+    },
+    {
+      "key": "ac30",
+      "requirement": "the-operator-can-grant-an-agent-the-authority-to-accept-evid",
+      "given": "",
+      "when": "the operator withdraws the grant",
+      "then": "the agent is refused when it next decides evidence"
+    },
+    {
+      "key": "ac31",
+      "requirement": "the-operator-can-grant-an-agent-the-authority-to-accept-evid",
+      "given": "",
+      "when": "an agent is bound to a charter describing a reviewer",
+      "then": "it holds no acceptance authority until the operator grants it"
+    }
+  ],
+  "tasks": [],
+  "algorithms": [],
+  "design": "",
+  "evidence": {
+    "checked": [
+      "Translated from openspec/specs/agent-configuration/spec.md (10 requirements, 31 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten."
+    ],
+    "limits": [
+      "scenarios-state-no-starting-state: 31 of 31 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed"
+    ]
+  },
+  "lifecycle": "",
+  "open_questions": [],
+  "aw_identity": {
+    "requirements": {
+      "agent-configuration-is-a-destination-rather-than-a-surface-i": "FR-1",
+      "configuration-navigation-replaces-the-surrounding-navigation": "FR-2",
+      "configuration-is-separated-from-observation": "FR-3",
+      "configuration-sections-are-named-for-operator-intent": "FR-4",
+      "an-agent-carries-a-description-written-for-the-operator": "FR-5",
+      "an-agent-is-archived-rather-than-deleted": "FR-6",
+      "an-agent-s-workspace-states-where-it-works-and-whether-that-": "FR-7",
+      "an-agent-has-a-default-permission-posture": "FR-8",
+      "a-setting-with-no-backing-state-is-not-presented": "FR-9",
+      "the-operator-can-grant-an-agent-the-authority-to-accept-evid": "FR-10"
+    },
+    "high_water": 10,
+    "retired": {},
+    "digests": {
+      "FR-1": "ad191f74cf3ecbb355f03199372d2123836575ebb07083d922cdfb0c1e6b327c",
+      "FR-2": "59136f39f8f45b39849dd0dc819ea8937aa1ded2bd2a7e7c53914f3941af9b6d",
+      "FR-3": "64db4b051ccdb67106e5ab54a231dfb801ee67d96c1f752fcca3952be197ad52",
+      "FR-4": "ffaf96dd26ae5477ddd3d210ea1787ff4b8196536c4fd48421c7e5b780a2b20a",
+      "FR-5": "3988f9d6046e4ae89579778983802ed26802a0e7d0e28b0a9da846d95e8cc235",
+      "FR-6": "eada5e1ad8421eac923dacfd71b8b2d42beb817865d64818c851008aea2eb9ce",
+      "FR-7": "2829140a09786f34eea6bf8fd8610cb6578158ac2b35d2b5f41a64e7140bf4ab",
+      "FR-8": "59a5c74776a80ea191c7af84a2424d2a4772168973e518c6ddab9facb531f92c",
+      "FR-9": "d99af380469b582c6f29cb3b0ad463edb5431a286884127b1f86172e41806ce8",
+      "FR-10": "37d330187a7b284c602d117f37448c97a57896920caeda81f017426c56bb9900"
+    }
+  }
+}
+</script>
+</body>
+</html>

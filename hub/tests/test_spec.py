@@ -153,7 +153,7 @@ async def test_a_filed_document_carries_its_index_metadata(app, auth_headers, tm
             "home": "spec/spec.html",
             "documents": [
                 _document(
-                    "spec/spec.html", title="Baseline", kind="baseline", status="living", order=1
+                    "spec/spec.html", title="Baseline", kind="baseline", status="approved", order=1
                 )
             ],
         },
@@ -180,13 +180,13 @@ async def test_an_index_entry_with_no_file_is_retained_and_reported(app, auth_he
             "home": "spec/spec.html",
             "documents": [
                 _document(
-                    "spec/spec.html", title="Baseline", kind="baseline", status="living", order=1
+                    "spec/spec.html", title="Baseline", kind="baseline", status="approved", order=1
                 ),
                 _document(
                     "spec/changes/gone/spec.html",
                     title="Gone",
                     kind="change-spec",
-                    status="draft",
+                    status="exploring",
                     order=2,
                 ),
             ],
@@ -209,7 +209,7 @@ async def test_a_document_the_index_omits_is_reported_as_unfiled(app, auth_heade
             "home": "spec/spec.html",
             "documents": [
                 _document(
-                    "spec/spec.html", title="Baseline", kind="baseline", status="living", order=1
+                    "spec/spec.html", title="Baseline", kind="baseline", status="approved", order=1
                 )
             ],
         },
@@ -254,10 +254,10 @@ async def test_an_index_naming_a_home_that_is_gone_does_not_silently_substitute(
             "home": "spec/base.html",
             "documents": [
                 _document(
-                    "spec/base.html", title="Base", kind="baseline", status="living", order=1
+                    "spec/base.html", title="Base", kind="baseline", status="approved", order=1
                 ),
                 _document(
-                    "spec/other.html", title="Other", kind="baseline", status="living", order=2
+                    "spec/other.html", title="Other", kind="baseline", status="approved", order=2
                 ),
             ],
         },

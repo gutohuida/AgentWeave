@@ -1,16 +1,16 @@
 """A conversation says whether it needs the operator, without being opened.
 
-This is the expensive half of the navigation problem. `Question`, `PermissionRequest` and
-`UnaskedQuestion` each block a run pending an answer, and today none of them are visible anywhere
-except inside the conversation that raised them — so with three agents working, a run that
-stopped to ask something is found by clicking through agents one at a time while
+This is the expensive half of the navigation problem. `Question` and `PermissionRequest` each
+block a run pending an answer, and today none of them are visible anywhere except inside the
+conversation that raised them — so with three agents working, a run that stopped to ask
+something is found by clicking through agents one at a time while
 `Agent.question_timeout_seconds` counts down.
 """
 
 import pytest
 
 from hub.db.engine import async_session_factory
-from hub.db.models import PermissionRequest, Question, Run, UnaskedQuestion
+from hub.db.models import PermissionRequest, Question, Run
 from hub.utils import short_id
 
 
@@ -111,30 +111,6 @@ async def test_a_pending_permission_request_reads_as_waiting(app, auth_headers) 
                 conversation_id=conversation_id,
                 tool_name="Bash",
                 tool_input={"command": "rm -rf build"},
-                status="pending",
-            )
-        )
-        await session.commit()
-
-    assert (await _attention(app, auth_headers))[conversation_id] == "waiting"
-
-
-@pytest.mark.asyncio
-async def test_an_unasked_question_reads_as_waiting(app, auth_headers) -> None:
-    """The backstop counts too: a question the agent forgot to route still needs the operator."""
-    await _sync_agents(app, auth_headers, "offline")
-    conversation_id = await _conversation(app, auth_headers)
-    run_id = await _run_for(conversation_id, status="completed")
-
-    async with async_session_factory() as session:
-        session.add(
-            UnaskedQuestion(
-                id=f"unasked-{short_id()}",
-                project_id="proj-test",
-                agent="offline",
-                run_id=run_id,
-                conversation_id=conversation_id,
-                question="Should I proceed with the destructive migration?",
                 status="pending",
             )
         )

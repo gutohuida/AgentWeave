@@ -44,7 +44,49 @@ describe('Composer — bounded autosizing', () => {
     expect(textarea.style.height).toBe(`${COMPOSER_MAX_HEIGHT_PX}px`)
     expect(textarea.style.overflowY).toBe('auto')
   })
+
+  it('collapses back to its resting height once a long message is sent', async () => {
+    // The reported defect: the box grew as a long prompt was typed and then stayed that
+    // tall after sending, until the operator switched conversation and React remounted it.
+    // Sizing used to happen in `onInput`, which never fires for a programmatic clear.
+    const { onSubmit } = renderComposer()
+    const textarea = screen.getByRole('textbox') as HTMLTextAreaElement
+
+    Object.defineProperty(textarea, 'scrollHeight', { configurable: true, value: 900 })
+    fireEvent.change(textarea, { target: { value: 'line\n'.repeat(40) } })
+    await waitFor(() => expect(textarea.style.height).toBe(`${COMPOSER_MAX_HEIGHT_PX}px`))
+
+    // An emptied textarea reports its `rows`-derived height, well under the maximum.
+    Object.defineProperty(textarea, 'scrollHeight', { configurable: true, value: 60 })
+    fireEvent.keyDown(textarea, { key: 'Enter' })
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled())
+    await waitFor(() => expect(textarea.style.height).toBe('60px'))
+  })
+
+  it('grows to fit text it did not receive as keystrokes', async () => {
+    // The same gap in the other direction: a restored draft arrives as state, not as
+    // input, so the box used to stay short around text that overflowed it.
+    const textarea = renderComposerWithDraft()
+    await waitFor(() => expect(textarea.style.height).toBe('240px'))
+  })
 })
+
+function renderComposerWithDraft(): HTMLTextAreaElement {
+  const view = render(
+    <Composer
+      agent="claude"
+      projectId="proj-draft"
+      conversationId="conv-draft"
+      isRunning={false}
+      onSubmit={vi.fn().mockResolvedValue(undefined)}
+    />
+  )
+  const textarea = view.container.querySelector('textarea') as HTMLTextAreaElement
+  Object.defineProperty(textarea, 'scrollHeight', { configurable: true, value: 240 })
+  fireEvent.change(textarea, { target: { value: 'a restored draft\n'.repeat(20) } })
+  return textarea
+}
 
 describe('Composer — column layout (2026-08-04-hub-charcoal-visual-refresh)', () => {
   it('renders the text area with no control preceding it, and the control row beneath it', () => {

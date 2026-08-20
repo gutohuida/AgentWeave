@@ -54,11 +54,6 @@ vi.mock('@/api/permissions', () => ({
   useDismissPermissionRequest: () => ({ mutate: vi.fn(), isPending: false }),
 }))
 
-vi.mock('@/api/unaskedQuestions', () => ({
-  usePendingUnaskedQuestions: () => ({ data: [] }),
-  useResolveUnaskedQuestion: () => ({ mutate: vi.fn(), isPending: false }),
-}))
-
 vi.mock('@/api/checkpoints', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/checkpoints')>()
   // The mutations stay real — they go through the mocked fetch, which is what these assert on.
@@ -468,6 +463,81 @@ describe('conversation controls — autoscroll follows scroll position', () => {
     fireEvent.scroll(output)
     recordedEntries = [...recordedEntries, timelineEntry('3')]
     rerender(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)
+    expect(output.scrollTop).toBe(1000)
+  })
+
+  /**
+   * Operator, 2026-08-20: "the scroll is behaving weirdly... when I scroll all the way down it
+   * suddenly jumps up a little bit. Feels like a bouncing pattern."
+   *
+   * The landing effect — "opening a conversation shows its newest entry" — listed `scrollToNewest`
+   * as a dependency. That callback's identity changes with `tailSpacer`, which is re-measured on
+   * every render of a streaming response, so an effect meant to fire on arrival re-fired
+   * throughout a turn: it yanked the viewport to the newest entry and forced `autoscroll` back on,
+   * against a `handleScroll` that had just turned it off. Reading further up the conversation was
+   * the thing this made impossible.
+   */
+  it('does not re-land on the newest entry while the operator is reading further up', () => {
+    recordedEntries = [timelineEntry('1')]
+    const { rerender } = render(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)
+    const output = screen.getByTestId('conversation-output')
+
+    // The turn's measured height is what drives `tailSpacer`, and a growing answer changes it on
+    // every render — which is exactly what used to give `scrollToNewest` a new identity and
+    // re-run the landing effect. Reproducing the bounce requires that measurement to move, so
+    // the height is read from a variable the test advances.
+    let turnHeight = 120
+    const original = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetHeight')
+    Object.defineProperty(HTMLElement.prototype, 'offsetHeight', {
+      configurable: true,
+      get(this: HTMLElement) {
+        return this.hasAttribute?.('data-turn-boundary') ? turnHeight : 0
+      },
+    })
+    try {
+      setScrollGeometry(output, { scrollTop: 0, scrollHeight: 1000, clientHeight: 600 })
+      recordedEntries = [timelineEntry('1'), timelineEntry('2')]
+      rerender(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)
+
+      // The operator scrolls up to read something, which turns following off.
+      setScrollGeometry(output, { scrollTop: 120, scrollHeight: 1000, clientHeight: 600 })
+      fireEvent.scroll(output)
+      expect(output.scrollTop).toBe(120)
+
+      // The answer keeps streaming: entries land, the turn grows, and the spacer shrinks with it.
+      // The spacer is what gives `scrollToNewest` a new identity, and re-measuring it needs the
+      // entry count to move — which is why this advances both. None of it is an arrival at a
+      // conversation, so none of it may scroll.
+      // Single-digit ids: `timelineEntry` interpolates the id into the seconds field.
+      for (const [id, height] of [['3', 200], ['4', 280], ['5', 360]] as const) {
+        turnHeight = height
+        recordedEntries = [...recordedEntries, timelineEntry(id)]
+        rerender(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)
+      }
+
+      expect(output.scrollTop).toBe(120)
+    } finally {
+      if (original) Object.defineProperty(HTMLElement.prototype, 'offsetHeight', original)
+      else Reflect.deleteProperty(HTMLElement.prototype, 'offsetHeight')
+    }
+  })
+
+  it('still lands on the newest entry when the conversation itself changes', () => {
+    // The other half of the same boundary: suppressing the re-fire must not suppress the arrival.
+    const { rerender } = render(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)
+    const output = screen.getByTestId('conversation-output')
+
+    setScrollGeometry(output, { scrollTop: 0, scrollHeight: 1000, clientHeight: 40 })
+    recordedEntries = [timelineEntry('1')]
+    rerender(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)
+    expect(output.scrollTop).toBe(1000)
+
+    setScrollGeometry(output, { scrollTop: 120, scrollHeight: 1000, clientHeight: 40 })
+    fireEvent.scroll(output)
+
+    recordedEntries = [timelineEntry('9')]
+    rerender(<AgentOutputPanel agent={idleAgent} conversationId="conv-new" />)
+
     expect(output.scrollTop).toBe(1000)
   })
 

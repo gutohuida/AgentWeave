@@ -321,8 +321,13 @@ An agent can stop and involve the operator rather than guess:
   `codex_appserver.decide_approval`, producing a card the operator answers.
 - **Questions** — `ask_user` takes 1–4 structured questions, blocks, and returns the answers. The
   operator steps through them above the composer.
-- **The backstop** — a completed run whose final text ends in a question, having opened no question
-  row, is flagged so a question the agent forgot to route still reaches the operator.
+
+There is deliberately **no backstop** behind these. A completed run whose final text merely *reads*
+like a question used to be detected, recorded and surfaced to the operator; that was retired on
+2026-08-20 at the operator's request, and migration `0082` drops its table. Do not reintroduce it:
+guessing whether trailing prose is a question is a judgement the product should not make on the
+operator's behalf. An agent that needs an answer calls `ask_user`; a turn that ends without calling
+it has ended.
 
 How long a run waits is per-agent (`Agent.permission_timeout_seconds`,
 `Agent.question_timeout_seconds`), carried to the spawned tool process as `AW_DECISION_TIMEOUT` and

@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent conversation handoff</title>
+<meta name="aw-spec-kind" content="capability">
+<meta name="aw-spec-status" content="current">
+<meta name="aw-spec-rigor" content="sketch">
+<meta name="aw-spec-schema-version" content="1">
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+    --surface-2: #21262d; --surface: #161b22;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+:root[data-theme="dark"] {
+  --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+  --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+  --surface-2: #21262d; --surface: #161b22;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 2rem 2.5rem 4rem; background: var(--bg); color: var(--fg);
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+h1 { font-size: 1.75rem; margin: 0 0 .25rem; }
+h2 { font-size: 1.15rem; margin: 2.5rem 0 .75rem; padding-bottom: .3rem;
+     border-bottom: 1px solid var(--border); }
+h3 { font-size: 1rem; margin: 1.5rem 0 .4rem; }
+p { margin: .5rem 0; }
+ul, ol { margin: .5rem 0; padding-left: 1.4rem; }
+li { margin: .25rem 0; }
+a { color: var(--aw-accent); }
+.aw-meta { color: var(--muted); font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-chip { display: inline-block; padding: .1rem .5rem; border-radius: 999px;
+           background: var(--surface-2); font-size: .78rem; margin-right: .4rem; }
+.aw-requirement { border-left: 3px solid var(--border); padding: .1rem 0 .1rem .9rem;
+                  margin: 1.1rem 0; }
+.aw-requirement-must { border-left-color: var(--aw-accent); }
+.aw-requirement-should { border-left-color: var(--aw-warn); }
+.aw-requirement-may { border-left-color: var(--border); }
+.aw-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8rem;
+         color: var(--muted); }
+.aw-modal { font-weight: 600; }
+.aw-modal-must { color: var(--aw-accent); }
+.aw-modal-should { color: var(--aw-warn); }
+.aw-modal-may { color: var(--fg); font-weight: 400; }
+.aw-chip-rigor-gate { color: var(--aw-accent); border: 1px solid var(--aw-accent); }
+.aw-chip-rigor-contract { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Phase is a lifecycle, and the question it answers is "can I rely on this?". `approved` and a
+   capability's `current` are settled and take the done tone; `proposed` is waiting on an operator
+   decision and takes warn; `exploring` and `archived` are quiet for opposite reasons — one has not
+   arrived yet, the other has been superseded. Deliberately NOT the accent: this document already
+   spends accent on links and on MUST, and a third meaning would empty it of any. `kind` keeps the
+   plain chip on purpose — it is a category, not a state, and hue there ranks nothing. */
+.aw-chip-phase-done { color: var(--aw-ok); border: 1px solid var(--aw-ok); }
+.aw-chip-phase-waiting { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+.aw-chip-phase-quiet { color: var(--muted); }
+.aw-chip-phase-archived { color: var(--muted); text-decoration: line-through; }
+/* An unresolved question blocks `propose`, so it is a real state and not a label. Resolved stays
+   the plain chip — the reader needs to find what is still open, not celebrate what is closed. */
+.aw-chip-open { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Limits is where a reader is most likely to be misled, and it read identically to Checked. */
+.aw-limits { color: var(--aw-warn); }
+/* The first screenful was entirely monochrome, so the document read as texty however the
+   requirements below were coloured. This puts the same modal scheme where the eye lands first,
+   carrying counts rather than decoration. */
+.aw-summary { margin: 0 0 1.5rem; font-size: .9rem; color: var(--muted); }
+.aw-summary .aw-count { font-weight: 600; }
+.aw-summary-sep { color: var(--border); margin: 0 .45rem; }
+.aw-rationale { color: var(--muted); font-size: .9rem; }
+.aw-refs { font-size: .82rem; color: var(--muted); }
+.aw-note { color: var(--muted); font-style: italic; }
+.aw-empty { color: var(--muted); }
+table { border-collapse: collapse; margin: .75rem 0; width: 100%; }
+th, td { border: 1px solid var(--border); padding: .4rem .6rem; text-align: left;
+         vertical-align: top; font-size: .92rem; }
+code, pre { background: var(--surface); border-radius: 4px; }
+code { padding: .1rem .3rem; font-size: .88em; }
+</style>
+</head>
+<body>
+<h1>Agent conversation handoff</h1>
+<p class="aw-meta"><span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><span class="aw-chip">sketch</span></p>
+<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">4</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">4</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">14</span> criteria</p>
+<section><h2 id="summary">Summary</h2><p>Durable conversation transitions from the agent conversation workspace: preserve the current AgentWeave conversation in a checkpoint, create one successor conversation, resume from the checkpoint, and then continue that successor conversation normally. Conversation identity is AgentWeave&#x27;s own `conversation_id`, allocated before any provider process starts; the provider session is nullable continuation data beneath it, never the operator-facing identity a handoff transitions between.</p></section><section><h2 id="requirements">Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-1"><span class="aw-id">FR-1</span> <p><span class="aw-modal aw-modal-must">MUST</span> The conversation workspace MUST present existing AgentWeave conversations as resumable choices, a `New conversation (start fresh)` choice that deliberately creates a new unbound conversation, and a `Handoff` action that produces a checkpoint before creating a successor conversation.</p><p class="aw-rationale">The prior wording described handoff as preserving context *&quot;through a durable checkpoint&quot;* written by the agent. Production of the checkpoint is now the Hub&#x27;s, so the action is a request rather than an instruction relayed to the agent. Readiness MUST reflect that a checkpoint exists and passed verification. It MUST NOT be derived from the agent&#x27;s run ending, which reported success for a run that produced nothing and returned a question to the operator. The normal picker and continuity controls MUST use `conversation_id` and MUST NOT use provider session IDs as conversation labels or values. The agent-detail header MUST NOT present the legacy `Compact` and `Reset` actions as primary conversation controls.</p></div><div class="aw-requirement aw-requirement-must" id="FR-2"><span class="aw-id">FR-2</span> <p><span class="aw-modal aw-modal-must">MUST</span> The `Handoff` action MUST cause the Hub to produce a checkpoint for the selected conversation, and MUST NOT depend on the agent invoking a checkpoint workflow of its own.</p><p class="aw-rationale">The prior wording required the action to *&quot;append a checkpoint request&quot;* instructing the agent to *&quot;invoke its checkpoint workflow with reason `pre_handoff`&quot;* and preserve state *&quot;in the configured durable checkpoint location&quot;*. No such workflow is installed into any project, and the location lies outside the agent&#x27;s own working directory, so the instruction was unsatisfiable on both counts. Where an artifact appeared at all it came from a skill belonging to the operator&#x27;s environment rather than to AgentWeave. The content and verification of the checkpoint are governed by `conversation-checkpoint`. This requirement governs only the action that requests one. The action MAY request brief notes from the agent, but the checkpoint MUST be produced whether or not the agent responds.</p></div><div class="aw-requirement aw-requirement-must" id="FR-3"><span class="aw-id">FR-3</span> <p><span class="aw-modal aw-modal-must">MUST</span> After a handoff is ready, the next user message MUST create exactly one unbound successor conversation, and the Hub MUST deliver the checkpoint into it rather than instructing the successor to locate it.</p><p class="aw-rationale">The prior wording required the successor&#x27;s prompt to instruct the new provider session to *&quot;read the newest checkpoint for its agent&quot;* at a stated path. Both paths named were wrong: neither existed, and one of the two runtimes recovered only by abandoning the instruction and searching its whole working directory. The other appeared to succeed only because it had earlier written to the same incorrect location, so two errors composed into a working round trip. The checkpoint is delivered as conversation-scoped queued input. It MUST NOT be delivered through the agent-scoped canonical context, which writes one file per agent and therefore cannot carry something belonging to one successor conversation. The successor&#x27;s prompt MUST NOT instruct the agent to locate a checkpoint on the filesystem.</p></div><div class="aw-requirement aw-requirement-must" id="FR-4"><span class="aw-id">FR-4</span> <p><span class="aw-modal aw-modal-must">MUST</span> The conversation workspace MUST visibly distinguish continuing an existing conversation, preparing a handoff, a ready handoff, starting a fresh conversation, and continuing its successor. Transient handoff state MUST be cleared when the selected agent changes or the user manually changes the conversation selection. Provider-binding latency MUST NOT be represented as a pending application identity state because `conversation_id` is already available.</p></div></section><section><h2 id="acceptance">Acceptance criteria</h2><table><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>the user selects an existing conversation and sends a message</td><td>the trigger includes its exact `conversation_id` the server derives provider continuation from that conversation&#x27;s binding</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>the user selects `New conversation (start fresh)` and sends a message</td><td>the trigger omits `conversation_id` so the server creates one synchronously no checkpoint is delivered into it</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>a run ends without a verified checkpoint having been produced</td><td>the handoff is not reported as ready</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>the agent conversation renders</td><td>`Compact` and `Reset` buttons do not appear in its primary header durable transitions are initiated through `Handoff`</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>an automatically managed agent has an existing conversation selected the user activates `Handoff`</td><td>the Hub produces a checkpoint for that conversation the workspace is armed to create one successor conversation</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>the checkpoint is being produced</td><td>the UI indicates that the handoff is being prepared handoff controls remain disabled until it settles unrelated running-state logic does not disable ordinary queued composer input</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>the agent is asked for notes and does not answer, refuses, or returns unusable notes</td><td>the checkpoint is still produced the handoff is not reported as failed for that reason alone</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>the agent&#x27;s runner is configured as manual</td><td>the `Handoff` action is disabled the UI explains that handoff requires an automatically managed runner</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>the handoff is ready and the user sends the next message</td><td>the trigger omits `conversation_id` and returns the new successor `conversation_id` the checkpoint is delivered into that successor as queued input the user&#x27;s original request remains present</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>the successor conversation receives the checkpoint</td><td>no instruction to read a checkpoint from a filesystem path is included</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>the fresh trigger is accepted</td><td>the selector binds to its returned `conversation_id` without waiting for output the UI indicates that it is continuing the successor conversation</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>the user sends another message in the successor conversation</td><td>the trigger carries that successor `conversation_id` the checkpoint is not delivered again no further conversation is created</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>the user selects a different agent</td><td>handoff state from the previous agent MUST be cleared the new agent&#x27;s most recently active conversation MUST be selected when available</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>the user changes the conversation selection during an idle state</td><td>any prepared handoff MUST be cancelled the continuity indicator MUST describe the newly selected conversation</td></tr></tbody></table></section><section><h2 id="evidence">Evidence and coverage limits</h2><h3>Checked</h3><ul><li>Translated from openspec/specs/agent-conversation-handoff/spec.md (4 requirements, 14 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten.</li></ul><h3 class="aw-limits">Limits</h3><ul><li>scenarios-state-no-starting-state: 14 of 14 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed</li></ul></section><section><h2 id="open-questions">Open questions</h2><p class="aw-empty">None outstanding.</p></section>
+<script type="application/agentweave-spec+json" id="aw-spec-payload">
+{
+  "schema_version": 1,
+  "kind": "capability",
+  "title": "Agent conversation handoff",
+  "summary": "Durable conversation transitions from the agent conversation workspace: preserve the current AgentWeave conversation in a checkpoint, create one successor conversation, resume from the checkpoint, and then continue that successor conversation normally. Conversation identity is AgentWeave's own `conversation_id`, allocated before any provider process starts; the provider session is nullable continuation data beneath it, never the operator-facing identity a handoff transitions between.",
+  "problem": "",
+  "scope": {
+    "in_scope": [],
+    "non_goals": []
+  },
+  "requirements": [
+    {
+      "key": "agent-output-distinguishes-continuation-fresh-start-and-hand",
+      "statement": "The conversation workspace MUST present existing AgentWeave conversations as resumable choices, a `New conversation (start fresh)` choice that deliberately creates a new unbound conversation, and a `Handoff` action that produces a checkpoint before creating a successor conversation.",
+      "modal": "MUST",
+      "rationale": "The prior wording described handoff as preserving context *\"through a durable checkpoint\"* written by the agent. Production of the checkpoint is now the Hub's, so the action is a request rather than an instruction relayed to the agent. Readiness MUST reflect that a checkpoint exists and passed verification. It MUST NOT be derived from the agent's run ending, which reported success for a run that produced nothing and returned a question to the operator. The normal picker and continuity controls MUST use `conversation_id` and MUST NOT use provider session IDs as conversation labels or values. The agent-detail header MUST NOT present the legacy `Compact` and `Reset` actions as primary conversation controls.",
+      "party": null
+    },
+    {
+      "key": "handoff-checkpoints-the-selected-conversation",
+      "statement": "The `Handoff` action MUST cause the Hub to produce a checkpoint for the selected conversation, and MUST NOT depend on the agent invoking a checkpoint workflow of its own.",
+      "modal": "MUST",
+      "rationale": "The prior wording required the action to *\"append a checkpoint request\"* instructing the agent to *\"invoke its checkpoint workflow with reason `pre_handoff`\"* and preserve state *\"in the configured durable checkpoint location\"*. No such workflow is installed into any project, and the location lies outside the agent's own working directory, so the instruction was unsatisfiable on both counts. Where an artifact appeared at all it came from a skill belonging to the operator's environment rather than to AgentWeave. The content and verification of the checkpoint are governed by `conversation-checkpoint`. This requirement governs only the action that requests one. The action MAY request brief notes from the agent, but the checkpoint MUST be produced whether or not the agent responds.",
+      "party": null
+    },
+    {
+      "key": "the-next-conversation-resumes-the-durable-handoff",
+      "statement": "After a handoff is ready, the next user message MUST create exactly one unbound successor conversation, and the Hub MUST deliver the checkpoint into it rather than instructing the successor to locate it.",
+      "modal": "MUST",
+      "rationale": "The prior wording required the successor's prompt to instruct the new provider session to *\"read the newest checkpoint for its agent\"* at a stated path. Both paths named were wrong: neither existed, and one of the two runtimes recovered only by abandoning the instruction and searching its whole working directory. The other appeared to succeed only because it had earlier written to the same incorrect location, so two errors composed into a working round trip. The checkpoint is delivered as conversation-scoped queued input. It MUST NOT be delivered through the agent-scoped canonical context, which writes one file per agent and therefore cannot carry something belonging to one successor conversation. The successor's prompt MUST NOT instruct the agent to locate a checkpoint on the filesystem.",
+      "party": null
+    },
+    {
+      "key": "conversation-transition-state-is-visible-and-scoped-to-the-a",
+      "statement": "The conversation workspace MUST visibly distinguish continuing an existing conversation, preparing a handoff, a ready handoff, starting a fresh conversation, and continuing its successor. Transient handoff state MUST be cleared when the selected agent changes or the user manually changes the conversation selection. Provider-binding latency MUST NOT be represented as a pending application identity state because `conversation_id` is already available.",
+      "modal": "MUST",
+      "rationale": null,
+      "party": null
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "key": "ac1",
+      "requirement": "agent-output-distinguishes-continuation-fresh-start-and-hand",
+      "given": "",
+      "when": "the user selects an existing conversation and sends a message",
+      "then": "the trigger includes its exact `conversation_id` the server derives provider continuation from that conversation's binding"
+    },
+    {
+      "key": "ac2",
+      "requirement": "agent-output-distinguishes-continuation-fresh-start-and-hand",
+      "given": "",
+      "when": "the user selects `New conversation (start fresh)` and sends a message",
+      "then": "the trigger omits `conversation_id` so the server creates one synchronously no checkpoint is delivered into it"
+    },
+    {
+      "key": "ac3",
+      "requirement": "agent-output-distinguishes-continuation-fresh-start-and-hand",
+      "given": "",
+      "when": "a run ends without a verified checkpoint having been produced",
+      "then": "the handoff is not reported as ready"
+    },
+    {
+      "key": "ac4",
+      "requirement": "agent-output-distinguishes-continuation-fresh-start-and-hand",
+      "given": "",
+      "when": "the agent conversation renders",
+      "then": "`Compact` and `Reset` buttons do not appear in its primary header durable transitions are initiated through `Handoff`"
+    },
+    {
+      "key": "ac5",
+      "requirement": "handoff-checkpoints-the-selected-conversation",
+      "given": "",
+      "when": "an automatically managed agent has an existing conversation selected the user activates `Handoff`",
+      "then": "the Hub produces a checkpoint for that conversation the workspace is armed to create one successor conversation"
+    },
+    {
+      "key": "ac6",
+      "requirement": "handoff-checkpoints-the-selected-conversation",
+      "given": "",
+      "when": "the checkpoint is being produced",
+      "then": "the UI indicates that the handoff is being prepared handoff controls remain disabled until it settles unrelated running-state logic does not disable ordinary queued composer input"
+    },
+    {
+      "key": "ac7",
+      "requirement": "handoff-checkpoints-the-selected-conversation",
+      "given": "",
+      "when": "the agent is asked for notes and does not answer, refuses, or returns unusable notes",
+      "then": "the checkpoint is still produced the handoff is not reported as failed for that reason alone"
+    },
+    {
+      "key": "ac8",
+      "requirement": "handoff-checkpoints-the-selected-conversation",
+      "given": "",
+      "when": "the agent's runner is configured as manual",
+      "then": "the `Handoff` action is disabled the UI explains that handoff requires an automatically managed runner"
+    },
+    {
+      "key": "ac9",
+      "requirement": "the-next-conversation-resumes-the-durable-handoff",
+      "given": "",
+      "when": "the handoff is ready and the user sends the next message",
+      "then": "the trigger omits `conversation_id` and returns the new successor `conversation_id` the checkpoint is delivered into that successor as queued input the user's original request remains present"
+    },
+    {
+      "key": "ac10",
+      "requirement": "the-next-conversation-resumes-the-durable-handoff",
+      "given": "",
+      "when": "the successor conversation receives the checkpoint",
+      "then": "no instruction to read a checkpoint from a filesystem path is included"
+    },
+    {
+      "key": "ac11",
+      "requirement": "the-next-conversation-resumes-the-durable-handoff",
+      "given": "",
+      "when": "the fresh trigger is accepted",
+      "then": "the selector binds to its returned `conversation_id` without waiting for output the UI indicates that it is continuing the successor conversation"
+    },
+    {
+      "key": "ac12",
+      "requirement": "the-next-conversation-resumes-the-durable-handoff",
+      "given": "",
+      "when": "the user sends another message in the successor conversation",
+      "then": "the trigger carries that successor `conversation_id` the checkpoint is not delivered again no further conversation is created"
+    },
+    {
+      "key": "ac13",
+      "requirement": "conversation-transition-state-is-visible-and-scoped-to-the-a",
+      "given": "",
+      "when": "the user selects a different agent",
+      "then": "handoff state from the previous agent MUST be cleared the new agent's most recently active conversation MUST be selected when available"
+    },
+    {
+      "key": "ac14",
+      "requirement": "conversation-transition-state-is-visible-and-scoped-to-the-a",
+      "given": "",
+      "when": "the user changes the conversation selection during an idle state",
+      "then": "any prepared handoff MUST be cancelled the continuity indicator MUST describe the newly selected conversation"
+    }
+  ],
+  "tasks": [],
+  "algorithms": [],
+  "design": "",
+  "evidence": {
+    "checked": [
+      "Translated from openspec/specs/agent-conversation-handoff/spec.md (4 requirements, 14 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten."
+    ],
+    "limits": [
+      "scenarios-state-no-starting-state: 14 of 14 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed"
+    ]
+  },
+  "lifecycle": "",
+  "open_questions": [],
+  "aw_identity": {
+    "requirements": {
+      "agent-output-distinguishes-continuation-fresh-start-and-hand": "FR-1",
+      "handoff-checkpoints-the-selected-conversation": "FR-2",
+      "the-next-conversation-resumes-the-durable-handoff": "FR-3",
+      "conversation-transition-state-is-visible-and-scoped-to-the-a": "FR-4"
+    },
+    "high_water": 4,
+    "retired": {},
+    "digests": {
+      "FR-1": "8b7b0df0793d8a37e0aa3552ac11e4723fd4cc60ca15fc60277bff5d4dad8f4b",
+      "FR-2": "03408b6eaf4bf2ff5721e2d9231aaf0be27c08032f1a337af0e7a7856060c4e2",
+      "FR-3": "9158b2362d6471ce45d045a18a00a362877ad8eede0498565ffeb5109903387b",
+      "FR-4": "47768994ff3a1e0df6559ba80aa7c470e15758e7d02e5232572cc489d37613df"
+    }
+  }
+}
+</script>
+</body>
+</html>

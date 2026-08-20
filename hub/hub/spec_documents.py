@@ -28,8 +28,11 @@ from .spec_manifest import (
     HTML_HEAD_MAX_BYTES,
     MANIFEST_MAX_BYTES,
     Manifest,
+    ManifestDocument,
     SpecPathError,
+    build_manifest,
     compute_intrinsic_conflicts,
+    dump_manifest,
     load_manifest,
     validate_spec_path,
 )
@@ -237,6 +240,108 @@ def read_index(
     if manifest is None:
         return None, "invalid", [d.to_dict() for d in parse_diagnostics]
     return manifest, "valid", [d.to_dict() for d in parse_diagnostics]
+
+
+def build_index(
+    on_disk: List[str],
+    documents: List[Tuple[str, str, str, str]],
+    existing: Optional[Manifest],
+    home: Optional[str] = None,
+) -> Tuple[Optional[Manifest], List[Dict[str, Any]]]:
+    """Assemble the manifest for a project, preserving whatever arrangement is already recorded.
+
+    Takes plain data rather than a database session on purpose: this module resolves paths and
+    reads files, and has never reached the database. `documents` is ``(path, title, kind, phase)``
+    per row, and the caller does the query.
+
+    **Only documents that are both on disk and known to the Hub are filed.** A row whose file is
+    gone would become a `missing_document` the moment it was written, and a file with no row has
+    no title or kind to record — neither is something to invent here.
+
+    Preservation is the whole point of reading `existing` first: `parent` and `order` are the
+    operator's arrangement, they have no column to live in, and a rebuild that recomputed them
+    would silently discard the only copy.
+    """
+    diagnostics: List[Dict[str, Any]] = []
+    known = {path: (title, kind, phase) for path, title, kind, phase in documents}
+    available = [path for path in on_disk if path in known]
+
+    for path in on_disk:
+        if path not in known:
+            # Reported rather than filed: the Hub has no title or kind for it, and guessing one
+            # would put an invented name into a file that outlives this machine.
+            diagnostics.append(_diag("unindexable_document", path=path))
+
+    previous = existing.by_path() if existing is not None else {}
+    ordered_paths = sorted(available)
+
+    # A document added to an already-arranged corpus is placed *after* everything the operator has
+    # ordered, not renumbered from one. Numbering from position alone let a new document collide
+    # with an existing order — adding a 34th document to a 33-document corpus produced three
+    # entries all claiming order 10, and `order` carries no uniqueness constraint to catch it, so
+    # the display order among the tie was arbitrary. Found by adding a system map to an imported
+    # corpus, 2026-08-20.
+    carried_orders = [
+        previous[path].order for path in ordered_paths if previous.get(path) is not None
+    ]
+    next_order = (max(carried_orders) + 10) if carried_orders else 10
+
+    entries: List[ManifestDocument] = []
+    for path in ordered_paths:
+        title, kind, phase = known[path]
+        carried = previous.get(path)
+        if carried is not None:
+            order = carried.order
+        else:
+            order = next_order
+            next_order += 10
+        entries.append(
+            ManifestDocument(
+                path=path,
+                title=title,
+                kind=kind,
+                status=phase,
+                # `parent` is carried or left unset — never derived from directory nesting.
+                # `spec/capabilities/a/spec.html` and `spec/changes/b/spec.html` share no
+                # meaningful parent document, and inventing one writes a hierarchy the operator
+                # never chose into a file that travels with the folder.
+                parent=carried.parent if carried is not None else None,
+                # Order is carried where recorded, otherwise derived from a stable sort by path.
+                # Deliberately not creation order: that would make the file's contents depend on
+                # database rows which do not travel with it, so the same corpus would order
+                # differently on another machine.
+                order=order,
+            )
+        )
+
+    if not entries:
+        return None, diagnostics
+
+    paths = [entry.path for entry in entries]
+    if home is not None:
+        # The operator is answering the question `_select_home` refuses to answer, so their answer
+        # wins over anything recorded. It still has to name a document that exists.
+        if home not in paths:
+            diagnostics.append(_diag("home_missing", path=home))
+            home = None
+    else:
+        home, home_diagnostics = _select_home(existing, paths)
+        diagnostics.extend(home_diagnostics)
+
+    manifest = build_manifest(entries, home)
+    if manifest is None:
+        # `build_manifest` refuses without a usable home, and `_select_home` refuses to invent one
+        # when the choice is the operator's. Nothing is written rather than a home being guessed.
+        diagnostics.append(_diag("index_home_required", actual="no home is recorded"))
+    return manifest, diagnostics
+
+
+def write_index(workspace: ProjectWorkspace, manifest: Manifest) -> Path:
+    """Write `spec/index.json`. The only thing here that puts a manifest on disk."""
+    resolved = workspace.resolve_relative(INDEX_RELATIVE)
+    resolved.parent.mkdir(parents=True, exist_ok=True)
+    resolved.write_text(dump_manifest(manifest), encoding="utf-8")
+    return resolved
 
 
 def _read_head(workspace: ProjectWorkspace, path: str) -> Optional[str]:

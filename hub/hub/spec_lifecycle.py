@@ -134,8 +134,9 @@ async def create_document(
     on the conversation: without it, "propose" and "approve" have no subject.
 
     A capability document has no exploration to close and nothing to propose — it describes
-    current, shipped behaviour and is written directly, through a merge (`spec_service.py`). It is
-    created at `current` and this is the only place a document's phase is ever set there.
+    current, shipped behaviour and is written directly by the operator (`spec_service.py`), either
+    by merging an approved change into it or by writing its content outright. It is created at
+    `current` and this is the only place a document's phase is ever set there.
     """
     existing = await get_document(session, project_id, path)
     if existing is not None:

@@ -1,0 +1,270 @@
+{
+  "version": 1,
+  "home": "spec/agentweave.html",
+  "documents": [
+    {
+      "path": "spec/agentweave.html",
+      "title": "AgentWeave",
+      "kind": "system-map",
+      "status": "exploring",
+      "parent": null,
+      "order": 10
+    },
+    {
+      "path": "spec/capabilities/agent-capability-plane/spec.html",
+      "title": "Agent capability plane",
+      "kind": "capability",
+      "status": "current",
+      "parent": null,
+      "order": 20
+    },
+    {
+      "path": "spec/capabilities/agent-charter/spec.html",
+      "title": "Agent charter",
+      "kind": "capability",
+      "status": "current",
+      "parent": null,
+      "order": 30
+    },
+    {
+      "path": "spec/capabilities/agent-composer/spec.html",
+      "title": "Agent composer",
+      "kind": "capability",
+      "status": "current",
+      "parent": null,
+      "order": 40
+    },
+    {
+      "path": "spec/capabilities/agent-configuration/spec.html",
+      "title": "Agent configuration",
+      "kind": "capability",
+      "status": "current",
+      "parent": null,
+      "order": 50
+    },
+    {
+      "path": "spec/capabilities/agent-context-onboarding/spec.html",
+      "title": "Agent context onboarding",
+      "kind": "capability",
+      "status": "current",
+      "parent": null,
+      "order": 60
+    },
+    {
+      "path": "spec/capabilities/agent-context-usage/spec.html",
+      "title": "Agent context usage",
+      "kind": "capability",
+      "status": "current",
+      "parent": null,
+      "order": 70
+    },
+    {
+      "path": "spec/capabilities/agent-conversation-handoff/spec.html",
+      "title": "Agent conversation handoff",
+      "kind": "capability",
+      "status": "current",
+      "parent": null,
+      "order": 80
+    },
+    {
+      "path": "spec/capabilities/agent-conversation-workspace/spec.html",
+      "title": "Agent conversation workspace",
+      "kind": "capability",
+      "status": "current",
+      "parent": null,
+      "order": 90
+    },
+    {
+      "path": "spec/capabilities/agent-loops/spec.html",
+      "title": "Agent loops",
+      "kind": "capability",
+      "status": "current",
+      "parent": null,
+      "order": 100
+    },
+    {
+      "path": "spec/capabilities/agent-run-sandboxing/spec.html",
+      "title": "Agent run sandboxing",
+      "kind": "capability",
+      "status": "current",
+      "parent": null,
+      "order": 110
+    },
+    {
+      "path": "spec/capabilities/agent-stream-events/spec.html",
+      "title": "Agent stream events",
+      "kind": "capability",
+      "status": "current",
+      "parent": null,
+      "order": 120
+    },
+    {
+      "path": "spec/capabilities/agent-tool-surface/spec.html",
+      "title": "Agent tool surface",
+      "kind": "capability",
+      "status": "current",
+      "parent": null,
+      "order": 130
+    },
+    {
+      "path": "spec/capabilities/app-lifecycle/spec.html",
+      "title": "App lifecycle",
+      "kind": "capability",
+      "status": "current",
+      "parent": null,
+      "order": 140
+    },
+    {
+      "path": "spec/capabilities/conversation-checkpoint/spec.html",
+      "title": "Conversation checkpoint",
+      "kind": "capability",
+      "status": "current",
+      "parent": null,
+      "order": 150
+    },
+    {
+      "path": "spec/capabilities/conversation-lifecycle/spec.html",
+      "title": "Conversation lifecycle",
+      "kind": "capability",
+      "status": "current",
+      "parent": null,
+      "order": 160
+    },
+    {
+      "path": "spec/capabilities/conversation-side-panel/spec.html",
+      "title": "Conversation side panel",
+      "kind": "capability",
+      "status": "current",
+      "parent": null,
+      "order": 170
+    },
+    {
+      "path": "spec/capabilities/hub-interaction-feedback/spec.html",
+      "title": "Hub interaction feedback",
+      "kind": "capability",
+      "status": "current",
+      "parent": null,
+      "order": 180
+    },
+    {
+      "path": "spec/capabilities/hub-workspace-shell/spec.html",
+      "title": "Hub workspace shell",
+      "kind": "capability",
+      "status": "current",
+      "parent": null,
+      "order": 190
+    },
+    {
+      "path": "spec/capabilities/local-project-workspace/spec.html",
+      "title": "Local project workspace",
+      "kind": "capability",
+      "status": "current",
+      "parent": null,
+      "order": 200
+    },
+    {
+      "path": "spec/capabilities/model-catalog/spec.html",
+      "title": "Model catalog",
+      "kind": "capability",
+      "status": "current",
+      "parent": null,
+      "order": 210
+    },
+    {
+      "path": "spec/capabilities/opencode-config/spec.html",
+      "title": "Opencode config",
+      "kind": "capability",
+      "status": "current",
+      "parent": null,
+      "order": 220
+    },
+    {
+      "path": "spec/capabilities/operator-agent-creation/spec.html",
+      "title": "Operator agent creation",
+      "kind": "capability",
+      "status": "current",
+      "parent": null,
+      "order": 230
+    },
+    {
+      "path": "spec/capabilities/project-environment-settings/spec.html",
+      "title": "Project environment settings",
+      "kind": "capability",
+      "status": "current",
+      "parent": null,
+      "order": 240
+    },
+    {
+      "path": "spec/capabilities/requirement-traceability/spec.html",
+      "title": "Requirement traceability",
+      "kind": "capability",
+      "status": "current",
+      "parent": null,
+      "order": 250
+    },
+    {
+      "path": "spec/capabilities/run-task-binding/spec.html",
+      "title": "Run task binding",
+      "kind": "capability",
+      "status": "current",
+      "parent": null,
+      "order": 260
+    },
+    {
+      "path": "spec/capabilities/runner-registry/spec.html",
+      "title": "Runner registry",
+      "kind": "capability",
+      "status": "current",
+      "parent": null,
+      "order": 270
+    },
+    {
+      "path": "spec/capabilities/runtime-diagnostics/spec.html",
+      "title": "Runtime diagnostics",
+      "kind": "capability",
+      "status": "current",
+      "parent": null,
+      "order": 280
+    },
+    {
+      "path": "spec/capabilities/spec-chat-session/spec.html",
+      "title": "Spec chat session",
+      "kind": "capability",
+      "status": "current",
+      "parent": null,
+      "order": 290
+    },
+    {
+      "path": "spec/capabilities/spec-document-authority/spec.html",
+      "title": "Spec document authority",
+      "kind": "capability",
+      "status": "current",
+      "parent": null,
+      "order": 300
+    },
+    {
+      "path": "spec/capabilities/task-lifecycle-governance/spec.html",
+      "title": "Task lifecycle governance",
+      "kind": "capability",
+      "status": "current",
+      "parent": null,
+      "order": 310
+    },
+    {
+      "path": "spec/capabilities/trace-timeline/spec.html",
+      "title": "Trace timeline",
+      "kind": "capability",
+      "status": "current",
+      "parent": null,
+      "order": 320
+    },
+    {
+      "path": "spec/capabilities/usage-accounting/spec.html",
+      "title": "Usage accounting",
+      "kind": "capability",
+      "status": "current",
+      "parent": null,
+      "order": 330
+    }
+  ]
+}

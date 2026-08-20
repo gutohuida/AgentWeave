@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Run task binding</title>
+<meta name="aw-spec-kind" content="capability">
+<meta name="aw-spec-status" content="current">
+<meta name="aw-spec-rigor" content="sketch">
+<meta name="aw-spec-schema-version" content="1">
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+    --surface-2: #21262d; --surface: #161b22;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+:root[data-theme="dark"] {
+  --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+  --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+  --surface-2: #21262d; --surface: #161b22;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 2rem 2.5rem 4rem; background: var(--bg); color: var(--fg);
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+h1 { font-size: 1.75rem; margin: 0 0 .25rem; }
+h2 { font-size: 1.15rem; margin: 2.5rem 0 .75rem; padding-bottom: .3rem;
+     border-bottom: 1px solid var(--border); }
+h3 { font-size: 1rem; margin: 1.5rem 0 .4rem; }
+p { margin: .5rem 0; }
+ul, ol { margin: .5rem 0; padding-left: 1.4rem; }
+li { margin: .25rem 0; }
+a { color: var(--aw-accent); }
+.aw-meta { color: var(--muted); font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-chip { display: inline-block; padding: .1rem .5rem; border-radius: 999px;
+           background: var(--surface-2); font-size: .78rem; margin-right: .4rem; }
+.aw-requirement { border-left: 3px solid var(--border); padding: .1rem 0 .1rem .9rem;
+                  margin: 1.1rem 0; }
+.aw-requirement-must { border-left-color: var(--aw-accent); }
+.aw-requirement-should { border-left-color: var(--aw-warn); }
+.aw-requirement-may { border-left-color: var(--border); }
+.aw-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8rem;
+         color: var(--muted); }
+.aw-modal { font-weight: 600; }
+.aw-modal-must { color: var(--aw-accent); }
+.aw-modal-should { color: var(--aw-warn); }
+.aw-modal-may { color: var(--fg); font-weight: 400; }
+.aw-chip-rigor-gate { color: var(--aw-accent); border: 1px solid var(--aw-accent); }
+.aw-chip-rigor-contract { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Phase is a lifecycle, and the question it answers is "can I rely on this?". `approved` and a
+   capability's `current` are settled and take the done tone; `proposed` is waiting on an operator
+   decision and takes warn; `exploring` and `archived` are quiet for opposite reasons — one has not
+   arrived yet, the other has been superseded. Deliberately NOT the accent: this document already
+   spends accent on links and on MUST, and a third meaning would empty it of any. `kind` keeps the
+   plain chip on purpose — it is a category, not a state, and hue there ranks nothing. */
+.aw-chip-phase-done { color: var(--aw-ok); border: 1px solid var(--aw-ok); }
+.aw-chip-phase-waiting { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+.aw-chip-phase-quiet { color: var(--muted); }
+.aw-chip-phase-archived { color: var(--muted); text-decoration: line-through; }
+/* An unresolved question blocks `propose`, so it is a real state and not a label. Resolved stays
+   the plain chip — the reader needs to find what is still open, not celebrate what is closed. */
+.aw-chip-open { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Limits is where a reader is most likely to be misled, and it read identically to Checked. */
+.aw-limits { color: var(--aw-warn); }
+/* The first screenful was entirely monochrome, so the document read as texty however the
+   requirements below were coloured. This puts the same modal scheme where the eye lands first,
+   carrying counts rather than decoration. */
+.aw-summary { margin: 0 0 1.5rem; font-size: .9rem; color: var(--muted); }
+.aw-summary .aw-count { font-weight: 600; }
+.aw-summary-sep { color: var(--border); margin: 0 .45rem; }
+.aw-rationale { color: var(--muted); font-size: .9rem; }
+.aw-refs { font-size: .82rem; color: var(--muted); }
+.aw-note { color: var(--muted); font-style: italic; }
+.aw-empty { color: var(--muted); }
+table { border-collapse: collapse; margin: .75rem 0; width: 100%; }
+th, td { border: 1px solid var(--border); padding: .4rem .6rem; text-align: left;
+         vertical-align: top; font-size: .92rem; }
+code, pre { background: var(--surface); border-radius: 4px; }
+code { padding: .1rem .3rem; font-size: .88em; }
+</style>
+</head>
+<body>
+<h1>Run task binding</h1>
+<p class="aw-meta"><span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><span class="aw-chip">sketch</span></p>
+<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">15</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-count">15</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">47</span> criteria</p>
+<section><h2 id="summary">Summary</h2><p>Which task a run is working on, who decides that, what binding does to the task&#x27;s status, and what happens when a run ends holding work nobody moved. Established by `openspec/changes/2026-08-10-run-task-binding/`. Before it, `Run` carried project, agent, session, conversation, pid and heartbeat and nothing about the work, so a task&#x27;s status stayed current only if an agent remembered to say so — not a discipline problem but a missing edge in the data model. Where `task-lifecycle-governance` governs **validity** — that a recorded transition is legal, attributed, and made by an entitled actor — this capability governs **liveness**: that a transition happens at all when reality changes. B1 made it impossible to record a wrong transition and could do nothing about a missing one, because an agent that does the work and never touches the ledger asks for nothing and so passes every check. Both mechanisms sit at boundaries AgentWeave owns for every runner — process start and process end — rather than inside any agent, which is what makes them enforcement rather than instruction, and why no part of this depends on a runner hook. It is also the prerequisite for B3: evidence is produced *by a run*, about *a task*, and that edge did not exist.</p></section><section><h2 id="requirements">Requirements</h2><div class="aw-requirement aw-requirement-must" id="FR-1"><span class="aw-id">FR-1</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL record, on each run, the single task that run was started for, or nothing. A run SHALL NOT be bound to more than one task.</p><p class="aw-rationale">A run with no binding is legitimate: exploration, conversation, questions, and scheduled work are real work with no task.</p></div><div class="aw-requirement aw-requirement-must" id="FR-2"><span class="aw-id">FR-2</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL set a run&#x27;s binding itself, from the cause that started the run. No agent-facing operation — over HTTP or MCP — SHALL create, change, or remove a run&#x27;s binding.</p><p class="aw-rationale">An enforcement mechanism its subject can decline is not enforcement: an agent able to bind itself is an agent able to never bind, and an unbound run is never divergent.</p></div><div class="aw-requirement aw-requirement-must" id="FR-3"><span class="aw-id">FR-3</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL carry a task named on an agent-to-agent delegation through the receiving agent&#x27;s inbound queue and onto the run that delivers it.</p><p class="aw-rationale">The task id SHALL be validated against the sending run&#x27;s project when the delegation is made. A task id that does not resolve SHALL be refused with a message naming the problem, and the delegation SHALL still be deliverable without a binding rather than lost.</p></div><div class="aw-requirement aw-requirement-must" id="FR-4"><span class="aw-id">FR-4</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL let the operator start work on a task directly from the task, producing a run bound to it.</p></div><div class="aw-requirement aw-requirement-must" id="FR-5"><span class="aw-id">FR-5</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL, when binding a run to a task from whose current status an agent run may reach `in_progress`, move the task to `in_progress` and attribute the move to the binding run.</p><p class="aw-rationale">The move SHALL be applied through the same transition machine that governs every other status change, so no legality rule, actor rule, or later gate is bypassed by the runtime path.</p></div><div class="aw-requirement aw-requirement-must" id="FR-6"><span class="aw-id">FR-6</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL determine, when a bound run ends, whether that run caused any status transition of its bound task other than the runtime&#x27;s own automatic one. A bound run that caused none SHALL be recorded as divergent.</p><p class="aw-rationale">The determination SHALL be made at the run boundary — which the system owns for every runner — rather than inside the agent, and SHALL NOT depend on any runner-specific mechanism. A run&#x27;s exit status SHALL NOT affect whether it is checked. A run that crashed, failed, or was interrupted is still a run that ended holding a task nobody moved; the record SHALL name the exit status so that a crash is distinguishable from a completed run that forgot. A run whose queued input was returned to the queue SHALL NOT be recorded as divergent. That input is about to be delivered to a new run bound to the same task, so nothing has been dropped — recording a divergence would misdescribe it, and under an active policy would start a run racing the redelivery.</p></div><div class="aw-requirement aw-requirement-must" id="FR-7"><span class="aw-id">FR-7</span> <p><span class="aw-modal aw-modal-must">MUST</span> The system SHALL persist one immutable record per divergence, naming the run, the task, the policy applied, the outcome, and the run started in response where one was. Records MUST NOT be updated except to mark resolution, and MUST NOT be deleted by any application path.</p><p class="aw-rationale">Broadcasting a divergence is not sufficient: the operator SHALL be able to see divergences that occurred while they were not watching, and to ask how often an agent has diverged.</p></div><div class="aw-requirement aw-requirement-must" id="FR-8"><span class="aw-id">FR-8</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL let each task carry a divergence policy of `surface`, `retry`, or `escalate`, and an escalation agent. A task with no policy set SHALL be treated as `surface`.</p><p class="aw-rationale">`surface` SHALL record and display the divergence and start nothing. `retry` SHALL start one further run of the same agent, bound to the same task. `escalate` SHALL reassign the task to its escalation agent and start a run of that agent, bound to the same task. Defaulting to `surface` is required, not incidental: shipping this capability SHALL NOT cause any existing task to start runs nobody asked for.</p></div><div class="aw-requirement aw-requirement-must" id="FR-9"><span class="aw-id">FR-9</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL record, on a run started in response to a divergence, the run whose divergence caused it. A run carrying that reference SHALL NOT itself trigger a retry, and SHALL NOT trigger an escalation unless it was itself started by a retry.</p><p class="aw-rationale">A `retry` whose own run diverges SHALL fall through to `escalate` when the task names an escalation agent, and to `surface` otherwise. No sequence of divergences SHALL be able to start an unbounded number of runs: a chain SHALL start at most one retry and at most one escalation before surfacing. The escalation limit is required, not incidental. An escalated run&#x27;s task still carries the same policy and the same escalation agent, so without it a divergence of that run escalates to the same agent again, and does so forever. The bound applies to a chain, not to a task&#x27;s lifetime: a run that makes real progress ends the chain, and a later independent run that diverges may retry again.</p></div><div class="aw-requirement aw-requirement-must" id="FR-10"><span class="aw-id">FR-10</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL let the operator read and change a task&#x27;s divergence policy and escalation agent from the task itself, and SHALL show on the task that a divergence has occurred and whether it is still open.</p></div><div class="aw-requirement aw-requirement-must" id="FR-11"><span class="aw-id">FR-11</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL record a task binding on the conversation, and SHALL bind a run started in that conversation to it when nothing more specific applies.</p><p class="aw-rationale">Work spans more turns than a run does. With the binding held only per run, a conversation&#x27;s first turn is checked at its boundary and every later turn is not — including the turn where the agent actually stops, which is the only one at which &quot;did this ever reach the ledger?&quot; has a useful answer. An input that names its own task SHALL take precedence and SHALL rebind the conversation, so that delegating different work into an existing thread is not silently attributed to the old task. Each run SHALL still record the task it was bound to. Transitions and divergences are attributed to a run, and an integrity record that had to be joined through a conversation to say what it was about would depend on a row that may be archived.</p></div><div class="aw-requirement aw-requirement-must" id="FR-12"><span class="aw-id">FR-12</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL let the operator release a conversation&#x27;s binding, and SHALL release it automatically when the bound task reaches a status from which no further work is expected.</p><p class="aw-rationale">A binding SHALL NOT be released by inferring what the operator now seems to be discussing. A wrong inference silently stops checking runs, and a mechanism that quietly stops enforcing is worse than one that never started.</p></div><div class="aw-requirement aw-requirement-must" id="FR-13"><span class="aw-id">FR-13</span> <p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL NOT record a divergence for a run whose bound task is waiting on a person.</p><p class="aw-rationale">Divergence means work was dropped with no account of why. A waiting task has an account, and it names someone who can act on it. Answering a divergence with a retry would restart an agent that is still waiting for the same thing.</p></div><div class="aw-requirement aw-requirement-must" id="FR-14"><span class="aw-id">FR-14</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Binding a run to a task that is waiting on a person SHALL leave that task waiting. The system SHALL NOT move it back to the in-progress status as a consequence of a run starting.</p><p class="aw-rationale">The edge out of the waiting status exists, so without this rule the act of starting a run would release the block — and that run&#x27;s end would then find the task no longer waiting and record a divergence against work that was never dropped. A block ends when the answer arrives or the operator ends it, never because something started.</p></div><div class="aw-requirement aw-requirement-must" id="FR-15"><span class="aw-id">FR-15</span> <p><span class="aw-modal aw-modal-must">SHALL</span> Where a blocking question is answered after the run that asked it has ended, the system SHALL deliver the answer as queued input rather than relying on the asking run to receive it as a result.</p><p class="aw-rationale">A blocking ask holds its run open only while that run lives. A question that outlived its run — it timed out, or the run failed — has nobody waiting to receive the answer, and that is precisely the question that caused a task to be recorded as waiting. An answer that reaches no one leaves the operator believing they have unblocked work that is still stopped. Where the system cannot establish that the asking run has ended, it SHALL assume the asker is still waiting. Delivering a duplicate costs a turn; assuming wrongly in the other direction loses the answer.</p></div></section><section><h2 id="acceptance">Acceptance criteria</h2><table><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead><tbody><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>a run is started from a cause that names a task</td><td>the run durably identifies that task the binding is readable for the run&#x27;s whole life and after it ends</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>the operator starts a run by talking to an agent, or a scheduled job triggers one</td><td>the run records no task the run is not subject to any check that depends on a binding</td></tr><tr><td><a href="#FR-1">FR-1</a></td><td></td><td>anything attempts to bind a second task to a run that is already bound</td><td>no such path exists</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>an agent enumerates the operations available to it</td><td>no operation binds a run to a task, rebinds it, or clears a binding</td></tr><tr><td><a href="#FR-2">FR-2</a></td><td></td><td>a run is bound and the agent attempts to remove or change that binding by any available</td><td>the binding is unchanged</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>an agent delegates work naming a task in its project the receiving agent&#x27;s next turn delivers that item</td><td>the receiving run is bound to that task</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>a delegation names a task that does not exist or belongs to another project</td><td>the caller receives an error naming which task id failed and why</td></tr><tr><td><a href="#FR-3">FR-3</a></td><td></td><td>one turn delivers several queued items and more than one names a task</td><td>the run is bound to the task named by the earliest queued item that names one the same delivery always produces the same binding</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>the operator starts work on a task and names the agent</td><td>a run for that agent is started bound to that task</td></tr><tr><td><a href="#FR-4">FR-4</a></td><td></td><td>the operator views a run</td><td>the task it is bound to is shown, or its absence is evident</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>a run binds to a task in `pending` or `assigned`</td><td>the task moves to `in_progress` the transition is recorded naming the binding run and its agent the agent was not asked to make it</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>a run binds to a task already in `in_progress`</td><td>no transition is recorded</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>a run binds to a task in a status from which an agent run cannot reach `in_progress`</td><td>the run is bound no transition is recorded the binding is not refused</td></tr><tr><td><a href="#FR-5">FR-5</a></td><td></td><td>the runtime attempts the automatic move</td><td>it is subject to the same legality check as an agent-requested move</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>a bound run moves its task to `completed` and ends</td><td>no divergence is recorded</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>a bound run ends and the only transition it caused was the automatic one made when it was</td><td>a divergence is recorded naming the run, the task, the task&#x27;s status at run end, and the</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>a run with no binding ends</td><td>no divergence is recorded</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>a bound run&#x27;s process dies and the run is later reconciled to an ended state it had no queued input to return</td><td>the divergence check is performed the record names the exit status</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>a bound run ends and its delivered input is returned to the agent&#x27;s queue</td><td>no divergence is recorded no run is started in response</td></tr><tr><td><a href="#FR-6">FR-6</a></td><td></td><td>an open divergence exists for a task and any actor later moves that task</td><td>the divergence is recorded as resolved the record of it having occurred is retained</td></tr><tr><td><a href="#FR-7">FR-7</a></td><td></td><td>a divergence occurs and the operator later opens the project</td><td>the divergence is visible with its task, run, policy, and outcome</td></tr><tr><td><a href="#FR-7">FR-7</a></td><td></td><td>several divergences are recorded within the same instant</td><td>reading them back yields the order in which they occurred</td></tr><tr><td><a href="#FR-8">FR-8</a></td><td></td><td>a run bound to a task with no policy set diverges</td><td>the divergence is recorded and displayed no run is started</td></tr><tr><td><a href="#FR-8">FR-8</a></td><td></td><td>a run bound to a task whose policy is `retry` diverges</td><td>one further run of the same agent is started bound to that task that run is given the task, its current status, and the transitions available to it</td></tr><tr><td><a href="#FR-8">FR-8</a></td><td></td><td>a run bound to a task whose policy is `escalate` diverges the task names an escalation agent</td><td>the task is reassigned to that agent a run of that agent is started bound to the task the previous assignee is recorded</td></tr><tr><td><a href="#FR-8">FR-8</a></td><td></td><td>a task whose policy is `escalate` names no escalation agent</td><td>the divergence is surfaced no run is started</td></tr><tr><td><a href="#FR-9">FR-9</a></td><td></td><td>a run started in response to a divergence itself diverges</td><td>no further retry is started</td></tr><tr><td><a href="#FR-9">FR-9</a></td><td></td><td>a run started by `retry` diverges the task names an escalation agent</td><td>the work is escalated to that agent</td></tr><tr><td><a href="#FR-9">FR-9</a></td><td></td><td>a run started by `escalate` itself diverges the task still names the same escalation agent</td><td>the divergence is surfaced no further run is started</td></tr><tr><td><a href="#FR-9">FR-9</a></td><td></td><td>a run started in response to a divergence moves its task a later independent run bound to the same task diverges</td><td>that later divergence is answered by the task&#x27;s policy in full, including retry</td></tr><tr><td><a href="#FR-10">FR-10</a></td><td></td><td>the operator opens a task</td><td>its divergence policy and escalation agent are visible and changeable there</td></tr><tr><td><a href="#FR-10">FR-10</a></td><td></td><td>the operator sets an escalation agent</td><td>the choices offered are agents that exist in the project</td></tr><tr><td><a href="#FR-10">FR-10</a></td><td></td><td>a task has an unresolved divergence</td><td>the task shows it the indicator clears when the divergence resolves</td></tr><tr><td><a href="#FR-11">FR-11</a></td><td></td><td>work is started on a task in a conversation the operator sends a further message into that conversation</td><td>the run that message starts is bound to the same task it is subject to the run-boundary check</td></tr><tr><td><a href="#FR-11">FR-11</a></td><td></td><td>an input naming a task is delivered into a conversation bound to another task</td><td>the run is bound to the newly named task the conversation&#x27;s binding becomes that task</td></tr><tr><td><a href="#FR-11">FR-11</a></td><td></td><td>a conversation has no binding and its inputs name no task</td><td>its runs are unbound and are not checked</td></tr><tr><td><a href="#FR-11">FR-11</a></td><td></td><td>a run inherits its binding from its conversation</td><td>the run records the task it was bound to transitions it causes are attributed to it as before</td></tr><tr><td><a href="#FR-12">FR-12</a></td><td></td><td>the operator releases a conversation&#x27;s binding</td><td>subsequent runs in that conversation are unbound</td></tr><tr><td><a href="#FR-12">FR-12</a></td><td></td><td>a bound task reaches a status from which no further work is expected</td><td>the conversation&#x27;s binding is released</td></tr><tr><td><a href="#FR-12">FR-12</a></td><td></td><td>the operator discusses something else in a bound conversation without releasing it</td><td>the binding is unchanged runs continue to be checked</td></tr><tr><td><a href="#FR-13">FR-13</a></td><td></td><td>a bound run ends and its task is recorded as waiting</td><td>no divergence is recorded no run is started in response</td></tr><tr><td><a href="#FR-13">FR-13</a></td><td></td><td>a task is waiting on a person</td><td>the operator can see that it is waiting, and what for</td></tr><tr><td><a href="#FR-13">FR-13</a></td><td></td><td>a waiting task is released and a later bound run ends without moving it</td><td>that run is divergent as normal</td></tr><tr><td><a href="#FR-14">FR-14</a></td><td></td><td>a run is bound to a task that is waiting on a person</td><td>the run records the task the task is still waiting</td></tr><tr><td><a href="#FR-14">FR-14</a></td><td></td><td>a further run in a bound conversation ends while its task is still waiting</td><td>no divergence is recorded</td></tr><tr><td><a href="#FR-15">FR-15</a></td><td></td><td>a blocking question is answered after its asking run has ended</td><td>the answer is queued for the agent</td></tr><tr><td><a href="#FR-15">FR-15</a></td><td></td><td>a blocking question is answered while its asking run is still open</td><td>the answer is not also queued</td></tr></tbody></table></section><section><h2 id="evidence">Evidence and coverage limits</h2><h3>Checked</h3><ul><li>Translated from openspec/specs/run-task-binding/spec.md (15 requirements, 47 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten.</li></ul><h3 class="aw-limits">Limits</h3><ul><li>scenarios-state-no-starting-state: 47 of 47 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed</li></ul></section><section><h2 id="open-questions">Open questions</h2><p class="aw-empty">None outstanding.</p></section>
+<script type="application/agentweave-spec+json" id="aw-spec-payload">
+{
+  "schema_version": 1,
+  "kind": "capability",
+  "title": "Run task binding",
+  "summary": "Which task a run is working on, who decides that, what binding does to the task's status, and what happens when a run ends holding work nobody moved. Established by `openspec/changes/2026-08-10-run-task-binding/`. Before it, `Run` carried project, agent, session, conversation, pid and heartbeat and nothing about the work, so a task's status stayed current only if an agent remembered to say so — not a discipline problem but a missing edge in the data model. Where `task-lifecycle-governance` governs **validity** — that a recorded transition is legal, attributed, and made by an entitled actor — this capability governs **liveness**: that a transition happens at all when reality changes. B1 made it impossible to record a wrong transition and could do nothing about a missing one, because an agent that does the work and never touches the ledger asks for nothing and so passes every check. Both mechanisms sit at boundaries AgentWeave owns for every runner — process start and process end — rather than inside any agent, which is what makes them enforcement rather than instruction, and why no part of this depends on a runner hook. It is also the prerequisite for B3: evidence is produced *by a run*, about *a task*, and that edge did not exist.",
+  "problem": "",
+  "scope": {
+    "in_scope": [],
+    "non_goals": []
+  },
+  "requirements": [
+    {
+      "key": "a-run-carries-at-most-one-task-binding",
+      "statement": "The system SHALL record, on each run, the single task that run was started for, or nothing. A run SHALL NOT be bound to more than one task.",
+      "modal": "SHALL",
+      "rationale": "A run with no binding is legitimate: exploration, conversation, questions, and scheduled work are real work with no task.",
+      "party": null
+    },
+    {
+      "key": "only-the-runtime-binds-a-run-to-a-task",
+      "statement": "The system SHALL set a run's binding itself, from the cause that started the run. No agent-facing operation — over HTTP or MCP — SHALL create, change, or remove a run's binding.",
+      "modal": "SHALL",
+      "rationale": "An enforcement mechanism its subject can decline is not enforcement: an agent able to bind itself is an agent able to never bind, and an unbound run is never divergent.",
+      "party": null
+    },
+    {
+      "key": "a-delegation-that-names-a-task-binds-the-run-that-receives-i",
+      "statement": "The system SHALL carry a task named on an agent-to-agent delegation through the receiving agent's inbound queue and onto the run that delivers it.",
+      "modal": "SHALL",
+      "rationale": "The task id SHALL be validated against the sending run's project when the delegation is made. A task id that does not resolve SHALL be refused with a message naming the problem, and the delegation SHALL still be deliverable without a binding rather than lost.",
+      "party": null
+    },
+    {
+      "key": "the-operator-can-start-a-bound-run-from-a-task",
+      "statement": "The system SHALL let the operator start work on a task directly from the task, producing a run bound to it.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "binding-advances-the-task-without-asking-the-agent",
+      "statement": "The system SHALL, when binding a run to a task from whose current status an agent run may reach `in_progress`, move the task to `in_progress` and attribute the move to the binding run.",
+      "modal": "SHALL",
+      "rationale": "The move SHALL be applied through the same transition machine that governs every other status change, so no legality rule, actor rule, or later gate is bypassed by the runtime path.",
+      "party": null
+    },
+    {
+      "key": "a-run-that-ends-without-moving-its-task-is-divergent",
+      "statement": "The system SHALL determine, when a bound run ends, whether that run caused any status transition of its bound task other than the runtime's own automatic one. A bound run that caused none SHALL be recorded as divergent.",
+      "modal": "SHALL",
+      "rationale": "The determination SHALL be made at the run boundary — which the system owns for every runner — rather than inside the agent, and SHALL NOT depend on any runner-specific mechanism. A run's exit status SHALL NOT affect whether it is checked. A run that crashed, failed, or was interrupted is still a run that ended holding a task nobody moved; the record SHALL name the exit status so that a crash is distinguishable from a completed run that forgot. A run whose queued input was returned to the queue SHALL NOT be recorded as divergent. That input is about to be delivered to a new run bound to the same task, so nothing has been dropped — recording a divergence would misdescribe it, and under an active policy would start a run racing the redelivery.",
+      "party": null
+    },
+    {
+      "key": "every-divergence-is-recorded-durably",
+      "statement": "The system SHALL persist one immutable record per divergence, naming the run, the task, the policy applied, the outcome, and the run started in response where one was. Records MUST NOT be updated except to mark resolution, and MUST NOT be deleted by any application path.",
+      "modal": "MUST",
+      "rationale": "Broadcasting a divergence is not sufficient: the operator SHALL be able to see divergences that occurred while they were not watching, and to ask how often an agent has diverged.",
+      "party": null
+    },
+    {
+      "key": "the-response-to-a-divergence-is-a-policy-set-per-task",
+      "statement": "The system SHALL let each task carry a divergence policy of `surface`, `retry`, or `escalate`, and an escalation agent. A task with no policy set SHALL be treated as `surface`.",
+      "modal": "SHALL",
+      "rationale": "`surface` SHALL record and display the divergence and start nothing. `retry` SHALL start one further run of the same agent, bound to the same task. `escalate` SHALL reassign the task to its escalation agent and start a run of that agent, bound to the same task. Defaulting to `surface` is required, not incidental: shipping this capability SHALL NOT cause any existing task to start runs nobody asked for.",
+      "party": null
+    },
+    {
+      "key": "a-divergence-response-runs-at-most-one-hop",
+      "statement": "The system SHALL record, on a run started in response to a divergence, the run whose divergence caused it. A run carrying that reference SHALL NOT itself trigger a retry, and SHALL NOT trigger an escalation unless it was itself started by a retry.",
+      "modal": "SHALL",
+      "rationale": "A `retry` whose own run diverges SHALL fall through to `escalate` when the task names an escalation agent, and to `surface` otherwise. No sequence of divergences SHALL be able to start an unbounded number of runs: a chain SHALL start at most one retry and at most one escalation before surfacing. The escalation limit is required, not incidental. An escalated run's task still carries the same policy and the same escalation agent, so without it a divergence of that run escalates to the same agent again, and does so forever. The bound applies to a chain, not to a task's lifetime: a run that makes real progress ends the chain, and a later independent run that diverges may retry again.",
+      "party": null
+    },
+    {
+      "key": "the-operator-sets-and-sees-divergence-handling-where-the-tas",
+      "statement": "The system SHALL let the operator read and change a task's divergence policy and escalation agent from the task itself, and SHALL show on the task that a divergence has occurred and whether it is still open.",
+      "modal": "SHALL",
+      "rationale": null,
+      "party": null
+    },
+    {
+      "key": "a-conversation-carries-the-binding-and-its-runs-inherit-it",
+      "statement": "The system SHALL record a task binding on the conversation, and SHALL bind a run started in that conversation to it when nothing more specific applies.",
+      "modal": "SHALL",
+      "rationale": "Work spans more turns than a run does. With the binding held only per run, a conversation's first turn is checked at its boundary and every later turn is not — including the turn where the agent actually stops, which is the only one at which \"did this ever reach the ledger?\" has a useful answer. An input that names its own task SHALL take precedence and SHALL rebind the conversation, so that delegating different work into an existing thread is not silently attributed to the old task. Each run SHALL still record the task it was bound to. Transitions and divergences are attributed to a run, and an integrity record that had to be joined through a conversation to say what it was about would depend on a row that may be archived.",
+      "party": null
+    },
+    {
+      "key": "a-conversation-s-binding-can-be-released",
+      "statement": "The system SHALL let the operator release a conversation's binding, and SHALL release it automatically when the bound task reaches a status from which no further work is expected.",
+      "modal": "SHALL",
+      "rationale": "A binding SHALL NOT be released by inferring what the operator now seems to be discussing. A wrong inference silently stops checking runs, and a mechanism that quietly stops enforcing is worse than one that never started.",
+      "party": null
+    },
+    {
+      "key": "a-task-recorded-as-waiting-is-not-divergent",
+      "statement": "The system SHALL NOT record a divergence for a run whose bound task is waiting on a person.",
+      "modal": "SHALL",
+      "rationale": "Divergence means work was dropped with no account of why. A waiting task has an account, and it names someone who can act on it. Answering a divergence with a retry would restart an agent that is still waiting for the same thing.",
+      "party": null
+    },
+    {
+      "key": "starting-a-run-does-not-release-a-waiting-task",
+      "statement": "Binding a run to a task that is waiting on a person SHALL leave that task waiting. The system SHALL NOT move it back to the in-progress status as a consequence of a run starting.",
+      "modal": "SHALL",
+      "rationale": "The edge out of the waiting status exists, so without this rule the act of starting a run would release the block — and that run's end would then find the task no longer waiting and record a divergence against work that was never dropped. A block ends when the answer arrives or the operator ends it, never because something started.",
+      "party": null
+    },
+    {
+      "key": "an-answer-reaches-an-asker-whose-run-has-ended",
+      "statement": "Where a blocking question is answered after the run that asked it has ended, the system SHALL deliver the answer as queued input rather than relying on the asking run to receive it as a result.",
+      "modal": "SHALL",
+      "rationale": "A blocking ask holds its run open only while that run lives. A question that outlived its run — it timed out, or the run failed — has nobody waiting to receive the answer, and that is precisely the question that caused a task to be recorded as waiting. An answer that reaches no one leaves the operator believing they have unblocked work that is still stopped. Where the system cannot establish that the asking run has ended, it SHALL assume the asker is still waiting. Delivering a duplicate costs a turn; assuming wrongly in the other direction loses the answer.",
+      "party": null
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "key": "ac1",
+      "requirement": "a-run-carries-at-most-one-task-binding",
+      "given": "",
+      "when": "a run is started from a cause that names a task",
+      "then": "the run durably identifies that task the binding is readable for the run's whole life and after it ends"
+    },
+    {
+      "key": "ac2",
+      "requirement": "a-run-carries-at-most-one-task-binding",
+      "given": "",
+      "when": "the operator starts a run by talking to an agent, or a scheduled job triggers one",
+      "then": "the run records no task the run is not subject to any check that depends on a binding"
+    },
+    {
+      "key": "ac3",
+      "requirement": "a-run-carries-at-most-one-task-binding",
+      "given": "",
+      "when": "anything attempts to bind a second task to a run that is already bound",
+      "then": "no such path exists"
+    },
+    {
+      "key": "ac4",
+      "requirement": "only-the-runtime-binds-a-run-to-a-task",
+      "given": "",
+      "when": "an agent enumerates the operations available to it",
+      "then": "no operation binds a run to a task, rebinds it, or clears a binding"
+    },
+    {
+      "key": "ac5",
+      "requirement": "only-the-runtime-binds-a-run-to-a-task",
+      "given": "",
+      "when": "a run is bound and the agent attempts to remove or change that binding by any available",
+      "then": "the binding is unchanged"
+    },
+    {
+      "key": "ac6",
+      "requirement": "a-delegation-that-names-a-task-binds-the-run-that-receives-i",
+      "given": "",
+      "when": "an agent delegates work naming a task in its project the receiving agent's next turn delivers that item",
+      "then": "the receiving run is bound to that task"
+    },
+    {
+      "key": "ac7",
+      "requirement": "a-delegation-that-names-a-task-binds-the-run-that-receives-i",
+      "given": "",
+      "when": "a delegation names a task that does not exist or belongs to another project",
+      "then": "the caller receives an error naming which task id failed and why"
+    },
+    {
+      "key": "ac8",
+      "requirement": "a-delegation-that-names-a-task-binds-the-run-that-receives-i",
+      "given": "",
+      "when": "one turn delivers several queued items and more than one names a task",
+      "then": "the run is bound to the task named by the earliest queued item that names one the same delivery always produces the same binding"
+    },
+    {
+      "key": "ac9",
+      "requirement": "the-operator-can-start-a-bound-run-from-a-task",
+      "given": "",
+      "when": "the operator starts work on a task and names the agent",
+      "then": "a run for that agent is started bound to that task"
+    },
+    {
+      "key": "ac10",
+      "requirement": "the-operator-can-start-a-bound-run-from-a-task",
+      "given": "",
+      "when": "the operator views a run",
+      "then": "the task it is bound to is shown, or its absence is evident"
+    },
+    {
+      "key": "ac11",
+      "requirement": "binding-advances-the-task-without-asking-the-agent",
+      "given": "",
+      "when": "a run binds to a task in `pending` or `assigned`",
+      "then": "the task moves to `in_progress` the transition is recorded naming the binding run and its agent the agent was not asked to make it"
+    },
+    {
+      "key": "ac12",
+      "requirement": "binding-advances-the-task-without-asking-the-agent",
+      "given": "",
+      "when": "a run binds to a task already in `in_progress`",
+      "then": "no transition is recorded"
+    },
+    {
+      "key": "ac13",
+      "requirement": "binding-advances-the-task-without-asking-the-agent",
+      "given": "",
+      "when": "a run binds to a task in a status from which an agent run cannot reach `in_progress`",
+      "then": "the run is bound no transition is recorded the binding is not refused"
+    },
+    {
+      "key": "ac14",
+      "requirement": "binding-advances-the-task-without-asking-the-agent",
+      "given": "",
+      "when": "the runtime attempts the automatic move",
+      "then": "it is subject to the same legality check as an agent-requested move"
+    },
+    {
+      "key": "ac15",
+      "requirement": "a-run-that-ends-without-moving-its-task-is-divergent",
+      "given": "",
+      "when": "a bound run moves its task to `completed` and ends",
+      "then": "no divergence is recorded"
+    },
+    {
+      "key": "ac16",
+      "requirement": "a-run-that-ends-without-moving-its-task-is-divergent",
+      "given": "",
+      "when": "a bound run ends and the only transition it caused was the automatic one made when it was",
+      "then": "a divergence is recorded naming the run, the task, the task's status at run end, and the"
+    },
+    {
+      "key": "ac17",
+      "requirement": "a-run-that-ends-without-moving-its-task-is-divergent",
+      "given": "",
+      "when": "a run with no binding ends",
+      "then": "no divergence is recorded"
+    },
+    {
+      "key": "ac18",
+      "requirement": "a-run-that-ends-without-moving-its-task-is-divergent",
+      "given": "",
+      "when": "a bound run's process dies and the run is later reconciled to an ended state it had no queued input to return",
+      "then": "the divergence check is performed the record names the exit status"
+    },
+    {
+      "key": "ac19",
+      "requirement": "a-run-that-ends-without-moving-its-task-is-divergent",
+      "given": "",
+      "when": "a bound run ends and its delivered input is returned to the agent's queue",
+      "then": "no divergence is recorded no run is started in response"
+    },
+    {
+      "key": "ac20",
+      "requirement": "a-run-that-ends-without-moving-its-task-is-divergent",
+      "given": "",
+      "when": "an open divergence exists for a task and any actor later moves that task",
+      "then": "the divergence is recorded as resolved the record of it having occurred is retained"
+    },
+    {
+      "key": "ac21",
+      "requirement": "every-divergence-is-recorded-durably",
+      "given": "",
+      "when": "a divergence occurs and the operator later opens the project",
+      "then": "the divergence is visible with its task, run, policy, and outcome"
+    },
+    {
+      "key": "ac22",
+      "requirement": "every-divergence-is-recorded-durably",
+      "given": "",
+      "when": "several divergences are recorded within the same instant",
+      "then": "reading them back yields the order in which they occurred"
+    },
+    {
+      "key": "ac23",
+      "requirement": "the-response-to-a-divergence-is-a-policy-set-per-task",
+      "given": "",
+      "when": "a run bound to a task with no policy set diverges",
+      "then": "the divergence is recorded and displayed no run is started"
+    },
+    {
+      "key": "ac24",
+      "requirement": "the-response-to-a-divergence-is-a-policy-set-per-task",
+      "given": "",
+      "when": "a run bound to a task whose policy is `retry` diverges",
+      "then": "one further run of the same agent is started bound to that task that run is given the task, its current status, and the transitions available to it"
+    },
+    {
+      "key": "ac25",
+      "requirement": "the-response-to-a-divergence-is-a-policy-set-per-task",
+      "given": "",
+      "when": "a run bound to a task whose policy is `escalate` diverges the task names an escalation agent",
+      "then": "the task is reassigned to that agent a run of that agent is started bound to the task the previous assignee is recorded"
+    },
+    {
+      "key": "ac26",
+      "requirement": "the-response-to-a-divergence-is-a-policy-set-per-task",
+      "given": "",
+      "when": "a task whose policy is `escalate` names no escalation agent",
+      "then": "the divergence is surfaced no run is started"
+    },
+    {
+      "key": "ac27",
+      "requirement": "a-divergence-response-runs-at-most-one-hop",
+      "given": "",
+      "when": "a run started in response to a divergence itself diverges",
+      "then": "no further retry is started"
+    },
+    {
+      "key": "ac28",
+      "requirement": "a-divergence-response-runs-at-most-one-hop",
+      "given": "",
+      "when": "a run started by `retry` diverges the task names an escalation agent",
+      "then": "the work is escalated to that agent"
+    },
+    {
+      "key": "ac29",
+      "requirement": "a-divergence-response-runs-at-most-one-hop",
+      "given": "",
+      "when": "a run started by `escalate` itself diverges the task still names the same escalation agent",
+      "then": "the divergence is surfaced no further run is started"
+    },
+    {
+      "key": "ac30",
+      "requirement": "a-divergence-response-runs-at-most-one-hop",
+      "given": "",
+      "when": "a run started in response to a divergence moves its task a later independent run bound to the same task diverges",
+      "then": "that later divergence is answered by the task's policy in full, including retry"
+    },
+    {
+      "key": "ac31",
+      "requirement": "the-operator-sets-and-sees-divergence-handling-where-the-tas",
+      "given": "",
+      "when": "the operator opens a task",
+      "then": "its divergence policy and escalation agent are visible and changeable there"
+    },
+    {
+      "key": "ac32",
+      "requirement": "the-operator-sets-and-sees-divergence-handling-where-the-tas",
+      "given": "",
+      "when": "the operator sets an escalation agent",
+      "then": "the choices offered are agents that exist in the project"
+    },
+    {
+      "key": "ac33",
+      "requirement": "the-operator-sets-and-sees-divergence-handling-where-the-tas",
+      "given": "",
+      "when": "a task has an unresolved divergence",
+      "then": "the task shows it the indicator clears when the divergence resolves"
+    },
+    {
+      "key": "ac34",
+      "requirement": "a-conversation-carries-the-binding-and-its-runs-inherit-it",
+      "given": "",
+      "when": "work is started on a task in a conversation the operator sends a further message into that conversation",
+      "then": "the run that message starts is bound to the same task it is subject to the run-boundary check"
+    },
+    {
+      "key": "ac35",
+      "requirement": "a-conversation-carries-the-binding-and-its-runs-inherit-it",
+      "given": "",
+      "when": "an input naming a task is delivered into a conversation bound to another task",
+      "then": "the run is bound to the newly named task the conversation's binding becomes that task"
+    },
+    {
+      "key": "ac36",
+      "requirement": "a-conversation-carries-the-binding-and-its-runs-inherit-it",
+      "given": "",
+      "when": "a conversation has no binding and its inputs name no task",
+      "then": "its runs are unbound and are not checked"
+    },
+    {
+      "key": "ac37",
+      "requirement": "a-conversation-carries-the-binding-and-its-runs-inherit-it",
+      "given": "",
+      "when": "a run inherits its binding from its conversation",
+      "then": "the run records the task it was bound to transitions it causes are attributed to it as before"
+    },
+    {
+      "key": "ac38",
+      "requirement": "a-conversation-s-binding-can-be-released",
+      "given": "",
+      "when": "the operator releases a conversation's binding",
+      "then": "subsequent runs in that conversation are unbound"
+    },
+    {
+      "key": "ac39",
+      "requirement": "a-conversation-s-binding-can-be-released",
+      "given": "",
+      "when": "a bound task reaches a status from which no further work is expected",
+      "then": "the conversation's binding is released"
+    },
+    {
+      "key": "ac40",
+      "requirement": "a-conversation-s-binding-can-be-released",
+      "given": "",
+      "when": "the operator discusses something else in a bound conversation without releasing it",
+      "then": "the binding is unchanged runs continue to be checked"
+    },
+    {
+      "key": "ac41",
+      "requirement": "a-task-recorded-as-waiting-is-not-divergent",
+      "given": "",
+      "when": "a bound run ends and its task is recorded as waiting",
+      "then": "no divergence is recorded no run is started in response"
+    },
+    {
+      "key": "ac42",
+      "requirement": "a-task-recorded-as-waiting-is-not-divergent",
+      "given": "",
+      "when": "a task is waiting on a person",
+      "then": "the operator can see that it is waiting, and what for"
+    },
+    {
+      "key": "ac43",
+      "requirement": "a-task-recorded-as-waiting-is-not-divergent",
+      "given": "",
+      "when": "a waiting task is released and a later bound run ends without moving it",
+      "then": "that run is divergent as normal"
+    },
+    {
+      "key": "ac44",
+      "requirement": "starting-a-run-does-not-release-a-waiting-task",
+      "given": "",
+      "when": "a run is bound to a task that is waiting on a person",
+      "then": "the run records the task the task is still waiting"
+    },
+    {
+      "key": "ac45",
+      "requirement": "starting-a-run-does-not-release-a-waiting-task",
+      "given": "",
+      "when": "a further run in a bound conversation ends while its task is still waiting",
+      "then": "no divergence is recorded"
+    },
+    {
+      "key": "ac46",
+      "requirement": "an-answer-reaches-an-asker-whose-run-has-ended",
+      "given": "",
+      "when": "a blocking question is answered after its asking run has ended",
+      "then": "the answer is queued for the agent"
+    },
+    {
+      "key": "ac47",
+      "requirement": "an-answer-reaches-an-asker-whose-run-has-ended",
+      "given": "",
+      "when": "a blocking question is answered while its asking run is still open",
+      "then": "the answer is not also queued"
+    }
+  ],
+  "tasks": [],
+  "algorithms": [],
+  "design": "",
+  "evidence": {
+    "checked": [
+      "Translated from openspec/specs/run-task-binding/spec.md (15 requirements, 47 criteria). Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten."
+    ],
+    "limits": [
+      "scenarios-state-no-starting-state: 47 of 47 criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed"
+    ]
+  },
+  "lifecycle": "",
+  "open_questions": [],
+  "aw_identity": {
+    "requirements": {
+      "a-run-carries-at-most-one-task-binding": "FR-1",
+      "only-the-runtime-binds-a-run-to-a-task": "FR-2",
+      "a-delegation-that-names-a-task-binds-the-run-that-receives-i": "FR-3",
+      "the-operator-can-start-a-bound-run-from-a-task": "FR-4",
+      "binding-advances-the-task-without-asking-the-agent": "FR-5",
+      "a-run-that-ends-without-moving-its-task-is-divergent": "FR-6",
+      "every-divergence-is-recorded-durably": "FR-7",
+      "the-response-to-a-divergence-is-a-policy-set-per-task": "FR-8",
+      "a-divergence-response-runs-at-most-one-hop": "FR-9",
+      "the-operator-sets-and-sees-divergence-handling-where-the-tas": "FR-10",
+      "a-conversation-carries-the-binding-and-its-runs-inherit-it": "FR-11",
+      "a-conversation-s-binding-can-be-released": "FR-12",
+      "a-task-recorded-as-waiting-is-not-divergent": "FR-13",
+      "starting-a-run-does-not-release-a-waiting-task": "FR-14",
+      "an-answer-reaches-an-asker-whose-run-has-ended": "FR-15"
+    },
+    "high_water": 15,
+    "retired": {},
+    "digests": {
+      "FR-1": "f77402de0ae6d6e8c453219177781ea5fa7d9e269f67aa6b0818349d69d51768",
+      "FR-2": "28973d078a6ed9f7f87bcc54cc1d9c77adfa0b19aa195dca76c62358e5c32090",
+      "FR-3": "ae43c0d1a763530e9ea9e3c28345d57beb3b4ac8580c771c5c29c42fb96e9f5e",
+      "FR-4": "026a2d4a80a7e7563e0a872883d47a4fa0d60204cf7f6d3577491494d5f70b78",
+      "FR-5": "cecbf16648f6b16f1bd6fed9eb10259366671d74ae2444489abc0a11513d4931",
+      "FR-6": "2749c45ac07254f797773eeaf6014dbbca47fb367a9c21620d47b3b84a804c28",
+      "FR-7": "87c61f9c10c05316c196a9db68e2f6a2b5c61438188216e6bdb4e2f2cc4c93b2",
+      "FR-8": "b4e6a4e2856640a27f996379f9bde0a0b0d7660ea870aab5f0ad2c852d8d5b0d",
+      "FR-9": "86eb899564f4c39933c534cbab7a280bfaf7ca8f0a63608a455cfa1b24b01acf",
+      "FR-10": "8e78ec856a9be3a2756e5f7571974905390f58e1ee9cb2d2d0b789e8e0ebbd19",
+      "FR-11": "44cc7c4093f9ca05083d462ea4ade4ecd4f0653d7cb2556f2e80af29b8de4f3f",
+      "FR-12": "8741fc0b027813b179d42c45f71eecc9a38b59700bf56716aec1335dad297253",
+      "FR-13": "54f3c21d40729efd5368256640955f8142f843c2e4f51effdd7f5b04d54806b3",
+      "FR-14": "bc0587eb2f0298b7454242dfe3851fcdd73faeba6fccf6d9923edc43b66be54d",
+      "FR-15": "bc34f56d60f0cf673da54e1dba0902acc2615208c7ccf2c7bb6f1c4991e26625"
+    }
+  }
+}
+</script>
+</body>
+</html>

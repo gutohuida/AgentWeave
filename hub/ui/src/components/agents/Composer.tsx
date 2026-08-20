@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Icon } from '@/components/common/Icon'
 import { Button } from '@/components/ui/button'
 import { clearComposerDraft, getComposerDraft, setComposerDraft } from '@/lib/composerDrafts'
@@ -181,6 +181,22 @@ export function Composer({
     textareaRef.current?.focus()
   }, [insertPathRequest])
 
+  // The composer's height follows its text, and it has to be an effect rather than an
+  // `onInput` handler. `onInput` fires only for input the operator types, so every
+  // programmatic change to `text` left the inline height at whatever the last keystroke
+  // produced: sending a long message cleared the box but kept it tall until the operator
+  // switched conversation and React remounted the element. Inserting a mention and
+  // restoring a saved draft had the same gap, in the other direction — text arrived and
+  // the box stayed short. Keying off `text` covers all four.
+  useLayoutEffect(() => {
+    const textarea = textareaRef.current
+    if (!textarea) return
+    // 'auto' first so the measurement shrinks as well as grows: scrollHeight never reports
+    // less than the height already set, so without the reset the box could only get taller.
+    textarea.style.height = 'auto'
+    textarea.style.height = `${Math.min(textarea.scrollHeight, COMPOSER_MAX_HEIGHT_PX)}px`
+  }, [text])
+
   const handleSend = async () => {
     const trimmed = text.trim()
     if ((!trimmed && !canSubmitEmpty) || submitting || disabledReason) return
@@ -286,11 +302,6 @@ export function Composer({
             overflowY: 'auto',
             outline: 'none',
             fontFamily: "'JetBrains Mono', monospace",
-          }}
-          onInput={(e) => {
-            const t = e.target as HTMLTextAreaElement
-            t.style.height = 'auto'
-            t.style.height = `${Math.min(t.scrollHeight, COMPOSER_MAX_HEIGHT_PX)}px`
           }}
         />
       </div>
