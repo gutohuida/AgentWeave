@@ -9,7 +9,7 @@ import pytest
 from sqlalchemy import func, select
 
 from hub.db.engine import async_session_factory
-from hub.db.models import Charter, Project, Run, Runner
+from hub.db.models import Charter, EventLog, Project, Run, Runner
 from hub.project_lifecycle import ProjectLifecycleService
 from hub.project_workspace import PROJECT_MARKER_PATH, ProjectIdentityConflict, ProjectPathError
 
@@ -128,6 +128,46 @@ async def test_orphaned_marker_is_adopted_under_its_own_id(app, tmp_path) -> Non
     assert stored.working_directory == str(directory.resolve())
     assert runner_count == 2
     assert charter_count and charter_count > 0
+
+
+@pytest.mark.asyncio
+async def test_adoption_leaves_a_trace_the_operator_can_find(app, tmp_path) -> None:
+    """Adoption is silent while it happens, but must not be invisible afterwards.
+
+    A project reaching this database with an id it did not mint is worth being able to see later:
+    it means the folder was registered somewhere else first. A server log line reaches whoever
+    reads server output; this row is what reaches the operator in the app. Registering a plain
+    unmarked directory is ordinary and writes no such event, which is what the second half asserts
+    — an event every registration emits would say nothing.
+    """
+    adopted_dir = tmp_path / "adopted"
+    adopted_dir.mkdir()
+    orphan_id = "proj-tracecheck1"
+    marker_path = adopted_dir / PROJECT_MARKER_PATH
+    marker_path.parent.mkdir(parents=True)
+    marker_path.write_text(json.dumps({"version": 1, "project_id": orphan_id}), encoding="utf-8")
+
+    plain_dir = tmp_path / "plain"
+    plain_dir.mkdir()
+
+    async with async_session_factory() as session:
+        await ProjectLifecycleService(session).open_existing(adopted_dir)
+        plain = await ProjectLifecycleService(session).open_existing(plain_dir)
+
+    async with async_session_factory() as session:
+        events = (
+            (
+                await session.execute(
+                    select(EventLog).where(EventLog.event_type == "project_adopted")
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+    assert [event.project_id for event in events] == [orphan_id]
+    assert events[0].data["path"] == str(adopted_dir.resolve())
+    assert plain.id != orphan_id
 
 
 @pytest.mark.asyncio

@@ -26,7 +26,7 @@ from .project_workspace import (
     configured_workspace_root,
 )
 from .repo_hygiene import seed_repo_excludes
-from .utils import short_id
+from .utils import persist_event, short_id
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +99,18 @@ class ProjectLifecycleService:
                     "project_adopted project_id=%s path=%s",
                     project.id,
                     canonical.path,
+                )
+                # Adoption is deliberately silent at the time it happens — the operator asked to
+                # open a folder and it opened. But it is not nothing: this project was registered
+                # in some other database, and its id came from the folder rather than being minted
+                # here. A log line says that to whoever reads the server output; this row says it
+                # to the operator, in the app, afterwards. Written after the commit above, because
+                # the row carries a foreign key to the project it describes.
+                await persist_event(
+                    self.session,
+                    project.id,
+                    "project_adopted",
+                    {"path": str(canonical.path), "adopted_id": project.id},
                 )
                 return project
 
