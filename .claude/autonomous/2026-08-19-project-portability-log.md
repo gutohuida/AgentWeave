@@ -671,3 +671,24 @@ Idle-checkpointing again: verify, confirm CI, extend the heartbeat, stop. `stop_
 2026-08-20T08:00:00+01:00; about five hours remain. Next iteration should repeat the same checks
 rather than assume this conclusion is permanent — the operator may act on the draft PR or add new
 work at any point before the window closes.
+
+## Iteration 13 — idle checkpoint, queue still empty (2026-08-20T03:28+01:00)
+
+Repeated the standing check from scratch, not trusted secondhand. `git branch --show-current` /
+`git log --oneline -5` / `git status` all match STATE.json exactly (`e503021` "Release the branch
+to the driver" at HEAD, clean tree) — no reconciliation needed.
+
+`openspec list` — "No active changes found." `openspec validate --all --strict` — 33/33 passed,
+same count as iterations 8-12's post-archive baseline.
+
+`gh run list --branch autonomous/2026-08-19-project-portability --limit 5` — five most recent CI
+runs all `completed success` (6m11s-7m38s), same set iteration 12 saw — no new push has landed
+since the sweep-test commit. `gh pr view 7 --json comments,reviews,mergeable,mergeStateStatus,state,commits`
+— zero comments, zero reviews, `OPEN`, `MERGEABLE`, `CLEAN`, same commit list as before. No
+operator activity on the draft PR.
+
+**Conclusion.** Nothing changed since iteration 12. Queue stays empty; no work manufactured.
+Idle-checkpointing again: verify, confirm CI, extend the heartbeat, stop. `stop_at` is
+2026-08-20T08:00:00+01:00; about four and a half hours remain. Next iteration should repeat the
+same checks rather than assume this conclusion is permanent — the operator may act on the draft PR
+or add new work at any point before the window closes.
