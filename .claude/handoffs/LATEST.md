@@ -1,1 +1,1 @@
-handoff-0061-2026-08-20-0845-project-portability-shipped-and-identity-restored.md
+handoff-0062-2026-08-20-1117-the-corpus-moved-into-agentweave.md
