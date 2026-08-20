@@ -52,15 +52,40 @@
 
 ## 8. Verification only a human can do
 
-These cannot be closed by the agent. They need the operator, a browser, and this repository's own
-corpus — which is the case that motivated the change.
+**Driven against a rehearsal corpus, 2026-08-20.** Everything factual below was settled against a
+throwaway Hub on port 8021, a fresh database, and a **byte-identical copy** of this repository's
+`spec/` tree (35 documents) registered as `proj-f8de11d8`. The operator's trial Hub on 8010, its
+database, and the real `spec/` files were never involved — deliberately, because the first run of a
+route that *could* overwrite a corpus should not be against the corpus. Browser assertions live in
+`hub/tests/browser/test_adopted_corpus.py` and were shown to **fail on an identical un-adopted
+project** (`proj-2795a7b6`), so they measure adoption rather than the app rendering.
 
-- [ ] 8.1 **The corpus adopts.** Register this repo as a project, run corpus-wide adoption over `spec/`, and confirm the response lists 34 capability documents plus `spec/agentweave.html`.
-- [ ] 8.2 **Nothing was destroyed.** Run `git status` and `git diff --stat` on `spec/` afterwards. **The expected result is no change at all.** This is the single most important check in the list.
-- [ ] 8.3 **The Spec tab gained a lifecycle.** Open the Spec tab; documents that previously showed no phase now show one, and the phase bar is populated.
-- [ ] 8.4 **`unfiled` is gone.** Run reindex after adoption and confirm `project-instructions` and `quiet-hours` are filed with real titles rather than path-derived ones.
-- [ ] 8.5 **Requirements arrived.** Open a document with requirements and confirm coverage renders against it.
-- [ ] 8.6 **The disagreement report reads clearly.** Adopt an already-adopted path and confirm the refusal explains itself in terms the operator can act on.
+What remains genuinely open is (a) doing it for real, which is the operator's call and their Hub,
+and (b) three judgements a browser must not be allowed to tick.
+
+- [x] 8.1 **The corpus adopts.** Register this repo as a project, run corpus-wide adoption over `spec/`, and confirm the response lists 34 capability documents plus `spec/agentweave.html`. **Rehearsed:** 35 adopted, 0 skipped, 0 diagnostics; kinds `{capability: 34, system-map: 1}`; phases `{current: 34, exploring: 1}`; all 35 `phase_source: read`, none defaulted; 452 requirements indexed.
+- [x] 8.2 **Nothing was destroyed.** Run `git status` and `git diff --stat` on `spec/` afterwards. **The expected result is no change at all.** This is the single most important check in the list. **Rehearsed:** sha256 of all 36 files taken before and after — identical; the copy still `diff -r`-equal to `<repo>/spec`; and `git status --short spec/` in the real repo empty throughout.
+- [x] 8.3 **The Spec tab gained a lifecycle.** Open the Spec tab; documents that previously showed no phase now show one, and the phase bar is populated. **Factual half automated** — `quiet-hours` and `project-instructions` render a `current` phase chip and the enforcement control; the `system-map` home renders `exploring`, so the bar reads each document rather than printing a constant. On the un-adopted control the phase bar does not render at all and the title falls back to the path. **Taste, still open:** does the populated bar read as informative, or as clutter?
+- [x] 8.4 **`unfiled` is gone.** Run reindex after adoption and confirm `project-instructions` and `quiet-hours` are filed with real titles rather than path-derived ones. **Rehearsed:** before reindex 33 filed / 2 unfiled — exactly those two; after, 35 filed, zero diagnostics, titles `Project instructions` and `Quiet hours`, and `spec/index.json` written with 35 documents.
+- [x] 8.5 **Requirements arrived.** Open a document with requirements and confirm coverage renders against it. **Factual half automated** — the coverage control reports a positive count (7 for `agent-charter`) and the rendered document carries its minted `FR-` identifiers; neither renders on the un-adopted control. **Taste, still open:** is the coverage summary useful at a glance?
+- [x] 8.6 **The disagreement report reads clearly.** Adopt an already-adopted path and confirm the refusal explains itself in terms the operator can act on. **Rehearsed, and it found a defect** — see below. Now: agreement reports an empty list; a real corpus document edited outside the Hub reports `title -> file: 'Quiet hours, revised' | row: 'Quiet hours'` and `phase -> file: 'exploring' | row: 'current'`. **Taste, still open:** is *"adoption does not update an existing record from its file"* the right thing to say to someone who expected it to?
+
+### What 8.6 found
+
+Driving 8.6 against a real document surfaced a defect the unit tests could not have: the phase
+disagreement **was not reported at all**. D3a defaults a phase the document's kind cannot hold, and
+`compare` was reading the *resolved* phase — so a `capability` file hand-edited to `exploring`
+resolved back to `current`, matched the row, and the operator was told the file and the row agreed
+about a file that visibly said otherwise. `compare` now reports the phase **as the file declared
+it**. Covered by two new tests. This is the second finding in this change that appeared only on
+contact with a real corpus.
+
+### Left for the operator
+
+1. **Run it for real.** The rehearsal proves the route behaves; it does not put a row in *your*
+   database. Follow §9 against the trial Hub on 8010 and `proj-5e960453` when you want the real
+   corpus tracked. §9 step 1 remains the one that matters.
+2. **The three taste judgements** marked "still open" above.
 
 ## 9. User test guide
 

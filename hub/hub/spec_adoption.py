@@ -435,12 +435,24 @@ def compare(identity: AdoptableIdentity, row: SpecDocument) -> Tuple[FieldDiffer
     and that is a separate operator decision — see design D4, which declines to
     take it here because "trust the file" collides with the rule that a gate whose
     value lives where the gated party can write it is not a gate.
+
+    **Phase is compared as the file declared it, not as adoption resolved it.**
+    D3a defaults a phase the document's kind cannot hold, so a `capability` file
+    hand-edited to `exploring` resolves back to `current` — and comparing the
+    resolved value against the row would find them equal and report nothing at
+    all. The operator would be told the file and the row agree about a file that
+    visibly says otherwise. Found by editing a real corpus document, 2026-08-20.
+
+    `unrecognised_phase` already holds exactly that declared value, and is `None`
+    when the file either stated a usable phase or stated none — in both of which
+    the resolved phase *is* the honest account of what the file amounts to.
     """
     differences: List[FieldDifference] = []
+    declared_phase = identity.unrecognised_phase or identity.phase
     for name, from_file, from_row in (
         ("title", identity.title, row.title),
         ("kind", identity.kind, row.kind),
-        ("phase", identity.phase, row.phase),
+        ("phase", declared_phase, row.phase),
     ):
         if from_file != from_row:
             differences.append(FieldDifference(field=name, file=from_file, row=from_row))

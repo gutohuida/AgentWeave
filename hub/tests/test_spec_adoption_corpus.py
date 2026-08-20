@@ -89,8 +89,20 @@ def _snapshot(tmp_path) -> dict:
 
 
 def _corpus(tmp_path) -> None:
-    """Three adoptable documents, one hand-written file, one damaged payload."""
-    _write(tmp_path, "spec/agentweave.html", _document(title="Home", kind="system-map"))
+    """Three adoptable documents, one hand-written file, one damaged payload.
+
+    Shaped like this repository's own corpus, which is the case the change was
+    written for: capability documents at `current`, and a single `system-map` home
+    at `exploring`. The home's phase is stated rather than defaulted because
+    `current` and `capability` imply each other — a `system-map` claiming `current`
+    is an inconsistency the real corpus does not have, and a fixture carrying one
+    quietly tests D3a's fallback instead of the sweep.
+    """
+    _write(
+        tmp_path,
+        "spec/agentweave.html",
+        _document(title="Home", kind="system-map", status="exploring"),
+    )
     _write(tmp_path, "spec/capabilities/one/spec.html", _document(title="One"))
     _write(tmp_path, "spec/capabilities/two/spec.html", _document(title="Two"))
     _write(tmp_path, "spec/notes.html", "<html><body>written by a person</body></html>")

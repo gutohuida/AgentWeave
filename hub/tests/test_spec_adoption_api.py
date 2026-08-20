@@ -333,6 +333,41 @@ class TestDisagreementIsReportedNotResolved:
         assert differences["phase"] == {"field": "phase", "file": "exploring", "row": "current"}
 
     @pytest.mark.asyncio
+    async def test_a_phase_the_kind_cannot_hold_is_still_reported_as_a_disagreement(
+        self, app, tmp_path, auth_headers
+    ):
+        """The file is compared as it reads, not as adoption would resolve it.
+
+        A `capability` hand-edited to `exploring` resolves back to `current` under
+        D3a. Comparing the resolved value would find it equal to the row and report
+        nothing — telling the operator the file and row agree about a file that
+        visibly says otherwise. Found against a real corpus document."""
+        path = "spec/a.html"
+        _write(tmp_path, path, _document(title="A", kind="capability", status="current"))
+        await _adopt(app, path, auth_headers)
+
+        _write(tmp_path, path, _document(title="A", kind="capability", status="exploring"))
+        second = await _adopt(app, path, auth_headers)
+
+        assert second.status_code == 409, second.text
+        differences = {d["field"]: d for d in second.json()["detail"]["differences"]}
+        assert differences["phase"] == {"field": "phase", "file": "exploring", "row": "current"}
+
+    @pytest.mark.asyncio
+    async def test_a_file_stating_no_phase_agrees_with_the_row_it_would_produce(
+        self, app, tmp_path, auth_headers
+    ):
+        """The other half of the same rule: a file that says nothing about its
+        phase is not disagreeing with anything."""
+        path = "spec/a.html"
+        _write(tmp_path, path, _document(title="A", kind="capability", status="current"))
+        await _adopt(app, path, auth_headers)
+
+        _write(tmp_path, path, _document(title="A", kind="capability", status=None))
+        second = await _adopt(app, path, auth_headers)
+        assert second.json()["detail"]["differences"] == []
+
+    @pytest.mark.asyncio
     async def test_neither_the_row_nor_the_file_changes_when_disagreement_is_reported(
         self, app, tmp_path, auth_headers
     ):

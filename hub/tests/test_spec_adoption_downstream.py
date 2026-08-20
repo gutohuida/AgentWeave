@@ -175,7 +175,12 @@ async def test_reindex_files_a_previously_unindexable_document_after_adoption(
 async def test_a_corpus_reconstitutes_from_its_files_alone(app, tmp_path, auth_headers):
     """The clone case, end to end: files present, no rows, one call, then the
     corpus is filed with every title and phase its own documents recorded."""
-    _write(tmp_path, "spec/agentweave.html", _document(title="Home", kind="system-map"))
+    # `exploring`, matching this repo's real home: a `system-map` cannot be `current`.
+    _write(
+        tmp_path,
+        "spec/agentweave.html",
+        _document(title="Home", kind="system-map", status="exploring"),
+    )
     _write(tmp_path, "spec/capabilities/one/spec.html", _document(title="One"))
     _write(tmp_path, "spec/capabilities/two/spec.html", _document(title="Two"))
 
