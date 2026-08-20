@@ -167,9 +167,9 @@
     "openspec_changes_in_flight": "none — `ls openspec/changes/ | grep -v archive` is empty",
     "not_run_at_prep": "Full hub/tests/ suite and eslint were NOT run tonight. The loop should establish its own baseline early so it can tell inherited breakage from its own."
   },
-  "last_heartbeat": "2026-08-20T02:08:51+01:00",
+  "last_heartbeat": "2026-08-20T01:28:51+01:00",
   "log_file": ".claude/autonomous/2026-08-19-project-portability-log.md",
   "driver": "Windows Scheduled Task 'AgentWeaveAutonomousSession' -> .claude/skills/autonomous-session/scripts/run-iteration.ps1 -> headless `claude -p`. Each firing is a fresh process; all continuity is STATE.json + the log. Session-bound drivers (ScheduleWakeup, CronCreate) are NOT used - the 2026-08-15 run asked for nine hours and got forty minutes because the session went away.",
-  "heartbeat_note": "Live as of iteration 9's work. Will be set deliberately stale again once this iteration commits and pushes, releasing the branch for the next scheduled firing.",
+  "heartbeat_note": "Deliberately stale. The process that ran iteration 9 has finished and released the branch, so the next scheduled firing takes over instead of standing down against a heartbeat nobody is refreshing.",
   "draft_pr": "https://github.com/gutohuida/AgentWeave/pull/7"
 }
