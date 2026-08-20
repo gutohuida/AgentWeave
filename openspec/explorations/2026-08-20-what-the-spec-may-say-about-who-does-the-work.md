@@ -1,13 +1,23 @@
 # Exploration — What a specification may say about who does the work (2026-08-20)
 
-**Status:** Explored 2026-08-20, carrying forward decisions the operator took in
-`2026-08-20-the-row-is-the-spine.md` §6–§7. This is carve-up item **#4** — the largest of the five,
-and the one that was left open rather than proposed because six routing questions were unanswered
-and the tiers themselves were undefined.
+**Status:** Explored with the operator 2026-08-20, in two passes. The first carried forward decisions
+from `2026-08-20-the-row-is-the-spine.md` §6–§7 and checked them against the code. The second was a
+live review in which the operator withdrew the parallelism cap they had previously asked for and
+replaced it with something better. This is carve-up item **#4** — the largest of the five.
 
-Every claim below was checked against the code; `file:line` is given so the next reader can re-check
-rather than trust. **Three of the previous exploration's proposals do not survive that check** and
-are withdrawn in §3, §4 and §6. That is the main value of this document.
+Decisions the operator took are marked **DECIDED**. Every claim was checked against the code;
+`file:line` is given so the next reader can re-check rather than trust.
+
+**Four proposals do not survive this document**, and that is its main value:
+
+| Withdrawn | Where | Whose |
+|---|---|---|
+| Materialise dependent tasks as `blocked` | §3 | the previous exploration's |
+| `Runner.flags` can carry effort today | §2 | the previous exploration's |
+| Tiers name a model | §5 | superseded — `high`/`medium`/`low`, **DECIDED** |
+| **A max-concurrent-runs project setting** | §6 | the operator's own, withdrawn on review |
+
+The last one is the significant one, and §7 is what replaced it.
 
 ---
 
@@ -129,6 +139,10 @@ of that being a status. And routing simply does not offer an unready task to an 
 *already* renders it. Readiness needs new UI. That is a real cost and it is the price of not
 overloading a status whose narrowness is load-bearing.
 
+**§7 is where that cost is paid, and it turned out to be worth paying.** A status carries one bit per
+card — stuck or not. A dependency layout carries the whole wave structure, which is strictly more
+than `blocked` could ever have shown.
+
 ## 4. Where dependencies live, and the one thing that makes it cheap
 
 `key` is already *"a stable handle for this task, unique within the document"* (`spec_payload.py:99`).
@@ -222,81 +236,250 @@ outlive the roster, so renaming a tier later means editing every document that u
 - Three tiers assume complexity is one-dimensional. "Long but simple" and "short but subtle" want
   different runners, and both are `medium` under a single axis.
 
-**Recommendation: three named tiers, and resist a second axis until a real decomposition needs
-one.** But this is the operator's, and it should be decided before anything writes a tier into a
-document.
+**DECIDED — `high` / `medium` / `low`.** Three names, one axis. A second axis is resisted until a
+real decomposition needs one: adding an axis later is easy, renaming one is not, because a tier that
+has been written into approved documents cannot be renamed without editing every document that used
+it.
 
-## 6. Max concurrent runs — the cap is trivial, the release is the whole problem
+## 6. Max concurrent runs — proposed, then withdrawn by the operator
 
-**DECIDED already** (previous exploration §7): parallelism is opt-in, a project setting, default 1.
-*"He could be using a restricted token plan and need to do things one at a time."*
+**WITHDRAWN.** The previous exploration recorded this as decided: parallelism opt-in, a project
+setting, default 1, from *"He could be using a restricted token plan and need to do things one at a
+time."* On review the operator withdrew it:
 
-`Project` already carries four budget columns (`models.py:71-81`), so a fifth has an obvious home,
-and `schedule_agent` is called from **fifteen call sites** — so a check placed inside it is enforced
-everywhere at once. That part is a morning's work.
+> *"I'm thinking of dropping this as a config and let the user control it. He can start the agents
+> and tasks that he wants to start as he wants to start."*
 
-**The part that is not:** what wakes the next agent when a run finishes.
+Three things in the code support that, and any one of them would be enough.
 
-Today the scheduler's only concurrency rule is per-agent (`turn_scheduler.py:37-43`) — *"agent is
-already running"*. Agent A running never blocks agent B, so nothing ever needs to notice A finishing
-in order to release B. A **project-wide** cap creates exactly that cross-agent blocking, and there
-is no waker for it.
+**One — a cap cannot tell the operator's own work from an agent's, and the product already can.**
+`turn_scheduler.py:68-71`:
 
-`redrain_queued_agents` is the only project-wide drain, and `agent_trigger.py:1234-1238` records both
-its reach and a measured failure:
+```python
+initiator = "operator" if controlling_operator is not None else "autonomous"
+budget = await project_budget_state(db, project_id)
+if initiator == "autonomous" and budget["exhausted"]:
+    return ScheduleResult(waiting_reason="token budget exhausted")
+```
+
+`token_budget` pauses **autonomous** turns and lets **operator-initiated** ones through, so the
+operator's own work is never starved by their agents' spending. That is exactly the distinction the
+operator reached for — *"I want to explore something else while it builds"* — already built, and a
+raw concurrency cap would ignore it. The cap would be a **regression against an existing mechanism**,
+not an addition to it.
+
+**Two — a cap of 1 makes the product's own review flow unreachable.** The operator's question was
+*"what about testers? Will they enter in this math as well?"* They would, and it is fatal.
+Author/reviewer separation is enforced rather than advised — `ActorNotPermittedError`, *"the move is
+a legal edge, but not for this actor"* (`task_transition_service.py:52`), guarded at `:119`:
+
+```
+   completed ──▶ under_review ──▶ approved
+                                     ▲
+                        a different agent than the author.
+                        structural, not a convention.
+```
+
+So the task lifecycle **requires** concurrency ≥ 2 to complete a single task. A project cap of 1
+means no work can ever be reviewed while any work is in progress.
+
+**Three — concurrency is a poor proxy for the quantity actually named.** The stated worry was a
+restricted token plan. Two cheap runs cost less than one expensive one, and `token_budget` already
+bounds the real quantity — with the operator carve-out above, which a count of runs cannot express.
+
+**What the status quo already is.** There is no project-wide limit today; the only rule is per-agent
+(`turn_scheduler.py:37-43`). So *"let the user control it"* is what ships now, and this item's
+correct outcome is to build nothing.
+
+### The finding that outlives the withdrawal
+
+The reason the cap looked cheap and was not is worth keeping, because it applies to **any** future
+project-wide limit.
+
+Today, agent A running never blocks agent B, so nothing ever needs to notice A finishing in order to
+release B. Any project-wide limit creates that cross-agent blocking — and there is no waker for it:
+
+```
+   run ends ──▶ schedule_agent(same agent)          ← exists, 15 call sites
+            └─▶ redrain_queued_agents(project)      ← does not exist
+```
+
+`agent_trigger.py:1234-1238` records both the reach of the only project-wide drain and the same bug
+already measured in narrower form:
 
 > *"Nothing does on a timer: `redrain_queued_agents` is reachable only from project open, settings
 > save and relocate. **Measured — an entry sat `queued` at one attempt until an unrelated settings
 > save drove the second, which is a limit protecting nobody.**"*
 
-That is this exact bug, already observed once in a narrower form. Shipping a project cap without a
-release path reproduces it deliberately and at larger scale: with `max_concurrent_runs = 1`, every
-agent but one waits until the operator happens to save a setting.
+**Rule for the next person who proposes a project-wide limit of any kind: build the release path
+first.** A limit without it stops work silently rather than visibly, which is worse than no limit.
+
+## 7. What replaced it — the dependency board
+
+**DECIDED.** Instead of a number that throttles, a picture that informs.
 
 ```
-   run ends ──▶ schedule_agent(same agent)          ← exists today
-            └─▶ redrain_queued_agents(project)      ← MISSING. the whole feature.
+   A CAP                          A BOARD
+   ─────                          ───────
+   a number that throttles        a picture that informs
+   the system decides when        the operator decides when
+   "you may run 2 at a time"      "here is the shape — start what you like"
 ```
 
-**The change is small and it is the load-bearing part**: every path where a run reaches a terminal
-state must re-drain the project, not only its own agent. It should be built and tested *first*, not
-last — a cap without it is worse than no cap, because work stops silently rather than visibly.
+This lands back on §1's principle from the other side. `spec_tasks.py:39-41` says a specification has
+no business deciding who performs work; a concurrency cap says the *system* decides **when** work
+happens. Showing the structure and leaving the choice to the operator refuses both.
 
-**Open:** re-draining the project on every run completion is O(agents) scheduling attempts per
-completion. At `agent_budget = 8` that is fine. It is worth knowing it is not free.
+And it subsumes what §3 wanted `blocked` for. Rather than one bit per card — stuck or not stuck —
+the layout carries the whole wave structure:
 
-## 7. What this becomes
+```
+   layer 0  ── ready now ──   [A]      [B]      [C]
+                               │        │
+                       ┌───────┘        └───┐
+   layer 1                    [D]          [E]
+                               │            │
+   layer 2                     └─────┬──────┘
+                                    [F]
 
-The item is too large for one change. Split on the seams the code already has:
+   position  = dependency depth
+   badge     = status
+```
+
+**DECIDED — status moves onto the card, and it is already there.** `TaskCard.tsx:235` renders
+`<StatusBadge status={task.status} />` today, where it is redundant with the column it sits in. In a
+dependency layout the column is repurposed and the badge becomes the only status signal. The card is
+already ready; nothing needs adding to it.
+
+The trade is explicit: **position cannot encode two things.** A dependency layout gives up
+status-as-position, which is exactly why the operator said the status must be in the card.
+
+### DECIDED — top to bottom, not left to right
+
+The axes are not symmetric:
+
+| | bounded by | |
+|---|---|---|
+| **width** — tasks that can run at once | `agent_budget` (8) | small |
+| **depth** — length of a dependency chain | nothing | unbounded |
+
+The unbounded axis belongs where scrolling is cheap, and vertical scrolling is free while horizontal
+scrolling is avoided. A twelve-task decomposition eight layers deep and two wide is a comfortable
+vertical scroll and a miserable horizontal one.
+
+There is a second reason. Left-to-right produces columns of stacked cards — **visually identical to
+the existing seven-column kanban**, with the columns silently meaning something else. Two views that
+look the same and mean different things is a confusion paid for daily. Top-to-bottom also gives cards
+room: the current board is `minmax(160px, 1fr)` across seven columns, and rows fit a title, a status
+badge, an assignee and a complexity chip without cramping.
+
+**It is a DAG, not a tree.** A task may depend on several, so edges converge as well as diverge and
+there is no parent-per-card. "Tree" is the operator's word for the shape; layered DAG is what it is.
+
+### DECIDED — a second view, toggled
+
+Kanban answers *"what is in flight"*; the dependency board answers *"what can start"*. Neither
+subsumes the other, so the seven-column board stays and this is a layout you switch to.
+
+### DECIDED — one board per document, chosen from a picker
+
+The operator's reason: *"As the project goes on and more things park in done it gets overpopulated.
+One board for each document I feel is the best approach."*
+
+`Task.spec_document_id` already carries this (`spec_tasks.py:194`), so a per-document board is a
+filter on a column that exists.
+
+**DECIDED — hand-made tasks get a standing "no document" board.** A task created by hand has
+`spec_document_id = NULL` and would otherwise appear on no board at all — which would make it
+unreachable for edge-drawing, contradicting the decision below. The picker lists the real documents
+plus one board for the loose tasks. It is a filter on `NULL`, not a new concept.
+
+**The picker is worth designing, not just listing.** If it carries each document's open and total
+counts, choosing a board and seeing what remains become one act:
+
+```
+  ▸ corpus-aware-documents      12 open / 55
+  ▸ agent-created-documents      0 open / 35   ✓
+  ▸ document-adoption           38 open / 38
+  ▸ (no document)                4 open
+```
+
+### DECIDED — the spec declares edges and the operator may edit them
+
+`depends_on` in the payload covers tasks materialised from a document. The operator also makes tasks
+by hand, and those would otherwise all be roots. Both, then: declared dependencies arrive with the
+task, and the operator can add or remove edges on the board.
+
+This is the first place the payload and the board both write the same fact, and the rule needs
+stating when it is designed: the document declares the decomposition's *intent*, the board holds what
+is *true now*, and re-approving a document must not silently redraw edges the operator changed —
+consistent with `spec_tasks.py:19-21`, *"a task that already exists is never touched."*
+
+### The cost of per-document scoping, and one way to soften it
+
+A dependency crossing two documents cannot be drawn on either board. That shape is immediate: this
+project's own carve-up is five items depending on each other across five documents.
+
+An edge leaving the board can be shown as an off-board reference rather than dropped:
+
+```
+        ┌──────────────────────────────┐
+        │  ⇡ document-adoption          │  ← names the document and the
+        │    task: "adopt a corpus"     │    task. not a card to act on.
+        └───────────────┬───────────────┘
+                        │
+                       [A]   [B]
+                        └──┬──┘
+                          [C]
+```
+
+The blocker stays visible and reachable without the board becoming the whole project. **Open:**
+whether that requires a task-level edge (`Task.depends_on_task_id` or a join table) in addition to
+the within-document payload field. §4 recommended within-document only; the off-board stub is what
+makes that recommendation survivable rather than merely cheap.
+
+## 8. What this becomes
+
+The item is too large for one change. Split on the seams the code already has. The original **4a**
+was max concurrent runs and is gone — §6 — and what stood behind it became **4b′**.
 
 | # | Change | Depends on | Size |
 |---|---|---|---|
-| **4a** | **Max concurrent runs** — the project setting, the check in `schedule_agent`, and the project re-drain on run completion. | nothing | small, and useful alone |
-| **4b** | **Complexity and dependencies in the payload** — two payload fields, `spec_completeness` checks, `materialise()` carrying them onto the task, readiness computed. No routing. | nothing | medium |
-| **4c** | **The tier table** — project-scoped tier→runners mapping, operator-editable, one-to-many, pointing at `Runner` rows so deletion fails loudly. | 4b | medium |
-| **4d** | **Auto-assignment** — `materialise()` fills `assignee` from the tier mapping. Legal without touching the transition machine, because `assigned` is already an entry status. | 4b, 4c | small |
+| **4b** | **Dependencies in the payload** — `depends_on` on `spec_payload.Task`, `spec_completeness` checking cycles and unknown keys, `materialise()` carrying them onto the task, readiness computed rather than stored. | nothing | medium |
+| **4b′** | **The dependency board** — per-document, top-to-bottom layered DAG, status on the card, operator-editable edges, document picker with open counts, off-board stubs for edges that leave. | 4b | medium, and the visible half |
+| **4c** | **Complexity and the tier table** — `complexity` on the payload; project-scoped tier→runners mapping, operator-editable, one-to-many, pointing at `Runner` rows so deletion fails loudly. | nothing (payload) / — | medium |
+| **4d** | **Auto-assignment** — `materialise()` fills `assignee` from the tier mapping. | 4c | small |
 
-**4a is worth doing on its own merits**, independent of the whole tier idea: it is the operator's
-stated want, and the missing project re-drain is a latent defect the moment any project-wide limit
-exists.
+**`complexity` was split out of 4b.** It serves routing; `depends_on` serves the board. They share
+nothing but the payload object, so binding them into one change would make the board wait on a tier
+vocabulary it does not use.
+
+**4b + 4b′ is the slice worth shipping first.** It is the operator's actual want after §6, it needs
+no tier decided, and it is the half with something to look at.
 
 **4d is smaller than it sounds and that is the finding worth carrying:** `ENTRY_STATUSES` already
 includes `assigned`, so materialising a task directly as assigned is legal under the machine as
 written. Auto-assignment is filling in two `None`s at `spec_tasks.py:192-193` — not a subsystem.
 
-## 8. Still open, and genuinely the operator's
+## 9. Still open, and genuinely the operator's
 
-- **What are the tiers?** (§5, Q6.) Decide before anything writes one into a document.
 - **Does a tier name a model, or a (model, effort) pair?** The second is better and costs building
-  `Runner.flags` support that nothing has yet.
-- **Cross-document dependencies** (§4). Recommended out of scope, but the carve-up itself is a
-  five-item dependency chain across five documents, so the limit will be felt immediately.
+  `Runner.flags` support that nothing has yet. (The tier *names* are decided — §5.)
+- **Cross-document dependencies** (§4, §7). Recommended out of scope, but per-document boards make
+  the limit structural rather than merely present, and this project's own carve-up is exactly that
+  shape. The off-board stub in §7 is the proposed softening, and it may still need a task-level edge.
+- **Which fact wins when a re-approved document's declared edges disagree with the operator's** (§7).
+  `spec_tasks.py:19-21` — *"a task that already exists is never touched"* — points at the answer but
+  does not cover edges, which did not exist when it was written.
 - **Least-loaded or round-robin** (§5, Q2).
-- **Should assignment ever start work?** Recommended as a firm non-goal here, but it is the question
+- **Should assignment ever start work?** Recommended as a firm non-goal, but it is the question
   behind "does approving a document make eight agents wake up", and leaving it unanswered means
   someone answers it by accident later.
+- **Does the dependency board need its own readiness rule for `blocked` tasks?** A task that is
+  `blocked` (waiting on a person) and also has unmet dependencies is stopped for two unrelated
+  reasons. The board shows one; the badge shows the other. Probably fine, unexamined.
 
-## 9. Not covered
+## 10. Not covered
 
 The model catalog (§8 of the previous exploration, carve-up item #5) stays where it is: independent
 of all of this, and carrying its own governance question about an agent that can expand what it is
