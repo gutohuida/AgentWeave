@@ -113,7 +113,13 @@ describe('runDurationsByRunId', () => {
 })
 
 describe('the live working indicator', () => {
-  beforeEach(() => vi.useFakeTimers())
+  // Pinned to the fixture timestamps above, because the counter is now derived from the run's
+  // own first entry rather than from when the pane mounted. Without a fixed clock the assertions
+  // below would read the real gap between 2026-08-02 and today.
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.setSystemTime(Date.parse('2026-08-02T00:00:00Z'))
+  })
   afterEach(() => vi.useRealTimers())
 
   it('is absent while idle', () => {
@@ -129,6 +135,19 @@ describe('the live working indicator', () => {
       vi.advanceTimersByTime(3000)
     })
     expect(screen.getByTestId('timeline-working-indicator')).toHaveTextContent('Working · 3s')
+  })
+
+  it('reads the age of the run, not the age of the pane', () => {
+    // The operator's report: "leaving a conversation and jumping to another agent composer
+    // resets the working timer — it goes back to 0". A pane mounting against a run that began
+    // 40 seconds ago must open at 40s, because the origin is the run's first entry rather than
+    // this component's mount.
+    renderTimeline({
+      isRunning: true,
+      entries: [entry({ id: 'a1', run_id: 'run-1', timestamp: '2026-08-01T23:59:20Z' })],
+      timelineEvents: [lifecycle('run_started', 'run-1', '2026-08-01T23:59:20Z')],
+    })
+    expect(screen.getByTestId('timeline-working-indicator')).toHaveTextContent('Working · 40s')
   })
 
   it('is announced to assistive tech, since it is the only sign the agent is alive', () => {
@@ -172,6 +191,43 @@ describe('the live working indicator', () => {
     })
     expect(screen.getByTestId('timeline-working-indicator')).toBeInTheDocument()
     expect(screen.queryByTestId('turn-worked-for')).not.toBeInTheDocument()
+  })
+
+  /**
+   * Stop, then send again. The operator's report: "if I stop the turn and send a new message the
+   * working indicator do not show anymore. Until that new message is done."
+   *
+   * `run_started` for the new run reaches `timelineEvents` before that run's first entry has been
+   * grouped into a turn, so for that window the newest turn on screen is still the STOPPED one.
+   * Judging by the last turn alone read that as settled and hid the indicator for the whole of
+   * the new run.
+   */
+  it('shows again when a new run starts while the stopped turn is still the newest on screen', () => {
+    renderTimeline({
+      isRunning: true,
+      entries: [entry({ id: 'a1', run_id: 'run-1', content: 'half an answer' })],
+      timelineEvents: [
+        lifecycle('run_started', 'run-1', '2026-08-02T00:00:00Z'),
+        lifecycle('run_stopped', 'run-1', '2026-08-02T00:00:04Z'),
+        // The new run has begun; none of its entries have arrived yet.
+        lifecycle('run_started', 'run-2', '2026-08-02T00:00:06Z'),
+      ],
+    })
+    expect(screen.getByTestId('timeline-working-indicator')).toBeInTheDocument()
+  })
+
+  it('stays hidden after a stop that is not followed by another run', () => {
+    // The other half of the same boundary: a stop the operator does not follow up on must leave
+    // the indicator down, or every stopped turn would count forever.
+    renderTimeline({
+      isRunning: true,
+      entries: [entry({ id: 'a1', run_id: 'run-1', content: 'half an answer' })],
+      timelineEvents: [
+        lifecycle('run_started', 'run-1', '2026-08-02T00:00:00Z'),
+        lifecycle('run_stopped', 'run-1', '2026-08-02T00:00:04Z'),
+      ],
+    })
+    expect(screen.queryByTestId('timeline-working-indicator')).not.toBeInTheDocument()
   })
 })
 
