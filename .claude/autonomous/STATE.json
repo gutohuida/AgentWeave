@@ -9,7 +9,7 @@
   "stop_when_queue_empties": false,
   "run": 1,
   "iteration": 0,
-  "last_heartbeat": "2026-08-20T23:20:00+01:00",
+  "last_heartbeat": "2026-08-20T22:35:00+01:00",
   "log_file": ".claude/autonomous/2026-08-20-open-specs-log.md",
   "driver": "Windows Scheduled Task 'AgentWeaveAutonomousSession' -> .claude/skills/autonomous-session/scripts/run-iteration.ps1 -> headless `claude -p`, every 20 minutes, self-unregistering past stop_at. Each firing is a fresh process; all continuity is this file plus the log. Session-bound drivers (ScheduleWakeup, CronCreate) are deliberately NOT used — the 2026-08-15 run asked for nine hours and got forty minutes because the interactive session went away.",
 
@@ -23,7 +23,8 @@
     "vitest": "1172 passed / 118 files in 24.45s",
     "tsc": "clean (npx tsc --noEmit in hub/ui)",
     "openspec_validate_all_strict": "40 passed, 0 failed (40 items)",
-    "pytest_hub": "STARTED IN BACKGROUND AT PREP AND NOT SEEN TO FINISH. Iteration 1 must run `cd hub && py -3.11 -m pytest tests/ -q` itself and record the figure BEFORE writing any code, so inherited breakage is distinguishable from its own. Last known figure is 2580 passed, from handoff 0066, and it predates 8 commits.",
+    "pytest_hub": "MEASURED AT PREP, GREEN: `cd hub && py -3.11 -m pytest tests/ -q` -> 2582 passed, 84 skipped, 1 xpassed, 130 warnings in 554.09s (9m14s), exit 0. This is THE baseline — any red in a later run is this run's own until proven otherwise. Two notes: (a) 2582 vs handoff 0066's 2580, the difference being the concurrent session's commits from earlier today; (b) the 1 xpassed is INHERITED, an xfail-marked test that passed, present before this run started and not this run's to chase.",
+    "pytest_hub_costs_9_minutes": "The full Hub suite takes 9m14s against a 15-minute firing interval. Do NOT open every iteration with it. Run targeted files while working (e.g. tests/test_agent_actions_*.py, tests/test_tool_surface_matches_server.py, tests/test_spec_documents_api.py) and the full suite at a SECTION boundary, started early in the turn rather than at the end.",
     "ruff_black_mypy": "NOT run at prep. Establish on first touch of a Python file.",
     "hub_8010": "up, {\"status\":\"ok\",\"ui_stale\":true}, serving ~/.agentweave/hub/profiles/beta/agentweave.db, project proj-5e960453, credential aw_live_58ab7d84a1bf7b34eb2d1b424875bacd",
     "hub_8000": "up. The operator's real usage. Do not touch.",
@@ -40,9 +41,10 @@
       "why_first": "Smallest fully-unblocked change, and both real open questions carry the design's own recommendation so nothing in it needs the operator. Touches hub/hub/api/v1/agent_actions.py and hub/hub/mcp_server.py — no file overlap with S2.",
       "shape": "6 sections: (1) POST /agent-actions/spec/documents/create, (2) refusals, (3) the create_spec_document MCP tool, (4) retire the 'operator starts the document' rule in BOTH places in one commit, (5) agent-verifiable tests, (6) human-only tests, (7) the user test guide.",
       "landmines": [
-        "1.3 says MOVE _mint_document_path (hub/hub/api/v1/spec.py:224) somewhere both routes reach — do not copy it.",
+        "1.3 says MOVE _mint_document_path somewhere both routes reach — do not copy it. VERIFIED at prep: it is at hub/hub/api/v1/spec.py:225 (the design says 224, off by one), it is async, takes (session, project_id, workspace), and delegates to spec_naming.mint_placeholder_path at spec.py:238. Its only caller today is spec.py:1163.",
         "3.1 mcp_server.py may import stdlib + fastmcp ONLY. Anything it needs from the Hub is restated there, with a test asserting the two agree.",
-        "3.4 the tool count is asserted in the Hub's tests — currently 21 tools, 20 agent-callable. Adding one means updating that assertion.",
+        "3.4 IS STALE AS WRITTEN — do not go looking for a count assertion. VERIFIED at prep: mcp_server.py already has 22 `@mcp.tool()` decorators, not the 21 that task 3.4 and CLAUDE.md both claim, and nothing asserts a NUMBER. What actually guards the surface is hub/tests/test_tool_surface_matches_server.py, which compares NAME SETS: every served tool must either be described in `_tool_surface_lines()` in hub/hub/api/v1/agents.py as `name(arg, arg)` in backticks — with the ARGUMENT NAMES matching the real schema — or be listed in UNDESCRIBED_TOOLS with a reason of at least 8 words. Adding create_spec_document without doing one of those two fails that test. Its docstring records why this matters: an agent told to call a tool its own surface omits concludes it does not have the tool, and stops. That cost a completed interview once already.",
+        "hub/build/lib/hub/ is a STALE COPY of the package and shows up in greps. Never edit it. Edit hub/hub/.",
         "4.3 the two rule-retirements (mcp_server.py:905 and agent_actions.py:1158-1162) go in the SAME commit. A build with one and not the other contradicts itself.",
         "4.4 grep for a third statement of the rule — turn-context text, hub/hub/data/charters/, onboarding copy, docs.",
         "5.7 is the load-bearing test: creating documents must leave every pre-existing spec/ file byte-identical."
@@ -90,7 +92,7 @@
 
   "current": "S1",
 
-  "next_action": "ITERATION 1. Do these in order and stop when the turn is comfortably full. (a) Confirm you are on branch autonomous/2026-08-20-open-specs and the tree is clean; if not, reconcile in the log before anything else. (b) Establish the Hub test baseline that prep could not: `cd hub && py -3.11 -m pytest tests/ -q` and record the exact figure in the log — this is what lets every later iteration tell inherited breakage from its own. Do not skip it and do not write code before it. (c) Then start S1 section 1: read openspec/changes/agent-created-documents/design.md and tasks.md, read hub/hub/api/v1/spec.py:224 (_mint_document_path) and its neighbours in hub/hub/api/v1/agent_actions.py, and implement tasks 1.1-1.8 — the POST /agent-actions/spec/documents/create route, with the request/response schemas. MOVE _mint_document_path to somewhere both routes reach; do not copy it. Take the pre-authorised answers in `pre_authorised` without re-deciding them. Write the tests for section 2 as you go if the turn allows; otherwise leave section 2 as the next iteration's unit. Tick only the tasks.md boxes you actually verified. Commit, push, then release the branch per the driver protocol.",
+  "next_action": "ITERATION 1 — implement S1 section 1, the route. The baseline is already measured (see runway_verified_at_prep) so do NOT spend this turn re-running the full Hub suite. (a) Confirm you are on branch autonomous/2026-08-20-open-specs and the tree is clean; if not, reconcile in the log before anything else. (b) Read openspec/changes/agent-created-documents/design.md and tasks.md in full, then hub/hub/api/v1/spec.py around line 225 (_mint_document_path, its caller at 1163) and the neighbouring agent routes in hub/hub/api/v1/agent_actions.py — get_agent_actor, and the 404 at 1158-1162 you will reword in section 4. (c) Implement tasks 1.1 through 1.8: POST /agent-actions/spec/documents/create, identity from get_agent_actor, NO path and NO kind accepted, optional `title` only (PA-1), path minted via the MOVED _mint_document_path, spec_lifecycle.create_document with kind='change-spec' and Actor(kind='agent', name=actor.agent, run_id=actor.run_id), payload written through spec_service.save_document, spec_updated broadcast, returns path and phase, request/response schemas in hub/hub/schemas/. MOVE _mint_document_path so both routes reach it — do not copy it. (d) Verify with targeted tests, not the full suite: the new route's own test, plus tests/test_spec_documents_api.py and tests/test_tool_surface_matches_server.py to prove nothing existing broke. Task 1.5 explicitly wants an ASSERTION that save_document reaches _apply_and_write and not the propose branch — assert it, do not assume it. (e) Tick ONLY the tasks.md boxes you actually ran and saw pass. Leave sections 2, 3 and 4 for later iterations. (f) Append a log entry, rewrite this file, commit and push, then release the branch per heartbeat_note. If section 1 lands early and the turn still has room, continue into section 2 (the refusals) rather than stopping.",
 
   "pre_authorised": [
     {
@@ -199,6 +201,10 @@
     "git checkout <file> to undo a scratch mutation reverts uncommitted work. Copy the file aside first.",
     "Playwright's Python get_by_role(name=...) does not accept a callable — use re.compile(...). And page.get_by_text does not reach a rendered spec document; it renders in an iframe, so use page.frame_locator('iframe').first."
   ],
+
+  "do_not_idle": "Last night's run (2026-08-19) spent its final SIX iterations — about two hours — writing idle checkpoints that said nothing had changed, because its queue had emptied and it treated 'nothing assigned' as 'nothing to do'. Do not repeat that. This queue holds 234 tasks across four changes, so an iteration should never be idle. If the current item is genuinely blocked, say why in the log and PULL THE NEXT QUEUE ITEM FORWARD in the same turn rather than checkpointing an empty verification. If every item in S1-S6 is somehow closed before stop_at, the useful work is: write up what the run learned as an exploration under openspec/explorations/, or drive the product end to end against 8010 and record what breaks. An idle checkpoint is the last resort, not the default.",
+
+  "iteration_shape": "One unit of work per firing, sized to finish inside the turn, ending pushed. Prefer a small finished thing to a large half-thing — half a thing is what dies badly. Tick a tasks.md box ONLY for something you actually ran and saw pass. A section of the change (say, S1 section 1, or S1 section 2) is about the right size. Run `cd hub && py -3.11 -m pytest tests/ -q` before claiming any Hub work is done; it takes several minutes, so start it early in the turn rather than at the end.",
 
   "heartbeat_note": "While an iteration is working, keep last_heartbeat at now — that is what stops the driver and a live session both writing this branch. As the LAST act of an iteration, after everything is pushed, set it ~40 minutes in the past and commit that one-line change, so the next firing takes over instead of standing down against a heartbeat nobody is refreshing."
 }

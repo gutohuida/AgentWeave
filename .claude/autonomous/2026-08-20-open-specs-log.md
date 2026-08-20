@@ -37,7 +37,7 @@ answers to every open question the first two changes carry.
 | `npx vitest run` (Hub UI) | **1172 passed / 118 files** in 24s |
 | `npx tsc --noEmit` (Hub UI) | **clean** |
 | `openspec validate --all --strict` | **40 passed, 0 failed** (40 items) |
-| `py -3.11 -m pytest hub/tests/ -q` | started in background — see the first entry below |
+| `py -3.11 -m pytest hub/tests/ -q` | **2582 passed, 84 skipped, 1 xpassed** in **554s (9m14s)** |
 | `claude` on PATH | yes, `C:\Users\huida\AppData\Roaming\npm\claude` |
 | `origin/master` reachable | yes; master is **16 commits ahead** of it, unpushed |
 | Hub on 8010 | up, `{"status":"ok","ui_stale":true}` |
@@ -114,5 +114,77 @@ Pre-authorised now, so no iteration has to think about them:
   places that have diverged before.
 - **S2 — navigation strip below the meta chips.** Design says it *"wants seeing rather than
   deciding"*. Below is the reversible choice (one template move) and keeps the title first.
+
+### The baseline landed green, and it is slower than the firing interval
+
+`cd hub && py -3.11 -m pytest tests/ -q` → **2582 passed, 84 skipped, 1 xpassed, 130 warnings in
+554.09s**. Exit 0.
+
+Three things worth carrying:
+
+- **2582, against handoff 0066's 2580.** The two extra are the concurrent session's commits from
+  earlier today. Nothing inherited is red.
+- **The `1 xpassed` is inherited.** An `xfail`-marked test passed. It was there before this run
+  started; it is not evidence of anything this run did, and it is not this run's to chase.
+- **9m14s, against a 15-minute firing interval.** An iteration that runs the full Hub suite spends
+  most of its window doing it. So: run targeted files while working, and the full suite at a
+  section boundary, started early in the turn rather than at the end.
+
+### Two of S1's stated landmines were already stale — checked before arming, not after
+
+Task 3.4 of `agent-created-documents` says the Hub asserts a tool *count* — *"currently 21 tools,
+20 agent-callable, and that count is asserted"* — and CLAUDE.md says the same. Both are out of date,
+and an iteration that trusted them would have gone hunting for an assertion that does not exist.
+
+Measured: `hub/hub/mcp_server.py` already carries **22** `@mcp.tool()` decorators, and **no test
+asserts a number.** What actually guards the surface is `hub/tests/test_tool_surface_matches_server.py`,
+which compares **name sets** in both directions — every served tool must be described in
+`_tool_surface_lines()` (`hub/hub/api/v1/agents.py`) as `` `name(arg, arg)` ``, with the argument
+names matching the real schema, or be listed in `UNDESCRIBED_TOOLS` with a reason of at least eight
+words. Adding `create_spec_document` without doing one of those two fails that test.
+
+Its docstring is worth reading before touching the surface: the check exists because a Codex agent
+was told by its phase block to call `submit_spec_document`, did not find it in the described
+surface, concluded *"the required `submit_spec_document` capability was not exposed in this
+session"*, and stopped — after three rounds of `ask_user` had already settled the whole scope. The
+tool was being served the entire time.
+
+Also confirmed while checking: `_mint_document_path` is at `hub/hub/api/v1/spec.py:`**225**, not 224
+as the design says, and its only caller today is `spec.py:1163`. And `hub/build/lib/hub/` is a stale
+copy of the package that shows up in every grep — never edit it.
+
+Both corrections are written into `STATE.json`'s landmines so no iteration rediscovers them.
+
+### Driver armed
+
+`AgentWeaveAutonomousSession`, every **15 minutes**, first firing 23:13:18, self-unregistering past
+2026-08-21T08:00:00. Installed at 20 minutes first and shortened deliberately: `MultipleInstances`
+is `IgnoreNew`, so a long iteration never overlaps, it only causes the next firing to be skipped —
+which means a shorter interval strictly reduces the dead time between a finished iteration and the
+next one starting. At 20 minutes a 25-minute iteration would idle 15 minutes; at 15 it idles ~5.
+
+The 23:10:50 firing stood down correctly — *"Heartbeat is -9.2 min old (grace 25) - a live session
+holds the branch"* — which also proves the interlock works before anyone is relying on it.
+
+**This branch is pushed** (`origin/autonomous/2026-08-20-open-specs`). Note that pushing it carried
+master's 16 unpushed commits to GitHub as ancestors of this branch. That is unavoidable, and is what
+last night's run did too; `master` itself is still unpushed and stays that way.
+
+### One lesson taken from last night, written into the state file
+
+The 2026-08-19 run spent its **final six iterations — about two hours — writing idle checkpoints**
+that said nothing had changed, because its queue had emptied and it read "nothing assigned" as
+"nothing to do". `STATE.json` now carries a `do_not_idle` clause: if the current item is blocked,
+say why and pull the next queue item forward *in the same turn*. An idle checkpoint is the last
+resort, not the default. Tonight's queue holds 234 tasks, so it should never come up.
+
+### What iteration 0 did NOT do
+
+- **No product code was written.** This entry is setup only.
+- **`ruff` / `black` / `mypy` were not run.** Establish them on first touch of a Python file.
+- **No browser test was run**, and the Spec tab was not driven. 8010 is up and holds the adopted
+  corpus if an iteration wants it.
+- **The `ui_stale: true` on both Hubs was not fixed.** It is inherited, from a stamp dated
+  2026-08-20T14:14:54Z, and it is only this run's problem if this run touches `hub/ui/src`.
 
 ---
