@@ -895,6 +895,11 @@ def _tool_surface_lines(*, has_peers: bool = True) -> List[str]:
         "handle an answer that is none of yours.",
         "- `get_answer(question_id)` — only needed for a question you asked with "
         "`blocking=False`; a normal `ask_user` has already returned the answer.",
+        "- `create_spec_document(title=None)` — start a specification document yourself; you do "
+        "not need the operator to start it. Returns a placeholder `path` (meaningless — a colour "
+        "and a mythic animal) and `phase`. Always a `change-spec`, always `exploring`; there is no "
+        "`kind` or `path` argument to set either. Call `rename_spec_document` once you know the "
+        "subject, then `submit_spec_document` with the renamed path.",
         f"- `submit_spec_document(path, title, kind, summary, problem, design, lifecycle, scope, "
         f"requirements, acceptance_criteria, tasks, algorithms, evidence, open_questions)` — write "
         f"the specification document the operator has open. `kind` is one of {values(SpecKind)}. "

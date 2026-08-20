@@ -880,6 +880,34 @@ EvidenceDecision = Literal["accepted", "rejected"]
 
 
 @mcp.tool()
+def create_spec_document(title: Optional[str] = None) -> Dict[str, Any]:
+    """Start a specification document when you need one — you do not need the operator to start it.
+
+    Use this the moment you have something worth writing up: a finding, a proposal, a design
+    worth recording. It creates the document and returns immediately so you keep working in the
+    same turn — there is nothing to wait for and nobody to ask.
+
+    This is step one of a three-call flow: `create_spec_document` → work out the subject →
+    `rename_spec_document` → `submit_spec_document`. The `path` this returns is a placeholder —
+    a colour and a mythic animal, meaning nothing about the document's actual subject. Call
+    `rename_spec_document` as soon as you know what the document is about, and use the path it
+    returns for everything after, including `submit_spec_document`.
+
+    There is no `path` and no `kind` argument: the Hub always mints the path and the document is
+    always a `change-spec` — the one kind whose lifecycle (exploring, proposed, approved,
+    archived) is meant to be filled in and then gated by the operator. `title` is optional and
+    only cosmetic — it shows in the operator's list before the rename lands, and does not affect
+    the path.
+
+    Returns the minted `path` and the `phase` it starts in (`exploring`).
+    """
+    body: Dict[str, Any] = {}
+    if title is not None:
+        body["title"] = title
+    return _hub_request("POST", "/spec/documents/create", body)
+
+
+@mcp.tool()
 def submit_spec_document(
     path: str,
     title: str,
@@ -902,7 +930,7 @@ def submit_spec_document(
     Never write specification HTML yourself — it will not be treated as a document. Submit the
     structure here and the Hub produces the markup, the anchors, and the identifiers.
 
-    The document must already exist: the operator starts an exploration, and you fill it in.
+    The document must already exist — call `create_spec_document` first if you don't have one yet.
     Submitting repeatedly is normal and expected — a document under discussion is incomplete, and
     saving an incomplete one is not an error. The response lists what still blocks it from being
     proposed.

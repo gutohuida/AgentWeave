@@ -51,6 +51,29 @@ def test_hub_request_binds_run_token_without_identity_headers(hub):
     assert _body(request) == {"title": "T"}
 
 
+def test_create_spec_document_reaches_the_create_route_with_no_title(hub):
+    from hub.mcp_server import create_spec_document
+
+    calls, responses = hub
+    responses.append(b'{"path": "spec/changes/amber-griffin/spec.html", "phase": "exploring"}')
+    assert create_spec_document() == {
+        "path": "spec/changes/amber-griffin/spec.html",
+        "phase": "exploring",
+    }
+    request = calls[0]
+    assert request.full_url.endswith("/api/v1/agent-actions/spec/documents/create")
+    assert _body(request) == {}
+
+
+def test_create_spec_document_sends_only_the_title_it_was_given(hub):
+    from hub.mcp_server import create_spec_document
+
+    calls, responses = hub
+    responses.append(b'{"path": "spec/changes/amber-griffin/spec.html", "phase": "exploring"}')
+    create_spec_document(title="A finding worth writing up")
+    assert _body(calls[0]) == {"title": "A finding worth writing up"}
+
+
 def test_send_message_payload_contains_no_identity_or_run(hub):
     from hub.mcp_server import send_message
 

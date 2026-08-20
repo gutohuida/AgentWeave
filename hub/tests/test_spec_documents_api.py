@@ -174,12 +174,14 @@ async def test_an_invalid_payload_is_refused_with_its_field_and_writes_nothing(
 
 
 @pytest.mark.asyncio
-async def test_submitting_to_a_document_that_does_not_exist_says_who_starts_one(
+async def test_submitting_to_a_document_that_does_not_exist_says_how_to_start_one(
     app, auth_headers, run_headers, tmp_path
 ):
+    """`agent-created-documents` retires the old wording that named the operator as the only
+    remedy — an agent can create the document itself now, so the refusal names that instead."""
     response = await _submit(app, run_headers, _document(), path="spec/changes/absent/spec.html")
     assert response.status_code == 404
-    assert "operator" in response.json()["detail"]
+    assert "create_spec_document" in response.json()["detail"]
 
 
 @pytest.mark.asyncio

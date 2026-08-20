@@ -88,6 +88,29 @@ class ProposalRefusedError(RuntimeError):  # noqa: N818 - "refused" is the outco
         super().__init__(message)
 
 
+async def mint_document_path(
+    session: AsyncSession, project_id: str, workspace: ProjectWorkspace
+) -> str:
+    """A free placeholder path, free against both the records and the disk.
+
+    A name is only available if nothing at all occupies it: a document the
+    project has recorded, or a file somebody put there by hand.
+
+    Shared by every route that starts an exploration with no caller-supplied
+    path — the operator's `POST /project/documents` and the agent's
+    `POST /agent-actions/spec/documents/create` — so there is exactly one
+    definition of "taken" to keep consistent.
+    """
+    recorded = {
+        document.path for document in await spec_lifecycle.list_documents(session, project_id)
+    }
+
+    def is_taken(candidate: str) -> bool:
+        return candidate in recorded or spec_documents.document_exists(workspace, candidate)
+
+    return spec_naming.mint_placeholder_path(is_taken)
+
+
 async def save_document(
     session: AsyncSession,
     workspace: ProjectWorkspace,

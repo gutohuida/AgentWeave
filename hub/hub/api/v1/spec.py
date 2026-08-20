@@ -222,22 +222,6 @@ def _operator() -> spec_lifecycle.Actor:
     return spec_lifecycle.Actor(kind="operator", name="operator")
 
 
-async def _mint_document_path(session: AsyncSession, project_id: str, workspace) -> str:
-    """A free placeholder path, free against both the records and the disk.
-
-    A name is only available if nothing at all occupies it: a document the
-    project has recorded, or a file somebody put there by hand.
-    """
-    recorded = {
-        document.path for document in await spec_lifecycle.list_documents(session, project_id)
-    }
-
-    def is_taken(candidate: str) -> bool:
-        return candidate in recorded or spec_documents.document_exists(workspace, candidate)
-
-    return spec_naming.mint_placeholder_path(is_taken)
-
-
 async def _require_document(session: AsyncSession, project_id: str, path: str):
     try:
         safe = validate_spec_path(path)
@@ -1160,7 +1144,7 @@ async def create_document(
 
     if body.path is None:
         try:
-            path = await _mint_document_path(session, project_id, workspace)
+            path = await spec_service.mint_document_path(session, project_id, workspace)
         except spec_naming.NamingExhaustedError as exc:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,

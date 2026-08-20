@@ -20,6 +20,7 @@ from ...db.models import CheckpointNote, Question
 from ...schemas.jobs import JobCreate, JobResponse, JobUpdate
 from ...schemas.messages import _MESSAGE_TYPES, MessageCreate, MessageResponse
 from ...schemas.questions import QuestionCreate, QuestionOption, QuestionResponse
+from ...schemas.spec import SpecDocumentCreate
 from ...schemas.tasks import (
     _PRIORITIES,
     _TASK_ID_RE,
@@ -1059,6 +1060,73 @@ async def read_spec_document(
     return view
 
 
+@router.post("/spec/documents/create", status_code=status.HTTP_201_CREATED)
+async def create_spec_document(
+    body: SpecDocumentCreate,
+    actor: AgentActor = Depends(get_agent_actor),
+    session: AsyncSession = Depends(get_session),
+):
+    """Start an exploration, so an agent that needs a document keeps working instead of stopping.
+
+    Reuses `POST /project/documents`' own creation path rather than branching it: the route mints
+    a placeholder path that nothing occupies (design D1, `agent-created-documents`), so there is
+    nothing for this write to render over. Always `change-spec`, at `exploring` — the one kind an
+    agent may originate (design D3) and the one phase an empty document can start in.
+
+    No `path` and no `kind` are accepted, deliberately: deriving both here would let the least
+    trusted caller in the system name where a write lands (design D2). The path arrives second,
+    once `rename_spec_document` gives the document a name that means something.
+    """
+    from ... import project_workspace, spec_lifecycle, spec_naming, spec_service
+    from .spec import SCHEMA_VERSION, UNTITLED
+
+    try:
+        workspace = await project_workspace.resolve_project_workspace(session, actor.project_id)
+    except project_workspace.ProjectWorkspaceError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+    try:
+        path = await spec_service.mint_document_path(session, actor.project_id, workspace)
+    except spec_naming.NamingExhaustedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"message": str(exc), "code": "naming_exhausted"},
+        ) from exc
+
+    try:
+        document = await spec_lifecycle.create_document(
+            session,
+            actor.project_id,
+            path,
+            actor=spec_lifecycle.Actor(kind="agent", name=actor.agent, run_id=actor.run_id),
+            title=body.title or "",
+            kind="change-spec",
+        )
+    except spec_lifecycle.PhaseError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"message": str(exc), "code": exc.code},
+        ) from exc
+
+    payload = {
+        "schema_version": SCHEMA_VERSION,
+        "kind": document.kind,
+        "title": body.title or UNTITLED,
+    }
+    await spec_service.save_document(
+        session,
+        workspace,
+        document,
+        payload,
+        actor=spec_lifecycle.Actor(kind="agent", name=actor.agent, run_id=actor.run_id),
+    )
+    await session.commit()
+    await sse_manager.broadcast(
+        actor.project_id, "spec_updated", {"path": document.path, "phase": document.phase}
+    )
+    return {"path": document.path, "phase": document.phase}
+
+
 @router.post("/spec/documents/rename")
 async def rename_spec_document(
     body: SpecDocumentRename,
@@ -1116,10 +1184,10 @@ async def rename_spec_document(
 class SpecDocumentSubmission(BaseModel):
     """A payload plus the document it belongs to.
 
-    The document must already exist. An agent does not start an exploration —
-    the operator does, and the document is what "propose" and "approve" later
-    refer to. There is deliberately no phase or approval field here: the tool
-    surface offers no way to express either.
+    The document must already exist — call `create_spec_document` first if you
+    don't have one yet. There is deliberately no phase or approval field here:
+    "propose" and "approve" are the operator's, and the tool surface offers no
+    way to express either.
     """
 
     path: str = Field(max_length=255)
@@ -1157,8 +1225,8 @@ async def submit_spec_document(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=(
-                f"no specification document at {path}. The operator starts an exploration; "
-                "you fill it in."
+                f"no specification document at {path}. Call create_spec_document to start one, "
+                "then rename_spec_document once you know its subject, before submitting again."
             ),
         )
 

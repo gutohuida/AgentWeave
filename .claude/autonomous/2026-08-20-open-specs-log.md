@@ -188,3 +188,69 @@ resort, not the default. Tonight's queue holds 234 tasks, so it should never com
   2026-08-20T14:14:54Z, and it is only this run's problem if this run touches `hub/ui/src`.
 
 ---
+
+## Iteration 1 — S1 sections 1–5 and 7 (headless firing, picked up at 00:13, landed 00:33+01:00)
+
+**Found the tree dirty on arrival.** A prior firing had done substantial, real work — `git diff
+--stat` showed six modified files and two new ones (`hub/hub/schemas/spec.py`,
+`hub/tests/test_agent_created_documents.py`) — but `STATE.json`'s only uncommitted change was the
+heartbeat bump to 23:40:48, and the log's last entry was Iteration 0's "no product code was
+written." That firing did the work and died before committing, logging, or advancing `STATE.json`
+past the heartbeat. Nothing was lost — this iteration's job became verify-and-land rather than
+build-from-scratch, and that is recorded here rather than silently claimed as this iteration's own
+authorship.
+
+**What was already there, verified real:** `tasks.md` showed sections 1–4 ticked complete —
+the route (`POST /agent-actions/spec/documents/create`), the refusals (409 on unresolvable
+workspace, 409 `naming_exhausted`), the `create_spec_document` MCP tool, and both halves of
+retiring the old rule (`mcp_server.py:905`'s description, and the 404 in
+`agent_actions.py`) in what would be one commit. `_mint_document_path` was moved — not copied —
+to `spec_service.mint_document_path`, with `spec.py`'s own `create_document` now calling the same
+function. Ran the targeted suite before trusting any of it:
+`test_agent_created_documents.py test_spec_documents_api.py test_tool_surface_matches_server.py
+test_mcp_server.py` → **68 passed**. Read every touched diff by hand (not just the test result) —
+the route, the schema move, the MCP tool docstring, the surface-line addition in `agents.py` — and
+it all held together: no path/kind acceptance, identity from `get_agent_actor` only, `change-spec`
+at `exploring` unconditionally.
+
+**Ran the full Hub suite** (`py -3.11 -m pytest tests/ -q --ignore=hub/tests/browser`, kicked off
+early as `iteration_shape` asks): **1 failed, 2595 passed, 84 skipped, 1 xpassed in 763.21s**. The
+one failure, `test_checkpoint_record.py::test_the_lineage_id_is_carried_forward_not_regenerated`,
+is unrelated to this change (not in the diff) and confirmed flaky rather than caused by anything
+here — reran the file alone three times: pass, pass, fail, with zero code changes between runs.
+`ruff` and `black` are clean on every touched file; `mypy` carries the same 296 pre-existing errors
+`git stash` shows on `master`, none new.
+
+**Found a real gap task 4.4 had marked closed.** Its own note said grepping `hub/hub`, `hub/ui/src`,
+`docs/` and the charter seeds found no third statement of the retired rule. Reading
+`agent_actions.py` around the submission route while writing the end-to-end test turned one up
+anyway: `SpecDocumentSubmission`'s class docstring still read *"An agent does not start an
+exploration — the operator does."* It isn't turn-context or a charter — it's a Pydantic model
+docstring — but Pydantic folds a model's docstring into its OpenAPI schema `description` by
+default, so it's reachable by any agent that inspects the API surface directly rather than going
+through the described tool set. Reworded it to match the MCP tool's own wording and added
+`test_no_schema_states_the_retired_operator_only_rule` so a fourth recurrence fails a test instead
+of a grep. Filed as a correction on task 4.4 in `tasks.md` rather than silently amending what it
+already claimed.
+
+**Closed out section 5.** Added the two tests it was missing: `test_the_full_three_call_flow_...`
+(task 5.4 — create, rename, submit against real routes, asserting the placeholder path stops
+existing on disk once renamed) and `test_the_creating_agent_cannot_propose_or_approve_its_own_...`
+(task 5.6 — phase stays `exploring`, and the operator's own `/documents/propose` route returns 401
+against a run credential, since `/agent-actions` never exposes propose/approve/transition/archive
+at all). Left 5.3 unticked (mypy isn't literally clean, even though the noise is pre-existing) and
+5.5 unticked (the flag's absence is exercised implicitly by every test in the file, not asserted
+explicitly) — both explained inline in `tasks.md` rather than ticked on a technicality. Re-ran the
+full targeted set plus the newly-touched neighbours (`test_operator_authored_documents.py`,
+`test_spec_rename.py`, `test_spec_capability_kind.py`) after every edit: **110 passed** each time.
+
+**Tasks.md now stands at 27/35.** What remains is section 6 (human-only — driving a live agent
+against 8010 and watching the rail) and 7 is done. Section 6 needs the operator awake; it is not
+this run's to fake or skip past.
+
+**S1 moves to `current: S2`.** With sections 1–5 and 7 real and verified and only human
+verification left, this queue item is done for tonight's purposes — `do_not_idle` says pull the
+next item forward rather than idle-checkpoint waiting for a human who said they won't respond.
+`corpus-aware-documents` (S2) starts next iteration.
+
+---

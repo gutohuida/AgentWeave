@@ -8,8 +8,8 @@
   "stop_at": "2026-08-21T08:00:00+01:00",
   "stop_when_queue_empties": false,
   "run": 1,
-  "iteration": 0,
-  "last_heartbeat": "2026-08-20T22:35:00+01:00",
+  "iteration": 1,
+  "last_heartbeat": "2026-08-21T00:32:00+01:00",
   "log_file": ".claude/autonomous/2026-08-20-open-specs-log.md",
   "driver": "Windows Scheduled Task 'AgentWeaveAutonomousSession' -> .claude/skills/autonomous-session/scripts/run-iteration.ps1 -> headless `claude -p`, every 20 minutes, self-unregistering past stop_at. Each firing is a fresh process; all continuity is this file plus the log. Session-bound drivers (ScheduleWakeup, CronCreate) are deliberately NOT used — the 2026-08-15 run asked for nine hours and got forty minutes because the interactive session went away.",
 
@@ -35,8 +35,9 @@
     {
       "id": "S1",
       "title": "agent-created-documents — let an agent start a specification document",
-      "status": "in_progress",
-      "tasks": "0/35",
+      "status": "code_complete_pending_human_verification",
+      "tasks": "27/35",
+      "remaining": "Section 6 (6.1-6.6) is human-only — drive a live agent against 8010 and watch the rail. 5.3 (mypy) and 5.5 (allow_agent_jobs explicit assertion) are explained-but-unticked in tasks.md, not blockers. Do not pick this back up unless the operator responds or explicitly resumes it; do_not_idle says pull the next item forward instead.",
       "path": "openspec/changes/agent-created-documents/",
       "why_first": "Smallest fully-unblocked change, and both real open questions carry the design's own recommendation so nothing in it needs the operator. Touches hub/hub/api/v1/agent_actions.py and hub/hub/mcp_server.py — no file overlap with S2.",
       "shape": "6 sections: (1) POST /agent-actions/spec/documents/create, (2) refusals, (3) the create_spec_document MCP tool, (4) retire the 'operator starts the document' rule in BOTH places in one commit, (5) agent-verifiable tests, (6) human-only tests, (7) the user test guide.",
@@ -46,14 +47,14 @@
         "3.4 IS STALE AS WRITTEN — do not go looking for a count assertion. VERIFIED at prep: mcp_server.py already has 22 `@mcp.tool()` decorators, not the 21 that task 3.4 and CLAUDE.md both claim, and nothing asserts a NUMBER. What actually guards the surface is hub/tests/test_tool_surface_matches_server.py, which compares NAME SETS: every served tool must either be described in `_tool_surface_lines()` in hub/hub/api/v1/agents.py as `name(arg, arg)` in backticks — with the ARGUMENT NAMES matching the real schema — or be listed in UNDESCRIBED_TOOLS with a reason of at least 8 words. Adding create_spec_document without doing one of those two fails that test. Its docstring records why this matters: an agent told to call a tool its own surface omits concludes it does not have the tool, and stops. That cost a completed interview once already.",
         "hub/build/lib/hub/ is a STALE COPY of the package and shows up in greps. Never edit it. Edit hub/hub/.",
         "4.3 the two rule-retirements (mcp_server.py:905 and agent_actions.py:1158-1162) go in the SAME commit. A build with one and not the other contradicts itself.",
-        "4.4 grep for a third statement of the rule — turn-context text, hub/hub/data/charters/, onboarding copy, docs.",
+        "4.4 grep for a third statement of the rule — turn-context text, hub/hub/data/charters/, onboarding copy, docs. DONE in iteration 1, but the first grep pass missed one: a Pydantic model's own class docstring (SpecDocumentSubmission in agent_actions.py) is folded into the OpenAPI schema description by default, so it is agent-reachable even though it is neither turn-context nor a charter. Fixed and guarded by test_no_schema_states_the_retired_operator_only_rule. If touching this file again, check model docstrings too, not just prose the agent is told directly.",
         "5.7 is the load-bearing test: creating documents must leave every pre-existing spec/ file byte-identical."
       ]
     },
     {
       "id": "S2",
       "title": "corpus-aware-documents — a home that maps the corpus, and documents that know their neighbours",
-      "status": "open",
+      "status": "in_progress",
       "tasks": "0/55",
       "path": "openspec/changes/corpus-aware-documents/",
       "note": "Touches hub/hub/spec_render.py and hub/hub/spec_manifest.py. The `parent` field in spec/index.json is validated, preserved and has never had a producer — that is the gap. Keep the two spec_manifest.py twins (hub/hub/ and src/agentweave/) in sync by hand."
@@ -90,9 +91,9 @@
     }
   ],
 
-  "current": "S1",
+  "current": "S2",
 
-  "next_action": "ITERATION 1 — implement S1 section 1, the route. The baseline is already measured (see runway_verified_at_prep) so do NOT spend this turn re-running the full Hub suite. (a) Confirm you are on branch autonomous/2026-08-20-open-specs and the tree is clean; if not, reconcile in the log before anything else. (b) Read openspec/changes/agent-created-documents/design.md and tasks.md in full, then hub/hub/api/v1/spec.py around line 225 (_mint_document_path, its caller at 1163) and the neighbouring agent routes in hub/hub/api/v1/agent_actions.py — get_agent_actor, and the 404 at 1158-1162 you will reword in section 4. (c) Implement tasks 1.1 through 1.8: POST /agent-actions/spec/documents/create, identity from get_agent_actor, NO path and NO kind accepted, optional `title` only (PA-1), path minted via the MOVED _mint_document_path, spec_lifecycle.create_document with kind='change-spec' and Actor(kind='agent', name=actor.agent, run_id=actor.run_id), payload written through spec_service.save_document, spec_updated broadcast, returns path and phase, request/response schemas in hub/hub/schemas/. MOVE _mint_document_path so both routes reach it — do not copy it. (d) Verify with targeted tests, not the full suite: the new route's own test, plus tests/test_spec_documents_api.py and tests/test_tool_surface_matches_server.py to prove nothing existing broke. Task 1.5 explicitly wants an ASSERTION that save_document reaches _apply_and_write and not the propose branch — assert it, do not assume it. (e) Tick ONLY the tasks.md boxes you actually ran and saw pass. Leave sections 2, 3 and 4 for later iterations. (f) Append a log entry, rewrite this file, commit and push, then release the branch per heartbeat_note. If section 1 lands early and the turn still has room, continue into section 2 (the refusals) rather than stopping.",
+  "next_action": "ITERATION 2 — S1 is code-complete (27/35, see queue[0].remaining); do NOT resume it, section 6 needs a human. Start S2 (corpus-aware-documents), section 1: corpus context, and a renderer that ignores it when none is given. (a) Confirm branch autonomous/2026-08-20-open-specs and a clean tree; reconcile in the log first if not. (b) Read openspec/changes/corpus-aware-documents/design.md and tasks.md in full — PA-4, PA-5 and PA-6 already pre-authorise its three open questions (3.6 recursive-on-home, 6.1 `system-map` kind, nav-strip placement), so section 1 has nothing to stall on. Then read hub/hub/spec_render.py:328 (render_document — the function tasks 1.1-1.3 extend), hub/hub/spec_manifest.py:86-106 (ManifestDocument, Manifest, ManifestDiagnostic — the shapes 1.4 builds context from) and hub/hub/spec_documents.py (which already imports and uses Manifest/ManifestDocument — read how, since 1.4 says to build corpus context 'from a Manifest', not from spec_manifest.py directly). (c) Implement tasks 1.1-1.5: a plain corpus-context value (home path, parent entry or None, ordered children with path/title/kind/phase/summary) assembled by the CALLER — render_document must keep reaching neither the database nor the filesystem, so the context is passed in, not fetched. Add the parameter to render_document with default None. Task 1.3 is load-bearing: assert byte-identical rendered output for every existing caller when no context is supplied — this is what lets groups 2-6 land without re-reviewing every already-rendered document, so write that test before anything else in this section. Then 1.4: build the context from a Manifest, children resolved by `parent`, ordered by `order`. 1.5 asks you to decide and record a summary-lookup strategy that is one pass per rebuild, not one file read per child — write the decision inline in tasks.md next to 1.5, not just in code. (d) Verify with targeted tests (grep for the render_document test file first; do not assume its name) plus a full `py -3.11 -m pytest tests/ -q --ignore=hub/tests/browser` run kicked off EARLY in the turn per iteration_shape — expect the known-flaky test_checkpoint_record.py::test_the_lineage_id_is_carried_forward_not_regenerated to sometimes fail on its own; that is not this section's regression, everything else must be green. (e) Tick ONLY tasks.md boxes you ran and saw pass; leave sections 2-6 for later iterations. (f) Append a log entry, rewrite this file (advance iteration, refresh heartbeat), commit, push, then release the branch per heartbeat_note.",
 
   "pre_authorised": [
     {
