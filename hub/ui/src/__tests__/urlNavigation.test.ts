@@ -132,6 +132,23 @@ describe('phase 5 URL navigation contract', () => {
       expect(back.conversationId).toBeNull()
     })
 
+    it('carries the open document back, because settings is a round trip', () => {
+      // The attachment is not only a reading panel — it is what the next turn is written against.
+      // Dropping it on the way back out of settings changed how the following run behaved with
+      // nothing on screen to say so (operator, 2026-08-20: "leaving a conversation detaches the
+      // spec open").
+      const back = agentSettingsBackDestination(
+        agentSettingsDestination('proj-1', 'claude', 'access'),
+        'spec/capabilities/runner-registry/spec.html',
+      )
+      expect(back.document).toBe('spec/capabilities/runner-registry/spec.html')
+    })
+
+    it('still returns with nothing open when nothing was open', () => {
+      const back = agentSettingsBackDestination(agentSettingsDestination('proj-1', 'claude'))
+      expect(back.document).toBeNull()
+    })
+
     it('puts the rail into section mode, as project configuration does', () => {
       expect(isSectionedDestination(agentSettingsDestination('proj-1', 'claude'))).toBe(true)
       expect(isSectionedDestination(environmentDestination('proj-1'))).toBe(true)

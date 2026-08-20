@@ -151,6 +151,9 @@ export function AgentOutputPanel({
   /** Height of the blank tail below the newest turn. See the layout effect below. */
   const [tailSpacer, setTailSpacer] = useState(0)
   const [autoscroll, setAutoscroll] = useState(true)
+  /** The `agent:conversation` this pane has already landed on, so it lands once and not again
+   *  every time a streaming response re-measures the tail. */
+  const landedOnRef = useRef<string | null>(null)
 
   const { apiKey, selectedProjectId: projectId } = useConfigStore()
   const [isSending, setIsSending] = useState(false)
@@ -363,15 +366,43 @@ export function AgentOutputPanel({
     if (autoscroll) scrollToNewest()
   }, [timelineEntries.length, isRunning, autoscroll, tailSpacer, scrollToNewest])
 
-  // Opening or switching a conversation lands on its newest entry, and resumes following. Nothing
-  // did this before, so a conversation with history opened at its oldest message. A layout effect
-  // runs after the entries are in the DOM but before paint, so the jump is never visible as a
-  // scroll — and `timelineEntries.length` is a dependency because the entries usually arrive a
-  // render after the conversation identity changes.
+  // Always the current `scrollToNewest`, reachable without making its identity a dependency.
+  // That identity changes with `tailSpacer`, which changes on every measurement of a streaming
+  // response — see the landing effect below for why depending on it was the bug.
+  const scrollToNewestRef = useRef(scrollToNewest)
   useLayoutEffect(() => {
-    scrollToNewest()
+    scrollToNewestRef.current = scrollToNewest
+  }, [scrollToNewest])
+
+  // Switching conversation resumes following, wherever the previous one was left.
+  useLayoutEffect(() => {
     setAutoscroll(true)
-  }, [agent.name, currentConversationId, scrollToNewest])
+    landedOnRef.current = null
+  }, [agent.name, currentConversationId])
+
+  /* Opening or switching a conversation lands on its newest entry. Nothing did this before, so a
+   * conversation with history opened at its oldest message. A layout effect runs after the entries
+   * are in the DOM but before paint, so the jump is never visible as a scroll.
+   *
+   * Landing happens ONCE per conversation, tracked by identity rather than by dependency. This
+   * used to list `scrollToNewest` as a dependency, whose identity changes whenever `tailSpacer`
+   * does — which is on every measurement of a streaming response. So an effect meant to run on
+   * arriving at a conversation re-ran throughout every turn, yanking the viewport back to the
+   * newest entry and forcing `autoscroll` back on underneath the operator while they were reading
+   * something further up. Against `handleScroll` turning it off again, that reads as the viewport
+   * fighting back: operator, 2026-08-20, "when I scroll all the way down it suddenly jumps up a
+   * little bit — feels like a bouncing pattern".
+   *
+   * The entry count is still a dependency, because a conversation's entries usually arrive a
+   * render after its identity changes and there is nothing to land on until they do — but the
+   * identity guard is what stops it landing again on entry number two.
+   */
+  useLayoutEffect(() => {
+    const identity = `${agent.name}:${currentConversationId ?? ''}`
+    if (landedOnRef.current === identity || timelineEntries.length === 0) return
+    landedOnRef.current = identity
+    scrollToNewestRef.current()
+  }, [agent.name, currentConversationId, timelineEntries.length])
 
   const [foldAllSignal, setFoldAllSignal] = useState(0)
 

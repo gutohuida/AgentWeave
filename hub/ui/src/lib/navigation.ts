@@ -182,8 +182,13 @@ export function agentSettingsDestination(
  *  already resolves null to the agent's newest, so this needs no lookup of its own. */
 export function agentSettingsBackDestination(
   destination: Extract<WorkspaceDestination, { kind: 'agent-settings' }>,
+  /** What was open beside the conversation before settings were opened. Settings is a place the
+   *  operator steps into and straight back out of, so returning with the document dropped both
+   *  closed the reader and — because the attachment is what the next turn is written against —
+   *  silently changed how the following run behaved. */
+  document: string | null = null,
 ): Extract<WorkspaceDestination, { kind: 'conversation' }> {
-  return agentDestination(destination.projectId, destination.agent)
+  return agentDestination(destination.projectId, destination.agent, null, document)
 }
 
 /** The composer-primary surface for a conversation that does not exist yet.

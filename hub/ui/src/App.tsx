@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { AccountingPanel } from '@/components/accounting/AccountingPanel'
 import { useAgents } from '@/api/agents'
 import { useProjects } from '@/api/projects'
@@ -155,6 +155,30 @@ export default function App() {
     )
   }, [destination, resolvedConversationId, navigateTo])
 
+  /**
+   * The last document state the operator had while on a conversation, kept across destinations
+   * that are not conversations.
+   *
+   * Recorded per project, because a document path belongs to one project's corpus and must not
+   * follow the operator into another. Records `null` too: closing the document is a state worth
+   * remembering, and is what keeps "changing agent with it closed keeps it closed" true.
+   *
+   * Declared here, above the bootstrap early-returns below, because it is a hook and the returns
+   * are conditional.
+   */
+  const lastConversationDocument = useRef<{ projectId: string | null; document: string | null }>({
+    projectId: null,
+    document: null,
+  })
+  useEffect(() => {
+    if (destination.kind === 'conversation') {
+      lastConversationDocument.current = {
+        projectId: destination.projectId,
+        document: destination.document,
+      }
+    }
+  }, [destination])
+
   useSSE()
 
   if (bootstrapState === 'pending') {
@@ -201,11 +225,27 @@ export default function App() {
    *
    * A document is what they are working on, not a property of the thread they are working on it
    * in — so changing agent while reading a specification keeps it open, and changing agent with
-   * it closed keeps it closed (operator, 2026-08-10: *"a memory between agents"*). It is `null`
-   * anywhere that is not a conversation, so arriving from a project tab opens nothing: the
-   * memory is of what is on screen, not a preference that outlives leaving the surface.
+   * it closed keeps it closed (operator, 2026-08-10: *"a memory between agents"*).
+   *
+   * It reads `null` on a project tab, deliberately and still: arriving at a conversation from
+   * project-level work opens nothing, because the memory is of what is on screen rather than a
+   * preference outliving the surface.
+   *
+   * **Agent settings is the exception**, because it is not somewhere the operator goes — it is a
+   * detour about the very conversation they are in, entered and left by a Back button that lands
+   * them where they started. Dropping the attachment across that round trip is a straightforward
+   * loss (operator, 2026-08-20: *"leaving a conversation detaches the spec open"*), and not only
+   * of a reading panel: the attachment is what the next turn is written against and what
+   * restricts the agent's file writes, so it changed how the following run behaved with nothing
+   * on screen to say so.
    */
-  const openDocument = destination.kind === 'conversation' ? destination.document : null
+  const rememberedDocument =
+    destination.kind === 'agent-settings' &&
+    lastConversationDocument.current.projectId === currentProjectId
+      ? lastConversationDocument.current.document
+      : null
+  const openDocument =
+    destination.kind === 'conversation' ? destination.document : rememberedDocument
 
   const navigate = (value: string) => {
     if (value.startsWith('agent:')) {
@@ -464,7 +504,9 @@ export default function App() {
               navigateTo(agentSettingsDestination(id, agent, section))
             }
             onBackFromAgentSettings={(id, agent) =>
-              navigateTo(agentSettingsBackDestination(agentSettingsDestination(id, agent)))
+              navigateTo(
+                agentSettingsBackDestination(agentSettingsDestination(id, agent), openDocument),
+              )
             }
             // The rail stands in for the project tree while the Spec screen is open, so choosing
             // a document is a rail action there.
