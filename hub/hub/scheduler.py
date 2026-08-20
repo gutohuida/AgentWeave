@@ -243,7 +243,23 @@ def _loop_queue_order() -> tuple:
 #: The accepted cost is the mirror image: a task the agent genuinely cannot start is now re-claimed
 #: every firing, so the loop repeats one item instead of spinning on none. That is the more visible
 #: and more fixable of the two failures, which is why it was chosen.
-CLAIMABLE_LOOP_TASK_STATUSES: tuple = ("in_progress", "blocked", "assigned", "pending")
+#:
+#: `revision_needed` joined on 2026-08-20, and its absence was the same shape of omission as
+#: `assigned`'s: a reviewer who did everything right -- reviewed promptly and sent the work back --
+#: left the loop unable to act on the outcome, because the status was in neither this tuple nor
+#: `TERMINAL_FOR_BINDING`. `revision_needed -> in_progress` is `_BOTH` (`task_transitions.py`), so
+#: the loop's own agent is exactly who should resume it. Two other status sets already agreed it is
+#: live work -- `_ACTIVE_TASK_STATUSES` (`api/v1/agents.py`) and `_LIVE_TASK_STATUSES`
+#: (`checkpoints.py`) -- and only this one dissented, which is what marks it as an oversight rather
+#: than a policy. Resumed, not re-entered: like `assigned`, it is non-pending, so `_do_fire_job`
+#: leaves its status alone and the agent takes it back to `in_progress` itself.
+CLAIMABLE_LOOP_TASK_STATUSES: tuple = (
+    "in_progress",
+    "blocked",
+    "assigned",
+    "pending",
+    "revision_needed",
+)
 
 
 async def _claim_loop_task(session: AsyncSession, loop: Loop) -> Optional[Task]:
@@ -275,10 +291,17 @@ async def _loop_stall_reason(session: AsyncSession, loop: Loop) -> Optional[str]
 
     Only the middle case had an answer. The first presented identically to the third, so a loop
     whose tasks had all reached `completed` with nothing reviewing them spawned an agent on every
-    cron tick forever, claimed nothing, and never stopped -- `completed` and `under_review` are the
-    only two statuses in neither `CLAIMABLE_LOOP_TASK_STATUSES` nor `TERMINAL_FOR_BINDING`, so they
-    are invisible to the claim and counted as open by the stop condition at the same time.
-    Reproduced before it was fixed, in `test_loop_whose_tasks_are_all_completed_but_unapproved_spins`.
+    cron tick forever, claimed nothing, and never stopped -- a status in neither
+    `CLAIMABLE_LOOP_TASK_STATUSES` nor `TERMINAL_FOR_BINDING` is invisible to the claim and counted
+    as open by the stop condition at the same time. Reproduced before it was fixed, in
+    `test_loop_whose_tasks_are_all_completed_but_unapproved_spins`.
+
+    `completed` and `under_review` are what remain in that gap, and they belong there: both mean
+    "someone else's turn". An earlier version of this docstring called them "the only two", which
+    was wrong -- `revision_needed` was a third, and it did not belong, so it became claimable on
+    2026-08-20 rather than stalling here. `test_a_stalled_loop_queue_is_neither_claimable_nor_drained`
+    derives the gap from the transition map instead of restating it, so the next status added to the
+    machine cannot fall into it unnoticed.
 
     Skipping rather than stopping is deliberate: stalled is not finished. `_loop_stop_reason`'s
     branch sets `job.enabled = False` and calls `remove_job`, which for a queue waiting on a review

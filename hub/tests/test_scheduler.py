@@ -15,6 +15,8 @@ import pytest
 from sqlalchemy import select
 
 import hub.api.v1.agent_trigger as agent_trigger
+import hub.api.v1.agents as agents_api
+from hub import checkpoints
 from hub.checkpoint_generation import render_checkpoint
 from hub.db.engine import async_session_factory
 from hub.db.models import (
@@ -32,6 +34,7 @@ from hub.db.models import (
     Task,
 )
 from hub.run_task_binding import TERMINAL_FOR_BINDING
+from hub.task_transitions import TRANSITIONS
 from hub.scheduler import (
     _LOOP_BRIEFING_CHECKPOINT_CHARS,
     CLAIMABLE_LOOP_TASK_STATUSES,
@@ -705,18 +708,53 @@ async def test_loop_fire_resumes_an_assigned_task_rather_than_stranding_it(
         assert untouched.assignee is None
 
 
+def _statuses_in_neither_set() -> set:
+    """The gap between the claim and the stop condition, derived rather than restated.
+
+    A status in neither set is invisible to `_claim_loop_task` and counted as open by
+    `_loop_stop_reason` at the same time -- the §3 spin. Computed from the transition map so that
+    adding a status to the machine without placing it in one set or the other shows up here
+    instead of as a loop that fires forever. Hardcoding this list is how it was miscounted once:
+    `revision_needed` was in the gap and went unnoticed because the list said "completed,
+    under_review" and nobody re-derived it.
+    """
+    all_statuses = set(TRANSITIONS) | {to for moves in TRANSITIONS.values() for to in moves}
+    return all_statuses - set(CLAIMABLE_LOOP_TASK_STATUSES) - set(TERMINAL_FOR_BINDING)
+
+
+def test_only_the_awaiting_someone_else_statuses_sit_in_the_claim_stop_gap():
+    """The gap is legitimate for exactly the statuses that mean "someone else's turn".
+
+    `completed` and `under_review` belong there: the loop's agent genuinely cannot act, so
+    `_loop_stall_reason` names the wait rather than the claim swallowing it. Anything else in the
+    gap is a bug -- `revision_needed` was, until 2026-08-20, and it stalled a loop whose reviewer
+    had done everything right.
+    """
+    assert _statuses_in_neither_set() == {"completed", "under_review"}
+
+
+def test_revision_needed_is_claimable_so_a_returned_review_resumes():
+    """A reviewer who sends work back must not strand the loop.
+
+    `revision_needed -> in_progress` is `_BOTH`, so the loop's own agent is exactly who should
+    pick it up -- and two other status sets already treat it as live work.
+    """
+    assert "revision_needed" in CLAIMABLE_LOOP_TASK_STATUSES
+    assert TRANSITIONS["revision_needed"]["in_progress"]
+    assert "revision_needed" in agents_api._ACTIVE_TASK_STATUSES
+    assert "revision_needed" in checkpoints._LIVE_TASK_STATUSES
+
+
 @pytest.mark.asyncio
-@pytest.mark.parametrize("stalled_status", ["completed", "under_review"])
+@pytest.mark.parametrize("stalled_status", sorted(_statuses_in_neither_set()))
 async def test_a_stalled_loop_queue_is_neither_claimable_nor_drained(stalled_status):
-    """The two constants behind the §3 spin, stated directly and for both statuses it reaches.
+    """Every status in the gap, parametrized from the gap itself rather than from a literal.
 
     A task awaiting review is invisible to `_claim_loop_task` and simultaneously counted as open
-    by `_loop_stop_reason`. Every status is in exactly one of those two sets except these two,
-    which are in neither -- that gap is what `_loop_stall_reason` exists to name. Pinned for both
-    statuses so a fix cannot half-close it.
+    by `_loop_stop_reason` -- that combination is what `_loop_stall_reason` exists to name. Driven
+    off `_statuses_in_neither_set()` so a status that later falls into the gap is covered here the
+    moment it does, without anyone remembering to add it.
     """
-    assert stalled_status not in CLAIMABLE_LOOP_TASK_STATUSES
-    assert stalled_status not in TERMINAL_FOR_BINDING
 
     suffix = f"stalled-{stalled_status}"
     async with async_session_factory() as db:
