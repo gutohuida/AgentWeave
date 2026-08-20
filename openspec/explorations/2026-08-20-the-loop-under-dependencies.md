@@ -72,7 +72,8 @@ wrong on its own.
 
 ## 3. The spin — same shape, different clothes, and it looks live
 
-`TERMINAL_FOR_BINDING` is `("approved", "rejected")` (`scheduler.py:239`). So `completed` counts as
+`TERMINAL_FOR_BINDING` is `("approved", "rejected")` (`run_task_binding.py:272`, imported at
+`scheduler.py:25`). So `completed` counts as
 **open** for the stop condition (`scheduler.py:88-92`), while `completed` is **not** in
 `CLAIMABLE_LOOP_TASK_STATUSES`.
 
