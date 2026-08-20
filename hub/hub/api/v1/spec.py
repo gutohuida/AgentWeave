@@ -27,6 +27,7 @@ from ... import (
     requirement_coverage,
     requirement_evidence,
     requirement_links,
+    spec_adoption,
     spec_documents,
     spec_index,
     spec_lifecycle,
@@ -294,6 +295,20 @@ class ReindexRequest(BaseModel):
     """
 
     home: Optional[str] = Field(default=None, max_length=255)
+
+
+class DocumentAdopt(BaseModel):
+    """Tracking a document that is already on disk.
+
+    Carries a path and nothing else. Everything else about the document — its
+    title, its kind, the phase it is in — is read from the file, because a caller
+    able to state those could state them differently from what the file says, and
+    the whole point of adoption is that the file is what is being believed.
+    """
+
+    path: str = Field(max_length=255)
+
+    model_config = {"extra": "forbid"}
 
 
 async def _requirement(session: AsyncSession, project_id: str, identifier: str, document: str):
@@ -1154,6 +1169,62 @@ async def create_document(
     await session.commit()
     await sse_manager.broadcast(project_id, "spec_updated", {"path": path, "phase": document.phase})
     return {**_document_view(document), "blocking": result.blocking}
+
+
+#: What adoption refuses for, mapped to the status each refusal deserves. A path
+#: the caller malformed is theirs to fix (400); a file that is missing or says
+#: nothing usable about itself is a state of the world (422); a document already
+#: tracked is a conflict with a record that exists (409).
+_ADOPTION_REFUSAL_STATUS = {
+    "unsafe_document_path": status.HTTP_400_BAD_REQUEST,
+    "document_exists": status.HTTP_409_CONFLICT,
+    "file_missing": status.HTTP_422_UNPROCESSABLE_ENTITY,
+    "file_unreadable": status.HTTP_422_UNPROCESSABLE_ENTITY,
+    "payload_absent": status.HTTP_422_UNPROCESSABLE_ENTITY,
+    "payload_unreadable": status.HTTP_422_UNPROCESSABLE_ENTITY,
+    "payload_identity_missing": status.HTTP_422_UNPROCESSABLE_ENTITY,
+}
+
+
+@router.post("/documents/adopt", status_code=status.HTTP_201_CREATED)
+async def adopt_document(
+    body: DocumentAdopt,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Track a document that already exists on disk, without writing to it.
+
+    The operator's, like every route in this file — `get_project` resolves an
+    operator credential and nothing else, so a run-scoped token cannot reach it.
+    Adoption states what a project's corpus *is*, and a document is not something
+    a run should be able to bring into existence by writing a file next to itself.
+
+    Distinct from `POST /documents` rather than a flag on it, and deliberately:
+    creation renders a starter file over the path it is given, so pointing it at
+    an existing document destroys that document. Two routes whose names differ
+    cannot be confused by a missing parameter (design D1).
+    """
+    project_id, _ = project
+    workspace = await _workspace(session, project_id)
+
+    outcome = await spec_adoption.adopt(
+        session, workspace, project_id, body.path, actor=_operator()
+    )
+    if isinstance(outcome, spec_adoption.AdoptionRefusal):
+        raise HTTPException(
+            status_code=_ADOPTION_REFUSAL_STATUS.get(
+                outcome.code, status.HTTP_422_UNPROCESSABLE_ENTITY
+            ),
+            detail={"message": outcome.message, **outcome.to_dict()},
+        )
+
+    await session.commit()
+    await sse_manager.broadcast(
+        project_id,
+        "spec_updated",
+        {"path": outcome.document.path, "phase": outcome.document.phase},
+    )
+    return {**_document_view(outcome.document), **outcome.to_dict()}
 
 
 @router.post("/documents/close-exploration")

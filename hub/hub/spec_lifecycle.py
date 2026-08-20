@@ -126,6 +126,7 @@ async def create_document(
     actor: Actor,
     title: str = "",
     kind: str = "change-spec",
+    phase: Optional[str] = None,
 ) -> SpecDocument:
     """A new document, in `exploring` — or in `current`, if it is a capability document.
 
@@ -137,7 +138,20 @@ async def create_document(
     current, shipped behaviour and is written directly by the operator (`spec_service.py`), either
     by merging an approved change into it or by writing its content outright. It is created at
     `current` and this is the only place a document's phase is ever set there.
+
+    `phase`, when given, is the phase a document already has — read from a file being adopted
+    (`spec_adoption`), where the file is the only account of a lifecycle this machine never
+    walked. Every ordinary creation omits it and is unaffected.
+
+    **This is not a way to promote a document.** It is reachable only where no row exists, which
+    is the one moment there is nothing to promote: the alternative for an adopted `approved`
+    document is `transition()`, and that would require walking it through `proposed` and calling
+    `approve` — inventing a history that did not happen in order to record one that did. A row
+    that already exists is refused above, before this argument is reached.
     """
+    if phase is not None and phase not in (EXPLORING, PROPOSED, APPROVED, ARCHIVED, CURRENT):
+        raise PhaseError(f"unknown phase {phase!r}", code="unknown_phase")
+
     existing = await get_document(session, project_id, path)
     if existing is not None:
         raise PhaseError(f"a document already exists at {path}", code="document_exists")
@@ -148,7 +162,7 @@ async def create_document(
         path=path,
         title=title,
         kind=kind,
-        phase=CURRENT if kind == "capability" else EXPLORING,
+        phase=phase or (CURRENT if kind == "capability" else EXPLORING),
     )
     session.add(document)
     await session.flush()

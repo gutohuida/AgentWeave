@@ -7,18 +7,18 @@
 
 ## 2. Adopting one document
 
-- [ ] 2.1 Add the single-document adoption route. Resolve the path through `ProjectWorkspace`, refuse anything escaping the `spec/` tree before reading the file.
-- [ ] 2.2 Refuse with a stated reason when the path already has a row; do not create, do not modify.
-- [ ] 2.3 On success, call `spec_lifecycle.create_document` with the identity from task 1, then `spec_index.reindex_from_file` to index its requirements. Neither writes to disk.
-- [ ] 2.4 Set `content_digest` from the file as found (design D6), so later drift detection has a baseline.
-- [ ] 2.5 Add request/response schemas: the adopted document's id, path, title, kind, phase, whether the phase was read or defaulted, and the requirement-index result.
-- [ ] 2.6 Register the route and confirm it is operator-authenticated, not run-credential authenticated.
+- [x] 2.1 Add the single-document adoption route. Resolve the path through `ProjectWorkspace`, refuse anything escaping the `spec/` tree before reading the file.
+- [x] 2.2 Refuse with a stated reason when the path already has a row; do not create, do not modify.
+- [x] 2.3 On success, call `spec_lifecycle.create_document` with the identity from task 1, then `spec_index.reindex_from_file` to index its requirements. Neither writes to disk.
+- [x] 2.4 Set `content_digest` from the file as found (design D6), so later drift detection has a baseline.
+- [x] 2.5 Add request/response schemas: the adopted document's id, path, title, kind, phase, whether the phase was read or defaulted, and the requirement-index result.
+- [x] 2.6 Register the route and confirm it is operator-authenticated, not run-credential authenticated.
 
 ## 3. Reporting disagreement without resolving it
 
-- [ ] 3.1 When adoption is refused because a row exists, compare the file's title, kind and phase against the row's and report each differing field with both values.
-- [ ] 3.2 Report an empty difference list when file and row agree, rather than omitting the field — an absent list and an empty one must not be ambiguous to a reader.
-- [ ] 3.3 Assert in a test that neither the row nor the file changes when a disagreement is reported.
+- [x] 3.1 When adoption is refused because a row exists, compare the file's title, kind and phase against the row's and report each differing field with both values.
+- [x] 3.2 Report an empty difference list when file and row agree, rather than omitting the field — an absent list and an empty one must not be ambiguous to a reader.
+- [x] 3.3 Assert in a test that neither the row nor the file changes when a disagreement is reported.
 
 ## 4. Adopting a corpus
 

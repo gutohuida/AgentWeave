@@ -30,7 +30,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
-from . import spec_documents, spec_lifecycle
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from . import spec_documents, spec_index, spec_lifecycle
 from .db.models import SpecDocument
 from .project_workspace import ProjectPathError, ProjectWorkspace
 from .spec_manifest import SpecPathError, parse_html_head, validate_spec_path
@@ -231,6 +233,100 @@ def identity_from_content(path: str, content: str) -> Adoptable:
         unrecognised_phase=status or None,
         content=content,
     )
+
+
+@dataclass(frozen=True)
+class AdoptionResult:
+    """A document that is now tracked, and what indexing its requirements found."""
+
+    document: SpecDocument
+    identity: AdoptableIdentity
+    #: `None` when the file carried no requirements to index — which
+    #: `reindex_from_file` reports by declining rather than by retiring what it
+    #: could not read.
+    index: Optional[spec_index.IndexResult] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.document.id,
+            **self.identity.to_dict(),
+            "requirements": (
+                None
+                if self.index is None
+                else {
+                    "created": self.index.created,
+                    "reworded": self.index.reworded,
+                    "retired": self.index.retired,
+                    "restored": self.index.restored,
+                    "unchanged": self.index.unchanged,
+                }
+            ),
+        }
+
+
+async def adopt(
+    session: AsyncSession,
+    workspace: ProjectWorkspace,
+    project_id: str,
+    path: str,
+    *,
+    actor: spec_lifecycle.Actor,
+) -> AdoptionResult | AdoptionRefusal:
+    """Mint a row for a file that already exists, or say why it cannot be minted.
+
+    Composes primitives that are each already read-only on disk, rather than
+    interpreting the file a second way: `read_identity` reads it,
+    `create_document` mints the row and takes no workspace, `reindex_from_file`
+    indexes requirements into rows. There is no writer in this call tree.
+
+    Does not commit. The caller owns the transaction, as every other service
+    function here does.
+    """
+    identity = read_identity(workspace, path)
+    if isinstance(identity, AdoptionRefusal):
+        return identity
+
+    existing = await spec_lifecycle.get_document(session, project_id, identity.path)
+    if existing is not None:
+        # Refused rather than updated, and the disagreement is reported so the
+        # operator has the diagnostic without the Hub taking the decision that
+        # diagnostic would inform (design D4).
+        return AdoptionRefusal(
+            path=identity.path,
+            code="document_exists",
+            message=(
+                f"{identity.path} is already tracked; adoption does not update an existing "
+                "record from its file"
+            ),
+            differences=compare(identity, existing),
+        )
+
+    document = await spec_lifecycle.create_document(
+        session,
+        project_id,
+        identity.path,
+        actor=actor,
+        title=identity.title,
+        kind=identity.kind,
+        phase=identity.phase,
+    )
+
+    # The file exactly as adoption found it (design D6). Digested from the bytes
+    # already read rather than from a second read, so the baseline records what
+    # was actually adopted and cannot straddle an edit landing in between. Without
+    # it the first outside edit after adoption would be undetectable.
+    document.content_digest = spec_lifecycle.digest(identity.content)
+
+    index = await spec_index.reindex_from_file(session, workspace, document, actor=actor)
+
+    await spec_lifecycle.record_event(
+        session,
+        document,
+        kind="adopted",
+        actor=actor,
+        detail=identity.to_dict(),
+    )
+    return AdoptionResult(document=document, identity=identity, index=index)
 
 
 def compare(identity: AdoptableIdentity, row: SpecDocument) -> Tuple[FieldDifference, ...]:
