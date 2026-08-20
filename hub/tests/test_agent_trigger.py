@@ -262,6 +262,35 @@ async def test_successful_trigger_returns_run_id_and_spawns(app, auth_headers, b
 
 
 @pytest.mark.asyncio
+async def test_trigger_refuses_an_archived_agent(app, auth_headers, bind_runner):
+    """D15 (autonomous run P5, 2026-08-20): nothing between a trigger and a spawned `Run` used
+    to consult `Agent.lifecycle`, so an archived agent — reachable directly by name even though
+    it is no longer offered anywhere — could still be spawned and its `Run` would still carry
+    loop/job creator authority in its name's stead. `agent-configuration`'s spec states "nothing
+    runs an archived agent" as an existing fact; this is what makes it one.
+    """
+    reg = await app.post(
+        "/api/v1/projects/proj-test/agents/register",
+        json={"name": "retired", "contact_mode": "poll"},
+        headers=auth_headers,
+    )
+    assert reg.status_code == 200
+    await bind_runner("retired", cli="claude")
+    archived = await app.post(
+        "/api/v1/projects/proj-test/agents/retired/archive", headers=auth_headers
+    )
+    assert archived.status_code == 200
+
+    resp = await app.post(
+        "/api/v1/projects/proj-test/agent/trigger",
+        json={"agent": "retired", "message": "hi", "session_mode": "new"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 409
+    assert "archived" in resp.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
 async def test_trigger_command_uses_bound_runner_model_and_flags(app, auth_headers):
     sync = await app.post(
         "/api/v1/projects/proj-test/session/sync",

@@ -304,6 +304,19 @@ async def trigger_agent_directly(
             f"/api/v1/projects/{project_id}/agents/{agent} "
             "(runner_id) or the Hub UI before triggering.",
         )
+    if agent_row.lifecycle == "archived":
+        # `agent-configuration`'s spec states "nothing runs an archived agent" as the reason a
+        # blocked send need not open a new conversation as a workaround — that sentence is only
+        # true if this is enforced here, the one choke point both a manual trigger and a queued
+        # delivery (`turn_scheduler.py`) go through. Without it, an archived agent that was
+        # queued or triggered directly before archiving (or by a caller that names it explicitly)
+        # would still spawn a real run and inherit whatever authority its name carries — the
+        # D15 gap `2026-08-19-a-loop-writes-its-own-queue`'s A5.3 documented as surviving the
+        # literal name-reuse scenario a unique index already blocks.
+        raise TriggerAgentError(
+            status.HTTP_409_CONFLICT,
+            f"{agent} is archived and cannot be triggered. Unarchive it first.",
+        )
     runner_row = await session.get(Runner, agent_row.runner_id)
     if runner_row is None:
         raise TriggerAgentError(
@@ -707,6 +720,17 @@ async def trigger_agent(
     if body.session_mode == "resume" and not body.session_id:
         raise HTTPException(
             status_code=400, detail="session_id is required when session_mode='resume'"
+        )
+
+    # Mirrors the same guard in `trigger_agent_directly` — see its comment for why this is the
+    # one invariant that makes "nothing runs an archived agent" true rather than aspirational.
+    archived_check = await session.execute(
+        select(Agent.lifecycle).where(Agent.project_id == project_id, Agent.name == body.agent)
+    )
+    if archived_check.scalars().first() == "archived":
+        raise HTTPException(
+            status_code=409,
+            detail=f"{body.agent} is archived and cannot be triggered. Unarchive it first.",
         )
 
     try:

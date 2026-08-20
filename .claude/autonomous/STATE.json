@@ -8,7 +8,7 @@
   "stop_at": "2026-08-20T08:00:00+01:00",
   "stop_when_queue_empties": false,
   "run": 1,
-  "iteration": 4,
+  "iteration": 5,
   "session_stopped": false,
   "prepared_by": "Interactive session 2026-08-19T22:55-23:25+01:00, via /autonomous-prep. Both headline defects were reproduced or traced to a named line before being queued — item 1 by reading the render path end to end, item 2 by exercising the live API against two databases. Runway verified rather than assumed: playwright present, `pytest tests/test_project_lifecycle.py tests/test_project_persistence.py` 17 passed, vitest 1152 passed, tsc clean, working tree clean.",
   "operator_intent_verbatim": "Open any agentweave project with any agentweave app. Also: 'I think I clicked to create an agent in one project but it was actually creating into another project. Something weird there.'",
@@ -94,11 +94,12 @@
     {
       "id": "P5",
       "title": "Close the D15 name-reuse hole",
-      "status": "pending",
+      "status": "done",
       "evidence": "A new agent taking an archived agent's name inherits the archived agent's creator privilege. Task A5.3 recorded this deliberately rather than fixing it.",
       "operator_decision": "Strip the inherited privilege on reuse. Chosen over blocking reuse of archived names, because archiving and recreating under the same name is a thing the operator actually does and a permanent name reservation would be worse than the hole.",
       "do": "A new agent taking a previously-archived name starts with no creator privilege over the old agent's artifacts. Names stay reusable.",
-      "verify": "A test that creates an agent, gives it a creator-privileged artifact, archives it, recreates the same name, and asserts the new agent cannot reach the old artifact."
+      "verify": "A test that creates an agent, gives it a creator-privileged artifact, archives it, recreates the same name, and asserts the new agent cannot reach the old artifact.",
+      "outcome": "The literal scenario (archive + recreate the same name) does not reproduce today — reconfirmed independently, not just trusted from A5.3's 2026-08-19 note: `ix_agents_project_name` is an unconditional unique index on (project_id, name), and nothing renames an existing agent to free a name. The real, still-open gap A5.3 documented one layer down is what got closed: `_authorize_loop_task_creation` (hub/hub/api/v1/tasks.py) compared actor.agent to AIJob.agent as bare strings, never consulting the agents table, so a Run minted under an archived name kept that name's loop-creator authority. Fixed in two parts: (1) hub/hub/api/v1/agent_trigger.py's trigger_agent_directly (used by turn_scheduler and scheduler._do_fire_job) and the POST /agent/trigger route both now refuse with 409 if Agent.lifecycle == 'archived', closing 'nothing runs an archived agent' everywhere at once, not just the loop-authority angle; (2) _authorize_loop_task_creation now looks up the Agent row behind job.agent and refuses if it exists and reads archived — deliberately NOT refused when no Agent row exists at all, since that shape is the existing contract every _active_run-style test fixture in this codebase relies on (first version without that carve-out broke 4 unrelated tests, caught by insisting on the full suite rather than trusting the targeted files). The pre-existing D15 test in hub/tests/test_tasks.py was flipped per its own docstring's instruction, renamed to test_d15_an_archived_creators_run_no_longer_controls_its_loop, now asserting 403 — its old fixture had a latent bug (set archived_at but never lifecycle, so it was never actually archived by the model's own definition), fixed in the rewrite. New test_trigger_refuses_an_archived_agent added to test_agent_trigger.py. Both fixes mutation-checked (revert -> exact test fails by name -> restore). Full suite `pytest tests/ -n 4`: 2472 passed / 75 skipped / 1 xpassed (2471 before, +1 net — the D15 test was rewritten in place, not added). ruff, black clean; mypy zero errors attributable to either touched file. hub/hub/api/v1/jobs.py's _require_agent_job_allowance, the other function A5.3 named, was deliberately left untouched — it gates the CURRENT caller's own live run against a project-wide allowance, not a stored creator identity, so its exposure to an archived name closes as a side effect of fix (1) rather than needing its own change. No UI touched, no bundle rebuild. Not verified live in a browser, but this iteration is backend-only so the no-Hub-restart limit that blocked P1-P4's live checks doesn't apply — there is no UI surface to check."
     },
     {
       "id": "P6",
@@ -111,8 +112,8 @@
       "note": "The pinning is the same disease as P2 — identity that should travel, hard-coded to one place. Worth saying so in the commit message."
     }
   ],
-  "current": "P5",
-  "next_action": "Start P5 - close the D15 name-reuse hole. A new agent taking a previously-archived agent's name currently inherits the archived agent's creator privilege; find where creator privilege over an artifact is granted/checked (task A5.3's area - search for 'creator' privilege checks in hub/hub, likely agent_actions.py or tasks/evidence ownership logic) and confirm the mechanism before changing it. Operator decision already recorded in the P5 queue item: strip the inherited privilege on reuse (do NOT block name reuse - archiving and recreating under the same name is something the operator actually does). Verify with a test that creates an agent, gives it a creator-privileged artifact, archives it, recreates the same name, and asserts the new agent cannot reach the old artifact - mutation-check it (temporarily revert the fix, confirm the new test fails by name, restore). Run the specific touched hub/tests file(s) directly; the full suite now runs in one shot via `pytest hub/tests/ -n 4` in ~174s (proven this iteration, no need to chunk) if a full-suite check is wanted. Only rebuild/refresh the UI bundle if hub/ui/src non-test files changed.",
+  "current": "P6",
+  "next_action": "Start P6 - unpin the browser suite from one machine's project id. hub/tests/browser/conftest.py:54 hard-codes DEFAULT_PROJECT_ID = 'proj-5e960453'. Operator decision already recorded in the P6 queue item: make it configurable via an env var, defaulting to the current value so nothing breaks; keep the FORBIDDEN_PROJECT_IDS guard at conftest.py:52 intact (proj-ff695d96 must stay untouchable). Do NOT run the suite against a live Hub tonight - seeding fixtures into the operator's live trial Hub is out of scope and forbidden by the standing limits. Verify with `pytest tests/browser --collect-only` (proves it still imports and skips cleanly without AW_HUB_URL) - do not run it live. After P6, the queue is empty; check stop_when_queue_empties and decide whether to idle-checkpoint or find/propose further work, recording the decision either way. Only rebuild/refresh the UI bundle if hub/ui/src non-test files changed. Run the specific touched hub/tests file(s) directly; the full suite runs in one shot via `pytest hub/tests/ -n 4` in ~150-175s if a full-suite check is wanted.",
   "decisions_for_user": [
     {
       "id": "D-env",
@@ -154,7 +155,7 @@
     "openspec_changes_in_flight": "none — `ls openspec/changes/ | grep -v archive` is empty",
     "not_run_at_prep": "Full hub/tests/ suite and eslint were NOT run tonight. The loop should establish its own baseline early so it can tell inherited breakage from its own."
   },
-  "last_heartbeat": "2026-08-19T23:59:36+01:00",
+  "last_heartbeat": "2026-08-20T01:04:42+01:00",
   "log_file": ".claude/autonomous/2026-08-19-project-portability-log.md",
   "driver": "Windows Scheduled Task 'AgentWeaveAutonomousSession' -> .claude/skills/autonomous-session/scripts/run-iteration.ps1 -> headless `claude -p`. Each firing is a fresh process; all continuity is STATE.json + the log. Session-bound drivers (ScheduleWakeup, CronCreate) are NOT used - the 2026-08-15 run asked for nine hours and got forty minutes because the session went away.",
   "heartbeat_note": "Deliberately stale. The process that ran iteration 4 has finished and released the branch, so the next scheduled firing takes over instead of standing down against a heartbeat nobody is refreshing.",

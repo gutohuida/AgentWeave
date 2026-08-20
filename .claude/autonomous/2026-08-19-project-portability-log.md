@@ -320,3 +320,92 @@ already recorded in STATE.json: strip the inherited privilege on reuse, keep nam
 reusable. `verify`: a test that creates an agent, gives it a creator-privileged artifact,
 archives it, recreates the same name, and asserts the new agent cannot reach the old
 artifact.
+
+## Iteration 5 — P5, closing the D15 authority hole (2026-08-20T01:03+01:00)
+
+**The literal scenario in the queue item does not reproduce, confirmed rather than assumed.**
+"Create an agent, archive it, recreate the same name" cannot happen through the API today:
+`ix_agents_project_name` (`hub/hub/db/models.py:294`) is an unconditional unique index on
+`(project_id, name)` with no exemption for archived rows, and nothing lets an existing agent be
+renamed to free its name either. `hub/tests/test_tasks.py`'s pre-existing D15 test already
+recorded this exact finding on 2026-08-19 (`2026-08-18-a-loop-writes-its-own-queue`'s A5.3) —
+independently re-verified this iteration by reading the index definition and the agent-mutation
+routes in `hub/hub/api/v1/agents.py`, not by trusting the earlier note. Per the pre-authorised
+guidance for a queue item that turns out to be blocked or wrong, this is recorded rather than
+worked around: the *real*, still-open gap A5.3 documented — one layer down from the roster — is
+what this iteration closes instead.
+
+**The real gap.** `_authorize_loop_task_creation` (`hub/hub/api/v1/tasks.py`) decides who may add
+a task to a loop's queue by comparing `actor.agent` to `AIJob.agent` as bare strings — and
+`actor.agent` is itself just `Run.agent` (`agent_auth.py::get_agent_actor`), never looked up
+against the `agents` table. Whoever a *name* belongs to now, not whoever currently holds it as a
+live, open `Agent` row, controlled the loop. `hub/hub/api/v1/agent_trigger.py`'s two independent
+spawn paths (`trigger_agent_directly`, used by queued/scheduled delivery via `turn_scheduler.py`
+and `scheduler.py::_do_fire_job`; and the `POST /agent/trigger` route, which duplicates its own
+checks rather than calling the other — an existing pattern in this file, not one introduced here)
+never checked `Agent.lifecycle` either, so an archived agent could still be triggered directly by
+name and mint a new "running" `Run` — silently violating `agent-configuration`'s spec text
+("nothing runs an archived agent") along the way, not just the loop-authority question.
+
+**The fix, two parts.**
+1. `trigger_agent_directly` and `trigger_agent` (`agent_trigger.py`) both now refuse with 409 if
+   the named agent's `Agent.lifecycle == "archived"`, checked immediately alongside the existing
+   "has no runner bound" guard. This is the one choke point both spawn paths share with
+   scheduled/queued delivery, so it closes "an archived agent runs at all" everywhere at once —
+   confirmed by tracing `turn_scheduler.schedule_agent` and `scheduler.py::_do_fire_job` back to
+   `trigger_agent_directly`, not assumed from the file's docstring claiming it.
+2. `_authorize_loop_task_creation` (`tasks.py`) now additionally looks up the `Agent` row behind
+   `job.agent` after the existing name match, and refuses the same way if that row exists and
+   reads `lifecycle == "archived"`. Deliberately **not** refused when no `Agent` row exists at
+   all under that name — that shape (a `Run` with an identity string but no persisted roster
+   entry) is the existing, legitimate contract every `_active_run`-style test fixture in this
+   codebase already relies on, confirmed by re-running the full suite after the first version of
+   this check (which refused on `creator_row is None` too) and finding it broke four unrelated,
+   correct tests in `test_agent_actions_coordination.py` and `test_agent_actions_governed.py` —
+   caught by the full-suite run this iteration insisted on, not by the targeted files alone.
+   Loosened to "refuse only on a positively-archived row" and re-ran; all four passed again with
+   no other regressions.
+
+**The pre-existing D15 test, flipped rather than left recording the gap.** Its own docstring said
+"if this assertion ever starts failing with a 403, the gap has been closed; update this test... to
+say so rather than treating the failure as a regression" — done:
+`test_d15_a_run_claiming_an_archived_agents_name_inherits_its_loop_authority` is now
+`test_d15_an_archived_creators_run_no_longer_controls_its_loop`, asserting 403 and that no task
+was created, with the docstring rewritten to describe what closed it. One bug caught while doing
+this: the original fixture set `Agent.archived_at` but never `Agent.lifecycle`, so it was not
+actually archived by the model's own definition (`agent_lifecycle.archive()` sets both together,
+always) — the rewritten fixture sets `lifecycle = "archived"` too, matching real archival.
+
+**Mutation-checked, both fixes.** `_authorize_loop_task_creation`'s new lookup-and-refuse block
+was removed; the D15 test failed exactly as expected (`201 == 403`); restored, D15 test green
+again. The `trigger_agent` route's archived check was replaced with a no-op `pass`; the new
+`test_trigger_refuses_an_archived_agent` failed exactly as expected (`200 == 409`); restored,
+green again.
+
+**Measured.** Targeted run first (`test_tasks.py`, `test_agent_trigger.py`,
+`test_agent_archival.py`, `test_jobs.py`, `test_jobs_crud.py`, `test_scheduler.py`) — 142 passed.
+Full suite, `-n 4`, one command (per P4's established baseline) — **2472 passed, 75 skipped, 1
+xpassed** in 150s (2471 before this iteration; +1 net, matching the one genuinely new test — the
+D15 test was rewritten in place, not added). `ruff check` on the four touched files clean.
+`black --check` clean. `mypy hub/hub/api/v1/tasks.py hub/hub/api/v1/agent_trigger.py` — zero
+errors attributable to either file (the 296 reported are pre-existing, in the same shape P4 already
+documented as baseline noise elsewhere in the import graph). No UI files touched, so no bundle
+rebuild.
+
+**What a reviewer should distrust.** `_require_agent_job_allowance` (`hub/hub/api/v1/jobs.py`),
+the other function A5.3 named alongside `_authorize_loop_task_creation`, was deliberately left
+untouched after reading it closely: unlike the loop-creator check, it does not compare against any
+stored "creator" field — it gates whether the *current* caller's own run is live and the project
+allows agent-originated job mutations at all, and it already requires `Run.status == "running"`.
+Its exposure to an archived identity is closed as a side effect of fix #1 above (no new running
+Run can be minted for an archived name), not because it was independently changed — worth
+rechecking if a future change gives it its own creator-comparison logic. Not verified live in a
+browser — this iteration is backend-only, so the no-Hub-restart limit that blocked P1-P4's live
+verification does not apply here in the first place; there is no UI surface to check.
+
+**Next.** `current` set to `P6` — unpin `hub/tests/browser/conftest.py`'s hard-coded
+`DEFAULT_PROJECT_ID = 'proj-5e960453'` so the browser suite is not tied to this one machine's
+trial Hub. Operator decision already recorded: make it an env var defaulting to the current value,
+keep the `FORBIDDEN_PROJECT_IDS` guard at line 52 intact, and do **not** run the suite against a
+live Hub tonight — `pytest tests/browser --collect-only` is enough to prove it still imports and
+skips cleanly.
