@@ -35,9 +35,9 @@
 
 ## 5. Verification against this repository
 
-- [ ] 5.1 Run the full `hub/tests/` suite and confirm no regression against the pre-change baseline
+- [x] 5.1 Run the full `hub/tests/` suite and confirm no regression against the pre-change baseline
 - [x] 5.2 Run `py -3.11 -m ruff check` and `py -3.11 -m black --check` on every changed Python file
 - [x] 5.3 Against a Hub serving this repo, rebuild the index for `spec/` and confirm all three real documents — two `capability`/`current`, one `change-spec`/`archived` — report `filed` with zero `intrinsic_metadata_conflict` diagnostics
 - [x] 5.4 Confirm the written `spec/index.json` parses via the CLI twin as well as the Hub's, proving the round trip crosses the module boundary
 - [x] 5.5 Perform one mutation check: revert a single validation rule, watch a named test fail, restore it
-- [ ] 5.6 Record in `openspec/explorations/2026-08-20-dogfooding-findings.md` any friction this change surfaced that is not already an entry
+- [x] 5.6 Record in `openspec/explorations/2026-08-20-dogfooding-findings.md` any friction this change surfaced that is not already an entry
