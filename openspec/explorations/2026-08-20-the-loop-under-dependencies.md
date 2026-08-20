@@ -102,8 +102,21 @@ spawned a `JobRun` that reached `completed` doing nothing. The job stayed `enabl
 constants directly. Every other task status is in exactly one of `CLAIMABLE_LOOP_TASK_STATUSES` or
 `TERMINAL_FOR_BINDING`; these two are in neither, and that gap **is** the bug.
 
-So this is a live bug worth fixing on its own terms. **What the fix should be is not obvious** —
-see §11's first two open questions, which it turns out are the same question.
+**FIXED 2026-08-20**, the same day, by the operator's choice among three candidates: *skip the
+firing, keep polling.* `_loop_stall_reason` names the state the firing could not previously see —
+open work, none of it claimable — and a firing that claims nothing while open tasks remain records
+a `skipped` `JobRun` carrying the breakdown of what is being waited on, spawning nothing.
+
+**Skipped, not stopped, and deliberately.** `_loop_stop_reason`'s branch sets `job.enabled = False`
+and calls `remove_job`; for a queue waiting on a review that simply has not happened yet, that would
+kill the loop permanently and approving the task afterwards would not bring it back. A skipped
+firing costs nothing and recovers on the next tick — asserted at the end of the reproduction test,
+which now expects `[False, False, False]`, three skipped runs, and zero `Run` rows for the loop
+agent.
+
+What this does **not** decide is what the loop should do when the wait is permanent rather than
+temporary. It still cannot tell the two apart, and which one it is depends on §7's fork. That is now
+the whole of the remaining question.
 
 ## 4. Why a solo loop cannot execute a chain at all
 
@@ -286,7 +299,7 @@ uniqueness constraint and the §6 decision. Not needed for correctness — only 
 
 | # | Change | Depends on | Why |
 |---|---|---|---|
-| **L0** | **Verify the §3 spin**, and fix it if live | nothing | A loop that fires forever claiming nothing is a bug today, independent of everything here. |
+| ~~**L0**~~ | ~~Verify the §3 spin, and fix it if live~~ | — | **DONE 2026-08-20.** Reproduced, then fixed by skipping a stalled firing rather than spawning into it (§3). `_loop_stall_reason`, `scheduler.py`. |
 | **L1** | **Charter summary in the Team section** | nothing | One line per peer saying what it is for. Cheapest possible fix for 6.1, and useful with or without loops. |
 | **L2** | **`list_agents` MCP tool** — roster, charter, current availability | nothing | 6.2 and 6.3. Must be a tool, not context (§6.2). |
 | **L3** | **Dependency-aware claim** — skip unstartable tasks; distinguish the three stalled states | `task-dependencies` | Without it, dependencies deadlock every loop (§2). **This is not optional.** |
@@ -314,7 +327,10 @@ at a document that declares an order.
   or is the review tier derived from the implementation tier? **It also strengthens the case for
   tiers generally** — a second, independent use of the same vocabulary.
 - **What happens to the loop's `stop_when_queue_empties` when the queue is stalled rather than
-  empty?** A loop waiting on a review that will never come should end, and today it cannot tell.
+  empty?** *Half-answered 2026-08-20:* it no longer burns a turn per tick — a stalled firing is
+  skipped (§3). But the loop still cannot tell a review that is coming from one that never will, so
+  a loop waiting on the latter polls quietly forever instead of ending. Cheap, but not right. The
+  distinguishing signal is §7's, which is why this stays open.
 - **Does the agent hand off to a *tester*, or to whoever the task names?** The operator said both —
   *"any tester available"* and *"bind a tester to a task"*. They compose (the binding wins, otherwise
   pick one), but the precedence should be stated rather than assumed.
