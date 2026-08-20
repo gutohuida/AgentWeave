@@ -7,16 +7,16 @@ catch the shell not actually offering "Files" from the plus menu, a real click-t
 real tree row failing to reach `openTab`, or the measured minimum width (task 5.5) being wrong
 against real font metrics rather than jsdom's.
 
-Fixture project and reasoning for using it (not `proj-5e960453`) match `test_panel_shell.py`:
-`proj-b44fac0c` ("Throwaway (taste pass)") is the operator's disposable project, already
-carrying a real agent (`q2verify`), conversation, and specification document, read from but
-never mutated here. Its own working directory (`testbed/throwaway-taste-project`) is entirely
-`testbed/.gitignore`d, so `GET /workspace/paths` legitimately returns empty for it — real
-enough to prove the "no files" and read-refusal (404) paths live, but not enough to click
-through a real tree row. Tests that need one route `GET /workspace/paths` and
-`GET /workspace/file` to fixed responses instead of hand-editing this project's working
-directory — real component, real store, real network call, fabricated response, the same
-tradeoff `page.route` mocking always is.
+Fixture project and reasoning for using it (not the default `project_id`) match
+`test_panel_shell.py`: `spec_project_id` (`proj-b44fac0c`, "Throwaway (taste pass)", overridable
+with `AW_HUB_SPEC_PROJECT_ID`) is the operator's disposable project, already carrying a real
+agent (`q2verify`), conversation, and specification document, read from but never mutated here.
+Its own working directory (`testbed/throwaway-taste-project`) is entirely `testbed/.gitignore`d,
+so `GET /workspace/paths` legitimately returns empty for it — real enough to prove the "no
+files" and read-refusal (404) paths live, but not enough to click through a real tree row. Tests
+that need one route `GET /workspace/paths` and `GET /workspace/file` to fixed responses instead
+of hand-editing this project's working directory — real component, real store, real network
+call, fabricated response, the same tradeoff `page.route` mocking always is.
 """
 
 from __future__ import annotations
@@ -27,7 +27,6 @@ from urllib.parse import quote
 import pytest
 from playwright.sync_api import Page, expect
 
-PROJECT_ID = "proj-b44fac0c"
 AGENT = "q2verify"
 CONVERSATION_ID = "conv-b77949d3"
 DOCUMENT_PATH = "spec/changes/teal-roc/spec.html"
@@ -43,13 +42,10 @@ FILE_TAB_MIN_WIDTH = 260
 PANEL_SHELL = '[data-testid="panel-shell"]'
 DOCUMENT_PANE = '[data-testid="document-pane"]'
 
-PATHS_ROUTE = re.compile(rf".*/api/v1/projects/{PROJECT_ID}/workspace/paths.*")
-FILE_ROUTE = re.compile(rf".*/api/v1/projects/{PROJECT_ID}/workspace/file.*")
 
-
-def _open(page: Page, hub_url: str) -> Page:
+def _open(page: Page, hub_url: str, project_id: str) -> Page:
     query = (
-        f"project={PROJECT_ID}&agent={AGENT}&conversation={CONVERSATION_ID}"
+        f"project={project_id}&agent={AGENT}&conversation={CONVERSATION_ID}"
         f"&document={quote(DOCUMENT_PATH, safe='')}"
     )
     page.goto(f"{hub_url}/?{query}", wait_until="load")
@@ -57,14 +53,16 @@ def _open(page: Page, hub_url: str) -> Page:
     return page
 
 
-def _route_fixture_paths(page: Page) -> None:
-    page.route(PATHS_ROUTE, lambda route: route.fulfill(json=[FIXTURE_FILE_PATH]))
+def _route_fixture_paths(page: Page, project_id: str) -> None:
+    route = re.compile(rf".*/api/v1/projects/{project_id}/workspace/paths.*")
+    page.route(route, lambda r: r.fulfill(json=[FIXTURE_FILE_PATH]))
 
 
-def _route_fixture_file_content(page: Page) -> None:
+def _route_fixture_file_content(page: Page, project_id: str) -> None:
+    route = re.compile(rf".*/api/v1/projects/{project_id}/workspace/file.*")
     page.route(
-        FILE_ROUTE,
-        lambda route: route.fulfill(
+        route,
+        lambda r: r.fulfill(
             json={
                 "path": FIXTURE_FILE_PATH,
                 "binary": False,
@@ -75,10 +73,12 @@ def _route_fixture_file_content(page: Page) -> None:
     )
 
 
-def test_the_files_tab_opens_from_the_plus_affordance(page: Page, hub_url: str) -> None:
+def test_the_files_tab_opens_from_the_plus_affordance(
+    page: Page, hub_url: str, spec_project_id: str
+) -> None:
     """Task 5.1: the files tree is reachable the same way the specs index tab is — the plus
     menu, not just something wired in isolation."""
-    _open(page, hub_url)
+    _open(page, hub_url, spec_project_id)
 
     page.get_by_test_id("panel-tab-add").click()
     page.get_by_role("menuitem", name="Files").click()
@@ -88,7 +88,7 @@ def test_the_files_tab_opens_from_the_plus_affordance(page: Page, hub_url: str) 
 
 
 def test_a_search_with_no_matches_states_it_rather_than_an_empty_box(
-    page: Page, hub_url: str
+    page: Page, hub_url: str, spec_project_id: str
 ) -> None:
     """An empty *result* says so rather than showing an empty box — the same "a folder view that
     hides drift lies" principle `SpecTree` follows, applied to a result with nothing in it.
@@ -100,7 +100,7 @@ def test_a_search_with_no_matches_states_it_rather_than_an_empty_box(
     tree. The workspace arm moved to `filesIndexTab.test.tsx`, where it is a pure function of the
     paths prop; the search arm stays here because it is drivable whatever the fixture holds.
     """
-    _open(page, hub_url)
+    _open(page, hub_url, spec_project_id)
 
     page.get_by_test_id("panel-tab-add").click()
     page.get_by_role("menuitem", name="Files").click()
@@ -112,14 +112,14 @@ def test_a_search_with_no_matches_states_it_rather_than_an_empty_box(
 
 
 def test_selecting_a_file_from_the_tree_opens_it_and_closes_the_tree_tab(
-    page: Page, hub_url: str
+    page: Page, hub_url: str, spec_project_id: str
 ) -> None:
     """Task 5.1 (tree from `GET /workspace/paths`) and 5.2 / design D8 (opening a file closes
     the `files` tab), live: a real click on a real tree row, not a store call made from the
     test."""
-    _route_fixture_paths(page)
-    _route_fixture_file_content(page)
-    _open(page, hub_url)
+    _route_fixture_paths(page, spec_project_id)
+    _route_fixture_file_content(page, spec_project_id)
+    _open(page, hub_url, spec_project_id)
 
     page.get_by_test_id("panel-tab-add").click()
     page.get_by_role("menuitem", name="Files").click()
@@ -132,13 +132,13 @@ def test_selecting_a_file_from_the_tree_opens_it_and_closes_the_tree_tab(
 
 
 def test_a_missing_file_states_the_refusal_rather_than_hanging_or_blanking(
-    page: Page, hub_url: str
+    page: Page, hub_url: str, spec_project_id: str
 ) -> None:
     """Task 5.3, against the real `GET /workspace/file` (not routed): this fixture project's
     workspace listing is empty, so every path 404s — itself the case worth covering live, since
     5.3 requires the tab to *state* the outcome."""
-    _route_fixture_paths(page)
-    _open(page, hub_url)
+    _route_fixture_paths(page, spec_project_id)
+    _open(page, hub_url, spec_project_id)
 
     page.get_by_test_id("panel-tab-add").click()
     page.get_by_role("menuitem", name="Files").click()
@@ -149,13 +149,13 @@ def test_a_missing_file_states_the_refusal_rather_than_hanging_or_blanking(
 
 
 def test_insert_into_composer_appends_the_same_mention_the_trigger_would(
-    page: Page, hub_url: str
+    page: Page, hub_url: str, spec_project_id: str
 ) -> None:
     """Task 5.4, live: pressing the button actually reaches the composer's textarea, not just
     the unit-level guarantee (`composerTrigger.test.ts`) that the two formatters agree."""
-    _route_fixture_paths(page)
-    _route_fixture_file_content(page)
-    _open(page, hub_url)
+    _route_fixture_paths(page, spec_project_id)
+    _route_fixture_file_content(page, spec_project_id)
+    _open(page, hub_url, spec_project_id)
 
     page.get_by_test_id("panel-tab-add").click()
     page.get_by_role("menuitem", name="Files").click()
@@ -170,14 +170,14 @@ def test_insert_into_composer_appends_the_same_mention_the_trigger_would(
     [(FILE_TAB_MIN_WIDTH, False), (FILE_TAB_MIN_WIDTH - 20, True)],
 )
 def test_file_tab_header_at_the_measured_minimum_width(
-    page: Page, hub_url: str, width: int, should_overflow: bool
+    page: Page, hub_url: str, spec_project_id: str, width: int, should_overflow: bool
 ) -> None:
     """Task 5.5: the measured number actually holds against a real browser's font metrics, and
     a plainly-too-narrow width actually fails the same check — a boundary asserted in only one
     direction would not catch the number being measured against the wrong element."""
-    _route_fixture_paths(page)
-    _route_fixture_file_content(page)
-    _open(page, hub_url)
+    _route_fixture_paths(page, spec_project_id)
+    _route_fixture_file_content(page, spec_project_id)
+    _open(page, hub_url, spec_project_id)
     page.get_by_test_id("panel-tab-add").click()
     page.get_by_role("menuitem", name="Files").click()
     page.get_by_test_id(f"file-tree-file-{FIXTURE_FILE_PATH}").click()
