@@ -220,7 +220,101 @@ runs. There is a precedent shaped for it: `Agent.permission_timeout_seconds` and
 `AW_QUESTION_TIMEOUT` (CLAUDE.md, operator-in-the-loop). *"How long does this loop wait for a
 reviewer"* is the same shape. **Not decided, and not required for D.**
 
-## 9. What this becomes
+## 9. Should the firing be on a timer at all?
+
+Raised by the operator mid-session: *"I think having a cron is for the same repetitive job. Should we
+just wait for this agent to finish and then fire the next one right after?"*
+
+**The instinct is right and the code half-agrees already.** `schedule_agent` refuses with *"agent is
+already running"* (`turn_scheduler.py:43`), so a cron firing during a turn is *already* an attempt at
+"fire when free" — implemented by trying and being refused. And a run finishing already calls
+`schedule_agent` at the end of the normal path (`agent_trigger.py:1234` says so while explaining a
+bug in the other branch). The event hook exists.
+
+**But "the loop agent finished" is the wrong event on its own**, and this session is why:
+
+```
+   ALPHA finishes task 1  ──▶  `completed`, nothing claimable — it needs a REVIEWER
+        │
+   trigger = "ALPHA finished"
+        │
+        ▼
+   fire once, find nothing, then wait for ALPHA to finish again.
+   ALPHA is not running. It never finishes again.  ──▶  DEADLOCK
+```
+
+Worse than the cron, which at least keeps checking. The event that unblocks a stalled loop is the
+*reviewer's*, not the loop agent's — so the trigger set would have to include *any task in this
+loop's queue changing status*, which is the one that actually matters.
+
+**DECIDED: do not build events. Keep the cron.** Grounds:
+
+1. The latency gap between a 1-minute cron and an instant event is invisible at the timescale a loop
+   operates on — turns run for minutes.
+2. Missing wakers is a failure this codebase has already shipped. `redrain_queued_agents` is
+   reachable only from project open, settings save and relocate, and an entry was **measured**
+   sitting queued until an unrelated settings save — *"a limit protecting nobody"*
+   (`agent_trigger.py:1236-1238`).
+3. A specific event can be added later for a specific latency, without the cron going away.
+
+### 9.1 But a fast cron is actively harmful today — measured
+
+**There is no "agent is already running" guard in the firing path.** `_do_fire_job` claims a task and
+queues a briefing before `schedule_agent` ever gets a chance to refuse. Fired a loop five times with
+its agent mid-turn:
+
+```
+   5 firings while busy  ──▶  5 queued inbound entries (all `queued`)
+                         ──▶  5 JobRuns
+```
+
+When the agent finishes it drains all five — one turn each, every one briefed on the same task. At a
+30-second cron with a 20-minute turn that is **40 queued briefings for one task, then 40 turns to
+burn through them.** A fast cron does not waste a cheap check; it manufactures work, and the faster
+it runs the worse it gets. That is the opposite of what turning up a poll rate should do.
+
+**DECIDED: guard it.** Same shape as `_job_agent_skip_reason`, already in that function.
+
+### 9.2 What a tick should record — the operator's objection
+
+*"But won't this pollute the run view? Should we register it differently and filter it out?"*
+
+Correct, and it would have. `JobRun` feeds the last-10 runs on `GET /jobs/{job_id}`
+(`jobs.py:509`), `/history`, and `_batch_loop_summaries`' *is this loop running* check
+(`jobs.py:216`). At a 1-minute cron the last-10 view becomes ten skipped rows and a healthy loop
+reads as dead.
+
+**The line is not fired-versus-skipped. It is "something changed" versus "the same thing is still
+true."**
+
+| Tick kind | Frequency | Informative? |
+|---|---|---|
+| `fired` | the real history | always |
+| `stopped` | once per loop, by nature | yes |
+| `stalled` | every tick while stalled | **once** — the 400th repeats the 1st |
+| `busy` | every tick during a turn | **never** — the running `JobRun` already says it |
+
+**DECIDED: `busy` records nothing; `stalled` records one row that counts ticks in place.** So the
+history reads as a story — `fired, fired, stalled(47 ticks since 14:02), fired` — and stays
+meaningful at any cron rate.
+
+The precedent is `InboundQueueEntry.delivery_attempts` (`models.py:551-557`), which chose a counter
+over duplicate rows for the identical problem: *"an entry returned five times is indistinguishable
+from one never tried."* Same shape as §4's reminder count, which is the second time this session the
+answer has been "count the repetition, don't append it".
+
+*Rejected:* **record every tick and filter in the UI** — the 100-row prune window
+(`scheduler.py::_prune_job_history`) still fills with noise, so real history ages out; the problem
+moves rather than resolves. *Rejected:* **ticks are not `JobRun`s at all**, living only in the event
+log — cleaner conceptually, but it moves *"why is my loop doing nothing"* away from the loop's own
+history to a different screen.
+
+**One consequence to hold knowingly:** a counted stall row is **updated**, where every other write to
+that table is append-once. `JobRun` is not held to `TaskTransition`'s explicit append-only rule, so
+this is permitted — but it is a departure, and it is being taken deliberately rather than
+discovered later.
+
+## 10. What this becomes
 
 | # | Change | Depends on | State |
 |---|---|---|---|
@@ -229,9 +323,13 @@ reviewer"* is the same shape. **Not decided, and not required for D.**
 | **R2** | The re-brief — its own turn, bounded reminder count | R1 | ready to propose |
 | **R3** | Surface to the operator when the count is exhausted | R2 | ready to propose |
 | **R4** | Review-wait timeout for a handoff that happened but was never picked up | R1 | **open** — §8 |
+| **R5** | Busy guard — a firing whose loop agent already has a running turn is skipped | nothing | ready to propose — §9.1 |
+| **R6** | Tick recording — `busy` records nothing, `stalled` counts in place | R5 | ready to propose — §9.2 |
 
-R1–R3 are one change. They are the answer to §7 and they replace L5 in the previous exploration's
-L0–L5 table.
+**R1, R2, R3, R5 and R6 are one change.** They are all the same sentence: *the loop notices what is
+actually happening and reacts to it, instead of firing blind.* R1–R3 replace L5 in the previous
+exploration's L0–L5 table; R5 and R6 are the cadence half of the same idea. R4 stays out — it needs
+a decision that has not been taken.
 
 **Relationship to L1/L2/L4.** D deliberately does not need them. `list_agents` (L2) and charter
 summaries (L1) make ALPHA *better at choosing* a reviewer; D only makes sure ALPHA is *asked*. They
@@ -246,5 +344,11 @@ compose and neither blocks the other — which is the main practical benefit of 
   asked about three times", but nothing has been said.
 - **Does a reminder that succeeds reset the count?** Relevant after a `revision_needed` cycle, where
   the same task legitimately reaches `completed` more than once.
-- **Unifying the three "active task" sets** (§7) — a cleanup, not a bug, and larger than either fix
-  it would have prevented.
+- **Unifying the "active task" sets** (§7) — a cleanup, not a bug, and larger than either fix it
+  would have prevented. There are **four**, not three: `CLAIMABLE_LOOP_TASK_STATUSES`
+  (`scheduler.py`), `TERMINAL_FOR_BINDING` (`run_task_binding.py`), `_ACTIVE_TASK_STATUSES`
+  (`api/v1/agents.py:60`) and `_LIVE_TASK_STATUSES` (`checkpoints.py:62`). The last two are
+  identical in content and separate in code — and both already counted `revision_needed` as live
+  work, which is what marked §7's fix as correcting an oversight rather than changing a policy.
+- **What cron interval a loop should default to**, now that a fast one stops being harmful once R5
+  lands. Untouched — the current default was chosen when a fast cron piled up briefings.
