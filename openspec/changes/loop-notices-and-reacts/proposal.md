@@ -46,6 +46,15 @@ Explored and decided with the operator in
 - A skipped-because-busy tick records **no** `JobRun`. A stalled tick records **one** `JobRun` that
   counts subsequent ticks in place rather than appending a row per tick.
 
+**A loop ticks every five minutes by default, which the busy guard is what makes safe.**
+
+- `create_loop` requires `cron` with no default (`hub/hub/mcp_server.py:541`), and the UI offers five
+  examples, none more frequent than every six hours (`hub/ui/src/components/jobs/JobForm.tsx:13-19`).
+  A loop therefore polls on whatever a caller invents, and the honest advice today is *slowly*,
+  because a fast tick manufactures duplicate briefings.
+- Once a busy tick is refused and records nothing, five minutes costs one query and no row. The
+  operator sets the default to `*/5 * * * *`, and the UI offers it.
+
 **Every task status gets classified once, in one place.**
 
 - Four constants answer *"is this task live?"* today, and disagree:
@@ -73,8 +82,6 @@ Explored and decided with the operator in
   review, N ticks since …"* — visible, cheap, and recoverable the moment anyone reviews it. A timeout
   would have to decide what to *do* when it fires, and stopping, reassigning and re-briefing are all
   worse than staying visible and waiting.
-- **Changing any loop's default cron interval.** A faster cron becomes safe once the busy guard
-  lands, but choosing a new default is a separate decision.
 - **Changing which statuses any of the four sets contains.** The vocabulary work above is a
   refactor: every set keeps exactly the members it has today, derived rather than listed. Any change
   in membership is a behaviour change and belongs to a different proposal.

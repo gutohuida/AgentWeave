@@ -111,44 +111,63 @@ the four-set world means rewriting it immediately (design D9).
       with no special-case code path.
 - [ ] 8.5 Implement the surfacing, following the existing event and SSE pattern the stop path uses.
 
-## 9. Retroactive specification of what already shipped
+## 9. Cadence and presentation
 
-- [ ] 9.1 Confirm the `agent-loops` delta's stall-refusal requirement matches the behaviour
+Both depend on the busy guard (group 1). Five minutes is only safe once a busy tick is refused.
+
+- [ ] 9.1 Test: a loop created without an explicit cron gets `*/5 * * * *`.
+- [ ] 9.2 Give `create_loop`'s `cron` a default of `*/5 * * * *` (`hub/hub/mcp_server.py:541`), and
+      say in its `Args:` description that a busy tick is refused, so a frequent schedule is cheap.
+      Keep the twin-file discipline — `mcp_server.py` may import only stdlib and fastmcp.
+- [ ] 9.3 Add a sub-hourly option to `CRON_EXAMPLES`
+      (`hub/ui/src/components/jobs/JobForm.tsx:13-19`), whose five entries bottom out at every six
+      hours, and default a loop's form to it. Leave the plain job default alone — a job is not a loop
+      and nothing here makes a fast job cheap.
+- [ ] 9.4 Test: the loop board labels a re-briefing loop distinctly from both running and stalled,
+      and the label names the task and the attempt count (design D10).
+- [ ] 9.5 Implement that label, deriving the state from group 5's shared decision rather than
+      recomputing it.
+- [ ] 9.6 `make ui` after `npm run build`, and commit `hub/ui/src` and `hub/hub/static/ui` together.
+
+## 10. Retroactive specification of what already shipped
+
+- [ ] 10.1 Confirm the `agent-loops` delta's stall-refusal requirement matches the behaviour
       `_loop_stall_reason` already implements, and that its scenarios pass against the shipped code
       before this change adds anything.
-- [ ] 9.2 Confirm `revision_needed`'s presence in `CLAIMABLE_LOOP_TASK_STATUSES` is covered by an
+- [ ] 10.2 Confirm `revision_needed`'s presence in `CLAIMABLE_LOOP_TASK_STATUSES` is covered by an
       existing test and needs no new requirement here.
 
-## 10. Agent-verifiable checks
+## 11. Agent-verifiable checks
 
-- [ ] 10.1 `pytest hub/tests/ -v` passes, with the three pre-existing `test_pty_runner` environment
+- [ ] 11.1 `pytest hub/tests/ -v` passes, with the three pre-existing `test_pty_runner` environment
       failures unchanged and no new failures.
-- [ ] 10.2 `openspec validate loop-notices-and-reacts` reports valid.
-- [ ] 10.3 `ruff check hub/` and `black --check hub/` pass on every touched file.
-- [ ] 10.4 A firing refused for any reason creates no `InboundQueueEntry` — asserted directly, not
+- [ ] 11.2 `openspec validate loop-notices-and-reacts` reports valid.
+- [ ] 11.3 `ruff check hub/` and `black --check hub/` pass on every touched file, and
+      `cd hub/ui && npm run lint` passes.
+- [ ] 11.4 A firing refused for any reason creates no `InboundQueueEntry` — asserted directly, not
       inferred from a `JobRun` status.
-- [ ] 10.5 The claim decision function has exactly two call sites, asserted by a source scan in the
+- [ ] 11.5 The claim decision function has exactly two call sites, asserted by a source scan in the
       style of `hub/tests/test_task_transitions.py`'s existing origin scan.
 
-## 11. Human-only verification
+## 12. Human-only verification
 
 These cannot be established by an agent and must be checked by the operator against a running Hub.
 
-- [ ] 11.1 With a loop mid-turn, confirm the loop board does not flicker or show the loop as idle
+- [ ] 12.1 With a loop mid-turn, confirm the loop board does not flicker or show the loop as idle
       while firings are being refused.
-- [ ] 11.2 Confirm a stalled loop's history entry reads sensibly as its tick count climbs, rather than
+- [ ] 12.2 Confirm a stalled loop's history entry reads sensibly as its tick count climbs, rather than
       looking like a stuck row.
-- [ ] 11.3 Confirm the re-brief briefing is one an agent actually acts on — the wording is a judgement
+- [ ] 12.3 Confirm the re-brief briefing is one an agent actually acts on — the wording is a judgement
       no test can make.
-- [ ] 11.4 Confirm the exhaustion notice is noticeable without being alarming, and that it is clear
+- [ ] 12.4 Confirm the exhaustion notice is noticeable without being alarming, and that it is clear
       the loop has not died.
-- [ ] 11.5 Drive a real two-agent handoff end to end and confirm no re-brief is issued when the agent
+- [ ] 12.5 Drive a real two-agent handoff end to end and confirm no re-brief is issued when the agent
       does hand off correctly.
 
-## 12. User test guide
+## 13. User test guide
 
-- [ ] 12.1 Write the operator-facing guide covering: creating a loop, watching a firing claim work,
+- [ ] 13.1 Write the operator-facing guide covering: creating a loop, watching a firing claim work,
       deliberately completing a task without handing off, observing the re-brief, observing
       exhaustion, and resolving it by approving the task.
-- [ ] 12.2 Include how to tell the three refusal reasons apart from the loop's own history, and what
+- [ ] 13.2 Include how to tell the three refusal reasons apart from the loop's own history, and what
       each one means about what the loop is waiting for.

@@ -370,8 +370,12 @@ compose and neither blocks the other — which is the main practical benefit of 
   *"waiting on a person"*, and the four existing sets disagree — the claimable set includes it, the
   other three do not. Task 4.4 of `loop-notices-and-reacts`, and the one classification existing code
   does not answer.
-- **What cron interval a loop should default to**, now that a fast one stops being harmful once R5
-  lands. Untouched — the current default was chosen when a fast cron piled up briefings, and that
-  reason expires with the busy guard.
-- **What the board shows for a loop that is re-briefing.** The state is derivable; whether it gets
-  its own label or reuses the stall presentation is undecided.
+- ~~What cron interval a loop should default to~~ — **`*/5 * * * *`.** There was no default to change:
+  `create_loop` requires `cron` (`mcp_server.py:541`) and the UI's five examples bottom out at every
+  six hours (`JobForm.tsx:13-19`), so a loop polled on whatever a caller invented. Five minutes bounds
+  the latency between a reviewer approving and the next wave starting — the price of choosing polling
+  over events in §9 — and it only becomes payable once a busy tick is refused.
+- ~~What the board shows for a loop that is re-briefing~~ — **its own label**, distinct from both
+  running and stalled, naming the task and the attempt count. A re-briefing loop is neither: something
+  is genuinely wrong and is being actively corrected. Showing it as stalled would say *"waiting on
+  someone else"*, the opposite of true; showing it as running would hide it.

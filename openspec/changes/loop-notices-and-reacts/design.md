@@ -199,6 +199,28 @@ none.
 which is in this change. Landing them apart means writing D3 against the four-set world and
 rewriting it immediately.
 
+### D10 — Five minutes, and a re-briefing loop gets its own label
+
+**The tick interval.** There is no default to change: `create_loop` requires `cron`
+(`hub/hub/mcp_server.py:541`) and the UI's five examples bottom out at every six hours
+(`hub/ui/src/components/jobs/JobForm.tsx:13-19`). So a loop polls on whatever the caller invents,
+and until the busy guard lands the honest advice is *slowly*, because a fast tick manufactures
+duplicate briefings.
+
+**DECIDED: `*/5 * * * *`.** With D4 refusing a busy tick and D6 counting a stalled one, five minutes
+costs one query and no row. That bounds the latency between a reviewer approving and the next wave
+starting at five minutes, which is the cost of choosing polling over events in §9 of the exploration
+— and it only becomes payable now.
+
+**The label.** A re-briefing loop is neither *running* nor *stalled*: something is genuinely wrong —
+the agent finished work and did not hand it off — and it is being actively corrected. Presenting it
+as a stall would say *"waiting on someone else"*, which is the opposite of true; presenting it as
+running would hide it entirely.
+
+**DECIDED: its own label**, distinct from both, and it names the task and the attempt count so the
+board answers *"what is this loop doing"* without a click. This closes the last of the open questions
+this design was drafted with.
+
 ## Risks / Trade-offs
 
 **[The board and the firing drift, because claimability is now conditional]** → One function, called
@@ -235,8 +257,6 @@ survives a rollback even though the behaviour does not.
 
 - **Is the re-brief bound configurable per loop or per project?** A constant of **three** for this
   change (see below). Nothing has measured it, so the first real use is the evidence.
-- **What does the board show for a loop that is re-briefing?** The state is derivable per D3; whether
-  it gets its own label or reuses the stall presentation is undecided.
 - **What band does `blocked` belong to under D9?** It is claimable by the loop yet means *"waiting on
   a person"*. Today's sets disagree — `CLAIMABLE_LOOP_TASK_STATUSES` includes it, the other three do
   not. The classification must state which it is, and the answer is not obvious from existing code.
