@@ -15,7 +15,7 @@ contract, rather than trusting a caller's classification.
 
 from __future__ import annotations
 
-from typing import Optional, Tuple
+from typing import Any, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
@@ -321,6 +321,19 @@ async def _requirement(session: AsyncSession, project_id: str, identifier: str, 
     return row
 
 
+class DocumentContent(BaseModel):
+    """The operator's equivalent of an agent submission's body, minus the path.
+
+    The path is in the URL, matching every other operator document route. There is deliberately no
+    actor field: identity comes from the credential, and a body that could name one would be a way
+    to assert an identity the caller does not hold.
+    """
+
+    document: Any
+
+    model_config = {"extra": "forbid"}
+
+
 class RigorRequest(BaseModel):
     """The operator setting how strictly a document is enforced.
 
@@ -379,6 +392,72 @@ async def set_document_rigor(
         project_id, "spec_updated", {"path": document.path, "rigor": document.rigor}
     )
     return _document_view(document)
+
+
+@router.put("/documents/{path:path}/content")
+async def write_document_content(
+    path: str,
+    body: DocumentContent,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Write a document's content as the operator, without an agent and without a merge.
+
+    This reaches a branch of `spec_service.save_document` that has always existed and has never
+    been callable: the service refuses a capability write from any actor that is not the operator,
+    and `spec-document-authority` already requires that the same submission *from* the operator
+    succeeds. The only caller was the agent route, which binds the actor to a run and so can never
+    be the operator — leaving that requirement exercisable only by importing the module in a test.
+
+    `PUT`, because the payload names a document that already exists and writing it twice must leave
+    the same content. An import that stops halfway is then safe to re-run.
+
+    No rule is relaxed for the operator. Every refusal comes from the service, unchanged: an
+    invalid payload names its field, a mismatched `kind` is refused, an approved document is
+    refused until reopened, and a document at `contract` or `gate` rigor records a pending proposal
+    instead of being written — the operator accepts their own proposal, which is not a bypass.
+    """
+    project_id, _ = project
+    document = await _require_document(session, project_id, path)
+    workspace = await _workspace(session, project_id)
+
+    try:
+        result = await spec_service.save_document(
+            session,
+            workspace,
+            document,
+            body.document,
+            # Established from the credential the route already required, never from the body.
+            # There is no run id: an operator is not acting under one.
+            actor=_operator(),
+        )
+    except spec_service.SaveRefusedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"message": str(exc), "code": exc.code, "field": exc.field_path},
+        ) from exc
+
+    await session.commit()
+    await sse_manager.broadcast(
+        project_id, "spec_updated", {"path": result.path, "phase": result.phase}
+    )
+
+    if isinstance(result, spec_service.ProposeResult):
+        # Same shape the agent route returns at `contract`/`gate` rigor, and different from a write
+        # on purpose, so a caller cannot mistake "pending" for "live".
+        return {
+            "path": result.path,
+            "phase": result.phase,
+            "proposals": result.proposals,
+            "unchanged": result.unchanged,
+        }
+    return {
+        "path": result.path,
+        "phase": result.phase,
+        "identifiers": result.identifiers,
+        "divergence": result.divergence,
+        "blocking": result.blocking,
+    }
 
 
 @router.get("/documents/{path:path}/rigor-history")

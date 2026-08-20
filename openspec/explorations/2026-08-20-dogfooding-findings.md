@@ -231,6 +231,83 @@ rebuild is safe by construction), or state plainly in the schema that the file i
 arrangement. Right now it is authoritative by accident, which is the kind of thing that survives
 until someone writes a well-meaning "just regenerate it" helper.
 
+## 12. Nobody can write a capability document — the operator is permitted but unreachable
+
+**What happened.** `spec_service.save_document` (`hub/hub/spec_service.py:128`) contains:
+
+```python
+if document.kind == "capability" and actor.kind != "operator":
+    raise SaveRefusedError(
+        "capability documents are written by the operator, through a merge",
+        code="capability_write_is_the_operators",
+    )
+```
+
+So an **agent cannot write a capability document**, whatever it does. This corrects finding 2's
+implication: migrating 33 capabilities by triggering agent runs is not expensive, it is
+*impossible*. Every run would be refused at this line.
+
+The operator **is** permitted — `actor.kind == "operator"` passes the check. But auditing all 24
+routes in `hub/hub/api/v1/spec.py` plus the agent-facing ones in `agent_actions.py` finds that
+**no route anywhere calls `save_document` with an operator actor**. The only operator route that
+puts content into a capability document is `POST /documents/{path}/merge`, which absorbs an already
+approved `change-spec`.
+
+**Why it matters.** The service layer has an operator branch that nothing can reach. The result is
+that a capability document — the kind that represents current, shipped behaviour, and the kind all
+33 openspec documents would become — can only acquire content by:
+
+1. creating a `change-spec` document,
+2. having an agent author it,
+3. the operator approving it,
+4. the operator merging it into the capability.
+
+That is a sound flow for *evolving* a corpus one change at a time. It is the wrong shape for
+*importing* one: there is no change to absorb, nothing to approve, and the four-step dance would run
+33 times to import documents that already exist and are already current.
+
+**What would fix it.** An operator-authenticated route that calls `save_document` with
+`Actor(kind="operator", ...)` — the branch the service already anticipates. This is not a new
+capability or a weakening of a boundary: attribution is preserved (the actor is real, and
+`SpecDocumentEvent.actor_kind` already records it), approval remains operator-only, and rigor still
+applies. It is the missing half of a division of labour the code already describes.
+
+Worth noting the boundary is *stated* in the docstring as "through a merge", so a reader would
+conclude direct operator authoring is forbidden. The code says otherwise — it forbids only
+non-operators. The docstring is narrower than the check.
+
+## 13. `propose` answers 200 with a list of reasons it did not propose
+
+**What happened.** Getting a document to `approved` in a test took four attempts, each failing on
+something the previous response had not made obvious. The real sequence is
+create → write → `close-exploration` → `propose` → `phase?to=approved`, and the trap is in the
+middle: **`POST /documents/propose` returns `200 OK` with a `blocking` array when it refuses.**
+The phase is unchanged, and the status code says success.
+
+The failure then surfaces two calls later, as `a document cannot move from exploring to approved`
+— an error about the *transition*, naming neither the completeness rule that actually stopped it
+nor the requirement that violated it.
+
+**Why it matters.** Any client that checks the status code — which is the normal thing to do, and
+what the first version of my test did — concludes the document was proposed. The information is in
+the body, but nothing about a `200` suggests you need to read it. This is the same shape as finding
+6: a refusal delivered on a channel the caller is not watching.
+
+It also makes the *next* error misleading rather than merely unhelpful, because the operator is now
+debugging a phase machine when the problem is an uncovered requirement.
+
+**What would be nice.** Either a `409` with the findings in the detail (matching how
+`SaveRefusedError` and `PhaseError` already surface on this same router), or a distinct response
+shape for "did not propose" the way `save_document` returns `ProposeResult` vs `SaveResult`
+precisely so a caller "cannot mistake 'your edit is now pending' for 'your edit is live'". That
+reasoning is already written down in the codebase; it just was not applied here.
+
+**Incidental, and useful for the migration:** completeness requires each requirement to be covered
+by *both* an acceptance criterion and a task. The openspec corpus has requirements and scenarios but
+no tasks — so if those 33 documents were imported as `change-spec` they could never be proposed.
+Imported as `capability` they sit outside the phase machine entirely and completeness never runs,
+which is the correct classification anyway. Worth knowing before the import rather than after.
+
 ## 11. openspec's "must contain SHALL or MUST" check only reads the requirement's first line
 
 **What happened.** A requirement whose normative sentence was on the *second* line of its block was
