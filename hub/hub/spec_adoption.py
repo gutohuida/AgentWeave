@@ -27,7 +27,7 @@ what a newly created document of that kind would receive, and the fallback is
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -132,6 +132,26 @@ def default_phase_for(kind: str) -> str:
     return spec_lifecycle.CURRENT if kind == "capability" else spec_lifecycle.EXPLORING
 
 
+def phase_is_holdable(phase: str, kind: str) -> bool:
+    """Whether a document of this kind may be in this phase at all.
+
+    `current` and `capability` imply each other, and the database says so in a
+    cross-column check (`ck_spec_documents_kind_phase`) rather than only in the
+    code that writes the row. So a `system-map` file whose status reads `current`,
+    or a `capability` whose status reads `approved`, names a phase that is real but
+    that *this document* cannot be in.
+
+    Adoption treats that exactly as it treats an unrecognised status: fall back to
+    the kind's default and report what the file said. The alternative is refusing
+    the document, which would strand a corpus over a metadata value the operator
+    can neither see nor easily repair — and the fallback for a capability is
+    `current`, which is the only phase it could legally have meant.
+    """
+    if kind == "capability":
+        return phase == spec_lifecycle.CURRENT
+    return phase != spec_lifecycle.CURRENT
+
+
 def read_identity(workspace: ProjectWorkspace, path: str) -> Adoptable:
     """A document's adoptable identity, or a stated reason it cannot be adopted.
 
@@ -212,7 +232,7 @@ def identity_from_content(path: str, content: str) -> Adoptable:
         )
 
     status = _text(head.get("status"))
-    if status in PHASES:
+    if status in PHASES and phase_is_holdable(status, kind):
         return AdoptableIdentity(
             path=path,
             title=title,
@@ -329,6 +349,85 @@ async def adopt(
     return AdoptionResult(document=document, identity=identity, index=index)
 
 
+@dataclass
+class CorpusAdoption:
+    """What a sweep over the whole `spec/` tree adopted, skipped, and could not see."""
+
+    #: Every discovered path, in order, mapped to its outcome. A path is always
+    #: present with a stated reason — a document missing from a report looks
+    #: identical to one that was never there.
+    outcomes: Dict[str, AdoptionResult | AdoptionRefusal] = field(default_factory=dict)
+    #: Discovery's own diagnostics, carried through rather than summarised. This
+    #: is where `discovery_truncated` arrives, and a truncated sweep presented as
+    #: a complete one is the worst outcome this operation has.
+    diagnostics: List[Dict[str, Any]] = field(default_factory=list)
+
+    @property
+    def adopted(self) -> List[str]:
+        return [
+            path for path, outcome in self.outcomes.items() if isinstance(outcome, AdoptionResult)
+        ]
+
+    @property
+    def skipped(self) -> List[str]:
+        return [
+            path for path, outcome in self.outcomes.items() if isinstance(outcome, AdoptionRefusal)
+        ]
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "documents": {
+                path: (
+                    {"adopted": True, **outcome.to_dict()}
+                    if isinstance(outcome, AdoptionResult)
+                    else {"adopted": False, **outcome.to_dict()}
+                )
+                for path, outcome in self.outcomes.items()
+            },
+            "adopted": self.adopted,
+            "skipped": self.skipped,
+            "diagnostics": list(self.diagnostics),
+        }
+
+
+async def adopt_corpus(
+    session: AsyncSession,
+    workspace: ProjectWorkspace,
+    project_id: str,
+    *,
+    actor: spec_lifecycle.Actor,
+) -> CorpusAdoption:
+    """Adopt every adoptable document beneath `spec/`, reporting each one either way.
+
+    The case this exists for is a project whose database was created after its
+    files — a clone, a migration, a restored machine. Thirty-four individual
+    calls is not a recovery procedure.
+
+    **One unadoptable document never aborts the sweep** (design D5). Each path
+    yields adopted-or-skipped independently, so a corpus with one hand-written
+    file still adopts the other thirty-three.
+
+    Repeatability matters as much as the first run: the natural instinct on an
+    unexpected result is to run it again, and a second run must adopt nothing,
+    report every path as already tracked, and create no duplicates. It does,
+    because `adopt` refuses a path that has a row.
+    """
+    paths, diagnostics = spec_documents.discover(workspace)
+
+    outcomes: Dict[str, AdoptionResult | AdoptionRefusal] = {}
+    for path in paths:
+        try:
+            outcomes[path] = await adopt(session, workspace, project_id, path, actor=actor)
+        except spec_lifecycle.PhaseError as exc:
+            # `adopt` checks for an existing row before creating, so this is
+            # unreachable in the ordinary case. Caught narrowly rather than
+            # broadly: a bare `except` here would report a poisoned session as a
+            # skipped document and present a failed sweep as a partial success.
+            outcomes[path] = AdoptionRefusal(path=path, code=exc.code, message=str(exc))
+
+    return CorpusAdoption(outcomes=outcomes, diagnostics=list(diagnostics))
+
+
 def compare(identity: AdoptableIdentity, row: SpecDocument) -> Tuple[FieldDifference, ...]:
     """Every field on which the file and an existing row disagree.
 
@@ -338,13 +437,13 @@ def compare(identity: AdoptableIdentity, row: SpecDocument) -> Tuple[FieldDiffer
     value lives where the gated party can write it is not a gate.
     """
     differences: List[FieldDifference] = []
-    for field, from_file, from_row in (
+    for name, from_file, from_row in (
         ("title", identity.title, row.title),
         ("kind", identity.kind, row.kind),
         ("phase", identity.phase, row.phase),
     ):
         if from_file != from_row:
-            differences.append(FieldDifference(field=field, file=from_file, row=from_row))
+            differences.append(FieldDifference(field=name, file=from_file, row=from_row))
     return tuple(differences)
 
 

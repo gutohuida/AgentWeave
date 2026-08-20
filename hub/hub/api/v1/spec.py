@@ -1119,6 +1119,35 @@ async def reindex(
     }
 
 
+@router.post("/spec/adopt")
+async def adopt_corpus(
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Adopt every adoptable document beneath `spec/`, and say what happened to each.
+
+    Filed under `/spec/` rather than `/documents/` for the same reason `reindex`
+    is: this operates on the corpus, not on a document. It reports in reindex's
+    shape — a per-path map plus a diagnostics list — so the two read alike.
+
+    Never fails as a whole. A hand-written file with no payload is one skipped
+    path with a stated reason, not a failed recovery of the other thirty-three
+    (design D5).
+    """
+    project_id, _ = project
+    workspace = await _workspace(session, project_id)
+
+    outcome = await spec_adoption.adopt_corpus(session, workspace, project_id, actor=_operator())
+    await session.commit()
+
+    if outcome.adopted:
+        # One event for the sweep rather than one per document: the rail refreshes
+        # the whole tree either way, and thirty-four broadcasts would be thirty-three
+        # redundant re-renders.
+        await sse_manager.broadcast(project_id, "spec_updated", {"path": None, "phase": None})
+    return outcome.to_dict()
+
+
 @router.post("/documents", status_code=status.HTTP_201_CREATED)
 async def create_document(
     body: DocumentCreate,

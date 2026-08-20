@@ -90,11 +90,8 @@ class TestPhase:
         assert identity.phase_source == spec_adoption.READ
         assert identity.unrecognised_phase is None
 
-    @pytest.mark.parametrize(
-        "status",
-        ["exploring", "proposed", "approved", "archived", "current"],
-    )
-    def test_every_phase_a_row_can_hold_is_readable_from_a_file(self, status):
+    @pytest.mark.parametrize("status", ["exploring", "proposed", "approved", "archived"])
+    def test_every_phase_a_change_spec_can_hold_is_readable_from_a_file(self, status):
         """Including `approved` and `archived`, which `transition()` cannot reach
         from a fresh document — the file is the only account of a phase the row
         was never walked through on this machine."""
@@ -124,6 +121,41 @@ class TestPhase:
         assert identity.phase == spec_lifecycle.CURRENT
         assert identity.phase_source == spec_adoption.DEFAULTED
         assert identity.unrecognised_phase == "halfway-done"
+
+    @pytest.mark.parametrize(
+        ("kind", "status", "expected"),
+        [
+            # `current` and `capability` imply each other, in the database itself
+            # (`ck_spec_documents_kind_phase`), so each of these files states a
+            # phase its own document cannot legally be in.
+            ("system-map", "current", "exploring"),
+            ("change-spec", "current", "exploring"),
+            ("capability", "approved", "current"),
+            ("capability", "exploring", "current"),
+            ("capability", "archived", "current"),
+        ],
+    )
+    def test_a_phase_the_kind_cannot_hold_is_defaulted_and_reported(self, kind, status, expected):
+        """Found by writing a `system-map` at `current` into a test corpus, which
+        the database refused outright. A real phase that this document cannot be
+        in is no more usable than an unrecognised one, so it takes the same path —
+        rather than stranding the corpus over a metadata value the operator can
+        neither see nor easily repair."""
+        identity = spec_adoption.identity_from_content(
+            "spec/a.html", _document(kind=kind, status=status)
+        )
+        assert isinstance(identity, spec_adoption.AdoptableIdentity)
+        assert identity.phase == expected
+        assert identity.phase_source == spec_adoption.DEFAULTED
+        assert identity.unrecognised_phase == status
+
+    def test_the_holdable_rule_is_the_databases_own_invariant(self):
+        assert spec_adoption.phase_is_holdable("capability", "capability") is False
+        assert spec_adoption.phase_is_holdable("current", "capability") is True
+        assert spec_adoption.phase_is_holdable("current", "system-map") is False
+        for phase in ("exploring", "proposed", "approved", "archived"):
+            assert spec_adoption.phase_is_holdable(phase, "change-spec") is True
+            assert spec_adoption.phase_is_holdable(phase, "capability") is False
 
     def test_the_fallback_matches_what_creating_the_document_would_have_done(self):
         """If these two rules ever diverge, an adopted document lands somewhere a

@@ -92,6 +92,33 @@ because the payload is what the submission actually supplied and the meta tag is
 (`spec_lifecycle.py:151`). The fallback is *reported*, so a defaulted phase is never mistaken for a
 read one.
 
+### D3a — A phase the document's *kind* cannot hold is defaulted, not refused
+
+**Found during implementation, 2026-08-20, and not anticipated by D3.**
+
+D3 says a status naming no known phase falls back by kind. It does not cover a status naming a
+phase that is perfectly well known but that *this document* may not be in. The database enforces
+`capability ⟺ current` as a cross-column check — `ck_spec_documents_kind_phase`, added by `0074`,
+described in `models.py` as *"the strongest available statement that `current` is where capability
+documents live and nowhere else"*. So a `system-map` whose file reads `current`, or a `capability`
+whose file reads `approved`, describes a row the database will refuse outright.
+
+**Chosen:** treat it exactly as an unrecognised status — fall back to the kind's default, and
+report the value the file carried. **Rejected:** refusing the document, which would strand a corpus
+over a metadata value the operator can neither see in the app nor easily repair by hand; and
+relaxing the constraint, which is load-bearing and predates this change.
+
+The fallback is well-behaved in both directions: a `capability` defaults to `current`, which is the
+only phase it could legally have meant, and a non-capability defaults to `exploring`, which is where
+creating it would have put it.
+
+`create_document` states the same rule where it takes a `phase`, so the refusal names the problem
+instead of arriving as an `IntegrityError` from the flush.
+
+This was invisible against the corpus that motivated the change — all 34 capability documents read
+`current`, and `spec/agentweave.html` reads `exploring`, so every real document is already
+consistent. It surfaced only from a test corpus containing a `system-map` at `current`.
+
 ### D4 — Adoption refuses an already-tracked path, and reports why
 
 **Chosen:** refuse, and report every field on which file and row disagree.

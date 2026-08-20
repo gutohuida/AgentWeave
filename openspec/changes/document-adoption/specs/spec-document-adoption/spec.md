@@ -50,9 +50,10 @@ specification file, whatever the outcome of the adoption.
 ### Requirement: Phase is derived from the document's own status
 
 Adoption SHALL take the adopted document's phase from the `aw-spec-status` metadata the renderer
-writes into the file, because the payload block does not carry it. Where that metadata is absent or
-names no known phase, adoption SHALL fall back to the phase a newly created document of that kind
-would receive: `current` for a `capability` document, `exploring` otherwise.
+writes into the file, because the payload block does not carry it. Where that metadata is absent,
+names no known phase, or names a phase the document's kind may not be in, adoption SHALL fall back
+to the phase a newly created document of that kind would receive: `current` for a `capability`
+document, `exploring` otherwise.
 
 #### Scenario: A capability document adopts at its recorded phase
 
@@ -72,6 +73,15 @@ would receive: `current` for a `capability` document, `exploring` otherwise.
 - **WHEN** a document whose `aw-spec-status` names no known phase is adopted
 - **THEN** the row's phase is the kind-derived default
 - **AND** the response reports the unrecognised value
+
+#### Scenario: A phase the document's kind may not hold is defaulted, not refused
+
+- **WHEN** a document whose `aw-spec-status` names a known phase that its own kind may not be in is
+  adopted — a `capability` document in any phase other than `current`, or a document of any other
+  kind in `current`
+- **THEN** the row's phase is the kind-derived default
+- **AND** the response reports the value the file carried
+- **AND** the document is adopted rather than refused
 
 ### Requirement: A file with no readable payload is refused
 

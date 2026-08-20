@@ -22,33 +22,33 @@
 
 ## 4. Adopting a corpus
 
-- [ ] 4.1 Add the corpus-wide adoption route: `discover()` the `spec/` tree, adopt each untracked adoptable document, skip the rest with a stated reason per path.
-- [ ] 4.2 Follow reindex's response shape — a per-path map plus a diagnostics list — so the two operations read alike.
-- [ ] 4.3 Surface `discover()`'s truncation diagnostic when `MAX_DISCOVERED_DOCUMENTS` is hit, so a truncated sweep is never presented as complete.
-- [ ] 4.4 Ensure a single unadoptable document cannot abort the sweep.
-- [ ] 4.5 Test repeatability: a second run adopts nothing, reports every path as already tracked, and creates no duplicate rows.
+- [x] 4.1 Add the corpus-wide adoption route: `discover()` the `spec/` tree, adopt each untracked adoptable document, skip the rest with a stated reason per path.
+- [x] 4.2 Follow reindex's response shape — a per-path map plus a diagnostics list — so the two operations read alike.
+- [x] 4.3 Surface `discover()`'s truncation diagnostic when `MAX_DISCOVERED_DOCUMENTS` is hit, so a truncated sweep is never presented as complete.
+- [x] 4.4 Ensure a single unadoptable document cannot abort the sweep.
+- [x] 4.5 Test repeatability: a second run adopts nothing, reports every path as already tracked, and creates no duplicate rows.
 
 ## 5. The read-only guarantee
 
-- [ ] 5.1 Test that a successful adoption leaves the file **byte-identical**. Assert on bytes, not on the row — a row-only assertion passes against the current destructive behaviour and is worthless.
-- [ ] 5.2 Test that a refused adoption leaves the file byte-identical, for each refusal reason.
-- [ ] 5.3 Test that corpus-wide adoption leaves every file in the tree byte-identical.
-- [ ] 5.4 Mutation-check the three tests above: confirm each fails if a write is introduced into the adoption path.
+- [x] 5.1 Test that a successful adoption leaves the file **byte-identical**. Assert on bytes, not on the row — a row-only assertion passes against the current destructive behaviour and is worthless.
+- [x] 5.2 Test that a refused adoption leaves the file byte-identical, for each refusal reason.
+- [x] 5.3 Test that corpus-wide adoption leaves every file in the tree byte-identical.
+- [x] 5.4 Mutation-check the three tests above: confirm each fails if a write is introduced into the adoption path. **Done in two passes** — a write on the success path fails 5.1 and 5.3 (and the module's no-writer check); a write on the refusal path fails all three parametrised cases of 5.2. A single mutation would have left 5.2 unproven.
 
 ## 6. Downstream reachability
 
-- [ ] 6.1 Test that an adopted document's requirements resolve by identifier through the existing lookup.
-- [ ] 6.2 Test that an adopted change-spec document accepts a phase transition (close-exploration).
-- [ ] 6.3 Test that reindex files a previously `unindexable_document` after adoption, with its real title and kind, and stops reporting it as unindexable.
-- [ ] 6.4 Test that `GET /specs` reports a non-null `document_id` and phase for an adopted document.
+- [x] 6.1 Test that an adopted document's requirements resolve by identifier through the existing lookup.
+- [x] 6.2 Test that an adopted change-spec document accepts a phase transition (close-exploration).
+- [x] 6.3 Test that reindex files a previously `unindexable_document` after adoption, with its real title and kind, and stops reporting it as unindexable.
+- [x] 6.4 Test that `GET /specs` reports a non-null `document_id` and phase for an adopted document.
 
 ## 7. Verification the agent can run
 
-- [ ] 7.1 `py -3.11 -m pytest hub/tests/ -q --ignore=hub/tests/browser` — full suite green, no new failures.
-- [ ] 7.2 `py -3.11 -m ruff check` and `black --check --target-version py311` clean.
-- [ ] 7.3 Confirm no migration was added and no model column changed — this change touches no schema.
-- [ ] 7.4 Confirm `POST /documents` is byte-for-byte unchanged, and that its own tests still pass.
-- [ ] 7.5 Confirm neither `spec_manifest.py` twin was touched (design D7); if either was, synchronise both and run `hub/tests/test_spec_manifest_roundtrip.py`.
+- [x] 7.1 `py -3.11 -m pytest hub/tests/ -q --ignore=hub/tests/browser` — full suite green, no new failures. **2578 passed, 12 skipped, 1 xpassed, 0 failed** (2026-08-20).
+- [x] 7.2 `py -3.11 -m ruff check` and `black --check --target-version py311` clean.
+- [x] 7.3 Confirm no migration was added and no model column changed — this change touches no schema. `git status` on `hub/hub/migrations/` and `db/models.py` is empty.
+- [x] 7.4 Confirm `POST /documents` is byte-for-byte unchanged, and that its own tests still pass. The diff on `api/v1/spec.py` removes **zero** lines — it is purely additive.
+- [x] 7.5 Confirm neither `spec_manifest.py` twin was touched (design D7); if either was, synchronise both and run `hub/tests/test_spec_manifest_roundtrip.py`. Neither is modified.
 
 ## 8. Verification only a human can do
 

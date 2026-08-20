@@ -149,8 +149,18 @@ async def create_document(
     `approve` — inventing a history that did not happen in order to record one that did. A row
     that already exists is refused above, before this argument is reached.
     """
-    if phase is not None and phase not in (EXPLORING, PROPOSED, APPROVED, ARCHIVED, CURRENT):
-        raise PhaseError(f"unknown phase {phase!r}", code="unknown_phase")
+    if phase is not None:
+        if phase not in (EXPLORING, PROPOSED, APPROVED, ARCHIVED, CURRENT):
+            raise PhaseError(f"unknown phase {phase!r}", code="unknown_phase")
+        # `current` and `capability` imply each other, and the database says so in
+        # a cross-column check. Stated here too so the refusal names the problem
+        # rather than surfacing as an IntegrityError from the flush below.
+        if (kind == "capability") != (phase == CURRENT):
+            raise PhaseError(
+                f"a {kind} document cannot be in {phase}; current is where capability "
+                "documents live and nowhere else",
+                code="phase_not_holdable",
+            )
 
     existing = await get_document(session, project_id, path)
     if existing is not None:
