@@ -1,1 +1,1 @@
-handoff-0060-2026-08-19-2255-loop-traceability-shipped-and-v1-1-0-published.md
+handoff-0061-2026-08-20-0845-project-portability-shipped-and-identity-restored.md
