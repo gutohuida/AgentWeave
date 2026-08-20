@@ -944,3 +944,30 @@ stop. Next iteration (likely the last one that will actually run before `stop_at
 the same checks; if it fires after 08:00:00+01:00 it should skip the checkpoint cycle entirely,
 confirm the tree is clean and pushed, set `session_stopped: true`, and end the run without
 extending the heartbeat again.
+
+## Iteration 25 — idle checkpoint, queue still empty (2026-08-20T07:28+01:00)
+
+Repeated the standing check from scratch, not trusted secondhand. `git branch --show-current` /
+`git log --oneline -5` / `git status` all match STATE.json exactly (`979cd33` "Release the branch
+to the driver" at HEAD, clean tree) — no reconciliation needed.
+
+`openspec list` — "No active changes found." `openspec validate --all --strict` — 33/33 passed,
+same count as iterations 8-24's post-archive baseline.
+
+`gh run list --branch autonomous/2026-08-19-project-portability --limit 5` — five most recent CI
+runs all `completed success`. The newest two (2026-08-20T06:09:54Z, 06:09:42Z) are not new
+activity — they trace to iteration 24's own two checkpoint commits (`56e3b24` "Idle checkpoint:
+queue confirmed still empty (iteration 24)", `979cd33` "Release the branch to the driver"), each
+triggering its own pull_request CI run. `gh pr view 7 --json comments,reviews,mergeable,
+mergeStateStatus,state,commits` — zero comments, zero reviews, `OPEN`, `MERGEABLE`, `CLEAN`, last
+commit `979cd33` matches HEAD exactly. `git fetch origin master` + `git rev-parse origin/master`
+confirms master is unchanged at `a3439c4` — no new operator activity anywhere reachable from this
+branch.
+
+**Conclusion.** Nothing changed since iteration 24. Queue stays empty; no work manufactured.
+`stop_at` is 2026-08-20T08:00:00+01:00; about 32 minutes remain — still before the window closes,
+so idle-checkpointing once more rather than stopping early: verify, confirm CI, extend the
+heartbeat, stop. The next iteration should check the current time FIRST. If still before
+08:00:00+01:00, repeat this same cycle. If at or after 08:00:00+01:00, skip the checkpoint cycle
+entirely, confirm the tree is clean and pushed, set `session_stopped: true`, write a closing log
+entry, and end the run without extending the heartbeat again.

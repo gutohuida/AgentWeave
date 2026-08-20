@@ -8,7 +8,7 @@
   "stop_at": "2026-08-20T08:00:00+01:00",
   "stop_when_queue_empties": false,
   "run": 1,
-  "iteration": 24,
+  "iteration": 25,
   "session_stopped": false,
   "prepared_by": "Interactive session 2026-08-19T22:55-23:25+01:00, via /autonomous-prep. Both headline defects were reproduced or traced to a named line before being queued — item 1 by reading the render path end to end, item 2 by exercising the live API against two databases. Runway verified rather than assumed: playwright present, `pytest tests/test_project_lifecycle.py tests/test_project_persistence.py` 17 passed, vitest 1152 passed, tsc clean, working tree clean.",
   "operator_intent_verbatim": "Open any agentweave project with any agentweave app. Also: 'I think I clicked to create an agent in one project but it was actually creating into another project. Something weird there.'",
@@ -125,7 +125,7 @@
     }
   ],
   "current": "idle",
-  "next_action": "Iteration 24 re-verified iteration 23's conclusion rather than trusting it secondhand: branch/log/STATE.json all matched (HEAD 0a0bbc3, clean tree), `openspec list` still empty, `openspec validate --all --strict` 33/33 (unchanged), draft PR #7 still open, mergeable, CLEAN, zero comments/reviews, last commit matches HEAD, master unchanged at a3439c4. The newest CI run (2026-08-20T05:49:41Z) traces to iteration 23's own two checkpoint commits, not new operator activity. The queue (P1-P7) is fully closed and stays closed. stop_at is 2026-08-20T08:00:00+01:00; only about 52 minutes remained when this iteration ran (started 07:08+01:00). Next iteration: check the current time FIRST via PowerShell Get-Date. If it is before 2026-08-20T08:00:00+01:00, repeat the same check (branch state, `openspec list`, log grep, CI, PR activity) and idle-checkpoint again if nothing new surfaced. If it is at or after 08:00:00+01:00, do NOT start a new idle-checkpoint cycle — just verify final state is clean/pushed, set session_stopped true, write a closing log entry, and stop; do not extend the heartbeat again once stopped. Do NOT restart or reconfigure the Hubs on ports 8000/8010 even to 'just check' — that limit is still in force.",
+  "next_action": "Iteration 25 re-verified iteration 24's conclusion rather than trusting it secondhand: branch/log/STATE.json all matched (HEAD 979cd33, clean tree), `openspec list` still empty, `openspec validate --all --strict` 33/33 (unchanged), draft PR #7 still open, mergeable, CLEAN, zero comments/reviews, last commit matches HEAD, master unchanged at a3439c4. The two newest CI runs (2026-08-20T06:09:54Z, 06:09:42Z) trace to iteration 24's own two checkpoint commits, not new operator activity. The queue (P1-P7) is fully closed and stays closed. stop_at is 2026-08-20T08:00:00+01:00; only about 32 minutes remained when this iteration ran (started 07:28+01:00). Next iteration: check the current time FIRST via PowerShell Get-Date. If it is before 2026-08-20T08:00:00+01:00, repeat the same check (branch state, `openspec list`, log grep, CI, PR activity) and idle-checkpoint again if nothing new surfaced. If it is at or after 08:00:00+01:00, do NOT start a new idle-checkpoint cycle — just verify final state is clean/pushed, set session_stopped true, write a closing log entry, and stop; do not extend the heartbeat again once stopped. Do NOT restart or reconfigure the Hubs on ports 8000/8010 even to 'just check' — that limit is still in force.",
   "decisions_for_user": [
     {
       "id": "D-env",
@@ -167,7 +167,7 @@
     "openspec_changes_in_flight": "none — `ls openspec/changes/ | grep -v archive` is empty",
     "not_run_at_prep": "Full hub/tests/ suite and eslint were NOT run tonight. The loop should establish its own baseline early so it can tell inherited breakage from its own."
   },
-  "last_heartbeat": "2026-08-20T06:29:40+01:00",
+  "last_heartbeat": "2026-08-20T07:28:59+01:00",
   "log_file": ".claude/autonomous/2026-08-19-project-portability-log.md",
   "driver": "Windows Scheduled Task 'AgentWeaveAutonomousSession' -> .claude/skills/autonomous-session/scripts/run-iteration.ps1 -> headless `claude -p`. Each firing is a fresh process; all continuity is STATE.json + the log. Session-bound drivers (ScheduleWakeup, CronCreate) are NOT used - the 2026-08-15 run asked for nine hours and got forty minutes because the session went away.",
   "heartbeat_note": "Deliberately stale. The process that ran iteration 24 has finished and released the branch, so the next scheduled firing takes over instead of standing down against a heartbeat nobody is refreshing.",
