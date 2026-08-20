@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tracking and showing the subagents Claude spawns</title>
+<meta name="aw-spec-kind" content="change-spec">
+<meta name="aw-spec-status" content="exploring">
+<meta name="aw-spec-rigor" content="sketch">
+<meta name="aw-spec-schema-version" content="1">
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+    --surface-2: #21262d; --surface: #161b22;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+:root[data-theme="dark"] {
+  --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+  --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+  --surface-2: #21262d; --surface: #161b22;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 2rem 2.5rem 4rem; background: var(--bg); color: var(--fg);
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+h1 { font-size: 1.75rem; margin: 0 0 .25rem; }
+h2 { font-size: 1.15rem; margin: 2.5rem 0 .75rem; padding-bottom: .3rem;
+     border-bottom: 1px solid var(--border); }
+h3 { font-size: 1rem; margin: 1.5rem 0 .4rem; }
+p { margin: .5rem 0; }
+ul, ol { margin: .5rem 0; padding-left: 1.4rem; }
+li { margin: .25rem 0; }
+a { color: var(--aw-accent); }
+.aw-meta { color: var(--muted); font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-chip { display: inline-block; padding: .1rem .5rem; border-radius: 999px;
+           background: var(--surface-2); font-size: .78rem; margin-right: .4rem; }
+.aw-requirement { border-left: 3px solid var(--border); padding: .1rem 0 .1rem .9rem;
+                  margin: 1.1rem 0; }
+.aw-requirement-must { border-left-color: var(--aw-accent); }
+.aw-requirement-should { border-left-color: var(--aw-warn); }
+.aw-requirement-may { border-left-color: var(--border); }
+.aw-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8rem;
+         color: var(--muted); }
+.aw-modal { font-weight: 600; }
+.aw-modal-must { color: var(--aw-accent); }
+.aw-modal-should { color: var(--aw-warn); }
+.aw-modal-may { color: var(--fg); font-weight: 400; }
+.aw-chip-rigor-gate { color: var(--aw-accent); border: 1px solid var(--aw-accent); }
+.aw-chip-rigor-contract { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Phase is a lifecycle, and the question it answers is "can I rely on this?". `approved` and a
+   capability's `current` are settled and take the done tone; `proposed` is waiting on an operator
+   decision and takes warn; `exploring` and `archived` are quiet for opposite reasons — one has not
+   arrived yet, the other has been superseded. Deliberately NOT the accent: this document already
+   spends accent on links and on MUST, and a third meaning would empty it of any. `kind` keeps the
+   plain chip on purpose — it is a category, not a state, and hue there ranks nothing. */
+.aw-chip-phase-done { color: var(--aw-ok); border: 1px solid var(--aw-ok); }
+.aw-chip-phase-waiting { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+.aw-chip-phase-quiet { color: var(--muted); }
+.aw-chip-phase-archived { color: var(--muted); text-decoration: line-through; }
+/* An unresolved question blocks `propose`, so it is a real state and not a label. Resolved stays
+   the plain chip — the reader needs to find what is still open, not celebrate what is closed. */
+.aw-chip-open { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Limits is where a reader is most likely to be misled, and it read identically to Checked. */
+.aw-limits { color: var(--aw-warn); }
+/* The first screenful was entirely monochrome, so the document read as texty however the
+   requirements below were coloured. This puts the same modal scheme where the eye lands first,
+   carrying counts rather than decoration. */
+.aw-summary { margin: 0 0 1.5rem; font-size: .9rem; color: var(--muted); }
+.aw-summary .aw-count { font-weight: 600; }
+.aw-summary-sep { color: var(--border); margin: 0 .45rem; }
+.aw-rationale { color: var(--muted); font-size: .9rem; }
+.aw-refs { font-size: .82rem; color: var(--muted); }
+.aw-note { color: var(--muted); font-style: italic; }
+.aw-empty { color: var(--muted); }
+table { border-collapse: collapse; margin: .75rem 0; width: 100%; }
+th, td { border: 1px solid var(--border); padding: .4rem .6rem; text-align: left;
+         vertical-align: top; font-size: .92rem; }
+code, pre { background: var(--surface); border-radius: 4px; }
+code { padding: .1rem .3rem; font-size: .88em; }
+</style>
+</head>
+<body>
+<h1>Tracking and showing the subagents Claude spawns</h1>
+<p class="aw-meta"><span class="aw-chip">change-spec</span><span class="aw-chip aw-chip-phase-quiet">exploring</span><span class="aw-chip">sketch</span></p>
+
+<section><h2 id="summary">Summary</h2><p>A Claude agent can spawn subagents, and AgentWeave records them only as an opaque tool call. This document is a seeded exploration: the problem, what live probing established about what is knowable, and the questions that decide the shape. No requirements yet — the operator has not been interviewed on this one.</p></section><section><h2 id="problem">Problem</h2><p>A Claude agent working in AgentWeave can spawn subagents. The Hub records a spawn only as a generic tool call in the run timeline; it attributes no identity, no type, no model, no tokens, no duration and no outcome to the subagent itself. From the operator&#x27;s chair a subagent is a tool call named `Task` (or `Agent`) followed by a blob of result text, with no way to see what was delegated, what it cost, or whether it succeeded.</p><p>Two distinct problems live here and either is worth solving alone:
+- ATTRIBUTION — subagent tokens should land in the project&#x27;s totals so the money and token figures are honest.
+- VISIBILITY — a place to see what was spawned, what it was asked to do, how long it took and what it returned.</p><p>The operator has asked for this to be developed separately from the control-page usage change, and has named a page in the side panel as a possible home.</p><p>WHAT LIVE PROBING ESTABLISHED (Claude Code 2.1.221, `--output-format stream-json`, this machine, 2026-08-20)</p><p>Everything needed to track a subagent is already in the stream the Hub parses today; none of it is currently read.</p><p>- A spawn emits `system` / `subtype: task_started`, carrying `task_id`, `tool_use_id`, `description`, `subagent_type` (e.g. `Explore`), `task_type` (e.g. `local_agent`) and the full `prompt`. Identity and intent arrive up front, before any work happens.
+- Every subagent turn then arrives as an ordinary `assistant` line with `parent_tool_use_id` set to the spawning tool call&#x27;s id, carrying its own `message.model` and its own `message.usage`. Per-subagent, per-model token attribution is therefore directly measurable, live, without waiting for the subagent to finish.
+- On completion the parent&#x27;s tool result carries `agentId`, `agentType`, `resolvedModel`, `status`, `totalDurationMs`, `totalToolUseCount`, `toolStats` (read/search/bash/edit counts, lines added and removed) and `usage`. An asynchronous launch instead returns `{agentId, description, prompt, resolvedModel, status, isAsync, outputFile, canReadOutputFile}`, so the completed and the launched-in-background cases are different shapes and a reader must handle both.
+- Claude Code also writes each subagent&#x27;s own transcript to `~/.claude/projects/&lt;slug&gt;/&lt;session&gt;/subagents/agent-&lt;agentId&gt;.jsonl`, whose entries carry `isSidechain: true`, the parent `sessionId`, the `agentId`, and per-message `usage`, `model` and `effort`.</p><p>TRAP — `totalTokens` on the tool result is NOT the subagent&#x27;s cost. It is the final request&#x27;s footprint. Measured against a real subagent transcript: the tool result reported `totalTokens` 40,314, while summing that subagent&#x27;s 18 actual requests gives 530,405 (36 input, 3,083 output, 394,591 cache read, 132,695 cache write). Pricing a subagent from `totalTokens` understates it by more than an order of magnitude. The per-turn `usage` on each `parent_tool_use_id` line is the figure that can be summed.</p><p>RELATIONSHIP TO THE USAGE CHANGE — the final `result` event&#x27;s `usage` covers the main chain only, while `modelUsage` and `total_cost_usd` cover the whole session including subagents (measured: main-chain cache-read 57,940 exactly matching `result.usage`, against `modelUsage` cache-read 84,169; `total_cost_usd` equal to `modelUsage.costUSD` to the last digit). The Hub reads `result.usage` first, so it currently stores a cost that includes subagents beside a token count that does not. That inconsistency is being fixed in the control-page usage change rather than here, because that change is what puts the two numbers side by side. Per-subagent attribution — which subagent spent what — is this document&#x27;s problem.</p></section><section><h2 id="requirements">Requirements</h2><p class="aw-empty">No requirements yet.</p></section><section><h2 id="open-questions">Open questions</h2><ul><li><span class="aw-chip aw-chip-open">open</span>Is the goal attribution, visibility, or both — and if only one, which ships first?</li><li><span class="aw-chip aw-chip-open">open</span>Does &#x27;subagent&#x27; mean only Claude&#x27;s own spawned agents, or also AgentWeave&#x27;s out-of-band worker calls, and does Codex have an equivalent?</li><li><span class="aw-chip aw-chip-open">open</span>Where does a subagent surface live — a project tab, a subview of Activity, a panel inside the conversation that spawned it, or the agent&#x27;s own page?</li><li><span class="aw-chip aw-chip-open">open</span>Should a subagent&#x27;s prompt and returned text be stored, or only its metadata?</li><li><span class="aw-chip aw-chip-open">open</span>Do asynchronous subagents — launched in the background, returning an `outputFile` rather than a result — need to be followed to completion, or is recording the launch enough?</li><li><span class="aw-chip aw-chip-open">open</span>Should any of this be retroactive?</li></ul></section>
+<script type="application/agentweave-spec+json" id="aw-spec-payload">
+{
+  "schema_version": 1,
+  "kind": "change-spec",
+  "title": "Tracking and showing the subagents Claude spawns",
+  "summary": "A Claude agent can spawn subagents, and AgentWeave records them only as an opaque tool call. This document is a seeded exploration: the problem, what live probing established about what is knowable, and the questions that decide the shape. No requirements yet — the operator has not been interviewed on this one.",
+  "problem": "A Claude agent working in AgentWeave can spawn subagents. The Hub records a spawn only as a generic tool call in the run timeline; it attributes no identity, no type, no model, no tokens, no duration and no outcome to the subagent itself. From the operator's chair a subagent is a tool call named `Task` (or `Agent`) followed by a blob of result text, with no way to see what was delegated, what it cost, or whether it succeeded.\n\nTwo distinct problems live here and either is worth solving alone:\n- ATTRIBUTION — subagent tokens should land in the project's totals so the money and token figures are honest.\n- VISIBILITY — a place to see what was spawned, what it was asked to do, how long it took and what it returned.\n\nThe operator has asked for this to be developed separately from the control-page usage change, and has named a page in the side panel as a possible home.\n\nWHAT LIVE PROBING ESTABLISHED (Claude Code 2.1.221, `--output-format stream-json`, this machine, 2026-08-20)\n\nEverything needed to track a subagent is already in the stream the Hub parses today; none of it is currently read.\n\n- A spawn emits `system` / `subtype: task_started`, carrying `task_id`, `tool_use_id`, `description`, `subagent_type` (e.g. `Explore`), `task_type` (e.g. `local_agent`) and the full `prompt`. Identity and intent arrive up front, before any work happens.\n- Every subagent turn then arrives as an ordinary `assistant` line with `parent_tool_use_id` set to the spawning tool call's id, carrying its own `message.model` and its own `message.usage`. Per-subagent, per-model token attribution is therefore directly measurable, live, without waiting for the subagent to finish.\n- On completion the parent's tool result carries `agentId`, `agentType`, `resolvedModel`, `status`, `totalDurationMs`, `totalToolUseCount`, `toolStats` (read/search/bash/edit counts, lines added and removed) and `usage`. An asynchronous launch instead returns `{agentId, description, prompt, resolvedModel, status, isAsync, outputFile, canReadOutputFile}`, so the completed and the launched-in-background cases are different shapes and a reader must handle both.\n- Claude Code also writes each subagent's own transcript to `~/.claude/projects/\u003cslug>/\u003csession>/subagents/agent-\u003cagentId>.jsonl`, whose entries carry `isSidechain: true`, the parent `sessionId`, the `agentId`, and per-message `usage`, `model` and `effort`.\n\nTRAP — `totalTokens` on the tool result is NOT the subagent's cost. It is the final request's footprint. Measured against a real subagent transcript: the tool result reported `totalTokens` 40,314, while summing that subagent's 18 actual requests gives 530,405 (36 input, 3,083 output, 394,591 cache read, 132,695 cache write). Pricing a subagent from `totalTokens` understates it by more than an order of magnitude. The per-turn `usage` on each `parent_tool_use_id` line is the figure that can be summed.\n\nRELATIONSHIP TO THE USAGE CHANGE — the final `result` event's `usage` covers the main chain only, while `modelUsage` and `total_cost_usd` cover the whole session including subagents (measured: main-chain cache-read 57,940 exactly matching `result.usage`, against `modelUsage` cache-read 84,169; `total_cost_usd` equal to `modelUsage.costUSD` to the last digit). The Hub reads `result.usage` first, so it currently stores a cost that includes subagents beside a token count that does not. That inconsistency is being fixed in the control-page usage change rather than here, because that change is what puts the two numbers side by side. Per-subagent attribution — which subagent spent what — is this document's problem.",
+  "scope": {
+    "in_scope": [],
+    "non_goals": []
+  },
+  "requirements": [],
+  "acceptance_criteria": [],
+  "tasks": [],
+  "algorithms": [],
+  "design": "",
+  "evidence": {
+    "checked": [],
+    "limits": []
+  },
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "question": "Is the goal attribution, visibility, or both — and if only one, which ships first?",
+      "resolved": false,
+      "why": "Attribution is an accounting change with no new surface: subagent turns are summed and their spend lands in the right totals. Visibility is a surface: a list of spawns, what each was asked, what it returned. They share a data-collection step but nothing else, and either is useful without the other."
+    },
+    {
+      "question": "Does 'subagent' mean only Claude's own spawned agents, or also AgentWeave's out-of-band worker calls, and does Codex have an equivalent?",
+      "resolved": false,
+      "why": "The Hub already records `WorkerInvocation` for its own checkpoint and probe calls — arguably the same idea one level up, and being given its own category on the Budgets page. Whether Codex exposes a comparable delegated-agent concept has not been checked."
+    },
+    {
+      "question": "Where does a subagent surface live — a project tab, a subview of Activity, a panel inside the conversation that spawned it, or the agent's own page?",
+      "resolved": false,
+      "why": "A subagent belongs to one turn of one conversation, which argues for showing it where that turn is read. A project-wide page instead answers 'what has been delegated lately, and what did it cost', which is a different question with a different home. The project tab row is short and deliberately scarce."
+    },
+    {
+      "question": "Should a subagent's prompt and returned text be stored, or only its metadata?",
+      "resolved": false,
+      "why": "The prompt and the result are what make a subagent's work reviewable, and they are the whole point of a visibility surface. They are also unbounded text arriving on every spawn, and the prompt can carry whatever the parent agent chose to paste into it."
+    },
+    {
+      "question": "Do asynchronous subagents — launched in the background, returning an `outputFile` rather than a result — need to be followed to completion, or is recording the launch enough?",
+      "resolved": false,
+      "why": "The two cases return different shapes. Following an async subagent to completion means watching for its result after the spawning turn has already ended, which is a different lifetime from anything the Hub tracks per run today."
+    },
+    {
+      "question": "Should any of this be retroactive?",
+      "resolved": false,
+      "why": "Subagent detail can only be collected from a run as it streams. Claude Code's own on-disk subagent transcripts hold the history, but reading them means AgentWeave deriving facts from another tool's files rather than from its own records — the architectural line the usage change deliberately did not cross."
+    }
+  ],
+  "aw_identity": {
+    "requirements": {},
+    "high_water": 0,
+    "retired": {},
+    "digests": {}
+  }
+}
+</script>
+</body>
+</html>
