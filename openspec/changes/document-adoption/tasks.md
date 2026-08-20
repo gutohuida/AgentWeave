@@ -64,4 +64,74 @@ corpus — which is the case that motivated the change.
 
 ## 9. User test guide
 
-- [ ] 9.1 Write the operator-facing test guide for this change: what to run, in what order, what a correct result looks like, and what a wrong one looks like. Lead with 8.2 — the check that the files were not modified — because that is the failure this change exists to prevent.
+- [x] 9.1 Write the operator-facing test guide for this change: what to run, in what order, what a correct result looks like, and what a wrong one looks like. Lead with 8.2 — the check that the files were not modified — because that is the failure this change exists to prevent.
+
+**Setup.** This repository, registered as a project (`proj-5e960453`), against the trial Hub on
+port 8010 — never the Hub whose code is being edited. Its own `spec/` tree is the real case: 34
+capability documents plus `spec/agentweave.html`, every one carrying a payload block, not one of
+them with a row.
+
+**Before anything else, make sure `spec/` is committed and clean.** `git status --short spec/`
+should print nothing. Every check below compares against that, and a dirty tree makes step 1
+unreadable.
+
+1. **The check that matters — nothing is written.** Run corpus adoption:
+
+   ```bash
+   curl -X POST http://127.0.0.1:8010/api/v1/projects/proj-5e960453/project/spec/adopt \
+     -H "Authorization: Bearer $AW_KEY"
+   ```
+
+   Then, immediately: `git status --short spec/` and `git diff --stat spec/`.
+   *Expect:* **both print nothing at all.** Not "only whitespace changed", not "just the status
+   line" — nothing.
+   *Failure looks like:* any modified file under `spec/`. That is `POST /documents`' behaviour
+   leaking into adoption, and it means a document was overwritten with a placeholder. Stop and
+   restore from git before doing anything else.
+
+2. **The corpus arrived.** Read the response from step 1.
+   *Expect:* 35 entries under `documents`, 35 paths in `adopted`, `skipped` empty, `diagnostics`
+   empty. Each adopted entry carries the document's real title and `"phase_source": "read"`.
+   *Failure looks like:* fewer than 35; a `discovery_truncated` diagnostic (the tree is bigger than
+   the Hub will walk); or titles that read like paths rather than like subjects.
+
+3. **Running it twice is safe.** Run the exact same command again.
+   *Expect:* `adopted` empty, all 35 in `skipped`, each with `"code": "document_exists"` and an
+   empty `differences` list.
+   *Failure looks like:* anything adopted a second time, or a `differences` list with entries in it
+   — the second means a file has moved underneath its row since step 1, which should not have
+   happened in the space of one command.
+
+4. **The Spec tab gained a lifecycle.** Open the Spec tab in the app.
+   *Expect:* documents that previously showed no phase now show one, and the phase bar is
+   populated. Capability documents read `current`.
+   *Failure looks like:* phases still blank, or a capability document showing something other than
+   `current`.
+
+5. **`unfiled` is gone.** Run reindex, then open the Spec tab again.
+   *Expect:* `project-instructions` and `quiet-hours` are filed, with their real titles rather than
+   names derived from their paths. No `unindexable_document` diagnostics in the reindex response.
+   *Failure looks like:* either document still unfiled — the exact symptom this change was written
+   for.
+
+6. **Requirements arrived.** Open a document that declares requirements and look at coverage.
+   *Expect:* coverage renders against real requirement identifiers.
+   *Failure looks like:* an empty coverage view on a document that visibly lists requirements.
+
+7. **The refusal explains itself.** Adopt one already-adopted path by hand:
+
+   ```bash
+   curl -X POST http://127.0.0.1:8010/api/v1/projects/proj-5e960453/project/documents/adopt \
+     -H "Authorization: Bearer $AW_KEY" -H "Content-Type: application/json" \
+     -d '{"path":"spec/capabilities/agent-charter/spec.html"}'
+   ```
+
+   *Expect:* a 409 whose message says the document is already tracked and that adoption does not
+   update an existing record from its file, plus a `differences` list.
+   *Failure looks like:* a bare "conflict" with nothing to act on, or — worse — a 200.
+
+8. **A hand-written file is refused, not mangled.** Put any HTML file with no payload block under
+   `spec/`, adopt that path, then check it with `git status`.
+   *Expect:* a 422 naming the missing payload, and the file untouched.
+   *Failure looks like:* a row created for it, or the file rewritten. Delete the test file
+   afterwards.
