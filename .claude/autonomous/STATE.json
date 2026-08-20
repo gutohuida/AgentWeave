@@ -8,7 +8,7 @@
   "stop_at": "2026-08-20T08:00:00+01:00",
   "stop_when_queue_empties": false,
   "run": 1,
-  "iteration": 6,
+  "iteration": 7,
   "session_stopped": false,
   "prepared_by": "Interactive session 2026-08-19T22:55-23:25+01:00, via /autonomous-prep. Both headline defects were reproduced or traced to a named line before being queued — item 1 by reading the render path end to end, item 2 by exercising the live API against two databases. Runway verified rather than assumed: playwright present, `pytest tests/test_project_lifecycle.py tests/test_project_persistence.py` 17 passed, vitest 1152 passed, tsc clean, working tree clean.",
   "operator_intent_verbatim": "Open any agentweave project with any agentweave app. Also: 'I think I clicked to create an agent in one project but it was actually creating into another project. Something weird there.'",
@@ -115,16 +115,17 @@
     {
       "id": "P7",
       "title": "Unpin the browser suite's second fixture identity, proj-b44fac0c",
-      "status": "pending",
+      "status": "done",
       "severity": "low — the suite still runs fine on this machine; this only matters when running it against a genuinely different Hub/database",
       "evidence": "Found while doing P6, not part of the original prep queue. `test_panel_shell.py:30`, `test_files_tab.py:30` (`PROJECT_ID = \"proj-b44fac0c\"`), and `test_human_only_halves.py:38` (`SPEC_PROJECT = \"proj-b44fac0c\"`) all hardcode a second, distinct fixture project — the operator's disposable 'Throwaway (taste pass)' project, which carries a real agent (`q2verify`), conversation (`conv-b77949d3`), and specification document (`spec/changes/teal-roc/spec.html`) that the default project (P6's `AW_HUB_PROJECT_ID`) does not have. P6's fix does not reach these three files' constants at all.",
       "do": "Add a second env var (e.g. AW_HUB_SPEC_PROJECT_ID, defaulting to proj-b44fac0c) alongside AW_HUB_PROJECT_ID in conftest.py, expose it as a fixture (e.g. spec_project_id), and thread it through the three files' constants/call sites the same way P6 threaded project_id through test_loops_index.py and test_human_only_halves.py.",
       "verify": "pytest tests/browser --collect-only still collects all 63 (or however many exist by then) with 0 errors; pytest tests/browser with no AW_HUB_URL still skips cleanly. Do NOT run against a live Hub.",
-      "note": "Same shape as P6 — copy its approach rather than re-deriving one. Low severity: nothing is broken today, this only matters the day someone actually points the suite at a second database, which per P6's own evidence has not happened yet."
+      "note": "Same shape as P6 — copy its approach rather than re-deriving one. Low severity: nothing is broken today, this only matters the day someone actually points the suite at a second database, which per P6's own evidence has not happened yet.",
+      "outcome": "Added `spec_project_id` fixture to conftest.py (env `AW_HUB_SPEC_PROJECT_ID`, default `proj-b44fac0c`, same FORBIDDEN_PROJECT_IDS guard as project_id). Removed the independent `PROJECT_ID`/`SPEC_PROJECT` constants from all three files and threaded the fixture through every helper and test function. test_files_tab.py's two module-level compiled regexes (PATHS_ROUTE/FILE_ROUTE) depended on the old constant and couldn't stay module-level once the value became a fixture — moved into per-call functions taking project_id as an argument. `pytest tests/browser --collect-only` — 63 collected, 0 errors, same count as before. `pytest tests/browser` with no AW_HUB_URL — 63 skipped, unchanged. ruff clean; black flagged one line-length collapse in test_panel_shell.py's _open signature, applied. mypy: same 4 pre-existing no-untyped-def errors as the unmodified branch tip (confirmed via git stash + rerun), nothing new. Not run against a live Hub. Committed as b0c12e5."
     }
   ],
-  "current": "P7",
-  "next_action": "Start P7 - unpin the browser suite's second hardcoded fixture identity, proj-b44fac0c ('Throwaway (taste pass)', the operator's disposable project with its own agent/conversation/spec-document). Found this iteration while fixing P6: it is a genuinely separate fixture from the default project P6 already made configurable, hardcoded independently in three files (test_panel_shell.py:30, test_files_tab.py:30, test_human_only_halves.py:38's SPEC_PROJECT). Add a second env var (e.g. AW_HUB_SPEC_PROJECT_ID) alongside AW_HUB_PROJECT_ID in conftest.py, expose it as a fixture, and thread it through the three files the same way this iteration threaded project_id through test_loops_index.py and test_human_only_halves.py's LOOP_PROJECT. Verify with `pytest tests/browser --collect-only` (all tests still collect, 0 errors) and a no-AW_HUB_URL run (still skips cleanly) - do not run live. After P7, the queue is empty again; check stop_when_queue_empties (false) and decide whether to idle-checkpoint or find/propose further work, recording the decision either way. Only rebuild/refresh the UI bundle if hub/ui/src non-test files changed (this and P6 did not touch it). Run the specific touched hub/tests file(s) directly for type/lint checks; the full suite runs in one shot via `pytest hub/tests/ -n 4` in ~150-175s if a full-suite check is wanted.",
+  "current": "idle",
+  "next_action": "The named queue (P1-P7) is fully closed. Iteration 7 also closed two loose threads recorded in this run's own log rather than inventing new work: (1) synced and archived openspec/changes/portable-project-identity (P2's change — implemented and verified in iteration 3 but never synced into openspec/specs/ or archived; delta applied to local-project-workspace/spec.md, validated 34/34 before archiving, archived to openspec/changes/archive/2026-08-20-portable-project-identity/), and (2) closed P4's own named open finding by adding test_every_orm_datetime_column_uses_the_utc_correction to hub/tests/test_timestamp_serialization.py, a static sweep of hub/hub/db/models.py mirroring hub/ui/src/__tests__/hubTime.test.ts's client-side sweep, mutation-checked. Full detail in iteration 7's log entry. Next iteration: re-run `openspec list` and grep the log for new findings before assuming there is nothing left. If genuinely nothing surfaces, the correct move per the pre-authorised guidance is to idle-checkpoint (verify branch state, confirm CI green, extend the heartbeat, stop) rather than manufacture a queue item. Do NOT restart or reconfigure the Hubs on ports 8000/8010 even to 'just check' — that limit is still in force.",
   "decisions_for_user": [
     {
       "id": "D-env",
@@ -166,9 +167,9 @@
     "openspec_changes_in_flight": "none — `ls openspec/changes/ | grep -v archive` is empty",
     "not_run_at_prep": "Full hub/tests/ suite and eslint were NOT run tonight. The loop should establish its own baseline early so it can tell inherited breakage from its own."
   },
-  "last_heartbeat": "2026-08-20T00:34:12+01:00",
+  "last_heartbeat": "2026-08-20T01:36:25+01:00",
   "log_file": ".claude/autonomous/2026-08-19-project-portability-log.md",
   "driver": "Windows Scheduled Task 'AgentWeaveAutonomousSession' -> .claude/skills/autonomous-session/scripts/run-iteration.ps1 -> headless `claude -p`. Each firing is a fresh process; all continuity is STATE.json + the log. Session-bound drivers (ScheduleWakeup, CronCreate) are NOT used - the 2026-08-15 run asked for nine hours and got forty minutes because the session went away.",
-  "heartbeat_note": "Deliberately stale. The process that ran iteration 6 has finished and released the branch, so the next scheduled firing takes over instead of standing down against a heartbeat nobody is refreshing.",
+  "heartbeat_note": "Deliberately stale. The process that ran iteration 7 has finished and released the branch, so the next scheduled firing takes over instead of standing down against a heartbeat nobody is refreshing.",
   "draft_pr": "https://github.com/gutohuida/AgentWeave/pull/7"
 }

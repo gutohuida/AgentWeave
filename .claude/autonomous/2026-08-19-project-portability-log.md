@@ -469,3 +469,97 @@ thread it through `test_panel_shell.py`, `test_files_tab.py`, and `test_human_on
 `SPEC_PROJECT`. After P7 the queue is empty again; `stop_when_queue_empties` is `false`, so the
 next iteration needs to decide — and record — whether to idle-checkpoint or find/propose further
 work.
+
+## Iteration 7 — P7, and the queue's actual end (2026-08-20T01:36+01:00)
+
+**P7, done.** Threaded the second hardcoded fixture identity (`proj-b44fac0c`, "Throwaway (taste
+pass)") through every call site the same way iteration 6 threaded `project_id`. Added
+`spec_project_id` (env `AW_HUB_SPEC_PROJECT_ID`, default unchanged) to `conftest.py`, removed the
+independent `PROJECT_ID`/`SPEC_PROJECT` constants from `test_panel_shell.py`, `test_files_tab.py`,
+and `test_human_only_halves.py`, and threaded the fixture through every helper and test function —
+including `test_files_tab.py`'s two module-level compiled regexes (`PATHS_ROUTE`/`FILE_ROUTE`),
+which depended on the old constant and had to move into per-call functions taking `project_id` as
+an argument, since a fixture value cannot be closed over at import time.
+
+**Verified.** `pytest tests/browser --collect-only` — 63 collected, 0 errors, same count as before
+(nothing dropped). `pytest tests/browser` with no `AW_HUB_URL` — 63 skipped, unchanged. `ruff`
+clean on all four touched files. `black --check` flagged one line-length collapse in
+`test_panel_shell.py`'s `_open` signature after the added parameter; applied and reconfirmed clean.
+`mypy` reports the same 4 pre-existing `no-untyped-def` errors as the unmodified branch tip (verified
+by `git stash`-ing this iteration's changes and re-running mypy against the original files) — same
+shape, just shifted line numbers from the edits; nothing new. Not run against a live Hub, per the
+standing limit — pure test-file plumbing, no product code touched.
+
+**The queue is now actually empty — P1 through P7, all `done`.** Per the "Next" note carried from
+iteration 6 and the pre-authorised guidance (`stop_when_queue_empties: false`), this iteration had
+to decide, and record, what happens next rather than stopping. Chose to look for real unfinished
+business already named in the run's own history before inventing anything new:
+
+1. **`openspec/changes/portable-project-identity` (P2's change) was implemented and verified last
+   iteration but never synced or archived.** `openspec status --change --json` showed all four
+   artifacts (`proposal`, `design`, `specs`, `tasks`) `done`, `tasks.md` fully checked off, and
+   `actionContext.mode: repo-local` — no workspace-planning restriction applies. Read the delta
+   spec (`specs/local-project-workspace/spec.md`) against the main spec at
+   `openspec/specs/local-project-workspace/spec.md`: the main spec was missing the adoption
+   sentence on the "Projects have stable directory-backed identity" requirement, its two new
+   scenarios ("A directory carries an identifier this database has never registered", "A project is
+   deleted and its directory is reopened"), and a sharpened WHEN clause on the existing "A marker
+   was copied" scenario that distinguishes case 2 (this database already holds the marker's id)
+   from the new case 3 (adoption). Applied all three edits by hand (the delta's own MODIFIED-section
+   intent, not a wholesale replacement — the other two untouched scenarios in that requirement, plus
+   every other requirement in the file, were left exactly as they were). `openspec validate --all
+   --strict` — 34/34 passed before archiving, 33/33 after (the archived change itself no longer
+   counts as a separate validation item). Archived to
+   `openspec/changes/archive/2026-08-20-portable-project-identity/`.
+
+2. **P4's own log entry named an open finding**: nothing swept every `DateTime(...)` declaration in
+   `hub/hub/db/models.py` the way `hub/ui/src/__tests__/hubTime.test.ts` sweeps the client, so a
+   future column written as `mapped_column(DateTime(timezone=True))` directly would silently bypass
+   `UTCDateTime` and reintroduce the naive-timestamp bug P4 fixed. Added
+   `test_every_orm_datetime_column_uses_the_utc_correction` to
+   `hub/tests/test_timestamp_serialization.py` — the server-side mirror of the client sweep, walking
+   `models.py`'s own source text rather than importing it (a static sweep, not a runtime one, same
+   reasoning the TS version gives for using Vite's source graph instead of introspecting the mounted
+   module). Confirmed the sweep isn't vacuous (`len(utc_datetime_uses) > 30`, currently ~35) before
+   trusting an empty offenders list. Mutation-checked: rewrote one column
+   (`Project.created_at`, line 70) from `UTCDateTime()` to `DateTime(timezone=True)` via a small
+   Python script (not an `Edit` call — `mapped_column(UTCDateTime()...)` appears 30 times in the
+   file and Edit's exact-match requirement can't target one occurrence without pasting surrounding
+   context for every line), reran the new test alone, watched it fail by name naming line 70 and the
+   exact offending text, then reverted the same way and confirmed `git diff --stat` showed no
+   residual change before rerunning the full file green.
+
+**What was deliberately NOT invented.** No new queue item was manufactured past these two. Grepped
+this log file for language like "open finding" / "worth rechecking" / "future iteration" turned up
+nothing beyond what's covered above; the one remaining loose thread from P5
+(`_require_agent_job_allowance`'s exposure being closed only as a side effect, "worth rechecking if
+a future change gives it its own creator-comparison logic") is conditional on a change that hasn't
+happened and isn't actionable today.
+
+**CI.** Pushed both this iteration's P7 commit and the archive/sync commit, then the sweep-test
+commit. `gh run list --branch autonomous/2026-08-19-project-portability` shows the four most recent
+completed runs on this branch all green (5m30s-7m45s), and the push just now triggered a fifth,
+in progress at the time of this entry. `gh run list --branch master --workflow ci.yml` confirms
+master's own CI is unaffected and green — this branch's draft PR (#7) has been exercising CI the
+whole run, exactly as iteration 1 set out to arrange.
+
+**Measured.** Targeted: `pytest hub/tests/test_timestamp_serialization.py
+hub/tests/test_project_lifecycle.py hub/tests/test_project_persistence.py` — 22 passed. Full
+`hub/tests/` suite was NOT re-run this iteration (last measured at 2472 passed / 75 skipped / 1
+xpassed in iteration 5, unaffected by anything touched here — none of this iteration's three
+commits touch product code the full suite would newly exercise beyond what the targeted run
+already covers). `ruff check`, `black --check` clean on every touched file. No UI files touched,
+so no bundle rebuild.
+
+**What a reviewer should distrust.** The decision to treat "sync + archive P2's change" and "close
+P4's named finding" as legitimate `stop_when_queue_empties: false` follow-on work, rather than
+scope creep past a queue the operator actually wrote, rests on both being explicitly recorded as
+unfinished business in this run's own prior iterations — not invented from scratch. If that
+reasoning is wrong, both are easily separable: the archive commit and the sweep-test commit are
+each self-contained and revertable independently of P1-P7.
+
+**Next.** The named queue is fully closed and its two recorded loose threads are closed with it.
+No further work is queued. The next iteration should re-run `openspec list` and grep this log for
+new findings before assuming there is nothing left — but if genuinely nothing surfaces, idle-
+checkpointing (verify the branch, confirm CI, extend the heartbeat, stop) is the correct outcome
+per the pre-authorised guidance, not manufacturing a queue item to fill the window.
