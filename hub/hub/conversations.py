@@ -16,7 +16,6 @@ from .db.models import (
     PermissionRequest,
     Question,
     Run,
-    UnaskedQuestion,
 )
 from .utils import short_id
 
@@ -332,9 +331,6 @@ async def conversation_attention(
         ),
         select(PermissionRequest.conversation_id).where(
             PermissionRequest.conversation_id.in_(ids), PermissionRequest.status == "pending"
-        ),
-        select(UnaskedQuestion.conversation_id).where(
-            UnaskedQuestion.conversation_id.in_(ids), UnaskedQuestion.status == "pending"
         ),
     )
     for query in waiting_queries:

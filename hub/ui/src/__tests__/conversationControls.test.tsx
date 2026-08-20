@@ -54,11 +54,6 @@ vi.mock('@/api/permissions', () => ({
   useDismissPermissionRequest: () => ({ mutate: vi.fn(), isPending: false }),
 }))
 
-vi.mock('@/api/unaskedQuestions', () => ({
-  usePendingUnaskedQuestions: () => ({ data: [] }),
-  useResolveUnaskedQuestion: () => ({ mutate: vi.fn(), isPending: false }),
-}))
-
 vi.mock('@/api/checkpoints', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/checkpoints')>()
   // The mutations stay real — they go through the mocked fetch, which is what these assert on.

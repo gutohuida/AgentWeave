@@ -111,7 +111,6 @@ from ...runner_parsing import (
 from ...scheduler import finalize_job_run_for_conversation
 from ...spec_manifest import SpecPathError, validate_spec_path
 from ...sse import sse_manager
-from ...unasked_question import trailing_question
 from ...usage_accounting import record_turn_usage
 from ...utils import persist_event, short_id
 
@@ -1126,104 +1125,6 @@ async def _broadcast_run_lifecycle(
     await sse_manager.broadcast(project_id, event_type, payload)
 
 
-async def _flag_unasked_question(
-    *,
-    project_id: str,
-    agent: str,
-    run_id: str,
-    conversation_id: Optional[str],
-    final_status: str,
-) -> None:
-    """Record a turn that ended on a question the agent never routed through `ask_user`.
-
-    Measured failure this exists for: told to ask which package manager to use, Codex wrote the
-    question into its final message and ended the turn. No question row was created, so the one
-    person who could answer was never told a question existed, and the agent sat waiting for an
-    answer that could not arrive. A tool call cannot be required by either provider's protocol, so
-    the Hub reads what the run actually said instead.
-
-    Everything here is best-effort: the run has already been recorded as finished, and a backstop
-    that could turn a completed run into a failed one would be worse than the gap it closes.
-    """
-    try:
-        # A failed or stopped run has a louder story to tell, and its trailing text is often cut
-        # off mid-sentence — a fragment ending in "?" there is truncation, not a question.
-        if final_status != "completed":
-            return
-
-        from sqlalchemy import select
-
-        from ...db.models import AgentOutput, Question, UnaskedQuestion
-        from ...inbound_queue import queued_entries
-
-        async with async_session_factory() as db:
-            asked = (
-                await db.execute(
-                    select(Question.id).where(Question.created_by_run_id == run_id).limit(1)
-                )
-            ).scalar_one_or_none()
-            if asked is not None:
-                return
-
-            # `schedule_agent` runs moments after this and starts the next turn if anything is
-            # queued, so the question is about to be answered by the next turn's input rather
-            # than stranded. Uses the scheduler's own helper so the two cannot disagree.
-            if await queued_entries(db, project_id, agent):
-                return
-
-            final_text = (
-                await db.execute(
-                    select(AgentOutput.content)
-                    .where(
-                        AgentOutput.project_id == project_id,
-                        AgentOutput.run_id == run_id,
-                        AgentOutput.kind == "text",
-                    )
-                    .order_by(AgentOutput.sequence.desc())
-                    .limit(1)
-                )
-            ).scalar_one_or_none()
-            question = trailing_question(final_text or "")
-            if not question:
-                return
-
-            record_id = f"unasked-{short_id()}"
-            db.add(
-                UnaskedQuestion(
-                    id=record_id,
-                    project_id=project_id,
-                    agent=agent,
-                    run_id=run_id,
-                    conversation_id=conversation_id,
-                    question=question,
-                    status="pending",
-                )
-            )
-            await persist_event(
-                db,
-                project_id,
-                "question_not_asked",
-                {
-                    "id": record_id,
-                    "agent": agent,
-                    "run_id": run_id,
-                    "conversation_id": conversation_id,
-                    "question": question,
-                },
-                agent=agent,
-                severity="warn",
-            )
-            await db.commit()
-
-        await sse_manager.broadcast(
-            project_id,
-            "question_not_asked",
-            {"id": record_id, "agent": agent, "run_id": run_id, "question": question},
-        )
-    except Exception:  # noqa: BLE001 — a backstop must never worsen the run it observes
-        logger.warning("Could not check run %s for an unasked question", run_id, exc_info=True)
-
-
 async def _execute_run(
     *,
     project_id: str,
@@ -1626,17 +1527,6 @@ async def _execute_run(
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                 },
             )
-
-        # Before the scheduler, because one of the suppressions is "the queue is not empty" —
-        # asking after the next turn had already started would read a queue this run's
-        # successor was draining.
-        await _flag_unasked_question(
-            project_id=project_id,
-            agent=agent,
-            run_id=run_id,
-            conversation_id=conversation_id,
-            final_status=final_status,
-        )
 
         # After the response has landed, so the titler sees the exchange rather than the
         # opening line alone, and so nothing the operator is waiting on is delayed by it.
@@ -2155,15 +2045,6 @@ async def _execute_codex_appserver_run(
                 },
             )
 
-        # Same backstop, same reason, same position relative to the scheduler as the exec path
-        # above. Codex is the transport this was measured failing on.
-        await _flag_unasked_question(
-            project_id=project_id,
-            agent=agent,
-            run_id=run_id,
-            conversation_id=conversation_id,
-            final_status=final_status,
-        )
         await maybe_generate_title(project_id=project_id, conversation_id=conversation_id)
 
         from ...turn_scheduler import schedule_agent

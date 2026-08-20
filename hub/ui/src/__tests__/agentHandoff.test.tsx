@@ -43,11 +43,6 @@ vi.mock('@/api/permissions', () => ({
   useDismissPermissionRequest: () => ({ mutate: vi.fn(), isPending: false }),
 }))
 
-vi.mock('@/api/unaskedQuestions', () => ({
-  usePendingUnaskedQuestions: () => ({ data: [] }),
-  useResolveUnaskedQuestion: () => ({ mutate: vi.fn(), isPending: false }),
-}))
-
 let offeredCheckpoints: unknown[] = []
 
 vi.mock('@/api/checkpoints', async (importOriginal) => {

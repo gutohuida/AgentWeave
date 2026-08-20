@@ -36,9 +36,7 @@ import { BannerStack, type ConversationBanner } from './BannerStack'
 import { Composer } from './Composer'
 import { PermissionRequestCard } from './PermissionRequestCard'
 import { AgentQuestionCard } from './AgentQuestionCard'
-import { UnaskedQuestionCard } from './UnaskedQuestionCard'
 import { usePendingPermissionRequests } from '@/api/permissions'
-import { usePendingUnaskedQuestions } from '@/api/unaskedQuestions'
 import { activeQuestionFor } from '@/lib/pendingQuestions'
 import { useAnswerQuestion, useDeclineQuestion, useQuestions } from '@/api/questions'
 import { ConversationControls, type HandoffState } from './ConversationControls'
@@ -186,7 +184,6 @@ export function AgentOutputPanel({
   const [warningDismissed, setWarningDismissed] = useState(false)
   const [releasedBinding, setReleasedBinding] = useState(false)
   const { data: permissionRequests = [] } = usePendingPermissionRequests()
-  const { data: unaskedQuestions = [] } = usePendingUnaskedQuestions()
   const { data: openQuestions = [] } = useQuestions(false)
   const answerQuestion = useAnswerQuestion()
   const declineQuestion = useDeclineQuestion()
@@ -998,10 +995,6 @@ export function AgentOutputPanel({
               operator is answering under its timeout, so this must be where they already are
               rather than somewhere they have to scroll to. */}
           <PermissionRequestCard requests={permissionRequests} agent={agent.name} />
-          {/* Nothing is blocked on this one — the turn has already ended — but it belongs in the
-              same place for the same reason: it is the operator's move, and the timeline is
-              where things go to be scrolled past. */}
-          <UnaskedQuestionCard questions={unaskedQuestions} agent={agent.name} />
           <AgentQuestionCard
             questions={openQuestions}
             agent={agent.name}

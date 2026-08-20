@@ -349,7 +349,7 @@ export function eventBelongsToTimeline(event: SSEEvent, name: string): boolean {
     case 'log_event':
     case 'agent_heartbeat':
     case 'permission_denied':
-    case 'question_not_asked':
+    case 'question_not_asked': // retired backstop; kept so old event_logs rows still route
     case 'run_started':
     case 'run_completed':
     case 'run_failed':

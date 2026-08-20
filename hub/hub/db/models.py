@@ -1362,35 +1362,6 @@ class PermissionRequest(Base):
     __table_args__ = (Index("ix_permission_requests_project_status", "project_id", "status"),)
 
 
-class UnaskedQuestion(Base):
-    """A question a run ended its turn on without ever routing through `ask_user`.
-
-    Detected rather than reported: no provider protocol lets the Hub require that a turn end
-    through a particular tool, so the Hub reads the run's final assistant text instead. The row
-    exists because the operator needs something to act on — `status` leaves "pending" when they
-    re-prompt the agent ("asked") or decide it was not a real question ("dismissed").
-
-    "asked" means the operator asked the agent to ask properly, not that anyone answered. Whether
-    the agent then calls the tool is the agent's business, and its own turn.
-    """
-
-    __tablename__ = "unasked_questions"
-
-    id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
-    agent: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
-    run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
-    # Already recorded since this table was added; indexed now because navigation queries it.
-    conversation_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
-    question: Mapped[str] = mapped_column(Text, nullable=False)
-    # "pending" | "asked" | "dismissed"
-    status: Mapped[str] = mapped_column(String(16), default="pending", nullable=False, index=True)
-    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
-    resolved_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
-
-    __table_args__ = (Index("ix_unasked_questions_project_status", "project_id", "status"),)
-
-
 # The five triggers design.md enumerates. v1 generates uniformly for all of them and records
 # which one fired — a deliberate deferral, not a conclusion; see
 # `project_checkpoint_trigger_prompts_provisional`.
