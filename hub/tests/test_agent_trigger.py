@@ -586,6 +586,9 @@ async def test_trigger_injects_identity_env_and_tells_agent_the_access_path(
     """
     monkeypatch.setenv("HUB_API_KEY", "aw_live_parent-secret")
     monkeypatch.setenv("HUB_PROJECT_ID", "parent-project")
+    monkeypatch.setenv("DATABASE_URL", "sqlite+aiosqlite:///C:/live/agentweave.db")
+    monkeypatch.setenv("AW_BOOTSTRAP_API_KEY", "aw_live_parent-bootstrap")
+    monkeypatch.setenv("AW_TICKET_SECRET", "parent-ticket-secret")
     sync = await app.post(
         "/api/v1/projects/proj-test/session/sync",
         json={"data": {"agents": {"identity-claude": {"runner": "claude"}}}},
@@ -628,6 +631,12 @@ async def test_trigger_injects_identity_env_and_tells_agent_the_access_path(
     assert run_token not in resp.text
     assert "HUB_API_KEY" not in spawned_env
     assert "HUB_PROJECT_ID" not in spawned_env
+    # Service configuration is not run authority either. DATABASE_URL is the destructive
+    # one: an agent that inherits it gets a writable handle to the operator's live
+    # database, and `pytest hub/tests/` drops every table in whatever it names.
+    assert "DATABASE_URL" not in spawned_env
+    assert "AW_BOOTSTRAP_API_KEY" not in spawned_env
+    assert "AW_TICKET_SECRET" not in spawned_env
     # The Hub's own environment must be inherited, not replaced, by adding these keys.
     assert "PATH" in spawned_env or "Path" in spawned_env
     # The boundary the "Workspace only" posture enforces is the directory the run actually

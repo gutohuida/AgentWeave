@@ -582,6 +582,17 @@ async def trigger_agent_directly(
     # through to a spawned run: AW_RUN_TOKEN is the run's complete authority.
     env.pop("HUB_API_KEY", None)
     env.pop("HUB_PROJECT_ID", None)
+    # The same principle covers the Hub's own service configuration, which is not run
+    # authority either. DATABASE_URL is the sharpest case: `_hub_native_start` exports it
+    # into the Hub's environment (cli.py), so without this every spawned agent inherits a
+    # writable handle to the operator's live database — and `pytest hub/tests/`, the command
+    # this repository's own instructions tell an agent to run, has fixtures that drop every
+    # table in whatever DATABASE_URL names. AW_BOOTSTRAP_API_KEY is the instance operator
+    # credential and AW_TICKET_SECRET signs SSE tickets; an agent holding either can act as
+    # the operator rather than as its run.
+    env.pop("DATABASE_URL", None)
+    env.pop("AW_BOOTSTRAP_API_KEY", None)
+    env.pop("AW_TICKET_SECRET", None)
 
     run = Run(
         id=run_id,

@@ -426,6 +426,73 @@ modal to hide. One more argument for "you supply structure; the Hub renders the 
 
 ---
 
+## 18. The product destroyed the operator's database by following its own instructions — FIXED
+
+**Severity: this is the worst finding of the migration.** On 2026-08-20 the operator's live Hub
+database (`~/.agentweave/hub/data/agentweave.db`) lost every application table. Zero projects, zero
+agents, zero conversations, zero credentials. The operator discovered it as *"closing the agentweave
+app blocks me from opening again — it asks for an API key and project id"*, which is the symptom,
+not the fault: `/api/v1/setup/token` returns `503 No API key configured` when
+`operator_credentials` is empty, so the UI falls back to the manual setup modal.
+
+**The chain, every link verified:**
+
+1. `hub/tests/conftest.py:10` read `os.environ.setdefault("DATABASE_URL", "…:memory:")`.
+   `setdefault` yields to an inherited value.
+2. `hub/tests/conftest.py`'s `app` fixture runs `Base.metadata.drop_all` on whatever
+   `settings.database_url` resolved to — once per test.
+3. `src/agentweave/cli.py`'s `_hub_native_start` sets `os.environ["DATABASE_URL"]` in the Hub
+   process before importing hub modules.
+4. `hub/hub/api/v1/agent_trigger.py:541` builds a spawned run's environment as
+   `dict(os.environ)`. It popped `HUB_API_KEY` and `HUB_PROJECT_ID` — *"a parent service
+   environment may contain operator credentials"* — but not `DATABASE_URL`.
+5. `CLAUDE.md` tells agents to run `pytest hub/tests/ -v`. The operator's agents have worktrees at
+   `.agentweave/worktrees/{Architect,Developer,Tester,teste}/`.
+
+So an agent AgentWeave spawned, running the command this repository documents, dropped the
+operator's live database — and pytest exited **green**, because from the suite's point of view
+nothing went wrong.
+
+**Reproduced deliberately** on a throwaway database seeded with a canary row:
+`DATABASE_URL=…/victim.db pytest hub/tests/test_spec.py` → `19 passed`, canary gone, `projects`
+recreated with the Hub's 25-column schema and a `proj-test` row inserted.
+
+**Why the recreate was partial.** The database was found with 21 of 43 mapped tables present and
+all of them empty. `drop_all` removes all 43; `init_db`'s `create_all` recreates them in dependency
+order. A run interrupted between the two leaves exactly this: an early prefix of the creation order
+(`projects`, `agents`, `conversations`) present, the rest (`runs`, `spec_requirements`,
+`turn_usage`) absent entirely.
+
+**The fix, both halves:**
+
+- `hub/tests/conftest.py` now **assigns** `DATABASE_URL` instead of defaulting it, warns when it
+  ignores an inherited value, and calls `assert_engine_is_disposable()` — at import and again in
+  the `app` fixture — which raises rather than dropping tables on a non-`:memory:` engine. The
+  guard lives next to the destruction, not only next to the configuration, because the environment
+  is only one of the routes to a live database.
+- `agent_trigger.py` now also pops `DATABASE_URL`, `AW_BOOTSTRAP_API_KEY` and `AW_TICKET_SECRET`.
+  The last two are a separate, quieter defect: `AW_BOOTSTRAP_API_KEY` **is** the instance operator
+  credential and `AW_TICKET_SECRET` signs SSE tickets, so any spawned agent could act as the
+  operator rather than as its own run. The existing comment already stated the principle; the list
+  was just incomplete.
+
+Same command, after the fix: `19 passed`, one loud warning, canary intact.
+
+**What this says about the design, beyond the bug.** The spawned-run environment was built as
+*subtract the known-bad* from the Hub's own. That is the wrong default for a boundary this
+consequential — it fails open, silently, every time a new variable is added. An allowlist would
+have made this bug unwritable. Worth deciding before the next variable.
+
+**Recovery.** SQLite does not zero freed pages, so ~823 distinct rows were carved back out of the
+freelist (`testbed/db-recovery/`): 11 conversations with the operator's own prompts, 198 spec
+requirements, 203 revisions, 15 spec documents with their phases, 18 runs, 314 event log rows, 25
+charters. Not everything — the `projects` row itself and roughly half the requirements had already
+had their pages reused. The `spec/` documents themselves were never at risk: they are files on
+disk, committed to git. That is the portability argument the corpus migration rests on, arriving
+as a rescue rather than a demonstration.
+
+---
+
 ## Findings outside the spec flow (recorded here so they are not lost)
 
 - **`summaryForEvent` has no case for `project_adopted` or `agent_created`.** Both fall to the

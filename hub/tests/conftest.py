@@ -1,24 +1,64 @@
 """Shared test fixtures for AgentWeave Hub."""
 
 import os
+import warnings
 
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
-# Use in-memory SQLite for tests
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
-os.environ.setdefault("AW_BOOTSTRAP_API_KEY", "aw_live_testkey_abcdefgh")
-os.environ.setdefault("AW_BOOTSTRAP_PROJECT_ID", "proj-test")
-os.environ.setdefault("AW_BOOTSTRAP_PROJECT_NAME", "Test Project")
+# Use in-memory SQLite for tests.
+#
+# These are assignments, not `setdefault`. An inherited DATABASE_URL used to win here,
+# and the `app` fixture below drops every table before each test — so running this suite
+# from any shell that had one exported destroyed that database and still exited green.
+# That is not a hypothetical shell: `_hub_native_start` (src/agentweave/cli.py) exports
+# DATABASE_URL into the Hub's own environment, spawned agents inherited it, and this
+# repository's instructions tell an agent to run `pytest hub/tests/`. So the environment
+# most likely to run the suite was the one pointed at live operator data.
+TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+
+_inherited_database_url = os.environ.get("DATABASE_URL")
+if _inherited_database_url and _inherited_database_url != TEST_DATABASE_URL:
+    warnings.warn(
+        f"Ignoring inherited DATABASE_URL={_inherited_database_url!r}. The Hub suite "
+        f"always runs on {TEST_DATABASE_URL} because its fixtures drop every table.",
+        stacklevel=1,
+    )
+
+os.environ["DATABASE_URL"] = TEST_DATABASE_URL
+os.environ["AW_BOOTSTRAP_API_KEY"] = "aw_live_testkey_abcdefgh"
+os.environ["AW_BOOTSTRAP_PROJECT_ID"] = "proj-test"
+os.environ["AW_BOOTSTRAP_PROJECT_NAME"] = "Test Project"
 
 from hub.db.engine import async_session_factory, engine, init_db  # noqa: E402
 from hub.db.models import Base  # noqa: E402
 from hub.main import create_app  # noqa: E402 — env must be set first
-from hub.project_workspace import (
+from hub.project_workspace import (  # noqa: E402
     # A module-level constant holding the unpatched original, not a function alias.
     resolve_project_workspace as _REAL_RESOLVE_PROJECT_WORKSPACE,  # noqa: N812
-)  # noqa: E402
+)
+
+
+def assert_engine_is_disposable() -> None:
+    """Refuse to drop tables on anything but an in-memory database.
+
+    The backstop for the assignment above: the environment is only one way the engine
+    can end up bound to real data (an edited conftest, a `.env` discovered from the
+    working directory, a future embedder). Whatever the route, the cost of being wrong
+    is a destroyed database that no test failure reports — so the check lives next to
+    the destruction, not only next to the configuration.
+    """
+    url = str(engine.url)
+    if ":memory:" not in url:
+        raise RuntimeError(
+            f"Refusing to run the Hub suite against {url!r}: its fixtures drop every "
+            f"table, and this is not an in-memory database. Unset DATABASE_URL (or set "
+            f"it to {TEST_DATABASE_URL}) and run again."
+        )
+
+
+assert_engine_is_disposable()
 
 
 @pytest_asyncio.fixture
@@ -26,6 +66,7 @@ async def app():
     application = create_app()
     # ASGITransport does not trigger the FastAPI lifespan, so we run init_db
     # (create_all + bootstrap key) explicitly before each test.
+    assert_engine_is_disposable()
     async with engine.begin() as connection:
         await connection.run_sync(Base.metadata.drop_all)
     await init_db()
