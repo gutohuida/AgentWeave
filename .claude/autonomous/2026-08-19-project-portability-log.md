@@ -590,3 +590,23 @@ a queue item to fill the window. `stop_at` is 2026-08-20T08:00:00+01:00; six hou
 iteration should repeat this same check (branch state, `openspec list`, log grep, CI) before
 assuming the same conclusion still holds — new work could arrive from the operator, or CI could
 regress, between now and then.
+
+## Iteration 9 — idle checkpoint, queue still empty (2026-08-20T02:08+01:00)
+
+Repeated iteration 8's check from scratch rather than trusting it secondhand. `git branch
+--show-current` / `git log --oneline -5` / `git status` all match STATE.json exactly (`87b266b`
+"Release the branch to the driver" at HEAD, clean tree) — no reconciliation needed.
+
+`openspec list` — "No active changes found." `openspec validate --all --strict` — 33/33 passed,
+same count as iteration 8's post-archive baseline; nothing new proposed since.
+
+`gh run list --branch autonomous/2026-08-19-project-portability --limit 5` — five most recent CI
+runs all `completed success` (5m50s-7m45s), same set iteration 8 saw. `gh pr view 7` — still
+`OPEN`, mergeable `MERGEABLE`, zero comments, zero reviews — no operator activity on the draft PR
+since it opened.
+
+**Conclusion.** Nothing changed since iteration 8. Queue stays empty; no work manufactured.
+Idle-checkpointing again per the pre-authorised guidance: verify, confirm CI, extend the heartbeat,
+stop. `stop_at` is 2026-08-20T08:00:00+01:00; just under six hours remain. Next iteration should
+repeat the same four checks (branch/log state, `openspec list`, log grep for new findings, CI)
+rather than assume this conclusion is permanent.
