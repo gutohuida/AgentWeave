@@ -254,6 +254,14 @@ its claimed task `completed` with no review in flight, it routes it rather than 
 Belt and braces — which is the same choice `scheduler.py:243` already made, preferring *"the more
 visible and more fixable of the two failures"*.
 
+**RESOLVED 2026-08-20** — see `2026-08-20-who-guarantees-the-review-handoff.md`, which supersedes
+this section. The fork dissolved once *guaranteeing the handoff happens* was separated from
+*deciding who it goes to*; the operator's objection was only ever about the second. The loop
+re-briefs **its own agent** rather than routing the work itself, so the agent still chooses the
+reviewer. Two corrections to this section that came out of it: `under_review` does **not** imply a
+reviewer is on it (the author may move its own task there unguarded), and the routing this section
+proposed would have needed L2 first, which the re-brief does not.
+
 ## 8. Is the time-based firing wrong?
 
 Less than it looks. The clock is not scheduling work — it is **polling**. A poll over a DAG is
@@ -304,7 +312,7 @@ uniqueness constraint and the §6 decision. Not needed for correctness — only 
 | **L2** | **`list_agents` MCP tool** — roster, charter, current availability | nothing | 6.2 and 6.3. Must be a tool, not context (§6.2). |
 | **L3** | **Dependency-aware claim** — skip unstartable tasks; distinguish the three stalled states | `task-dependencies` | Without it, dependencies deadlock every loop (§2). **This is not optional.** |
 | **L4** | **A task names its reviewer** | L2 | 6.4. Bindable by the operator, choosable by an agent, and the natural home for "easy tasks get a weaker reviewer". |
-| **L5** | **The review handoff, and who guarantees it** | L2, L3 | §7's fork. |
+| ~~**L5**~~ | ~~The review handoff, and who guarantees it~~ | — | **RESOLVED 2026-08-20.** Becomes R1–R3 in `2026-08-20-who-guarantees-the-review-handoff.md`. Note it turned out **not** to depend on L2: the loop re-briefs its own agent rather than choosing a reviewer. |
 
 **L0 through L2 are worth doing regardless of dependencies.** L1 in particular: an agent that cannot
 tell what its colleagues are for is a gap in a multi-agent product, not a gap in loops.
@@ -318,7 +326,9 @@ at a document that declares an order.
   see §3. What remains open is the fix, and it is entangled with the two questions below rather than
   being a local repair: the loop cannot distinguish *waiting for a reviewer who is coming* from
   *waiting for a reviewer who never will*, and which of those it is depends entirely on §7's fork.
-- **Who guarantees the handoff** (§7) — agent alone, loop alone, or both.
+- ~~**Who guarantees the handoff** (§7)~~ — **answered 2026-08-20:** neither of the three as framed.
+  The loop guarantees the *asking*, the agent keeps the *choosing*. See
+  `2026-08-20-who-guarantees-the-review-handoff.md`.
 - **Should a loop ever claim more than one item** (§9).
 - **How does a reviewer get chosen when several are free?** The same least-loaded-versus-round-robin
   question §5 of the previous exploration left open for implementers, now for reviewers.
