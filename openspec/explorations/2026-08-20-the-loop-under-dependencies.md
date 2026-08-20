@@ -310,7 +310,7 @@ uniqueness constraint and the §6 decision. Not needed for correctness — only 
 | ~~**L0**~~ | ~~Verify the §3 spin, and fix it if live~~ | — | **DONE 2026-08-20.** Reproduced, then fixed by skipping a stalled firing rather than spawning into it (§3). `_loop_stall_reason`, `scheduler.py`. |
 | **L1** | **Charter summary in the Team section** | nothing | One line per peer saying what it is for. Cheapest possible fix for 6.1, and useful with or without loops. |
 | **L2** | **`list_agents` MCP tool** — roster, charter, current availability | nothing | 6.2 and 6.3. Must be a tool, not context (§6.2). |
-| **L3** | **Dependency-aware claim** — skip unstartable tasks; distinguish the three stalled states | `task-dependencies` | Without it, dependencies deadlock every loop (§2). **This is not optional.** |
+| ~~**L3**~~ | ~~Dependency-aware claim — skip unstartable tasks; distinguish the three stalled states~~ | — | **SPECIFIED 2026-08-20** as group 9 of `task-dependencies`, with design D10 and an `agent-loops` delta. It was absent from that change's original 70 tasks — one incidental mention of *"respects an owning `Loop`"* — which would have shipped the §2 deadlock intact. The change that creates the deadlock now carries its fix. |
 | **L4** | **A task names its reviewer** | L2 | 6.4. Bindable by the operator, choosable by an agent, and the natural home for "easy tasks get a weaker reviewer". |
 | ~~**L5**~~ | ~~The review handoff, and who guarantees it~~ | — | **RESOLVED 2026-08-20.** Becomes R1–R3 in `2026-08-20-who-guarantees-the-review-handoff.md`. Note it turned out **not** to depend on L2: the loop re-briefs its own agent rather than choosing a reviewer. |
 

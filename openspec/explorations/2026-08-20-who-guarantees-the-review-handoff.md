@@ -322,33 +322,56 @@ discovered later.
 | **R1** | Handoff detection — the two lookups of §3, behind one shared predicate | nothing | ready to propose |
 | **R2** | The re-brief — its own turn, bounded reminder count | R1 | ready to propose |
 | **R3** | Surface to the operator when the count is exhausted | R2 | ready to propose |
-| **R4** | Review-wait timeout for a handoff that happened but was never picked up | R1 | **open** — §8 |
+| ~~**R4**~~ | ~~Review-wait timeout for a handoff that happened but was never picked up~~ | — | **DECIDED AGAINST 2026-08-20.** Not deferred. Once R6 counts a stalled tick in place, such a loop already reads *"stalled, waiting on review, N ticks since …"* — visible, cheap, and recoverable the moment anyone reviews it. A timeout must choose an *action*, and stopping, reassigning and re-briefing the reviewer are each worse than continuing to wait visibly. |
 | **R5** | Busy guard — a firing whose loop agent already has a running turn is skipped | nothing | ready to propose — §9.1 |
 | **R6** | Tick recording — `busy` records nothing, `stalled` counts in place | R5 | ready to propose — §9.2 |
 
-**R1, R2, R3, R5 and R6 are one change.** They are all the same sentence: *the loop notices what is
-actually happening and reacts to it, instead of firing blind.* R1–R3 replace L5 in the previous
-exploration's L0–L5 table; R5 and R6 are the cadence half of the same idea. R4 stays out — it needs
-a decision that has not been taken.
+**R1, R2, R3, R5 and R6 are one change** — proposed 2026-08-20 as `loop-notices-and-reacts`, which
+validates. They are all the same sentence: *the loop notices what is actually happening and reacts to
+it, instead of firing blind.* R1–R3 replace L5 in the previous exploration's L0–L5 table; R5 and R6
+are the cadence half of the same idea. R4 is decided against rather than deferred.
+
+**The status-set unification rides with them.** Folded into the same change by operator decision
+(design D9): its first consumer is the shared claim decision R1–R3 need, so landing them apart means
+writing that function against the four-set world and rewriting it immediately. Membership does not
+change — each derived set is asserted equal to its current literal before the literal is deleted.
+
+**L3 went where it belongs, which is not here.** The dependency-aware claim is now group 9 of
+`task-dependencies` (design D10), because the change that introduces the deadlock should carry its
+fix. It was absent from that change's 70 tasks — one incidental mention of *"respects an owning
+`Loop`"* and nothing else — which would have shipped the §2 deadlock intact.
 
 **Relationship to L1/L2/L4.** D deliberately does not need them. `list_agents` (L2) and charter
 summaries (L1) make ALPHA *better at choosing* a reviewer; D only makes sure ALPHA is *asked*. They
 compose and neither blocks the other — which is the main practical benefit of choosing D over B.
 
-## 10. Still open
+## 11. Still open
 
-- **The review-wait timeout** (§8) — a handoff that happened to a reviewer who never runs.
-- **How many reminders?** *"A small fixed number"* is decided; the number is not. Three is the
-  obvious starting point and `delivery_attempts` offers no precedent value for the count itself.
-- **Is the reminder count per task or per loop?** Per task is the natural reading of "task 1 was
-  asked about three times", but nothing has been said.
-- **Does a reminder that succeeds reset the count?** Relevant after a `revision_needed` cycle, where
-  the same task legitimately reaches `completed` more than once.
-- **Unifying the "active task" sets** (§7) — a cleanup, not a bug, and larger than either fix it
-  would have prevented. There are **four**, not three: `CLAIMABLE_LOOP_TASK_STATUSES`
+**Closed on 2026-08-20, after the first draft of this document:**
+
+- ~~The review-wait timeout~~ — **decided against**, see R4 in §10.
+- ~~How many reminders~~ — **three.** Nothing has measured it; chosen because three wasted turns are
+  cheap and one bad turn should not escalate to the operator. The first real use is the evidence.
+- ~~Per task or per loop~~ — **per task.** Per loop would exhaust on one stubborn task and silence
+  reminders for every other.
+- ~~Does a successful reminder reset the count~~ — **yes.** Without it a task through a legitimate
+  `revision_needed` cycle, which reaches `completed` more than once by design, arrives at its second
+  completion with the budget already spent.
+- ~~Unifying the "active task" sets~~ — **folded into `loop-notices-and-reacts`** (design D9) rather
+  than left as a cleanup. There are **four**, not three: `CLAIMABLE_LOOP_TASK_STATUSES`
   (`scheduler.py`), `TERMINAL_FOR_BINDING` (`run_task_binding.py`), `_ACTIVE_TASK_STATUSES`
-  (`api/v1/agents.py:60`) and `_LIVE_TASK_STATUSES` (`checkpoints.py:62`). The last two are
-  identical in content and separate in code — and both already counted `revision_needed` as live
-  work, which is what marked §7's fix as correcting an oversight rather than changing a policy.
+  (`api/v1/agents.py:60`) and `_LIVE_TASK_STATUSES` (`checkpoints.py:62`) — the last two identical in
+  content and separate in code, and both already counting `revision_needed` as live work, which is
+  what marked §7's fix as correcting an oversight rather than changing a policy.
+
+**Genuinely still open:**
+
+- **What band `blocked` belongs to** under the new vocabulary. It is claimable by the loop yet means
+  *"waiting on a person"*, and the four existing sets disagree — the claimable set includes it, the
+  other three do not. Task 4.4 of `loop-notices-and-reacts`, and the one classification existing code
+  does not answer.
 - **What cron interval a loop should default to**, now that a fast one stops being harmful once R5
-  lands. Untouched — the current default was chosen when a fast cron piled up briefings.
+  lands. Untouched — the current default was chosen when a fast cron piled up briefings, and that
+  reason expires with the busy guard.
+- **What the board shows for a loop that is re-briefing.** The state is derivable; whether it gets
+  its own label or reuses the stall presentation is undecided.

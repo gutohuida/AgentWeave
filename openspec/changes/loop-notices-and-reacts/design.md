@@ -166,6 +166,39 @@ pulling the operator into an unattended loop for something that self-corrects is
 **The single-agent project needs no special case.** It has nobody to hand off to, so it exhausts the
 bound immediately and surfaces — which is the correct outcome, reached by the general rule.
 
+### D9 — One status vocabulary, four derived sets, no membership changes
+
+Four constants answer *"is this task live?"* and none knows the others exist:
+
+| Constant | Where | Members |
+|---|---|---|
+| `CLAIMABLE_LOOP_TASK_STATUSES` | `hub/hub/scheduler.py` | `pending assigned in_progress blocked revision_needed` |
+| `TERMINAL_FOR_BINDING` | `hub/hub/run_task_binding.py:272` | `approved rejected` |
+| `_ACTIVE_TASK_STATUSES` | `hub/hub/api/v1/agents.py:60` | `pending assigned in_progress under_review revision_needed` |
+| `_LIVE_TASK_STATUSES` | `hub/hub/checkpoints.py:62` | identical to the row above |
+
+**Both stall bugs fixed on 2026-08-20 lived in the gaps.** The spin, because `completed` was in
+neither of the first two. `revision_needed`, because it was in neither — while the *other two* sets
+already called it live work. Four opinions, and the disagreement was the bug both times.
+
+The fix is a classification, not a fifth set: every status in `TRANSITIONS` belongs to exactly one
+band, and each of the four sets is derived from the bands rather than listed. A status added to the
+transition machine and not classified fails at import, not at 3am in a loop that fires forever.
+
+**Membership does not change.** Each derived set must contain exactly what it contains today; a test
+asserts each one against its current literal before the literal is deleted. This is what keeps a
+refactor from smuggling in a behaviour change — and it is why this can safely ride along with the
+rest of this proposal rather than needing its own.
+
+*Rejected:* **leaving it and relying on the derived-gap test** added on 2026-08-20. That test catches
+a status in neither `CLAIMABLE` nor `TERMINAL` — the exact shape that bit twice — but says nothing
+about the other two sets, and nothing about a status that belongs to the wrong band rather than to
+none.
+
+*Rejected:* **its own change.** The vocabulary's first real consumer is D3's shared claim decision,
+which is in this change. Landing them apart means writing D3 against the four-set world and
+rewriting it immediately.
+
 ## Risks / Trade-offs
 
 **[The board and the firing drift, because claimability is now conditional]** → One function, called
@@ -186,6 +219,10 @@ identity is "most recent run for this job, same reason". Accepted explicitly in 
 because upgrades from an early revision reach it with only that revision's tables. Bump the head
 assertions in `hub/tests/test_migrations.py` and `hub/tests/test_project_persistence.py`.
 
+**[The D9 refactor silently changes a set's membership]** → Each derived set is asserted equal to its
+current literal *before* the literal is removed, per D9. A refactor that changes behaviour fails that
+assertion rather than shipping.
+
 ## Migration Plan
 
 Additive columns only; no backfill. A task with no recorded re-brief count reads as zero, which is
@@ -196,11 +233,20 @@ survives a rollback even though the behaviour does not.
 
 ## Open Questions
 
-- **How many re-briefs?** *"A small fixed number"* is decided; three is the assumed starting point
-  and nothing has measured it. `delivery_attempts` offers no precedent for the count itself.
-- **Is the bound configurable per loop or per project?** Assumed constant for this change.
+- **Is the re-brief bound configurable per loop or per project?** A constant of **three** for this
+  change (see below). Nothing has measured it, so the first real use is the evidence.
 - **What does the board show for a loop that is re-briefing?** The state is derivable per D3; whether
   it gets its own label or reuses the stall presentation is undecided.
-- **R4, the review-wait timeout** — a handoff that happened to a reviewer who never runs. Out of
-  scope, and the shape to copy when it is taken up is `Agent.permission_timeout_seconds` /
-  `Agent.question_timeout_seconds`.
+- **What band does `blocked` belong to under D9?** It is claimable by the loop yet means *"waiting on
+  a person"*. Today's sets disagree — `CLAIMABLE_LOOP_TASK_STATUSES` includes it, the other three do
+  not. The classification must state which it is, and the answer is not obvious from existing code.
+
+**Closed since first drafting:**
+
+- **How many re-briefs?** **Three.** A number nothing has measured, chosen because it is small enough
+  that three wasted turns are cheap and large enough that a single bad turn does not escalate to the
+  operator. Cheap to change once real use says otherwise.
+- **R4, the review-wait timeout.** **Decided against**, not deferred — see the proposal's non-goals.
+  Once a stalled tick counts in place, a loop waiting on an absent reviewer is already visible and
+  already recoverable; a timeout would have to choose an action, and every candidate is worse than
+  continuing to wait visibly.

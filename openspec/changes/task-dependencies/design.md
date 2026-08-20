@@ -239,6 +239,51 @@ render as something or the remaining graph looks rootless.
 
 **The picker carries counts**, so choosing a board and seeing what remains are one act.
 
+### D10 — The loop's claim must consult the gate, or this change deadlocks every loop
+
+**Added 2026-08-20, after the gap was found in review.** This design originally said nothing about
+loops, which would have shipped a guaranteed deadlock. From
+`openspec/explorations/2026-08-20-the-loop-under-dependencies.md` §2:
+
+```
+   firing 1   claim oldest pending ──▶ assigned       (D1 leaves → assigned UNGATED)
+              agent attempts → in_progress ──▶ REFUSED by the gate
+              task remains `assigned`
+   firing 2   `assigned` sorts above every `pending`  ──▶ re-claims THE SAME task
+   firing 3   ⟳ forever. Startable work is never reached.
+```
+
+Two locally-correct decisions produce it, and neither is wrong alone. D1 deliberately leaves
+`→ assigned` ungated so a whole wave can be assigned in advance. `_loop_queue_order` deliberately
+sorts non-pending above pending so an unfinished task is resumed rather than stranded — a fix made
+2026-08-19 whose own comment predicts this exact cost: *"a task the agent genuinely cannot start is
+now re-claimed every firing, so the loop repeats one item instead of spinning on none."* That trade
+was taken against an occasional agent-behaviour problem. **Dependencies make it a structural
+certainty**: every dependent task is unstartable by design until its prerequisite is approved.
+
+**Chosen: the claim consults the same dependency determination the gate uses**, and skips unstartable
+tasks in order rather than stopping at the first. Claimability and startability agreeing is the whole
+fix.
+
+*Rejected:* **gating `→ assigned` as well.** It would stop the loop claiming unstartable work, but it
+discards D1's reason for leaving that edge open and breaks auto-assignment before it is built.
+
+*Rejected:* **a separate readiness computation for the loop.** Two implementations of "are this
+task's dependencies met" is the drift shape `_loop_queue_order`'s comment already records —
+*"two consistent wrong answers read as a match, which is how it survived review."*
+
+**A queue gated on a `rejected` prerequisite stalls; it does not stop.** Tempting to treat as
+§8's *"nothing ready EVER"* and end the loop, but `rejected → pending` is operator-only and therefore
+reversible, while stopping sets `job.enabled = False` and calls `remove_job` — so the operator
+reversing the rejection afterwards could not revive the loop. Same reasoning that chose *skip* over
+*stop* for the stall on 2026-08-20. The stall reason distinguishes the two kinds of gating, because
+the remedies differ.
+
+**Sequencing.** `loop-notices-and-reacts` introduces the one shared claim-decision function that both
+`_do_fire_job` and `_batch_loop_summaries` call. This change adds a dependency branch to it. Landing
+that change first makes this a branch; landing this first means building the shared function here and
+rewriting it there.
+
 ## Risks
 
 **Review becomes the bottleneck and nobody notices.** D8's middle state is the whole mitigation, and

@@ -46,6 +46,16 @@ Explored and decided with the operator in
 - A skipped-because-busy tick records **no** `JobRun`. A stalled tick records **one** `JobRun` that
   counts subsequent ticks in place rather than appending a row per tick.
 
+**Every task status gets classified once, in one place.**
+
+- Four constants answer *"is this task live?"* today, and disagree:
+  `CLAIMABLE_LOOP_TASK_STATUSES` (`hub/hub/scheduler.py`), `TERMINAL_FOR_BINDING`
+  (`hub/hub/run_task_binding.py:272`), `_ACTIVE_TASK_STATUSES` (`hub/hub/api/v1/agents.py:60`) and
+  `_LIVE_TASK_STATUSES` (`hub/hub/checkpoints.py:62`) — the last two identical in content and
+  separate in code. **Both of the stall bugs fixed on 2026-08-20 lived in the gaps between them.**
+- One named vocabulary classifies every status, and each of the four sets is derived from it, so a
+  status added to the transition machine cannot silently belong to none.
+
 **Non-Goals — explicitly out of scope, not merely omitted:**
 
 - **Event-driven firing.** Decided against (exploration §9): the latency gap is invisible at a loop's
@@ -58,10 +68,16 @@ Explored and decided with the operator in
   (exploration R4/§8). Needs a decision not yet taken.
 - **A reviewer field on `Task`** (L4), **charter summaries in the Team section** (L1), and
   **`list_agents`** (L2). Independent, and this change is deliberately built not to need them.
-- **Unifying the four overlapping "active task" status sets.** Recorded as a smell in the
-  exploration; a cleanup, not part of this.
+- **A review-wait timeout** for a handoff that *did* reach a reviewer who never runs. Decided
+  against, not deferred: once a stalled tick counts in place, such a loop reads *"stalled, waiting on
+  review, N ticks since …"* — visible, cheap, and recoverable the moment anyone reviews it. A timeout
+  would have to decide what to *do* when it fires, and stopping, reassigning and re-briefing are all
+  worse than staying visible and waiting.
 - **Changing any loop's default cron interval.** A faster cron becomes safe once the busy guard
   lands, but choosing a new default is a separate decision.
+- **Changing which statuses any of the four sets contains.** The vocabulary work above is a
+  refactor: every set keeps exactly the members it has today, derived rather than listed. Any change
+  in membership is a behaviour change and belongs to a different proposal.
 
 ## Capabilities
 
@@ -76,6 +92,10 @@ Explored and decided with the operator in
 - `agent-loops`: A firing gains two refusal conditions before it claims — the loop's agent already
   running, and its queue stalled — and the rules for what a firing records when it does not fire.
   Today every firing that is not stopped proceeds to claim (`hub/hub/scheduler.py::_do_fire_job`).
+- `task-lifecycle-governance`: Every task status must be classified into exactly one lifecycle band,
+  and the sets that ask *"is this task live?"* must be derived from that classification rather than
+  listed independently. Today four constants list their members by hand and none is checked for
+  completeness against the transition machine.
 
 ## Impact
 
@@ -86,6 +106,8 @@ Explored and decided with the operator in
 - `hub/hub/api/v1/jobs.py` — `_batch_loop_summaries` imports the claim's derivation rather than
   restating it (`:170`); that sharing must survive claimability becoming conditional.
 - New derivation reading `Message` and `TaskTransition`; no new columns for the signal itself.
+- `hub/hub/run_task_binding.py`, `hub/hub/api/v1/agents.py`, `hub/hub/checkpoints.py` — each stops
+  listing its status set and derives it from the shared vocabulary. No membership changes.
 
 **Database**
 

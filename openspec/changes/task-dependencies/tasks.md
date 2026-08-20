@@ -80,29 +80,56 @@ behaviour.
 - [ ] 8.12 Decide what "good enough" edge routing is **before** implementing it. Crossing minimisation in a layered DAG is a known hard problem and an unbounded one to polish.
 - [ ] 8.13 `make ui` after `npm run build`, and commit `hub/ui/src` and `hub/hub/static/ui` together.
 
-## 9. Verification an agent can do
+## 9. The loop's claim — without this the change deadlocks every loop
 
-- [ ] 9.1 `py -3.11 -m pytest hub/tests/ -q --ignore=hub/tests/browser` passes.
-- [ ] 9.2 `py -3.11 -m pytest tests/ -q` passes.
-- [ ] 9.3 `ruff check hub/`, `black --check hub/`, `mypy hub/hub/` clean on touched files; `cd hub/ui && npm run lint`.
-- [ ] 9.4 Test the whole chain: document declares A → B → C, approve, confirm B cannot start until A is **approved** (not merely completed), and C not until B is.
-- [ ] 9.5 Test a cross-document import end to end: approve document 1, import its task into document 2, approve 2, confirm the edge points at the existing task and no duplicate was created.
-- [ ] 9.6 Test the regression case: A approved, C started, A → revision_needed. C's status is unchanged and C is reported as running on a regressed prerequisite.
-- [ ] 9.7 Test the rejected case: A rejected, B refused with a message naming A and distinguishable from "not yet approved".
-- [ ] 9.8 Confirm `spec_completeness`'s existing checks are unchanged — this change adds three and must alter none.
-- [ ] 9.9 Confirm the seven-column board's tests still pass untouched.
+Design D10. Depends on `loop-notices-and-reacts` having landed the shared claim decision; if it has
+not, this group builds against the current `_claim_loop_task` and that change adapts it instead.
 
-## 10. Verification only a human can do
+- [ ] 9.1 Test the deadlock first, before fixing it: a loop over a document declaring A → B, with A
+      unapproved, must not claim B on every firing forever. Assert the current failure, then flip the
+      assertion — the same order that caught the spin on 2026-08-20.
+- [ ] 9.2 Test: a queue holding an older gated task and a newer startable one claims the newer, and
+      leaves the older with its status and no assignee.
+- [ ] 9.3 Test: a queue where every task is gated claims nothing, and the job stays enabled with no
+      stop reason recorded.
+- [ ] 9.4 Test: approving the prerequisite makes the gated task claimable on the next firing, with no
+      other action.
+- [ ] 9.5 Test the agreement directly — every task a firing claims can move to `in_progress` without
+      the dependency gate refusing it. This is the whole property; assert it rather than inferring it
+      from the cases above.
+- [ ] 9.6 Implement the skip using the **same** dependency determination the gate in group 5 uses.
+      A second implementation is the drift `_loop_queue_order`'s comment records; import it.
+- [ ] 9.7 Skip unstartable tasks in queue order rather than stopping at the first one.
+- [ ] 9.8 Distinguish the two stall reasons: waiting on work that can still be approved, versus gated
+      on a `rejected` prerequisite. Different remedies, so different messages.
+- [ ] 9.9 Test that a rejected-gated queue does **not** stop the loop, and that reversing the
+      rejection and approving revives it with no further operator action.
+- [ ] 9.10 Confirm the board's derivation agrees with the firing's for a gated queue — the same
+      13.1 property, now with dependencies in it.
 
-- [ ] 10.1 **The shape is legible.** Open the board for a real decomposition. The order of work is apparent without reading a single description.
-- [ ] 10.2 **The stall is diagnosable.** Let a layer sit completed and unreviewed. The board says work is waiting on review — not merely that downstream cards are gated. If this reads as "the feature is broken", it is.
-- [ ] 10.3 **The gate is honest in a live run.** Ask an agent to start a task whose prerequisite is unapproved. The refusal tells it what to wait for, in words it can act on.
-- [ ] 10.4 **The review chain is bearable.** Walk a three-deep chain with two agents. Judge whether the review cost per wave is acceptable — this is the change's main risk and only real use answers it.
-- [ ] 10.5 **The board does not lie about foreign work.** With a cross-document import, confirm the reference names the owning document and that the blocker is reachable from it.
-- [ ] 10.6 **Collapse behaves.** Finish a layer, confirm it collapses, expand it, confirm the graph still reads.
-- [ ] 10.7 **Structure really is read-only.** Try to drag, delete, or otherwise alter an edge. Confirm the refusal explains itself rather than nothing happening.
-- [ ] 10.8 **The picker earns its place.** Confirm outstanding counts make choosing a board and seeing what is left one act.
+## 10. Verification an agent can do
 
-## 11. User test guide
+- [ ] 10.1 `py -3.11 -m pytest hub/tests/ -q --ignore=hub/tests/browser` passes.
+- [ ] 10.2 `py -3.11 -m pytest tests/ -q` passes.
+- [ ] 10.3 `ruff check hub/`, `black --check hub/`, `mypy hub/hub/` clean on touched files; `cd hub/ui && npm run lint`.
+- [ ] 10.4 Test the whole chain: document declares A → B → C, approve, confirm B cannot start until A is **approved** (not merely completed), and C not until B is.
+- [ ] 10.5 Test a cross-document import end to end: approve document 1, import its task into document 2, approve 2, confirm the edge points at the existing task and no duplicate was created.
+- [ ] 10.6 Test the regression case: A approved, C started, A → revision_needed. C's status is unchanged and C is reported as running on a regressed prerequisite.
+- [ ] 10.7 Test the rejected case: A rejected, B refused with a message naming A and distinguishable from "not yet approved".
+- [ ] 10.8 Confirm `spec_completeness`'s existing checks are unchanged — this change adds three and must alter none.
+- [ ] 10.9 Confirm the seven-column board's tests still pass untouched.
 
-- [ ] 11.1 Write the operator-facing test guide: what to declare, in what order to approve, what should be startable at each point, and what should not. Lead with 10.2 — an unattended review backlog and a broken dependency gate look identical from the outside, and if the board cannot tell them apart the feature is unusable no matter how correct the graph is.
+## 11. Verification only a human can do
+
+- [ ] 11.1 **The shape is legible.** Open the board for a real decomposition. The order of work is apparent without reading a single description.
+- [ ] 11.2 **The stall is diagnosable.** Let a layer sit completed and unreviewed. The board says work is waiting on review — not merely that downstream cards are gated. If this reads as "the feature is broken", it is.
+- [ ] 11.3 **The gate is honest in a live run.** Ask an agent to start a task whose prerequisite is unapproved. The refusal tells it what to wait for, in words it can act on.
+- [ ] 11.4 **The review chain is bearable.** Walk a three-deep chain with two agents. Judge whether the review cost per wave is acceptable — this is the change's main risk and only real use answers it.
+- [ ] 11.5 **The board does not lie about foreign work.** With a cross-document import, confirm the reference names the owning document and that the blocker is reachable from it.
+- [ ] 11.6 **Collapse behaves.** Finish a layer, confirm it collapses, expand it, confirm the graph still reads.
+- [ ] 11.7 **Structure really is read-only.** Try to drag, delete, or otherwise alter an edge. Confirm the refusal explains itself rather than nothing happening.
+- [ ] 11.8 **The picker earns its place.** Confirm outstanding counts make choosing a board and seeing what is left one act.
+
+## 12. User test guide
+
+- [ ] 12.1 Write the operator-facing test guide: what to declare, in what order to approve, what should be startable at each point, and what should not. Lead with 10.2 — an unattended review backlog and a broken dependency gate look identical from the outside, and if the board cannot tell them apart the feature is unusable no matter how correct the graph is.
