@@ -27,7 +27,7 @@ agentweave hub start --docker       # scenario B: Docker instead
 Notes:
 - Config and data live in `~/.agentweave/hub/` (compose file, `.env`, database) — not in the project.
 - On first start an API key `aw_live_<hex32>` is generated, printed, and saved to `~/.agentweave/hub/.env`. Record it; agents authenticate with it.
-- Useful env vars (in `~/.agentweave/hub/.env`): `AW_HOST` (native only, default `127.0.0.1`), `AW_PORT`, `AW_BOOTSTRAP_API_KEY`, `AW_BOOTSTRAP_PROJECT_ID`, `DATABASE_URL` (default SQLite; set a PostgreSQL DSN for production), `AW_CORS_ORIGINS`.
+- Useful env vars (in `~/.agentweave/hub/.env`): `AW_HOST` (native only, default `127.0.0.1`), `AW_PORT`, `AW_BOOTSTRAP_API_KEY`, `DATABASE_URL` (default SQLite; set a PostgreSQL DSN for production), `AW_CORS_ORIGINS`.
 - `--local` builds from `./hub/` via Docker — Hub development only, not for normal projects.
 
 ## 2C. Connect to a remote Hub

@@ -27,12 +27,17 @@ if _inherited_database_url and _inherited_database_url != TEST_DATABASE_URL:
     )
 
 os.environ["DATABASE_URL"] = TEST_DATABASE_URL
-os.environ["AW_BOOTSTRAP_API_KEY"] = "aw_live_testkey_abcdefgh"
-os.environ["AW_BOOTSTRAP_PROJECT_ID"] = "proj-test"
-os.environ["AW_BOOTSTRAP_PROJECT_NAME"] = "Test Project"
+os.environ["AW_BOOTSTRAP_API_KEY"] = TEST_API_KEY = "aw_live_testkey_abcdefgh"
+
+# The project nearly every test addresses. It used to arrive as a side effect of
+# `init_db`, which created a project when AW_BOOTSTRAP_PROJECT_ID was set — the same
+# mechanism that put a "Default Project" in front of operators who had an older .env.
+# Startup now creates no project at all, so the suite makes its own.
+TEST_PROJECT_ID = "proj-test"
+TEST_PROJECT_NAME = "Test Project"
 
 from hub.db.engine import async_session_factory, engine, init_db  # noqa: E402
-from hub.db.models import Base  # noqa: E402
+from hub.db.models import ApiKey, Base, Project  # noqa: E402
 from hub.main import create_app  # noqa: E402 — env must be set first
 from hub.project_workspace import (  # noqa: E402
     # A module-level constant holding the unpatched original, not a function alias.
@@ -61,14 +66,30 @@ def assert_engine_is_disposable() -> None:
 assert_engine_is_disposable()
 
 
+async def seed_test_project() -> None:
+    """Create `proj-test` and its API key, before the seeders that iterate projects.
+
+    Ordering is load-bearing: `init_db` seeds default runners and charters for every
+    project it finds, so a project created afterwards would come up with neither.
+    """
+    async with async_session_factory() as session:
+        session.add(Project(id=TEST_PROJECT_ID, name=TEST_PROJECT_NAME))
+        session.add(
+            ApiKey(id=TEST_API_KEY, project_id=TEST_PROJECT_ID, label="bootstrap", revoked=False)
+        )
+        await session.commit()
+
+
 @pytest_asyncio.fixture
 async def app():
     application = create_app()
     # ASGITransport does not trigger the FastAPI lifespan, so we run init_db
-    # (create_all + bootstrap key) explicitly before each test.
+    # (create_all + the instance operator credential) explicitly before each test.
     assert_engine_is_disposable()
     async with engine.begin() as connection:
         await connection.run_sync(Base.metadata.drop_all)
+        await connection.run_sync(Base.metadata.create_all)
+    await seed_test_project()
     await init_db()
     async with AsyncClient(
         transport=ASGITransport(app=application), base_url="http://test"

@@ -24,10 +24,10 @@ class Settings(BaseSettings):
     aw_host: str = "127.0.0.1"
     aw_port: int = 8000
 
-    # Bootstrap key inserted on first startup
+    # Instance operator credential, minted on first startup if the database has none.
+    # There is deliberately no bootstrap *project* setting: startup creates no project,
+    # so there is nothing for one to name.
     aw_bootstrap_api_key: str = ""
-    aw_bootstrap_project_id: str = "proj-default"
-    aw_bootstrap_project_name: str = "Default Project"
 
     # SSE ticket signing
     aw_ticket_secret: str = ""

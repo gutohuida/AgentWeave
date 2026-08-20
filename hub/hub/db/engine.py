@@ -232,46 +232,14 @@ async def init_db() -> None:
     await _run_alembic_upgrade()
 
     async with async_session_factory() as session:
-        from sqlalchemy import func, select
-
-        # Check if any keys exist
-        count = await session.scalar(select(func.count()).select_from(ApiKey))
-        # AW_BOOTSTRAP_PROJECT_ID is only ever present when explicitly requested — by
-        # conftest.py's test fixture, or by an existing pre-multi-project .env carried
-        # forward from before this change. A genuinely fresh native install's scaffolded
-        # .env no longer writes this key, so it starts with zero projects (design
-        # decision 6: "Startup no longer bootstraps proj-default unconditionally").
-        if count == 0 and os.environ.get("AW_BOOTSTRAP_PROJECT_ID") is not None:
-            # No keys exist - need to bootstrap
-            # Determine API key: use env value unless it's empty or placeholder
-            api_key = settings.aw_bootstrap_api_key
-            auto_generated = False
-
-            if not api_key or api_key == _PLACEHOLDER_API_KEY:
-                api_key = _generate_api_key()
-                auto_generated = True
-                logger.info("Bootstrap API key auto-generated")
-
-            # Create project
-            project = Project(
-                id=settings.aw_bootstrap_project_id,
-                name=settings.aw_bootstrap_project_name,
-            )
-            session.add(project)
-
-            # Create API key
-            key = ApiKey(
-                id=api_key,
-                project_id=settings.aw_bootstrap_project_id,
-                label="bootstrap" if not auto_generated else "auto-generated",
-                revoked=False,
-            )
-            session.add(key)
-            await session.commit()
-
-            if auto_generated:
-                logger.info("Bootstrap API key stored in database")
-
+        # Startup creates no project. A Hub with nothing in it is the correct empty state:
+        # the operator opens a directory and that registers the project, which is the only
+        # path that can bind a project id to a working directory. A seeded "Default Project"
+        # bound to nothing was an artefact of the single-project era — it survived the move
+        # to a project collection as an env-gated leftover (AW_BOOTSTRAP_PROJECT_ID), which
+        # was enough for an old .env carried forward to keep conjuring one. The gate, the
+        # settings behind it and the project it made are all gone; tests that want a project
+        # create one (see hub/tests/conftest.py).
         await _seed_operator_credential(session)
         await _seed_default_runners(session)
         await _seed_default_charters(session)
