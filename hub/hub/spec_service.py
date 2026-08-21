@@ -662,7 +662,12 @@ async def rename_document(
     filesystem move goes last because a transaction rolls back and a file move
     does not.
     """
-    if document.phase == spec_lifecycle.APPROVED:
+    if document.first_approved_at is not None:
+        # Not `phase == APPROVED`: approval has two exits, archive and reopen, and both unfreeze
+        # the path if this checked current phase alone — which the refusal's own reason ("its path
+        # is part of what was approved") does not intend. `first_approved_at` is set once and never
+        # reset (`spec_lifecycle.transition`), so this is monotone: once ever-approved, always
+        # refused, even after archiving or reopening (design D6).
         raise SaveRefusedError(
             "this document is approved; its path is part of what was approved",
             code="document_approved",

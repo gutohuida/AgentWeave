@@ -62,10 +62,12 @@ behaviour.
 
 ## 6. The rename refusal
 
-- [ ] 6.1 Change `rename_document`'s check from `phase == APPROVED` to "has ever been approved".
-- [ ] 6.2 Test the two holes this closes: approve → archive → rename, and approve → reopen → rename. Both must now refuse.
-- [ ] 6.3 Test that a never-approved document still renames.
-- [ ] 6.4 Check whether any existing test asserted the archived-rename path worked. If one does, it encoded the hole — fix the test and say so in the commit.
+- [x] 6.1 Change `rename_document`'s check from `phase == APPROVED` to "has ever been approved". Landed: `hub/hub/spec_service.py:665` now checks `document.first_approved_at is not None` instead of `document.phase == spec_lifecycle.APPROVED`, with a comment at the check site (per D6) explaining why phase alone isn't enough and pointing at `spec_lifecycle.transition()` for the never-reset invariant. `first_approved_at` (migration 0083, section 3) is already set once on the first `-> approved` transition and never cleared — `spec_lifecycle.py:299-303`.
+- [x] 6.2 Test the two holes this closes: approve → archive → rename, and approve → reopen → rename. Both must now refuse. Landed as `test_a_document_that_was_approved_and_then_archived_is_still_not_renamed` and `test_a_document_that_was_approved_and_then_reopened_is_still_not_renamed` in `hub/tests/test_spec_rename.py`, driven through the real `/documents/phase` and `/documents/rename` HTTP routes (not a hand-built `SpecDocument`). Both assert `422`/`document_approved` and that the file did not move.
+- [x] 6.3 Test that a never-approved document still renames. Landed as `test_a_never_approved_document_still_renames` — takes a document through propose and back to exploring (reopened, never approved) and confirms the rename still succeeds at 200. The plain never-touched-approval path was already covered by the pre-existing `test_a_subject_becomes_the_documents_path`; confirmed rather than assumed.
+- [x] 6.4 Check whether any existing test asserted the archived-rename path worked. If one does, it encoded the hole — fix the test and say so in the commit. Checked: no existing test in `test_spec_rename.py` exercised archive or reopen before renaming — the only pre-existing approved-refusal test (`test_an_approved_document_is_not_renamed`) checked the direct approved-phase case only. Nothing needed fixing; the hole was untested, not wrongly asserted.
+
+**Verified, not assumed.** `pytest tests/test_spec_rename.py tests/test_spec_archive.py tests/test_migrations.py -q` from `hub/` → 100 passed, 1 skipped. `ruff check`/`black --check` on `hub/spec_service.py` and `tests/test_spec_rename.py` → clean. `mypy hub/spec_service.py` → no new errors attributable to this file. CLI baseline (`pytest tests/ -q` from repo root) → 404 passed, 3 skipped, exact match to run2_baseline. Full `hub/tests/` suite run (adds no table, no payload field, so optional per run2's own rule — run anyway per iteration_shape's lean-toward-it note; result recorded in the log once it completes).
 
 ## 7. Reading dependencies
 

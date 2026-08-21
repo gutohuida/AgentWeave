@@ -253,21 +253,25 @@ async def test_a_delivered_turn_keeps_the_path_it_ran_with(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
-async def test_an_approved_document_is_not_renamed(app, auth_headers, run_headers, tmp_path):
-    await _create(app, auth_headers)
-    await app.post(SUBMIT, json={"path": PLACEHOLDER, "document": _document()}, headers=run_headers)
+async def _approve(app, auth_headers, run_headers, path=PLACEHOLDER):
+    await app.post(SUBMIT, json={"path": path, "document": _document()}, headers=run_headers)
     await app.post(
-        f"{BASE}/documents/close-exploration", params={"path": PLACEHOLDER}, headers=auth_headers
+        f"{BASE}/documents/close-exploration", params={"path": path}, headers=auth_headers
     )
-    await app.post(f"{BASE}/documents/propose", params={"path": PLACEHOLDER}, headers=auth_headers)
+    await app.post(f"{BASE}/documents/propose", params={"path": path}, headers=auth_headers)
     approved = await app.post(
         f"{BASE}/documents/phase",
-        params={"path": PLACEHOLDER, "to": "approved"},
+        params={"path": path, "to": "approved"},
         json={"reason": "looks right"},
         headers=auth_headers,
     )
     assert approved.status_code == 200, approved.text
+
+
+@pytest.mark.asyncio
+async def test_an_approved_document_is_not_renamed(app, auth_headers, run_headers, tmp_path):
+    await _create(app, auth_headers)
+    await _approve(app, auth_headers, run_headers)
 
     response = await _rename(app, run_headers)
 
@@ -275,6 +279,78 @@ async def test_an_approved_document_is_not_renamed(app, auth_headers, run_header
     assert response.json()["detail"]["code"] == "document_approved"
     assert (tmp_path / PLACEHOLDER).is_file()
     assert await _row(PLACEHOLDER) is not None
+
+
+@pytest.mark.asyncio
+async def test_a_document_that_was_approved_and_then_archived_is_still_not_renamed(
+    app, auth_headers, run_headers, tmp_path
+):
+    """`archived` unfreezes `phase == APPROVED`, but not the fact that the path was once approved
+    (design D6) — archiving is not a way to launder a path free."""
+    await _create(app, auth_headers)
+    await _approve(app, auth_headers, run_headers)
+    archived = await app.post(
+        f"{BASE}/documents/phase",
+        params={"path": PLACEHOLDER, "to": "archived"},
+        json={"reason": "done"},
+        headers=auth_headers,
+    )
+    assert archived.status_code == 200, archived.text
+
+    response = await _rename(app, run_headers)
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "document_approved"
+    assert (tmp_path / PLACEHOLDER).is_file()
+    assert await _row(PLACEHOLDER) is not None
+
+
+@pytest.mark.asyncio
+async def test_a_document_that_was_approved_and_then_reopened_is_still_not_renamed(
+    app, auth_headers, run_headers, tmp_path
+):
+    """`exploring` unfreezes `phase == APPROVED` too, but reopening for revision does not
+    un-approve history (design D6) — the path stays part of what was approved."""
+    await _create(app, auth_headers)
+    await _approve(app, auth_headers, run_headers)
+    reopened = await app.post(
+        f"{BASE}/documents/phase",
+        params={"path": PLACEHOLDER, "to": "exploring"},
+        json={"reason": "one more pass"},
+        headers=auth_headers,
+    )
+    assert reopened.status_code == 200, reopened.text
+
+    response = await _rename(app, run_headers)
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "document_approved"
+    assert (tmp_path / PLACEHOLDER).is_file()
+    assert await _row(PLACEHOLDER) is not None
+
+
+@pytest.mark.asyncio
+async def test_a_never_approved_document_still_renames(app, auth_headers, run_headers, tmp_path):
+    """The refusal is monotone in one direction only: a document that has never reached
+    `approved` keeps renaming exactly as before this change."""
+    await _create(app, auth_headers)
+    await app.post(SUBMIT, json={"path": PLACEHOLDER, "document": _document()}, headers=run_headers)
+    await app.post(
+        f"{BASE}/documents/close-exploration", params={"path": PLACEHOLDER}, headers=auth_headers
+    )
+    await app.post(f"{BASE}/documents/propose", params={"path": PLACEHOLDER}, headers=auth_headers)
+    await app.post(
+        f"{BASE}/documents/phase",
+        params={"path": PLACEHOLDER, "to": "exploring"},
+        json={"reason": "back to the drawing board"},
+        headers=auth_headers,
+    )
+
+    response = await _rename(app, run_headers)
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {"path": NAMED, "previous_path": PLACEHOLDER}
+    assert await _row(NAMED) is not None
 
 
 @pytest.mark.asyncio
