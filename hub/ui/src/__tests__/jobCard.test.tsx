@@ -13,6 +13,17 @@ import type { Job } from '@/api/jobs'
 
 let loopTasks: unknown[] = []
 
+/** What `useJobHistory` returns for the card under test — the runs, and whether they are in flight. */
+let jobHistory: { data?: unknown[]; isLoading: boolean } = { data: [], isLoading: false }
+
+vi.mock('@/api/jobs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/api/jobs')>()
+  return {
+    ...actual,
+    useJobHistory: () => jobHistory,
+  }
+})
+
 vi.mock('@/api/tasks', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/tasks')>()
   return {
@@ -172,5 +183,57 @@ describe('JobCard loop block', () => {
     await user.click(screen.getByLabelText('Expand job details'))
     await user.click(screen.getByText('Bump lodash (in_progress)'))
     expect(onOpenTasks).toHaveBeenCalledWith(['task-1', 'task-2'])
+  })
+})
+
+/**
+ * Broken-loop check 9.6: nothing got quieter that should not have. The jobs collection carries no
+ * `history`, so an expanded card read "No runs yet" for a job whose firings had failed — a loud
+ * failure rendered as a job that had never fired.
+ */
+describe('JobCard run history', () => {
+  it('shows a failed firing and its reason instead of "No runs yet"', async () => {
+    const user = userEvent.setup()
+    loopTasks = []
+    jobHistory = {
+      data: [
+        {
+          id: 'run-1',
+          job_id: 'job-1',
+          fired_at: '2026-08-21T09:00:00Z',
+          status: 'failed',
+          trigger: 'scheduled',
+          error_summary: 'agent claude has no runner bound',
+        },
+      ],
+      isLoading: false,
+    }
+    // No `history` on the job itself — exactly what `GET /jobs` returns.
+    renderCard(baseJob())
+
+    await user.click(screen.getByLabelText('Expand job details'))
+    expect(screen.queryByText('No runs yet')).not.toBeInTheDocument()
+    expect(screen.getByText('agent claude has no runner bound')).toBeInTheDocument()
+  })
+
+  it('does not claim "No runs yet" while the history is still loading', async () => {
+    const user = userEvent.setup()
+    loopTasks = []
+    jobHistory = { data: undefined, isLoading: true }
+    renderCard(baseJob())
+
+    await user.click(screen.getByLabelText('Expand job details'))
+    expect(screen.queryByText('No runs yet')).not.toBeInTheDocument()
+    expect(screen.getByText('Loading runs…')).toBeInTheDocument()
+  })
+
+  it('still says "No runs yet" for a job that genuinely has not fired', async () => {
+    const user = userEvent.setup()
+    loopTasks = []
+    jobHistory = { data: [], isLoading: false }
+    renderCard(baseJob())
+
+    await user.click(screen.getByLabelText('Expand job details'))
+    expect(screen.getByText('No runs yet')).toBeInTheDocument()
   })
 })

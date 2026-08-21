@@ -75,8 +75,23 @@ row. **No scheduler work, no new mechanism, and `run_reconciliation.py` is not m
       failure mode of this fix is a card that goes quiet during real work.
 - [x] 3.4 Test: startup reconciliation is unchanged and still flips the row to `failed`. It stays the
       backstop for a crashed process; this group must not weaken it.
-- [ ] 3.5 Measure the cost of the added correlation on a project with many loops before assuming it
+- [x] 3.5 Measure the cost of the added correlation on a project with many loops before assuming it
       is free — this query runs on every loop listing (design, remaining open question 3).
+
+      **Measured 2026-08-21**, throwaway benchmark against the in-memory suite fixture: 300 loops,
+      3,000 `JobRun` rows, 100 live `Run` rows, 100 loops reporting `firing_active`. Mean of 20
+      reps each: the correlated query (the `Run` join task 3.2 added) **1.24–1.33 ms**; the
+      uncorrelated query it replaced **1.22–1.27 ms**; **delta +0.02 to +0.06 ms**, ~0.9% of one
+      `_batch_loop_summaries` call. It is one batched query with an `IN` over the batch's own job
+      ids, not one per loop, so the cost does not grow per loop beyond the row scan. Open question
+      3 is answered: the correlation is free at this scale.
+
+      **What the measurement found instead:** `_batch_loop_summaries` itself costs **~141–151 ms**
+      at 300 loops, and the correlation is a rounding error inside it. The dominant cost is an
+      N+1 — the `current_task` loop calls `dependency_gate.evaluate` once per loop (**300 calls
+      per listing**, counted directly). Out of scope for this change, which did not introduce it;
+      recorded here because 3.5 is the task that would otherwise be read as "the loop listing was
+      measured and is fine".
 
 ## 4. A refused firing leaves no conversation
 
@@ -137,10 +152,41 @@ row. **No scheduler work, no new mechanism, and `run_reconciliation.py` is not m
       pre-existing environment fault twice on 2026-08-21. Baseline before this change: 2723 passed,
       84 skipped, 1 xpassed (inherited).
 - [x] 8.2 `py -3.11 -m pytest tests/ -q` (CLI) passes.
-- [ ] 8.3 `ruff check hub/`, `black --check hub/`, `mypy hub/hub/` clean on touched files.
+- [x] 8.3 `ruff check hub/`, `black --check hub/`, `mypy hub/hub/` clean on touched files.
+
+      **Measured 2026-08-21.** `ruff check hub/` — all checks passed. `black --check hub/` — 393
+      files unchanged. `mypy` is **not** clean and never has been: 369 errors across 87 files
+      repo-wide, 301 of them in this change's seven touched files
+      (`api/v1/{agent_trigger,agents,inbound_queue,jobs}.py`, `run_task_binding.py`,
+      `scheduler.py`, `turn_scheduler.py`). The check that can honestly be made is *no new* errors,
+      so it was made: mypy was run over the same seven files at `99f1fdc`, this change's base, and
+      the count is **301 there too**. This change introduced zero type errors. Recorded rather than
+      checked off as "clean" because the task as written asks for something the repository has not
+      been true of for a long time.
 - [x] 8.4 `openspec validate diagnose-and-clear-a-broken-loop --strict` reports valid.
-- [ ] 8.5 Confirm the existing loop suite passes **unmodified**. Nothing here changes what a
+- [x] 8.5 Confirm the existing loop suite passes **unmodified**. Nothing here changes what a
       successful firing does, so any edit to those tests means a fix reached further than intended.
+
+      **Measured 2026-08-21.** The four loop test files pass: 27 passed
+      (`test_conversation_loop_marker.py`, `test_loop_archival.py`,
+      `test_loop_claim_dependency_gate.py`, `test_loop_continuity_warning.py`).
+
+      **Unmodified is not literally true, and this is the audit the task asks for.** `git diff
+      99f1fdc..HEAD` over those four files shows one changed:
+      `test_loop_archival.py`, +40/-1, in commit `8eba7cf`. Two edits, both examined:
+
+      1. *Additive* — a new `test_archiving_a_job_retires_its_loop_without_erasing_history`. No
+         existing assertion touched.
+      2. *An existing test amended* — `test_firing_active_reflects_an_in_progress_job_run`
+         (introduced `d7395c1`, 2026-08-19, so genuinely pre-existing) gained a `conversation_id`
+         on its `JobRun` and a matching `running` `Run` row.
+
+      Edit 2 is the one 8.5 exists to catch, and it clears: task 3.2 deliberately redefined
+      `firing_active` to require a live `Run`, so a fixture asserting `firing_active: true` from an
+      `in_progress` `JobRun` with no `Run` was asserting the behaviour this change set out to
+      remove. The test's name and intent survive unchanged; only its fixture now represents a
+      genuinely-running firing, which is what the test always claimed to be about. No assertion was
+      weakened or deleted. A fix did not reach further than intended.
 
 ## 9. Verification only a human can do
 
@@ -154,8 +200,35 @@ row. **No scheduler work, no new mechanism, and `run_reconciliation.py` is not m
       needed. Three undiscoverable steps was the measured cost.
 - [x] 9.5 **The archive refusal teaches.** Attempt to archive an agent with queued input and judge
       whether the message tells you what to do next.
-- [ ] 9.6 **Nothing got quieter that should not have.** A real firing that fails for a real reason
+- [x] 9.6 **Nothing got quieter that should not have.** A real firing that fails for a real reason
       must still be visible; confirm this change did not turn a loud failure into a silent one.
+
+      **It had.** Verified 2026-08-21 against a live Hub on port 8010 serving a disposable copy of
+      the beta database. `GET /jobs` returns `history: null` — measured, not inferred — and
+      `JobCard` rendered `RunHistory runs={job.history}`, so an expanded card said **"No runs yet"**
+      for a job with two failed firings. The failure reasons existed the whole time and were
+      reachable at `GET /jobs/{id}/history`; nothing in the list view ever asked for them. This is
+      the check finding exactly what it was written to find, in the surface the change touched.
+
+      **Fixed:** `useJobHistory` (`hub/ui/src/api/jobs.ts`) fetches the existing history route on
+      demand, and `JobCard` calls it only once the card is expanded — so a project with many jobs
+      does not pay for history on cards nobody opened, and the jobs collection stays as narrow as
+      task 3.5's measurement assumes. `RunHistory` no longer claims "No runs yet" while the answer
+      is still in flight, and a `stopped` run stops drawing the pending clock glyph.
+
+      **Also exposed by making history visible:** the failure reason was the row's `flex-1` child
+      but ordered *after* the timestamp, so it consumed the free space and shunted the timestamp
+      back against the trigger — the row read `scheduled1 minute ago`. Reordered; the timestamp is
+      right-aligned on failed and successful rows alike. This was latent, not new: the row had
+      never rendered in this view before.
+
+      **Live evidence** (Playwright, disposable Hub, project `proj-5e960453` in the copy —
+      `proj-ff695d96` deliberately untouched, per the browser suite's own `FORBIDDEN_PROJECT_IDS`):
+      card expands, `runner launch failed: agent claude has no runner bound` and `firing timed out
+      after 600s` both visible, `No runs yet` absent, completed run still green. Screenshot
+      reviewed for layout, not merely asserted on. Regression tests in
+      `hub/ui/src/__tests__/jobCard.test.tsx` pin all three states: failed-with-reason, loading,
+      and a genuinely-unfired job.
 
 ## 10. User test guide
 

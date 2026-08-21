@@ -3,7 +3,7 @@ import { formatDistanceToNow } from 'date-fns'
 import { Icon } from '@/components/common/Icon'
 import { Badge } from '@/components/common/Badge'
 import { Button } from '@/components/ui/button'
-import { Job, JobRun } from '@/api/jobs'
+import { Job, JobRun, useJobHistory } from '@/api/jobs'
 import { useTasks } from '@/api/tasks'
 import { hubDate } from '@/lib/hubTime'
 
@@ -27,7 +27,13 @@ function getStatusLabel(enabled: boolean): string {
   return enabled ? 'Active' : 'Paused'
 }
 
-function RunHistory({ runs }: { runs?: JobRun[] }) {
+function RunHistory({ runs, isLoading }: { runs?: JobRun[]; isLoading?: boolean }) {
+  // "No runs yet" is a claim about the job, so it must not be said while the answer is still in
+  // flight — that is how a job with failed firings came to read as one that had never fired.
+  if (isLoading && (!runs || runs.length === 0)) {
+    return <p className="text-xs" style={{ color: 'var(--text-3)' }}>Loading runs…</p>
+  }
+
   if (!runs || runs.length === 0) {
     return <p className="text-xs" style={{ color: 'var(--text-3)' }}>No runs yet</p>
   }
@@ -37,10 +43,10 @@ function RunHistory({ runs }: { runs?: JobRun[] }) {
       {runs.slice(0, 5).map((run) => (
         <div
           key={run.id}
-          className="flex items-center justify-between p-2 rounded-lg"
+          className="flex items-center justify-between gap-3 p-2 rounded-lg"
           style={{ background: 'var(--surface-2)' }}
         >
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             <Icon
               name={
                 run.status === 'completed'
@@ -49,6 +55,8 @@ function RunHistory({ runs }: { runs?: JobRun[] }) {
                   ? 'error'
                   : run.status === 'skipped'
                   ? 'pause'
+                  : run.status === 'stopped'
+                  ? 'stop'
                   : 'schedule'
               }
               size={16}
@@ -67,18 +75,22 @@ function RunHistory({ runs }: { runs?: JobRun[] }) {
               {run.trigger}
             </span>
           </div>
-          <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>
-            {formatDistanceToNow(hubDate(run.fired_at), { addSuffix: true })}
-          </span>
+          {/* Before the timestamp, not after: the reason is the flex-1 child, so ordering it last
+              let it consume the row's free space and shunted the timestamp back against the
+              trigger ("scheduled1 minute ago"). Invisible until this card started loading its own
+              history, since the list response never carried a run to render. */}
           {(run.status === 'failed' || run.status === 'skipped') && run.error_summary && (
             <span
-              className="ml-2 flex-1 min-w-0 truncate text-[11px]"
+              className="flex-1 min-w-0 truncate text-[11px]"
               style={{ color: run.status === 'skipped' ? 'var(--amber)' : 'var(--red)' }}
               title={run.error_summary}
             >
               {run.error_summary}
             </span>
           )}
+          <span className="text-[11px] shrink-0" style={{ color: 'var(--text-3)' }}>
+            {formatDistanceToNow(hubDate(run.fired_at), { addSuffix: true })}
+          </span>
         </div>
       ))}
     </div>
@@ -178,6 +190,10 @@ function LoopBlock({ job, onOpenTasks }: { job: Job; onOpenTasks?: (taskIds: str
 
 export function JobCard({ job, onRun, onPause, onResume, onArchive, isPending, onOpenTasks }: JobCardProps) {
   const [expanded, setExpanded] = useState(false)
+  // Fetched only once the card is open: the collection this card renders from carries no history,
+  // and a project can list many jobs the operator never expands.
+  const { data: fetchedHistory, isLoading: historyLoading } = useJobHistory(job.id, expanded)
+  const history = job.history ?? fetchedHistory
   const [showArchiveConfirm, setShowArchiveConfirm] = useState(false)
 
   return (
@@ -309,7 +325,7 @@ export function JobCard({ job, onRun, onPause, onResume, onArchive, isPending, o
             {/* Run History */}
             <div>
               <p className="text-[11px] font-medium mb-2" style={{ color: 'var(--text-3)' }}>Recent Runs</p>
-              <RunHistory runs={job.history} />
+              <RunHistory runs={history} isLoading={historyLoading} />
             </div>
 
             {/* Loop — absent entirely for a plain job */}

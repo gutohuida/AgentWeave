@@ -138,6 +138,25 @@ export function useJob(jobId: string | null) {
   })
 }
 
+/**
+ * A job's recent firings, fetched on demand.
+ *
+ * The jobs collection deliberately does not carry `history` — only `GET /jobs/{id}` does, and the
+ * list view renders from the collection, so an expanded card had no runs to show and reported
+ * "No runs yet" for a job whose firings had failed (broken-loop check 9.6). This fetches the
+ * dedicated history route instead of widening the collection response, so a project with many
+ * jobs pays for history only on the card the operator actually opened.
+ */
+export function useJobHistory(jobId: string | null, enabled = true) {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  return useQuery<JobRun[]>({
+    queryKey: ['project', projectId, 'jobs', jobId, 'history'],
+    queryFn: () =>
+      getJson<JobRun[]>(`/api/v1/projects/${projectId}/jobs/${jobId}/history?limit=10`),
+    enabled: enabled && isConfigured && !!projectId && !!jobId,
+  })
+}
+
 export function useCreateJob() {
   const queryClient = useQueryClient()
   const { selectedProjectId: projectId } = useConfigStore()
