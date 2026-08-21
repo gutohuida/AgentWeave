@@ -1,4 +1,4 @@
-import type { Task, TaskBoardEdge } from '@/api/tasks'
+import type { Task, TaskBoardEdge, TaskDependencyRef } from '@/api/tasks'
 
 export interface BoardLayer {
   depth: number
@@ -58,6 +58,51 @@ const TERMINAL_TASK_STATUSES = new Set(['approved', 'rejected'])
 
 export function isTerminalTask(task: Task): boolean {
   return TERMINAL_TASK_STATUSES.has(task.status)
+}
+
+/**
+ * Off-board prerequisites this board's own tasks name (task 8.7) — an imported entry whose
+ * resolved task lives in another document. The board's `edges` list only carries ids; the title,
+ * status and owning document come from whichever on-board task's own `prerequisites` named it
+ * (`_attach_dependencies` on the backend resolves this for every edge touching the page, on-board
+ * or not). Deduped by id since more than one on-board task can share the same off-board
+ * prerequisite.
+ */
+export function offBoardPrerequisites(tasks: Task[]): TaskDependencyRef[] {
+  const onBoard = new Set(tasks.map((t) => t.id))
+  const byId = new Map<string, TaskDependencyRef>()
+  for (const task of tasks) {
+    for (const ref of task.prerequisites ?? []) {
+      if (!onBoard.has(ref.id)) byId.set(ref.id, ref)
+    }
+  }
+  return [...byId.values()]
+}
+
+/**
+ * The three stalled states design D8 says look identical as "a card that will not start" but have
+ * different remedies — `null` for a task that is not gated at all. `running_on_regressed` (task
+ * 8.9) is deliberately not one of these: it is a running task, not a stalled one, and is surfaced
+ * on its own card rather than folded into a layer's count.
+ *
+ * `dependency_state === 'gated'` covers two of the three rows in D8's table alike; the split
+ * between them reads each unmet prerequisite's own status, which is already on the card via
+ * `prerequisites` (no second fetch) — `completed`/`under_review` means the work is done and
+ * nothing is reviewing it yet (D8's middle row, the risk this task mitigates), anything earlier
+ * means it is still being worked.
+ */
+export type DependencyStallState = 'gated' | 'waiting_on_review' | 'gated_on_rejected'
+
+const REVIEW_PENDING_STATUSES = new Set(['completed', 'under_review'])
+
+export function dependencyStallState(task: Task): DependencyStallState | null {
+  if (task.dependency_state === 'gated_on_rejected') return 'gated_on_rejected'
+  if (task.dependency_state !== 'gated') return null
+  const unmet = (task.prerequisites ?? []).filter((p) => p.status !== 'approved' && p.status !== 'rejected')
+  if (unmet.length > 0 && unmet.every((p) => REVIEW_PENDING_STATUSES.has(p.status))) {
+    return 'waiting_on_review'
+  }
+  return 'gated'
 }
 
 /** Groups tasks by depth, shallowest first — top of the board (task 8.2's top-to-bottom layout). */

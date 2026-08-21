@@ -188,6 +188,30 @@ async def test_board_returns_a_documents_tasks_and_edges(app, auth_headers):
     assert body["edges"] == [{"task_id": "task-r73-mid", "depends_on_task_id": "task-r73-prereq"}]
 
 
+async def test_board_prerequisite_ref_carries_its_own_document(app, auth_headers):
+    """An off-board prerequisite (task 8.7's territory) still names the document it lives in, so
+    the board can draw it as a reference rather than a bare, unclickable title."""
+    async with async_session_factory() as session:
+        other_doc_prereq = await _make_task(
+            session, "task-r73x-other-doc-prereq", "approved", spec_document_id="doc-other-x"
+        )
+        task = await _make_task(session, "task-r73x-mid", "pending", spec_document_id="doc-r73x")
+        await _depend(session, task.id, other_doc_prereq.id)
+        await session.commit()
+
+    resp = await app.get(
+        "/api/v1/projects/proj-test/tasks/board",
+        params={"spec_document_id": "doc-r73x"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    (mid,) = [row for row in body["tasks"] if row["id"] == "task-r73x-mid"]
+    (prereq_ref,) = mid["prerequisites"]
+    assert prereq_ref["id"] == "task-r73x-other-doc-prereq"
+    assert prereq_ref["spec_document_id"] == "doc-other-x"
+
+
 async def test_board_with_no_document_id_returns_hand_made_tasks_only(app, auth_headers):
     async with async_session_factory() as session:
         await _make_task(session, "task-r73-handmade", "pending", spec_document_id=None)

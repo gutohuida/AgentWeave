@@ -1,12 +1,42 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { RefObject } from 'react'
-import { TaskBoardEdge, useTaskBoard } from '@/api/tasks'
+import { Task, TaskBoardEdge, useTaskBoard, useTaskBoards } from '@/api/tasks'
 import { useAgents } from '@/api/agents'
 import { EmptyState } from '@/components/common/EmptyState'
 import { Icon } from '@/components/common/Icon'
-import { assignDepths, groupByDepth, isTerminalTask } from '@/lib/dependencyBoardLayout'
+import {
+  assignDepths,
+  dependencyStallState,
+  groupByDepth,
+  isTerminalTask,
+  offBoardPrerequisites,
+} from '@/lib/dependencyBoardLayout'
 import { TaskCard } from './TaskCard'
 import { TaskDetailDrawer } from './TaskDetailDrawer'
+
+/** Task 8.8's per-layer sentence — design D8's mitigation for its main risk: three states that
+ *  look alike as "a card that will not start" get named separately, at the layer, not only per
+ *  card ("Layer N is waiting on M reviews" is the design's own example). */
+function layerStallSummary(tasks: Task[]): string | null {
+  let gated = 0
+  let waitingOnReview = 0
+  let gatedOnRejected = 0
+  for (const task of tasks) {
+    const state = dependencyStallState(task)
+    if (state === 'gated') gated++
+    else if (state === 'waiting_on_review') waitingOnReview++
+    else if (state === 'gated_on_rejected') gatedOnRejected++
+  }
+  const parts: string[] = []
+  if (waitingOnReview > 0) {
+    parts.push(`waiting on ${waitingOnReview} review${waitingOnReview === 1 ? '' : 's'}`)
+  }
+  if (gated > 0) parts.push(`${gated} gated on an unmet prerequisite`)
+  if (gatedOnRejected > 0) {
+    parts.push(`${gatedOnRejected} gated on a rejected prerequisite`)
+  }
+  return parts.length > 0 ? parts.join(', ') : null
+}
 
 interface EdgeLine {
   id: string
@@ -85,6 +115,17 @@ interface DependencyBoardProps {
 export function DependencyBoard({ specDocumentId, onOpenRequirement }: DependencyBoardProps) {
   const { data: board, isLoading } = useTaskBoard(specDocumentId)
   const { data: agents = [] } = useAgents()
+  // Task 8.7: an off-board reference names the document it lives in, not just its id — the
+  // picker's own boards list already carries every document's title (task 7.4), so this is a
+  // cache hit, not a second round trip.
+  const { data: boardsData } = useTaskBoards()
+  const documentTitleById = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const summary of boardsData?.boards ?? []) {
+      if (summary.spec_document_id) map.set(summary.spec_document_id, summary.title || 'Untitled')
+    }
+    return map
+  }, [boardsData])
   const colorsByAgent = useMemo(
     () => new Map(agents.map((agent) => [agent.name, agent.color_index])),
     [agents],
@@ -113,6 +154,12 @@ export function DependencyBoard({ specDocumentId, onOpenRequirement }: Dependenc
 
   const layoutKey = layers.map((l) => `${l.depth}:${l.tasks.map((t) => t.id).join(',')}`).join('|')
   const lines = useEdgeLines(containerRef, cardRefsRef.current, edges, layoutKey)
+
+  // Task 8.7: every off-board reference this board's own tasks name — no layer of their own
+  // (they are not on this board to lay out), drawn once above everything else instead. Cheap
+  // enough (one pass over already-fetched data) that memoising it is not worth a second dependency
+  // list to keep in step with `tasks`.
+  const offBoardRefs = offBoardPrerequisites(tasks)
 
   const openTask = tasks.find((t) => t.id === openTaskId) ?? null
 
@@ -159,11 +206,52 @@ export function DependencyBoard({ specDocumentId, onOpenRequirement }: Dependenc
         </svg>
 
         <div className="relative flex flex-col gap-6" style={{ zIndex: 1 }}>
+          {/* Task 8.7: an imported entry resolved to a task outside this document — named, not
+              hidden, since a dependent that never starts and never says why looks like a bug. No
+              layer of its own: these are not laid out, only referenced. */}
+          {offBoardRefs.length > 0 && (
+            <div
+              data-testid="dependency-board-offboard-refs"
+              className="flex flex-wrap items-center gap-1.5"
+            >
+              {offBoardRefs.map((ref) => (
+                <span
+                  key={ref.id}
+                  data-testid={`dependency-board-offboard-ref-${ref.id}`}
+                  title={`${ref.title} — ${ref.status}`}
+                  className="flex items-center gap-1 px-2 py-1 rounded text-xs"
+                  style={{
+                    border: '1px dashed var(--border)',
+                    color: 'var(--text-3)',
+                  }}
+                >
+                  <Icon name="link" size={11} />
+                  {ref.title}
+                  <span style={{ color: 'var(--text-3)' }}>
+                    — in {ref.spec_document_id ? documentTitleById.get(ref.spec_document_id) ?? 'another document' : 'another document'}
+                  </span>
+                </span>
+              ))}
+            </div>
+          )}
           {layers.map((layer) => {
             const allTerminal = layer.tasks.length > 0 && layer.tasks.every(isTerminalTask)
             const expanded = expandedOverride[layer.depth] ?? !allTerminal
+            const stallSummary = layerStallSummary(layer.tasks)
             return (
               <div key={layer.depth} data-testid={`dependency-board-layer-${layer.depth}`}>
+                {/* Task 8.8, design D8's main risk mitigation: name the layer's stalled state,
+                    not only each card's — "gated" and "waiting on review" look identical as "a
+                    card that will not start" and have different remedies. */}
+                {stallSummary && (
+                  <p
+                    data-testid={`dependency-board-layer-${layer.depth}-stall-summary`}
+                    className="text-xs mb-2"
+                    style={{ color: 'var(--text-3)' }}
+                  >
+                    Layer {layer.depth} is {stallSummary}.
+                  </p>
+                )}
                 {/* Collapse affordance only exists on a fully-terminal layer — a partly finished
                     layer (design D9) always renders its cards, no header, unchanged from before
                     8.6. */}

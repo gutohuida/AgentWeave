@@ -257,15 +257,27 @@ async def _attach_dependencies(
     other_ids = {tid for pair in edges for tid in pair} - set(task_ids)
     by_response = {response.id: response for response in responses}
     known = {
-        response.id: {"id": response.id, "title": response.title, "status": response.status}
+        response.id: {
+            "id": response.id,
+            "title": response.title,
+            "status": response.status,
+            "spec_document_id": response.spec_document_id,
+        }
         for response in responses
     }
     if other_ids:
         other_rows = await session.execute(
-            select(Task.id, Task.title, Task.status).where(Task.id.in_(other_ids))
+            select(Task.id, Task.title, Task.status, Task.spec_document_id).where(
+                Task.id.in_(other_ids)
+            )
         )
-        for other_id, title, other_status in other_rows:
-            known[other_id] = {"id": other_id, "title": title, "status": other_status}
+        for other_id, title, other_status, other_document_id in other_rows:
+            known[other_id] = {
+                "id": other_id,
+                "title": title,
+                "status": other_status,
+                "spec_document_id": other_document_id,
+            }
 
     prerequisites: dict[str, list] = {}
     dependents: dict[str, list] = {}

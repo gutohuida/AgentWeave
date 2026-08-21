@@ -3,7 +3,12 @@ import { cleanup, render, screen, fireEvent } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 import type { Task, TaskBoardEdge } from '@/api/tasks'
-import { assignDepths, groupByDepth } from '@/lib/dependencyBoardLayout'
+import {
+  assignDepths,
+  dependencyStallState,
+  groupByDepth,
+  offBoardPrerequisites,
+} from '@/lib/dependencyBoardLayout'
 
 /**
  * `task-dependencies` task 8.1 (longest-path layer assignment), 8.2 (top-to-bottom layout with
@@ -99,12 +104,86 @@ describe('groupByDepth', () => {
   })
 })
 
-function renderBoard(tasks: Task[], edges: TaskBoardEdge[]) {
+describe('offBoardPrerequisites', () => {
+  it('finds a prerequisite named on an on-board task but not itself on the board', () => {
+    const tasks = [
+      makeTask({
+        id: 'a',
+        prerequisites: [{ id: 'ext', title: 'Elsewhere', status: 'pending', spec_document_id: 'doc-x' }],
+      }),
+    ]
+    expect(offBoardPrerequisites(tasks)).toEqual([
+      { id: 'ext', title: 'Elsewhere', status: 'pending', spec_document_id: 'doc-x' },
+    ])
+  })
+
+  it('excludes a prerequisite that is itself on the board', () => {
+    const tasks = [
+      makeTask({ id: 'a', prerequisites: [{ id: 'b', title: 'On board', status: 'pending' }] }),
+      makeTask({ id: 'b' }),
+    ]
+    expect(offBoardPrerequisites(tasks)).toEqual([])
+  })
+
+  it('dedupes an off-board prerequisite shared by two on-board tasks', () => {
+    const shared = { id: 'ext', title: 'Shared', status: 'pending', spec_document_id: 'doc-x' }
+    const tasks = [
+      makeTask({ id: 'a', prerequisites: [shared] }),
+      makeTask({ id: 'b', prerequisites: [shared] }),
+    ]
+    expect(offBoardPrerequisites(tasks)).toHaveLength(1)
+  })
+})
+
+describe('dependencyStallState', () => {
+  it('is null when there is no dependency state at all', () => {
+    expect(dependencyStallState(makeTask({ dependency_state: null }))).toBeNull()
+  })
+
+  it('is null for a running task whose prerequisite regressed — that is task 8.9, not a stall', () => {
+    expect(dependencyStallState(makeTask({ dependency_state: 'running_on_regressed' }))).toBeNull()
+  })
+
+  it('is gated_on_rejected when a prerequisite was rejected', () => {
+    expect(dependencyStallState(makeTask({ dependency_state: 'gated_on_rejected' }))).toBe(
+      'gated_on_rejected',
+    )
+  })
+
+  it('is waiting_on_review when every unmet prerequisite is done but unreviewed', () => {
+    const task = makeTask({
+      dependency_state: 'gated',
+      prerequisites: [
+        { id: 'p1', title: 'p1', status: 'completed' },
+        { id: 'p2', title: 'p2', status: 'under_review' },
+      ],
+    })
+    expect(dependencyStallState(task)).toBe('waiting_on_review')
+  })
+
+  it('is plain gated when at least one unmet prerequisite is still being worked', () => {
+    const task = makeTask({
+      dependency_state: 'gated',
+      prerequisites: [
+        { id: 'p1', title: 'p1', status: 'completed' },
+        { id: 'p2', title: 'p2', status: 'in_progress' },
+      ],
+    })
+    expect(dependencyStallState(task)).toBe('gated')
+  })
+})
+
+function renderBoard(
+  tasks: Task[],
+  edges: TaskBoardEdge[],
+  boards: { spec_document_id: string | null; title: string | null; total: number; outstanding: number }[] = [],
+) {
   vi.doMock('@/api/tasks', async (importOriginal) => {
     const actual = await importOriginal<typeof import('@/api/tasks')>()
     return {
       ...actual,
       useTaskBoard: () => ({ data: { spec_document_id: 'spdoc-1', tasks, edges }, isLoading: false }),
+      useTaskBoards: () => ({ data: { boards } }),
     }
   })
 }
@@ -255,6 +334,125 @@ describe('DependencyBoard', () => {
       expect(screen.getByText('Done task')).toBeInTheDocument()
       expect(screen.getByText('Still going')).toBeInTheDocument()
       expect(screen.queryByTestId('dependency-board-layer-0-toggle')).not.toBeInTheDocument()
+    })
+  })
+
+  describe('task 8.7 — an imported entry draws as an off-board reference', () => {
+    it('names the off-board prerequisite and the document it lives in', async () => {
+      vi.resetModules()
+      renderBoard(
+        [
+          makeTask({
+            id: 'b',
+            title: 'Depends on something elsewhere',
+            prerequisites: [
+              { id: 'ext-1', title: 'External prerequisite', status: 'approved', spec_document_id: 'doc-other' },
+            ],
+          }),
+        ],
+        [{ task_id: 'b', depends_on_task_id: 'ext-1' }],
+        [{ spec_document_id: 'doc-other', title: 'The Other Document', total: 1, outstanding: 0 }],
+      )
+      const { DependencyBoard: Board } = await import('@/components/tasks/DependencyBoard')
+      const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      render(
+        <QueryClientProvider client={client}>
+          <Board specDocumentId="spdoc-1" />
+        </QueryClientProvider>,
+      )
+
+      const ref = screen.getByTestId('dependency-board-offboard-ref-ext-1')
+      expect(ref).toHaveTextContent('External prerequisite')
+      expect(ref).toHaveTextContent('The Other Document')
+    })
+
+    it('draws nothing when every prerequisite is on this board', async () => {
+      vi.resetModules()
+      renderBoard(
+        [makeTask({ id: 'a', title: 'Root' }), makeTask({ id: 'b', title: 'Leaf' })],
+        [{ task_id: 'b', depends_on_task_id: 'a' }],
+      )
+      const { DependencyBoard: Board } = await import('@/components/tasks/DependencyBoard')
+      const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      render(
+        <QueryClientProvider client={client}>
+          <Board specDocumentId="spdoc-1" />
+        </QueryClientProvider>,
+      )
+
+      expect(screen.queryByTestId('dependency-board-offboard-refs')).not.toBeInTheDocument()
+    })
+  })
+
+  describe('task 8.8 — the layer names its own stalled state (design D8)', () => {
+    it('says a layer is waiting on N reviews when prerequisites are done but unreviewed', async () => {
+      vi.resetModules()
+      renderBoard(
+        [
+          makeTask({
+            id: 'a',
+            title: 'Blocked on review',
+            dependency_state: 'gated',
+            prerequisites: [{ id: 'p1', title: 'Prereq', status: 'completed' }],
+          }),
+        ],
+        [],
+      )
+      const { DependencyBoard: Board } = await import('@/components/tasks/DependencyBoard')
+      const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      render(
+        <QueryClientProvider client={client}>
+          <Board specDocumentId="spdoc-1" />
+        </QueryClientProvider>,
+      )
+
+      expect(screen.getByTestId('dependency-board-layer-0-stall-summary')).toHaveTextContent(
+        'waiting on 1 review',
+      )
+    })
+
+    it('distinguishes gated from gated-on-rejected in the same layer', async () => {
+      vi.resetModules()
+      renderBoard(
+        [
+          makeTask({
+            id: 'a',
+            dependency_state: 'gated',
+            prerequisites: [{ id: 'p1', title: 'Prereq', status: 'pending' }],
+          }),
+          makeTask({
+            id: 'b',
+            dependency_state: 'gated_on_rejected',
+            prerequisites: [{ id: 'p2', title: 'Prereq 2', status: 'rejected' }],
+          }),
+        ],
+        [],
+      )
+      const { DependencyBoard: Board } = await import('@/components/tasks/DependencyBoard')
+      const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      render(
+        <QueryClientProvider client={client}>
+          <Board specDocumentId="spdoc-1" />
+        </QueryClientProvider>,
+      )
+
+      const summary = screen.getByTestId('dependency-board-layer-0-stall-summary')
+      expect(summary).toHaveTextContent('1 gated on an unmet prerequisite')
+      expect(summary).toHaveTextContent('1 gated on a rejected prerequisite')
+    })
+
+    it('says nothing when nothing in the layer is stalled', async () => {
+      vi.resetModules()
+      renderBoard([makeTask({ id: 'a', dependency_state: null })], [])
+      const { DependencyBoard: Board } = await import('@/components/tasks/DependencyBoard')
+      const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      render(
+        <QueryClientProvider client={client}>
+          <Board specDocumentId="spdoc-1" />
+        </QueryClientProvider>,
+      )
+
+      expect(screen.queryByTestId('dependency-board-layer-0-stall-summary')).not.toBeInTheDocument()
     })
   })
 })

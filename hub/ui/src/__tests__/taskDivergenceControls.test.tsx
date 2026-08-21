@@ -162,6 +162,45 @@ describe('a stalled task says so', () => {
   })
 })
 
+describe('a running task whose prerequisite regressed says so (task 8.9, design D8)', () => {
+  it('shows nothing when there is no dependency state', () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={client}>
+        <TaskCard task={makeTask()} onOpen={() => {}} />
+      </QueryClientProvider>,
+    )
+    expect(screen.queryByTestId('task-dependency-regressed-task-1')).not.toBeInTheDocument()
+  })
+
+  it('shows nothing for a merely gated task — the flag is for a task already running', () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={client}>
+        <TaskCard task={makeTask({ dependency_state: 'gated' })} onOpen={() => {}} />
+      </QueryClientProvider>,
+    )
+    expect(screen.queryByTestId('task-dependency-regressed-task-1')).not.toBeInTheDocument()
+  })
+
+  it('flags a running task whose prerequisite regressed, without stopping it', () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={client}>
+        <TaskCard
+          task={makeTask({ status: 'in_progress', dependency_state: 'running_on_regressed' })}
+          onOpen={() => {}}
+        />
+      </QueryClientProvider>,
+    )
+    const badge = screen.getByTestId('task-dependency-regressed-task-1')
+    expect(badge).toHaveTextContent('Prerequisite regressed')
+    // Still in progress: the badge is awareness, not enforcement — nothing about rendering it
+    // touches status.
+    expect(screen.getByText('in progress')).toBeInTheDocument()
+  })
+})
+
 describe('starting work binds the run', () => {
   it('offers each agent, and starts the chosen one on this task', async () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })

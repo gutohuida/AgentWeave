@@ -262,6 +262,34 @@ export function TaskCard({ task, assigneeColorIndex, onOpenRequirement, onOpen }
               Stalled
             </span>
           )}
+          {/* Task 8.9, design D8: "a running task whose dependency regressed is flagged, not
+              stopped." `approved -> revision_needed` is operator-only, so this is rare and always
+              an explicit act — red rather than the divergence badge's amber, since this one names
+              an actual problem (a prerequisite the gate let this task start against no longer
+              holds), not a run that merely stopped reporting in. Nothing here moves the task; the
+              gate only guards the `-> in_progress` edge (`dependency_gate.py`), so a task already
+              running keeps running. */}
+          {task.dependency_state === 'running_on_regressed' && (
+            <span
+              data-testid={`task-dependency-regressed-${task.id}`}
+              title="A prerequisite this task started against has since been sent back for revision or rejected."
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+                background: 'color-mix(in srgb, var(--red) 12%, transparent)',
+                border: '1px solid color-mix(in srgb, var(--red) 30%, transparent)',
+                borderRadius: 9999,
+                padding: '1px 6px',
+                fontSize: 10,
+                fontWeight: 500,
+                color: 'var(--red)',
+              }}
+            >
+              <Icon name="warning" size={10} />
+              Prerequisite regressed
+            </span>
+          )}
           <StatusBadge status={task.priority} />
           {task.assignee && (
             <span

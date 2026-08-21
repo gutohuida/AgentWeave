@@ -130,9 +130,9 @@ past group 1. Task 10.0 gates the change on them.
 - [x] 8.4 Confirm the status badge reads correctly **on its own, with no status column** — `TaskCard.tsx:235` already renders it, where it is currently redundant with the column. (Reworded 2026-08-21: it used to say "the only status signal", which D12's liveness cue makes false. The intent was always that the badge must not *need* the column, not that nothing else may appear.) Confirmed rather than built: `DependencyBoard.tsx` has no status column at all — position means depth (D8), never status — and `TaskCard` (reused whole per 8.3) always renders `StatusBadge` regardless. New test asserts two cards at the same depth, differing only in `status`, each still read correctly off their own badge.
 - [x] 8.5 Document picker with outstanding counts, plus the standing "no document" board. Landed: `hub/ui/src/components/tasks/DependencyBoardView.tsx`, wrapping `DependencyBoard` with a picker row built on the already-landed `useTaskBoards()` (task 7.4/D9) — one pill per board (`title`, or "No document" for the `null`-keyed standing board) each showing `outstanding/total`, so choosing a board and seeing what remains are the same glance per D9. Defaults to the first *document* board (documents-first, "no document" last — the backend's own sort at `hub/hub/api/v1/tasks.py:783`), not the standing board, since the dependency view exists for documents that declare dependencies. Not yet mounted from `App.tsx` — still task 8.11's job — so reachable today only from its own tests.
 - [x] 8.6 Collapse a layer whose tasks are all terminal; expandable. Do not collapse a partly finished layer. Landed: `isTerminalTask` (`dependencyBoardLayout.ts`, restating the backend's `run_task_binding.TERMINAL_FOR_BINDING` — `approved`/`rejected` — since the UI has no import path into `hub/hub/`) plus a per-layer toggle in `DependencyBoard.tsx`, keyed by depth. A layer collapses to a "`N` done" row by default only when *every* task in it is terminal; a layer with even one unfinished task never grows the toggle at all, so its rendering is byte-identical to before 8.6. Known, accepted limit rather than an oversight: an edge into or out of a *collapsed* layer's card is not drawn while collapsed — the same skip-if-no-card-ref behaviour 8.1/8.2 already give an off-board reference, not a special case added for this — noted here rather than built out further, matching 8.12's own "good enough, not unbounded polish" precedent.
-- [ ] 8.7 Imported entries drawn as off-board references naming their document.
-- [ ] 8.8 **The three stalled states, distinguished** (design D8): gated, waiting-on-review, gated-on-rejected. Surface "layer N is waiting on M reviews" at the layer, not only per card — this is the mitigation for the change's main risk and it is a display rule protecting a lifecycle rule.
-- [ ] 8.9 Mark a running task whose prerequisite regressed.
+- [x] 8.7 Imported entries drawn as off-board references naming their document. Landed across both sides of the fetch: `TaskDependencyRef` (`hub/hub/schemas/tasks.py`) gained `spec_document_id`, populated in `_attach_dependencies` (`hub/hub/api/v1/tasks.py`) for both an on-board ref (already known, `response.spec_document_id`) and an off-board one (added to the existing `other_rows` query rather than a second query). The frontend's `offBoardPrerequisites(tasks)` (`dependencyBoardLayout.ts`) reads every on-board task's own `prerequisites` list for an id not on this board — no second fetch, the ref was already attached — and `DependencyBoard.tsx` renders the result once, above every layer (these are referenced, not laid out, so they get no depth of their own), each a dashed pill naming the prerequisite and its document via `useTaskBoards()`'s already-cached titles (task 7.4). New backend test `test_board_prerequisite_ref_carries_its_own_document`; frontend covered both as pure-function tests (`offBoardPrerequisites`) and a rendered-board test.
+- [x] 8.8 **The three stalled states, distinguished** (design D8): gated, waiting-on-review, gated-on-rejected. Surface "layer N is waiting on M reviews" at the layer, not only per card — this is the mitigation for the change's main risk and it is a display rule protecting a lifecycle rule. Landed: `dependencyStallState(task)` (`dependencyBoardLayout.ts`) reads each task's own `dependency_state` (7.2, already served) plus its `prerequisites`' statuses (also already served, no new fetch) to split D8's middle row out of the backend's single `"gated"` value — every unmet prerequisite `completed`/`under_review` means `waiting_on_review`, anything earlier stays plain `gated`; `gated_on_rejected` passes through unchanged. `layerStallSummary` (`DependencyBoard.tsx`) counts the three across a layer and renders "Layer N is waiting on M reviews[, K gated on an unmet prerequisite][, J gated on a rejected prerequisite]." above the layer, present only when at least one task in it is stalled. 5 new pure-function tests plus 3 rendered-board tests.
+- [x] 8.9 Mark a running task whose prerequisite regressed. Landed on `TaskCard` itself (`hub/ui/src/components/tasks/TaskCard.tsx`), not `DependencyBoard` — `dependency_state === 'running_on_regressed'` is already attached to every `TaskResponse` a page fetches (7.2), not only a board's, so the flag is visible wherever the card is, matching D8's "awareness, not enforcement" (nothing here touches status; the gate only guards the `-> in_progress` edge). A red pill, "Prerequisite regressed", deliberately distinct from the existing amber "Stalled" divergence badge — that one means a run stopped reporting in, this one means a real prerequisite fact changed. 3 new tests in `taskDivergenceControls.test.tsx`.
 - [ ] 8.10 No editing affordance for structure. Where an operator tries, say dependencies are changed by editing the document.
 - [ ] 8.11 View toggle; the seven-column board unchanged.
 - [x] 8.12 Decide what "good enough" edge routing is **before** implementing it. Crossing minimisation in a layered DAG is a known hard problem and an unbounded one to polish. Decided and landed together as a technical call rather than an operator one — see design.md's D8 addendum: a direct straight line per edge, no crossing minimisation or bundling, redrawn on layout change. Recorded rather than escalated to `decisions_for_user` because nothing about it is stored data or hard to reverse — it is one function, and 8.12's own wording already names the deferred part as "unbounded... to polish," not an open product question.
@@ -179,7 +179,44 @@ constants, not touching `DependencyBoard.tsx` itself. `npx tsc --noEmit` clean. 
 every touched file, `--max-warnings 0`, clean. Full `hub/ui` `vitest run`, in the **foreground**:
 **120 files / 1190 passed** — exactly the prior pass's 1183 + 7 new tests, 0 failed, 0 regressed.
 No Python touched, so `ruff`/`black`/`mypy`/`pytest hub/tests/` were not run for this pass.
-Remaining in section 8: 8.7–8.11, 8.13–8.16.
+
+**Verified, not assumed — third pass (8.7, 8.8, 8.9), 2026-08-21.** This pass touched Python
+(`TaskDependencyRef` gained a field), so per the run's own `lesson_from_run1` the full backend
+suite was run rather than a targeted selection. Backend: `hub/hub/schemas/tasks.py` (`spec_document_id`
+on `TaskDependencyRef`), `hub/hub/api/v1/tasks.py` (`_attach_dependencies` populates it from the
+already-fetched rows on both sides, no new query). `ruff check` and `black --check` clean on both
+files; `mypy` shows no new errors attributable to either (checked by grepping the two paths out of
+the run's pre-existing 301-error baseline, unrelated files, zero hits). New backend test
+`test_board_prerequisite_ref_carries_its_own_document` — targeted file
+`pytest hub/tests/test_task_dependency_reads.py -q` → **11 passed**. Full `hub/tests/` suite, in
+the **foreground** (started early, ~16 minutes): **2727 passed, 84 skipped, 1 xpassed, 0 failed in
+964.22s** — up from run3's own 2699-passed baseline, the difference accounted for by the concurrent
+interactive session's own uncommitted-then-committed work landing in the same tree during the run
+(`022cd36`, `5f0c10f`), not this pass's; `git show --stat` on both confirms neither touches a file
+this pass touched. Frontend: `dependencyBoardLayout.ts` gained `offBoardPrerequisites` and
+`dependencyStallState`; `DependencyBoard.tsx` renders both; `TaskCard.tsx` gained the regressed-
+prerequisite badge (8.9's real home — every page that serves `dependency_state`, not only the
+board). 16 new tests: 3 pure-function (`offBoardPrerequisites`), 5 pure-function
+(`dependencyStallState`), 2 rendered (8.7's off-board reference chip present/absent), 3 rendered
+(8.8's layer summary — waiting-on-review wording, gated vs. gated-on-rejected in the same sentence,
+silent when nothing is stalled), 3 rendered (8.9's badge on `TaskCard`, in
+`taskDivergenceControls.test.tsx` next to the existing divergence-badge tests since both are "what
+a card says when something is wrong"). One pre-existing-but-adjacent finding, not fixed here: `Icon`
+names `"alert_triangle"` and `"help_circle"`, already used by `TaskCard.tsx` before this pass, are
+not in `Icon.tsx`'s `ICONS` map — they render nothing and only warn to the console (confirmed by
+reading the full map). This pass's own new icon uses `"link"`, which *is* mapped, deliberately
+avoiding the same trap rather than also fixing the pre-existing one, which is out of this section's
+scope. `npx tsc --noEmit` clean. `npx eslint` on every touched file, `--max-warnings 0`, clean (one
+warning self-caught and fixed before shipping: an unmemoised `useMemo` dependency on a fresh
+`board?.tasks ?? []` array — resolved by dropping the `useMemo`, since `offBoardPrerequisites` is
+one cheap pass over already-fetched data and not worth a second dependency list to keep in step).
+Full `hub/ui` `vitest run`, in the **foreground**: **120 files / 1206 passed** — exactly the prior
+pass's 1190 + 16 new tests, 0 failed, 0 regressed. `openspec validate task-dependencies --strict`
+and `--all --strict` both clean (42/42 — one more `spec/change` item than the prior pass's 41,
+accounted for by the concurrent session's own new `diagnose-and-clear-a-broken-loop` proposal, not
+this pass's).
+
+Remaining in section 8 (6 of 16 tasks): 8.10, 8.11, 8.13–8.16.
 - [ ] 8.14 **Concurrent work shows per card (design D12, operator decision 2026-08-21).** This is the decision `loop-becomes-a-flow` 9.4 deferred, and it is what makes section 8 safe to build: a layer holding several running tasks is just several cards each showing what it is doing, so nothing here needs rework when a flow starts more than one at a time.
 - [ ] 8.15 **The liveness cue.** A slow pulsing hue around a card whose task has a live run. It says something the badge does not — the badge says the task *is* `in_progress`, the cue says a run is executing *now*, and `has_open_divergence` exists because those two can disagree.
 - [ ] 8.16 Gate the animation on `prefers-reduced-motion`, degrading to a static hue, and confirm nothing is carried by colour or motion alone. Test both branches.

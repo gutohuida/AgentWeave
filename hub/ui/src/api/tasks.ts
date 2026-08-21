@@ -56,11 +56,14 @@ export interface Task {
 }
 
 /** A prerequisite or dependent named on a `Task` — enough to draw an edge without fetching the
- *  other end of it. */
+ *  other end of it. `spec_document_id` is null for a hand-made task and is what lets a board draw
+ *  a prerequisite outside its own document as an off-board reference naming that document
+ *  (`task-dependencies` task 8.7), rather than a bare title with nowhere to point. */
 export interface TaskDependencyRef {
   id: string
   title: string
   status: string
+  spec_document_id?: string | null
 }
 
 /** One checked tie between a task and a requirement. `statement` is null where the document no

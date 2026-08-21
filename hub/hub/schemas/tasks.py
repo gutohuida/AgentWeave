@@ -198,11 +198,14 @@ class TaskUpdate(BaseModel):
 class TaskDependencyRef(BaseModel):
     """A prerequisite or dependent named on `TaskResponse` — enough to render an edge without a
     second fetch: `id` to link to it, `title` and `status` to show what it is and whether it has
-    cleared (`task-dependencies` design D3, task 7.1)."""
+    cleared (`task-dependencies` design D3, task 7.1). `spec_document_id` is what lets a board
+    draw a prerequisite outside its own document as an off-board reference naming that document
+    (task 8.7) rather than a bare title with nowhere to point."""
 
     id: str = Field(max_length=64)
     title: str = Field(max_length=256)
     status: str = Field(max_length=32)
+    spec_document_id: Optional[str] = Field(default=None, max_length=128)
 
     model_config = {"from_attributes": True}
 
