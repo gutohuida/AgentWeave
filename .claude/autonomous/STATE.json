@@ -9,7 +9,7 @@
   "stop_when_queue_empties": false,
   "run": 1,
   "iteration": 7,
-  "last_heartbeat": "2026-08-21T06:47:50+01:00",
+  "last_heartbeat": "2026-08-21T06:10:42+01:00",
   "log_file": ".claude/autonomous/2026-08-20-open-specs-log.md",
   "driver": "Windows Scheduled Task 'AgentWeaveAutonomousSession' -> .claude/skills/autonomous-session/scripts/run-iteration.ps1 -> headless `claude -p`, every 20 minutes, self-unregistering past stop_at. Each firing is a fresh process; all continuity is this file plus the log. Session-bound drivers (ScheduleWakeup, CronCreate) are deliberately NOT used — the 2026-08-15 run asked for nine hours and got forty minutes because the interactive session went away.",
 
