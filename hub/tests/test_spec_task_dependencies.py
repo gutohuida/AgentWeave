@@ -372,3 +372,78 @@ async def test_materialise_never_raises_for_a_malformed_import(app, auth_headers
     assert len(references) == 1
     assert references[0].reference == "ghost-key"
     assert references[0].reason == "not_declared"
+
+
+# ---------------------------------------------------------------------------
+# Section 10.4 — the whole chain, end to end
+#
+# The gate itself (`test_dependency_gate.py`) and the HTTP wiring
+# (`test_task_transitions_api.py`) are both covered against hand-built `TaskDependency` rows. This
+# is the one path neither exercises: a document that DECLARES a three-hop chain, materialised for
+# real through document approval, then walked hop by hop through the real operator PATCH route to
+# confirm each gate opens on the prerequisite reaching APPROVED specifically — not merely
+# `completed`, and not merely "the immediate prerequisite has started".
+# ---------------------------------------------------------------------------
+
+TASKS_BASE = "/api/v1/projects/proj-test/tasks"
+PATH_CHAIN = "spec/changes/dep-chain/spec.html"
+
+
+async def _patch_status(app, auth_headers, task_id, status):
+    return await app.patch(f"{TASKS_BASE}/{task_id}", json={"status": status}, headers=auth_headers)
+
+
+@pytest.mark.asyncio
+async def test_the_whole_chain_gates_hop_by_hop_on_approved_not_completed(
+    app, auth_headers, author
+):
+    declared = [
+        {"key": "task-a", "description": "First.", "requirements": ["alpha"]},
+        {
+            "key": "task-b",
+            "description": "Second.",
+            "requirements": ["alpha"],
+            "depends_on": ["task-a"],
+        },
+        {
+            "key": "task-c",
+            "description": "Third.",
+            "requirements": ["alpha"],
+            "depends_on": ["task-b"],
+        },
+    ]
+    await make_document(app, auth_headers, author, path=PATH_CHAIN, tasks=declared)
+    await approve(app, auth_headers, path=PATH_CHAIN)
+
+    by_key = await tasks_by_key()
+    a_id, b_id, c_id = by_key["task-a"].id, by_key["task-b"].id, by_key["task-c"].id
+
+    # B cannot start while A is merely completed, not yet approved.
+    for status in ("in_progress", "completed"):
+        response = await _patch_status(app, auth_headers, a_id, status)
+        assert response.status_code == 200, f"{status}: {response.text}"
+    gated = await _patch_status(app, auth_headers, b_id, "in_progress")
+    assert gated.status_code == 409, gated.text
+    assert gated.json()["detail"]["code"] == "dependency_unmet"
+
+    # C cannot start either -- it depends on B, which has not even been assigned yet.
+    c_gated = await _patch_status(app, auth_headers, c_id, "in_progress")
+    assert c_gated.status_code == 409, c_gated.text
+
+    # A reaches approved -- B unblocks.
+    for status in ("under_review", "approved"):
+        response = await _patch_status(app, auth_headers, a_id, status)
+        assert response.status_code == 200, f"{status}: {response.text}"
+    unblocked = await _patch_status(app, auth_headers, b_id, "in_progress")
+    assert unblocked.status_code == 200, unblocked.text
+
+    # C is still gated -- B is only in_progress, not approved.
+    still_gated = await _patch_status(app, auth_headers, c_id, "in_progress")
+    assert still_gated.status_code == 409, still_gated.text
+
+    # Walk B to approved -- C unblocks.
+    for status in ("completed", "under_review", "approved"):
+        response = await _patch_status(app, auth_headers, b_id, status)
+        assert response.status_code == 200, f"{status}: {response.text}"
+    final = await _patch_status(app, auth_headers, c_id, "in_progress")
+    assert final.status_code == 200, final.text

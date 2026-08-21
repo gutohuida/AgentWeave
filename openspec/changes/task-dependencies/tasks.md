@@ -233,19 +233,74 @@ zero failures either side.
 
 ## 10. Verification an agent can do
 
-- [ ] 10.0 **Check group 1 first.** It was reopened on 2026-08-21, after implementation had moved
+- [x] 10.0 **Check group 1 first.** It was reopened on 2026-08-21, after implementation had moved
       past it, to add the reviewer field (1.6–1.8, design D11). A worker walking groups in order will
       have skipped them. This change is not complete until they are done, and
-      `loop-becomes-a-flow`'s reviewer resolution depends on the field existing.
-- [ ] 10.1 `py -3.11 -m pytest hub/tests/ -q --ignore=hub/tests/browser` passes.
-- [ ] 10.2 `py -3.11 -m pytest tests/ -q` passes.
-- [ ] 10.3 `ruff check hub/`, `black --check hub/`, `mypy hub/hub/` clean on touched files; `cd hub/ui && npm run lint`.
-- [ ] 10.4 Test the whole chain: document declares A → B → C, approve, confirm B cannot start until A is **approved** (not merely completed), and C not until B is.
-- [ ] 10.5 Test a cross-document import end to end: approve document 1, import its task into document 2, approve 2, confirm the edge points at the existing task and no duplicate was created.
-- [ ] 10.6 Test the regression case: A approved, C started, A → revision_needed. C's status is unchanged and C is reported as running on a regressed prerequisite.
-- [ ] 10.7 Test the rejected case: A rejected, B refused with a message naming A and distinguishable from "not yet approved".
-- [ ] 10.8 Confirm `spec_completeness`'s existing checks are unchanged — this change adds three and must alter none.
-- [ ] 10.9 Confirm the seven-column board's tests still pass untouched.
+      `loop-becomes-a-flow`'s reviewer resolution depends on the field existing. Confirmed: 1.6, 1.7
+      and 1.8 are all ticked (landed run3 iteration 1, commit `5dbf316`) before this section started.
+- [x] 10.1 `py -3.11 -m pytest hub/tests/ -q --ignore=hub/tests/browser` passes. Run in the
+      **foreground** per `NEVER_BACKGROUND_AND_WAIT` (the Bash tool auto-backgrounded it past its
+      600s cap; polled to completion with a blocking `TaskOutput` rather than ending the turn):
+      **2724 passed, 12 skipped, 1 xpassed, 0 failed in 870.77s (14m30s)**. +4 over the prior
+      (iteration 1's) baseline of 2720 — 1 is this section's own new test (10.4); the other 3 are a
+      concurrent interactive session's uncommitted `hub/hub/scheduler.py`/`hub/tests/test_scheduler.py`
+      work, present in the working tree throughout (per `CONCURRENT_SESSION_IS_EXPECTED`, left
+      untouched and unstaged). Zero failures either side.
+- [x] 10.2 `py -3.11 -m pytest tests/ -q` passes. **404 passed, 3 skipped in 17.56s** — matches the
+      run's own CLI baseline exactly.
+- [x] 10.3 `ruff check hub/`, `black --check hub/`, `mypy hub/hub/` clean on touched files;
+      `cd hub/ui && npm run lint`. `ruff check hub/ tests/` and `black --check hub/ tests/` both
+      clean (393 files). `mypy hub/spec_payload.py hub/spec_tasks.py hub/dependency_gate.py
+      hub/task_transition_service.py hub/spec_completeness.py hub/spec_lifecycle.py` — the six files
+      this change actually touches — reports only two pre-existing patterns, neither a regression:
+      an untyped `refusal` constructor parameter on `DependencyUnmetError`
+      (`task_transition_service.py:98`) mirrors the identical, older `GateUnsatisfiedError` right
+      above it (`:82`) exactly; and `transition.reported_advisories = reported` (`:277`) is a
+      deliberately dynamic, non-persisted attribute the surrounding comment already explains, unre-
+      lated to this change. Whole-package `mypy hub/` carries 377 pre-existing errors across files
+      this change never touches (mostly missing return annotations in `agent_actions.py`/`main.py`)
+      — that is the repo's standing baseline, not something section 10 introduced or is scoped to
+      fix. `cd hub/ui && npm run lint` — exit 0, no output past the command line.
+- [x] 10.4 Test the whole chain: document declares A → B → C, approve, confirm B cannot start until A
+      is **approved** (not merely completed), and C not until B is. Nothing exercised this end to end
+      through a real *declared* chain before — the gate's own tests
+      (`hub/tests/test_dependency_gate.py`) and the HTTP wiring tests
+      (`hub/tests/test_task_transitions_api.py`) both build `TaskDependency` rows by hand. Added
+      `test_the_whole_chain_gates_hop_by_hop_on_approved_not_completed`
+      (`hub/tests/test_spec_task_dependencies.py`): a document declares A, B (`depends_on: [A]`), C
+      (`depends_on: [B]`), approved for real through the document phase routes (materialising real
+      edges), then each task is walked hop by hop through the real operator `PATCH
+      /tasks/{id}` route. Confirms B is refused (409, `dependency_unmet`) while A is only
+      `in_progress`/`completed`, unblocks once A reaches `approved`; C is refused while B is
+      unstarted AND while B is merely `in_progress`, unblocks only once B reaches `approved`.
+- [x] 10.5 Test a cross-document import end to end: approve document 1, import its task into document
+      2, approve 2, confirm the edge points at the existing task and no duplicate was created.
+      Already covered: `test_an_import_resolves_to_the_existing_task_without_creating_one`
+      (`hub/tests/test_spec_task_dependencies.py`, section 4) does exactly this — approves a source
+      document, imports its task into a second document via `from`, approves the second, asserts
+      exactly one new task was created and the import resolves to the source document's existing
+      task id.
+- [x] 10.6 Test the regression case: A approved, C started, A → revision_needed. C's status is
+      unchanged and C is reported as running on a regressed prerequisite. Already covered:
+      `test_dependency_state_is_running_on_regressed` (`hub/tests/test_task_dependency_reads.py`,
+      section 7) builds exactly this sequence via `apply_transition` and asserts, over the real
+      `GET /tasks/{id}` route, both `status == "in_progress"` (unchanged) and
+      `dependency_state == "running_on_regressed"`.
+- [x] 10.7 Test the rejected case: A rejected, B refused with a message naming A and distinguishable
+      from "not yet approved". Already covered at the gate layer
+      (`test_a_rejected_prerequisite_gates_permanently_with_a_different_message`,
+      `test_an_unmet_but_not_rejected_prerequisite_says_not_yet_approved`, both
+      `hub/tests/test_dependency_gate.py`) and at the HTTP layer
+      (`test_a_rejected_prerequisite_reads_differently_from_an_unmet_one_over_http`,
+      `hub/tests/test_task_transitions_api.py` — asserts `detail["rejected"]` is truthy and
+      `detail["unmet"]` is empty, the distinguishing shape).
+- [x] 10.8 Confirm `spec_completeness`'s existing checks are unchanged — this change adds three and
+      must alter none. `pytest hub/tests/test_spec_completeness.py -q` → **24 passed**, all
+      pre-existing checks (`depends_on_unresolved`, `dependency_cycle`, `import_not_approved` are
+      the three this change added, landed and tested in section 2) exercised unaltered.
+- [x] 10.9 Confirm the seven-column board's tests still pass untouched. `npx vitest run
+      src/__tests__/tasksBoardFilter.test.tsx` (`hub/ui`) → **4 passed**, file untouched by this or
+      any prior task-dependencies section.
 
 ## 11. Verification only a human can do
 
@@ -260,4 +315,75 @@ zero failures either side.
 
 ## 12. User test guide
 
-- [ ] 12.1 Write the operator-facing test guide: what to declare, in what order to approve, what should be startable at each point, and what should not. Lead with 10.2 — an unattended review backlog and a broken dependency gate look identical from the outside, and if the board cannot tell them apart the feature is unusable no matter how correct the graph is.
+- [x] 12.1 Write the operator-facing test guide: what to declare, in what order to approve, what should be startable at each point, and what should not. Lead with 10.2 — an unattended review backlog and a broken dependency gate look identical from the outside, and if the board cannot tell them apart the feature is unusable no matter how correct the graph is.
+
+**Setup.** A project registered against the trial Hub on port 8010 — never the Hub whose code is
+being edited. Any project works; nothing here needs the corpus other changes rely on. Section 8
+(the board UI) is not built yet, so this guide drives the API directly rather than a picture — the
+same calls the future board will make.
+
+**Lead with the confusion 10.2 warns about.** Before testing anything else, put one task in
+`under_review` with no dependents and leave it there. `GET /tasks/{id}` on anything gated behind it
+should read `dependency_state: "gated"` — the SAME word a task waiting on an unapproved-but-not-yet-
+reviewed prerequisite gets. *If your instinct on seeing "gated" is "is the gate broken, or is
+someone just behind on review?" — that is the real question this feature has to answer legibly, and
+today the read model does not distinguish the two.* This is not a bug to file; it is the thing to
+watch for across every step below, because a UI that cannot answer it will look broken even when
+every line of backend code is correct.
+
+1. **Declare a chain.** Create a document (`POST .../project/documents`), submit it
+   (`submit_spec_document` or `POST /agent-actions/spec/documents`) with three tasks: `A`, `B`
+   (`"depends_on": ["A"]`), `C` (`"depends_on": ["B"]`). Approve the document (`close-exploration`,
+   then `phase` to `proposed`, then `approved`).
+   *Expect:* `GET /tasks` shows three new tasks, each `pending`, `dependency_state: null` on A
+   (nothing gates it), `"gated"` on B and C.
+   *Failure looks like:* a task missing, or B/C already startable — the edges did not materialise.
+
+2. **B is refused, not merely warned.** `PATCH /tasks/{B_id}` with `{"status": "in_progress"}`.
+   *Expect:* HTTP 409, `detail.code == "dependency_unmet"`, `detail.unmet` names A by id and title.
+   *Failure looks like:* 200 — the gate did not fire — or a 409 with no usable detail, forcing you
+   to already know why.
+
+3. **Completed is not enough.** Walk A: `PATCH ... in_progress`, then `completed`. Repeat step 2's
+   PATCH on B.
+   *Expect:* still 409. A task's prerequisite must reach `approved`, not merely `completed` — a
+   completed-but-unreviewed prerequisite is exactly the "review backlog, not a broken gate" case the
+   lead-in above describes.
+   *Failure looks like:* 200 — the gate is checking the wrong status.
+
+4. **Approved unblocks exactly one hop.** Walk A the rest of the way: `under_review`, `approved`.
+   Retry B's `PATCH ... in_progress` — expect 200. Immediately retry C's — expect still 409, because
+   C depends on B, not A, and B has only just started.
+   *Failure looks like:* C unblocks too — dependencies are being resolved transitively when they
+   should not be, or the wrong edge was recorded.
+
+5. **The rejected case reads differently from the unmet case.** Reject a task with a dependent
+   (`PATCH` the prerequisite to `rejected`), then try to start the dependent.
+   *Expect:* 409, but `detail.rejected` is non-empty and `detail.unmet` is empty — distinguishable
+   from step 2's response without reading prose, by a client that only branches on the shape.
+   *Failure looks like:* the same `unmet` shape as an ordinary gate refusal — a rejected prerequisite
+   reads as "come back later" instead of "this is never starting."
+
+6. **A regression flags the dependent without stopping it.** With B now `in_progress` (from step 4),
+   walk A backwards: `PATCH /tasks/{A_id} {"status": "revision_needed"}` (operator-only edge).
+   `GET /tasks/{B_id}`.
+   *Expect:* `status` is still `"in_progress"` — B is not halted — but `dependency_state` reads
+   `"running_on_regressed"`.
+   *Failure looks like:* B silently reverts or stops (the gate should never re-evaluate a task that
+   has already started), or `dependency_state` still reads `null`, hiding that its prerequisite went
+   backwards under it.
+
+7. **A cross-document import points at the same task, not a copy.** In a second document, declare a
+   task whose `from` names document 1's path and A's key, plus a task naming that import as its
+   `depends_on`. Approve document 2.
+   *Expect:* the response's `tasks_created` has exactly one new task (the importing task) — the
+   imported entry resolves to A's existing id rather than minting a second row. `GET
+   /tasks/{importer_id}` shows the prerequisite is A, in the OTHER document.
+   *Failure looks like:* two rows for what should be one task, or the new task's prerequisite is a
+   phantom with no document behind it.
+
+**What "done" looks like across all seven:** every refusal names a real task the operator (or the
+next agent) can go act on, no gate ever fires on a task that has already legitimately started, and
+"waiting on review" is at minimum distinguishable from "waiting on the gate" if you already know to
+compare `status` against `dependency_state` — which, per the lead-in, is not the same as the board
+being able to show that distinction on its own. That gap is section 8's to close, not this guide's.
