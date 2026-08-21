@@ -1487,3 +1487,80 @@ placement — the layout already supports several running cards per layer with n
 own claim, but the visual cue itself is unbuilt), 8.15 (the pulsing hue), 8.16
 (`prefers-reduced-motion`). Section 11 (human-only, 8) is not this run's. `stop_at` (19:00) is
 still a little over three hours out.
+
+## Iteration 4 — task-dependencies section 8, second pass: 8.4, 8.5, 8.6 (15:35-15:52+01:00)
+
+Arrived to a dirty tree at `c6ec7a2`: `hub/hub/launchability.py` and `hub/tests/test_launchability.py`
+modified but not this run's — matching the `concurrent_session_claim` entry the interactive session
+had written into `STATE.json` between iterations 3 and 4, "INTERACTIVE SESSION HOLDS THE BACKEND LOOP
+FILES, 15:31 -> until it says otherwise." Confirmed via `git log` and `git status` that both files
+named in the claim were exactly the two dirty ones and nothing else — left them alone for the entire
+turn, never staged, never read for content. `last_heartbeat` was already stale (14:48, ~47 minutes
+before this iteration started), so the branch was free to pick up.
+
+Continued section 8's second pass per the prior `next_action`'s own grouping: 8.4 (confirm), 8.5
+(document picker), 8.6 (collapse a terminal layer) — a subset of the originally-sketched PASS 2
+(8.4–8.10), sized down to three tasks rather than seven so this fit in one turn cleanly, leaving
+8.7–8.10 for the next pass rather than rushing them.
+
+**8.4 was genuinely a confirmation, not a build.** `TaskCard.tsx:235` already renders `StatusBadge`
+unconditionally, and `DependencyBoard.tsx` has no status column at all — position already means
+depth (D8), not status, since section 8's first pass. Added a test proving it rather than trusting
+the reasoning: two cards at the same depth, differing only in `status`, each still readable off its
+own badge alone.
+
+**8.5**: new `hub/ui/src/components/tasks/DependencyBoardView.tsx`, a thin wrapper — a picker row of
+pills (one per `useTaskBoards()` entry, already landed in the first pass for exactly this) each
+showing `title` (or "No document" for the `null`-keyed standing board) and `outstanding/total`, then
+the selected board rendered via the existing `DependencyBoard`. Defaults to the first *document*
+board rather than the standing one, since `useTaskBoards()` already sorts documents first (backend,
+`tasks.py:783`) and the dependency view exists for documents that declare dependencies. Deliberately
+not mounted into `App.tsx` yet — still task 8.11.
+
+**8.6**: `isTerminalTask` added to `dependencyBoardLayout.ts`, restating the backend's
+`run_task_binding.TERMINAL_FOR_BINDING` (`approved`/`rejected`) since the UI has no import path into
+`hub/hub/` (read `run_task_binding.py` for this — did not edit it, it is one of the claimed files).
+`DependencyBoard.tsx` gained a per-layer collapse toggle, keyed by depth: a layer collapses to a
+"`N` done" row by default only when *every* task in it is terminal; a layer with even one unfinished
+task never grows the toggle, keeping its markup byte-identical to before 8.6, matching D9's explicit
+"do not collapse a partly finished layer." Known, accepted limit rather than an oversight: an edge
+into or out of a collapsed layer's card does not draw while collapsed, using the exact same
+skip-if-no-ref path 8.1/8.2 already give an off-board reference — recorded in `tasks.md` rather than
+built out further, following 8.12's own "good enough, not unbounded polish" precedent.
+
+**Two self-caught bugs before either shipped, both in tests, not product code.** (1) The first 8.4
+test queried `getByText(/pending/i)` against a card titled "Pending task" — the regex matched both
+the title and the badge and threw its own ambiguous-match error before the assertion even ran a
+false positive; fixed by titling cards nothing that echoes a status word and scoping each query to
+its own card via `closest('.cursor-pointer')`. (2) The first `dependencyBoardView.test.tsx` draft
+built each mocked `useTaskBoard(id)` response as a fresh object literal *inside* the mock closure —
+so `edges` (an inline `[]`) was a new array reference on every render. `DependencyBoard`'s
+`useLayoutEffect` depends on that reference directly and re-ran every render as a result, tripping
+React's "Maximum update depth exceeded" guard. Confirmed this is a test-authoring bug, not a product
+one: React Query holds a response reference steady across renders unless an actual refetch changes
+it, so real usage never sees unstable `edges`. Fixed by moving the mocked data to stable module-scope
+constants; `DependencyBoard.tsx` itself needed no change.
+
+**Verified, not assumed.** Targeted suite (`dependencyBoard.test.tsx`, `dependencyBoardView.test.tsx`,
+`tasksApi.test.tsx`) — 23 passed. `npx tsc --noEmit` clean. `npx eslint` on every touched file,
+`--max-warnings 0`, clean. Full `hub/ui` `vitest run`, in the **foreground**: **120 files / 1190
+passed** — exactly the prior pass's 1183 + 7 new tests (1 for 8.4, 2 for 8.6, 4 for
+`DependencyBoardView`), 0 failed, 0 regressed. No Python touched, so `ruff`/`black`/`mypy`/
+`pytest hub/tests/` were not run. `openspec validate task-dependencies --strict` and `--all --strict`
+both clean (41/41).
+
+Committed the six explicit paths (`git add` by name, no `git add -A` — the two claimed backend files
+stayed untouched throughout) as `48a625c` and pushed clean. `git status` after committing showed one
+new untracked item, `openspec/changes/diagnose-and-clear-a-broken-loop/`, evidently the concurrent
+interactive session starting a new change — not read, not touched, noted here only so the next
+iteration does not mistake it for its own uncommitted work.
+
+`task-dependencies` section 8 now stands at 7/16 (8.1–8.6, 8.12). Remaining: 8.7 (off-board import
+references — the skip logic already tolerates these, this task is drawing them), 8.8 (the three
+stalled states, D8's main risk mitigation), 8.9 (regressed-prerequisite flag), 8.10 (no structural
+editing affordance), 8.11 (the view toggle — wires `DependencyBoardView` into `App.tsx`, the point
+this becomes reachable from a running Hub), 8.13 (`make ui`, always last), 8.14–8.16 (the D12
+liveness cue and its `prefers-reduced-motion` gate). Section 11 (human-only) is not this run's.
+`concurrent_session_claim` on the backend loop files was still standing at the end of this turn —
+no message from the interactive session releasing it — so it is carried forward verbatim into
+`next_action` again. `stop_at` (19:00) is a little under three hours and ten minutes out.
