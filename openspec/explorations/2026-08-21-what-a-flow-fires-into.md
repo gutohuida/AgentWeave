@@ -1,6 +1,7 @@
 # Exploration — What a flow fires into (2026-08-21)
 
-**Status:** OPEN. Three findings verified by reading the live code paths; none fixed.
+**Status:** OPEN, and findings A and B are now **MEASURED against a live Hub** (§2a), not only read.
+None fixed. A fourth finding appeared while cleaning up, and it is in §2a too.
 **Follows:** `2026-08-21-the-loop-becomes-a-flow.md` §9, whose open questions this works through.
 **Why now:** `loop-becomes-a-flow` is proposed at 0/60 and unreviewed. Its central move — the flow
 **selects the agent at firing time** from a ladder, rather than carrying one chosen at creation —
@@ -125,6 +126,84 @@ makes it fail.
 That is the finding. The ladder's cheapest candidate is the one that cannot run.
 
 ---
+
+## 2a. MEASURED — the whole chain, driven on the trial Hub, 2026-08-21
+
+Everything above was read from source. It was then **driven**, on 8010 restarted onto current code,
+in project `aw-loop10`: a probe agent created with a runner, unbound by PATCH, given a loop with one
+seeded task, and fired once by hand. Every predicted step happened, and the observations are verbatim.
+
+**The firing.** `POST /jobs/{id}/run` → `{"success": true, "run_id": "run-68de7086"}`. The task moved
+`pending → assigned` and took the assignee. So the claim happened normally; nothing refused.
+
+**The loop card, from `GET /loops`:**
+
+```json
+"queue": {"assigned": 1},
+"current_task": {"title": "Probe task for Finding A", "status": "assigned"},
+"firing_active": true
+```
+
+`firing_active: true` — **the card reads "firing"**, which is the field `_batch_loop_summaries`
+derives from `JobRun.status == "in_progress"`. Meanwhile:
+
+**The JobRun**, from the job detail's own history:
+
+```json
+{"id": "run-68de7086", "status": "in_progress", "trigger": "manual", "session_id": null}
+```
+
+**And no agent ever started.** `GET /runs` → `total runs: 0`. So the loop reported itself as firing,
+continuously, with nothing behind it — exactly the composition §2 predicted, and the operator's only
+signal said the opposite of the truth.
+
+**Finding B, verbatim.** `GET /queue/probe-norunner/status`:
+
+```json
+{"agent": "probe-norunner", "waiting_count": 1, "running": false,
+ "waiting_reason": "Runner CLI 'probe-norunner' was not found in PATH.", "delivery_attempts": 0}
+```
+
+The predicted message, exactly: the agent's own name presented as a missing binary, for an agent
+whose actual problem is `runner_id IS NULL`.
+
+**The reaper, and its limit, both confirmed.** Before restarting: `in_progress`,
+`firing_active: true`. After stopping and restarting the Hub with nothing else changed:
+`status = failed`, `firing_active: false`. So `reconcile_stale_job_runs` does exactly what it
+promises — **and only at startup.** Between restarts the card stays wrong. For an unattended flow,
+which is the entire point of the feature, that is indefinitely. The queue entry and its misleading
+reason survived the restart untouched.
+
+### The fourth finding — the remedy is blocked by the symptom
+
+Cleaning up produced a defect nobody was looking for. Archiving the broken agent was **refused**:
+
+> `probe-norunner has messages waiting to be delivered. Archiving it would strand them, because
+> nothing delivers to an archived agent.`
+
+That guard is right, and well worded. But it composes badly here: **an agent that cannot be launched
+accumulates undeliverable queue entries, and those entries then block archiving it.** The operator's
+natural remedy for a broken agent is refused *because* it is broken, and the refusal names a
+consequence rather than the cause. Draining requires knowing that
+`DELETE /queue/entries/{id}` exists and finding the entry id first.
+
+With the cron guard unbuilt (`loop-notices-and-reacts` group 1), every tick adds another such entry,
+so the agent gets progressively harder to archive the longer the problem goes unnoticed.
+
+### A fifth, smaller one: a loop outlives its job's archival
+
+`POST /jobs/{id}/archive` set the job's `archived_at`. The loop's stayed `null` and it remained in
+`GET /loops`. Archiving it directly is refused — *"this loop is still running; it must stop or
+complete before it can be archived"* — which is correct in isolation (D17: never hide unattended
+work that is still firing). But the loop's job was already archived, so nothing could fire it, and
+it was not "still running" in any sense the operator would recognise.
+
+Clearing it took: set `stop_at` in the past → fire once so the stop condition is evaluated → then
+archive. Three steps, none discoverable, to retire a loop whose job the operator had already retired.
+
+**All probe fixtures were removed:** loop archived, job archived, agent archived, queue entry
+deleted, probe task rejected, and `builder`/`speccer`/`verifier` confirmed still bound to
+`runner-f654640b`. `GET /loops` returns zero active loops.
 
 ## 3. Finding B — an unbound runner is reported as a missing CLI named after the agent
 
