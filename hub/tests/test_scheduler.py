@@ -34,7 +34,6 @@ from hub.db.models import (
     Task,
 )
 from hub.run_task_binding import TERMINAL_FOR_BINDING
-from hub.task_transitions import TRANSITIONS
 from hub.scheduler import (
     _LOOP_BRIEFING_CHECKPOINT_CHARS,
     CLAIMABLE_LOOP_TASK_STATUSES,
@@ -44,6 +43,7 @@ from hub.scheduler import (
     _loop_stop_reason,
     finalize_job_run_for_conversation,
 )
+from hub.task_transitions import TRANSITIONS
 
 
 async def _make_job(db, *, suffix, agent, session_mode="new"):
