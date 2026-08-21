@@ -132,7 +132,7 @@ row. **No scheduler work, no new mechanism, and `run_reconciliation.py` is not m
 
 ## 8. Verification an agent can do
 
-- [ ] 8.1 `cd hub && py -3.11 -m pytest tests/ -q` — no failures. **Use `py -3.11`**: the venv
+- [x] 8.1 `cd hub && py -3.11 -m pytest tests/ -q` — no failures. **Use `py -3.11`**: the venv
       interpreter fails three `test_pty_runner` tests and skips 13, which was mistaken for a
       pre-existing environment fault twice on 2026-08-21. Baseline before this change: 2723 passed,
       84 skipped, 1 xpassed (inherited).
