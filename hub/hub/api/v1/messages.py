@@ -137,6 +137,32 @@ async def create_message_for_actor(
             ),
         )
 
+    if body.conversation_id and body.start_new_thread:
+        # D4: naming a thread and asking for a new one are contradictory. Refuse rather than
+        # silently preferring one, which would hide a caller's mistake. Same three-part shape as
+        # the archived-conversation refusal below: cause, way out, message content back.
+        await persist_event(
+            session,
+            project_id,
+            "agent_action_rejected",
+            {
+                "endpoint": "POST /messages",
+                "reason": "conflicting_conversation_directive",
+                "recipient": body.recipient,
+                "conversation_id": body.conversation_id,
+            },
+            agent=sender,
+            severity="warn",
+        )
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Cannot combine conversation_id with start_new_thread: naming a thread and "
+                "asking for a new one are contradictory. Send again with only one of the two. "
+                f"Your message was not sent. Its content was:\n\n{body.content}"
+            ),
+        )
+
     if body.conversation_id:
         recipient_conversation = await get_conversation_by_id(session, body.conversation_id)
         if (
@@ -176,6 +202,17 @@ async def create_message_for_actor(
                     f"{body.content}"
                 ),
             )
+    elif body.start_new_thread:
+        # D4: an explicit request for a fresh thread, bypassing both the forward and reverse
+        # lookups on purpose. The newest binding wins subsequent forward lookups (task 4.4), so
+        # this becomes the recipient's active thread with no extra state to track.
+        recipient_conversation = new_conversation(
+            project_id=project_id, agent=body.recipient, origin="peer"
+        )
+        recipient_conversation.bound_sender_conversation_id = source_conversation_id
+        recipient_conversation.bound_sender_agent = None if source_conversation_id else sender
+        session.add(recipient_conversation)
+        await inherit_runtime_overrides(session, recipient_conversation)
     else:
         # The normal path — a sender does not know the recipient's thread ids, so omitting the
         # id is what agents actually do. It used to resolve to whatever thread the recipient

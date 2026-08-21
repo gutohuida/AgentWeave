@@ -212,3 +212,92 @@ Ticked `tasks.md` boxes 3.1–3.5 — all five ran and passed as described above
 `start_new_thread: bool = False` to the message-create schema, honour it in `messages.py` (skip
 both lookups, mint directly), and refuse it in combination with an explicit `conversation_id` per
 design.md D4. Read D4 first to confirm which route(s) the flag belongs on.
+design.md D4 first to confirm which route(s) the flag belongs on.
+
+## Iteration 4 — 2026-08-22T00:03:50+01:00 — C4: starting a thread deliberately
+
+Entry state matched STATE.json exactly: branch `autonomous/2026-08-21-refine-and-continue` at
+`118644c`, C3 landed, current/next_action pointed at C4. No reconciliation needed.
+
+**Two schemas, not one — the thing 4.2 flagged as worth checking.** Read design.md D4 first, which
+names `send_message` (the MCP tool) as the surface. Tracing its HTTP call showed the agent-facing
+route (`POST /agent-actions/messages`) validates against `AgentMessageCreate`
+(`hub/hub/api/v1/agent_actions.py`), a *separate*, `extra: "forbid"` schema from the operator-route
+`MessageCreate` in `hub/hub/schemas/messages.py` that only gets built internally afterward
+(`agent_actions.py:196-205`) and handed to the shared `create_message_for_actor`. Adding
+`start_new_thread` to `MessageCreate` alone — which is what task 4.2's literal wording pointed at —
+would have left every agent send 422 on the new field, the same class of total outage the existing
+comment on `AgentMessageCreate.conversation_id` warns about for exactly this "`extra: forbid` plus
+a missing key" shape. Added the field to both: `MessageCreate` (used directly by the
+operator-facing `POST /projects/{id}/messages`) and `AgentMessageCreate` (used by the route
+`send_message` actually calls), threading it through the explicit `MessageCreate(...)` construction
+in `send_peer_message`.
+
+**4.3 — `hub/hub/api/v1/messages.py`.** Added a guard clause before the existing `if
+body.conversation_id:` block: `conversation_id` and `start_new_thread` together is refused with a
+409 in the same three-part shape (cause, way out, message content back) as the archived-conversation
+refusal a few lines below, plus the same `agent_action_rejected` event the other rejections in this
+function persist — the existing refusals all record one and a silent 409 would have been the odd
+one out. Added a new `elif body.start_new_thread:` branch, sitting between the `if
+body.conversation_id:` branch and the existing `else:` (peer/reply/mint) branch, that mints
+directly — same three lines (`new_conversation`, `bound_sender_conversation_id`,
+`inherit_runtime_overrides`) as the existing mint-on-miss fallback, since D4 says this is a
+deliberate mint, not a fallback, so it gets its own comment rather than sharing the fallback's.
+
+**4.1 / 4.4 — `hub/tests/test_conversation_start_new_thread.py`, new file, 4 tests.** Covers: an
+explicit `start_new_thread` request mints a second thread even though a binding to the recipient
+already exists (the forward lookup would otherwise have found it); an ordinary follow-up with no
+flag afterward resolves to the *new* thread, not the old one — proving 4.4 without adding any new
+state, since `peer_bound_conversation`'s existing `.order_by(...desc())` already prefers the
+newest; omitting the flag is unaffected (a light regression check); and naming `conversation_id`
+together with `start_new_thread` is refused with nothing created and nothing delivered — checked by
+snapshotting the full `Message`/`Conversation` table contents before and after the rejected call
+and asserting the sets of ids are identical, not just that the response was a 409.
+
+**Verified, not assumed.**
+- `pytest tests/test_conversation_start_new_thread.py -q` → 4 passed.
+- `git stash -- hub/api/v1/messages.py hub/api/v1/agent_actions.py hub/schemas/messages.py` then
+  rerun → 3 failed (the two mint-comparison tests and the refusal test — the refusal test fails
+  with a 422 first, since the field is rejected outright by `extra: "forbid"` before reaching the
+  409 logic, which is itself confirmation the field genuinely didn't exist on that schema before),
+  1 passed (the flag-omitted test, correctly unaffected since it never touches the new field);
+  `git stash pop` restored the change, rerun → 4 passed.
+- `pytest tests/test_conversation_start_new_thread.py tests/test_conversation_reply.py
+  tests/test_agent_message_routing.py tests/test_archived_send_refusal.py
+  tests/test_checkpoint_cutover.py tests/test_conversations.py tests/test_messages.py -q` →
+  77 passed.
+- `pytest tests/test_agent_actions_coordination.py tests/test_agent_message_routing.py
+  tests/test_archived_send_refusal.py tests/test_conversation_reply.py
+  tests/test_conversation_start_new_thread.py tests/test_mcp_body_contract.py
+  tests/test_mcp_server.py tests/test_project_workspace_unavailable.py tests/test_messages.py
+  tests/test_conversations.py tests/test_checkpoint_cutover.py -q` → 152 passed — this phase widens
+  two shared request schemas, so both mcp_server-contract tests and the coordination suite were
+  worth checking explicitly, not just the conversation-specific files.
+- **Full `hub/tests/` suite, chunked** (175 files, `split -n l/3`): first pass on chunk 1 hit one
+  failure, `test_checkpoint_record.py::test_the_lineage_id_is_carried_forward_not_regenerated` —
+  passed alone in isolation, so re-ran the exact same chunk command twice more: once with this
+  iteration's changes stashed (a *different* test failed instead,
+  `test_evidence_latest_review_signal.py::test_a_later_acceptance_replaces_the_reason_shown`, plus
+  the three expected `test_conversation_start_new_thread.py` failures) and once with the change
+  restored and nothing else touched (754 passed, 1 skipped, 1 xpassed, zero failures). Different
+  tests failing across otherwise-identical runs, with and without this change present, is
+  pre-existing order/state flakiness in the suite, not something C4 introduced — not this
+  iteration's bug to fix, and not fixed. Clean chunk 1: 754 passed, 1 skipped, 1 xpassed (238s).
+  Chunk 2: 1017 passed, 9 skipped (356s). Chunk 3: 980 passed, 2 skipped (238s). Total 2751 passed
+  (2747 from iteration 3 plus this file's 4), zero failures on the clean run, all skips/xpass
+  pre-existing.
+- `py -3.11 -m ruff check` on the three touched files → clean. `black --check` flagged the new test
+  file only (a collapsed multi-line expression); ran `black` on it and reran the file's tests to
+  confirm the reformat changed nothing behavioural (4 passed).
+- `npx openspec validate conversations-continue --strict` → valid.
+
+Ticked `tasks.md` boxes 4.1–4.4 — all four ran and passed as described above.
+
+**Next:** C5 — conversations-continue phase 5 (the tool surface tells the truth). Add
+`start_new_thread` to `send_message` in `hub/hub/mcp_server.py:174-208` (stdlib + fastmcp only —
+it's a pass-through, `_hub_request`'s payload dict just needs the new key added) and rewrite the
+`conversation_id` docstring at lines 191-194, which still says "Leave unset to use their most
+recent one" — stale since the binding contract shipped. Also update whatever test asserts
+`mcp_server.py`'s restatements agree with the Hub's schema (task 5.4) and add a test that the
+published description doesn't claim recency and declares `start_new_thread` with its default (task
+5.1). Read design.md D6 first — it's the shortest phase left and names the exact lines.

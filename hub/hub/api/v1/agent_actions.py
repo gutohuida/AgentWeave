@@ -62,6 +62,9 @@ class AgentMessageCreate(BaseModel):
     # included, and a forbidden *key* is rejected regardless of its value. Every agent-to-agent
     # message failed 422, not only the ones naming a conversation.
     conversation_id: Optional[str] = Field(default=None, max_length=64)
+    # D4: an explicit request for a fresh recipient thread, bypassing the usual binding. Refused
+    # in combination with conversation_id — see MessageCreate for the shared behaviour.
+    start_new_thread: bool = False
 
     model_config = {"extra": "forbid"}
 
@@ -202,6 +205,7 @@ async def send_peer_message(
         task_id=body.task_id,
         run_id=actor.run_id,
         conversation_id=body.conversation_id,
+        start_new_thread=body.start_new_thread,
     )
     return await create_message_for_actor(
         message,

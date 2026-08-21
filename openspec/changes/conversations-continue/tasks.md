@@ -74,15 +74,15 @@ Covers `agent-conversation-workspace` — *A reply continues the conversation it
 
 Covers `agent-conversation-workspace` — *An agent can start a new thread deliberately*.
 
-- [ ] 4.1 Add tests for all four scenarios: an explicit request creates a thread even when a binding
+- [x] 4.1 Add tests for all four scenarios: an explicit request creates a thread even when a binding
       exists; the new thread becomes the bound one for later messages; omitting the flag continues;
       naming a conversation **and** asking for a new thread is refused with nothing created and
       nothing delivered
-- [ ] 4.2 Add `start_new_thread: bool = False` to the message-create schema in `hub/hub/schemas/`
-- [ ] 4.3 Honour it in `hub/hub/api/v1/messages.py` — when true, skip both lookups and mint, binding
+- [x] 4.2 Add `start_new_thread: bool = False` to the message-create schema in `hub/hub/schemas/`
+- [x] 4.3 Honour it in `hub/hub/api/v1/messages.py` — when true, skip both lookups and mint, binding
       the new conversation to the sending conversation; when true alongside an explicit
       `conversation_id`, refuse
-- [ ] 4.4 Confirm by test that the newest binding wins the forward lookup, so no extra state is
+- [x] 4.4 Confirm by test that the newest binding wins the forward lookup, so no extra state is
       needed to make the new thread the active one
 
 ## 5. The tool surface tells the truth
