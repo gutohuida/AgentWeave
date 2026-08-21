@@ -82,10 +82,39 @@ the same unlaunchable agent, and each strands the same way — which is the same
 *"5 firings during 1 turn → 5 queued briefings for the same task"*. **At the 5-minute driver interval
 this accumulates twelve times an hour.**
 
+### MEASURED 2026-08-21 against the trial Hub — how an agent gets to have no runner
+
+The section below originally said this *"requires an operator to bind a loop to an agent they never
+gave a runner — a mistake, and a visible one, made once at creation."* Driving the live Hub on 8010
+showed that is wrong in both directions, and the truth is sharper.
+
+**You cannot create one.** `POST /api/v1/projects/{id}/agents` with `{"name": "norunner-probe"}` is
+refused by `OperatorAgentCreate`'s own validator (`agents.py:88-94`):
+
+> `Value error, Provide either runner_id or both provider and model, not both or neither`
+
+**You can unbind one.** `PATCH .../agents/verifier` with `{"runner_id": null}` **succeeded**, and
+returned `"runner_id": null`. No refusal, no warning. One field, from the same surface the Hub UI
+uses.
+
+**And self-registration never had the concept.** `POST .../agents/register` (`agents.py:1455`) takes
+a plain `dict` and reads `name`, `contact_mode`, `mcp_endpoint`, `spawn_cmd`, `config` — runner is
+not among them.
+
+So **the invariant is enforced at creation and nowhere else.** That is how
+`reconcile_stale_job_runs`' documented case (`job-0b490274`, agent `claude-1`, `runner_id` NULL) came
+to exist, and it is a defect independent of anything to do with flows: an operator who never
+deliberately created an unlaunchable agent can produce one by editing a launchable one.
+
+*(This was done to a real fixture in the `aw-loop10` project and restored immediately —
+`verifier` is back on `runner-f654640b`, matching `builder` and `speccer`. The original value was
+**inferred from its siblings, not recovered**, since all three were seeded together; if `verifier`
+was ever deliberately bound to something else, that is now lost and this is the note saying so.)*
+
 ### Why the flow makes this worse rather than merely inheriting it
 
-Today this requires an operator to bind a loop to an agent they never gave a runner — a mistake, and
-a visible one, made once at creation.
+Given the above, the precondition is one PATCH away rather than impossible — but it is also not the
+routine mistake this section first assumed.
 
 Under the ladder, rung two selects **from the roster by availability**. An agent with no runner bound
 is *maximally available*: it is never running and never holds a task, because nothing can start it.
