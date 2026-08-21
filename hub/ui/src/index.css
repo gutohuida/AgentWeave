@@ -841,4 +841,20 @@
       scroll-behavior: auto !important;
     }
   }
+
+  /* task-dependencies task 8.15/D12: the dependency board's (and every other task view's)
+     liveness cue. Applied only when JS has already confirmed prefers-reduced-motion is off
+     (TaskCard.tsx) — the blanket reduced-motion rule above is a second line of defence, not
+     the primary gate, since that gate needs to be assertable in a test. */
+  @keyframes task-live-pulse {
+    0%, 100% {
+      box-shadow: 0 0 0 2px color-mix(in srgb, var(--green) 40%, transparent);
+    }
+    50% {
+      box-shadow: 0 0 0 6px color-mix(in srgb, var(--green) 14%, transparent);
+    }
+  }
+  .task-live-pulse {
+    animation: task-live-pulse 2.4s ease-in-out infinite;
+  }
 }

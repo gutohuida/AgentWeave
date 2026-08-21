@@ -10,6 +10,7 @@ import { TaskIntegrationNote } from '@/components/tasks/TaskIntegrationNote'
 import { agentColorVars } from '@/lib/agentColors'
 import { useRequirementChips } from '@/hooks/useRequirementChips'
 import { hubDate } from '@/lib/hubTime'
+import { prefersReducedMotion } from '@/lib/motion'
 
 interface TaskCardProps {
   task: Task
@@ -83,14 +84,29 @@ export function TaskCard({ task, assigneeColorIndex, onOpenRequirement, onOpen }
   const isBlocked = task.status === 'blocked'
   const blockedAccent = 'var(--purple)'
 
+  /* D12: a slow pulsing green hue around a card whose task has a run executing *right now* —
+   * a fact the status badge cannot carry, since a task can read `in_progress` with nothing
+   * actually running (that disagreement is `has_open_divergence`, above). `assignee_status`
+   * is the Hub's own liveness read (`effective_heartbeat_status`): `"running"` only while a
+   * fresh, non-stale heartbeat says so, so this is never a second guess about what the badge
+   * already means. Never the sole carrier of the fact (D12): the "running" status pill a few
+   * lines below already says the same thing in words. */
+  const isLive = assigneeStatus === 'running'
+  const reduceMotion = prefersReducedMotion()
+
   return (
     <div
+      data-testid={isLive ? `task-live-${task.id}` : undefined}
+      className={isLive && !reduceMotion ? 'task-live-pulse' : undefined}
       style={{
         background: 'var(--surface-2)',
         border: `1px solid ${isBlocked ? `color-mix(in srgb, ${blockedAccent} 45%, transparent)` : 'var(--border)'}`,
         borderRadius: 'var(--radius)',
         overflow: 'hidden',
         transition: 'border-color var(--dur-fast) var(--ease), background-color var(--dur-fast) var(--ease)',
+        // The static hue itself — present whether or not the animation class above is, so
+        // reduced motion loses only the pulsing, never the cue (task 8.16).
+        boxShadow: isLive ? '0 0 0 2px color-mix(in srgb, var(--green) 40%, transparent)' : undefined,
       }}
       onMouseEnter={(e) => { e.currentTarget.style.borderColor = isBlocked ? blockedAccent : 'var(--border-hi)' }}
       onMouseLeave={(e) => {
