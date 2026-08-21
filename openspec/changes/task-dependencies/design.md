@@ -359,6 +359,50 @@ this: incompleteness is reported, not refused.
 *Rejected:* **waiting and adding it in the flow's own change.** Two migrations on the same model, and
 documents authored between them could not express a reviewer at all.
 
+### D12 — Concurrent work shows on the card, and liveness is a visual cue rather than a badge
+
+**Operator decision, 2026-08-21.** Asked whether a document with several tasks running at once should
+show that per card, per layer, or in a flow header: *"The card can show and we should use more of the
+UI. For example a green hue around the card pulsating slowly… Or something like that. Take advantage
+of visual cues."*
+
+So: **per card**, and the card gains a *liveness* cue — a slow pulsing hue around a task that is
+actually running — rather than another badge or counter.
+
+**This unblocks section 8.** `loop-becomes-a-flow` task 9.4 defers this decision here, and it was the
+sole reason the board was marked unsafe to build: built serial-shaped it would have been reworked
+once a flow could start several tasks at once. Per-card needs no rework, because a layer holding four
+running tasks looks like four cards each showing what it is doing. Width becomes an emergent
+property of the graph, exactly as `loop-becomes-a-flow` D5 says it should be.
+
+**The cue carries a different fact from the badge, and that is why it is not redundant.** The status
+badge says what the task *is* — `in_progress`. The pulse says a run is *executing right now*. Those
+can disagree, and the board already has a component for the case where they do:
+`has_open_divergence` (`TaskCard.tsx:236-245`) exists precisely because *"the board claims [work is
+running], and nothing is actually running"*. A liveness cue makes that disagreement visible
+continuously instead of only once it has been detected and badged.
+
+**Consequence for task 8.4.** Its wording — *"the status badge reads correctly as the only status
+signal"* — was written about the seven-column board, where the column and the badge say the same
+thing twice and the dependency board removes the column. That intent survives: the badge must still
+read correctly on its own. But *"the only status signal"* becomes false as written, because the
+pulse is a second signal about a different fact. Reword it to *"the badge is sufficient on its own,
+with no status column"*, so a later reader does not treat D12 as violating it.
+
+**Constraints on the cue**, so it stays a cue and not a distraction:
+
+- It SHALL respect `prefers-reduced-motion`, degrading to a static hue. An animation that cannot be
+  turned off is an accessibility defect, and this one is on screen for as long as work runs.
+- It SHALL NOT be the only carrier of any fact. Anything the pulse says must also be readable
+  without it — colour and motion together exclude too many readers to carry sole meaning.
+- It SHALL reuse `TaskCard` (task 8.3). The cue is a state on the existing card, never a second card
+  component for the dependency board.
+
+*Rejected:* **per layer.** Makes width legible at a glance, but puts status in a second place and
+says nothing about *which* task or *whose* agent without opening the layer anyway.
+*Rejected:* **a flow header.** One place to read concurrency, furthest from the graph it describes —
+and it would have to be built again the moment two documents run at once.
+
 ## Risks
 
 **Review becomes the bottleneck and nobody notices.** D8's middle state is the whole mitigation, and

@@ -127,7 +127,7 @@ past group 1. Task 10.0 gates the change on them.
 - [ ] 8.1 Layer assignment: longest-path depth, so a task sits below **everything** it depends on rather than below its first prerequisite.
 - [ ] 8.2 Top-to-bottom layout, converging edges drawn.
 - [ ] 8.3 **Reuse `TaskCard`.** A board that grows its own card component is how the two views diverge (design, risks).
-- [ ] 8.4 Confirm the status badge reads correctly as the only status signal — `TaskCard.tsx:235` already renders it, where it is currently redundant with the column.
+- [ ] 8.4 Confirm the status badge reads correctly **on its own, with no status column** — `TaskCard.tsx:235` already renders it, where it is currently redundant with the column. (Reworded 2026-08-21: it used to say "the only status signal", which D12's liveness cue makes false. The intent was always that the badge must not *need* the column, not that nothing else may appear.)
 - [ ] 8.5 Document picker with outstanding counts, plus the standing "no document" board.
 - [ ] 8.6 Collapse a layer whose tasks are all terminal; expandable. Do not collapse a partly finished layer.
 - [ ] 8.7 Imported entries drawn as off-board references naming their document.
@@ -136,7 +136,10 @@ past group 1. Task 10.0 gates the change on them.
 - [ ] 8.10 No editing affordance for structure. Where an operator tries, say dependencies are changed by editing the document.
 - [ ] 8.11 View toggle; the seven-column board unchanged.
 - [ ] 8.12 Decide what "good enough" edge routing is **before** implementing it. Crossing minimisation in a layered DAG is a known hard problem and an unbounded one to polish.
-- [ ] 8.13 `make ui` after `npm run build`, and commit `hub/ui/src` and `hub/hub/static/ui` together.
+- [ ] 8.14 **Concurrent work shows per card (design D12, operator decision 2026-08-21).** This is the decision `loop-becomes-a-flow` 9.4 deferred, and it is what makes section 8 safe to build: a layer holding several running tasks is just several cards each showing what it is doing, so nothing here needs rework when a flow starts more than one at a time.
+- [ ] 8.15 **The liveness cue.** A slow pulsing hue around a card whose task has a live run. It says something the badge does not — the badge says the task *is* `in_progress`, the cue says a run is executing *now*, and `has_open_divergence` exists because those two can disagree.
+- [ ] 8.16 Gate the animation on `prefers-reduced-motion`, degrading to a static hue, and confirm nothing is carried by colour or motion alone. Test both branches.
+- [ ] 8.13 **Always last in this section, whatever is added above it:** `make ui` after `npm run build`, and commit `hub/ui/src` and `hub/hub/static/ui` together. Left at 8.13 rather than renumbered — renumbering a group with a regex silently produced duplicate headers twice on 2026-08-21, and the ordering that matters here is the doing, not the numbering.
 
 ## 9. The loop's claim — without this the change deadlocks every loop
 
