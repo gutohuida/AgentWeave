@@ -327,6 +327,38 @@ the remedies differ.
 that change first makes this a branch; landing this first means building the shared function here and
 rewriting it there.
 
+### D11 — A task may name its reviewer, as a hint that is resolved rather than an identity
+
+**Added 2026-08-21, after group 1 landed**, by operator decision, so the corpus takes one payload
+migration rather than two. From `2026-08-21-a-review-is-a-task-not-a-message.md` §2, layer (a):
+*"At spec time define who is testing what."*
+
+**The field is a hint, not a binding.** `reviewer: Optional[str]`, resolved best-effort, and an
+unresolvable name is **preserved and reported rather than refused** — which is not a new mechanism
+but the one `materialise()` already uses for unresolvable requirement names (`absorb_free_text`,
+`spec_tasks.py:204-206`), and the one task 4.3 of this change already applies to unresolvable
+imports.
+
+**Why it cannot be an agent identity.** The corpus principle this project adopted is *"the file is
+the portable truth; the database is machine-local state"*
+(`2026-08-20-the-row-is-the-spine.md` §9). An agent **name** is machine-local — it is a roster row in
+one Hub's database. A document that hard-binds `reviewer: bravo` says nothing on any other machine,
+and this corpus is committed and expected to reproduce anywhere. So the payload states *what kind of
+review this needs*, and turning that into a running agent is machine-local resolution.
+
+**Resolution order is deliberately left to the flow, not fixed here**, because the flow is not yet
+proposed and the fallback chain belongs with it: a declared reviewer resolves against charters and
+agents; failing that, whoever is free; failing that, the situation surfaces. What this change owes is
+the field, its description, and preservation — not the selection.
+
+*Rejected:* **refusing an unresolvable reviewer at submission.** It would make a document
+un-submittable on a machine whose roster differs from the author's, which is precisely the
+portability the principle protects. `spec_service.py:98-101` already settles the general form of
+this: incompleteness is reported, not refused.
+
+*Rejected:* **waiting and adding it in the flow's own change.** Two migrations on the same model, and
+documents authored between them could not express a reviewer at all.
+
 ## Risks
 
 **Review becomes the bottleneck and nobody notices.** D8's middle state is the whole mitigation, and

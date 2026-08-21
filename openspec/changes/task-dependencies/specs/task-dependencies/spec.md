@@ -227,3 +227,36 @@ so that this reads as a rule rather than as a feature quietly not working.
 - **WHEN** a dependency is recorded for a task with no owning document
 - **THEN** it is refused
 - **AND** the refusal states that dependencies are declared by a document
+
+### Requirement: A task may name the reviewer it needs, as a portable hint
+
+A document's task MAY name a reviewer, and the Hub SHALL treat that name as a hint to be resolved
+rather than as an agent identity. A task naming no reviewer SHALL validate and materialise exactly as
+one authored before this field existed.
+
+A named reviewer that resolves to nothing on this machine SHALL be preserved and reported, and SHALL
+NOT cause the document to be refused. A document is committed and is expected to reproduce on a
+machine whose agent roster differs from its author's, so an unresolvable name is an ordinary
+condition rather than an error.
+
+#### Scenario: A task naming a reviewer round-trips unchanged
+
+- **WHEN** a payload whose task names a reviewer is rendered and read back
+- **THEN** the recovered payload names the same reviewer
+
+#### Scenario: A task naming no reviewer is unaffected
+
+- **WHEN** a payload whose tasks name no reviewer is submitted
+- **THEN** it validates and materialises exactly as it did before this field existed
+
+#### Scenario: An unresolvable reviewer is reported, not refused
+
+- **WHEN** a document names a reviewer matching no charter and no agent in this project
+- **THEN** the submission succeeds
+- **AND** the unresolvable name is reported among the document's blocking items
+- **AND** the name is preserved on the task rather than discarded
+
+#### Scenario: The name is not stored as an agent identity
+
+- **WHEN** a document naming a reviewer is materialised
+- **THEN** no task is assigned to an agent as a result of the name alone
