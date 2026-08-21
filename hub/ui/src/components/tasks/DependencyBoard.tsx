@@ -3,7 +3,8 @@ import type { RefObject } from 'react'
 import { TaskBoardEdge, useTaskBoard } from '@/api/tasks'
 import { useAgents } from '@/api/agents'
 import { EmptyState } from '@/components/common/EmptyState'
-import { assignDepths, groupByDepth } from '@/lib/dependencyBoardLayout'
+import { Icon } from '@/components/common/Icon'
+import { assignDepths, groupByDepth, isTerminalTask } from '@/lib/dependencyBoardLayout'
 import { TaskCard } from './TaskCard'
 import { TaskDetailDrawer } from './TaskDetailDrawer'
 
@@ -89,6 +90,12 @@ export function DependencyBoard({ specDocumentId, onOpenRequirement }: Dependenc
     [agents],
   )
   const [openTaskId, setOpenTaskId] = useState<string | null>(null)
+  // Task 8.6: a layer whose every task is terminal (approved/rejected) collapses to one row by
+  // default, expandable — but a layer with even one unfinished task never collapses, since that is
+  // the shape D9 rejects ("a partly finished layer" must stay legible). Keyed by depth rather than
+  // by a Set of collapsed ids so a fresh layer (a document reindex adding depth) is never
+  // accidentally pre-expanded by a stale override from a different layer at the same depth.
+  const [expandedOverride, setExpandedOverride] = useState<Record<number, boolean>>({})
 
   const containerRef = useRef<HTMLDivElement | null>(null)
   const cardRefsRef = useRef<Map<string, HTMLDivElement>>(new Map())
@@ -152,31 +159,55 @@ export function DependencyBoard({ specDocumentId, onOpenRequirement }: Dependenc
         </svg>
 
         <div className="relative flex flex-col gap-6" style={{ zIndex: 1 }}>
-          {layers.map((layer) => (
-            <div key={layer.depth} data-testid={`dependency-board-layer-${layer.depth}`}>
-              <div
-                className="flex flex-wrap items-start gap-3"
-                style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 12 }}
-              >
-                {layer.tasks.map((task) => (
-                  <div
-                    key={task.id}
-                    ref={(el) => {
-                      if (el) cardRefsRef.current.set(task.id, el)
-                      else cardRefsRef.current.delete(task.id)
-                    }}
+          {layers.map((layer) => {
+            const allTerminal = layer.tasks.length > 0 && layer.tasks.every(isTerminalTask)
+            const expanded = expandedOverride[layer.depth] ?? !allTerminal
+            return (
+              <div key={layer.depth} data-testid={`dependency-board-layer-${layer.depth}`}>
+                {/* Collapse affordance only exists on a fully-terminal layer — a partly finished
+                    layer (design D9) always renders its cards, no header, unchanged from before
+                    8.6. */}
+                {allTerminal && (
+                  <button
+                    type="button"
+                    data-testid={`dependency-board-layer-${layer.depth}-toggle`}
+                    aria-expanded={expanded}
+                    onClick={() =>
+                      setExpandedOverride((prev) => ({ ...prev, [layer.depth]: !expanded }))
+                    }
+                    className="flex items-center gap-1 mb-2 text-xs font-medium"
+                    style={{ color: 'var(--text-3)' }}
                   >
-                    <TaskCard
-                      task={task}
-                      assigneeColorIndex={colorsByAgent.get(task.assignee ?? '')}
-                      onOpenRequirement={onOpenRequirement}
-                      onOpen={() => setOpenTaskId(task.id)}
-                    />
+                    <Icon name={expanded ? 'expand_more' : 'chevron_right'} size={14} />
+                    {layer.tasks.length} done
+                  </button>
+                )}
+                {expanded && (
+                  <div
+                    className="flex flex-wrap items-start gap-3"
+                    style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 12 }}
+                  >
+                    {layer.tasks.map((task) => (
+                      <div
+                        key={task.id}
+                        ref={(el) => {
+                          if (el) cardRefsRef.current.set(task.id, el)
+                          else cardRefsRef.current.delete(task.id)
+                        }}
+                      >
+                        <TaskCard
+                          task={task}
+                          assigneeColorIndex={colorsByAgent.get(task.assignee ?? '')}
+                          onOpenRequirement={onOpenRequirement}
+                          onOpen={() => setOpenTaskId(task.id)}
+                        />
+                      </div>
+                    ))}
                   </div>
-                ))}
+                )}
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       </div>
 

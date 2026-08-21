@@ -178,4 +178,83 @@ describe('DependencyBoard', () => {
 
     expect(screen.getByText('No tasks on this board')).toBeInTheDocument()
   })
+
+  // Task 8.4: the status badge (TaskCard.tsx:235) must read correctly with no status column —
+  // the dependency board repurposes position for depth (design D8), so the badge is the only
+  // place a card's status is stated at all.
+  it('shows each task\'s own status badge with no status column beside it (task 8.4)', async () => {
+    vi.resetModules()
+    renderBoard(
+      [
+        makeTask({ id: 'a', title: 'First card', status: 'pending' }),
+        makeTask({ id: 'b', title: 'Second card', status: 'in_progress' }),
+      ],
+      [],
+    )
+    const { DependencyBoard: Board } = await import('@/components/tasks/DependencyBoard')
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={client}>
+        <Board specDocumentId="spdoc-1" />
+      </QueryClientProvider>,
+    )
+
+    // Both statuses read directly off their own card — nothing about the layer (depth 0 for
+    // both, since neither depends on the other) says which is which; only the badge does.
+    expect(screen.getByTestId('task-open-a').closest('.cursor-pointer')).toHaveTextContent(/pending/i)
+    expect(screen.getByTestId('task-open-b').closest('.cursor-pointer')).toHaveTextContent(/in progress/i)
+  })
+
+  describe('task 8.6 — collapsing a terminal layer', () => {
+    it('collapses a layer whose every task is terminal (approved/rejected), by default', async () => {
+      vi.resetModules()
+      renderBoard(
+        [
+          makeTask({ id: 'a', title: 'Done task one', status: 'approved' }),
+          makeTask({ id: 'b', title: 'Done task two', status: 'rejected' }),
+        ],
+        [],
+      )
+      const { DependencyBoard: Board } = await import('@/components/tasks/DependencyBoard')
+      const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      render(
+        <QueryClientProvider client={client}>
+          <Board specDocumentId="spdoc-1" />
+        </QueryClientProvider>,
+      )
+
+      expect(screen.queryByText('Done task one')).not.toBeInTheDocument()
+      expect(screen.queryByText('Done task two')).not.toBeInTheDocument()
+      const toggle = screen.getByTestId('dependency-board-layer-0-toggle')
+      expect(toggle).toHaveAttribute('aria-expanded', 'false')
+      expect(toggle).toHaveTextContent('2 done')
+
+      fireEvent.click(toggle)
+      expect(screen.getByText('Done task one')).toBeInTheDocument()
+      expect(screen.getByText('Done task two')).toBeInTheDocument()
+      expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    })
+
+    it('never collapses a layer with even one unfinished task (design D9)', async () => {
+      vi.resetModules()
+      renderBoard(
+        [
+          makeTask({ id: 'a', title: 'Done task', status: 'approved' }),
+          makeTask({ id: 'b', title: 'Still going', status: 'in_progress' }),
+        ],
+        [],
+      )
+      const { DependencyBoard: Board } = await import('@/components/tasks/DependencyBoard')
+      const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      render(
+        <QueryClientProvider client={client}>
+          <Board specDocumentId="spdoc-1" />
+        </QueryClientProvider>,
+      )
+
+      expect(screen.getByText('Done task')).toBeInTheDocument()
+      expect(screen.getByText('Still going')).toBeInTheDocument()
+      expect(screen.queryByTestId('dependency-board-layer-0-toggle')).not.toBeInTheDocument()
+    })
+  })
 })

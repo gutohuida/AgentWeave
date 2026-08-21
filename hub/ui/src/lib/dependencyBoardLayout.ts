@@ -48,6 +48,18 @@ export function assignDepths(tasks: Task[], edges: TaskBoardEdge[]): Map<string,
   return depth
 }
 
+/**
+ * A task's dependency lifecycle is done and will not change further (task 8.6's "terminal"). Mirrors
+ * the backend's `run_task_binding.TERMINAL_FOR_BINDING` — restated rather than imported, since the
+ * UI has no shared module path into `hub/hub/`. `rejected` counts as terminal here even though it
+ * never reached `approved`: it is resolved, not something a layer is still waiting on.
+ */
+const TERMINAL_TASK_STATUSES = new Set(['approved', 'rejected'])
+
+export function isTerminalTask(task: Task): boolean {
+  return TERMINAL_TASK_STATUSES.has(task.status)
+}
+
 /** Groups tasks by depth, shallowest first — top of the board (task 8.2's top-to-bottom layout). */
 export function groupByDepth(tasks: Task[], depth: Map<string, number>): BoardLayer[] {
   const groups = new Map<number, Task[]>()
