@@ -41,14 +41,25 @@ expect them to move.
 | | |
 |---|---|
 | **Port** | `8010` |
-| **Database** | `<repo>/hub/data/agentweave.db` (holds this repo's live trial fixtures) |
+| **Database** | `~/.agentweave/hub/profiles/beta/agentweave.db` — **measured 2026-08-21**, not assumed (see below) |
 | **PID file** | `~/.agentweave/hub/hub-trial-8010.pid` (per-launch-script; `hub-8010.pid` and `hub.pid` are from other launches and may be stale — check `Get-Process -Id <pid>` before trusting any of them) |
 | **This repo registered as** | `proj-5e960453`, working directory the repo root |
 
-Other databases under `~/.agentweave/hub/profiles/` (`beta`, `trial`, `dev`) are earlier or
-divergent copies, not the live one. Confirm which database a running instance actually serves
-with `GET /api/v1/projects` before trusting any doc, this one included — these paths have moved
-before and will again.
+**This row was wrong until 2026-08-21, and this paragraph is why it is now right.** It used to name
+`<repo>/hub/data/agentweave.db`, and said the profile databases were "earlier or divergent copies,
+not the live one". The opposite is true. Measured by calling `GET /api/v1/projects` against the
+running instance and watching which file's mtime moved: **beta was written within the same second;
+`<repo>/hub/data/agentweave.db` had not been touched for a day.** `profiles/trial/` is older still
+(2026-08-17) and `profiles/dev/` does not exist.
+
+So keep doing what the next sentence says, including against this row. Confirm which database a
+running instance actually serves before trusting any doc, this one included — these paths have moved
+before and will again, and this doc has been wrong about them for at least a day at a time. The
+cheap check is the one above: hit the API, then compare mtimes across the candidates.
+
+`<repo>/hub/data/agentweave.db` is therefore **not** the live trial database. It is still not stray
+test output and still should not be deleted — it is a real earlier database — but nothing serves it
+today.
 
 Start it — **from `hub/`, not the repo root** (see the trap below):
 
@@ -70,10 +81,11 @@ spawned server fails, 60 seconds later, with its output already sent to `DEVNULL
 that one if it appears. This only bites a repository that contains a top-level `hub/` directory,
 which is to say: this one, the one being dogfooded.
 
-`hub/data/agentweave.db`, gitignored and untracked, is **the database above** — the table's row
-already names it. It started life as the pre-migration original, created by a bare `uvicorn`
-launch from `hub/` landing on `config.py`'s relative default, but is not a stale leftover: it is
-what port 8010 actually serves today. Do not delete it.
+`hub/data/agentweave.db`, gitignored and untracked, started life as the pre-migration original,
+created by a bare `uvicorn` launch from `hub/` landing on `config.py`'s relative default. This
+paragraph used to claim it was "what port 8010 actually serves today"; **measurement on 2026-08-21
+disproved that** — see the table above. Keep it, since it is a real earlier database rather than
+stray test output, but do not reason from it: nothing serves it.
 
 ## Specifications — openspec owns the corpus, AgentWeave takes new work
 
