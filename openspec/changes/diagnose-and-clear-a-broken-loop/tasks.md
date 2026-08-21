@@ -136,9 +136,9 @@ row. **No scheduler work, no new mechanism, and `run_reconciliation.py` is not m
       interpreter fails three `test_pty_runner` tests and skips 13, which was mistaken for a
       pre-existing environment fault twice on 2026-08-21. Baseline before this change: 2723 passed,
       84 skipped, 1 xpassed (inherited).
-- [ ] 8.2 `py -3.11 -m pytest tests/ -q` (CLI) passes.
+- [x] 8.2 `py -3.11 -m pytest tests/ -q` (CLI) passes.
 - [ ] 8.3 `ruff check hub/`, `black --check hub/`, `mypy hub/hub/` clean on touched files.
-- [ ] 8.4 `openspec validate diagnose-and-clear-a-broken-loop --strict` reports valid.
+- [x] 8.4 `openspec validate diagnose-and-clear-a-broken-loop --strict` reports valid.
 - [ ] 8.5 Confirm the existing loop suite passes **unmodified**. Nothing here changes what a
       successful firing does, so any edit to those tests means a fix reached further than intended.
 
