@@ -232,6 +232,38 @@ no table and no payload field (`lesson_from_run1`'s trigger), and it is the firs
 to touch zero Python at all.
 
 Remaining in section 8 (4 of 16 tasks): 8.13–8.16.
+
+**Verified, not assumed — fifth pass (8.15, 8.16, then 8.13), 2026-08-21.** No new backend field or
+table (`assignee_status` already existed on `TaskResponse`), so per `lesson_from_run1` the full
+`hub/tests/` suite was not rerun; this is the second pass in a row touching zero Python. Changed:
+`hub/ui/src/components/tasks/TaskCard.tsx` (the cue itself), `hub/ui/src/index.css` (the
+`task-live-pulse` keyframes), new `hub/ui/src/lib/motion.ts` (`prefersReducedMotion()`), new
+`hub/ui/src/__tests__/taskLivenessCue.test.tsx` (6 tests). `npx tsc --noEmit` clean. `npx eslint`
+on all four touched/new files, `--max-warnings 0`, clean. Targeted
+(`taskLivenessCue.test.tsx`, `taskDivergenceControls.test.tsx`) → **19 passed**. Full `hub/ui`
+`vitest run`, in the **foreground**: **121 files / 1214 passed** — exactly the prior pass's 1208 +
+6 new tests, 0 failed, 0 regressed. `openspec validate task-dependencies --strict` and
+`--all --strict` both clean (42/42). Confirmed the compiled class survived the production build by
+grepping the built CSS asset directly (`grep -c task-live-pulse hub/hub/static/ui/assets/*.css` →
+1), not merely assumed from a clean `npm run build` exit code. **Live-browser verification is
+partial, recorded honestly rather than overclaimed:** started the Vite dev server against 8010
+(`AW_DEV_HUB=http://127.0.0.1:8010 npm run dev`, port 5173 already held by another process on this
+machine so bound 5174 instead — confirmed via `netstat`, not assumed) and confirmed it served the
+app (`curl` 200). Checked every task on `proj-ff695d96` (the trial Hub's one project with real
+data) for a live `assignee_status: 'running'` via the real API — none was running at the time
+(all `idle`), so the *pulsing* branch could not be photographed without spinning up a real agent
+run, which this pass judged disproportionate to a CSS-styling check (cost, time, and touching a
+project this run's own convention treats as read-only). The "off" branch (no cue on a card with no
+live run) and the toggle/board around it were already verified live in the fourth pass and nothing
+in this pass touches that path. The "on" branch's actual DOM output (the `task-live-*` testid, the
+`task-live-pulse` class, and the `boxShadow` ring) **is** verified against real React output via
+`@testing-library/react`'s `render()` — jsdom, not a mock renderer — which is why the test file
+mocks only `window.matchMedia`, the one browser API jsdom does not implement meaningfully, rather
+than the component itself. Dev server stopped (`Stop-Process`) before finishing the turn.
+
+Section 8 is now **16/16, complete.** Rebuilt the UI bundle (`npm run build` +
+`scripts/refresh_ui_bundle.py`) and committed `hub/ui/src` and `hub/hub/static/ui` together (8.13,
+always last).
 - [x] 8.10 No editing affordance for structure. Where an operator tries, say dependencies are changed by editing the document. Confirmed rather than built, in the same spirit as 8.4: no add/remove-edge affordance exists anywhere in `DependencyBoard.tsx` or `DependencyBoardView.tsx` — grepped both for any click handler that would mutate `depends_on`, found none, matching design D5 ("the document is the only writer of edges") by construction, not by care. The one gap: nothing *said* that, so an operator who came looking for an edit control would find silence rather than an explanation. Added `structureHint` in `DependencyBoardView.tsx`, rendered as a line below the document picker: "Dependencies are set in the document — edit its depends_on field to change them" for a document board, and D5's own stated consequence — "Hand-made tasks belong to no document, so they can never have a dependency" — for the standing "no document" board, rather than the same generic wording for both. New test in `dependencyBoardView.test.tsx` asserts both strings, one per board.
 - [x] 8.11 View toggle; the seven-column board unchanged. Landed in `App.tsx`'s `tasks` tab: a `tasksView` state (`'board' | 'dependencies'`, default `'board'`) following the exact pattern the `activity` tab's `activitySubview` already established (two buttons, `aria-pressed`, no stored preference — opt-in per visit, same reasoning as `activitySubview`), switching between `TasksBoard` and the now-mountable `DependencyBoardView`. `onOpenRequirement` is built once in the tab branch and passed to whichever view is active, since `TaskCard`'s requirement chip means the same thing in both. `TasksBoard.tsx` itself was not touched — confirmed via `git diff --stat` showing zero lines changed in that file — so the seven-column board is verified unchanged, not merely assumed so. New test in `App-mount.test.tsx` ("Tasks contains Dependencies as an internal sub-view") mirrors the existing Activity/Logs test exactly: switches to Dependencies, back to Board, asserts the other view unmounts each time. **Verified live against 8010**, not only via `vitest`, per this task's own point being the one where the board becomes reachable from a running Hub: started `AW_DEV_HUB=http://127.0.0.1:8010 npm run dev` (Vite on `:5173`, IPv6-only loopback — reachable at `http://localhost:5173`, not `127.0.0.1`, worth noting since the first attempt connection-refused against the numeric address), then `py -3.11 scripts/uishot.py` against `proj-5e960453` (this repo's own trial project, empty of tasks) and, to see a populated board, `proj-ff695d96` ("aw-loop10", a different registered project on the same trial Hub with real `depends_on` data) — read-only, nothing in either project was mutated. Screenshots (not committed, cleaned up from `testbed/scratch/` after viewing) showed: the Board/Dependencies toggle rendering correctly with Board active by default; clicking Dependencies mounting the real picker, a real card layout, and 8.10's structure hint reading correctly beneath it; `aw-loop10`'s document board rendering all 5 of its real tasks in a single unlayered row, confirmed correct rather than a bug by checking the raw `/tasks/board` response directly — that document declares zero `depends_on` edges, so depth-0-for-everyone is the right layout, not evidence of anything broken.
 - [x] 8.15 **The liveness cue.** A slow pulsing hue around a card whose task has a live run. It says something the badge does not — the badge says the task *is* `in_progress`, the cue says a run is executing *now*, and `has_open_divergence` exists because those two can disagree. Landed: the signal is `task.assignee_status === 'running'` — already the Hub's own liveness read (`effective_heartbeat_status` in `hub/hub/agent_status.py`, served on every `TaskResponse` since before this change), so this needed no new backend field. `TaskCard.tsx` computes `isLive` from it and applies a green ring (`boxShadow`) plus, when motion is allowed, a `task-live-pulse` class (new `@keyframes` in `index.css`) to the card's own root — no second card component, per D12's third constraint.
