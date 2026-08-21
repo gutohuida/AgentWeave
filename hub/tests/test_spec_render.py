@@ -6,6 +6,7 @@ external resource. They are now structural — the renderer emits the anchor and
 the link from the same minted value, so the failure has nowhere to occur.
 """
 
+import hashlib
 import re
 
 from hub.spec_identity import (
@@ -17,7 +18,7 @@ from hub.spec_identity import (
     retained,
 )
 from hub.spec_payload import SCHEMA_VERSION, extract_payload, payload_to_dict, validate_payload
-from hub.spec_render import _STYLE, render_document
+from hub.spec_render import _STYLE, CorpusContext, render_document
 
 # The neutral custom properties SpecFrame.tsx's HUB_NEUTRALS override sets on every
 # mode (`themeOverride()` in SpecFrame.tsx) — spec_render.py must define each one under
@@ -519,3 +520,157 @@ def test_the_done_tone_is_defined_in_every_theme_block():
     """--aw-ok is read by the phase chip, so a block that omits it would render an unstyled chip
     in that mode. Mirrors the neutral pinning test above."""
     assert _STYLE.count("--aw-ok:") == 4
+
+
+# ---------------------------------------------------------------------------
+# corpus-aware-documents §1: the renderer accepts a corpus context and, until
+# groups 2-3 land, ignores it. This is the regression net that lets those groups
+# add navigation and a map without re-reviewing every document rendered before
+# they existed: every caller that omits `corpus` — which today is every caller —
+# must keep getting exactly this output, byte for byte.
+# ---------------------------------------------------------------------------
+
+
+def _rich_payload():
+    return _payload(
+        kind="capability",
+        title="A rich document",
+        summary="What this changes and why.",
+        problem="The problem.",
+        scope={"in_scope": ["thing one"], "non_goals": ["not this"]},
+        requirements=[_requirement("alpha")],
+        acceptance_criteria=[_criterion("c1", "alpha")],
+        tasks=[{"key": "t1", "title": "Do it", "description": "desc", "requirements": ["alpha"]}],
+        open_questions=[{"key": "q1", "question": "Still open?", "resolved": False}],
+        evidence={"checked": ["Read the code"], "limits": ["Not run live"]},
+    )
+
+
+# Captured from render_document's own output. Recaptured once, in §2, when `.aw-nav` joined the
+# shared stylesheet (_STYLE, embedded in every document regardless of whether this document's own
+# `corpus` uses it — the existing pattern for every other CSS rule here, e.g. `.aw-chip-rigor-contract`
+# is present even in documents whose rigor is not `contract`). §1.3's guarantee is that the
+# `corpus is None` branch renders no *region*, not that the shared stylesheet is frozen — a change
+# to this digest with no `corpus` argument passed and no stylesheet edit means the None-branch
+# stopped being a no-op.
+_BASELINE_DIGEST = "836153f74f6f2bc176ecc571ce255561eca1e0a7cbe20ad5a035757e522cd0de"
+
+
+def test_omitting_corpus_reproduces_the_pre_change_output_byte_for_byte():
+    payload = _rich_payload()
+    identifiers, _ = mint(["alpha"])
+    html = render_document(
+        payload, identifiers, phase="current", stored_payload=payload_to_dict(payload), rigor="gate"
+    )
+    assert hashlib.sha256(html.encode("utf-8")).hexdigest() == _BASELINE_DIGEST
+
+
+def test_explicit_corpus_none_is_identical_to_omitting_it():
+    payload = _rich_payload()
+    identifiers, _ = mint(["alpha"])
+    kwargs = {"phase": "current", "stored_payload": payload_to_dict(payload), "rigor": "gate"}
+    omitted = render_document(payload, identifiers, **kwargs)
+    explicit = render_document(payload, identifiers, corpus=None, **kwargs)
+    assert omitted == explicit
+
+
+# ---------------------------------------------------------------------------
+# corpus-aware-documents §2: the navigation region — home and parent links,
+# below the meta chips (decision D-S2-navstrip), computed relative to the
+# document's own path on disk.
+# ---------------------------------------------------------------------------
+
+
+def _render_with_corpus(corpus):
+    payload = _rich_payload()
+    identifiers, _ = mint(["alpha"])
+    return render_document(
+        payload,
+        identifiers,
+        phase="current",
+        stored_payload=payload_to_dict(payload),
+        rigor="gate",
+        corpus=corpus,
+    )
+
+
+def test_the_home_document_gets_no_home_link():
+    corpus = CorpusContext(
+        path="spec/agentweave.html", home="spec/agentweave.html", parent=None, children=()
+    )
+    html = _render_with_corpus(corpus)
+    assert 'class="aw-nav"' not in html
+
+
+def test_a_non_home_document_with_no_parent_gets_only_a_home_link():
+    corpus = CorpusContext(
+        path="spec/capabilities/x/spec.html", home="spec/agentweave.html", parent=None, children=()
+    )
+    html = _render_with_corpus(corpus)
+    nav = re.search(r'<p class="aw-nav">(.*?)</p>', html).group(1)
+    assert '<a href="../../agentweave.html">Home</a>' in nav
+    assert "aw-map" not in nav
+
+
+def test_a_document_with_a_parent_gets_both_links_home_first():
+    corpus = CorpusContext(
+        path="spec/areas/agents.html",
+        home="spec/agentweave.html",
+        parent=("spec/agentweave.html", "AgentWeave"),
+        children=(),
+    )
+    html = _render_with_corpus(corpus)
+    nav = re.search(r'<p class="aw-nav">(.*?)</p>', html).group(1)
+    home_pos = nav.index(">Home<")
+    parent_pos = nav.index(">AgentWeave<")
+    assert home_pos < parent_pos
+    assert '<a href="../agentweave.html">Home</a>' in nav
+    assert '<a href="../agentweave.html">AgentWeave</a>' in nav
+
+
+def test_relative_links_climb_out_of_nested_directories():
+    corpus = CorpusContext(
+        path="spec/capabilities/deep/nested/spec.html",
+        home="spec/agentweave.html",
+        parent=("spec/areas/agents.html", "Agents and execution"),
+        children=(),
+    )
+    html = _render_with_corpus(corpus)
+    assert '<a href="../../../agentweave.html">Home</a>' in html
+    assert '<a href="../../../areas/agents.html">Agents and execution</a>' in html
+
+
+def test_the_navigation_region_carries_no_external_resource():
+    corpus = CorpusContext(
+        path="spec/capabilities/x/spec.html",
+        home="spec/agentweave.html",
+        parent=("spec/agentweave.html", "AgentWeave"),
+        children=(),
+    )
+    html = _render_with_corpus(corpus)
+    assert "http://" not in html
+    assert "https://" not in html
+
+
+def test_a_rendered_file_opened_from_disk_resolves_both_links_with_no_hub_running(tmp_path):
+    """Task 2.5: the links are computed relative to the document's own location on disk, so
+    writing the home and a nested document to their real relative locations and following the
+    href from the nested one, with no HTTP server involved, must land on the file that exists."""
+    home_dir = tmp_path / "spec"
+    home_dir.mkdir()
+    (home_dir / "agentweave.html").write_text("<html>home</html>", encoding="utf-8")
+
+    corpus = CorpusContext(
+        path="spec/capabilities/x/spec.html", home="spec/agentweave.html", parent=None, children=()
+    )
+    html = _render_with_corpus(corpus)
+    href = re.search(r'<a href="([^"]+)">Home</a>', html).group(1)
+
+    own_dir = tmp_path / "spec" / "capabilities" / "x"
+    own_dir.mkdir(parents=True)
+    doc_path = own_dir / "spec.html"
+    doc_path.write_text(html, encoding="utf-8")
+
+    resolved = (doc_path.parent / href).resolve()
+    assert resolved == (home_dir / "agentweave.html").resolve()
+    assert resolved.read_text(encoding="utf-8") == "<html>home</html>"

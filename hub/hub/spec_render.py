@@ -18,8 +18,10 @@ owns. The renderer's job stops at semantic structure with stable ids.
 
 from __future__ import annotations
 
+import posixpath
+from dataclasses import dataclass
 from html import escape
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Tuple
 
 from .spec_payload import SpecPayload, embed_payload
 
@@ -69,6 +71,8 @@ ul, ol { margin: .5rem 0; padding-left: 1.4rem; }
 li { margin: .25rem 0; }
 a { color: var(--aw-accent); }
 .aw-meta { color: var(--muted); font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-nav { font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-nav a { margin-right: .6rem; }
 .aw-chip { display: inline-block; padding: .1rem .5rem; border-radius: 999px;
            background: var(--surface-2); font-size: .78rem; margin-right: .4rem; }
 .aw-requirement { border-left: 3px solid var(--border); padding: .1rem 0 .1rem .9rem;
@@ -325,6 +329,61 @@ def _evidence(payload: SpecPayload) -> str:
     return body
 
 
+# The corpus context a document is rendered with: where home is, what this document's parent is
+# (if any), and this document's own children. Plain data — a `Manifest` read from `spec/index.json`
+# plus each child's own summary, assembled by the caller (`spec_documents.build_corpus_context`).
+# `spec_render.py` reaches neither the database nor the filesystem to produce it, and does not gain
+# either capability by accepting it: everything here is already resolved.
+@dataclass(frozen=True)
+class CorpusChild:
+    path: str
+    title: str
+    kind: str
+    phase: str
+    summary: str
+
+
+@dataclass(frozen=True)
+class CorpusContext:
+    path: str  # this document's own corpus path — links are computed relative to it (§2.3)
+    home: str
+    parent: Optional[Tuple[str, str]]  # (path, title), or None where there is none
+    children: Tuple[CorpusChild, ...]
+
+
+def _relative_link(own_path: str, target_path: str) -> str:
+    """A link from `own_path` to `target_path` that resolves on disk, with no Hub serving it.
+
+    Both are corpus-relative paths like `spec/capabilities/x/spec.html`, not filesystem paths on
+    whatever OS renders them — `posixpath` is used unconditionally so the output is always
+    `/`-separated, per design D1/§2.3's example: `spec/capabilities/x/spec.html` reaching
+    `spec/agentweave.html` is `../../agentweave.html`.
+    """
+    return posixpath.relpath(target_path, start=posixpath.dirname(own_path) or ".")
+
+
+def _navigation(corpus: Optional[CorpusContext]) -> str:
+    """Home and parent links, below the meta chips (decision D-S2-navstrip).
+
+    Home is suppressed on the home document itself (§2.1) — there is nothing to link to that
+    is not the page already open. Parent is rendered only where the manifest records one (§2.2).
+    Absent `corpus`, this renders nothing, which is what keeps every caller that omits it (today,
+    every caller) byte-identical to before this parameter existed (§1.3).
+    """
+    if corpus is None:
+        return ""
+    parts: List[str] = []
+    if corpus.path != corpus.home:
+        parts.append(f'<a href="{_e(_relative_link(corpus.path, corpus.home))}">Home</a>')
+    if corpus.parent is not None:
+        parent_path, parent_title = corpus.parent
+        href = _e(_relative_link(corpus.path, parent_path))
+        parts.append(f'<a href="{href}">{_e(parent_title)}</a>')
+    if not parts:
+        return ""
+    return f'<p class="aw-nav">{"".join(parts)}</p>\n'
+
+
 def render_document(
     payload: SpecPayload,
     identifiers: Dict[str, str],
@@ -332,6 +391,7 @@ def render_document(
     phase: str,
     stored_payload: Dict[str, Any],
     rigor: str = "sketch",
+    corpus: Optional[CorpusContext] = None,
 ) -> str:
     """A self-contained document: inline style only, no external resource.
 
@@ -344,6 +404,12 @@ def render_document(
     copy in the file is for whoever reads it and the database row is the
     authority — a gate whose value lives where the gated party can write it is
     not a gate.
+
+    `corpus` is optional. Omitted (still true of every caller until corpus-aware-documents §4
+    wires reindex up), the document is byte-identical to before this parameter existed (§1.3).
+    Supplied, it adds one region below the meta chips: a home link (suppressed on the home
+    document itself) and a parent link (present only where the manifest records one) — §2. The
+    generated map of a document's own children is a separate task (§3) and does not exist yet.
     """
     scope_body = ""
     if payload.scope.in_scope:
@@ -392,6 +458,7 @@ def render_document(
         f'<p class="aw-meta"><span class="aw-chip">{_e(payload.kind)}</span>'
         f'<span class="{phase_chip_class}">{_e(phase)}</span>'
         f'<span class="{rigor_chip_class}">{_e(rigor)}</span></p>\n'
+        f"{_navigation(corpus)}"
         f"{_summary(payload)}\n"
         f"{sections}\n"
         f"{embed_payload(stored_payload)}\n"

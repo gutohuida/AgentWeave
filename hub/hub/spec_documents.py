@@ -36,6 +36,8 @@ from .spec_manifest import (
     load_manifest,
     validate_spec_path,
 )
+from .spec_payload import extract_payload
+from .spec_render import CorpusChild, CorpusContext
 
 SPEC_DIR = "spec"
 INDEX_RELATIVE = "spec/index.json"
@@ -342,6 +344,66 @@ def write_index(workspace: ProjectWorkspace, manifest: Manifest) -> Path:
     resolved.parent.mkdir(parents=True, exist_ok=True)
     resolved.write_text(dump_manifest(manifest), encoding="utf-8")
     return resolved
+
+
+def corpus_summaries(workspace: ProjectWorkspace, manifest: Manifest) -> Dict[str, str]:
+    """Every manifest document's summary, read once per rebuild.
+
+    corpus-aware-documents §1.5: a rebuild re-renders a bounded set of documents (design D2), and
+    each one's map can list several children — so summaries are read in a single pass over the
+    corpus here, keyed by path, rather than once per child per document rendered. A document with
+    no file, no payload, or no non-empty `summary` field is simply absent from the result; the
+    renderer decides what an absent summary looks like (§3.4), not this function.
+    """
+    summaries: Dict[str, str] = {}
+    for document in manifest.documents:
+        content = read_document(workspace, document.path)
+        if content is None:
+            continue
+        stored = extract_payload(content)
+        if stored is None:
+            continue
+        summary = stored.get("summary")
+        if isinstance(summary, str) and summary.strip():
+            summaries[document.path] = summary.strip()
+    return summaries
+
+
+def build_corpus_context(manifest: Manifest, path: str, summaries: Dict[str, str]) -> CorpusContext:
+    """The corpus context `render_document` takes for the document at `path`.
+
+    Pure over data already in hand — the manifest and a summaries map built once by
+    `corpus_summaries` — so building context for every document a rebuild re-renders costs no
+    additional file reads beyond that one pass (§1.5).
+
+    `path` need not itself be in the manifest (a document being rendered for the first time, before
+    its own row and index entry exist, still has a home and can still be somebody's child once
+    filed); it can then have no parent and no children of its own.
+    """
+    by_path = manifest.by_path()
+
+    parent: Optional[Tuple[str, str]] = None
+    entry = by_path.get(path)
+    if entry is not None and entry.parent is not None:
+        parent_entry = by_path.get(entry.parent)
+        if parent_entry is not None:
+            parent = (parent_entry.path, parent_entry.title)
+
+    children = tuple(
+        CorpusChild(
+            path=child.path,
+            title=child.title,
+            kind=child.kind,
+            phase=child.status,
+            summary=summaries.get(child.path, ""),
+        )
+        for child in sorted(
+            (doc for doc in manifest.documents if doc.parent == path),
+            key=lambda doc: doc.order,
+        )
+    )
+
+    return CorpusContext(path=path, home=manifest.home, parent=parent, children=children)
 
 
 def _read_head(workspace: ProjectWorkspace, path: str) -> Optional[str]:

@@ -254,3 +254,66 @@ next item forward rather than idle-checkpoint waiting for a human who said they 
 `corpus-aware-documents` (S2) starts next iteration.
 
 ---
+
+## Iteration 2 — S2 sections 1–2 (headless firing, found dirty at 01:30, landed 02:29+01:00)
+
+**Found the tree dirty again on arrival**, the same shape as iteration 1: a prior firing had done
+real work — `spec_render.py`, `spec_documents.py`, `test_spec_render.py` modified, a new
+`test_spec_corpus_context.py` — and `tasks.md` already showed sections 1 and 2 (10 tasks, 1.1
+through 2.5) ticked with real landing notes. `STATE.json`'s only uncommitted change was the
+heartbeat bump to 01:30:27, and the log had no entry for it. Nothing was lost; this iteration's
+job was verify-and-land, same as last time. Filing this as a repeat pattern rather than a one-off:
+two iterations in a row have died after finishing real work but before committing it.
+
+**Verified everything by hand rather than trusting the ticks.** Read every diff:
+
+- `spec_render.py` gained `CorpusChild`/`CorpusContext` frozen dataclasses, a `corpus:
+  Optional[CorpusContext] = None` parameter on `render_document`, `_relative_link` (posixpath,
+  unconditionally `/`-separated), and `_navigation` (home link suppressed on the home document
+  itself, parent link only where recorded, both below the meta chips per decision
+  `D-S2-navstrip`). `.aw-nav` added to the shared `_STYLE` block, unconditionally — same pattern
+  as every other rule already there.
+- `spec_documents.py` gained `corpus_summaries` (one pass over the manifest per rebuild, keyed by
+  path, empty/missing summaries simply absent) and `build_corpus_context` (pure over a manifest
+  and that summaries map — parent resolved via `Manifest.by_path()`, children filtered by
+  `doc.parent == path` and sorted by `order`). Neither is wired into a route yet; that is §4.
+- Confirmed task 1.3's actual guarantee: `test_omitting_corpus_reproduces_the_pre_change_output_
+  byte_for_byte` pins a sha256 digest of a rich document's output, and
+  `test_explicit_corpus_none_is_identical_to_omitting_it` cross-checks it against no-argument at
+  all. Both pass. The digest baseline had to move once already (§2.4's stylesheet addition is
+  unconditional) and that move is documented inline in the test file rather than silent.
+
+**Ran the tests rather than trusting the diff.** `test_spec_render.py` (50, all corpus-context
+tests included) and the new `test_spec_corpus_context.py` (13): **63 passed** together.
+`ruff check`, `black --check`, and `py -3.11 -m mypy hub/spec_render.py hub/spec_documents.py` all
+clean on the touched files (mypy: "Success: no issues found in 2 source files" — a stronger result
+than iteration 1's "same pre-existing noise, nothing new", since neither touched file carries any
+pre-existing error).
+
+**Full suites, both green against the touched work, one pre-existing flake found and characterised.**
+`py -3.11 -m pytest tests/ -q` (CLI, repo root): **404 passed, 3 skipped**, matching the prep
+baseline exactly. `py -3.11 -m pytest hub/tests/ -q --ignore=hub/tests/browser`: **2 failed, 2618
+passed, 84 skipped, 1 xpassed in 768s (12m48s)**. One failure is the already-known flaky
+`test_checkpoint_record.py::test_the_lineage_id_is_carried_forward_not_regenerated`. The other,
+`test_spec_index.py::test_a_key_that_comes_back_gets_a_new_identifier`, was new to this run's log —
+checked before assuming it was this iteration's damage, since neither `spec_index.py` nor anything
+it imports is in this iteration's diff. Passed alone. Re-ran the whole file four more times: a
+**different** test failed each time (`test_a_requirement_put_back_by_hand_is_restored`,
+`test_a_changed_acceptance_criterion_is_a_rewording` + `test_a_removed_requirement_is_retired_not_
+deleted` together, `test_a_reworded_requirement_records_both_digests` +
+`test_a_changed_obligation_is_a_rewording` + `test_an_edit_made_outside_the_hub_is_recorded_as_
+external` together, then `test_a_reworded_requirement_records_both_digests` alone again) — the
+signature of a timestamp-collision flake (events sorted by a clock whose resolution the test
+outruns), not anything this change touches. Recorded in `STATE.json`'s `dead_ends_inherited` so a
+later iteration doesn't chase it as its own regression, the same way the checkpoint flake already
+is.
+
+**Tasks.md needed no further edits** — sections 1 and 2 were already ticked with accurate landing
+notes by the firing that did the work; this iteration's job was confirming each note was true, not
+writing new ones.
+
+**Section 3 (the generated map) starts next iteration.** Its own task 3.6 says "ask the operator
+before implementing" but `PA-4` already pre-authorises the answer (recursive on the home, direct
+children elsewhere) — so nothing in it actually needs to stall.
+
+---
