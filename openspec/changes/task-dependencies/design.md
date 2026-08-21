@@ -134,6 +134,21 @@ in the one document it is scoped to, and it never queries another document at la
 `materialise()` gains exactly one rule: **an imported entry resolves to the existing task and never
 creates one.**
 
+**Implementation shape, decided at task 1.3: a discriminator field on `Task` (`from`), not a
+separate list.** Built a real cross-document payload both ways before choosing. A discriminator
+keeps the imported entry inside the same `tasks:` list a sibling's `depends_on` already indexes by
+key — one collection, no second list to cross-reference when materialising, rendering a nav strip,
+or checking for a duplicate key. The alternative, a separate `imported_tasks: List[dict]`, keeps an
+ordinary `Task` structurally simpler (no field required for one kind of entry and forbidden for
+another) but forces every consumer of `depends_on` — the gate, the board, `materialise()` — to look
+in two lists to resolve one key. The discriminator also matches this section's own diagram above
+literally: the imported entry is drawn *inside* `tasks:`, marked "← IMPORTED", not in a second
+block. Landed as `hub/hub/spec_payload.py`'s `Task.from_` (aliased to the reserved word `from`,
+`Optional[ImportedFrom]`, `ImportedFrom` a `{document, key}` submodel rather than a raw dict so a
+malformed import is an ordinary field error, the same mechanism every other nested part uses).
+`description` and `requirements` became optional on `Task` as a consequence — an imported entry
+carries neither.
+
 ### D5 — The document is the only writer of edges
 
 The operator, reversing an earlier decision in the same review: *"I can't edit existing edges. Only

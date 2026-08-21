@@ -60,7 +60,12 @@ class _Part(BaseModel):
     # forward-compatibility requirement: a document written under a later schema
     # can be read and rewritten here without losing what this version cannot
     # name.
-    model_config = ConfigDict(extra="allow")
+    #
+    # populate_by_name lets a field with an alias (`Task.from_`, aliased to the
+    # reserved word `from`) also be constructed by its Python name — the raw
+    # payload always uses the alias, but code building a Task directly (tests,
+    # materialisation) should not have to fight the keyword.
+    model_config = ConfigDict(extra="allow", populate_by_name=True)
 
 
 class Requirement(_Part):
@@ -95,6 +100,15 @@ class AcceptanceCriterion(_Part):
     )
 
 
+class ImportedFrom(_Part):
+    """Where an imported task entry (`Task.from_`) actually lives."""
+
+    document: str = Field(
+        description="Path of the document that owns this task. It must be approved: a task cannot import work from a document nobody has signed off on, and until it is, the imported dependency names nothing a reader or an approver can rely on."
+    )
+    key: str = Field(description="The task's key within that document.")
+
+
 class Task(_Part):
     key: str = Field(description="Stable handle for this task, unique within the document.")
     title: str = Field(
@@ -102,9 +116,22 @@ class Task(_Part):
         max_length=200,
         description="What a task board should call this, in a few words. Optional: without it a name is derived from the description, which reads as prose rather than as a name.",
     )
-    description: str = Field(description="One concrete unit of work, not 'build the whole thing'.")
+    description: str = Field(
+        default="",
+        description="One concrete unit of work, not 'build the whole thing'. Required for a task declared here; leave it blank on an imported entry (see `from`), whose work is described in the document that owns it.",
+    )
     requirements: List[str] = Field(
-        description="Keys of the requirements this task satisfies. At least one: a task tracing to nothing is work nobody asked for."
+        default_factory=list,
+        description="Keys of the requirements this task satisfies. At least one for a task declared here — a task tracing to nothing is work nobody asked for. Left empty on an imported entry (see `from`), whose requirements belong to the document that owns it.",
+    )
+    depends_on: List[str] = Field(
+        default_factory=list,
+        description="Keys of sibling tasks in THIS document — local only — that must be approved before this one may start. An imported entry (see `from`) is named the same way once declared, so it can be depended on like any other sibling. This is where ordering gets taught, the same place decomposition is.",
+    )
+    from_: Optional[ImportedFrom] = Field(
+        default=None,
+        alias="from",
+        description="Set only on an imported entry: names an existing task in another, approved document instead of declaring new work here. An imported entry resolves to that task and never creates one — it exists so a sibling's `depends_on` can name it.",
     )
 
 
@@ -265,8 +292,13 @@ def validate_payload(raw: Any) -> SpecPayload:
 
 
 def payload_to_dict(payload: SpecPayload) -> Dict[str, Any]:
-    """The payload as stored — including fields this version does not define."""
-    return payload.model_dump(mode="json")
+    """The payload as stored — including fields this version does not define.
+
+    `by_alias=True` so `Task.from_` (the reserved word `from` cannot be a Python
+    field name) round-trips under the key the payload actually uses, not the
+    Python attribute name.
+    """
+    return payload.model_dump(mode="json", by_alias=True)
 
 
 # ---------------------------------------------------------------------------

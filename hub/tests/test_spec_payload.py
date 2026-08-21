@@ -158,6 +158,86 @@ def test_a_task_with_no_requirements_is_well_formed_but_incomplete():
 
 
 # ---------------------------------------------------------------------------
+# Dependencies and imports
+# ---------------------------------------------------------------------------
+
+
+def test_a_local_depends_on_names_a_sibling_key():
+    payload = validate_payload(
+        minimal(
+            requirements=[_requirement()],
+            tasks=[
+                {"key": "build", "description": "build it", "requirements": ["search-latency"]},
+                {
+                    "key": "ship",
+                    "description": "ship it",
+                    "requirements": ["search-latency"],
+                    "depends_on": ["build"],
+                },
+            ],
+        )
+    )
+    assert payload.tasks[1].depends_on == ["build"]
+
+
+def test_an_imported_entry_needs_no_description_or_requirements():
+    """The whole point of `from`: it names existing work rather than declaring
+    new work, so nothing else on the entry is required."""
+    payload = validate_payload(
+        minimal(
+            tasks=[
+                {
+                    "key": "adopt-corpus",
+                    "from": {"document": "spec/areas/interface.html", "key": "adopt-corpus"},
+                },
+            ],
+        )
+    )
+    assert payload.tasks[0].description == ""
+    assert payload.tasks[0].requirements == []
+    assert payload.tasks[0].from_.document == "spec/areas/interface.html"
+    assert payload.tasks[0].from_.key == "adopt-corpus"
+
+
+def test_a_round_trip_with_local_dependencies_and_an_import_loses_nothing():
+    """1.5: a payload with both an ordinary depends_on and an imported entry
+    survives render -> extract_payload -> validate unchanged — the same
+    round-trip discipline as every other field, extended to cover the two new
+    ones together in one realistic, cross-document payload."""
+    original = minimal(
+        requirements=[_requirement()],
+        tasks=[
+            {
+                "key": "adopt-corpus",
+                "from": {"document": "spec/areas/interface.html", "key": "adopt-corpus"},
+            },
+            {
+                "key": "render-map",
+                "description": "render the arrangement",
+                "requirements": ["search-latency"],
+                "depends_on": ["adopt-corpus"],
+            },
+        ],
+    )
+    stored = payload_to_dict(validate_payload(original))
+
+    document = f"<html><body>rendered</body>{embed_payload(stored)}</html>"
+    recovered = extract_payload(document)
+
+    assert recovered == stored
+
+    # And the recovered dict round-trips through validation again unchanged —
+    # not just JSON-equal, but re-acceptable as a payload.
+    revalidated = payload_to_dict(validate_payload(recovered))
+    assert revalidated == stored
+
+    imported, dependent = stored["tasks"]
+    assert imported["from"] == {"document": "spec/areas/interface.html", "key": "adopt-corpus"}
+    assert imported["description"] == ""
+    assert dependent["depends_on"] == ["adopt-corpus"]
+
+
+# ---------------------------------------------------------------------------
 # Forward compatibility
 # ---------------------------------------------------------------------------
 

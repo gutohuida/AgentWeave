@@ -636,3 +636,76 @@ for S3 section 1 (the schema/migration groundwork) with the specific files and g
 firing does not have to re-derive them.
 
 ---
+
+## Iteration 7 — S3 section 1, the payload (headless firing, arrived clean at 06:43)
+
+First iteration of `task-dependencies` (0/80 → 5/80). Arrived to a clean tree at `af8774d`, matching
+`STATE.json` exactly — no dirty-arrival cleanup needed this time, unlike five of the last six
+iterations.
+
+Read `design.md` D1–D5 in full before touching code, as `next_action` asked. One correction to
+`next_action`'s own file references: it named `hub/tests/test_spec_tasks.py` for the round-trip
+sibling suite; that file does not exist. The real file is `hub/tests/test_spec_declared_tasks.py`
+(plus `hub/tests/test_spec_board_task_convergence.py`, also exercising `materialise()` against the
+same `Task` shape) — found by grepping for `materialise` under `hub/tests`. Both ran clean.
+
+**1.1/1.2** — `depends_on: List[str]` added to `spec_payload.Task`
+(`hub/hub/spec_payload.py:120-123`), `default_factory=list` so an existing document with no
+`depends_on` key on any task validates unchanged. Field description states siblings are local-only,
+that an imported entry is named the same way once declared, and that this is where ordering is
+taught — same place decomposition already is, per the task's own wording.
+
+**1.3 — the open decision.** Built the shape from design D4's own diagram, which already draws the
+imported entry *inside* `tasks:`, marked "← IMPORTED" — not as a second block. Read literally, that
+diagram had already picked "discriminator field on `Task`" over "separate list"; this iteration
+confirmed rather than re-litigated by writing the two-task cross-document payload the round-trip
+test (1.5) actually uses and checking which shape it fell out of naturally. Chosen: `Task.from_`
+(`Optional[ImportedFrom]`, aliased to the reserved word `from` — `from_=`/`from:` both work via
+`populate_by_name`). `ImportedFrom` is a proper `_Part` submodel (`document`, `key`) rather than a
+raw `Dict[str, str]`, so a malformed import is an ordinary pydantic field error at payload
+validation — the same mechanism every other nested part (`Scope`, `Evidence`, `AcceptanceCriterion`)
+already uses, not a new one. Rejected alternative (`imported_tasks: List[dict]` as a second
+top-level list) and the reasoning for both are written into `design.md` D4 (new paragraph under the
+existing decision) and into `decisions_for_user` below — reversible if the operator reads the
+diagram differently.
+
+**Consequence of 1.3, not separately asked for but required by it:** `Task.description` and
+`Task.requirements` became optional (`default=""` / `default_factory=list`) — previously both keys
+had to be present (even empty) on every task entry, and an imported entry legitimately has neither.
+Checked before loosening it: no `spec_completeness.py` finding exists for a blank `description`
+today regardless, and empty `requirements` was already shape-legal
+(`test_a_task_with_no_requirements_is_well_formed_but_incomplete`, pre-existing). So this extends an
+existing permissiveness to the one field that hadn't needed it yet, rather than inventing new
+laxity.
+
+**1.4** — `ImportedFrom.document`'s description states the approved-only rule and why: *"a task
+cannot import work from a document nobody has signed off on, and until it is, the imported
+dependency names nothing a reader or an approver can rely on."*
+
+**1.5 — round-trip test**, `test_a_round_trip_with_local_dependencies_and_an_import_loses_nothing`
+in `hub/tests/test_spec_payload.py`: a two-task payload (one imported entry, one local task
+depending on it) through `payload_to_dict(validate_payload(...))` → `embed_payload` →
+`extract_payload`, asserting byte-identical recovery AND that re-validating the recovered dict
+produces the same dict again. This caught a real bug on first run, not a hypothetical one:
+`payload_to_dict` called `model_dump(mode="json")` without `by_alias=True`, so the aliased `from_`
+field serialised back out as the key `"from_"` instead of `"from"` — a silent field rename on every
+save. Fixed by adding `by_alias=True` (`hub/hub/spec_payload.py`'s `payload_to_dict`, comment
+explains why). Two narrower tests also added (`test_a_local_depends_on_names_a_sibling_key`,
+`test_an_imported_entry_needs_no_description_or_requirements`). The file went from 20 tests to 23,
+0 removed.
+
+**Verified, not assumed.** `pytest hub/tests/test_spec_payload.py hub/tests/test_spec_declared_tasks.py
+hub/tests/test_spec_board_task_convergence.py -q` → **38 passed**. `ruff check`,
+`black --check`(reformatted the new test file once — whitespace only — then clean) and
+`mypy hub/spec_payload.py` all clean. `git status --short` confirms scope: exactly
+`hub/hub/spec_payload.py`, `hub/tests/test_spec_payload.py`,
+`openspec/changes/task-dependencies/{design.md,tasks.md}` — no code outside this section touched.
+Full Hub/CLI suites **not** rerun this iteration (schema-only, additive-default change, section 1 of
+7, low blast radius, matches `next_action`'s own "optional this section" framing) — due before
+section 2 or at latest before S3 as a whole is called done.
+
+**Tasks.md now stands at 5/80.** `current` stays **S3**; section 2 (completeness checks: unresolved
+`depends_on`, within-document cycles, unapproved imports) is next, and per `next_action`'s own note
+it depends on 1.3 being settled, which it now is.
+
+---
