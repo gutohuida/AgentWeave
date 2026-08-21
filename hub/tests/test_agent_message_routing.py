@@ -341,3 +341,108 @@ async def test_an_archived_conversation_is_refused_with_all_three_parts(app, aut
     assert "archived" in detail  # the cause
     assert "omitting conversation_id" in detail  # the way out
     assert CONTENT in detail  # the agent's own words back
+
+
+@pytest.mark.asyncio
+async def test_an_agent_can_message_its_own_other_conversation(app, auth_headers) -> None:
+    """Verified 2026-08-20 for item 10 of the operator's twelve: *"an agent should be able to send
+    a message to itself in another conversation."*
+
+    It already works, and nothing here was built for it. There is no self-send guard anywhere on
+    this path, and naming a conversation routes on the conversation rather than on who is asking,
+    so `recipient == sender` is not a special case — it is the general rule applied to one agent.
+    Locked down here because the capability was undiscovered rather than designed, and an
+    undiscovered capability is exactly the kind that gets broken by an unrelated change.
+
+    What is NOT solved: an agent has no way to learn its own other conversations' ids, and
+    `send_message`'s docstring says a recipient is an agent *"as listed in your context"* — which
+    gives an agent no reason to think its own name qualifies. That is a context and documentation
+    gap, not a routing one.
+    """
+    await _sync_agents(app, auth_headers, "solo")
+    await _open_conversation("solo", "conv-thinking")
+    await _open_conversation("solo", "conv-building")
+    headers = await _active_run("run-self-1", "solo", conversation_id="conv-thinking")
+
+    response = await app.post(
+        "/api/v1/agent-actions/messages",
+        headers=headers,
+        json={
+            "recipient": "solo",
+            "subject": "Findings for the build thread",
+            "content": CONTENT,
+            "conversation_id": "conv-building",
+        },
+    )
+    assert response.status_code == 201, response.text
+
+    message_id = response.json()["id"]
+    async with async_session_factory() as session:
+        message = await session.get(Message, message_id)
+        assert message.sender == "solo"
+        assert message.recipient == "solo"
+        # Sent FROM the run's conversation...
+        assert message.conversation_id == "conv-thinking"
+    # ...and delivered INTO the one it named, not back into the one it came from.
+    assert await _conversation_of(message_id) == "conv-building"
+
+
+@pytest.mark.asyncio
+async def test_a_self_send_is_bounded_by_the_hop_budget(app, auth_headers) -> None:
+    """A self-send costs a hop like any other, so it cannot loop forever.
+
+    The open question the capability raised: an agent messaging itself spawns a turn that could
+    message itself again. It cannot run away, because `hop_depth` is derived from the sending run's
+    `turn_depth + 1` with no exemption for `recipient == sender` -- the entry is still created and
+    still durable, but `schedule_agent` refuses to start a turn for it once the budget is spent.
+    """
+    from hub.turn_scheduler import project_limits, schedule_agent
+
+    await _sync_agents(app, auth_headers, "looper")
+    await _open_conversation("looper", "conv-loop")
+
+    async with async_session_factory() as session:
+        hop_budget, _cap = await project_limits(session, "proj-test")
+
+    token = "aw_run_run-loop-deep-secret"
+    async with async_session_factory() as session:
+        session.add(
+            Run(
+                id="run-loop-deep",
+                project_id="proj-test",
+                agent="looper",
+                status="running",
+                # Already at the budget: the last hop permitted to send.
+                turn_depth=hop_budget,
+                conversation_id="conv-loop",
+                capability_token_hash=hash_run_token(token),
+            )
+        )
+        await session.commit()
+
+    response = await app.post(
+        "/api/v1/agent-actions/messages",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"recipient": "looper", "content": CONTENT, "conversation_id": "conv-loop"},
+    )
+    # The send is accepted and the entry is durable -- refusal happens at delivery, not at send.
+    assert response.status_code == 201, response.text
+
+    async with async_session_factory() as session:
+        entry = (
+            (
+                await session.execute(
+                    select(InboundQueueEntry).where(InboundQueueEntry.agent == "looper")
+                )
+            )
+            .scalars()
+            .first()
+        )
+        assert entry.hop_depth == hop_budget + 1
+        # End the run so "agent is already running" is not what refuses the turn below.
+        run = await session.get(Run, "run-loop-deep")
+        run.status = "completed"
+        await session.commit()
+
+    result = await schedule_agent("proj-test", "looper")
+    assert result.waiting_reason == "hop budget exhausted"
