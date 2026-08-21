@@ -1196,3 +1196,330 @@ requirements than a stated ceiling. The ceiling MUST be named in the refusal.
 - **WHEN** a document contains a declared task naming exactly the ceiling's number of requirements
 - **THEN** that task does not, on its own, block the transition
 
+### Requirement: The operator can write a document's content
+
+The Hub SHALL offer the operator a way to write a document's content directly, without an agent and
+without a merge. The payload contract MUST be the same one an agent submits, and the same
+validation MUST apply.
+
+This closes a gap rather than granting a new power: "A capability document's content SHALL be
+written only by the operator" is already required, and its scenario already states that a
+submission from the operator succeeds. The service enforces exactly that. What has never existed is
+a route, so the only way to exercise the operator's own authority has been to call the service
+in-process.
+
+#### Scenario: The operator writes a capability document
+
+- **GIVEN** a capability document with no content
+- **WHEN** the operator submits a valid payload for it
+- **THEN** the content is written
+- **AND** the document remains in the `current` phase
+
+#### Scenario: The operator writes a document an agent could also have written
+
+- **GIVEN** a change document being explored
+- **WHEN** the operator submits a valid payload for it
+- **THEN** the content is written
+
+#### Scenario: An agent still cannot write a capability document
+
+- **WHEN** an agent submits content against a capability document
+- **THEN** it is refused
+- **AND** the document's content is unchanged
+
+#### Scenario: The same validation applies to the operator
+
+- **WHEN** the operator submits a payload that omits a required field or violates a constraint
+- **THEN** it is refused with an error identifying the field
+- **AND** the document on disk is unchanged
+
+#### Scenario: The operator cannot reclassify a document
+
+- **WHEN** the operator submits a payload whose kind differs from the document's recorded kind
+- **THEN** it is refused
+- **AND** the document's recorded kind is unchanged
+
+#### Scenario: The operator does not bypass their own approval
+
+- **GIVEN** an approved document
+- **WHEN** the operator submits content for it without reopening it
+- **THEN** it is refused
+- **AND** the approved content is unchanged
+
+#### Scenario: Rigor applies to the operator's writes
+
+- **GIVEN** a document at a rigor that gates edits behind an accepted proposal
+- **WHEN** the operator submits content for it
+- **THEN** a pending proposal is recorded rather than the document being written
+
+### Requirement: Authorship is attributed to whoever performed it
+
+Every content write SHALL record who performed it and in what capacity, and the Hub MUST establish
+that from the caller's credential rather than from anything the caller states about itself.
+
+An operator's write MUST be distinguishable from an agent's in the document's recorded history, so
+that a corpus imported by hand is never mistaken for one an agent authored.
+
+#### Scenario: An operator's write is recorded as the operator's
+
+- **WHEN** the operator writes a document's content
+- **THEN** the recorded event names the operator as the actor
+- **AND** it is not attributed to any agent or run
+
+#### Scenario: An agent's write is recorded as that run's
+
+- **WHEN** an agent writes a document's content
+- **THEN** the recorded event names the agent and the run it acted under
+
+#### Scenario: A caller cannot assert an identity it does not hold
+
+- **WHEN** a request carries an actor or run named in its body
+- **THEN** the recorded actor is the one established from the credential
+- **AND** the body's claim is disregarded
+
+### Requirement: The Hub can write the document index it reads
+
+The Hub SHALL be able to produce `spec/index.json` for the documents a project holds. An index the
+Hub writes MUST parse as valid when read back, so that a corpus carries its own home, titles,
+hierarchy and ordering when the project directory moves.
+
+Writing the index is the operator's action, not an agent's, because it decides how the corpus is
+presented rather than what any document says.
+
+#### Scenario: A written index reads back as valid
+
+- **WHEN** the Hub writes the index for a project holding at least one document
+- **THEN** reading that file yields a valid index
+- **AND** its state is reported as valid rather than absent, unreadable or invalid
+
+#### Scenario: Documents the Hub rendered become filed rather than unindexed
+
+- **GIVEN** a project whose documents were rendered by the Hub and have no index
+- **WHEN** the operator rebuilds the index
+- **THEN** every discovered document is reported as filed
+- **AND** none is reported as unindexed
+
+#### Scenario: An agent cannot write the index
+
+- **WHEN** an agent attempts to rebuild or write the document index
+- **THEN** the attempt is refused
+- **AND** the index on disk is unchanged
+
+### Requirement: The index describes documents in the same vocabulary the Hub renders
+
+A document's kind and phase SHALL mean the same thing in the index as in the document the Hub
+rendered. Every kind an agent may submit MUST be expressible in the index, and a document's index
+status MUST be its lifecycle phase — the value the Hub writes into the rendered document's own
+metadata.
+
+This exists because the two vocabularies were introduced at different times and diverged: a
+document the Hub itself produced could not be described by an index the Hub itself validated, which
+made a correct corpus indistinguishable from a corrupt one.
+
+#### Scenario: A capability document can be indexed
+
+- **WHEN** the index describes a document whose kind is `capability`
+- **THEN** the index is valid
+- **AND** the document is reported as filed
+
+#### Scenario: A document's index status is its phase
+
+- **GIVEN** a document at a given lifecycle phase
+- **WHEN** the Hub writes the index
+- **THEN** the entry's status is that phase
+- **AND** comparing the entry against the rendered document reports no metadata conflict
+
+#### Scenario: An archived change document can be indexed
+
+- **WHEN** the index describes a change document that has been archived
+- **THEN** the index is valid
+- **AND** the document is reported as filed
+
+#### Scenario: A phase that is not a phase is refused
+
+- **WHEN** an index entry carries a status that is not a lifecycle phase
+- **THEN** the index is reported as invalid
+- **AND** the discovered documents are still listed
+
+#### Scenario: A kind and phase that cannot occur together are refused
+
+- **WHEN** an index entry pairs a kind with a phase that kind can never hold
+- **THEN** the index is reported as invalid
+
+#### Scenario: Two documents cannot claim the same position
+
+- **WHEN** two entries in the index record the same order
+- **THEN** the index is reported as invalid
+- **AND** the diagnostic names both documents
+
+### Requirement: Rebuilding the index preserves what the operator arranged
+
+Rebuilding the index SHALL carry forward the presentation choices already recorded in a valid index
+— which document is home, each document's parent, and its order. The Hub MUST NOT replace a
+recorded arrangement with a derived one.
+
+Where no arrangement is recorded, the Hub SHALL derive a stable order and leave parentage unset,
+and MUST NOT invent a home it was never given.
+
+#### Scenario: A recorded home survives a rebuild
+
+- **GIVEN** a valid index recording a home document that still exists
+- **WHEN** the operator rebuilds the index
+- **THEN** the same document is still home
+
+#### Scenario: Recorded parentage and order survive a rebuild
+
+- **GIVEN** a valid index recording a parent and an order for a document
+- **WHEN** the operator rebuilds the index
+- **THEN** that document's parent and order are unchanged
+
+#### Scenario: An unarranged corpus is ordered stably and left unparented
+
+- **GIVEN** a project with several documents and no recorded arrangement
+- **WHEN** the operator rebuilds the index twice with no document changing in between
+- **THEN** both rebuilds produce the same order
+- **AND** no document is given a parent
+
+#### Scenario: An ambiguous home is still not guessed
+
+- **GIVEN** a project with several documents and no recorded home
+- **WHEN** the operator rebuilds the index
+- **THEN** no document is recorded as home
+- **AND** the operator is asked which is home
+- **AND** no index is written
+
+### Requirement: The operator can name the home the Hub refuses to guess
+
+Rebuilding SHALL accept a home named by the operator, and that answer MUST take precedence over any
+home already recorded. A named home that does not identify a document in the corpus SHALL be
+refused rather than substituted.
+
+This exists because the Hub's refusal to guess, on its own, leaves a corpus of more than one
+document permanently unindexable: a home is required, nothing may invent one, and so nothing could
+ever be written. The refusal is right; what was missing was a way to answer.
+
+#### Scenario: A named home is recorded and the index is written
+
+- **GIVEN** a project with several documents and no recorded home
+- **WHEN** the operator rebuilds the index naming one of them as home
+- **THEN** that document is recorded as home
+- **AND** every discovered document is reported as filed
+
+#### Scenario: A named home overrides a recorded one
+
+- **GIVEN** a valid index already recording a home
+- **WHEN** the operator rebuilds the index naming a different document as home
+- **THEN** the newly named document is home
+
+#### Scenario: A named home that identifies no document is refused
+
+- **WHEN** the operator rebuilds the index naming a home that is not in the corpus
+- **THEN** no index is written
+- **AND** no other document is substituted as home
+
+### Requirement: A failure to write the index does not abandon the requirement index
+
+When the document index cannot be written, the requirement index SHALL still be rebuilt, and the
+reason the file was not written SHALL be reported.
+
+Rebuilding covers two indexes — the requirement index held as records, and the document index held
+as a file — and only the file can be blocked on a decision that is the operator's to make.
+
+#### Scenario: A corpus with no home still rebuilds its requirements
+
+- **GIVEN** a project with several documents and no home
+- **WHEN** the operator rebuilds
+- **THEN** the requirement index is rebuilt
+- **AND** the response reports that no document index was written
+- **AND** the response states why
+
+#### Scenario: A home naming a document that no longer exists is not silently replaced
+
+- **GIVEN** a valid index whose home names a document that has since been removed
+- **WHEN** the operator rebuilds the index
+- **THEN** no other document is substituted as home
+- **AND** the condition is reported
+
+### Requirement: Both index implementations agree on the vocabulary
+
+The Hub and the CLI validate the index independently and MUST accept exactly the same kinds and
+phases. A value one accepts and the other rejects SHALL be treated as a defect in whichever is
+behind.
+
+This is asserted rather than documented because the two modules deliberately have no import
+relationship, so nothing but a test can hold them together.
+
+#### Scenario: The two implementations accept the same kinds
+
+- **WHEN** the set of kinds each implementation accepts is compared
+- **THEN** the two sets are identical
+
+#### Scenario: The two implementations accept the same phases
+
+- **WHEN** the set of phases each implementation accepts is compared
+- **THEN** the two sets are identical
+
+### Requirement: A document may enter Hub tracking without being created through the Hub
+
+The Hub SHALL recognise that a specification document can exist before its `spec_documents` row
+does, and SHALL provide a way for such a document to become tracked without being rewritten.
+Creating a document through the Hub and adopting one that already exists are distinct acts: the
+first writes a starter file and takes its identity from the caller, the second writes nothing and
+takes its identity from the file.
+
+#### Scenario: Creating a document still writes a starter file
+
+- **WHEN** the operator creates a new document at a path where no file exists
+- **THEN** a row is created and a starter file is written at that path
+- **AND** the document's title and kind are those the caller supplied
+
+#### Scenario: Adopting a document takes its identity from the file
+
+- **WHEN** the operator adopts a document at a path where a file already exists
+- **THEN** a row is created whose title and kind come from the file's own payload
+- **AND** the file is not written
+
+#### Scenario: Creation is refused where a document is already tracked
+
+- **WHEN** the operator creates a document at a path that already has a row
+- **THEN** the creation is refused, as it is today
+
+### Requirement: The file is authoritative at the point of adoption
+
+At the moment a document enters Hub tracking, the file SHALL be the sole source of that document's
+title, kind and phase. This is what allows a project's specification corpus to be reproduced from
+its committed files alone on a machine whose database has never seen it.
+
+This authority is scoped to adoption. Once a row exists, the row remains authoritative for phase and
+rigor, and a file that has moved underneath it remains drift to be reported rather than silently
+accepted.
+
+#### Scenario: A cloned corpus reconstitutes from its files
+
+- **WHEN** a project's `spec/` tree is present with no corresponding `spec_documents` rows, and
+  corpus-wide adoption is run
+- **THEN** each document is tracked with the title, kind and phase recorded in its own file
+
+#### Scenario: The row stays authoritative after adoption
+
+- **WHEN** an adopted document's file is edited outside the Hub so that its recorded phase differs
+  from the row's
+- **THEN** the row's phase is unchanged
+- **AND** the difference is reported as drift rather than applied
+
+### Requirement: Adoption reports rather than resolves
+
+Where a document's file and its existing row disagree, the Hub SHALL report the disagreement and
+SHALL NOT resolve it on the operator's behalf.
+
+#### Scenario: Disagreement is surfaced with both values
+
+- **WHEN** adoption is attempted against a path whose row and file disagree on title, kind or phase
+- **THEN** the response names each differing field and reports both the file's value and the row's
+  value
+
+#### Scenario: No write follows a disagreement
+
+- **WHEN** adoption reports a disagreement
+- **THEN** neither the row nor the file is modified
+
