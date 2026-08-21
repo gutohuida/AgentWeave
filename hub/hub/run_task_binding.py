@@ -392,6 +392,8 @@ async def block_task_for_question(
     """
     actor = run_actor(run.id, run.agent)
     if STATUS_BLOCKED not in allowed_targets(task.status, actor.kind):
+        if task.status == STATUS_BLOCKED:
+            question.blocked_task_id = task.id
         return None
 
     try:

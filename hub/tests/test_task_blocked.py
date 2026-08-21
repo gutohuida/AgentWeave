@@ -19,7 +19,11 @@ from sqlalchemy import select
 from hub.db.engine import async_session_factory
 from hub.db.models import InboundQueueEntry, Question, Run, RunDivergence, Task
 from hub.run_divergence import evaluate_run_end
-from hub.run_task_binding import bind_run_to_task, release_block_for_question
+from hub.run_task_binding import (
+    bind_run_to_task,
+    block_task_for_question,
+    release_block_for_question,
+)
 from hub.task_transitions import STATUS_BLOCKED
 
 
@@ -106,6 +110,42 @@ async def test_the_question_records_which_task_it_parked(app):
     async with async_session_factory() as session:
         question = await session.get(Question, "q-run-blk-2")
         assert question.blocked_task_id == "task-blk-2"
+
+
+@pytest.mark.asyncio
+async def test_a_second_question_records_and_releases_an_already_blocked_task(app):
+    async with async_session_factory() as session:
+        await _run_that_asked(session, "run-blk-second-1", "task-blk-second")
+    await evaluate_run_end("run-blk-second-1")
+
+    async with async_session_factory() as session:
+        task = await session.get(Task, "task-blk-second")
+        second_run = Run(
+            id="run-blk-second-2",
+            project_id="proj-test",
+            agent="worker",
+            status="completed",
+        )
+        second = Question(
+            id="q-run-blk-second-2",
+            project_id="proj-test",
+            from_agent="worker",
+            question="One more thing?",
+            blocking=True,
+            answered=False,
+            created_by_run_id=second_run.id,
+        )
+        session.add_all([second_run, second])
+
+        transition = await block_task_for_question(session, second_run, task, second)
+        assert transition is None
+        assert task.status == STATUS_BLOCKED
+        assert second.blocked_task_id == task.id
+
+        second.answered = True
+        released = await release_block_for_question(session, second)
+        assert released is task
+        assert task.status == "in_progress"
 
 
 @pytest.mark.asyncio
