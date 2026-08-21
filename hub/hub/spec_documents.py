@@ -369,6 +369,35 @@ def corpus_summaries(workspace: ProjectWorkspace, manifest: Manifest) -> Dict[st
     return summaries
 
 
+def _children_of(
+    manifest: Manifest, path: str, summaries: Dict[str, str], *, recursive: bool
+) -> Tuple[CorpusChild, ...]:
+    """Direct children of `path`, each carrying its own descendant tree only when `recursive`.
+
+    §3.6, decision D-S2-recursive: the home's map is the whole corpus; everywhere else it is one
+    level. `build_corpus_context` is the only caller and decides which this is — this function
+    just recurses or doesn't. `context.children` itself is always direct children regardless
+    (`test_a_grandchild_is_not_a_child` pins that for navigation, §1/§2); recursion only ever adds
+    depth *inside* a child's own `.children`, never widens the top level.
+    """
+    return tuple(
+        CorpusChild(
+            path=child.path,
+            title=child.title,
+            kind=child.kind,
+            phase=child.status,
+            summary=summaries.get(child.path, ""),
+            children=(
+                _children_of(manifest, child.path, summaries, recursive=True) if recursive else ()
+            ),
+        )
+        for child in sorted(
+            (doc for doc in manifest.documents if doc.parent == path),
+            key=lambda doc: doc.order,
+        )
+    )
+
+
 def build_corpus_context(manifest: Manifest, path: str, summaries: Dict[str, str]) -> CorpusContext:
     """The corpus context `render_document` takes for the document at `path`.
 
@@ -389,19 +418,7 @@ def build_corpus_context(manifest: Manifest, path: str, summaries: Dict[str, str
         if parent_entry is not None:
             parent = (parent_entry.path, parent_entry.title)
 
-    children = tuple(
-        CorpusChild(
-            path=child.path,
-            title=child.title,
-            kind=child.kind,
-            phase=child.status,
-            summary=summaries.get(child.path, ""),
-        )
-        for child in sorted(
-            (doc for doc in manifest.documents if doc.parent == path),
-            key=lambda doc: doc.order,
-        )
-    )
+    children = _children_of(manifest, path, summaries, recursive=(path == manifest.home))
 
     return CorpusContext(path=path, home=manifest.home, parent=parent, children=children)
 

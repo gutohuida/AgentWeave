@@ -224,3 +224,62 @@ class TestBuildCorpusContext:
         assert context.home == "spec/home.html"
         assert context.parent is None
         assert context.children == ()
+
+    def test_the_homes_direct_children_carry_their_own_descendants(self, workspace):
+        """§3.6, decision D-S2-recursive: recursive on the home, direct children elsewhere. The
+        home's top-level child list is still direct-only (test_a_grandchild_is_not_a_child above),
+        but each of those children now carries its own descendants nested inside it, which is what
+        lets the renderer show the whole corpus on the home page."""
+        manifest = _manifest(
+            "spec/home.html",
+            [
+                ("spec/home.html", "Home", "system-map", "approved", None, 10),
+                ("spec/area.html", "Area", "system-map", "approved", "spec/home.html", 20),
+                ("spec/leaf.html", "Leaf", "capability", "current", "spec/area.html", 30),
+            ],
+        )
+
+        context = spec_documents.build_corpus_context(manifest, "spec/home.html", {})
+
+        assert [child.path for child in context.children] == ["spec/area.html"]
+        area = context.children[0]
+        assert [grandchild.path for grandchild in area.children] == ["spec/leaf.html"]
+        assert area.children[0].children == ()
+
+    def test_a_non_home_documents_children_carry_no_nested_descendants(self, workspace):
+        """The area document's own context (built for the area, not the home) gets direct children
+        only, at every level — recursion is the home's alone."""
+        manifest = _manifest(
+            "spec/home.html",
+            [
+                ("spec/home.html", "Home", "system-map", "approved", None, 10),
+                ("spec/area.html", "Area", "system-map", "approved", "spec/home.html", 20),
+                ("spec/leaf.html", "Leaf", "capability", "current", "spec/area.html", 30),
+            ],
+        )
+
+        context = spec_documents.build_corpus_context(manifest, "spec/area.html", {})
+
+        assert [child.path for child in context.children] == ["spec/leaf.html"]
+        assert context.children[0].children == ()
+
+    def test_recursion_on_the_home_goes_arbitrarily_deep(self, workspace):
+        """Design D5: the renderer is generic over depth. A three-level arrangement — home, area,
+        capability, sub-item — must all show up nested under the home without a code change."""
+        manifest = _manifest(
+            "spec/home.html",
+            [
+                ("spec/home.html", "Home", "system-map", "approved", None, 10),
+                ("spec/area.html", "Area", "system-map", "approved", "spec/home.html", 20),
+                ("spec/cap.html", "Cap", "capability", "current", "spec/area.html", 30),
+                ("spec/sub.html", "Sub", "capability", "current", "spec/cap.html", 40),
+            ],
+        )
+
+        context = spec_documents.build_corpus_context(manifest, "spec/home.html", {})
+
+        area = context.children[0]
+        cap = area.children[0]
+        sub = cap.children[0]
+        assert sub.path == "spec/sub.html"
+        assert sub.children == ()

@@ -73,6 +73,10 @@ a { color: var(--aw-accent); }
 .aw-meta { color: var(--muted); font-size: .85rem; margin: 0 0 1.5rem; }
 .aw-nav { font-size: .85rem; margin: 0 0 1.5rem; }
 .aw-nav a { margin-right: .6rem; }
+.aw-map-list { list-style: none; margin: .5rem 0; padding-left: 0; }
+.aw-map-list .aw-map-list { padding-left: 1.25rem; margin-top: .5rem; }
+.aw-map-item { margin: .75rem 0; }
+.aw-map-item > p { margin: .2rem 0; }
 .aw-chip { display: inline-block; padding: .1rem .5rem; border-radius: 999px;
            background: var(--surface-2); font-size: .78rem; margin-right: .4rem; }
 .aw-requirement { border-left: 3px solid var(--border); padding: .1rem 0 .1rem .9rem;
@@ -341,6 +345,11 @@ class CorpusChild:
     kind: str
     phase: str
     summary: str
+    # Empty for every child except when this CorpusChild is itself part of the home document's
+    # context (§3.6, decision D-S2-recursive: recursive on the home, direct children elsewhere).
+    # `spec_documents.build_corpus_context` is what decides whether to populate this; a bare
+    # `CorpusChild` with no descendants means exactly what it says elsewhere in the corpus.
+    children: Tuple["CorpusChild", ...] = ()
 
 
 @dataclass(frozen=True)
@@ -384,6 +393,61 @@ def _navigation(corpus: Optional[CorpusContext]) -> str:
     return f'<p class="aw-nav">{"".join(parts)}</p>\n'
 
 
+# design D8: two of today's thirty-five documents still carry the placeholder text a syncing
+# change leaves behind, indistinguishable from a deliberately short real summary unless named.
+# Either one, or a genuinely empty summary, renders as "no summary yet" rather than a blank cell.
+_PLACEHOLDER_SUMMARY_PREFIX = "TBD - created by syncing change"
+
+
+def _has_summary(summary: str) -> bool:
+    return bool(summary) and not summary.startswith(_PLACEHOLDER_SUMMARY_PREFIX)
+
+
+def _map_child(own_path: str, child: CorpusChild) -> str:
+    phase_tone = _PHASE_TONE.get(child.phase, "")
+    phase_chip_class = f"aw-chip aw-chip-phase-{phase_tone}" if phase_tone else "aw-chip"
+    href = _e(_relative_link(own_path, child.path))
+    summary = (
+        f"<p>{_e(child.summary)}</p>"
+        if _has_summary(child.summary)
+        else '<p class="aw-empty">no summary yet</p>'
+    )
+    nested = (
+        f'<ul class="aw-map-list">'
+        f'{"".join(_map_child(own_path, grandchild) for grandchild in child.children)}'
+        f"</ul>"
+        if child.children
+        else ""
+    )
+    return (
+        '<li class="aw-map-item">'
+        f'<a href="{href}">{_e(child.title)}</a> '
+        f'<span class="aw-chip">{_e(child.kind)}</span>'
+        f'<span class="{phase_chip_class}">{_e(child.phase)}</span>'
+        f"{summary}{nested}"
+        "</li>"
+    )
+
+
+def _map(corpus: Optional[CorpusContext]) -> str:
+    """The generated map (§3): every child of the document being rendered, one level unless
+    `corpus.children` itself carries further descendants — which only the home document's context
+    does (decision D-S2-recursive, applied in `spec_documents.build_corpus_context`, not here; this
+    function only walks whatever tree it is handed). Renders nothing where there are no children
+    (§3.1), so a document with none is unaffected by this function existing.
+    """
+    if corpus is None or not corpus.children:
+        return ""
+    items = "".join(_map_child(corpus.path, child) for child in corpus.children)
+    return (
+        '<section class="aw-map">'
+        '<h2 id="map">Map <span class="aw-note">'
+        "(generated on reindex — hand edits here are overwritten)</span></h2>"
+        f'<ul class="aw-map-list">{items}</ul>'
+        "</section>"
+    )
+
+
 def render_document(
     payload: SpecPayload,
     identifiers: Dict[str, str],
@@ -407,9 +471,10 @@ def render_document(
 
     `corpus` is optional. Omitted (still true of every caller until corpus-aware-documents §4
     wires reindex up), the document is byte-identical to before this parameter existed (§1.3).
-    Supplied, it adds one region below the meta chips: a home link (suppressed on the home
-    document itself) and a parent link (present only where the manifest records one) — §2. The
-    generated map of a document's own children is a separate task (§3) and does not exist yet.
+    Supplied, it adds two regions: navigation below the meta chips — a home link (suppressed on
+    the home document itself) and a parent link (present only where the manifest records one),
+    §2 — and, below the authored content, a generated map of the document's own children where it
+    has any (§3), labelled as generated since a reindex overwrites it.
     """
     scope_body = ""
     if payload.scope.in_scope:
@@ -461,6 +526,7 @@ def render_document(
         f"{_navigation(corpus)}"
         f"{_summary(payload)}\n"
         f"{sections}\n"
+        f"{_map(corpus)}"
         f"{embed_payload(stored_payload)}\n"
         "</body>\n</html>\n"
     )

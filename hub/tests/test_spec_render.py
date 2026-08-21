@@ -18,7 +18,7 @@ from hub.spec_identity import (
     retained,
 )
 from hub.spec_payload import SCHEMA_VERSION, extract_payload, payload_to_dict, validate_payload
-from hub.spec_render import _STYLE, CorpusContext, render_document
+from hub.spec_render import _STYLE, CorpusChild, CorpusContext, render_document
 
 # The neutral custom properties SpecFrame.tsx's HUB_NEUTRALS override sets on every
 # mode (`themeOverride()` in SpecFrame.tsx) — spec_render.py must define each one under
@@ -546,14 +546,14 @@ def _rich_payload():
     )
 
 
-# Captured from render_document's own output. Recaptured once, in §2, when `.aw-nav` joined the
-# shared stylesheet (_STYLE, embedded in every document regardless of whether this document's own
-# `corpus` uses it — the existing pattern for every other CSS rule here, e.g. `.aw-chip-rigor-contract`
-# is present even in documents whose rigor is not `contract`). §1.3's guarantee is that the
-# `corpus is None` branch renders no *region*, not that the shared stylesheet is frozen — a change
-# to this digest with no `corpus` argument passed and no stylesheet edit means the None-branch
-# stopped being a no-op.
-_BASELINE_DIGEST = "836153f74f6f2bc176ecc571ce255561eca1e0a7cbe20ad5a035757e522cd0de"
+# Captured from render_document's own output. Recaptured twice: in §2, when `.aw-nav` joined the
+# shared stylesheet, and again in §3, when `.aw-map*` did the same (_STYLE is embedded in every
+# document regardless of whether this document's own `corpus` uses it — the existing pattern for
+# every other CSS rule here, e.g. `.aw-chip-rigor-contract` is present even in documents whose
+# rigor is not `contract`). §1.3's guarantee is that the `corpus is None` branch renders no
+# *region*, not that the shared stylesheet is frozen — a change to this digest with no `corpus`
+# argument passed and no stylesheet edit means the None-branch stopped being a no-op.
+_BASELINE_DIGEST = "7596614bf74c4b2b1129c95973e4fd42599f94d3ca0a673ae29f33c2d2d3be83"
 
 
 def test_omitting_corpus_reproduces_the_pre_change_output_byte_for_byte():
@@ -674,3 +674,150 @@ def test_a_rendered_file_opened_from_disk_resolves_both_links_with_no_hub_runnin
     resolved = (doc_path.parent / href).resolve()
     assert resolved == (home_dir / "agentweave.html").resolve()
     assert resolved.read_text(encoding="utf-8") == "<html>home</html>"
+
+
+# ---------------------------------------------------------------------------
+# corpus-aware-documents §3: the generated map — every child of the document
+# being rendered, listed with kind, phase, summary, and a relative link.
+# ---------------------------------------------------------------------------
+
+
+def test_a_document_with_no_children_gets_no_map_section():
+    corpus = CorpusContext(
+        path="spec/capabilities/x/spec.html", home="spec/agentweave.html", parent=None, children=()
+    )
+    html = _render_with_corpus(corpus)
+    assert 'class="aw-map"' not in html
+
+
+def test_a_document_with_children_gets_a_map_section():
+    child = CorpusChild(
+        path="spec/capabilities/a/spec.html",
+        title="A",
+        kind="capability",
+        phase="current",
+        summary="What A does.",
+    )
+    corpus = CorpusContext(
+        path="spec/agentweave.html", home="spec/agentweave.html", parent=None, children=(child,)
+    )
+    html = _render_with_corpus(corpus)
+    section = re.search(r'<section class="aw-map">(.*?)</section>', html).group(1)
+    assert '<a href="capabilities/a/spec.html">A</a>' in section
+    assert '<span class="aw-chip">capability</span>' in section
+    assert '<span class="aw-chip aw-chip-phase-done">current</span>' in section
+    assert "<p>What A does.</p>" in section
+
+
+def test_children_in_the_map_are_ordered_as_given_not_alphabetically():
+    """build_corpus_context already orders by the manifest's `order` (task 1.4); the map must not
+    re-sort what it is handed."""
+    children = tuple(
+        CorpusChild(
+            path=f"spec/{name}.html", title=name, kind="capability", phase="current", summary="s"
+        )
+        for name in ["z", "a", "m"]
+    )
+    corpus = CorpusContext(
+        path="spec/agentweave.html", home="spec/agentweave.html", parent=None, children=children
+    )
+    html = _render_with_corpus(corpus)
+    section = re.search(r'<section class="aw-map">(.*?)</section>', html).group(1)
+    positions = {name: section.index(f">{name}<") for name in ["z", "a", "m"]}
+    assert positions["z"] < positions["a"] < positions["m"]
+
+
+def test_an_empty_summary_renders_as_no_summary_yet_in_the_empty_style():
+    child = CorpusChild(
+        path="spec/capabilities/a/spec.html",
+        title="A",
+        kind="capability",
+        phase="current",
+        summary="",
+    )
+    corpus = CorpusContext(
+        path="spec/agentweave.html", home="spec/agentweave.html", parent=None, children=(child,)
+    )
+    html = _render_with_corpus(corpus)
+    assert '<p class="aw-empty">no summary yet</p>' in html
+
+
+def test_a_placeholder_summary_renders_as_no_summary_yet():
+    """design D8: the sync-created placeholder ('TBD - created by syncing change ...') is
+    indistinguishable from a real summary unless named, so it is treated the same as empty."""
+    child = CorpusChild(
+        path="spec/capabilities/a/spec.html",
+        title="A",
+        kind="capability",
+        phase="current",
+        summary="TBD - created by syncing change 2026-08-04-x. Update Purpose after archive.",
+    )
+    corpus = CorpusContext(
+        path="spec/agentweave.html", home="spec/agentweave.html", parent=None, children=(child,)
+    )
+    html = _render_with_corpus(corpus)
+    assert '<p class="aw-empty">no summary yet</p>' in html
+    assert "TBD - created by syncing change" not in html
+
+
+def test_the_map_region_is_labelled_as_generated():
+    child = CorpusChild(
+        path="spec/capabilities/a/spec.html",
+        title="A",
+        kind="capability",
+        phase="current",
+        summary="s",
+    )
+    corpus = CorpusContext(
+        path="spec/agentweave.html", home="spec/agentweave.html", parent=None, children=(child,)
+    )
+    html = _render_with_corpus(corpus)
+    section = re.search(r'<section class="aw-map">(.*?)</section>', html).group(1)
+    assert "generated" in section.lower()
+
+
+def test_a_grandchild_present_in_the_context_renders_nested_and_links_relative_to_the_document():
+    """Decision D-S2-recursive: whether a grandchild shows up at all is
+    `spec_documents.build_corpus_context`'s call, not the renderer's — this only proves that once
+    handed a nested tree (as the home's context is), the renderer walks it and computes every link
+    relative to the document actually being rendered, not to the immediate parent in the tree."""
+    grandchild = CorpusChild(
+        path="spec/capabilities/leaf/spec.html",
+        title="Leaf",
+        kind="capability",
+        phase="current",
+        summary="A leaf.",
+    )
+    child = CorpusChild(
+        path="spec/areas/agents.html",
+        title="Agents and execution",
+        kind="system-map",
+        phase="current",
+        summary="An area.",
+        children=(grandchild,),
+    )
+    corpus = CorpusContext(
+        path="spec/agentweave.html", home="spec/agentweave.html", parent=None, children=(child,)
+    )
+    html = _render_with_corpus(corpus)
+    section = re.search(r'<section class="aw-map">(.*?)</section>', html).group(1)
+    assert '<a href="areas/agents.html">Agents and execution</a>' in section
+    assert '<a href="capabilities/leaf/spec.html">Leaf</a>' in section
+
+
+def test_the_map_carries_no_external_resource():
+    child = CorpusChild(
+        path="spec/capabilities/a/spec.html",
+        title="A",
+        kind="capability",
+        phase="current",
+        summary="s",
+    )
+    corpus = CorpusContext(
+        path="spec/agentweave.html", home="spec/agentweave.html", parent=None, children=(child,)
+    )
+    html = _render_with_corpus(corpus)
+    assert "http://" not in html
+    assert "https://" not in html
+    assert "<script src" not in html
+    assert "<link" not in html

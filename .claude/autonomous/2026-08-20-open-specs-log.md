@@ -317,3 +317,68 @@ before implementing" but `PA-4` already pre-authorises the answer (recursive on 
 children elsewhere) — so nothing in it actually needs to stall.
 
 ---
+
+## Iteration 3 — S2 section 3, the generated map (headless firing, found dirty at 03:29, landed 04:11+01:00)
+
+**Found the tree dirty a third time, same shape as iterations 1 and 2.** A prior firing had done
+real work — `spec_render.py`, `spec_documents.py`, two test files modified, `tasks.md` sections
+3.1–3.6 ticked with detailed landing notes — and `STATE.json`'s only uncommitted change was the
+heartbeat bump to 03:29:34. Nothing lost; job was verify-and-land again. Three iterations in a row
+have now died after finishing real work but before committing — worth flagging as a pattern of the
+driver/session boundary rather than of any one iteration, since the work itself has been sound each
+time. Not fixing that pattern tonight; it is out of scope and the mitigation (verify-then-land) is
+working.
+
+**Verified by reading every diff, not by trusting the ticks.**
+
+- `spec_render.py` gained `CorpusChild.children` (a new field, default `()`, so every existing
+  construction of `CorpusChild` without it keeps working), `_map`/`_map_child` (a
+  `<section class="aw-map">` appended *below* the authored content, not beside navigation — matches
+  design's Risks section), `_PLACEHOLDER_SUMMARY_PREFIX`/`_has_summary` for design D8, and
+  `.aw-map-list`/`.aw-map-item` joining `_STYLE` unconditionally, same pattern as every other rule
+  there. `_map` returns `""` when `corpus is None` or `corpus.children` is empty, so §1.3's
+  byte-identity guarantee for the no-corpus path is untouched by construction, not by care.
+- `spec_documents.py` gained `_children_of(manifest, path, summaries, *, recursive)`, and
+  `build_corpus_context` now calls it with `recursive=(path == manifest.home)` instead of building
+  the tuple inline. Read this carefully since it's the decision `D-S2-recursive` implementation:
+  the *top-level* `context.children` is direct-children-only at every path, home included — only
+  each child's own nested `.children` field goes deep, and only when the document being built for
+  is the home. The renderer never checks which document it's rendering for; it just walks whatever
+  tree `build_corpus_context` handed it (design D5, "generic over depth").
+- `_BASELINE_DIGEST` in `test_spec_render.py` moved a second time (first for `.aw-nav` in §2, now
+  for `.aw-map*`), with the same inline explanation iteration 2 used — expected and correct, not a
+  regression, since the stylesheet block is unconditional.
+- Placeholder-summary decision is real, not asserted: grepped `spec/` myself and confirmed
+  `model-catalog` and `runtime-diagnostics` both begin `TBD - created by syncing change` today,
+  matching what tasks.md 3.4 claims.
+
+**Ran the tests rather than trusting the diff.** `test_spec_render.py` + `test_spec_corpus_context.py`
+together: **74 passed** (up from iteration 2's 63 — exactly the +11 new tests the diff adds: 8 in
+`test_spec_render.py`, 3 in `test_spec_corpus_context.py`, counted by hand against the diff, not
+assumed). `ruff check`, `black --check`, `mypy` on both touched files: **all clean**, mypy reporting
+"no issues found in 2 source files" same as iteration 2.
+
+**Ran the full Hub suite** (`py -3.11 -m pytest tests/ -q --ignore=tests/browser`, started early):
+**1 failed, 2630 passed, 12 skipped, 1 xpassed in 737.79s (12m17s)**. The one failure is the
+already-known flaky `test_checkpoint_record.py::test_the_lineage_id_is_carried_forward_not_
+regenerated` (see `dead_ends_inherited`) — not in this iteration's diff. 2630 vs iteration 2's 2618
+is +12, one more than the +11 new tests counted above; not chased further, filed under the same
+collection-difference note as the skipped count. Skipped count read 12 here versus 84 in every
+prior run in this log; not investigated further tonight since it reads as an environment/collection
+difference between invocation directories (this run's command was issued from `hub/` with a
+relative `--ignore=tests/browser`, prior runs from the repo root with `hub/tests/`) rather than
+anything section 3 touches — flagging it rather than either chasing it or silently absorbing it,
+and the two anomalies (skipped count, +1 passed) are consistent with the same cause. `test_spec_
+index.py`'s known timestamp-collision flake did not appear this run; consistent with it being
+nondeterministic, not evidence it's fixed.
+
+**Tasks.md needed no further edits** — section 3 (3.1–3.6) was already ticked with accurate, detailed
+landing notes by the firing that did the work, including the placeholder-string decision for 3.4 and
+the recursion boundary for 3.6. This iteration's job was confirming each note was true, which it was.
+
+**Section 4 (regeneration on reindex) starts next iteration.** It wires `build_corpus_context` and
+`corpus_summaries` — both landed in §1 but never called from a route — into
+`POST /project/spec/reindex`, and is where the "byte-identical until wired in" caveat repeated
+throughout §1–3's landing notes finally stops being true for real documents.
+
+---
