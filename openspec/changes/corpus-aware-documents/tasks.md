@@ -84,7 +84,7 @@ These need the operator, a browser, and a real corpus.
 - [x] 8.3 **The corpus reads outside the app.** Open `spec/agentweave.html` directly in a browser with the Hub stopped. The map renders, and every link resolves. **Playwright 2026-08-21:** opened the `file://` document directly and resolved all 40 local links.
 - [ ] 8.4 **The first reindex diff is reviewable.** Run reindex after group 4 lands and read `git diff --stat spec/`. Every file changed once, gaining a navigation strip. Confirm no document's authored content changed.
 - [ ] 8.5 **The bound holds in practice.** Add one document, reindex, and confirm `git status` shows exactly two changed files: the new one and its parent.
-- [ ] 8.6 **The generated region is obviously generated.** Look at the map on the home document and confirm a reader would not mistake it for prose someone wrote.
+- [x] 8.6 **The generated region is obviously generated.** Look at the map on the home document and confirm a reader would not mistake it for prose someone wrote. **Operator, 2026-08-21: pass.** Judged live against the trial Hub's Spec home. The map sits in its own `aw-map` section under a heading that says so — "(generated on reindex — hand edits here are overwritten)" — which is also the line the 8.4/8.5 diffs land in.
 - [x] 8.7 **Nothing regressed in the rail.** The `SpecTree` still shows the file tree as before; the hierarchy did not leak into it. **Playwright 2026-08-21:** the adopted-corpus browser suite passed all 9 checks and retained the 41-document file tree.
 
 ## 9. User test guide

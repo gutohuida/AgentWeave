@@ -441,7 +441,19 @@ zero failures either side.
 
 - [ ] 11.1 **The shape is legible.** Open the board for a real decomposition. The order of work is apparent without reading a single description.
 - [x] 11.2 **The stall is diagnosable.** Let a layer sit completed and unreviewed. The board says work is waiting on review — not merely that downstream cards are gated. If this reads as "the feature is broken", it is. **Playwright 2026-08-21:** a disposable live board rendered “Layer 2 is waiting on 1 review.”
-- [ ] 11.3 **The gate is honest in a live run.** Ask an agent to start a task whose prerequisite is unapproved. The refusal tells it what to wait for, in words it can act on.
+- [x] 11.3 **The gate is honest in a live run.** Ask an agent to start a task whose prerequisite is unapproved. The refusal tells it what to wait for, in words it can act on.
+
+      **Passed 2026-08-21, and the agent did more than wait.** `builder` was asked to start
+      "Design the batch entry point", gated on two unapproved prerequisites. The refusal (409,
+      `dependency_unmet`) named both by id, title and status. The agent did not retry, stall, or
+      report the feature broken — it read the refusal, went and did both prerequisites itself
+      (`measure`, `inventory` → `completed`), then messaged `speccer` to review them. `speccer`
+      moved both to `under_review` and `approved`, and `design-api` and `equivalence-tests` came
+      off the gate. Transitions recorded 18:59:35 → 19:06:59.
+
+      The refusal was actionable in the strongest sense available: the agent acted on it, without
+      the operator in the loop. Evidence: `task_transitions` for `proj-5e960453`, and the two
+      messages between `builder` and `speccer`.
 - [ ] 11.4 **The review chain is bearable.** Walk a three-deep chain with two agents. Judge whether the review cost per wave is acceptable — this is the change's main risk and only real use answers it.
 - [x] 11.5 **The board does not lie about foreign work.** With a cross-document import, confirm the reference names the owning document and that the blocker is reachable from it. **Playwright 2026-08-21:** exposed and fixed a non-interactive reference; clicking it now opens the owning board and shows the blocker.
 - [x] 11.6 **Collapse behaves.** Finish a layer, confirm it collapses, expand it, confirm the graph still reads. **Playwright 2026-08-21:** the two-task terminal layer collapsed to “2 done” and expanded to both named cards.
