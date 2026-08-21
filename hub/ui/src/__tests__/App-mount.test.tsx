@@ -65,6 +65,9 @@ vi.mock('@/components/overview/OverviewPage', () => ({
 vi.mock('@/components/tasks/TasksBoard', () => ({
   TasksBoard: () => <div data-testid="page-tasks" />,
 }))
+vi.mock('@/components/tasks/DependencyBoardView', () => ({
+  DependencyBoardView: () => <div data-testid="page-tasks-dependencies" />,
+}))
 // There is no Spec page and no Spec tab any more — a specification is opened from the composer's
 // Spec pill, in the conversation the operator is already in. Mocked so the conversation view's
 // inventory query never reaches the network.
@@ -210,6 +213,21 @@ describe('phase 5 App.tsx: rail-only navigation, tabs own project content', () =
     fireEvent.click(screen.getByText('Answer'))
     expect(screen.getByTestId('page-questions-inline')).toBeInTheDocument()
     expect(window.location.search).toContain('tab=overview')
+  })
+
+  it('Tasks contains Dependencies as an internal sub-view, the seven-column board still the default (task 8.11)', () => {
+    render(withQueryClient(<App />))
+    fireEvent.click(screen.getByTestId('project-tab-tasks'))
+    expect(screen.getByTestId('page-tasks')).toBeInTheDocument()
+    expect(screen.queryByTestId('page-tasks-dependencies')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByTestId('tasks-view-dependencies'))
+    expect(screen.queryByTestId('page-tasks')).not.toBeInTheDocument()
+    expect(screen.getByTestId('page-tasks-dependencies')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByTestId('tasks-view-board'))
+    expect(screen.getByTestId('page-tasks')).toBeInTheDocument()
+    expect(screen.queryByTestId('page-tasks-dependencies')).not.toBeInTheDocument()
   })
 
   it('Activity contains Logs as an internal sub-view', () => {

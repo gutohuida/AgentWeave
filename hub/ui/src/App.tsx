@@ -34,6 +34,7 @@ import { useSpecDocuments } from '@/api/spec'
 import { SpecPage } from '@/components/spec/SpecPage'
 import { useTasks } from '@/api/tasks'
 import { TasksBoard } from '@/components/tasks/TasksBoard'
+import { DependencyBoardView } from '@/components/tasks/DependencyBoardView'
 import { Button } from '@/components/ui/button'
 import { useSSE } from '@/hooks/useSSE'
 import { useWorkspaceNavigation } from '@/hooks/useWorkspaceNavigation'
@@ -66,6 +67,10 @@ export default function App() {
   const [agentCreateProjectId, setAgentCreateProjectId] = useState<string | null>(null)
   const [overviewQuestionsOpen, setOverviewQuestionsOpen] = useState(false)
   const [activitySubview, setActivitySubview] = useState<'activity' | 'logs'>('activity')
+  // Task 8.11: the seven-column board stays the default and unchanged — the dependency board is
+  // an alternate lens on the same data, not a replacement, so it is opt-in per visit rather than
+  // a stored preference.
+  const [tasksView, setTasksView] = useState<'board' | 'dependencies'>('board')
   const { destination, navigate: navigateTo } = useWorkspaceNavigation({
     availableProjectIds: projects ? projects.map((project) => project.id) : null,
     lastOpenedProjectId: projectId,
@@ -368,14 +373,40 @@ export default function App() {
         ? <QuestionsPanel />
         : <OverviewPage onNavigate={navigate} />
     } else if (destination.tab === 'tasks') {
+      // A task's requirement chip, clicked: land on that requirement in its document, scrolled
+      // into view — the other direction of F4's cross-tab navigation. Shared by both views since
+      // `TaskCard` renders the same chip either way.
+      const onOpenRequirement = (documentPath: string, anchor: string) =>
+        navigateTo(projectDestination(destination.projectId, 'spec', documentPath, anchor))
       projectContent = (
-        <TasksBoard
-          // A task's requirement chip, clicked: land on that requirement in its document,
-          // scrolled into view — the other direction of F4's cross-tab navigation.
-          onOpenRequirement={(documentPath, anchor) =>
-            navigateTo(projectDestination(destination.projectId, 'spec', documentPath, anchor))
-          }
-        />
+        <div className="flex h-full flex-col">
+          <div className="flex gap-1 px-4 pt-3">
+            {(
+              [
+                ['board', 'Board'],
+                ['dependencies', 'Dependencies'],
+              ] as const
+            ).map(([view, label]) => (
+              <button
+                key={view}
+                type="button"
+                data-testid={`tasks-view-${view}`}
+                onClick={() => setTasksView(view)}
+                className="px-3 py-1.5 text-xs"
+                aria-pressed={tasksView === view}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <div className="min-h-0 flex-1 overflow-hidden">
+            {tasksView === 'board' ? (
+              <TasksBoard onOpenRequirement={onOpenRequirement} />
+            ) : (
+              <DependencyBoardView onOpenRequirement={onOpenRequirement} />
+            )}
+          </div>
+        </div>
       )
     } else if (destination.tab === 'spec') {
       projectContent = (

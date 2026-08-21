@@ -116,6 +116,32 @@ describe('DependencyBoardView', () => {
     expect(screen.getByTestId('dependency-board-picker-none')).toHaveAttribute('aria-pressed', 'true')
   })
 
+  it('names the document as the place structure is changed, not the board itself', async () => {
+    // Task 8.10, design D5: the board has no add/remove-edge affordance anywhere, so an operator
+    // who comes looking for one should be told where structure actually lives instead of finding
+    // nothing and guessing.
+    vi.resetModules()
+    renderView(BOARDS)
+    const { DependencyBoardView } = await import('@/components/tasks/DependencyBoardView')
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={client}>
+        <DependencyBoardView />
+      </QueryClientProvider>,
+    )
+
+    expect(screen.getByTestId('dependency-board-structure-hint')).toHaveTextContent(
+      'Dependencies are set in the document',
+    )
+
+    fireEvent.click(screen.getByTestId('dependency-board-picker-none'))
+    // The "no document" board gets D5's own stated consequence, not the generic wording — a
+    // hand-made task belongs to no document, so nothing can ever declare its edges.
+    expect(screen.getByTestId('dependency-board-structure-hint')).toHaveTextContent(
+      'Hand-made tasks belong to no document, so they can never have a dependency.',
+    )
+  })
+
   it('shows an empty state when no board has any tasks', async () => {
     vi.resetModules()
     renderView([])

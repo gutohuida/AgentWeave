@@ -24,6 +24,18 @@ export function DependencyBoardView({ onOpenRequirement }: DependencyBoardViewPr
   const [manualSelection, setManualSelection] = useState<string | null | undefined>(undefined)
   const selectedId = manualSelection !== undefined ? manualSelection : boards[0]?.spec_document_id ?? null
 
+  // Task 8.10: this board draws structure, it never writes it (design D5, "the document is the
+  // only writer of edges") — there is no add/remove-edge affordance anywhere in this component or
+  // `DependencyBoard` for that reason, not by omission. The one place an operator might reasonably
+  // look for one is right here, above the board, so it says where structure actually comes from
+  // rather than leaving the absence to be discovered by trying. The "no document" board gets its
+  // own wording: a hand-made task belongs to no document, so nothing can ever declare its edges
+  // (D5's own stated consequence), not merely "edit elsewhere."
+  const structureHint =
+    selectedId === null
+      ? 'Hand-made tasks belong to no document, so they can never have a dependency.'
+      : 'Dependencies are set in the document — edit its depends_on field to change them.'
+
   if (isLoading) {
     return <div className="p-6" style={{ color: 'var(--text-3)' }}>Loading boards…</div>
   }
@@ -75,6 +87,13 @@ export function DependencyBoardView({ onOpenRequirement }: DependencyBoardViewPr
           )
         })}
       </div>
+      <p
+        data-testid="dependency-board-structure-hint"
+        className="px-3 pt-2 text-xs"
+        style={{ color: 'var(--text-3)' }}
+      >
+        {structureHint}
+      </p>
       <div className="flex-1 overflow-hidden">
         <DependencyBoard specDocumentId={selectedId} onOpenRequirement={onOpenRequirement} />
       </div>
