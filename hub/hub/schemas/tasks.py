@@ -195,6 +195,18 @@ class TaskUpdate(BaseModel):
         return v
 
 
+class TaskDependencyRef(BaseModel):
+    """A prerequisite or dependent named on `TaskResponse` — enough to render an edge without a
+    second fetch: `id` to link to it, `title` and `status` to show what it is and whether it has
+    cleared (`task-dependencies` design D3, task 7.1)."""
+
+    id: str = Field(max_length=64)
+    title: str = Field(max_length=256)
+    status: str = Field(max_length=32)
+
+    model_config = {"from_attributes": True}
+
+
 class TaskIntegrationSummary(BaseModel):
     """What the most recent approval of this task did to the repository — merged, or skipped why.
 
@@ -279,5 +291,17 @@ class TaskResponse(BaseModel):
     # older rows the migration never touched). The full history stays at
     # `GET /tasks/{id}/integrations`; this is only ever the newest row of it.
     latest_integration: Optional[TaskIntegrationSummary] = None
+    # `TaskDependency` read from both ends (`task-dependencies` design D3, task 7.1). Never stored
+    # here — derived per request from the join table, the same way `requirement_links` is derived
+    # from `task_requirement_links` rather than kept as a second copy.
+    prerequisites: List[TaskDependencyRef] = Field(default_factory=list)
+    dependents: List[TaskDependencyRef] = Field(default_factory=list)
+    # One of `"gated"` (a prerequisite is not yet approved), `"gated_on_rejected"` (a prerequisite
+    # was rejected and will not clear on its own), `"running_on_regressed"` (this task is already
+    # `in_progress` but a prerequisite no longer reads `approved` — flagged, not stopped, per design
+    # D8), or `None` when nothing about this task's dependencies is worth surfacing. Derived per
+    # request, not stored (task 7.2) — a stored readiness column is a denormalised join that goes
+    # stale the moment a prerequisite's status changes under it (design D1).
+    dependency_state: Optional[str] = Field(default=None, max_length=32)
 
     model_config = {"from_attributes": True}

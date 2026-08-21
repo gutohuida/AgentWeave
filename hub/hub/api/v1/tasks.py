@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ... import project_workspace, spec_lifecycle, spec_reading
+from ... import dependency_gate, project_workspace, spec_lifecycle, spec_reading
 from ...agent_status import effective_heartbeat_status
 from ...auth import get_project
 from ...db.engine import get_session
@@ -24,6 +24,7 @@ from ...db.models import (
     SpecDocument,
     SpecRequirement,
     Task,
+    TaskDependency,
     TaskIntegration,
     TaskRequirementLink,
     TaskRequirementReference,
@@ -35,7 +36,13 @@ from ...run_task_binding import (
     release_conversations_bound_to,
     release_reason,
 )
-from ...schemas.tasks import TaskCreate, TaskIntegrationSummary, TaskResponse, TaskUpdate
+from ...schemas.tasks import (
+    TaskCreate,
+    TaskDependencyRef,
+    TaskIntegrationSummary,
+    TaskResponse,
+    TaskUpdate,
+)
 from ...spec_lifecycle import Actor as SpecActor
 from ...sse import sse_manager
 from ...task_transition_service import (
@@ -215,6 +222,85 @@ async def _attach_requirements(
         # deliberately excluded: they round-trip as `unresolved_requirements`, and including them
         # here would invite a GET→PATCH cycle to resubmit a reference that already failed.
         response.requirement_ids = [item["identifier"] for item in response.requirement_links]
+    return responses
+
+
+async def _attach_dependencies(
+    session: AsyncSession, responses: List[TaskResponse], *, project_id: str
+) -> List[TaskResponse]:
+    """Fill in what each task depends on, what depends on it, and whether that's worth flagging.
+
+    Batched across the whole page for the same reason `_attach_requirements` is (task 7.1): one
+    query for every edge touching this page, not one per task. `dependency_state` (task 7.2) is
+    derived from the same rows rather than a second call into `dependency_gate.evaluate` — that
+    module answers "may this task start", scoped to one task; this answers "what should the read
+    model say", scoped to a page, and the two are the same join read two different ways.
+    """
+    task_ids = [response.id for response in responses]
+    if not task_ids:
+        return responses
+
+    edges = (
+        await session.execute(
+            select(TaskDependency.task_id, TaskDependency.depends_on_task_id).where(
+                TaskDependency.project_id == project_id,
+                (
+                    TaskDependency.task_id.in_(task_ids)
+                    | TaskDependency.depends_on_task_id.in_(task_ids)
+                ),
+            )
+        )
+    ).all()
+    if not edges:
+        return responses
+
+    other_ids = {tid for pair in edges for tid in pair} - set(task_ids)
+    by_response = {response.id: response for response in responses}
+    known = {
+        response.id: {"id": response.id, "title": response.title, "status": response.status}
+        for response in responses
+    }
+    if other_ids:
+        other_rows = await session.execute(
+            select(Task.id, Task.title, Task.status).where(Task.id.in_(other_ids))
+        )
+        for other_id, title, other_status in other_rows:
+            known[other_id] = {"id": other_id, "title": title, "status": other_status}
+
+    prerequisites: dict[str, list] = {}
+    dependents: dict[str, list] = {}
+    for task_id, depends_on_task_id in edges:
+        if task_id in by_response and depends_on_task_id in known:
+            prerequisites.setdefault(task_id, []).append(known[depends_on_task_id])
+        if depends_on_task_id in by_response and task_id in known:
+            dependents.setdefault(depends_on_task_id, []).append(known[task_id])
+
+    for response in responses:
+        own_prerequisites = prerequisites.get(response.id, [])
+        response.prerequisites = [TaskDependencyRef(**entry) for entry in own_prerequisites]
+        response.dependents = [
+            TaskDependencyRef(**entry) for entry in dependents.get(response.id, [])
+        ]
+        rejected = [
+            p for p in own_prerequisites if p["status"] == dependency_gate.PERMANENTLY_UNMET_STATUS
+        ]
+        unmet = [
+            p
+            for p in own_prerequisites
+            if p["status"] != dependency_gate.MET_STATUS
+            and p["status"] != dependency_gate.PERMANENTLY_UNMET_STATUS
+        ]
+        if response.status == "in_progress" and (rejected or unmet):
+            # Already started, and a prerequisite no longer clears the gate that let it start —
+            # design D8's "flagged, not stopped". The gate itself only guards `-> in_progress`, so
+            # this state is read-model-only: nothing in `task_transition_service` reacts to it.
+            response.dependency_state = "running_on_regressed"
+        elif rejected:
+            response.dependency_state = "gated_on_rejected"
+        elif unmet:
+            response.dependency_state = "gated"
+        else:
+            response.dependency_state = None
     return responses
 
 
@@ -573,7 +659,7 @@ async def list_tasks(
     integrations = await _latest_integrations_by_task(
         session, project_id, {task.id for task in tasks}
     )
-    return await _attach_requirements(
+    responses = await _attach_requirements(
         session,
         [
             _task_response(
@@ -586,6 +672,116 @@ async def list_tasks(
         ],
         project_id=project_id,
     )
+    return await _attach_dependencies(session, responses, project_id=project_id)
+
+
+@router.get("/board")
+async def task_board(
+    spec_document_id: Optional[str] = Query(None),
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """One document's tasks, and the edges between them, in a single call (task 7.3, design D9).
+
+    Omitting `spec_document_id` returns the "no document" board — every hand-made task, which per
+    D5 can never have an edge. `edges` is a flat list alongside `tasks` rather than only nested
+    inside each task's `prerequisites`/`dependents` (already present via `_attach_dependencies`):
+    a layout algorithm wants the graph's edge set once, not reconstructed by walking every card.
+
+    Batched the same way `list_tasks` is — one query for the tasks, one for the edges among them,
+    regardless of how many cards the document declared. Must not N+1 its way to a layout.
+    """
+    project_id, _ = project
+    q = select(Task).where(Task.project_id == project_id)
+    if spec_document_id:
+        q = q.where(Task.spec_document_id == spec_document_id)
+    else:
+        q = q.where(Task.spec_document_id.is_(None))
+    q = q.order_by(Task.created_at)
+    tasks = (await session.execute(q)).scalars().all()
+    task_ids = {task.id for task in tasks}
+    heartbeats = await _latest_heartbeats_by_agent(
+        session, project_id, {task.assignee for task in tasks if task.assignee}
+    )
+    diverged = await _tasks_with_open_divergence(session, project_id, task_ids)
+    integrations = await _latest_integrations_by_task(session, project_id, task_ids)
+    responses = await _attach_requirements(
+        session,
+        [
+            _task_response(
+                task,
+                heartbeats.get(task.assignee) if task.assignee else None,
+                has_open_divergence=task.id in diverged,
+                latest_integration=integrations.get(task.id),
+            )
+            for task in tasks
+        ],
+        project_id=project_id,
+    )
+    responses = await _attach_dependencies(session, responses, project_id=project_id)
+    edges: List[dict] = []
+    if task_ids:
+        edge_rows = await session.execute(
+            select(TaskDependency.task_id, TaskDependency.depends_on_task_id).where(
+                TaskDependency.project_id == project_id,
+                TaskDependency.task_id.in_(task_ids),
+            )
+        )
+        edges = [
+            {"task_id": task_id, "depends_on_task_id": depends_on_task_id}
+            for task_id, depends_on_task_id in edge_rows
+        ]
+    return {
+        "spec_document_id": spec_document_id,
+        "tasks": responses,
+        "edges": edges,
+    }
+
+
+@router.get("/boards")
+async def task_boards(
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """The picker: every board that has tasks, with outstanding counts (task 7.4, design D9).
+
+    One row per `spec_document_id` that has ever had a task materialised against it, plus a
+    standing `null`-keyed row for hand-made tasks (D9's "no document" board) when any exist.
+    `outstanding` excludes only the two terminal statuses (`run_task_binding.TERMINAL_FOR_BINDING`)
+    — a `rejected` task is resolved, not outstanding, even though it never reached `approved`.
+    """
+    project_id, _ = project
+    rows = await session.execute(
+        select(Task.spec_document_id, Task.status).where(Task.project_id == project_id)
+    )
+    totals: dict[Optional[str], int] = {}
+    outstanding: dict[Optional[str], int] = {}
+    for spec_document_id, task_status in rows:
+        totals[spec_document_id] = totals.get(spec_document_id, 0) + 1
+        if task_status not in TERMINAL_FOR_BINDING:
+            outstanding[spec_document_id] = outstanding.get(spec_document_id, 0) + 1
+
+    document_ids = [doc_id for doc_id in totals if doc_id is not None]
+    titles: dict[str, str] = {}
+    if document_ids:
+        doc_rows = await session.execute(
+            select(SpecDocument.id, SpecDocument.title).where(SpecDocument.id.in_(document_ids))
+        )
+        titles = dict(doc_rows.all())
+
+    boards = [
+        {
+            "spec_document_id": doc_id,
+            "title": titles.get(doc_id) if doc_id is not None else None,
+            "total": total,
+            "outstanding": outstanding.get(doc_id, 0),
+        }
+        for doc_id, total in totals.items()
+    ]
+    # Documents first (creation order via id is arbitrary; sort by title for a stable picker),
+    # the "no document" board last — it is the overflow bucket D9 describes, not a project.
+    boards.sort(key=lambda board: (board["spec_document_id"] is None, board["title"] or ""))
+    return {"boards": boards}
 
 
 @router.get("/{task_id}/integrations")
@@ -702,6 +898,7 @@ async def get_task(
         ],
         project_id=project_id,
     )
+    responses = await _attach_dependencies(session, responses, project_id=project_id)
     return responses[0]
 
 
@@ -843,6 +1040,7 @@ async def update_task_for_actor(
         ],
         project_id=project_id,
     )
+    responses = await _attach_dependencies(session, responses, project_id=project_id)
     return responses[0]
 
 
