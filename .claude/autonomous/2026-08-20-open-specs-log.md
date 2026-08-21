@@ -1240,3 +1240,75 @@ backdating its heartbeat on every exit path, not only the happy one).
 
 Heartbeat set to ~40 minutes in the past per `heartbeat_note`, though with the Scheduled Task
 self-unregistering past `stop_at` this should not matter — noted in case a firing is still armed.
+
+---
+
+# RUN 3 — 2026-08-21 13:45 → 19:00, no queue, hazards instead
+
+Same branch, same log, iteration numbering continues from run 2 (this is iteration 1 of run 3, but
+the file's own iteration counter is per-run per `STATE.json`). Armed by the interactive session
+13:45-13:50 after reading the morning's spec drift: task-dependencies gained a reviewer field
+(1.6-1.8) after group 1 had closed, loop-notices-and-reacts was rescoped down to 44 tasks (the
+review-handoff half withdrawn, superseded by a new exploration), and a new change,
+loop-becomes-a-flow (0/60), was proposed and explicitly NOT to be started. That session logged its
+own work as handoff 0068/0069 rather than in this file; `run3_hazards` and `run3_available_work` in
+`STATE.json` are its brief. No queue this time — the operator's own framing was "let the run choose,
+with the hazards written down."
+
+## Iteration 1 — task-dependencies 1.6-1.8, the stranded reviewer field (interactive-adjacent firing, 14:05-14:48+01:00)
+
+Arrived to a clean tree at `1e06755`, matching `STATE.json` exactly (`last_heartbeat` read
+70+ minutes stale, well past grace — no live session holding the branch at start). Read
+`run3_hazards` and `run3_available_work` before picking anything: section 8 (the board) and
+starting `loop-becomes-a-flow` are both flagged unsafe; task-dependencies 1.6-1.8 carries neither
+hazard, is small (3 tasks), and unblocks task 10.0's gate on the rest of section 10 — the obvious
+smallest safe unit.
+
+**Read design D11 before touching code.** The reviewer field is a hint, resolved best-effort, not
+an identity — resolution is explicitly `loop-becomes-a-flow`'s job, not this change's, so this
+section owes only the field, its `Field(description=...)`, and preservation of an unresolvable
+name. Landed `reviewer: Optional[str] = Field(default=None, ...)` on `spec_payload.Task`
+(`hub/hub/spec_payload.py`, right after `from_`), description stating what it resolves against and
+that an unresolvable name is kept, matching 1.7's own instruction.
+
+**Two round-trip tests** (`hub/tests/test_spec_payload.py`): `test_a_named_reviewer_survives_round_trip`
+(the same `payload_to_dict` → `embed_payload` → `extract_payload` → re-validate chain 1.5 already
+established, for a task naming `reviewer: "codex-1"`) and
+`test_naming_no_reviewer_validates_and_materialises_as_before` (a task with no `reviewer` key
+validates to `reviewer is None`). File went 62 → 64 tests, all 62 pre-existing unaffected.
+`ruff check`, `black --check`, `mypy hub/spec_payload.py` all clean.
+
+**Caught the exact regression 1.5's own comment predicted would recur.** The targeted neighbourhood
+run (`test_spec_payload.py test_spec_declared_tasks.py test_spec_board_task_convergence.py
+test_spec_completeness.py` → 113 passed) looked clean, but the full `hub/tests/` suite (run in the
+**foreground**, per `NEVER_BACKGROUND_AND_WAIT` — the Bash tool auto-backgrounded it past its 120s
+default timeout, polled to completion with blocking `TaskOutput` rather than ending the turn or
+trusting a Monitor notification to survive a headless process's own turn boundary) failed
+`test_spec_render.py::test_omitting_corpus_reproduces_the_pre_change_output_byte_for_byte` — the
+pinned byte-for-byte digest. Exactly the mechanism 1.5's own comment already names: `render_document`
+embeds the stored payload verbatim, so adding a `Task` field grows the embedded JSON for any document
+with tasks. Confirmed the delta was confined to that one line rather than assumed: `git stash` on
+`spec_payload.py` alone, re-rendered the same rich fixture before and after, diffed the two files —
+the only change was `"reviewer": null` appearing after `"from": null` on the one task. Recaptured
+`_BASELINE_DIGEST` and extended its comment to record the fourth recapture and why.
+
+**Verified, not assumed.** Re-ran the five-file targeted set (`test_spec_render.py` included) → 122
+passed. `ruff`/`black` clean on the newly-touched test file too. Ran the full `hub/tests/` suite a
+second time, same foreground-and-block discipline: **2720 passed, 12 skipped, 1 xpassed, 0 failed in
+1365.37s (22m45s)** — +2 over the prior (iteration 16's) baseline of 2718, exactly the two new tests
+this section adds, zero failures either side.
+
+**A concurrent session was actively editing `hub/hub/scheduler.py`, `hub/tests/test_scheduler.py`,
+and an exploration doc throughout this iteration** (uncommitted at the time, seen in `git status`
+partway through). Per `CONCURRENT_SESSION_IS_EXPECTED`, left those three files untouched and staged
+only the four this iteration actually changed
+(`hub/hub/spec_payload.py`, `hub/tests/test_spec_payload.py`, `hub/tests/test_spec_render.py`,
+`openspec/changes/task-dependencies/tasks.md`) — no `git add -A`. Committed as `5dbf316`, pushed
+clean.
+
+**`task-dependencies` now stands at 52/84.** Task 10.0's gate is now actually satisfiable. Remaining:
+section 8 (board, hazard — build additive-for-concurrency if taken), section 10 (verification, 9
+tasks, now unblocked), section 11 (human-only, not this run's), section 12 (test guide, 1 task).
+`loop-notices-and-reacts` (0/44, backend only, no hazard) remains the largest clean block if a later
+iteration wants a change of pace. `next_action` in `STATE.json` names section 10 or 12 as the likely
+next small unit, without handing over a queue — run 3's own framing.

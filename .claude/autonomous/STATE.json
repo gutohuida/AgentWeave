@@ -8,8 +8,8 @@
   "stop_at": "2026-08-21T19:00:00+01:00",
   "stop_when_queue_empties": false,
   "run": 3,
-  "iteration": 0,
-  "last_heartbeat": "2026-08-21T12:55:00+01:00",
+  "iteration": 1,
+  "last_heartbeat": "2026-08-21T14:47:46+01:00",
   "log_file": ".claude/autonomous/2026-08-20-open-specs-log.md",
   "driver": "Windows Scheduled Task 'AgentWeaveAutonomousSession' -> .claude/skills/autonomous-session/scripts/run-iteration.ps1 -> headless `claude -p`, every 20 minutes, self-unregistering past stop_at. Each firing is a fresh process; all continuity is this file plus the log. Session-bound drivers (ScheduleWakeup, CronCreate) are deliberately NOT used — the 2026-08-15 run asked for nine hours and got forty minutes because the interactive session went away.",
   "operator_intent_verbatim": "I'm going to sleep. There is a lot specs opens for development. Work on them in any order you see fit. I won't respond to anything anymore. Most things are specced out. Prepare a autonomous run until 8AM. Good night",
@@ -89,7 +89,7 @@
     }
   ],
   "current": "S3",
-  "next_action": "RUN 3 IS ARMED until 19:00. Choose your own work, in the order you judge best, from run3_available_work -- and read run3_hazards FIRST, because two of the obvious next steps (section 8, and starting loop-becomes-a-flow) are the two that are unsafe. Run 2 chose section 9 over section 8 on its own judgement and was right; that is why this run is not handed a queue. If you judge a hazard is worth taking anyway, say so in the log and in the commit.",
+  "next_action": "Iteration 1 of run 3 landed task-dependencies 1.6-1.8 (the stranded reviewer field, commit 5dbf316) -- 52/84 now. Still choose your own work from run3_available_work, hazards still apply (do not start loop-becomes-a-flow; section 8/the board is unsafe unless built additive-for-concurrency). What's left in task-dependencies: section 8 (board, HAZARD), section 10 (verification -- 10.0's gate is now actually satisfiable since 1.6-1.8 landed), section 11 (human-only, not yours), section 12 (user test guide, 1 task). A good next unit: section 10 (10.1-10.9, agent-verifiable -- run the full suites again fresh, add the chain/import/regression/rejected tests it asks for, confirm spec_completeness and the seven-column board are unchanged) or section 12 (small, 1 task). loop-notices-and-reacts (0/44, backend only, no hazard) remains the largest clean block if task-dependencies feels done for a session. NOTE: a concurrent interactive session is actively editing hub/hub/scheduler.py, hub/tests/test_scheduler.py and an exploration doc RIGHT NOW (uncommitted, seen at 14:0x-14:4x) -- per CONCURRENT_SESSION_IS_EXPECTED do not touch those files or stage them; this iteration left them untouched throughout.",
   "pre_authorised": [
     {
       "id": "PA-1",
@@ -242,7 +242,7 @@
     "loop-notices-and-reacts task 4.2 says to leave room for a FOURTH answer in the firing decision ('fire a different agent for this task'). That is loop-becomes-a-flow's landing point. Build the decision function so a fourth branch is an addition, not a rewrite."
   ],
   "run3_available_work": {
-    "task-dependencies": "49/83. Left: 1.6-1.8 (reviewer field, stranded), section 8 (board, 13 -- HAZARD above), section 10 (agent-verifiable, 10 incl. the new 10.0 gate), section 11 (human-only, 8 -- NOT yours, leave unticked), section 12 (user test guide, 1).",
+    "task-dependencies": "52/84 (after iteration 1 landed 1.6-1.8, commit 5dbf316). Left: section 8 (board, 13 -- HAZARD above), section 10 (agent-verifiable, 9 incl. 10.0's gate -- now actually landable since 1.6-1.8 exist), section 11 (human-only, 8 -- NOT yours, leave unticked), section 12 (user test guide, 1).",
     "loop-notices-and-reacts": "0/44. Backend only, no UI, depends on nothing unlanded. Groups 1-4 are the busy guard, tick recording, the status vocabulary and the shared firing decision. This is what loop-becomes-a-flow needs, and it is the largest clean block available.",
     "corpus-aware-documents": "45/55. Section 8.1-8.7 are human-only; do not attempt them.",
     "agent-created-documents": "27/35. Section 6 is human-only; do not attempt it.",
