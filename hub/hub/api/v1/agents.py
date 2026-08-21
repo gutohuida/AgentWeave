@@ -193,9 +193,6 @@ async def get_agents_launchability(
         runner_row = None
         if agent_row is not None and agent_row.runner_id is not None:
             runner_row = await session.get(Runner, agent_row.runner_id)
-        if runner_row is not None:
-            merged["runner"] = runner_row.cli
-            merged["model"] = runner_row.model
 
         probe = probe_agent(name, merged)
 
@@ -1911,6 +1908,29 @@ async def archive_agent(
 
     obstruction = await agent_archivable(session, agent_row)
     if obstruction is not None:
+        queued_ids = list(
+            (
+                await session.execute(
+                    select(InboundQueueEntry.id).where(
+                        InboundQueueEntry.project_id == project_id,
+                        InboundQueueEntry.agent == name,
+                        InboundQueueEntry.state == "queued",
+                    )
+                )
+            ).scalars()
+        )
+        if queued_ids:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "message": (
+                        f"{name} has {len(queued_ids)} queued message"
+                        f"{'s' if len(queued_ids) != 1 else ''}. Discard them to archive the agent."
+                    ),
+                    "blocking_queue_entry_count": len(queued_ids),
+                    "blocking_queue_entry_ids": queued_ids,
+                },
+            )
         raise HTTPException(status_code=409, detail=obstruction)
 
     archive_agent_row(agent_row)

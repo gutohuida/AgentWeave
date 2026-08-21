@@ -296,12 +296,19 @@ async def trigger_agent_directly(
         select(Agent).where(Agent.project_id == project_id, Agent.name == agent)
     )
     agent_row = agent_row_result.scalars().first()
-    if agent_row is None or agent_row.runner_id is None:
+    if agent_row is None:
         raise TriggerAgentError(
             status.HTTP_409_CONFLICT,
             f"{agent} has no runner bound. Bind one via PATCH "
             f"/api/v1/projects/{project_id}/agents/{agent} "
             "(runner_id) or the Hub UI before triggering.",
+        )
+    if agent_row.runner_id is None:
+        config = await get_agent_config(project_id, agent, session)
+        probe = probe_agent(agent, config)
+        raise TriggerAgentError(
+            status.HTTP_409_CONFLICT,
+            probe["reason"] or f"{agent} is not currently launchable.",
         )
     if agent_row.lifecycle == "archived":
         # `agent-configuration`'s spec states "nothing runs an archived agent" as the reason a

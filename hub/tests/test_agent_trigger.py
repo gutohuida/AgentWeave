@@ -193,6 +193,13 @@ async def test_unbound_agent_accumulates_queue_with_visible_reason(app, auth_hea
     assert "runner" in resp.json()["waiting_reason"].lower()
     assert "bound" in resp.json()["waiting_reason"].lower()
 
+    queue_status = await app.get(
+        "/api/v1/projects/proj-test/queue/offline-agent/status",
+        headers=auth_headers,
+    )
+    assert queue_status.status_code == 200
+    assert queue_status.json()["waiting_reason"] == resp.json()["waiting_reason"]
+
 
 @pytest.mark.asyncio
 async def test_resume_without_session_id_is_rejected(app, auth_headers):
