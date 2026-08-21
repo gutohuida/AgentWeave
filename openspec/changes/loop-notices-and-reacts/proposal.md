@@ -1,43 +1,37 @@
 ## Why
 
-A loop fires blind. It does not look at whether its agent is already working, whether the task it
-finished was ever handed to a reviewer, or whether anything has changed since the last time it fired
-and found the same thing. Three consequences, all reachable today:
+A loop fires blind. It does not look at whether its agent is already working, and it cannot tell
+whether anything has changed since the last time it fired and found the same thing. Two consequences,
+both reachable today and both measured:
 
-1. **A finished task can wait forever with nobody coming.** An agent cannot approve its own work
-   (`hub/hub/task_transition_service.py:119`), so it must hand off to a reviewer — and the comment
-   explaining why `assigned` had to become claimable already records why that is not enough:
-   reaching the next status *"needs the agent to call `update_task` itself, which it may simply not
-   do"* (`hub/hub/scheduler.py:236-237`). When the handoff does not happen, the task sits at
-   `completed` and, under `task-dependencies`, every task behind it is unreachable.
-2. **A firing during a live turn queues a duplicate briefing.** There is no already-running guard in
+1. **A firing during a live turn queues a duplicate briefing.** There is no already-running guard in
    `_do_fire_job` (`hub/hub/scheduler.py`); the task is claimed and an inbound entry queued before
    `schedule_agent` gets a chance to refuse (`hub/hub/turn_scheduler.py:43`). Measured: five firings
    during one turn produced five queued entries and five `JobRun`s. Turning the cron *up* multiplies
    the waste.
-3. **Repeated no-op ticks bury the real history.** `JobRun` feeds the last-ten-runs view
+2. **Repeated no-op ticks bury the real history.** `JobRun` feeds the last-ten-runs view
    (`hub/hub/api/v1/jobs.py:509`) and the *is this loop running* check (`:216`). A loop that ticks
    while stalled or busy fills that window with rows saying the same thing, and a healthy loop reads
    as dead.
 
-All three are the same missing behaviour: **the loop does not notice what is actually happening.**
+Both are the same missing behaviour: **the loop does not notice what is actually happening.**
+
+Underneath them is a third problem that is not a bug and causes both: **four constants answer *"is
+this task live?"* and disagree**, and there is no single place where a firing decides what it is
+about to do. Both stall bugs fixed on 2026-08-20 lived in the gaps between those constants.
 
 Explored and decided with the operator in
 `openspec/explorations/2026-08-20-who-guarantees-the-review-handoff.md`.
 
+**Scope narrowed 2026-08-21.** This change originally also guaranteed the review handoff — detecting
+a missing one and re-briefing the agent to send it. That half is superseded by
+`openspec/explorations/2026-08-21-a-review-is-a-task-not-a-message.md` and
+`2026-08-21-the-loop-becomes-a-flow.md`: a finished task becomes claimable by an agent that did not
+write it, and the flow fires the reviewer, so there is no message to forget. What remains is the
+firing hygiene — which the flow needs *more* than the loop does, because a flow fires more often and
+for more reasons.
+
 ## What Changes
-
-**The review handoff is guaranteed without taking the choice away from the agent.**
-
-- The Hub derives whether a completed task has a review in flight, from rows that already exist:
-  a `Message` naming the task with type `"review"` (`hub/hub/db/models.py:509,513`), and — for a task
-  at `under_review` — which agent moved it there (`TaskTransition.actor_agent`, read exactly this way
-  by `_agent_that_completed`, `hub/hub/task_transition_service.py:92-116`).
-- A firing that finds its loop's task finished with **no** review in flight spends its turn
-  re-briefing its own agent to perform the handoff, instead of claiming new work. The agent still
-  chooses the reviewer.
-- The re-brief is bounded. After a fixed number of unheeded reminders the loop stops reminding and
-  surfaces the situation to the operator.
 
 **The firing stops firing blind.**
 
@@ -65,6 +59,14 @@ Explored and decided with the operator in
 - One named vocabulary classifies every status, and each of the four sets is derived from it, so a
   status added to the transition machine cannot silently belong to none.
 
+**One place decides what a firing does.**
+
+- What a firing does — claim, refuse because stalled, or proceed with an unfilled queue — becomes one
+  function that both `_do_fire_job` and the board's `_batch_loop_summaries` call, so the board can
+  say *why* a loop is doing nothing from the same computation that decided it.
+- **This is what the flow needs from this change.** The flow adds a fourth answer — *fire a different
+  agent for this task* — and this is where it lands.
+
 **Non-Goals — explicitly out of scope, not merely omitted:**
 
 - **Event-driven firing.** Decided against (exploration §9): the latency gap is invisible at a loop's
@@ -73,8 +75,6 @@ Explored and decided with the operator in
 - **The loop choosing a reviewer.** The loop guarantees the *asking*; the agent keeps the *choosing*.
   A loop that routed work itself would need `list_agents` (L2) and would discard the operator's
   design.
-- **A review-wait timeout** for a handoff that *did* happen to a reviewer who never runs
-  (exploration R4/§8). Needs a decision not yet taken.
 - **A reviewer field on `Task`** (L4), **charter summaries in the Team section** (L1), and
   **`list_agents`** (L2). Independent, and this change is deliberately built not to need them.
 - **A review-wait timeout** for a handoff that *did* reach a reviewer who never runs. Decided
@@ -90,10 +90,6 @@ Explored and decided with the operator in
 
 ### New Capabilities
 
-- `loop-review-handoff`: How the Hub determines whether a finished task has a review in flight, what
-  a firing does when it does not, how many times it re-asks, and what happens when that bound is
-  reached.
-
 ### Modified Capabilities
 
 - `agent-loops`: A firing gains two refusal conditions before it claims — the loop's agent already
@@ -108,19 +104,19 @@ Explored and decided with the operator in
 
 **Code**
 
-- `hub/hub/scheduler.py` — `_do_fire_job` (the busy guard, the re-brief branch, tick recording),
-  `_loop_stall_reason`, and the shared claimability predicate `_batch_loop_summaries` must reuse.
+- `hub/hub/scheduler.py` — `_do_fire_job` (the busy guard, tick recording), `_loop_stall_reason`,
+  and the shared firing decision `_batch_loop_summaries` must reuse.
 - `hub/hub/api/v1/jobs.py` — `_batch_loop_summaries` imports the claim's derivation rather than
   restating it (`:170`); that sharing must survive claimability becoming conditional.
-- New derivation reading `Message` and `TaskTransition`; no new columns for the signal itself.
 - `hub/hub/run_task_binding.py`, `hub/hub/api/v1/agents.py`, `hub/hub/checkpoints.py` — each stops
   listing its status set and derives it from the shared vocabulary. No membership changes.
 
 **Database**
 
-- A migration for the stall tick counter and the re-brief counter. Guard for a missing table, as
-  `0033`/`0034` do; bump the head assertions in `hub/tests/test_migrations.py` and
-  `hub/tests/test_project_persistence.py`.
+- One migration, for the stall tick counter on `JobRun`. Guard for a missing table, as `0033`/`0034`
+  do; bump the head assertions in `hub/tests/test_migrations.py` and
+  `hub/tests/test_project_persistence.py`. The status vocabulary needs no migration — it changes
+  code, not data.
 
 **API / UI**
 
@@ -132,7 +128,7 @@ Explored and decided with the operator in
 **Behaviour already shipped that this builds on** (2026-08-20, committed): the stall skip
 (`_loop_stall_reason`) and `revision_needed` joining `CLAIMABLE_LOOP_TASK_STATUSES`.
 
-**Risk.** Claimability stops being a flat tuple and becomes conditional. A condition is far easier to
-duplicate-and-drift than a constant, and the board and the firing disagreeing is a failure this
-codebase has already had — *"two consistent wrong answers read as a match, which is how it survived
-review"* (`hub/hub/scheduler.py:210-220`).
+**Risk.** The firing's decision moves out of `_do_fire_job` into a function the board also calls. A
+shared function is the mitigation, not the risk — the risk is anyone re-deriving it, which is the
+failure this codebase has already had: *"two consistent wrong answers read as a match, which is how
+it survived review"* (`hub/hub/scheduler.py:210-220`).

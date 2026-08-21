@@ -27,147 +27,102 @@
       run is a stall, same reason -> increment; otherwise append.
 - [ ] 2.7 Expose the count on `JobRunResponse` so the history endpoints can render it.
 
-## 3. Handoff detection
+## 3. The status vocabulary
 
-- [ ] 3.1 Test each branch of design D1/D2 independently: completed with a `review` message; completed
-      with no message; completed with a message of another type; `under_review` moved by another
-      agent; `under_review` moved by the completing agent; `under_review` moved by the operator.
-- [ ] 3.2 Test that the derivation reads only persisted rows — no agent output is consulted.
-- [ ] 3.3 Implement the derivation as one function: `Message` by `task_id` and `type == "review"`,
-      plus `TaskTransition.actor_agent` for the move into `under_review` compared against the agent
-      recorded moving it to `completed`.
-- [ ] 3.4 Reuse `_agent_that_completed`'s ordering discipline — by `sequence`, not `created_at`, for
-      the reason its own docstring gives.
-
-## 4. The status vocabulary
-
-Do this before group 5 — the shared claim decision is its first consumer, and writing that against
+Do this before group 4 — the shared claim decision is its first consumer, and writing that against
 the four-set world means rewriting it immediately (design D9).
 
-- [ ] 4.1 Test: every status appearing in `TRANSITIONS` as an origin or destination is classified
+- [ ] 3.1 Test: every status appearing in `TRANSITIONS` as an origin or destination is classified
       into exactly one band. Derived from the map, never from a literal list.
-- [ ] 4.2 Test: an unclassified status, and a doubly-classified one, each fail at import with the
+- [ ] 3.2 Test: an unclassified status, and a doubly-classified one, each fail at import with the
       status named.
-- [ ] 4.3 Test: each of the four derived sets equals its current literal — `pending assigned
+- [ ] 3.3 Test: each of the four derived sets equals its current literal — `pending assigned
       in_progress blocked revision_needed` for the claimable set, `approved rejected` for terminal,
       and `pending assigned in_progress under_review revision_needed` for both active and live.
       **Write these assertions before deleting any literal.** This is what stops the refactor
       smuggling in a behaviour change.
-- [ ] 4.4 Decide which band `blocked` belongs to and record the reasoning where the classification
+- [ ] 3.4 Decide which band `blocked` belongs to and record the reasoning where the classification
       lives. It is claimable by the loop yet means *"waiting on a person"*, and today's four sets
       disagree about it — this is the one classification the existing code does not answer.
-- [ ] 4.5 Define the bands and the classification.
-- [ ] 4.6 Derive `CLAIMABLE_LOOP_TASK_STATUSES` (`hub/hub/scheduler.py`) and delete the literal.
-- [ ] 4.7 Derive `TERMINAL_FOR_BINDING` (`hub/hub/run_task_binding.py:272`), preserving its docstring
+- [ ] 3.5 Define the bands and the classification.
+- [ ] 3.6 Derive `CLAIMABLE_LOOP_TASK_STATUSES` (`hub/hub/scheduler.py`) and delete the literal.
+- [ ] 3.7 Derive `TERMINAL_FOR_BINDING` (`hub/hub/run_task_binding.py:272`), preserving its docstring
       — the reasoning about `completed` and `under_review` being deliberately absent must survive.
-- [ ] 4.8 Collapse `_ACTIVE_TASK_STATUSES` (`hub/hub/api/v1/agents.py:60`) and `_LIVE_TASK_STATUSES`
+- [ ] 3.8 Collapse `_ACTIVE_TASK_STATUSES` (`hub/hub/api/v1/agents.py:60`) and `_LIVE_TASK_STATUSES`
       (`hub/hub/checkpoints.py:62`) into one derived set — they are identical in content and separate
       in code.
-- [ ] 4.9 Confirm the derived-gap test added 2026-08-20
+- [ ] 3.9 Confirm the derived-gap test added 2026-08-20
       (`test_only_the_awaiting_someone_else_statuses_sit_in_the_claim_stop_gap`) still passes and
       still derives rather than lists.
 
-## 5. The shared claimability decision
+## 4. The shared claimability decision
 
-- [ ] 5.1 Test: for a queue holding an un-handed-off finished task, `_batch_loop_summaries`' current
-      item and `_do_fire_job`'s decision agree. This is human-only check 13.1 made mechanical, and
-      the drift it guards against is the one `_loop_queue_order` records.
-- [ ] 5.2 Implement the decision as one function returning what this firing should do — claim,
-      re-brief, refuse-stalled, or proceed-empty.
-- [ ] 5.3 Call it from `_do_fire_job` and from `_batch_loop_summaries` (`hub/hub/api/v1/jobs.py:170`),
+- [ ] 4.1 Test: for a stalled queue, `_batch_loop_summaries`' current item and `_do_fire_job`'s
+      decision agree. This is human-only check 13.1 made mechanical, and the drift it guards against
+      is the one `_loop_queue_order` records.
+- [ ] 4.2 Implement the decision as one function returning what this firing should do — claim,
+      refuse-stalled, or proceed-empty. **Leave room for a fourth answer**: the flow
+      (`openspec/explorations/2026-08-21-the-loop-becomes-a-flow.md`) adds "fire a different agent
+      for this task", and this function is where it lands.
+- [ ] 4.3 Call it from `_do_fire_job` and from `_batch_loop_summaries` (`hub/hub/api/v1/jobs.py:170`),
       importing rather than restating, matching the existing convention in that module.
-- [ ] 5.4 Confirm `completed` is NOT added to `CLAIMABLE_LOOP_TASK_STATUSES` (design D3) — assert it
+- [ ] 4.4 Confirm `completed` is NOT added to `CLAIMABLE_LOOP_TASK_STATUSES` (design D3) — assert it
       in a test, since widening the tuple is the obvious wrong fix.
 
-## 6. The re-brief
-
-- [ ] 6.1 Test: a loop whose queue holds an un-handed-off `completed` task and a claimable `pending`
-      task re-briefs about the first and leaves the second `pending` and unassigned.
-- [ ] 6.2 Test: a re-brief changes no task's status or assignee.
-- [ ] 6.3 Test: a finished task WITH a review in flight produces no re-brief.
-- [ ] 6.4 Implement the re-brief branch in `_do_fire_job`: compose a briefing naming the task and
-      stating it was completed without being sent for review, and claim nothing else.
-- [ ] 6.5 Confirm the briefing does not name a reviewer and does not send a message on the agent's
-      behalf.
-
-## 7. Bounding the re-brief
-
-- [ ] 7.1 Test: a task at the maximum re-brief count produces no further re-brief.
-- [ ] 7.2 Test: two un-handed-off tasks in one loop carry independent counts.
-- [ ] 7.3 Test: a task that acquires a review in flight has its count reset, so a later
-      `revision_needed` -> `in_progress` -> `completed` cycle starts from zero.
-- [ ] 7.4 Migration adding the per-task re-brief counter, with the same missing-table guard.
-- [ ] 7.5 Implement increment, bound check, and reset-on-review-in-flight.
-
-## 8. Surfacing exhaustion
-
-- [ ] 8.1 Test: reaching the maximum notifies the operator, and the notification names the task and
-      the attempt count.
-- [ ] 8.2 Test: reaching the maximum leaves the job enabled and scheduled, and records no loop stop
-      reason.
-- [ ] 8.3 Test: after the operator approves the exhausted task, the next firing claims the next
-      claimable task — proving recovery needs no further operator action.
-- [ ] 8.4 Test: a project whose only agent is the loop's executor reaches exhaustion and surfaces,
-      with no special-case code path.
-- [ ] 8.5 Implement the surfacing, following the existing event and SSE pattern the stop path uses.
-
-## 9. Cadence and presentation
+## 5. Cadence and presentation
 
 Both depend on the busy guard (group 1). Five minutes is only safe once a busy tick is refused.
 
-- [ ] 9.1 Test: a loop created without an explicit cron gets `*/5 * * * *`.
-- [ ] 9.2 Give `create_loop`'s `cron` a default of `*/5 * * * *` (`hub/hub/mcp_server.py:541`), and
+- [ ] 5.1 Test: a loop created without an explicit cron gets `*/5 * * * *`.
+- [ ] 5.2 Give `create_loop`'s `cron` a default of `*/5 * * * *` (`hub/hub/mcp_server.py:541`), and
       say in its `Args:` description that a busy tick is refused, so a frequent schedule is cheap.
       Keep the twin-file discipline — `mcp_server.py` may import only stdlib and fastmcp.
-- [ ] 9.3 Add a sub-hourly option to `CRON_EXAMPLES`
+- [ ] 5.3 Add a sub-hourly option to `CRON_EXAMPLES`
       (`hub/ui/src/components/jobs/JobForm.tsx:13-19`), whose five entries bottom out at every six
       hours, and default a loop's form to it. Leave the plain job default alone — a job is not a loop
       and nothing here makes a fast job cheap.
-- [ ] 9.4 Test: the loop board labels a re-briefing loop distinctly from both running and stalled,
-      and the label names the task and the attempt count (design D10).
-- [ ] 9.5 Implement that label, deriving the state from group 5's shared decision rather than
+- [ ] 5.4 Test: the loop board labels a stalled loop distinctly from a running one, and the label
+      says what is being waited on rather than only that something is (design D10).
+- [ ] 5.5 Implement that label, deriving the state from group 4's shared decision rather than
       recomputing it.
-- [ ] 9.6 `make ui` after `npm run build`, and commit `hub/ui/src` and `hub/hub/static/ui` together.
+- [ ] 5.6 `make ui` after `npm run build`, and commit `hub/ui/src` and `hub/hub/static/ui` together.
 
-## 10. Retroactive specification of what already shipped
+## 6. Retroactive specification of what already shipped
 
-- [ ] 10.1 Confirm the `agent-loops` delta's stall-refusal requirement matches the behaviour
+- [ ] 6.1 Confirm the `agent-loops` delta's stall-refusal requirement matches the behaviour
       `_loop_stall_reason` already implements, and that its scenarios pass against the shipped code
       before this change adds anything.
-- [ ] 10.2 Confirm `revision_needed`'s presence in `CLAIMABLE_LOOP_TASK_STATUSES` is covered by an
+- [ ] 6.2 Confirm `revision_needed`'s presence in `CLAIMABLE_LOOP_TASK_STATUSES` is covered by an
       existing test and needs no new requirement here.
 
-## 11. Agent-verifiable checks
+## 7. Agent-verifiable checks
 
-- [ ] 11.1 `pytest hub/tests/ -v` passes, with the three pre-existing `test_pty_runner` environment
+- [ ] 7.1 `pytest hub/tests/ -v` passes, with the three pre-existing `test_pty_runner` environment
       failures unchanged and no new failures.
-- [ ] 11.2 `openspec validate loop-notices-and-reacts` reports valid.
-- [ ] 11.3 `ruff check hub/` and `black --check hub/` pass on every touched file, and
+- [ ] 7.2 `openspec validate loop-notices-and-reacts` reports valid.
+- [ ] 7.3 `ruff check hub/` and `black --check hub/` pass on every touched file, and
       `cd hub/ui && npm run lint` passes.
-- [ ] 11.4 A firing refused for any reason creates no `InboundQueueEntry` — asserted directly, not
+- [ ] 7.4 A firing refused for any reason creates no `InboundQueueEntry` — asserted directly, not
       inferred from a `JobRun` status.
-- [ ] 11.5 The claim decision function has exactly two call sites, asserted by a source scan in the
+- [ ] 7.5 The claim decision function has exactly two call sites, asserted by a source scan in the
       style of `hub/tests/test_task_transitions.py`'s existing origin scan.
 
-## 12. Human-only verification
+## 8. Human-only verification
 
 These cannot be established by an agent and must be checked by the operator against a running Hub.
 
-- [ ] 12.1 With a loop mid-turn, confirm the loop board does not flicker or show the loop as idle
+- [ ] 8.1 With a loop mid-turn, confirm the loop board does not flicker or show the loop as idle
       while firings are being refused.
-- [ ] 12.2 Confirm a stalled loop's history entry reads sensibly as its tick count climbs, rather than
+- [ ] 8.2 Confirm a stalled loop's history entry reads sensibly as its tick count climbs, rather than
       looking like a stuck row.
-- [ ] 12.3 Confirm the re-brief briefing is one an agent actually acts on — the wording is a judgement
-      no test can make.
-- [ ] 12.4 Confirm the exhaustion notice is noticeable without being alarming, and that it is clear
-      the loop has not died.
-- [ ] 12.5 Drive a real two-agent handoff end to end and confirm no re-brief is issued when the agent
-      does hand off correctly.
+- [ ] 8.3 Confirm a stalled loop reads as *waiting*, not as *dead* — the distinction is a judgement
+      no test can make, and getting it wrong makes a working loop look broken.
+- [ ] 8.4 With a five-minute tick, confirm the last-ten runs view still shows the firings that
+      claimed work rather than a screen of refusals.
 
-## 13. User test guide
+## 9. User test guide
 
-- [ ] 13.1 Write the operator-facing guide covering: creating a loop, watching a firing claim work,
-      deliberately completing a task without handing off, observing the re-brief, observing
-      exhaustion, and resolving it by approving the task.
-- [ ] 13.2 Include how to tell the three refusal reasons apart from the loop's own history, and what
+- [ ] 9.1 Write the operator-facing guide covering: creating a loop, watching a firing claim work,
+      letting its queue stall, reading the stall from the loop's own history, and resolving it.
+- [ ] 9.2 Include how to tell the three refusal reasons apart from the loop's own history, and what
       each one means about what the loop is waiting for.

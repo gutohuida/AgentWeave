@@ -3,8 +3,15 @@
 A loop is *"an `AIJob` wearing a purpose and an optional stop condition"* with 24 requirements
 accumulated around it. Its firing path (`hub/hub/scheduler.py::_do_fire_job`) asks exactly one
 question before working — *should this loop stop?* — and otherwise proceeds. This change adds the
-two questions it should also be asking: *is my agent already busy?* and *did the work I finished
-last time actually go anywhere?*
+question it should also be asking before it works: *is my agent already busy?* — and adds the
+vocabulary and the shared decision point that make the answer trustworthy.
+
+**Scope narrowed 2026-08-21.** This change originally also guaranteed the review handoff, by
+detecting a missing one and re-briefing the agent. That is superseded by
+`openspec/explorations/2026-08-21-a-review-is-a-task-not-a-message.md` and
+`2026-08-21-the-loop-becomes-a-flow.md`: a finished task becomes claimable by a non-author and the
+flow fires the reviewer, so there is no message to forget and nothing to remind anyone about. The
+withdrawn decisions are kept below as numbered stubs rather than renumbered away.
 
 **What already landed 2026-08-20, before this change**, and which this design builds on rather than
 redoing:
@@ -29,74 +36,56 @@ task — two consistent wrong answers read as a match, which is how it survived 
 
 **Goals:**
 
-- A finished task never waits on a handoff that silently never happened.
-- The loop's agent keeps deciding *who* reviews; the loop only guarantees it is *asked*.
 - A firing costs nothing when there is nothing to do, at any cron interval.
 - A loop's execution history stays readable when the loop is idle.
+- Every task status is classified once, so the sets that ask *"is this live?"* cannot disagree.
+- One decision point deciding what a firing does — the place the flow will later extend.
 
-**Non-Goals:** as stated in the proposal — no event-driven firing, no loop-chosen reviewer, no
-review-wait timeout (R4), no `Task` reviewer field, no `list_agents`, no status-set unification, no
-change to any loop's default cron interval.
+**Non-Goals:** as stated in the proposal — no event-driven firing, no reviewer selection of any
+kind, no review-wait timeout, no `list_agents`, no change to which statuses any set contains, and
+**nothing about who does the work**. That is the flow's, and this change deliberately stops at
+giving it somewhere to land.
 
 ## Decisions
 
-### D1 — The handoff signal is derived, never stored
+### D1 — The handoff signal is derived, never stored — **WITHDRAWN 2026-08-21**
 
-Two lookups over rows that already exist: a `Message` with `task_id` and `type == "review"`
-(`hub/hub/db/models.py:509,513`), and `TaskTransition.actor_agent` for the move into `under_review`
-compared against the agent recorded moving it to `completed` — the pattern `_agent_that_completed`
-already uses (`hub/hub/task_transition_service.py:92-116`).
+Superseded by `openspec/explorations/2026-08-21-a-review-is-a-task-not-a-message.md`. There is no
+handoff message to detect: a finished task becomes claimable by a non-author, and the flow fires the
+reviewer. Kept as a numbered gap rather than renumbered, so the reasoning that was taken and then
+reversed stays findable.
 
-*Rejected:* **a `handed_off_at` column on `Task`.** A denormalised copy of a fact two tables already
-hold, and it would go stale exactly when it matters — an agent that sends the message through any
-path not updating the column produces a task that looks un-handed-off forever. The same reasoning
-that made `_loop_stop_reason` derive its queue state from task rows rather than a flag on `Loop`.
+### D2 — `under_review` alone does not mean a reviewer has it — **WITHDRAWN 2026-08-21**
 
-*Rejected:* **asking the agent whether it handed off.** The product does not ask agents to attest to
-their own compliance, and it would be unfalsifiable.
-
-**Why this is not the retired question-detection backstop.** CLAUDE.md is explicit that inferring
-whether trailing prose is a question is *"a judgement the product should not make on the operator's
-behalf"*, and that feature was deleted for it. The distinction that permits this one: the backstop
-**inferred intent from prose**; every branch here is a lookup on a row, and returns the same answer
-to whoever asks it.
-
-### D2 — `under_review` alone does not mean a reviewer has it
-
-`completed -> under_review` is `_BOTH` (`hub/hub/task_transitions.py:135`) and **unguarded** —
-`_REVIEW_OUTCOMES` is `{approved, rejected, revision_needed}`
-(`hub/hub/task_transition_service.py:89`), so `_guard_author_is_not_reviewer` returns early for it.
-With no reviewer field on `Task`, an author can move its own task to `under_review` with nobody on
-the other end. The actor comparison is what closes that hole, and omitting it would leave a silent
-stall reachable through a status that *looks* like progress.
-
-**The operator moving a task to `under_review` counts as a review in flight.** The operator may
-approve their own work by design (`_guard_author_is_not_reviewer`, D9 of the transition machine), so
-operator involvement is by definition a review that can complete.
+The *observation* survives and matters more than ever: `completed -> under_review` is `_BOTH` and
+unguarded (`hub/hub/task_transitions.py:135`), so an author can move its own task there with nobody
+on the other end. Under the flow that becomes a question about who may claim, not about how to read a
+signal, and it moves to the flow's proposal.
 
 ### D3 — Claimability becomes a shared predicate, not a widened tuple
 
-`completed` must **not** join `CLAIMABLE_LOOP_TASK_STATUSES`. That tuple means *"the firing works
-this task"*, and a re-brief is not working the task — it changes nothing about it. Widening the tuple
-would also make the board show a `completed` task as the loop's current item, which is false.
-
-Instead the firing gains a decision **after** the claim returns nothing:
+What a firing does stops being spread across `_do_fire_job` and becomes one function both it and
+`_batch_loop_summaries` call:
 
 ```
    _do_fire_job
      ├── loop stopped?          -> refuse, record, disable      (unchanged)
      ├── agent already running? -> refuse, record NOTHING       (D4)
-     ├── claim a task           -> proceed as today
-     └── claimed nothing?
-           ├── un-handed-off finished task, under the bound? -> RE-BRIEF   (D5)
-           ├── otherwise stalled?                            -> refuse, count (D6)
-           └── queue never filled / drained?                 -> proceed as today
+     └── the decision:
+           ├── a claimable task    -> claim and proceed          (as today)
+           ├── stalled             -> refuse, count              (D6)
+           └── never filled/drained -> proceed                   (as today)
 ```
 
-*Rejected:* **a second status tuple for "re-briefable".** Two tuples read by two callers is the
-drift shape the codebase has already been bitten by. The re-brief decision lives in one function that
-both `_do_fire_job` and `_batch_loop_summaries` call, so the board can label the loop *"waiting for a
-handoff"* from the same computation that drives the behaviour.
+**The fourth answer is deliberately left room for.** The flow adds *"fire a different agent for this
+task"*, and this is where it lands
+(`openspec/explorations/2026-08-21-the-loop-becomes-a-flow.md` §3). Building that decision point now,
+with three answers, is most of what the flow needs from this change — which is why it stays in scope
+even though the handoff work left.
+
+*Rejected:* **leaving the logic inline in `_do_fire_job` and having the board re-derive it.** Two
+derivations read by two callers is the drift shape the codebase has already been bitten by, and the
+board must be able to say *why* a loop is doing nothing from the same computation that decided it.
 
 ### D4 — A busy firing records nothing at all
 
@@ -116,18 +105,9 @@ through `_prune_job_history`'s 100-row window.
 *Rejected:* **recording busy ticks behind a UI filter.** The prune window still fills, so real
 history ages out at a fast cron — the problem moved rather than solved.
 
-### D5 — The re-brief occupies a whole firing
+### D5 — The re-brief occupies a whole firing — **WITHDRAWN 2026-08-21**
 
-The firing composes a briefing naming the task and stating it was completed without being sent for
-review, and does not claim anything else.
-
-*Rejected:* **appending the reminder to the next task's briefing.** Cheaper — no tick spent on one
-message — but it breaks the one-item-per-firing model (`_claim_loop_task` returns exactly one task),
-and a reminder buried under a fresh task assignment is precisely the instruction an agent skips.
-That is the failure being fixed, reintroduced as the fix.
-
-The firing **does not** change the task's status. Moving it would manufacture a transition nobody
-made, which is the class of untrue record the transition machine exists to prevent.
+No re-brief. See D1.
 
 ### D6 — Repetition is counted, not appended
 
@@ -144,27 +124,17 @@ a change in that table's write semantics and is being chosen rather than discove
 "The same stall" means the most recent `JobRun` for this job is a stall record and the stall reason
 is unchanged. A different reason starts a new row, so a stall that changes shape is visible.
 
-### D7 — The re-brief count lives on the task, and resets on success
+### D7 — The re-brief count lives on the task — **WITHDRAWN 2026-08-21**
 
-Per task, because *"task 1 was asked about three times"* is the sentence an operator needs, and a
-per-loop count would exhaust on one stubborn task and silence reminders for every other.
+No re-brief. See D1. The *principle* it rested on — count repetition rather than appending a row —
+survives in D6, which is where it is actually load-bearing.
 
-It resets when the task acquires a review in flight. Without a reset a task through a legitimate
-`revision_needed` cycle — which reaches `completed` more than once by design — would arrive at its
-second completion with the budget already spent.
+### D8 — Exhaustion surfaces; it never stops the loop — **WITHDRAWN 2026-08-21**
 
-### D8 — Exhaustion surfaces; it never stops the loop
-
-Setting `job.enabled = False` and calling `remove_job` is what `_loop_stop_reason` does, and it is
-unrecoverable by the operator simply resolving the situation afterwards. That is the same objection
-that chose *skip* over *stop* for the stall on 2026-08-20, and it applies unchanged here.
-
-*Rejected:* **surfacing on the first failure** — a single missed handoff can be one bad turn, and
-pulling the operator into an unattended loop for something that self-corrects is the wrong default.
-*Rejected:* **re-briefing without a bound** — the silent-forever failure with extra steps.
-
-**The single-agent project needs no special case.** It has nobody to hand off to, so it exhausts the
-bound immediately and surfaces — which is the correct outcome, reached by the general rule.
+Partly superseded. Nothing exhausts, because nothing reminds. What survives is narrower and belongs
+to the flow: a task the flow **could not staff**, because no eligible agent exists, is worth
+surfacing — a statement about the roster, not about an agent's diligence. The rule that surfacing
+must never disable the job is unchanged and restated wherever it lands.
 
 ### D9 — One status vocabulary, four derived sets, no membership changes
 
@@ -199,40 +169,27 @@ none.
 which is in this change. Landing them apart means writing D3 against the four-set world and
 rewriting it immediately.
 
-### D10 — Five minutes, and a re-briefing loop gets its own label
+### D10 — Five minutes
 
-**The tick interval.** There is no default to change: `create_loop` requires `cron`
-(`hub/hub/mcp_server.py:541`) and the UI's five examples bottom out at every six hours
-(`hub/ui/src/components/jobs/JobForm.tsx:13-19`). So a loop polls on whatever the caller invents,
-and until the busy guard lands the honest advice is *slowly*, because a fast tick manufactures
-duplicate briefings.
+There is no default to change: `create_loop` requires `cron` (`hub/hub/mcp_server.py:541`) and the
+UI's five examples bottom out at every six hours (`hub/ui/src/components/jobs/JobForm.tsx:13-19`). So
+a loop polls on whatever the caller invents, and until the busy guard lands the honest advice is
+*slowly*, because a fast tick manufactures duplicate briefings.
 
 **DECIDED: `*/5 * * * *`.** With D4 refusing a busy tick and D6 counting a stalled one, five minutes
-costs one query and no row. That bounds the latency between a reviewer approving and the next wave
-starting at five minutes, which is the cost of choosing polling over events in §9 of the exploration
-— and it only becomes payable now.
+costs one query and no row. That bounds the latency between one step finishing and the next starting
+at five minutes, which is the cost of choosing polling over events
+(`2026-08-20-who-guarantees-the-review-handoff.md` §9) — and it only becomes payable now.
 
-**The label.** A re-briefing loop is neither *running* nor *stalled*: something is genuinely wrong —
-the agent finished work and did not hand it off — and it is being actively corrected. Presenting it
-as a stall would say *"waiting on someone else"*, which is the opposite of true; presenting it as
-running would hide it entirely.
-
-**DECIDED: its own label**, distinct from both, and it names the task and the attempt count so the
-board answers *"what is this loop doing"* without a click. This closes the last of the open questions
-this design was drafted with.
+**A stalled loop's label says what it is waiting on**, not merely that it is waiting. The
+*re-briefing* label this decision originally also specified is withdrawn with D1; the flow will need
+a label of its own for *"staffing the next step"*, and that belongs with the flow.
 
 ## Risks / Trade-offs
 
 **[The board and the firing drift, because claimability is now conditional]** → One function, called
 by both, per D3. A test asserts the board's *current item* and the firing's claim agree for a queue
 holding an un-handed-off task — this is human-only check 13.1 made mechanical.
-
-**[The re-brief is itself ignored, and the loop burns turns reminding]** → Bounded by D7, and the
-bound is small. Worst case is N wasted turns per task, against today's unbounded silence.
-
-**[An agent had a good reason not to hand off]** → It has the bound's worth of turns to act
-otherwise, and exhaustion surfaces to the operator rather than forcing anything. The product does not
-try to distinguish "forgot" from "chose not to" — that would be inferring intent, which D1 refuses.
 
 **[The counted stall row makes `JobRun` writes non-idempotent]** → Confined to stall records, whose
 identity is "most recent run for this job, same reason". Accepted explicitly in D6.
@@ -247,25 +204,20 @@ assertion rather than shipping.
 
 ## Migration Plan
 
-Additive columns only; no backfill. A task with no recorded re-brief count reads as zero, which is
-correct for every task that existed before this change. A `JobRun` with no tick count reads as one.
+Additive only; no backfill. A `JobRun` with no tick count reads as one, which is correct for every
+row written before this change. The status vocabulary (D9) changes no data at all — it replaces
+literals with a derivation, asserted equal to those literals before they are deleted.
 
-Rollback is dropping the columns: the derivation in D1 reads pre-existing tables, so the signal
-survives a rollback even though the behaviour does not.
+Rollback is dropping the tick column and restoring the literals.
 
 ## Open Questions
 
-- **Is the re-brief bound configurable per loop or per project?** A constant of **three** for this
-  change (see below). Nothing has measured it, so the first real use is the evidence.
 - **What band does `blocked` belong to under D9?** It is claimable by the loop yet means *"waiting on
   a person"*. Today's sets disagree — `CLAIMABLE_LOOP_TASK_STATUSES` includes it, the other three do
   not. The classification must state which it is, and the answer is not obvious from existing code.
 
 **Closed since first drafting:**
 
-- **How many re-briefs?** **Three.** A number nothing has measured, chosen because it is small enough
-  that three wasted turns are cheap and large enough that a single bad turn does not escalate to the
-  operator. Cheap to change once real use says otherwise.
 - **R4, the review-wait timeout.** **Decided against**, not deferred — see the proposal's non-goals.
   Once a stalled tick counts in place, a loop waiting on an absent reviewer is already visible and
   already recoverable; a timeout would have to choose an action, and every candidate is worse than
