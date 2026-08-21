@@ -242,14 +242,33 @@ without reverting the migration is safe in either order.
 
 ## Open Questions
 
-1. Should `start_new_thread` be surfaced to the operator anywhere, or is it agent-only? The composer
-   has no notion of "reply into a new thread" today, and this change does not add one.
-   (Scope was the other open question here — whether the cutover fix belonged in this change at all.
-   Answered by the operator: it stays. See D7.)
+1. Scope — whether the cutover fix belonged in this change at all. Answered by the operator: it
+   stays. See D7.
 2. Answered while writing D5: the entry is already distinguished — left-aligned, named for the
    sending agent, in that agent's colour, against the operator's right-aligned "You". The
    remaining question is one of density rather than attribution: at what length does a thread
    carrying a full third-party exchange stop being readable as the operator's own conversation?
    Task 6.6 is where that gets judged.
-3. Does anything besides `checkpoint_cutover.py` create a conversation that ought to inherit a
-   lineage? A sweep of `new_conversation` call sites is part of the work.
+3. Answered by sweeping the `new_conversation` call sites. There are eight;
+   `checkpoint_cutover.py:91` is the only one that inherits, and there is no second successor path
+   — `agent_trigger.py` was checked for one and has none. The other seven each begin a genuinely
+   new line of work: the peer mint (`messages.py:196`), an operator trigger
+   (`agent_trigger.py:794`, `:806`), a loop firing (`scheduler.py:990`), an answered question
+   (`questions.py:109`), reconstructed output (`output_recording.py:62`), and an agent request
+   (`agents.py:1403`). `agent_trigger.py:800` already states the governing principle, about
+   runtime overrides: *"a conversation the operator starts begins clean — they are looking at the
+   composer and can choose."* Lineage follows the same rule.
+
+   The sweep also found that `agents.py:1403` never sets `bound_sender_conversation_id`, which
+   would split the requesting agent's first follow-up message into a second thread. It is **not**
+   fixed here: that line is unreachable, because `request_agent` always fails earlier with a 400.
+   See `openspec/explorations/2026-08-21-request-agent-cannot-succeed.md`.
+
+4. Should `start_new_thread` be surfaced to the operator? **No** — answered while exploring.
+   `agent-conversation-workspace` already requires that *"starting a conversation is a navigation
+   action with a dedicated surface"* (spec.md:881), with the agent preselected, retargetable, and
+   nothing persisted until the first message is sent. That is this capability, as a control the
+   operator already has. An agent has no navigation surface at all, so the flag is its equivalent
+   rather than a second way to do the same thing. Whether the operator should be able to force an
+   *agent's* delegation into a new thread is a different question, and the answer is probably no:
+   the agent knows whether it is starting a new line of work and the operator is not in that loop.

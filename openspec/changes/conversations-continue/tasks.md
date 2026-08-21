@@ -24,8 +24,9 @@ the code does rather than what the requirement says.
 - [ ] 1.4 Bump `HEAD_REVISION` to `"0085"` in `hub/tests/test_migrations.py:39` **and** the head
       assertion in `hub/tests/test_project_persistence.py`
 - [ ] 1.5 Set `lineage_id` to the conversation's own id in `new_conversation`
-      (`hub/hub/conversations.py`), and sweep every other `new_conversation` call site to confirm
-      none needs a different value — design.md open question 3
+      (`hub/hub/conversations.py`). The sweep is already done — design.md open question 3 lists all
+      eight call sites and `checkpoint_cutover.py:91` is the only one that inherits. Confirm the
+      list still holds rather than repeating the sweep
 - [ ] 1.6 Run `cd hub && py -3.11 -m pytest tests/test_migrations.py tests/test_project_persistence.py -q`
 
 ## 2. A cutover keeps the line of work
