@@ -19,14 +19,42 @@ rather than two. Design D11.
 **These three are outstanding and easy to miss**, because a worker walking groups in order is already
 past group 1. Task 10.0 gates the change on them.
 
-- [ ] 1.6 Add `reviewer: Optional[str] = None` to `spec_payload.Task`. Optional, and a document that
-      names none must validate and materialise exactly as it does today.
-- [ ] 1.7 Write the `Field(description=...)` — these **are** the agent-facing instructions, the same
+- [x] 1.6 Add `reviewer: Optional[str] = None` to `spec_payload.Task`. Optional, and a document that
+      names none must validate and materialise exactly as it does today. Landed `hub/hub/spec_payload.py`
+      (right after `from_`): `reviewer: Optional[str] = Field(default=None, ...)`. No alias, no
+      wiring into `materialise()`, the completeness checks, or the gate — D11 is explicit that
+      resolution belongs to `loop-becomes-a-flow`, not this change; this section owes only the field,
+      its description, and preservation. `test_naming_no_reviewer_validates_and_materialises_as_before`
+      confirms a task with no `reviewer` key validates with `reviewer is None` and nothing else about
+      the task's shape changed; the full pre-existing `test_spec_declared_tasks.py`/
+      `test_spec_board_task_convergence.py`/`test_spec_completeness.py` suites (54 tests, none of them
+      touching `reviewer`) still pass unchanged, which is the "materialises exactly as before"
+      guarantee for the field's absence.
+- [x] 1.7 Write the `Field(description=...)` — these **are** the agent-facing instructions, the same
       standard 1.2 was held to. It must say what the name is resolved against and that an
       unresolvable one is kept rather than refused, because an author writing a document has no way
-      to know which agents exist on the machine that will run it.
-- [ ] 1.8 Round-trip test alongside 1.5's: a payload naming a reviewer survives render →
+      to know which agents exist on the machine that will run it. Landed: *"Agent name this task's
+      completion should be reviewed by, resolved against the roster when the task is claimed for
+      review. Optional: an author writing a document has no way to know which agents exist on the
+      machine that will run it, so an unresolvable name is kept rather than refused — resolution
+      falls back to whatever the reviewing mechanism does when none is named or none resolves."*
+- [x] 1.8 Round-trip test alongside 1.5's: a payload naming a reviewer survives render →
       `extract_payload` → validate unchanged, and one naming none is byte-identical to today's.
+      Landed `test_a_named_reviewer_survives_round_trip` (same `payload_to_dict` →
+      `embed_payload` → `extract_payload` → re-validate chain 1.5 already uses, for a task naming
+      `reviewer: "codex-1"`) and `test_naming_no_reviewer_validates_and_materialises_as_before`
+      (a task with no `reviewer` key validates to `reviewer is None`, matching every task in the
+      corpus written before this field existed). `hub/tests/test_spec_payload.py` went from 62
+      tests to 64 (2 new, 0 removed, all 62 pre-existing still pass unchanged). **Adding the field
+      moved `test_spec_render.py`'s pinned byte-for-byte digest, exactly as 1.5's own comment
+      already predicted would happen again**: `render_document` embeds the stored payload verbatim,
+      so `_rich_payload()`'s one task grew a `"reviewer": null` in its embedded JSON. Confirmed the
+      delta was confined to that one line by diffing the rendered output against the pre-change
+      render (`git stash` on `spec_payload.py` alone, re-render, diff) rather than assuming it from
+      the field's default — nothing else moved. Recaptured `_BASELINE_DIGEST` and extended its
+      comment to record the fourth recapture and why, same discipline the comment already asks for.
+
+**Verified, not assumed.** `pytest tests/test_spec_payload.py tests/test_spec_render.py tests/test_spec_declared_tasks.py tests/test_spec_board_task_convergence.py tests/test_spec_completeness.py -q` (from `hub/`) → **122 passed**. `ruff check` and `black --check` clean on `hub/hub/spec_payload.py`, `hub/tests/test_spec_payload.py`, `hub/tests/test_spec_render.py`; `mypy hub/spec_payload.py` → clean. Full CLI suite (`py -3.11 -m pytest tests/ -q` from the repo root) — not rerun this section (payload-schema change confined to the Hub); full `hub/tests/` suite (`py -3.11 -m pytest tests/ -q --ignore=tests/browser`, run in the **foreground** per `NEVER_BACKGROUND_AND_WAIT`, polled via blocking `TaskOutput` rather than ending the turn) → **2720 passed, 12 skipped, 1 xpassed, 0 failed in 1365.37s** — +2 over the prior baseline (2718), exactly the two new tests this section adds, zero failures. This is the rule run 1 learned the expensive way: this section adds a payload field, so the full suite was run rather than trusted to targeted files, and it is exactly what caught the render digest above.
 
 ## 2. Completeness checks
 

@@ -546,21 +546,25 @@ def _rich_payload():
     )
 
 
-# Captured from render_document's own output. Recaptured three times: in §2, when `.aw-nav` joined
+# Captured from render_document's own output. Recaptured four times: in §2, when `.aw-nav` joined
 # the shared stylesheet; in §3, when `.aw-map*` did the same (_STYLE is embedded in every document
 # regardless of whether this document's own `corpus` uses it — the existing pattern for every other
 # CSS rule here, e.g. `.aw-chip-rigor-contract` is present even in documents whose rigor is not
-# `contract`); and by `task-dependencies` §1, which added `Task.depends_on` and `Task.from_` to
-# `spec_payload`. That third one is not a rendering change at all: `render_document` embeds the
-# stored payload verbatim, so a payload that grows fields grows the embedded JSON. The measured
-# delta was exactly `"depends_on": []` and `"from": null` on the one task, and nothing else.
+# `contract`); by `task-dependencies` §1.1-1.5, which added `Task.depends_on` and `Task.from_` to
+# `spec_payload`; and again by `task-dependencies` §1.6-1.8, which added `Task.reviewer`. None of
+# these are a rendering change at all: `render_document` embeds the stored payload verbatim, so a
+# payload that grows fields grows the embedded JSON. The measured delta each time was exactly the
+# new field(s) appearing on the one task with their default value — `"depends_on": []` and
+# `"from": null` the first time, `"reviewer": null` this time — and nothing else, confirmed both
+# times by diffing the rendered output against the pre-change render, not assumed from the field's
+# default.
 #
 # §1.3's guarantee is that the `corpus is None` branch renders no *region* — not that the shared
 # stylesheet is frozen, and not that the payload schema is. Before recapturing, diff the rendered
 # output against the previous commit and confirm the delta is confined to a deliberate stylesheet
 # or payload change: a digest that moves with no `corpus` argument passed, no stylesheet edit and
 # no payload field added means the None-branch stopped being a no-op, which is a real regression.
-_BASELINE_DIGEST = "d2b5513d641e10d8005b2793a628034e2b9d4c3c4a05bb63509ab2f868b8b9c7"
+_BASELINE_DIGEST = "5fc304c110a998d40818048991279c817d192a7e63f2a0044134f3aa83c5a307"
 
 
 def test_omitting_corpus_reproduces_the_pre_change_output_byte_for_byte():

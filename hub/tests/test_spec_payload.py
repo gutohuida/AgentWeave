@@ -237,6 +237,47 @@ def test_a_round_trip_with_local_dependencies_and_an_import_loses_nothing():
     assert dependent["depends_on"] == ["adopt-corpus"]
 
 
+def test_a_named_reviewer_survives_round_trip():
+    """1.8: a task naming a reviewer survives render -> extract_payload ->
+    validate unchanged, the same discipline 1.5 already applies to
+    depends_on and from."""
+    original = minimal(
+        requirements=[_requirement()],
+        tasks=[
+            {
+                "key": "ship",
+                "description": "ship it",
+                "requirements": ["search-latency"],
+                "reviewer": "codex-1",
+            },
+        ],
+    )
+    stored = payload_to_dict(validate_payload(original))
+    assert stored["tasks"][0]["reviewer"] == "codex-1"
+
+    document = f"<html><body>rendered</body>{embed_payload(stored)}</html>"
+    recovered = extract_payload(document)
+    assert recovered == stored
+
+    revalidated = payload_to_dict(validate_payload(recovered))
+    assert revalidated == stored
+
+
+def test_naming_no_reviewer_validates_and_materialises_as_before():
+    """1.6: a document naming no reviewer must validate and materialise
+    exactly as it did before this field existed — reviewer defaults to None
+    and every pre-existing task's shape is otherwise untouched."""
+    payload = validate_payload(
+        minimal(
+            requirements=[_requirement()],
+            tasks=[
+                {"key": "build", "description": "build it", "requirements": ["search-latency"]},
+            ],
+        )
+    )
+    assert payload.tasks[0].reviewer is None
+
+
 # ---------------------------------------------------------------------------
 # Forward compatibility
 # ---------------------------------------------------------------------------

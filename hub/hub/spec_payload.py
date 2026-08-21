@@ -133,6 +133,10 @@ class Task(_Part):
         alias="from",
         description="Set only on an imported entry: names an existing task in another, approved document instead of declaring new work here. An imported entry resolves to that task and never creates one — it exists so a sibling's `depends_on` can name it.",
     )
+    reviewer: Optional[str] = Field(
+        default=None,
+        description="Agent name this task's completion should be reviewed by, resolved against the roster when the task is claimed for review. Optional: an author writing a document has no way to know which agents exist on the machine that will run it, so an unresolvable name is kept rather than refused — resolution falls back to whatever the reviewing mechanism does when none is named or none resolves.",
+    )
 
 
 class Algorithm(_Part):
