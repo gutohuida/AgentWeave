@@ -1035,10 +1035,7 @@ class JobScheduler:
             )
             await sse_manager.broadcast(job.project_id, "queue_entry_queued", queue_payload)
             schedule_result = await schedule_agent(job.project_id, job.agent)
-            if (
-                schedule_result.waiting_reason
-                and schedule_result.waiting_reason != "agent is already running"
-            ):
+            if schedule_result.waiting_reason and schedule_result.terminal_failure:
                 # This is the same terminal outcome startup reconciliation would eventually
                 # record, reached honestly at the moment the Hub knows no turn began. Reusing
                 # `failed` also keeps JobCard's existing error-summary presentation.

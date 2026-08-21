@@ -23,6 +23,7 @@ _agent_locks: Dict[Tuple[str, str], asyncio.Lock] = {}
 class ScheduleResult:
     response: Optional[object] = None
     waiting_reason: Optional[str] = None
+    terminal_failure: bool = True
 
 
 def _lock_for(project_id: str, agent: str) -> asyncio.Lock:
@@ -40,7 +41,7 @@ async def schedule_agent(project_id: str, agent: str) -> ScheduleResult:
             .limit(1)
         )
         if running.scalar_one_or_none() is not None:
-            return ScheduleResult(waiting_reason="agent is already running")
+            return ScheduleResult(waiting_reason="agent is already running", terminal_failure=False)
 
         entries = await queued_entries(db, project_id, agent)
         if not entries:
@@ -113,8 +114,11 @@ async def schedule_agent(project_id: str, agent: str) -> ScheduleResult:
                         "directory_state": exc.directory_state,
                     },
                 )
-            return ScheduleResult(waiting_reason=exc.detail)
-        return ScheduleResult(response=response)
+            return ScheduleResult(
+                waiting_reason=exc.detail,
+                terminal_failure=not getattr(exc, "workspace_unavailable", False),
+            )
+        return ScheduleResult(response=response, terminal_failure=False)
 
 
 async def redrain_queued_agents(project_id: str) -> None:
