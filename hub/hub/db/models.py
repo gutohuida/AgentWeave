@@ -1647,6 +1647,16 @@ class SpecDocument(Base):
     )
     # When the operator declared exploration finished. Null while exploring.
     explore_closed_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+    # When this document was first approved, ever. Set once, in `spec_lifecycle.transition()`, the
+    # first time `to_phase == APPROVED`, and never touched again — **unlike `explore_closed_at`
+    # above, which resets to NULL on every reopen** ("reopening genuinely reopens",
+    # `spec_lifecycle.py:253-257`). The two columns look identical (a nullable phase-history
+    # timestamp) and behave oppositely on purpose: `explore_closed_at` answers "is exploration
+    # closed right now", `first_approved_at` answers "has this path ever been signed off on", which
+    # is what `rename_document`'s refusal needs (`task-dependencies` design D6) — an approved
+    # document that archives or reopens still must not have its path pulled out from under a task
+    # elsewhere that imported from it while it was approved.
+    first_approved_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), default=_now, onupdate=_now, nullable=False
@@ -2023,6 +2033,46 @@ class TaskRequirementReference(Base):
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
 
     __table_args__ = (Index("ix_task_requirement_references_task", "task_id"),)
+
+
+class TaskDependency(Base):
+    """An edge: `task_id` may not start until `depends_on_task_id` is `approved`.
+
+    A join table, not a JSON list on `Task.depends_on` (`task-dependencies` design D3): the gate
+    asks "are all my prerequisites approved", a join over `depends_on_task_id`; the board asks
+    both directions, what blocks this and what this blocks. A JSON array answers the first badly
+    and the second not at all, and neither can be indexed. `task_requirement_links` above is the
+    precedent for a link table shaped like this one.
+
+    **Has a `ForeignKey` on both ends, `ondelete="CASCADE"` — a deliberate departure from
+    `Question.blocked_task_id` above, which carries none because "the block record must outlive a
+    deleted task rather than cascade or refuse."** That reasoning does not transfer: a question is
+    a record of something that happened and stays true after the task it named is gone, but a
+    dependency naming a task that no longer exists is not a fact worth keeping — it is a hole in a
+    graph, so losing the edge with the task is correct rather than a loss of information. As with
+    `JobRun.job_id`/`Loop.job_id` above, the cascade is declarative rather than enforced today:
+    `PRAGMA foreign_keys` is never turned on for this app's SQLite connections
+    (`project_lifecycle.py::_project_scoped_tables`), and nothing yet deletes a `Task`. It documents
+    the intended behaviour and takes effect the day either of those changes.
+    """
+
+    __tablename__ = "task_dependencies"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
+    task_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False
+    )
+    depends_on_task_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("task_id", "depends_on_task_id", name="uq_task_dependencies_pair"),
+        Index("ix_task_dependencies_task", "task_id"),
+        Index("ix_task_dependencies_depends_on", "depends_on_task_id"),
+    )
 
 
 # Open at the edges on purpose. Evidence is whatever demonstrates the work, and constraining it to

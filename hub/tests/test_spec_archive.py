@@ -255,3 +255,47 @@ async def test_transition_itself_refuses_an_agent_actor_archiving(app, auth_head
             )
         assert excinfo.value.code == "archive_is_the_operators"
         assert document.phase == spec_lifecycle.APPROVED, "a refused transition must not mutate"
+
+
+@pytest.mark.asyncio
+async def test_first_approved_at_is_set_once_and_survives_a_reopen(app, tmp_path):
+    """`task-dependencies` design D6: unlike `explore_closed_at`, which resets to `None` on every
+    reopen, `first_approved_at` is set the first time a document is approved and never touched
+    again — not on reopening, and not on a second approval."""
+    operator = spec_lifecycle.Actor(kind="operator", name="operator")
+    async with async_session_factory() as session:
+        document = await spec_lifecycle.create_document(
+            session,
+            "proj-test",
+            "spec/changes/first-approved-demo/spec.html",
+            actor=operator,
+            title="First approved demo",
+        )
+        assert document.first_approved_at is None
+
+        await spec_lifecycle.close_exploration(session, document, actor=operator)
+        await spec_lifecycle.transition(
+            session, document, to_phase=spec_lifecycle.PROPOSED, actor=operator
+        )
+        await spec_lifecycle.transition(
+            session, document, to_phase=spec_lifecycle.APPROVED, actor=operator
+        )
+        first_stamp = document.first_approved_at
+        assert first_stamp is not None
+
+        # Reopen. `explore_closed_at` resets; `first_approved_at` must not.
+        await spec_lifecycle.transition(
+            session, document, to_phase=spec_lifecycle.EXPLORING, actor=operator
+        )
+        assert document.explore_closed_at is None
+        assert document.first_approved_at == first_stamp
+
+        # Approve a second time. Still the original timestamp, not a later one.
+        await spec_lifecycle.close_exploration(session, document, actor=operator)
+        await spec_lifecycle.transition(
+            session, document, to_phase=spec_lifecycle.PROPOSED, actor=operator
+        )
+        await spec_lifecycle.transition(
+            session, document, to_phase=spec_lifecycle.APPROVED, actor=operator
+        )
+        assert document.first_approved_at == first_stamp

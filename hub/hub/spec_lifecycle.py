@@ -296,6 +296,11 @@ async def transition(
         # Reopening genuinely reopens: the next proposal needs the operator to
         # say again that exploration is done.
         document.explore_closed_at = None
+    if to_phase == APPROVED and document.first_approved_at is None:
+        # Set once, never reset. `explore_closed_at` above answers "is exploration closed right
+        # now"; this answers "has this path ever been signed off on" — see the column's own
+        # comment in db/models.py. A later archive-then-reopen must not clear it.
+        document.first_approved_at = datetime.now(timezone.utc)
 
     return await record_event(
         session,

@@ -36,7 +36,7 @@ ALEMBIC_INI = Path(__file__).parent.parent / "hub" / "alembic.ini"
 # The revision `alembic upgrade head` must land on. Named once so the assertion and its failure
 # message cannot disagree — they did, for two head bumps, telling anyone debugging a failure to go
 # read the wrong migration.
-HEAD_REVISION = "0082"
+HEAD_REVISION = "0083"
 
 
 # ---------------------------------------------------------------------------
@@ -2699,3 +2699,130 @@ def test_migration_0081_downgrade_then_upgrade_round_trips(tmp_path) -> None:
         assert (
             conn.execute("SELECT loop_id FROM event_logs WHERE id = 'evt-1'").fetchone()[0] is None
         )
+
+
+def test_migration_0083_is_guarded_when_tasks_and_spec_documents_do_not_exist(tmp_path) -> None:
+    """An upgrade starting from an early revision reaches 0083 with neither `tasks` nor
+    `spec_documents` — `_create_0034_conversations_state` builds only `projects`/`conversations`/
+    `runs`. Both additions must skip rather than fail, and the upgrade must still reach head.
+    """
+    db_file = tmp_path / "early_0083.db"
+    _create_0034_conversations_state(db_file)
+
+    _run_alembic_with(f"sqlite+aiosqlite:///{db_file}")
+
+    with sqlite3.connect(db_file) as conn:
+        assert conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == (
+            HEAD_REVISION
+        )
+        tables = {
+            row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        }
+        # `tasks` is never created by any migration — a real startup's `create_all` builds it
+        # from the model, and this early state (built by `_create_0034_conversations_state`,
+        # which predates it) never gains one on the way to head either. `task_dependencies`
+        # references it, so it must be skipped rather than created against a foreign key with
+        # nothing to point at.
+        assert "tasks" not in tables
+        assert "task_dependencies" not in tables
+        # `spec_documents` is unrelated to `tasks` and is created unconditionally by `0065` on
+        # the way to head, so `first_approved_at` is added to it same as any other upgrade.
+        assert "spec_documents" in tables
+        doc_columns = {row[1] for row in conn.execute("PRAGMA table_info(spec_documents)")}
+        assert "first_approved_at" in doc_columns
+
+
+def test_migration_0083_creates_task_dependencies_and_first_approved_at_column(tmp_path) -> None:
+    """The join table lands with both directions indexed, and the new column is nullable."""
+    db_file = tmp_path / "fresh_0083.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    _run_alembic_with(db_url)
+
+    with sqlite3.connect(db_file) as conn:
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(task_dependencies)")}
+        assert {"id", "project_id", "task_id", "depends_on_task_id", "created_at"} <= columns
+
+        indexes = {row[1] for row in conn.execute("PRAGMA index_list(task_dependencies)")}
+        assert "ix_task_dependencies_task" in indexes
+        assert "ix_task_dependencies_depends_on" in indexes
+
+        doc_columns = {row[1] for row in conn.execute("PRAGMA table_info(spec_documents)")}
+        assert "first_approved_at" in doc_columns
+
+
+def test_migration_0083_backfills_first_approved_at_from_phase_history(tmp_path) -> None:
+    """The earliest `phase` event moving `to: "approved"` becomes `first_approved_at` — and a
+    later reopen recorded afterward must not be mistaken for a later approval."""
+    import json
+
+    db_file = tmp_path / "backfill_0083.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    _run_alembic_with(db_url)
+
+    with sqlite3.connect(db_file) as conn:
+        conn.execute(
+            "INSERT INTO projects (id, name, created_at) VALUES ('p1', 'demo', '2026-08-13')"
+        )
+        conn.execute(
+            "INSERT INTO spec_documents (id, project_id, path, title, kind, phase, created_at,"
+            " updated_at, first_approved_at) VALUES ('d1', 'p1', 'spec/x/spec.html', 'X',"
+            " 'change-spec', 'exploring', '2026-08-13', '2026-08-13', NULL)"
+        )
+        events = [
+            ("e1", "2026-08-14T00:00:00Z", {"from": "exploring", "to": "proposed"}),
+            ("e2", "2026-08-15T00:00:00Z", {"from": "proposed", "to": "approved"}),
+            ("e3", "2026-08-16T00:00:00Z", {"from": "approved", "to": "exploring"}),
+            ("e4", "2026-08-17T00:00:00Z", {"from": "proposed", "to": "approved"}),
+        ]
+        for event_id, created_at, detail in events:
+            conn.execute(
+                "INSERT INTO spec_document_events (id, document_id, project_id, kind, actor_kind,"
+                " actor, origin, detail, created_at) VALUES (?, 'd1', 'p1', 'phase', 'operator',"
+                " 'op', 'lifecycle', ?, ?)",
+                (event_id, json.dumps(detail), created_at),
+            )
+        # Clear the column create_all's own model gave the row, so the migration's own backfill
+        # (not the model default) is what this test is actually exercising.
+        conn.execute("UPDATE spec_documents SET first_approved_at = NULL WHERE id = 'd1'")
+        conn.commit()
+
+    _stamp(db_file, "0082")
+    _run_alembic_with(db_url)
+
+    with sqlite3.connect(db_file) as conn:
+        value = conn.execute(
+            "SELECT first_approved_at FROM spec_documents WHERE id = 'd1'"
+        ).fetchone()[0]
+    # e2, the earliest "to": "approved" event — not e4, the later one after a reopen.
+    assert value is not None
+    assert str(value).startswith("2026-08-15")
+
+
+def test_migration_0083_leaves_a_never_approved_document_null(tmp_path) -> None:
+    """A document with no `to: "approved"` event in its history is honestly NULL, not guessed."""
+    db_file = tmp_path / "never_approved_0083.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    _run_alembic_with(db_url)
+
+    with sqlite3.connect(db_file) as conn:
+        conn.execute(
+            "INSERT INTO projects (id, name, created_at) VALUES ('p2', 'demo', '2026-08-13')"
+        )
+        conn.execute(
+            "INSERT INTO spec_documents (id, project_id, path, title, kind, phase, created_at,"
+            " updated_at, first_approved_at) VALUES ('d2', 'p2', 'spec/y/spec.html', 'Y',"
+            " 'change-spec', 'exploring', '2026-08-13', '2026-08-13', NULL)"
+        )
+        conn.commit()
+
+    _stamp(db_file, "0082")
+    _run_alembic_with(db_url)
+
+    with sqlite3.connect(db_file) as conn:
+        value = conn.execute(
+            "SELECT first_approved_at FROM spec_documents WHERE id = 'd2'"
+        ).fetchone()[0]
+    assert value is None
