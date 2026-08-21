@@ -84,6 +84,22 @@ class GateUnsatisfiedError(TransitionRefusedError):
         self.refusal = refusal
 
 
+class DependencyUnmetError(TransitionRefusedError):
+    """The task depends on work that is not `approved` yet (`task-dependencies` design D1/D2).
+
+    409, same reasoning as `GateUnsatisfiedError`: the request is well-formed and the asker may make
+    it — a *prerequisite's* state is what forbids it, not this task's own. Carries the structured
+    refusal so a surface can render each unmet or permanently-rejected prerequisite rather than
+    parse a sentence.
+    """
+
+    http_status = 409
+
+    def __init__(self, refusal) -> None:
+        super().__init__(refusal.detail())
+        self.refusal = refusal
+
+
 #: Reaching `approved`, `rejected` or `revision_needed` is a judgement on work someone else did.
 #: These are the moves author/reviewer separation guards.
 _REVIEW_OUTCOMES = frozenset({"approved", "rejected", "revision_needed"})
@@ -206,6 +222,20 @@ async def apply_transition(
         raise IllegalTransitionError(refusal_detail(from_status, to_status, actor.kind))
 
     await _guard_author_is_not_reviewer(session, task, to_status, actor)
+
+    # The dependency gate, on the `-> in_progress` edge only (`task-dependencies` design D1) — this
+    # covers `pending -> in_progress`, `assigned -> in_progress` and the `blocked -> in_progress`
+    # resume edge alike, since all three share this one `to_status`. Not `-> assigned` and not
+    # `-> rejected`: a whole wave can be routed ahead of time and each task starts only once its own
+    # prerequisites clear. Same placement reasoning as the requirement gate below — inside the
+    # service and before the history row, so every caller (operator route, agent HTTP, the tool
+    # surface, jobs and the run-binding runtime move) is covered without knowing this exists.
+    if to_status == "in_progress":
+        from .dependency_gate import evaluate as evaluate_dependencies
+
+        dependency_refusal = await evaluate_dependencies(session, task)
+        if dependency_refusal.refuses:
+            raise DependencyUnmetError(dependency_refusal)
 
     # The gate, on this one edge. Inside the service and before the history row, so it cannot be
     # bypassed by a caller reaching the row a different way — which is also why every surface

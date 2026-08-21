@@ -7,7 +7,7 @@ whether a run knows what it is doing, and whether the ledger found out.
 import pytest
 
 from hub.db.engine import async_session_factory
-from hub.db.models import InboundQueueEntry, Run, Task
+from hub.db.models import InboundQueueEntry, Run, Task, TaskDependency
 from hub.run_task_binding import (
     DEFAULT_POLICY,
     POLICIES,
@@ -170,6 +170,67 @@ async def test_binding_revision_work_advances_it(app):
         await bind_run_to_task(session, run, task)
         await session.commit()
 
+        assert task.status == "in_progress"
+
+
+# ---------------------------------------------------------------------------
+# The dependency gate reaches the runtime move too (task-dependencies §5.8) — the "jobs" surface,
+# since this is the automatic `-> in_progress` a run's own binding makes, not something a caller
+# asked for by name.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_binding_a_task_with_an_unmet_dependency_leaves_it_un_started(app):
+    """`bind_run_to_task` already catches `TransitionRefusedError` broadly and returns `None` — the
+    same path an illegal edge would take. A gated task now takes it too: the run still binds (design
+    D3 of the run-task-binding change — binding is a statement about the run, not a claim about the
+    task), but the task stays wherever it was, gated the same way a manual attempt would be."""
+    async with async_session_factory() as session:
+        prereq = await _make_task(session, "task-bind-prereq", "pending")
+        task = await _make_task(session, "task-bind-gated", "pending")
+        session.add(
+            TaskDependency(
+                id="tdep-bind-gated",
+                project_id="proj-test",
+                task_id="task-bind-gated",
+                depends_on_task_id="task-bind-prereq",
+            )
+        )
+        run = _run("run-bind-gated")
+        session.add(run)
+        await session.commit()
+
+        transition = await bind_run_to_task(session, run, task)
+        await session.commit()
+
+        assert run.task_id == "task-bind-gated"
+        assert transition is None
+        assert task.status == "pending"
+        assert prereq.status == "pending"
+
+
+@pytest.mark.asyncio
+async def test_binding_a_task_with_an_approved_dependency_starts_it_as_usual(app):
+    async with async_session_factory() as session:
+        await _make_task(session, "task-bind-prereq-ok", "approved")
+        task = await _make_task(session, "task-bind-unblocked", "pending")
+        session.add(
+            TaskDependency(
+                id="tdep-bind-unblocked",
+                project_id="proj-test",
+                task_id="task-bind-unblocked",
+                depends_on_task_id="task-bind-prereq-ok",
+            )
+        )
+        run = _run("run-bind-unblocked")
+        session.add(run)
+        await session.commit()
+
+        transition = await bind_run_to_task(session, run, task)
+        await session.commit()
+
+        assert transition is not None
         assert task.status == "in_progress"
 
 

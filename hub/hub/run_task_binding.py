@@ -253,9 +253,13 @@ async def bind_run_to_task(
     try:
         return await apply_transition(session, task, "in_progress", actor, origin=ORIGIN_RUNTIME)
     except TransitionRefusedError:
-        # The reachability check above already covers the map, so this is the author/reviewer path
-        # and cannot currently fire for `in_progress`. Caught rather than assumed away: a refusal
-        # here must leave the run bound and the task untouched, never propagate and fail the spawn.
+        # The reachability check above already covers the map, so this cannot be an illegal edge or
+        # the author/reviewer path. Since `task-dependencies` §5 it CAN be the dependency gate: a run
+        # binds to a task whose prerequisites are not all `approved` yet. Caught rather than assumed
+        # away either way — a refusal here must leave the run bound and the task untouched, never
+        # propagate and fail the spawn. A task left un-started this way stays `pending`/`assigned`
+        # with the run attached but idle; `loop-notices-and-reacts` (S4) is where the loop itself
+        # learns to route around a gated task rather than claim one and sit idle on it.
         return None
 
 

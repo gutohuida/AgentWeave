@@ -214,6 +214,102 @@ async def test_an_agent_cannot_reject_work_before_review(app, auth_headers):
 
 
 # ---------------------------------------------------------------------------
+# The dependency gate reaches both transports (task-dependencies §5.8)
+#
+# There is no route that creates a `TaskDependency` row directly — only `materialise()` does
+# (§5.7's own finding: every edge it creates points at a task with `spec_document_id` set, so the
+# hand-made-task refusal §5.7 asks for has no reachable call site today). So these tests build the
+# edge straight in the database, the same way `test_dependency_gate.py` does, and drive the refusal
+# through the real HTTP routes — the operator's and the agent's, which is what §5.8 asks be proven
+# rather than assumed. `mcp_server.py`'s `update_task` tool is a third surface only in name: it PATCHes
+# this exact same `/agent-actions/tasks/{id}` route (`mcp_server.py`'s `_hub_request`), so the agent
+# route test below is that surface's coverage too.
+# ---------------------------------------------------------------------------
+
+
+async def _make_prerequisite(status: str) -> str:
+    async with async_session_factory() as session:
+        from hub.db.models import Task
+
+        prereq = Task(
+            id=f"task-prereq-http-{status}", project_id=PROJECT, title="Prerequisite", status=status
+        )
+        session.add(prereq)
+        await session.flush()
+        prereq_id = prereq.id
+        await session.commit()
+    return prereq_id
+
+
+async def _depend_on(task_id: str, prereq_id: str) -> None:
+    async with async_session_factory() as session:
+        from hub.db.models import TaskDependency
+
+        session.add(
+            TaskDependency(
+                id=f"tdep-http-{task_id}",
+                project_id=PROJECT,
+                task_id=task_id,
+                depends_on_task_id=prereq_id,
+            )
+        )
+        await session.commit()
+
+
+async def test_the_operator_route_is_gated_on_an_unapproved_prerequisite(app, auth_headers):
+    prereq_id = await _make_prerequisite("pending")
+    task_id = (await _create(app, auth_headers, "operator gated")).json()["id"]
+    await _depend_on(task_id, prereq_id)
+
+    response = await _patch(app, auth_headers, task_id, "in_progress")
+
+    assert response.status_code == 409, response.text
+    detail = response.json()["detail"]
+    assert detail["code"] == "dependency_unmet"
+    assert detail["unmet"][0]["id"] == prereq_id
+
+
+async def test_the_agent_route_is_gated_the_same_way(app, auth_headers):
+    """Also the MCP `update_task` tool's coverage — it PATCHes this exact route."""
+    prereq_id = await _make_prerequisite("in_progress")
+    task_id = (await _create(app, auth_headers, "agent gated")).json()["id"]
+    await _depend_on(task_id, prereq_id)
+    headers = await _active_run("run-gated")
+
+    response = await _patch(app, headers, task_id, "in_progress", agent_route=True)
+
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"]["code"] == "dependency_unmet"
+
+
+async def test_the_operator_route_starts_the_task_once_the_prerequisite_is_approved(
+    app, auth_headers
+):
+    prereq_id = await _make_prerequisite("approved")
+    task_id = (await _create(app, auth_headers, "operator unblocked")).json()["id"]
+    await _depend_on(task_id, prereq_id)
+
+    response = await _patch(app, auth_headers, task_id, "in_progress")
+
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "in_progress"
+
+
+async def test_a_rejected_prerequisite_reads_differently_from_an_unmet_one_over_http(
+    app, auth_headers
+):
+    prereq_id = await _make_prerequisite("rejected")
+    task_id = (await _create(app, auth_headers, "operator gated forever")).json()["id"]
+    await _depend_on(task_id, prereq_id)
+
+    response = await _patch(app, auth_headers, task_id, "in_progress")
+
+    assert response.status_code == 409, response.text
+    detail = response.json()["detail"]
+    assert detail["rejected"] and not detail["unmet"]
+
+
+# ---------------------------------------------------------------------------
 # A refusal leaves nothing behind (4.5)
 # ---------------------------------------------------------------------------
 
