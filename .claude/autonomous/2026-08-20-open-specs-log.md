@@ -562,3 +562,77 @@ down to a smaller slice (create the areas and set their parent to the home) rath
 section in one iteration, per `iteration_shape`'s "prefer a small finished thing".
 
 ---
+
+## Iteration 6 — S2 section 6, the arrangement itself (headless firing, found dirty at 06:13, landed 06:27+01:00)
+
+Same pattern as iterations 1, 2, 3 and 5: arrived to a dirty tree at `2354020`, not clean. Two
+firings in the 05:58–06:13 window had done the entire §6 implementation — driver.log shows one
+saying "I'll stop polling here and wait for the Monitor task to notify me" and ending without
+committing, then the next one taking over. What was on disk was substantial and real: `tasks.md`
+6.1–6.5 ticked with detailed landing notes, 6 new files under `spec/areas/`, and 40 files under
+`spec/capabilities/` + `spec/agentweave.html` + `spec/index.json` modified. This iteration's job
+was the same as every dirty-arrival iteration this run: verify before trusting, then land.
+
+**Verified independently, not from the landing notes alone:**
+
+- `spec/areas/*.html` — read `interface.html` in full. Real authored `summary` prose (not a
+  placeholder), `system-map` kind, direct-children-only map listing exactly the two capabilities
+  design D4 assigns to Interface, correct relative links (`../capabilities/...`), nav strip to
+  home. Matches the pattern the design and `PA-5` call for.
+- `spec/agentweave.html` — confirmed by grep, not by reading the landing note's claim: exactly 6
+  `areas/` links and 34 `capabilities/` links present in the rendered home, consistent with a
+  recursive map over all six areas and all 34 filed capabilities (`D-S2-recursive`).
+- A capability's own nav strip: `spec/capabilities/hub-workspace-shell/spec.html` shows both
+  `../../agentweave.html` ("Home") and `../../areas/interface.html` ("Interface") — both hops
+  present and correctly relative from that file's nesting depth.
+- No external resource introduced: `grep -rlE 'http://|https://|<link |<script src' spec/
+  --include=*.html` → one hit, `agent-composer/spec.html`, pre-existing prose inside a requirement
+  example (`"see https://example.com/foo"`), not a resource tag — matches what the landing note
+  claimed, confirmed independently rather than trusted.
+- No code touched: `git status --short hub/ src/ tests/` empty. Only `spec/`, `openspec/changes/
+  corpus-aware-documents/tasks.md`, and gitignored `testbed/scratch/arrange_areas*` (the throwaway
+  driver script, correctly not staged) were dirty.
+- `spec/index.json` document count: 41 (1 home + 34 capabilities + 6 areas) — matches the expected
+  shape exactly.
+
+**Also confirmed the "34, not 32" claim in 6.4's landing note** rather than taking it on faith:
+`project-instructions` and `quiet-hours` both do have rows in `spec/index.json` today (document-
+adoption's real run, per handoff 0067, had already filed them before this section started), so
+including both in the arrangement was correct, not scope creep.
+
+**Wrote §9 (the user test guide) this iteration** — it was still unwritten, and unlike §8 (human-
+only, needs a browser and the operator) it's something an agent can produce: seven steps, leading
+with reindex-stability and single-file-touched checks (the failure mode most likely to ship
+unnoticed — a rebuild that quietly rewrites the whole corpus — per the task's own framing), then
+the navigability, offline-readability, generated-region-labelling and missing-summary checks. Each
+step states what a correct result looks like and what a wrong one looks like, following S1's own
+`agent-created-documents` §7 test-guide convention (prose written directly under the numbered
+task in `tasks.md`, not a separate file).
+
+**Ran the tests this iteration, not carried over.** CLI suite (`py -3.11 -m pytest tests/ -q`
+from the repo root): **404 passed, 3 skipped**, exact match to every prior baseline. Full Hub
+suite (`py -3.11 -m pytest tests/ -q --ignore=tests/browser` from `hub/`): **1 failed, 2641
+passed, 12 skipped, 1 xpassed in 739.48s (12m19s)**. The one failure,
+`test_requirement_evidence.py::test_decisions_append_and_never_overwrite`, is the exact
+already-documented inherited timestamp-collision flake (`dead_ends_inherited`) — confirmed by
+rerunning it alone immediately after: **1 passed in 0.41s**. `ruff`/`black`/`mypy` were not
+rerun (7.3 left unticked, explained inline) since this section touched zero Python files.
+
+**Tasks.md now stands at 45/55.** Ticked 6.1–6.5 (already accurate from the prior firing), added
+9.1 (the test guide, new this iteration), and 7.1/7.2/7.4/7.5/7.6/7.7 (the verification tasks,
+run and confirmed this iteration — 7.5–7.7 were partially pre-filled by the prior firing and
+independently reconfirmed above). Left 6.6 (home narrative enrichment) and 6.7 (content backlog)
+unticked, explicitly deferred per the task list's own separation. Section 8 (8.1–8.7) is
+human-only and untouched — it needs the operator, a browser, and eyes on the rendered corpus, none
+of which this run has.
+
+**S2 is now effectively at the same stage S1 reached at the end of iteration 1: code-complete,
+verified, pending human verification (§8) and two explicitly-deferred content tasks (6.6, 6.7).**
+Committed as `8cb9b84`. `do_not_idle` says pull the next queue item forward rather than idle
+waiting on either S1's or S2's human sections — `current` moves to **S3**
+(`task-dependencies`, 0/80), the next unblocked item in `queue` order. `next_action` is written
+for S3 section 1 (the schema/migration groundwork) with the specific files and guard pattern
+(0033/0034-style missing-table guard) already researched from `STATE.json`'s own note, so the next
+firing does not have to re-derive them.
+
+---
