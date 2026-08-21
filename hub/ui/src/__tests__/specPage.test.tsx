@@ -148,9 +148,14 @@ describe('the Spec screen', () => {
     expect(screen.queryByText('Loading…')).not.toBeInTheDocument()
   })
 
-  it('opens the picker with Ctrl+K from here too', async () => {
+  /* Ctrl+K belongs to the command palette; see specNavigationUi.test.tsx for the two changes
+   * that disagreed and which one is current. The picker is reached from the breadcrumb. */
+  it('opens on Ctrl+Shift+K, and does not steal the plain chord from the palette', async () => {
     renderPage(HOME)
     fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true, shiftKey: true })
     expect(await screen.findByRole('dialog')).toHaveAccessibleName('Search documents')
   })
 })

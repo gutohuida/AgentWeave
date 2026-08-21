@@ -126,11 +126,21 @@ export function ConversationView({
     setPickerOpen(true)
   }, [])
 
-  // Ctrl/Cmd+K opens document search from anywhere in a conversation — which is what makes a
-  // document reachable without a separate screen to go to first.
+  /* Document search is Ctrl/Cmd+Shift+K. Ctrl/Cmd+K is the command palette's.
+   *
+   * `2026-08-10-conversation-first-spec-workspace` gave the plain chord to document search;
+   * `2026-08-18-2026-08-16-conversation-formatting-and-quick-nav` then specified a global command
+   * palette on that same chord, naming "no global command palette for cross-cutting navigation"
+   * as the problem it solved. The palette shipped and these listeners did not go — and being
+   * mounted, they won, so Ctrl+K opened the spec from anywhere and the palette was unreachable
+   * (operator, 2026-08-21: "ctrl + k is always opening the spec directly").
+   *
+   * Moved rather than deleted. The picker does have buttons, but not in every state — a
+   * conversation that does not exist yet omits the reopen control entirely — so deleting the
+   * keyboard route would strand document search exactly where there is nothing else to click. */
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'k') {
         e.preventDefault()
         openPicker()
       }

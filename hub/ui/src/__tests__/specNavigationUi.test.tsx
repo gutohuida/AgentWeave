@@ -446,15 +446,28 @@ describe('document search (FR-3, FR-9)', () => {
     await waitFor(() => expect(breadcrumb).toHaveFocus())
   })
 
-  it('opens from Ctrl+K in a conversation with no document open at all', async () => {
+  it('opens from the shortcut in a conversation with no document open at all', async () => {
     renderView(null)
-    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true, shiftKey: true })
     expect(await screen.findByRole('dialog')).toBeInTheDocument()
   })
 
-  it('opens from the Cmd+K shortcut', async () => {
+  /* Ctrl/Cmd+K is the command palette's, not this picker's.
+   *
+   * `2026-08-10-conversation-first-spec-workspace` gave the chord to document search;
+   * `2026-08-18-2026-08-16-conversation-formatting-and-quick-nav` then specified a global command
+   * palette on the same chord and named "no global command palette for cross-cutting navigation"
+   * as the problem it solved. The palette shipped, but this listener was never removed, and being
+   * mounted it won — so Ctrl+K opened the spec from anywhere and the palette was unreachable
+   * (operator, 2026-08-21). This pins the later decision. */
+  it('opens on Cmd/Ctrl+Shift+K, and leaves the plain chord to the command palette', async () => {
     renderView()
     fireEvent.keyDown(window, { key: 'k', metaKey: true })
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+    fireEvent.keyDown(window, { key: 'k', metaKey: true, shiftKey: true })
     expect(await screen.findByRole('dialog')).toBeInTheDocument()
   })
 
@@ -463,7 +476,7 @@ describe('document search (FR-3, FR-9)', () => {
     const user = userEvent.setup()
     renderView()
 
-    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+    fireEvent.click(screen.getByTestId('spec-document-breadcrumb'))
     const dialog = await screen.findByRole('dialog')
     await user.type(within(dialog).getByLabelText('Search documents'), 'add')
 
@@ -483,7 +496,7 @@ describe('document search (FR-3, FR-9)', () => {
     const user = userEvent.setup()
     renderView()
 
-    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+    fireEvent.click(screen.getByTestId('spec-document-breadcrumb'))
     const dialog = await screen.findByRole('dialog')
     await user.click(within(dialog).getByRole('button', { name: /Add Agent Stream Kinds/ }))
 

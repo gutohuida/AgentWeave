@@ -56,9 +56,21 @@ export function SpecPage({ document: openDocument, anchor, onOpenDocument, onOpe
     setPickerOpen(true)
   }, [])
 
+  /* Document search is Ctrl/Cmd+Shift+K. Ctrl/Cmd+K is the command palette's.
+   *
+   * `2026-08-10-conversation-first-spec-workspace` gave the plain chord to document search;
+   * `2026-08-18-2026-08-16-conversation-formatting-and-quick-nav` then specified a global command
+   * palette on that same chord, naming "no global command palette for cross-cutting navigation"
+   * as the problem it solved. The palette shipped and these listeners did not go — and being
+   * mounted, they won, so Ctrl+K opened the spec from anywhere and the palette was unreachable
+   * (operator, 2026-08-21: "ctrl + k is always opening the spec directly").
+   *
+   * Moved rather than deleted. The picker does have buttons, but not in every state — a
+   * conversation that does not exist yet omits the reopen control entirely — so deleting the
+   * keyboard route would strand document search exactly where there is nothing else to click. */
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'k') {
         e.preventDefault()
         openPicker()
       }
@@ -81,15 +93,15 @@ export function SpecPage({ document: openDocument, anchor, onOpenDocument, onOpe
 
   // Every document present is archived (or missing) — resolveSelection above has nothing to hand
   // to onOpenDocument and the effect never fires, so without this branch the screen sits on
-  // "Loading…" forever with no visible way out. Ctrl/Cmd+K still works — its listener is registered
-  // unconditionally above — but nothing on screen says so.
+  // "Loading…" forever with no visible way out. Ctrl/Cmd+Shift+K still works — its listener is
+  // registered unconditionally above — but nothing on screen says so.
   if (!isLoading && !openDocument && resolveSelection(inventory, null, specList?.home) === null) {
     return (
       <div className="flex h-full items-center justify-center">
         <EmptyState
           icon="archive"
           title="Everything here is archived"
-          description="Open a document from history — press Ctrl/Cmd+K, or choose one from the rail."
+          description="Open a document from history — press Ctrl/Cmd+Shift+K, or choose one from the rail."
         />
       </div>
     )

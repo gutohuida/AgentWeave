@@ -336,7 +336,7 @@ export function AgentOutputPanel({
    * 0 exactly when the turn fills the viewport, at which point following becomes ordinary
    * bottom-following. A fixed spacer (say 60vh) would instead leave a permanent void under short
    * conversations and have to be torn out later, which is visible as a jump. */
-  useLayoutEffect(() => {
+  const measureTail = useCallback(() => {
     const el = containerRef.current
     if (!el) return
     const turns = el.querySelectorAll<HTMLElement>('[data-turn-boundary]')
@@ -350,10 +350,37 @@ export function AgentOutputPanel({
       return
     }
     const next = Math.max(0, el.clientHeight - newest.offsetHeight - TAIL_BOTTOM_GAP_PX)
-    // Only commit a real change: this effect runs on every entry, and writing an equal value
-    // would re-render forever.
+    // Only commit a real change: this runs on every entry, and writing an equal value would
+    // re-render forever.
     setTailSpacer((prev) => (Math.abs(prev - next) > 1 ? next : prev))
-  }, [timelineEntries.length, isRunning])
+  }, [])
+
+  /* Re-measured whenever the newest turn's height changes, not only when an entry arrives.
+   *
+   * The spacer is sized so that pinning the newest turn's top leaves the turn and the spacer
+   * exactly filling the viewport — which is what makes "pinned to the top of the turn" and "at
+   * the bottom of the scroller" the same position, and `handleScroll` therefore keeps following.
+   * Folding or unfolding a `Work · N steps` disclosure changes that turn's height without adding
+   * an entry, so the old dependency list never re-measured: the spacer stayed sized for the other
+   * height, the viewport was no longer at the bottom, following switched itself off, and the
+   * viewport fought whoever tried to scroll back down (operator, 2026-08-21: "the bouncing scroll
+   * is back — happens when the work pack is expanded").
+   *
+   * Observing the turn is what makes the measurement honest for *any* height change — a fold, an
+   * image, a late-laid-out code block — rather than only the ones we thought to enumerate. The
+   * observer cannot feed itself: it writes the spacer's height, and the spacer is not inside the
+   * turn being observed. */
+  useLayoutEffect(() => {
+    measureTail()
+    const el = containerRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const turns = el.querySelectorAll<HTMLElement>('[data-turn-boundary]')
+    const newest = turns[turns.length - 1]
+    if (!newest) return
+    const observer = new ResizeObserver(() => measureTail())
+    observer.observe(newest)
+    return () => observer.disconnect()
+  }, [timelineEntries.length, isRunning, measureTail])
 
   // `isRunning` is a dependency because the working indicator renders at the foot of the timeline
   // and appears on that transition, not on a new entry. Following only `timelineEntries.length`

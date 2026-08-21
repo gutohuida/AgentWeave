@@ -160,8 +160,8 @@ export function SpecDocumentPanel({
           the control that names it (operator, 2026-08-10). The header's own background is what
           separates it from the document. */}
       <div className="flex shrink-0 items-center gap-2 px-3 py-2">
-        {/* The breadcrumb is the way to another document: it opens the same Ctrl+K search that
-            already covers the whole inventory, rather than a second, worse copy of it. */}
+        {/* The breadcrumb is the way to another document: it opens the same Ctrl/Cmd+Shift+K
+            search that already covers the whole inventory, rather than a second, worse copy. */}
         <button
           type="button"
           data-testid="spec-document-breadcrumb"
