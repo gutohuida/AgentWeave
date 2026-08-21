@@ -12,6 +12,7 @@ from typing import Any, Optional
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from . import dependency_gate
 from .checkpoint_generation import render_checkpoint
 from .checkpoints import latest_checkpoint_for_loop
 from .conversations import (
@@ -262,22 +263,62 @@ CLAIMABLE_LOOP_TASK_STATUSES: tuple = (
 )
 
 
+async def _first_startable_candidate(
+    session: AsyncSession, loop: Loop
+) -> "tuple[Optional[Task], list[tuple[Task, dependency_gate.DependencyRefusal]]]":
+    """Walks the loop's claimable-status queue in order (design D10, `task-dependencies` section 9)
+    and returns the first task the dependency gate would not refuse, plus every gated candidate
+    skipped along the way -- so a firing that claims nothing can say why rather than only that it
+    did not.
+
+    `in_progress` needs no fresh gate check and is always returned immediately: it is already
+    running, no `-> in_progress` transition is about to happen, and a prerequisite that regressed
+    under it is D8's "flagged, not stopped" case, not a reason to skip past it. Every other
+    claimable status (`pending`, `assigned`, `blocked`, `revision_needed`) is one `apply_transition`
+    away from `in_progress` -- the same edge `dependency_gate.evaluate` guards (`blocked ->
+    in_progress` included) -- so checking it here is what makes claimability and startability agree
+    (design D10) instead of the loop re-claiming a task the gate will only refuse.
+
+    Uses `dependency_gate.evaluate` directly rather than a second readiness computation -- two
+    implementations of "are this task's dependencies met" is the exact drift shape
+    `_loop_queue_order`'s own comment already records.
+    """
+    candidates = (
+        (
+            await session.execute(
+                select(Task)
+                .where(Task.loop_id == loop.id, Task.status.in_(CLAIMABLE_LOOP_TASK_STATUSES))
+                .order_by(*_loop_queue_order())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    gated: "list[tuple[Task, dependency_gate.DependencyRefusal]]" = []
+    for task in candidates:
+        if task.status == "in_progress":
+            return task, gated
+        refusal = await dependency_gate.evaluate(session, task)
+        if refusal.refuses:
+            gated.append((task, refusal))
+            continue
+        return task, gated
+    return None, gated
+
+
 async def _claim_loop_task(session: AsyncSession, loop: Loop) -> Optional[Task]:
     """The queue item this firing works on (design D3): resume the loop's existing active task
-    (`in_progress`, `blocked`, or `assigned`) if one exists, else claim the oldest `pending` one.
+    (`in_progress`, `blocked`, or `assigned`) if one exists, else claim the oldest startable
+    `pending` one -- skipping past a gated candidate in queue order rather than claiming it and
+    letting the dependency gate refuse the transition (design D10, section 9).
 
     Shares both its candidate set (`CLAIMABLE_LOOP_TASK_STATUSES`) and its ordering
     (`_loop_queue_order`) with `_batch_loop_summaries`'s "current item" derivation, so the board
     and the firing answer the same question the same way -- they are the two halves of human-only
     check 13.1, and it only means anything if they cannot drift.
     """
-    result = await session.execute(
-        select(Task)
-        .where(Task.loop_id == loop.id, Task.status.in_(CLAIMABLE_LOOP_TASK_STATUSES))
-        .order_by(*_loop_queue_order())
-        .limit(1)
-    )
-    return result.scalars().first()
+    task, _gated = await _first_startable_candidate(session, loop)
+    return task
 
 
 async def _loop_stall_reason(session: AsyncSession, loop: Loop) -> Optional[str]:
@@ -303,6 +344,16 @@ async def _loop_stall_reason(session: AsyncSession, loop: Loop) -> Optional[str]
     derives the gap from the transition map instead of restating it, so the next status added to the
     machine cannot fall into it unnoticed.
 
+    A **fourth** case joined on 2026-08-21 (`task-dependencies` design D10, section 9): every
+    claimable-status candidate exists but `dependency_gate` refuses all of them. Reported
+    separately from the generic "no claimable task among N open" message, and split further into
+    "still awaiting approval" versus "gated on a rejected prerequisite" -- the two remedies differ
+    (wait/review, or reopen the document), the same distinction `dependency_gate.DependencyRefusal`
+    itself keeps between `unmet` and `rejected`. A rejected-gated queue stalls rather than stops for
+    the same reason as the `completed`/`under_review` case: `rejected -> pending` is operator-only
+    and reversible, and stopping the loop (`job.enabled = False`, `remove_job`) would not come back
+    on its own once reversed.
+
     Skipping rather than stopping is deliberate: stalled is not finished. `_loop_stop_reason`'s
     branch sets `job.enabled = False` and calls `remove_job`, which for a queue waiting on a review
     that has simply not happened yet would kill the loop permanently -- and approving the task
@@ -321,6 +372,20 @@ async def _loop_stall_reason(session: AsyncSession, loop: Loop) -> Optional[str]
     ).all()
     if not rows:
         return None
+
+    _, gated = await _first_startable_candidate(session, loop)
+    if gated:
+        unmet = [task for task, refusal in gated if refusal.unmet]
+        rejected = [task for task, refusal in gated if refusal.rejected]
+        parts = []
+        if unmet:
+            parts.append(f"{len(unmet)} still awaiting a prerequisite's approval")
+        if rejected:
+            parts.append(
+                f"{len(rejected)} gated on a rejected prerequisite that will not clear on its own"
+            )
+        return "loop queue is stalled: " + "; ".join(parts)
+
     total = sum(count for _, count in rows)
     breakdown = ", ".join(f"{count} {status}" for status, count in sorted(rows))
     return f"loop queue is stalled: no claimable task among {total} open ({breakdown})"

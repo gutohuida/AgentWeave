@@ -181,13 +181,26 @@ async def _batch_loop_summaries(
         )
         .order_by(Task.loop_id, *_loop_queue_order())
     )
+    # D10 (`task-dependencies` section 9.10): the firing itself skips a gated candidate rather than
+    # claiming it, so "current" has to skip the same one or the board shows a task the next firing
+    # will pass over — the exact disagreement human-only check 13.1 exists to catch. Mirrors
+    # `scheduler._first_startable_candidate`'s rule rather than a second one: `in_progress` needs no
+    # fresh check (already running, no `-> in_progress` transition pending); everything else is
+    # tested against the same `dependency_gate.evaluate` the gate itself calls.
+    from ... import dependency_gate
+
     for task in candidates_result.scalars().all():
-        if task.loop_id not in current_task_by_loop:
-            current_task_by_loop[task.loop_id] = {
-                "id": task.id,
-                "title": task.title,
-                "status": task.status,
-            }
+        if task.loop_id in current_task_by_loop:
+            continue
+        if task.status != "in_progress":
+            refusal = await dependency_gate.evaluate(session, task)
+            if refusal.refuses:
+                continue
+        current_task_by_loop[task.loop_id] = {
+            "id": task.id,
+            "title": task.title,
+            "status": task.status,
+        }
 
     # Distinct (job_id, conversation_id) pairs first, so a resume-mode job that fired more than
     # once on the same conversation does not join the same question row once per firing.

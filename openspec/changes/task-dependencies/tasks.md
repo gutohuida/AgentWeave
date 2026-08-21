@@ -99,27 +99,88 @@ behaviour.
 Design D10. Depends on `loop-notices-and-reacts` having landed the shared claim decision; if it has
 not, this group builds against the current `_claim_loop_task` and that change adapts it instead.
 
-- [ ] 9.1 Test the deadlock first, before fixing it: a loop over a document declaring A → B, with A
+- [x] 9.1 Test the deadlock first, before fixing it: a loop over a document declaring A → B, with A
       unapproved, must not claim B on every firing forever. Assert the current failure, then flip the
-      assertion — the same order that caught the spin on 2026-08-20.
-- [ ] 9.2 Test: a queue holding an older gated task and a newer startable one claims the newer, and
-      leaves the older with its status and no assignee.
-- [ ] 9.3 Test: a queue where every task is gated claims nothing, and the job stays enabled with no
-      stop reason recorded.
-- [ ] 9.4 Test: approving the prerequisite makes the gated task claimable on the next firing, with no
-      other action.
-- [ ] 9.5 Test the agreement directly — every task a firing claims can move to `in_progress` without
+      assertion — the same order that caught the spin on 2026-08-20. Landed as
+      `test_a_dependent_task_with_an_unapproved_prerequisite_is_never_claimed`
+      (`hub/tests/test_loop_claim_dependency_gate.py`), with `dependent_b` created *before*
+      `prereq_a` deliberately so `_loop_queue_order`'s `created_at.asc()` tiebreak would pick the
+      dependent under the old code. **Mutation-checked rather than assumed**: temporarily restored
+      the pre-section-9 `_claim_loop_task` (plain `.limit(1)`, no gate check) and confirmed this
+      test fails, claiming `task-9-1-b` instead of `task-9-1-a` — the exact deadlock. An earlier
+      draft of the test created the prerequisite first, which happened to pass against the old code
+      by insertion-order coincidence rather than by exercising the gate; caught by the same
+      mutation check and fixed before landing.
+- [x] 9.2 Test: a queue holding an older gated task and a newer startable one claims the newer, and
+      leaves the older with its status and no assignee. Landed as
+      `test_an_older_gated_task_is_skipped_for_a_newer_startable_one`. Also mutation-checked: fails
+      against the pre-section-9 code (claims the older, gated task).
+- [x] 9.3 Test: a queue where every task is gated claims nothing, and the job stays enabled with no
+      stop reason recorded. Landed as
+      `test_a_queue_where_every_task_is_gated_claims_nothing_and_stays_enabled` — a chain of three
+      (rejected blocker → pending prereq → pending dependent) so every claimable candidate is
+      gated at once, confirming `_claim_loop_task` returns `None` and `_loop_stop_reason` still
+      does too (gated, not drained).
+- [x] 9.4 Test: approving the prerequisite makes the gated task claimable on the next firing, with no
+      other action. Landed as `test_approving_the_prerequisite_makes_the_dependent_claimable` —
+      walks the prerequisite through `in_progress → completed → under_review → approved` via
+      `apply_transition` directly, touching the dependent not at all, then reclaims.
+- [x] 9.5 Test the agreement directly — every task a firing claims can move to `in_progress` without
       the dependency gate refusing it. This is the whole property; assert it rather than inferring it
-      from the cases above.
-- [ ] 9.6 Implement the skip using the **same** dependency determination the gate in group 5 uses.
-      A second implementation is the drift `_loop_queue_order`'s comment records; import it.
-- [ ] 9.7 Skip unstartable tasks in queue order rather than stopping at the first one.
-- [ ] 9.8 Distinguish the two stall reasons: waiting on work that can still be approved, versus gated
-      on a `rejected` prerequisite. Different remedies, so different messages.
-- [ ] 9.9 Test that a rejected-gated queue does **not** stop the loop, and that reversing the
-      rejection and approving revives it with no further operator action.
-- [ ] 9.10 Confirm the board's derivation agrees with the firing's for a gated queue — the same
-      13.1 property, now with dependencies in it.
+      from the cases above. Landed as
+      `test_every_claimed_task_would_be_accepted_by_the_dependency_gate`: claims from a queue with a
+      gated task alongside a startable one, then asserts `dependency_gate.evaluate` on whatever was
+      claimed does not refuse (skipped for an already-`in_progress` claim, which needs no fresh
+      check).
+- [x] 9.6 Implement the skip using the **same** dependency determination the gate in group 5 uses.
+      A second implementation is the drift `_loop_queue_order`'s comment records; import it. Landed:
+      new `_first_startable_candidate(session, loop)` in `hub/hub/scheduler.py` walks the ordered
+      claimable-status query and calls `dependency_gate.evaluate` per candidate — no second
+      readiness computation. `_claim_loop_task` is now a one-line wrapper over it.
+- [x] 9.7 Skip unstartable tasks in queue order rather than stopping at the first one. Landed in the
+      same walk: a gated candidate is appended to a `gated` list and the loop continues to the next
+      candidate; `in_progress` always returns immediately (already running, no fresh gate check —
+      design D8's "flagged, not stopped").
+- [x] 9.8 Distinguish the two stall reasons: waiting on work that can still be approved, versus gated
+      on a `rejected` prerequisite. Different remedies, so different messages. Landed:
+      `_loop_stall_reason` now calls `_first_startable_candidate` when the generic non-terminal
+      breakdown is non-empty, and — when the queue turns out to be all-gated — reports counts split
+      by `refusal.unmet` ("N still awaiting a prerequisite's approval") versus `refusal.rejected`
+      ("M gated on a rejected prerequisite that will not clear on its own"), joined when both are
+      present.
+- [x] 9.9 Test that a rejected-gated queue does **not** stop the loop, and that reversing the
+      rejection and approving revives it with no further operator action. Landed as
+      `test_reversing_a_rejection_revives_a_stalled_loop_with_no_further_action` — confirms the
+      stall message names "rejected", then flips the prerequisite `rejected → pending` by hand
+      (the only operator-reachable route back per design D10) and reclaims with zero action on the
+      dependent.
+- [x] 9.10 Confirm the board's derivation agrees with the firing's for a gated queue — the same
+      13.1 property, now with dependencies in it. Found genuinely disagreeing:
+      `_batch_loop_summaries` (`hub/hub/api/v1/jobs.py`) picked its "current" candidate from the
+      same ordered query but with no gate check at all, so it would have shown a gated task as
+      current while the firing skipped past it. Fixed by mirroring
+      `_first_startable_candidate`'s rule inline (an `in_progress` row needs no check; every other
+      candidate is tested against `dependency_gate.evaluate` and skipped if refused) rather than
+      reusing the scheduler helper directly, since this function walks candidates for **many**
+      loops in one query and needs to track "already resolved" per `loop_id`. Landed as
+      `test_the_board_summary_agrees_with_the_firing_for_a_gated_queue`. **Caveat, stated rather
+      than glossed**: this adds one `dependency_gate.evaluate` query per skipped-gated candidate
+      across the whole batch, which is no longer the "six fixed queries" `_batch_loop_summaries`'s
+      own docstring promises (design D7) — proportional to how many loops in the batch are
+      currently gated, not to the number of jobs. Acceptable for now (a gated loop is the
+      exception, not the common case) but worth a note if a project ever runs many loops gated at
+      once.
+
+**Verified, not assumed.** `pytest hub/tests/test_loop_claim_dependency_gate.py
+hub/tests/test_scheduler.py hub/tests/test_dependency_gate.py hub/tests/test_task_dependency_reads.py
+hub/tests/test_jobs.py hub/tests/test_loop_archival.py -q` → **107 passed, 1 skipped**. `ruff
+check`/`black --check` clean on `hub/hub/scheduler.py`, `hub/hub/api/v1/jobs.py`, and the new test
+file. `mypy` on the two touched non-test files: no errors attributable to either (checked against
+lines outside the diff, same method every prior section used). Full `hub/tests/` suite run twice
+this section, in the **foreground** per `NEVER_BACKGROUND_AND_WAIT`: once before touching code
+(baseline with sections 5-7 in the tree, confirming the concurrent session's section 7 landing:
+**2711 passed, 12 skipped, 1 xpassed, 0 failed in 891s**) and once after section 9's changes,
+result recorded in the log once it completes.
 
 ## 10. Verification an agent can do
 
