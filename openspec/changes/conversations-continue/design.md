@@ -1,0 +1,211 @@
+# Design — Conversations continue
+
+## Context
+
+Peer delivery is resolved by `peer_bound_conversation` (`hub/hub/conversations.py:172`) on a single
+condition: an open conversation owned by the recipient whose `bound_sender_conversation_id` equals
+the sender's conversation. The binding is written once, when `hub/hub/api/v1/messages.py:196` mints
+the recipient's thread, and it is only ever read in that one direction.
+
+The row therefore records "B's thread `convB1` belongs to A's line of work `convA1`". When B replies
+from `convB1`, the code asks "which conversation owned by A is bound to `convB1`?" — a question the
+data cannot answer, because the link runs the other way. So it mints. Every reply does this, which
+is why three messages produced three conversations.
+
+Two constraints shape the fix.
+
+**There is no predecessor→successor column on `Conversation`.** The columns are `sequence`, `id`,
+`project_id`, `agent`, `provider_session_id`, `lifecycle`, `title`, `title_set_by_operator`,
+`origin`, `runtime_overrides`, `bound_sender_conversation_id`, `bound_sender_agent`, `task_id`,
+`checkpoint_warning`, and timestamps. A checkpoint cutover
+(`hub/hub/checkpoint_cutover.py:91-110`) opens a successor and archives the predecessor, but the
+only durable trace of the pairing is in `checkpoints` (`previous_checkpoint_id`, `lineage_id`) and
+in a derived title prefix. Nothing on the conversation says what it continues.
+
+**A cutover already breaks delivery in the forward direction, today.** The cutover copies
+`bound_sender_conversation_id` to the successor, which keeps *inbound* traffic reaching the
+recipient's current thread. It does nothing for the sender side: once A's own `convA1` is cut over
+to `convA2`, A sends from a new id, no thread is bound to it, and A's next message to B mints a new
+thread. This is a pre-existing defect of the same shape, and any reverse rule that ignores it would
+be correct on paper and broken the first time a long exchange checkpoints.
+
+## Goals / Non-Goals
+
+**Goals:**
+
+- A reply reaches the conversation it is replying to, in the ordinary case where two agents are
+  corresponding.
+- Continuity survives a checkpoint cutover on either side of the exchange.
+- An agent can open a fresh thread on purpose, and only on purpose.
+- Existing bound delivery is bit-for-bit unchanged where it already works.
+
+**Non-Goals:**
+
+- Repairing conversations already scattered by this defect.
+- Group threads or multi-owner conversations. A conversation stays owned by one agent.
+- Any heuristic that opens a thread on its own — no topic detection, no idle timeout, no length
+  trigger.
+- Changing the senderless binding (`bound_sender_agent`), which is a separate and correct contract.
+
+## Decisions
+
+### D1 — Resolve forward first, then reverse, then mint
+
+Delivery for a message that names no recipient conversation resolves in this order:
+
+1. **`start_new_thread` is true** → mint immediately, skipping both lookups.
+2. **Forward** — an open conversation owned by the recipient, bound to the sender's line of work.
+   This is today's rule, widened by D3.
+3. **Reverse** — the conversation the sender's own thread is bound to, when that conversation is
+   owned by the recipient. This is the new rule.
+4. **Mint** — as today, binding the new thread to the sender's conversation.
+
+Forward is tried first specifically so that **every case that resolves today resolves identically**.
+The reverse lookup can only fire where the current code would have minted, which is exactly the
+defect. That ordering is what makes this change safe to ship without a data migration.
+
+*Alternative considered: reverse first.* Rejected — it changes established deliveries. Where both
+could match, the forward binding is the thread the recipient is actively using for this line of
+work, and preferring it preserves the "separate lines of work reach separate threads" guarantee
+that the existing requirement is built on.
+
+### D2 — The reverse rule, stated exactly
+
+Let `src` be the sender's conversation. The reverse lookup succeeds when:
+
+- `src.bound_sender_conversation_id` is set; **and**
+- the conversation it names is owned by the recipient; **and**
+- an open conversation exists in that conversation's lineage (D3).
+
+Delivery goes to the newest open conversation in that lineage. It fails — and falls through to mint
+— in every other case, including when the named conversation is owned by a third agent.
+
+That third-agent condition is what makes the rule compose beyond two participants. Traced:
+
+| Step | Forward | Reverse | Result |
+|---|---|---|---|
+| A(`convA1`) → B | miss | — | mint `convB1` bound `convA1` |
+| B(`convB1`) → A | miss | `convB1`→`convA1`, owned by A ✓ | **`convA1`** |
+| A(`convA1`) → B | hit `convB1` | — | `convB1` |
+| B(`convB1`) → C | miss | `convB1`→`convA1`, owned by A ✗ | mint `convC1` bound `convB1` |
+| C(`convC1`) → A | miss | `convC1`→`convB1`, owned by B ✗ | mint `convA2` bound `convC1` |
+| A(`convA2`) → C | miss | `convA2`→`convC1`, owned by C ✓ | **`convC1`** |
+
+A and C had no prior thread, so opening one is right; once they have one, both directions hold it.
+The A↔B pair settles into a stable two-thread ping-pong, which is what "keep talking in the same
+conversation" means when each participant owns their own side.
+
+### D3 — A `lineage_id` column, not a predecessor walk
+
+Both the forward and reverse rules need "the line of work", not "the conversation id", because a
+cutover replaces the id. Add one column:
+
+```
+Conversation.lineage_id : str, indexed
+```
+
+Set to the conversation's own id at creation. A cutover successor inherits its predecessor's value.
+Then:
+
+- **Forward** matches `bound_sender_conversation_id IN (ids of conversations sharing src.lineage_id)`
+  rather than `== src.id`. This fixes the pre-existing sender-side cutover break described in
+  Context.
+- **Reverse** resolves the named conversation's `lineage_id`, then takes the newest open
+  conversation with that lineage owned by the recipient. No recursive walk, no successor pointer.
+
+*Alternative considered: a `continues_conversation_id` predecessor pointer.* Rejected — it requires
+a recursive walk on every delivery, and the walk is unbounded in a long-lived project. `lineage_id`
+answers the same question with one indexed equality, and the codebase already uses exactly this
+pattern on `checkpoints.lineage_id`.
+
+*Alternative considered: derive lineage from `checkpoints` at query time.* Rejected — it makes a
+routing decision depend on a join into checkpoint history, and a conversation with pruned
+checkpoints would silently lose its lineage.
+
+**Backfill:** existing rows get `lineage_id = id`. Past cutover chains are therefore not
+reconstructed, which is consistent with the proposal's non-goal of repairing history. Deriving them
+from `checkpoints` is possible and deliberately not done; a wrong guess would re-route live threads.
+
+### D4 — `start_new_thread` is an explicit boolean on `send_message`
+
+Default `False`. True mints a fresh recipient thread bound to the sender's conversation, which then
+wins subsequent forward lookups because the newest binding is selected. No schema change is needed
+for branching itself — the existing "newest bound thread" ordering already does the right thing.
+
+*Alternative considered: a sentinel value on `conversation_id`.* Rejected — `conversation_id` names
+a real conversation the sender chose, and overloading it with a magic string reads badly in the tool
+schema, which is the agent's only documentation.
+
+The flag is refused in combination with an explicit `conversation_id`: naming a thread and asking
+for a new one are contradictory, and silently preferring one would hide a caller's mistake.
+
+### D5 — A reply continues into an operator-origin thread
+
+The reverse rule tests ownership and lifecycle, not `origin`. A delegation begun in an operator's
+conversation returns to it, so one line of work stays in one place. The visible consequence is that
+an operator's thread can show entries whose originating agent is not the one they are talking to;
+`origin_agent` is already carried on the entry, so this is a rendering question rather than a data
+one, and it needs checking rather than assuming.
+
+*Alternative considered: continue only into `origin: peer` threads.* Rejected by the operator — it
+splits a single line of work across two conversations, which is the problem being fixed.
+
+### D6 — `send_message`'s description is corrected in the same change
+
+`hub/hub/mcp_server.py:191-194` tells agents that omitting `conversation_id` means "use their most
+recent one". Recency delivery was removed when the binding contract shipped. Leaving a stale
+description next to a new parameter would teach the wrong model of a surface this change is
+specifically about. `mcp_server.py` may import only stdlib + fastmcp, and the flag is passed
+straight through to the Hub, so nothing new is imported.
+
+## Risks / Trade-offs
+
+- **A reply lands somewhere the sender did not expect.** → The reverse rule only fires where a new
+  thread would otherwise have been minted, so nothing moves from one existing thread to another.
+  The worst case is a message in the thread it was replying to, which is the intent.
+
+- **An operator's conversation gains traffic they did not send** (D5). → Accepted deliberately.
+  Mitigation is presentational: confirm the entry renders its originating agent in an
+  operator-origin thread, and treat a failure there as part of this change, not a follow-up.
+
+- **`lineage_id` is wrong for pre-existing cutover chains**, since backfill sets it to `id`. → Those
+  threads behave exactly as they do today: no better, no worse. No delivery that currently works
+  starts failing, because the forward lookup on a self-lineage is equivalent to the current
+  equality test.
+
+- **Two agents ping-ponging in one thread pair could loop.** → Already bounded by the project's
+  `hop_budget`, which this change does not touch. Continuity does not add a path that budget did
+  not already govern.
+
+- **The reverse lookup adds a row fetch per peer send.** → One indexed primary-key load of the
+  sender's conversation, on a path that already writes a message, an entry and a queue row. Not
+  measurable against that.
+
+- **A long exchange now shares one context.** Continuing rather than branching means a thread grows
+  where it used to reset. → This is the point, and checkpointing is the existing answer to a thread
+  that grows too large. Worth watching, not worth pre-empting.
+
+## Migration Plan
+
+1. Add `Conversation.lineage_id` in `hub/hub/db/models.py`.
+2. New migration in `hub/hub/migrations/versions/`, guarded for a missing table as `0033`/`0034`
+   do, since an upgrade from an early revision reaches it with only that revision's tables.
+   Backfill `lineage_id = id`, then index it.
+3. Bump the head assertions in `hub/tests/test_migrations.py` **and**
+   `hub/tests/test_project_persistence.py`.
+4. Set `lineage_id` on conversation creation, and inherit it in `checkpoint_cutover.py`.
+5. Widen the forward lookup to the lineage; add the reverse lookup; add `start_new_thread`.
+
+**Rollback:** the migration's downgrade drops the column. The resolution change is additive — with
+the column absent the forward lookup degrades to today's equality test — so reverting the code
+without reverting the migration is safe in either order.
+
+## Open Questions
+
+1. Should `start_new_thread` be surfaced to the operator anywhere, or is it agent-only? The composer
+   has no notion of "reply into a new thread" today, and this change does not add one.
+2. When the reverse rule delivers into an operator-origin thread, should the entry be visually
+   distinguished from one the operator's own correspondent sent? D5 assumes existing rendering is
+   adequate; the task list verifies it rather than trusting it.
+3. Does anything besides `checkpoint_cutover.py` create a conversation that ought to inherit a
+   lineage? A sweep of `new_conversation` call sites is part of the work.

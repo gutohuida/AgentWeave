@@ -1,6 +1,8 @@
 # Exploration — A reply should continue the conversation, not start one (2026-08-21)
 
-**Status:** OPEN. Diagnosed, not designed. Operator asked for this to be specced.
+**Status:** CLOSED 2026-08-21 — specced as `openspec/changes/conversations-continue/`. The four
+questions below are answered in that change's `design.md` (D2 for three-plus agents, D4 for
+deliberate branching, D3 for the cutover, and D2's last scenario for archived threads).
 **Raised by:** operator, 2026-08-21, watching two agents talk on the trial Hub.
 
 ## The observation
