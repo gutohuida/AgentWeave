@@ -959,3 +959,74 @@ consequence flagged to the operator: because the payload gained two fields, the 
 rewrites all 41 documents on disk with `"depends_on": []` and `"from": null` in their embedded JSON.
 Inherent to adding payload fields, not a defect — but worth seeing deliberately given how much of
 `document-adoption` was about not churning the corpus.
+
+---
+
+# RUN 2 — 2026-08-21 09:30 → 13:00, finishing the gate
+
+Same branch, same log, iteration numbering continues from run 1. **Started by the operator at 09:30
+after reading the morning accounting.**
+
+## Why there is a run 2
+
+The operator asked two questions: could the implemented specs be archived, and could the whole
+`spec/` corpus be regenerated from the code and openspec. Answering the first honestly produced the
+fact that redirected the day:
+
+- **Archivable now: three** — `document-adoption`, `writable-spec-index`, `operator-authored-documents`,
+  all zero unticked. All three predate last night.
+- **Code complete, waiting on a person: two** — `agent-created-documents` 27/35 (six human-only
+  tasks, plus two the run deliberately left unticked rather than fudge) and `corpus-aware-documents`
+  45/55 (seven human-only, plus content work its own task list separates from completion).
+- **Genuinely incomplete: one, and it is inert.** `task-dependencies` 22/80. Sections 1–4 landed —
+  payload, completeness checks, storage, materialisation — but **section 5, the gate, does not
+  exist.** Dependencies are declared, stored and materialised into edges, and *nothing enforces
+  them*. The feature does not yet do the thing it is for.
+
+The operator's reply — *"Ahhh so there still work to be done. Okay. Schedule a new autonomous run
+for 13h and continue the work on this branch"* — and both side questions were settled:
+
+- **Archiving: "Not yet."** S5 is removed from the queue, not deferred-and-forgotten. The entry
+  stays in `STATE.json` marked `removed_by_operator` so no iteration helpfully re-adds it.
+- **Regenerating the corpus: dropped**, in favour of finishing the implementation. **No bulk reindex
+  this run** — `corpus-aware-documents` 8.4 wants the operator to read the *first* reindex diff
+  themselves and confirm no authored content changed, and a bulk regeneration now would blow past
+  exactly that check.
+
+`13h` is read as **13:00 today**, matching run 1's "until 8AM" shape and the operator's own
+notation. If they meant thirteen *hours*, the run stops early and can be re-armed — the recoverable
+direction of the two.
+
+## The queue
+
+**S3 `task-dependencies`, from section 5.** The gate is the first section that changes runtime
+behaviour, and until it lands sections 1–4 are observable but inert. Then sections 6–10, then **S4
+`loop-notices-and-reacts`** (0/64, untouched).
+
+Not in this run: archiving (operator declined), bulk reindex (operator dropped), and every
+human-only task in S1 and S2 — those need a person driving the live app and stay unticked.
+
+## Baseline for run 2 — different from run 1's, and this matters
+
+**`hub/tests/` → 2669 passed, 84 skipped, 1 xpassed, 0 failed.** Measured interactively at 09:00–09:40
+*after* repairing run 1's four failures (`0177df1`). Run 1's 2582 is superseded. Any red from here is
+run 2's own until proven otherwise.
+
+CLI 404 passed · vitest 1172 passed / 118 files · `tsc` clean · `openspec validate --all --strict`
+40/40 · `ruff`/`black` clean on touched files.
+
+## The rule run 1 learned the expensive way
+
+Run 1 stopped running the full Hub suite once sections got small, on the reasoning that targeted
+tests covered the touched call paths. That failed in **both** directions:
+
+- The render regression was caused by adding **payload fields** in `spec_payload.py`, and surfaced
+  in `test_spec_render.py`. Targeted selection follows the file you edited, not the files that
+  depend on it.
+- The three delete failures were caused by adding **tables**, and the test that mirrors them is
+  cross-cutting. No targeted selection would ever have picked it.
+
+**After adding a database table or a payload field, run the full suite before calling the section
+done, however small the diff looks.** Section 5 adds neither — but section 7 (read model) and
+section 8 (board) may.
+
