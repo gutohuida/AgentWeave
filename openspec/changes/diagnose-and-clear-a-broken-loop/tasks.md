@@ -43,9 +43,11 @@ a test instead of passing quietly.
 
 - [ ] 2.1 Reproduce: a loop whose agent cannot be launched fires, and assert the *present* behaviour —
       `JobRun` at `in_progress`, `firing_active` true, no `Run` row. This is the failing test.
-- [ ] 2.2 Decide whether the terminal state reuses `skipped` or needs its own word (design, open
-      question 3). `skipped` currently means "refused before the claim"; this claimed and then failed
-      to start. Record the decision where the state is set.
+- [x] 2.2 **DECIDED 2026-08-21: reuse `failed`.** No new vocabulary. It is already where these rows
+      end up — `reconcile_stale_job_runs` sets exactly `failed` — so this is the same outcome reached
+      honestly at the time rather than generically after a restart. And a new value would have hidden
+      the reason it was added for: `JobCard.tsx:73` renders `error_summary` for `failed`/`skipped`
+      only. Reasoning in design D1; restate it where the status is set.
 - [ ] 2.3 Stop discarding `schedule_agent`'s `ScheduleResult` at `scheduler.py:1015`. Record the
       `waiting_reason` on the `JobRun` — it is already an operator-facing sentence, already used by
       `api/v1/checkpoints.py:233-234`.
@@ -54,19 +56,27 @@ a test instead of passing quietly.
 - [ ] 2.5 Test: the reason recorded is the same one the queue status gives for that agent, so the two
       surfaces cannot drift into two explanations of one fact.
 
-## 3. Clearing a stranded firing without a restart
+## 3. The card stops depending on the reaper having run
 
-- [ ] 3.1 Reproduce: a stranded `JobRun` stays `in_progress` for as long as the Hub stays up. Measured
-      by restart on 2026-08-21 (`in_progress` → `failed`); this is that, without the restart.
-- [ ] 3.2 **Decide the trigger** (design, open question 1) — the APScheduler instance the Hub already
-      runs, a lifespan-owned task, or an existing periodic path. Look at what exists before adding
-      anything, and record why.
-- [ ] 3.3 Wire `reconcile_stale_job_runs` to that trigger. Do not change what the function does; it is
-      correct and its docstring already names this case.
-- [ ] 3.4 Test: a firing whose run is still `running` is never cleared out from under itself. The
-      guard exists (`run_reconciliation.py:131-132`); this pins it against the new caller.
-- [ ] 3.5 Confirm the interval is long enough that the window between a firing reaching `in_progress`
-      and its `Run` existing is not routinely hit. State the reasoning where the interval is set.
+**Rescoped 2026-08-21 by operator decision (design D2), and it got smaller.** This group used to ask
+which periodic trigger the reaper should gain. Group 2 removes the thing that produces stranded rows,
+so the reaper's existing trigger — Hub start — matches the only failure mode left, a dead process.
+What is actually wrong is the *derivation*: the loop card reads a raw status and inherits any stale
+row. **No scheduler work, no new mechanism, and `run_reconciliation.py` is not modified at all.**
+
+- [ ] 3.1 Reproduce: with a `JobRun` at `in_progress` and no live `Run`, the loop reports
+      `firing_active: true`. Measured 2026-08-21 by restart (`in_progress` → `failed`,
+      `firing_active` true → false); this is the same state, asserted without restarting.
+- [ ] 3.2 Make `_batch_loop_summaries` (`api/v1/jobs.py:228-234`) exclude in-progress firings with no
+      live `Run` when deriving `firing_active`. Same correlation
+      `reconcile_stale_job_runs` uses (`JobRun.conversation_id` → `Run.conversation_id`) — import or
+      share it rather than writing a second definition of "is anything actually running".
+- [ ] 3.3 Test: a firing whose `Run` is genuinely `running` still reports `firing_active: true`. The
+      failure mode of this fix is a card that goes quiet during real work.
+- [ ] 3.4 Test: startup reconciliation is unchanged and still flips the row to `failed`. It stays the
+      backstop for a crashed process; this group must not weaken it.
+- [ ] 3.5 Measure the cost of the added correlation on a project with many loops before assuming it
+      is free — this query runs on every loop listing (design, remaining open question 3).
 
 ## 4. A refused firing leaves no conversation
 
@@ -96,11 +106,18 @@ a test instead of passing quietly.
 
 - [ ] 6.1 Reproduce: an agent with undelivered queue entries refuses archival, and the message names
       no course of action.
-- [ ] 6.2 **Decide the shape** (design, open question 2) — prose naming the endpoint, a structured
-      field the UI turns into a button, or an operator-facing "discard queued input" action. The last
-      is the most useful and the largest; pick deliberately and record why.
-- [ ] 6.3 Implement it. The guard itself does not move.
-- [ ] 6.4 Test: the refusal states how the input is cleared, and clearing it allows archiving.
+- [x] 6.2 **DECIDED 2026-08-21: a structured field the UI turns into a button.** The refusal reports
+      how many entries block it and which; the agent surface offers *"Discard N queued messages and
+      archive"*. Cheaper than it looks — `deleteQueueEntry` already exists
+      (`hub/ui/src/api/queue.ts:76`) and so does `DELETE /queue/entries/{id}`, so this is wiring plus
+      a refusal that carries data rather than only prose. Reasoning and both rejections in design D3.
+- [ ] 6.3 Return the blocking entry count and ids on the refusal. The guard itself does not move.
+- [ ] 6.4 Wire the button in the agent surface, reusing `deleteQueueEntry`. Confirm it discards only
+      the entries the refusal named, never the whole queue.
+- [ ] 6.5 Test: the refusal carries the count and ids, and clearing them allows archiving.
+- [ ] 6.6 Test the confirmation is honest about what is destroyed — discarded input is not
+      recoverable, and "archivable, never deletable" does not apply to queue entries.
+- [ ] 6.7 `make ui` after `npm run build`; commit `hub/ui/src` and `hub/hub/static/ui` together.
 
 ## 7. A second question about a blocked task can release it
 

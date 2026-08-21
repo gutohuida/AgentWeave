@@ -39,6 +39,24 @@ it is information already produced and dropped one line from where it belongs.
 **A firing whose selection did not start is not `in_progress`.** It becomes a terminal `JobRun` state
 carrying the reason, exactly as the stall path already does with `skipped`.
 
+**That state is `failed` — operator decision, 2026-08-21.** No new vocabulary. Two reasons, and the
+second is the one that settled it:
+
+1. **It is already where these rows end up.** `reconcile_stale_job_runs` sets exactly `failed`, with
+   `"Reconciled on Hub start: no live run behind this firing"`. So this is not a new outcome; it is
+   the same outcome, reached honestly at the moment it happens instead of generically after a
+   restart.
+2. **A new value would have hidden the reason it was added for.** `JobCard.tsx:73` renders
+   `error_summary` only when the status is `failed` or `skipped`. A `not_started` shipped without a
+   matching UI change would have displayed a firing with no explanation — the exact defect this
+   change exists to end, reintroduced by the fix for it.
+
+*Rejected:* **`skipped`.** It means *refused before the claim* at all three sites that set it
+(`scheduler.py:850`, `881`, `964`), and reads amber — "nothing happened". This firing claimed a task,
+set an assignee and queued an entry. Those side effects make it a different story.
+*Rejected:* **a new `not_started`.** The most literally accurate — it did not fail, it never began —
+and rejected anyway on reason 2. Worth revisiting only together with the `JobCard` branch.
+
 *Rejected:* **inferring it later from the absence of a `Run`.** That is what
 `reconcile_stale_job_runs` does, and D2 keeps it — but it is a backstop, not the primary path. A fact
 known at the moment it happens should not be rediscovered by a sweep.
@@ -46,20 +64,38 @@ known at the moment it happens should not be rediscovered by a sweep.
 *Rejected:* **leaving `in_progress` and fixing only `firing_active`'s derivation.** The `JobRun` row
 would still claim a firing is in progress; every other reader would inherit the lie.
 
-### D2 — The reaper keeps its job and gains a trigger, and that is all
+### D2 — Fix the derivation, and leave the reaper exactly as it is
+
+**Operator decision, 2026-08-21, and it reverses this section's first draft.** That draft asked which
+periodic trigger the reaper should gain. Writing D1 dissolved the question.
 
 `reconcile_stale_job_runs` is correct and its docstring already names this exact case
 (`job-0b490274`, agent `claude-1`, `runner_id` NULL). Measured: before a restart the row read
-`in_progress` and `firing_active: true`; after, `failed` and `false`. The function works. Only its
-**trigger** is wrong — Hub start, which for an unattended loop is never.
+`in_progress` and `firing_active: true`; after, `failed` and `false`. **The function works. Its
+trigger is Hub start.** The first draft called that trigger wrong.
 
-D1 removes the main producer of these rows, so this is a genuine backstop for crashes rather than the
-routine path. It should run on a **schedule the Hub already owns** rather than a new mechanism.
+It is not wrong once D1 lands, because **D1 removes the thing that produced these rows.** After it, a
+row only strands if the Hub process dies mid-firing — and a dead process is followed by a start,
+which is when the reaper already runs. The trigger and the failure mode match.
 
-*Rejected:* **a general periodic-reconciliation framework.** Scope creep, and it would need a
-policy for every reconciler rather than the one case measured.
-*Rejected:* **dropping the reaper once D1 lands.** A crashed process still produces exactly this row,
-which is what the function was written for; D1 covers the refused case, not the died case.
+**What is actually wrong is the derivation.** `_batch_loop_summaries` (`api/v1/jobs.py:228-234`)
+builds `firing_active` from `JobRun.status == "in_progress"` alone, so any stale row makes the card
+claim work is happening. Excluding rows with no live `Run` makes the card honest **at the moment it
+is read, with no timer at all** — and it fixes the lie where the lie is told, rather than chasing the
+row that caused it.
+
+So: the reaper keeps its startup trigger and its job. The card stops depending on the reaper having
+run.
+
+*Rejected:* **a periodic sweep as well.** Belt and braces for a genuinely narrow residue — the run
+dies while the process lives *and* the finalize path fails to record it. Adding a second scheduling
+mechanism, plus a job-id namespace so loop bookkeeping never touches it, is a lot of machinery for
+that. Revisit if such a row is ever actually observed.
+*Rejected:* **dropping startup reconciliation.** A crash still produces exactly this row, which is
+what the function was written for.
+
+**Consequence:** group 3 is no longer "wire up a scheduler". It is a derivation fix and the tests
+that pin it, and it is smaller than the group that replaced it.
 
 ### D3 — The archive refusal keeps its guard and gains a remedy
 
@@ -69,6 +105,21 @@ exist *because* the agent is broken and the operator is not told how to clear th
 
 **The guard stays.** What changes is that the refusal names the remedy. The operator should not have
 to discover `DELETE /queue/entries/{id}` and find an entry id first.
+
+**The refusal carries a structured field and the UI turns it into a button — operator decision,
+2026-08-21.** The refusal reports how many entries block it and which, and the agent surface offers
+*"Discard N queued messages and archive"*.
+
+Cheaper than it looks: **`deleteQueueEntry` already exists in the UI** (`hub/ui/src/api/queue.ts:76`)
+and `DELETE /queue/entries/{id}` already exists on the server. Neither side needs new plumbing; this
+is wiring plus a refusal that carries data instead of only prose.
+
+*Rejected:* **prose naming the endpoint.** Cheapest, and it tells an API path to someone sitting in a
+UI. The operator would still be reading a REST route out of an error message and reaching for curl.
+*Rejected:* **a standing "discard queued input" action** independent of archiving. The most general
+and the most useful, and it invents an operator concept that does not exist yet — worth doing if
+discarding queued input turns out to be wanted anywhere other than at the point archiving is
+refused.
 
 *Rejected:* **archiving anyway and discarding the entries.** Silently dropping queued work is worse
 than a refusal, and the guard's reasoning is sound.
@@ -159,12 +210,23 @@ first time it runs under D2's trigger, which is the same treatment they get toda
 
 ## Open Questions
 
-- **What triggers the reaper under D2** — the APScheduler instance the Hub already runs, a
-  lifespan-owned task, or piggybacking on an existing periodic path. Wants a look at what already
-  exists before choosing.
-- **How does the archive refusal name its remedy** (D3) — prose naming the endpoint, a structured
-  field the UI turns into a button, or an operator-facing "discard queued input" action. The last is
-  the most useful and the largest.
-- **Does the `JobRun` state in D1 reuse `skipped` or need its own?** `skipped` currently means
-  "refused before the claim"; a selection that claimed and then failed to start is a different story
-  and may deserve a different word.
+**All three of this design's original open questions were decided by the operator on 2026-08-21**,
+and each is recorded in the decision it belongs to rather than here: the reaper's trigger in D2 (fix
+the derivation; the reaper keeps startup), the archive refusal's shape in D3 (a structured field the
+UI renders as a button), and the `JobRun` state in D1 (reuse `failed`).
+
+One of the three answered itself while being written up, which is worth keeping: **D2's question
+stopped existing once D1 was drafted.** "Which periodic trigger should the reaper gain" assumed the
+Hub would keep producing stranded rows. D1 stops producing them, so the reaper's existing trigger —
+Hub start — matches the only failure mode left, a dead process. The question was a symptom of an
+earlier decision not yet being made.
+
+Still open, and deliberately not asked yet because nothing depends on them:
+
+- **Whether `not_started` should exist eventually.** D1 rejects it *only* because `JobCard.tsx:73`
+  renders `error_summary` for `failed`/`skipped` alone, so shipping the word without the UI branch
+  would hide the reason. That is a reason to defer, not a reason it is wrong.
+- **Whether "discard queued input" deserves to be an operator action in its own right** (D3's second
+  rejection), rather than only a button on a refusal.
+- **What the derivation fix in D2 costs on a large project.** Excluding rows with no live `Run` adds
+  a correlation to a summary query that runs per loop listing. Measure before assuming it is free.
