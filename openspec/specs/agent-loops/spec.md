@@ -493,6 +493,15 @@ Archiving a loop SHALL be an operator action only, and MUST NOT be reachable by 
 The Hub SHALL refuse to archive a loop that has neither completed nor stopped, so that archiving can
 never conceal work that is still firing.
 
+Archiving a loop's job SHALL retire the loop with it. A loop has exactly one job, and an archived job
+never fires — so a loop whose job is archived is not firing and SHALL NOT be treated as though it
+were. Retiring it in that one operation is what satisfies the rule above, not an exception to it.
+
+Measured 2026-08-21: archiving a job left its loop active and listed, and archiving that loop was
+then refused as *"still running"* although nothing could fire it. Clearing it took setting a stop
+time in the past, firing once so the stop condition was evaluated, and only then archiving — three
+steps, none of them discoverable from the refusal.
+
 #### Scenario: Archiving a running loop is refused
 
 - **GIVEN** a loop that is still enabled and firing
@@ -504,6 +513,20 @@ never conceal work that is still firing.
 - **GIVEN** a loop that has stopped or completed
 - **WHEN** the operator archives it
 - **THEN** the loop is archived and no longer appears in default listings
+
+#### Scenario: Archiving a job retires its loop
+
+- **GIVEN** an enabled loop whose job has not been archived
+- **WHEN** the operator archives that job
+- **THEN** the loop is retired in the same operation
+- **AND** it no longer appears in default loop listings
+- **AND** the operator is not required to stop it first
+
+#### Scenario: A loop retired with its job keeps everything
+
+- **GIVEN** a loop with a queue history, firings, and a purpose
+- **WHEN** its job is archived
+- **THEN** its purpose, queue history, firings, and stop state are all still retrievable
 
 ### Requirement: How a loop ended is a distinct value, not only a written reason
 
@@ -663,3 +686,67 @@ present it.
 - **GIVEN** a run containing the conversation the operator currently has open
 - **WHEN** the list is presented
 - **THEN** that conversation is presented rather than collapsed out of view
+
+### Requirement: A firing does not claim a task whose dependencies are unmet
+
+A firing SHALL NOT claim a task the dependency gate would refuse to start. Claimability and
+startability must agree, or the loop claims work it cannot begin.
+
+The check SHALL use the same determination of *"are this task's dependencies met"* that the
+transition gate uses, so that the queue and the gate cannot disagree.
+
+A firing SHALL claim the queue's oldest startable task, skipping unstartable ones in order rather
+than stopping at the first.
+
+#### Scenario: An unstartable task is skipped in favour of a startable one
+
+- **WHEN** a loop's queue holds an older task with an unapproved prerequisite and a newer task with
+  none
+- **THEN** the firing claims the newer task
+- **AND** the older task keeps its status and gains no assignee
+
+#### Scenario: A queue of only unstartable tasks claims nothing
+
+- **WHEN** every non-terminal task in a loop's queue has an unmet dependency
+- **THEN** the firing claims nothing
+
+#### Scenario: A task becomes claimable when its prerequisite is approved
+
+- **WHEN** a task's only prerequisite moves to `approved` and the loop fires
+- **THEN** the firing claims that task
+
+#### Scenario: The claim and the gate agree
+
+- **WHEN** a firing claims a task
+- **THEN** that task's move to `in_progress` is not refused by the dependency gate
+
+### Requirement: A queue gated on unapproved work is stalled, never stopped
+
+A loop whose queue holds only tasks with unmet dependencies SHALL be treated as stalled, and its job
+SHALL remain enabled and remain scheduled.
+
+The recorded stall reason SHALL distinguish a queue waiting on work that can still be approved from
+one gated on a prerequisite that has been `rejected`, because the two mean different things to an
+operator and have different remedies.
+
+A queue gated on a rejected prerequisite SHALL NOT stop the loop. `rejected` is reversible by the
+operator, and stopping would set the job disabled and remove it from the scheduler, so the operator
+reversing the rejection afterwards could not revive it.
+
+#### Scenario: A dependency-gated queue does not disable the loop
+
+- **WHEN** a loop fires and every task in its queue has an unapproved prerequisite
+- **THEN** the job remains enabled and the loop records no stop reason
+
+#### Scenario: The stall reason names which kind of gating it is
+
+- **WHEN** a loop's queue is gated on a prerequisite that is `rejected`
+- **THEN** the recorded reason identifies the gating as permanent-until-reversed, distinctly from a
+  prerequisite merely not yet approved
+
+#### Scenario: Reversing a rejection revives the loop with no further action
+
+- **WHEN** the operator moves a rejected prerequisite back to `pending`, it is subsequently approved,
+  and the loop fires again
+- **THEN** the firing claims the task that was gated on it
+

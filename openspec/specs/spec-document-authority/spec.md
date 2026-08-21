@@ -1523,3 +1523,174 @@ SHALL NOT resolve it on the operator's behalf.
 - **WHEN** adoption reports a disagreement
 - **THEN** neither the row nor the file is modified
 
+### Requirement: Who may start a document is determined by its kind, not by the caller being the operator
+
+The Hub SHALL determine who may create a specification document from the kind of document being
+created. The operator MAY create a document of any kind. An agent MAY create a change specification
+and no other kind.
+
+The previous rule — that a document is started by the operator and filled in by an agent — was
+broader than the thing it protected. What has value in a specification corpus, and what agents must
+not write, is the record of current shipped behaviour: capability documents, already refused to
+agents at the point of writing whatever route is used. Guarding creation as well made the write-time
+refusal redundant for capability documents and made change specifications, which agents are expected
+to author, unreachable for no stated reason.
+
+Constraining kind **at creation** rather than only at write is load-bearing rather than tidy. A
+capability document is created directly in the current phase, so a kind checked only at write would
+allow an agent to create one it could then never fill in.
+
+#### Scenario: An agent creates a change specification
+
+- **WHEN** an agent creates a specification document
+- **THEN** a change specification is created
+
+#### Scenario: The operator's creation is unchanged
+
+- **WHEN** the operator creates a document of any kind
+- **THEN** it is created as before, with the kind the operator supplied
+
+#### Scenario: Capability documents remain the operator's to start and to write
+
+- **WHEN** an agent attempts to create or to write a capability document
+- **THEN** it is refused in both cases
+
+### Requirement: Approval remains the operator's regardless of who authored the document
+
+A document created by an agent SHALL be subject to exactly the same phase machinery as a document
+created by the operator, and its author SHALL gain no standing in it.
+
+Relaxing who may *start* a document says nothing about who may agree to one. These are different
+questions and the first must not be read as answering the second.
+
+#### Scenario: An agent-created document still needs operator approval
+
+- **WHEN** an agent-created document is proposed
+- **THEN** approval is the operator's decision, as for any document
+
+#### Scenario: Origin is not visible to the phase machine
+
+- **WHEN** a document's phase is transitioned
+- **THEN** the transition rules are the same whether the document was created by an agent or by the
+  operator
+
+### Requirement: A rendered document states where it sits, not only what it says
+
+The rendered form of a specification document SHALL carry, in addition to its own content, the
+document's relationship to the rest of the corpus: a link to the corpus home and, where recorded, to
+the document above it.
+
+This extends the existing guarantee that a rendered document is *self-contained* — inline style
+only, no external resource — from "opens correctly alone" to "can be navigated from alone". Both
+properties exist for the same reason: the corpus is committed to the project and is read outside the
+product at least as often as inside it.
+
+Corpus context SHALL be supplied to rendering rather than stored in the payload. A document's
+placement is arrangement, and arrangement belongs to the index, which travels with the project and
+is preserved across rebuilds. A payload copy would be a second source of the same truth with no rule
+for which wins.
+
+#### Scenario: A document rendered with corpus context carries navigation
+
+- **WHEN** a document is rendered and corpus context is supplied
+- **THEN** the rendered file carries navigation built from that context
+
+#### Scenario: A document rendered without corpus context is unchanged
+
+- **WHEN** a document is rendered with no corpus context supplied
+- **THEN** the rendered file is byte-identical to what the same payload produced before corpus
+  context existed
+
+#### Scenario: Placement is absent from the payload
+
+- **WHEN** a document's payload is read back from its rendered file
+- **THEN** it carries no parent or placement field
+
+### Requirement: A Hub-initiated regeneration is not an authored change
+
+Where the Hub re-renders a document to refresh a generated region, that write SHALL be recorded as a
+regeneration, SHALL update the document's stored content digest, and SHALL NOT be attributed as an
+authored edit to the party who triggered it.
+
+A rebuild is not an act of authorship. Recording it as one would attribute the operator's editorial
+voice to a maintenance operation, would refuse on approved documents which have every right to be
+regenerated, and would leave the corpus reporting itself as drifted after every rebuild.
+
+#### Scenario: A regeneration is attributed as such
+
+- **WHEN** the Hub re-renders a document during an index rebuild
+- **THEN** the recorded event is a regeneration
+- **AND** it is not recorded as a content submission by the triggering party
+
+#### Scenario: A regeneration updates the stored digest
+
+- **WHEN** the Hub re-renders a tracked document
+- **THEN** the document's stored content digest matches the content just written
+
+#### Scenario: An approved document may be regenerated
+
+- **WHEN** an approved document's generated region changes
+- **THEN** the regeneration proceeds
+- **AND** the document's phase is unchanged
+
+### Requirement: A document's path is fixed once it has ever been approved
+
+The Hub SHALL refuse to rename a document that has been approved at any point, not only one that is
+approved at the moment of the request.
+
+The rule that a document's path is part of what was approved is already stated, and it is already
+enforced — but only while the document sits in the approved phase. Approved has two exits: a document
+may be archived, and it may be reopened for revision. Both leave the phase, and both therefore
+release a path the approval was supposed to have fixed. An approved document's path can consequently
+be changed today by archiving it first, which the rule plainly does not intend.
+
+Once other work refers to a document by path, that path is a promise rather than a convenience: a
+reference recorded in another document travels with the repository and cannot be repaired by a
+database that stayed behind.
+
+Having been approved SHALL be recorded durably and SHALL NOT be cleared when the document leaves the
+approved phase. This distinguishes it from the record of exploration having been closed, which is
+deliberately cleared on reopening because reopening genuinely reopens the exploration — whereas
+reopening does not un-approve history.
+
+#### Scenario: An archived document keeps its path
+
+- **WHEN** a rename is attempted on a document that was approved and has since been archived
+- **THEN** the rename is refused
+
+#### Scenario: A reopened document keeps its path
+
+- **WHEN** a rename is attempted on a document that was approved and has since been reopened for
+  revision
+- **THEN** the rename is refused
+
+#### Scenario: A document that has never been approved may still be renamed
+
+- **WHEN** a rename is attempted on a document that has never been approved
+- **THEN** the rename succeeds
+
+#### Scenario: Approval is recorded durably
+
+- **WHEN** a document is approved and subsequently leaves the approved phase
+- **THEN** the record that it was approved remains
+
+### Requirement: A document may declare a dependency on another document's work
+
+A specification document SHALL be able to reference a task belonging to another document, so that the
+order of work spanning documents is recorded in the specifications rather than only in the heads of
+the people coordinating it.
+
+Such a reference SHALL name a document that has been approved. The restriction is what makes the
+reference sound: an approved document's path is fixed, so the reference cannot be broken by a rename,
+and an approved document has already produced its tasks, so the referenced work exists.
+
+#### Scenario: A cross-document reference is recorded in the document
+
+- **WHEN** a document declares a dependency on an approved document's task
+- **THEN** the reference is part of the document's own content
+
+#### Scenario: A reference to an unapproved document blocks a proposal
+
+- **WHEN** a document references a task in a document that has not been approved
+- **THEN** the document cannot be proposed until it has been
+

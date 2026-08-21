@@ -329,6 +329,22 @@
       "status": "current",
       "parent": "spec/areas/the-local-instance.html",
       "order": 330
+    },
+    {
+      "path": "spec/changes/batch-dependency-gate-evaluation-in-loop-summaries/spec.html",
+      "title": "Batch dependency gate evaluation in loop summaries",
+      "kind": "change-spec",
+      "status": "exploring",
+      "parent": null,
+      "order": 420
+    },
+    {
+      "path": "spec/changes/dependency-board-fixture/spec.html",
+      "title": "Batch the loop board dependency gate",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 430
     }
   ]
 }

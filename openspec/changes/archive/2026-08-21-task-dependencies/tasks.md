@@ -459,6 +459,8 @@ zero failures either side.
       moved into the panel shell, and this check should be re-judged against that surface rather
       than against a patched version of this one.
 
+
+      **Waived by the operator 2026-08-21 to archive this change.** **Waived as not passing, not as passing.** The cause is recorded above and the surface is being replaced; re-judge against the reworked board, tracked in `openspec/explorations/2026-08-21-the-execution-graph-in-the-panel.md`. Archiving this change does not mean the board reads well — it means the remaining work moved.
 - [x] 11.2 **The stall is diagnosable.** Let a layer sit completed and unreviewed. The board says work is waiting on review — not merely that downstream cards are gated. If this reads as "the feature is broken", it is. **Playwright 2026-08-21:** a disposable live board rendered “Layer 2 is waiting on 1 review.”
 - [x] 11.3 **The gate is honest in a live run.** Ask an agent to start a task whose prerequisite is unapproved. The refusal tells it what to wait for, in words it can act on.
 
@@ -482,6 +484,8 @@ zero failures either side.
       over a three-deep chain*, and one wave cannot answer it. Left open on purpose, and it is the
       last thing standing between this change and completion.
 
+
+      **Waived by the operator 2026-08-21 to archive this change.** Undecided by choice, not unattempted: one wave ran live (see 11.3) and the operator declined to generalise from it. Carried into `openspec/explorations/2026-08-21-is-the-review-chain-bearable.md`.
 - [x] 11.5 **The board does not lie about foreign work.** With a cross-document import, confirm the reference names the owning document and that the blocker is reachable from it. **Playwright 2026-08-21:** exposed and fixed a non-interactive reference; clicking it now opens the owning board and shows the blocker.
 - [x] 11.6 **Collapse behaves.** Finish a layer, confirm it collapses, expand it, confirm the graph still reads. **Playwright 2026-08-21:** the two-task terminal layer collapsed to “2 done” and expanded to both named cards.
 - [x] 11.7 **Structure really is read-only.** Try to drag, delete, or otherwise alter an edge. Confirm the refusal explains itself rather than nothing happening. **Playwright 2026-08-21:** found no draggable or delete-edge controls and the board explicitly directed edits to the document's `depends_on` field.
