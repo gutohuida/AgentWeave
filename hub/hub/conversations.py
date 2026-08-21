@@ -227,6 +227,54 @@ async def peer_bound_conversation(
     return result.scalar_one_or_none()
 
 
+async def reply_bound_conversation(
+    db: AsyncSession,
+    *,
+    project_id: str,
+    recipient: str,
+    sender_conversation_id: Optional[str],
+) -> Optional[Conversation]:
+    """The conversation a reply continues, resolved by reading the sender's own binding backwards.
+
+    design.md D2: `peer_bound_conversation` answers "which of the recipient's threads is bound to
+    *my* line of work" — a question that only has an answer once someone has replied to the sender
+    before. The first reply in an exchange finds nothing there, because the binding was written in
+    the other direction when the sender's thread was minted. This answers the question the data can
+    actually answer: "what did my own thread's binding point at, and is that the recipient?"
+
+    Succeeds only when the sender's conversation names a `bound_sender_conversation_id` that is
+    itself owned by the recipient — so a message to a *third* agent never continues an unrelated
+    thread, and a named conversation owned by neither address in this exchange is not treated as a
+    reply target. Resolves to the newest **open** conversation in that named conversation's lineage
+    (D3), not the named conversation itself, so a cutover on the recipient's side does not strand a
+    reply on an archived predecessor.
+
+    Called strictly after `peer_bound_conversation` and only on its miss (D1) — reverse resolution
+    can only fire where the forward lookup would otherwise have minted, so every delivery that
+    resolves today resolves identically.
+    """
+    if not sender_conversation_id:
+        return None
+    src = await get_conversation_by_id(db, sender_conversation_id)
+    if src is None or not src.bound_sender_conversation_id:
+        return None
+    named = await get_conversation_by_id(db, src.bound_sender_conversation_id)
+    if named is None or named.project_id != project_id or named.agent != recipient:
+        return None
+    result = await db.execute(
+        select(Conversation)
+        .where(
+            Conversation.project_id == project_id,
+            Conversation.agent == recipient,
+            Conversation.lineage_id == named.lineage_id,
+            Conversation.lifecycle == "open",
+        )
+        .order_by(Conversation.sequence.desc())
+        .limit(1)
+    )
+    return result.scalar_one_or_none()
+
+
 async def conversation_for_provider_session(
     db: AsyncSession,
     *,

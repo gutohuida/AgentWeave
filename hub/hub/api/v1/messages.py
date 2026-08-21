@@ -15,6 +15,7 @@ from ...conversations import (
     name_conversation,
     new_conversation,
     peer_bound_conversation,
+    reply_bound_conversation,
 )
 from ...db.engine import get_session
 from ...db.models import Agent, Message, Run
@@ -188,6 +189,16 @@ async def create_message_for_actor(
             sender_conversation_id=source_conversation_id,
             sender=sender,
         )
+        if recipient_conversation is None:
+            # D1: reverse resolution — the sender's own thread may already point back at the
+            # recipient, even though nothing points forward yet. Only reached on a forward miss,
+            # so every delivery that resolved before this change still resolves identically.
+            recipient_conversation = await reply_bound_conversation(
+                session,
+                project_id=project_id,
+                recipient=body.recipient,
+                sender_conversation_id=source_conversation_id,
+            )
         if recipient_conversation is None:
             # Also the archive case, and deliberately not a refusal. A sender that *named* an
             # archived conversation is refused above, because it chose one; a binding whose

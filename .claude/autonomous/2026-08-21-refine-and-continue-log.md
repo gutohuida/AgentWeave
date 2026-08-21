@@ -129,3 +129,86 @@ Ticked `tasks.md` boxes 2.1-2.5 — all five ran and passed as described above.
 resolution and wire it into `messages.py` **between** the forward lookup and the mint, without
 reordering the forward lookup (design.md D1 depends on forward-first). Include the 3.4 regression
 test: three alternating messages produce two conversations, not three.
+
+## Iteration 3 — 2026-08-21T23:58:39+01:00 — C3: a reply continues the conversation
+
+Entry state matched STATE.json exactly: branch `autonomous/2026-08-21-refine-and-continue` at
+`45d50f1`, C2 landed, current/next_action pointed at C3. No reconciliation needed.
+
+**3.2 — `reply_bound_conversation` in `hub/hub/conversations.py`.** Implements design.md D2
+exactly: given `sender_conversation_id`, look up the sender's own conversation `src`; if
+`src.bound_sender_conversation_id` is unset, fail. Otherwise look up the named conversation; fail
+unless it belongs to the given `project_id` **and** its `agent` is the recipient (this is what
+keeps a message to a third agent from continuing an unrelated thread — the named conversation is
+whoever the sender's own thread is bound to, not necessarily who this send is addressed to).
+Resolves to the newest **open** conversation sharing that named conversation's `lineage_id`, not
+the named conversation itself, so a cutover on the recipient's side is followed to the successor
+rather than stranding a reply on an archived predecessor.
+
+**3.3 — wired into `hub/hub/api/v1/messages.py`.** Added a second `if recipient_conversation is
+None:` block calling `reply_bound_conversation`, placed immediately after the existing
+`peer_bound_conversation` call and before the pre-existing mint block. The forward lookup itself
+is untouched — same call, same arguments, same position — so design.md D1's "every case that
+resolves today resolves identically" holds by construction, not just by testing.
+
+**3.1 / 3.4 — `hub/tests/test_conversation_reply.py`, new file, 7 tests.** Chose a new file over
+extending `test_agent_message_routing.py`: the six 3.1 scenarios plus the 3.4 regression are all
+reverse-resolution-specific and read better grouped under their own docstring than interleaved with
+the forward-lookup suite. Reused that file's helper shapes (`_active_run`, `_sync_agents`,
+`_conversation_of`) rather than importing them, matching the existing convention of small
+per-file private helpers over a shared test-utility module.
+
+Covers: a reply reaches the thread it answers; an exchange settles into exactly two conversations
+(A→B mint, B→A reverse-resolve, A→B forward-resolve — three sends, two conversations); a message
+to a *third* agent from a thread that is bound back to someone else does not continue that
+unrelated thread; a reply continues into an operator-origin conversation, with the replying agent
+recorded as `origin_agent` on the resulting queue entry (D5 — confirmed already true, nothing new
+needed for attribution); continuation survives the replying side's own cutover (reply from a
+successor conversation, bound to the same predecessor id, still resolves via the successor's own
+`bound_sender_conversation_id` copy — this exercises the C2 lineage plumbing and the C3 reverse
+rule together); an archived line with no open successor in its lineage falls through to minting,
+same as an ordinary forward miss; and the 3.4 regression itself, three messages alternating
+A→B→A→B... landing in exactly two conversations.
+
+**A test-construction bug caught by the tests, not the code.** The first draft of four of the seven
+tests referenced the *sender's own* conversation (`conv-a1`, `conv-a`, `conv-alt-a`) only as a
+string passed to `_active_run`, the way `test_agent_message_routing.py`'s senderless-traffic tests
+do — never creating an actual `Conversation` row for it. That pattern is correct for the forward
+lookup's literal-equality fallback (a sender id with no row behind it, as `Run.conversation_id` can
+be for the Hub/scheduler), but wrong here: `reply_bound_conversation` starts by resolving `src =
+get_conversation_by_id(db, sender_conversation_id)`, and a sender's own thread not existing as a
+row means there is nothing to read `bound_sender_conversation_id` off of. All four failed with the
+reply landing back in a fresh mint instead of the expected thread. Fixed by giving the sender side
+a real row (`_open_conversation(..., origin="operator")`) before starting its run, matching what an
+actual agent conversation looks like in production. Confirmed the fix was real and not
+coincidental: reverted `conversations.py`/`messages.py` via `git stash`, reran — 5 of 7 tests failed
+(the two structurally forward-only ones still passed, correctly, since they don't depend on 3.2/3.3
+at all) — then restored and reran clean.
+
+**Verified, not assumed.**
+- `pytest tests/test_conversation_reply.py -q` → 7 passed.
+- `git stash -- hub/api/v1/messages.py hub/conversations.py` then rerun → 5 failed, 2 passed
+  (as predicted); `git stash pop` restored the change, rerun → 7 passed.
+- `pytest tests/test_conversations.py tests/test_agent_message_routing.py
+  tests/test_archived_send_refusal.py tests/test_checkpoint_cutover.py
+  tests/test_conversation_reply.py -q` → 67 passed.
+- `pytest tests/test_conversation_archive.py tests/test_conversation_archive_refusal.py
+  tests/test_conversation_attention.py tests/test_conversation_context_usage.py
+  tests/test_conversation_contract.py tests/test_conversation_loop_marker.py
+  tests/test_conversation_origin.py tests/test_conversation_task_binding.py
+  tests/test_conversation_titles.py tests/test_messages.py -q` → 82 passed.
+- **Full `hub/tests/` suite, chunked** (177 files split into three `split -n l/3` groups, since the
+  whole suite is ~7min and exceeds the 600s single-command cap): chunk 1 → 750 passed, 1 skipped, 1
+  xpassed (277s); chunk 2 → 1017 passed, 9 skipped (353s); chunk 3 → 980 passed, 2 skipped (241s).
+  2747 passed total, zero failures, all skips/xpass pre-existing and unrelated (SQLite-only skips,
+  a documented xfail-that-now-passes elsewhere in the suite). No delivery test changed behaviour —
+  the forward path was not disturbed.
+- `py -3.11 -m ruff check` and `black --check` on the three touched/added files → clean.
+- `npx openspec validate conversations-continue --strict` → valid.
+
+Ticked `tasks.md` boxes 3.1–3.5 — all five ran and passed as described above.
+
+**Next:** C4 — conversations-continue phase 4 (starting a thread deliberately). Add
+`start_new_thread: bool = False` to the message-create schema, honour it in `messages.py` (skip
+both lookups, mint directly), and refuse it in combination with an explicit `conversation_id` per
+design.md D4. Read D4 first to confirm which route(s) the flag belongs on.

@@ -54,20 +54,20 @@ directions*.
 
 Covers `agent-conversation-workspace` — *A reply continues the conversation it is replying to*.
 
-- [ ] 3.1 Add tests for all six scenarios: a reply reaches the thread it answers; an exchange
+- [x] 3.1 Add tests for all six scenarios: a reply reaches the thread it answers; an exchange
       settles into exactly two conversations; a message to a third agent does **not** continue an
       unrelated thread; a reply continues into an operator-origin conversation and records the
       replying agent as `origin_agent`; continuation survives the replying side's cutover; an
       archived line with no open successor falls through to creating a conversation
-- [ ] 3.2 Add the reverse resolution to `hub/hub/conversations.py`: given the sender's conversation,
+- [x] 3.2 Add the reverse resolution to `hub/hub/conversations.py`: given the sender's conversation,
       if its `bound_sender_conversation_id` names a conversation owned by the recipient, return the
       newest open conversation in that conversation's lineage
-- [ ] 3.3 Wire it into `hub/hub/api/v1/messages.py:184-201` **between** the forward lookup and the
+- [x] 3.3 Wire it into `hub/hub/api/v1/messages.py:184-201` **between** the forward lookup and the
       mint, so the mint branch is reached only when both miss. Do not reorder the existing forward
       lookup
-- [ ] 3.4 Add a regression test reproducing the measured defect directly: three messages alternating
+- [x] 3.4 Add a regression test reproducing the measured defect directly: three messages alternating
       between two agents produce two conversations, not three
-- [ ] 3.5 Run `cd hub && py -3.11 -m pytest tests/ -q` and confirm no existing delivery test changed
+- [x] 3.5 Run `cd hub && py -3.11 -m pytest tests/ -q` and confirm no existing delivery test changed
       behaviour — any that did means the forward path was disturbed
 
 ## 4. Starting a thread deliberately
