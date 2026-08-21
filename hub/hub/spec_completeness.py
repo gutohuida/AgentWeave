@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import AbstractSet, List, Optional
+from typing import AbstractSet, Dict, List, Optional
 
 from .spec_payload import SpecPayload
 
@@ -67,8 +67,47 @@ def _text_fields(payload: SpecPayload) -> List[tuple]:
     return fields
 
 
+def _first_cycle(local_edges: Dict[str, List[str]]) -> Optional[List[str]]:
+    """The first cycle found among locally-declared tasks, as the sequence of keys walked.
+
+    `local_edges` already excludes imported entries — they resolve to a task in another,
+    already-approved document, so they are leaves by construction and cannot participate in a
+    cycle within this one. Depth-first with a recursion-stack (grey/black) set: the graph is a
+    handful of tasks per document, not a scale that needs anything cleverer.
+    """
+    unvisited, visiting, done = 0, 1, 2
+    color = dict.fromkeys(local_edges, unvisited)
+    stack: List[str] = []
+
+    def visit(key: str) -> Optional[List[str]]:
+        color[key] = visiting
+        stack.append(key)
+        for neighbour in local_edges.get(key, []):
+            if neighbour not in local_edges:
+                continue  # not a locally-declared task; cannot close a cycle
+            if color[neighbour] == visiting:
+                return stack[stack.index(neighbour) :] + [neighbour]
+            if color[neighbour] == unvisited:
+                found = visit(neighbour)
+                if found:
+                    return found
+        stack.pop()
+        color[key] = done
+        return None
+
+    for key in local_edges:
+        if color[key] == unvisited:
+            found = visit(key)
+            if found:
+                return found
+    return None
+
+
 def check(
-    payload: SpecPayload, *, board_served: Optional[AbstractSet[str]] = None
+    payload: SpecPayload,
+    *,
+    board_served: Optional[AbstractSet[str]] = None,
+    approved_document_paths: Optional[AbstractSet[str]] = None,
 ) -> List[Finding]:
     """Everything wrong with this document, not just the first thing.
 
@@ -80,9 +119,51 @@ def check(
     hand-creates board tasks before proposing gets `requirement_without_task` anyway, and then
     `materialise()` mints a second, overlapping set of tasks on approval — two decompositions with
     nothing reconciling them. The document's own `tasks[]` and the real board converge here instead.
+
+    `approved_document_paths` is the set of this project's currently-approved document paths,
+    supplied the same way `board_served` is — this module stays a pure function of its inputs,
+    never touching the database itself. Used to check an import (`Task.from_`) names a document
+    that has actually materialised the task it claims to reference.
     """
     findings: List[Finding] = []
     served = board_served or frozenset()
+    approved = approved_document_paths or frozenset()
+
+    all_task_keys = {task.key for task in payload.tasks}
+    for index, task in enumerate(payload.tasks):
+        for position, dep in enumerate(task.depends_on):
+            if dep not in all_task_keys:
+                findings.append(
+                    Finding(
+                        "depends_on_unresolved",
+                        f"tasks[{index}].depends_on[{position}]",
+                        f"{dep!r} names neither a task declared in this document nor an "
+                        "imported entry's key, so nothing satisfies it",
+                    )
+                )
+        if task.from_ is not None and task.from_.document not in approved:
+            findings.append(
+                Finding(
+                    "import_not_approved",
+                    f"tasks[{index}]",
+                    f"{task.key!r} imports {task.from_.key!r} from "
+                    f"{task.from_.document!r}, which is not approved — an import can only name "
+                    "a document whose task has already materialised",
+                )
+            )
+
+    local_edges = {task.key: list(task.depends_on) for task in payload.tasks if task.from_ is None}
+    cycle = _first_cycle(local_edges)
+    if cycle:
+        findings.append(
+            Finding(
+                "dependency_cycle",
+                "tasks",
+                "a cycle among locally-declared tasks: "
+                + " -> ".join(cycle)
+                + " — cycles are detected within this document only, not across documents",
+            )
+        )
 
     if not payload.requirements:
         findings.append(

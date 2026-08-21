@@ -709,3 +709,64 @@ section 2 or at latest before S3 as a whole is called done.
 it depends on 1.3 being settled, which it now is.
 
 ---
+
+## Iteration 8 — S3 section 2, completeness checks (headless firing, arrived clean at 06:5x)
+
+Arrived to a clean tree at `27dede1`, matching `STATE.json` exactly. Read `next_action`'s file
+references (`spec_completeness.py:70` `check()`, `spec_completeness.py:43` `Finding`) before
+touching code; both matched what was actually on disk.
+
+**2.1** — `depends_on_unresolved`. `all_task_keys` built once per document from every `task.key`
+(local and imported alike, since an imported entry's own key is what a sibling depends on per
+1.2's field description). Each `depends_on` entry not in that set is reported at
+`tasks[i].depends_on[j]`.
+
+**2.2** — `dependency_cycle`. `_first_cycle()` runs a plain DFS (three-colour map + explicit stack,
+so the reported cycle is the real walked path) over `local_edges` — `payload.tasks` filtered to
+`task.from_ is None` only. Imported entries are excluded by construction, not by a special case in
+the walk: they can never be a DFS root and any edge pointing at one is skipped as "not a local
+task," matching the task's own reasoning that an import is a leaf. First draft's `WHITE/GRAY/BLACK`
+tripped `ruff` N806 (uppercase locals) and C420 (dict comprehension where `dict.fromkeys` fits);
+fixed to lowercase names and `dict.fromkeys`, both clean after.
+
+**2.3 — the one requiring a design call.** `check()` cannot query the database and per the task's
+own instruction had to stay a pure function of its inputs — same shape `board_served` already
+established. Added `approved_document_paths: Optional[AbstractSet[str]]`, threaded from a new
+`spec_lifecycle.approved_document_paths(session, project_id)` (a `SpecDocument.path` query filtered
+to `phase == APPROVED`) at both of `spec_service.py`'s call sites (`_apply_and_write`'s
+`SaveResult.blocking`, and `propose()`), computed beside the existing `board_served` fetch each
+already had. **Deliberately current phase, not "ever approved."** D6's `first_approved_at` answers
+a different question (path stability for rename); an import needs the referenced task to exist
+*now*, which D6 itself ties to the document being approved (materialise() having run) — reopening
+the referenced document back to `exploring` makes an import newly unresolved even though the task
+row still exists, and that reads as correct: nothing yet re-guarantees a reopened document's task
+survives its next revision unedited. Commented both in `spec_lifecycle.py`'s new function and
+D6-adjacent, so the next reader doesn't fold the two nullable-timestamp-shaped questions into one.
+
+**2.4** — one test, all three problems in a single three-task payload, asserting
+`validate_payload` doesn't raise (none of these are shape problems, confirming D7's "reported in
+blocking, never a submission refusal" empirically rather than by reading the design) and that
+`check()`'s codes are a superset of all three. Same pattern the file's own
+`test_every_problem_is_reported_not_just_the_first` already used for five unrelated checks.
+
+**2.5** — the cycle message states the limit inline: `"...— cycles are detected within this
+document only, not across documents"`. In the `Finding.message` string itself, asserted directly
+in the cycle test, not left as a comment the message's own reader never sees.
+
+**Verified, not assumed.** `pytest hub/tests/test_spec_completeness.py hub/tests/test_spec_payload.py
+hub/tests/test_spec_declared_tasks.py hub/tests/test_spec_board_task_convergence.py
+hub/tests/test_operator_authored_documents.py hub/tests/test_spec_capability_kind.py
+hub/tests/test_spec_index_writer.py -q` → **113 passed** (completeness file: 14 → 24, 10 new tests,
+0 removed; the other files exercise both `spec_service.py` call sites this section touched and
+confirm the new parameter didn't disturb existing submission/propose behaviour). `ruff check`,
+`black --check` (reformatted `spec_completeness.py` and its test file once, line-length wrapping
+only, then clean) and `mypy hub/spec_completeness.py hub/spec_lifecycle.py hub/spec_service.py` all
+clean. `git status --short` confirms scope: exactly `hub/hub/spec_completeness.py`,
+`hub/hub/spec_lifecycle.py`, `hub/hub/spec_service.py`, `hub/tests/test_spec_completeness.py`,
+`openspec/changes/task-dependencies/tasks.md` — no file outside this section touched. Full
+Hub/CLI suites **not** rerun this iteration (targeted files cover every touched call path, section
+2 of 10, matches `iteration_shape`'s "optional this section" framing) — due before section 3 or at
+latest before S3 as a whole is called done.
+
+**Tasks.md now stands at 10/80.** `current` stays **S3**; section 3 (storage: migration `0083`,
+the `task_dependencies` table, the D3 foreign-key decision, `first_approved_at`, backfill) is next.

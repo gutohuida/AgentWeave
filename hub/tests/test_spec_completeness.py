@@ -163,3 +163,115 @@ def test_the_same_document_split_into_two_and_two_proposes_cleanly():
         ],
     )
     assert check(payload) == []
+
+
+# --- task-dependencies section 2: unresolved depends_on, cycles, unapproved imports ---
+
+
+def test_an_unresolved_depends_on_key_is_reported():
+    payload = _complete(
+        tasks=[
+            {
+                "key": "t1",
+                "description": "Build it",
+                "requirements": ["alpha"],
+                "depends_on": ["ghost"],
+            }
+        ]
+    )
+    finding = next(f for f in check(payload) if f.code == "depends_on_unresolved")
+    assert finding.where == "tasks[0].depends_on[0]"
+    assert "ghost" in finding.message
+
+
+def test_a_depends_on_key_naming_a_declared_sibling_is_not_reported():
+    keys = ["a", "b"]
+    payload = _complete(
+        requirements=_requirements(*keys),
+        acceptance_criteria=_criteria(*keys),
+        tasks=[
+            {"key": "t1", "description": "First", "requirements": ["a"]},
+            {"key": "t2", "description": "Second", "requirements": ["b"], "depends_on": ["t1"]},
+        ],
+    )
+    assert "depends_on_unresolved" not in _codes(payload)
+
+
+def test_a_depends_on_key_naming_an_imported_entrys_key_is_not_reported():
+    payload = _complete(
+        tasks=[
+            {"key": "imported-1", "from": {"document": "spec/other.md", "key": "ot1"}},
+            {
+                "key": "t1",
+                "description": "Build it",
+                "requirements": ["alpha"],
+                "depends_on": ["imported-1"],
+            },
+        ]
+    )
+    assert "depends_on_unresolved" not in _codes(payload)
+
+
+def test_a_cycle_among_local_tasks_is_reported():
+    payload = _complete(
+        requirements=_requirements("a", "b"),
+        acceptance_criteria=_criteria("a", "b"),
+        tasks=[
+            {"key": "t1", "description": "First", "requirements": ["a"], "depends_on": ["t2"]},
+            {"key": "t2", "description": "Second", "requirements": ["b"], "depends_on": ["t1"]},
+        ],
+    )
+    finding = next(f for f in check(payload) if f.code == "dependency_cycle")
+    assert "t1" in finding.message
+    assert "t2" in finding.message
+    assert "within this document only" in finding.message
+
+
+def test_a_local_task_depending_on_an_imported_entry_is_not_a_cycle():
+    """An imported entry is a leaf by construction — it cannot be part of a within-document cycle."""
+    payload = _complete(
+        tasks=[
+            {"key": "imported-1", "from": {"document": "spec/other.md", "key": "ot1"}},
+            {
+                "key": "t1",
+                "description": "Build it",
+                "requirements": ["alpha"],
+                "depends_on": ["imported-1"],
+            },
+        ]
+    )
+    assert "dependency_cycle" not in _codes(payload)
+
+
+def test_an_import_naming_an_unapproved_document_is_reported():
+    payload = _complete(tasks=[{"key": "t1", "from": {"document": "spec/other.md", "key": "ot1"}}])
+    finding = next(f for f in check(payload) if f.code == "import_not_approved")
+    assert "spec/other.md" in finding.message
+    assert "ot1" in finding.message
+
+
+def test_an_import_naming_an_approved_document_is_not_reported():
+    payload = _complete(tasks=[{"key": "t1", "from": {"document": "spec/other.md", "key": "ot1"}}])
+    codes = {f.code for f in check(payload, approved_document_paths={"spec/other.md"})}
+    assert "import_not_approved" not in codes
+
+
+def test_a_document_with_all_three_dependency_problems_returns_all_three_findings():
+    """Design D7: these are reported in `blocking`, never a submission refusal — all three survive
+    together in one `check()` call, the same way five unrelated problems already do above."""
+    payload = _complete(
+        requirements=_requirements("a", "b"),
+        acceptance_criteria=_criteria("a", "b"),
+        tasks=[
+            {
+                "key": "t1",
+                "description": "First",
+                "requirements": ["a"],
+                "depends_on": ["t2", "ghost"],
+            },
+            {"key": "t2", "description": "Second", "requirements": ["b"], "depends_on": ["t1"]},
+            {"key": "t3", "from": {"document": "spec/other.md", "key": "ot1"}},
+        ],
+    )
+    codes = _codes(payload)
+    assert {"depends_on_unresolved", "dependency_cycle", "import_not_approved"} <= codes

@@ -259,13 +259,16 @@ async def _apply_and_write(
     )
 
     board_served = await requirement_links.served_keys(session, document.id)
+    approved_paths = await spec_lifecycle.approved_document_paths(session, document.project_id)
     return SaveResult(
         path=document.path,
         phase=document.phase,
         identifiers=identifiers,
         blocking=[
             finding.to_dict()
-            for finding in spec_completeness.check(payload, board_served=board_served)
+            for finding in spec_completeness.check(
+                payload, board_served=board_served, approved_document_paths=approved_paths
+            )
         ],
         divergence=({"recorded": divergence[0], "found": divergence[1]} if divergence else None),
     )
@@ -758,7 +761,10 @@ async def propose(
         raise SaveRefusedError(str(exc), code="payload_invalid", field_path=exc.field) from exc
 
     board_served = await requirement_links.served_keys(session, document.id)
-    findings = spec_completeness.check(payload, board_served=board_served)
+    approved_paths = await spec_lifecycle.approved_document_paths(session, document.project_id)
+    findings = spec_completeness.check(
+        payload, board_served=board_served, approved_document_paths=approved_paths
+    )
     if findings:
         return [finding.to_dict() for finding in findings]
 

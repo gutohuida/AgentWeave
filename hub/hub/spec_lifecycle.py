@@ -118,6 +118,23 @@ async def list_documents(session: AsyncSession, project_id: str) -> List[SpecDoc
     return list(result.scalars().all())
 
 
+async def approved_document_paths(session: AsyncSession, project_id: str) -> set:
+    """Paths of this project's currently-`approved` documents.
+
+    Current phase, not "ever approved" — `first_approved_at` answers that question for the rename
+    rule (design D6), a different question. An import needs the referenced document's task to
+    exist *now*; that is only guaranteed while the document is approved, which is when
+    `materialise()` runs. Used by `spec_completeness.check()` to decide whether an import names
+    something real.
+    """
+    result = await session.execute(
+        select(SpecDocument.path).where(
+            SpecDocument.project_id == project_id, SpecDocument.phase == APPROVED
+        )
+    )
+    return set(result.scalars().all())
+
+
 async def create_document(
     session: AsyncSession,
     project_id: str,
