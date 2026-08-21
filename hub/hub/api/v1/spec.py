@@ -15,6 +15,7 @@ contract, rather than trusting a caller's classification.
 
 from __future__ import annotations
 
+import dataclasses
 from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -51,7 +52,13 @@ from ...db.models import (
     SpecEditProposal,
     SpecRequirement,
 )
-from ...spec_manifest import SpecPathError, validate_spec_path
+from ...spec_manifest import (
+    Manifest,
+    SpecPathError,
+    dump_manifest,
+    load_manifest,
+    validate_spec_path,
+)
 from ...spec_payload import SCHEMA_VERSION
 from ...sse import sse_manager
 
@@ -1113,6 +1120,93 @@ async def reindex(
             "rerendered": rerendered,
             "skipped": rerender_skipped,
         },
+    }
+
+
+class ArrangeRequest(BaseModel):
+    """Setting a document's place in the corpus (design D3).
+
+    An editorial judgement about what the project *is* — deliberately not something a document's
+    own payload can state (D3's rejection of a `parent` field on the payload). `parent: null`
+    unparents the document; omitting `parent` also unparents it, since there is no third state.
+    """
+
+    path: str = Field(max_length=255)
+    parent: Optional[str] = Field(default=None, max_length=255)
+
+    model_config = {"extra": "forbid"}
+
+
+@router.post("/spec/documents/arrange")
+async def arrange_document(
+    body: ArrangeRequest,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Set or clear a document's parent in the corpus hierarchy.
+
+    Operator-only — the agent capability plane has no equivalent. Validated by round-tripping the
+    candidate manifest through `load_manifest` (`dump_manifest` the candidate, then re-parse it):
+    unknown parent, self-parent and cycle are `load_manifest`'s own structural rules
+    (`spec_manifest.py:236-274`), reused here rather than reimplemented.
+    """
+    project_id, _ = project
+    try:
+        path = validate_spec_path(body.path)
+    except SpecPathError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    parent = body.parent
+    if parent is not None:
+        try:
+            parent = validate_spec_path(parent)
+        except SpecPathError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    workspace = await _workspace(session, project_id)
+    manifest, state, diagnostics = spec_documents.read_index(workspace)
+    if manifest is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"message": f"no usable index to arrange ({state})", "diagnostics": diagnostics},
+        )
+
+    by_path = manifest.by_path()
+    if path not in by_path:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=f"{path} is not in the index"
+        )
+
+    candidate = Manifest(
+        version=manifest.version,
+        home=manifest.home,
+        documents=tuple(
+            dataclasses.replace(doc, parent=parent) if doc.path == path else doc
+            for doc in manifest.documents
+        ),
+    )
+    revalidated, validation_diagnostics = load_manifest(dump_manifest(candidate))
+    if revalidated is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "message": "this placement is not allowed",
+                "diagnostics": [d.to_dict() for d in validation_diagnostics],
+            },
+        )
+
+    spec_documents.write_index(workspace, revalidated)
+
+    rows = await spec_lifecycle.list_documents(session, project_id)
+    rerendered, skipped = await spec_service.rerender_corpus(session, workspace, revalidated, rows)
+    await session.commit()
+
+    await sse_manager.broadcast(project_id, "spec_updated", {"path": path, "parent": parent})
+
+    return {
+        "path": path,
+        "parent": parent,
+        "corpus": {"rerendered": rerendered, "skipped": skipped},
     }
 
 

@@ -631,3 +631,161 @@ class TestReindexCorpusRerender:
         )
         assert dirty_write.status_code == 200, dirty_write.text
         assert dirty_write.json()["divergence"] is not None
+
+
+class TestArrangeRoute:
+    """corpus-aware-documents §5: `POST /project/spec/documents/arrange` sets or clears a
+    document's parent. Validation is reused from `load_manifest`'s own structural rules
+    (unknown parent, self-parent, cycle) rather than reimplemented, and the re-render step
+    reuses `spec_service.rerender_corpus`, the same function §4's reindex route calls.
+    """
+
+    async def _seed(self, app, auth_headers, tmp_path, *names):
+        for name in names:
+            _write(tmp_path, f"spec/{name}.html")
+            created = await app.post(
+                f"{BASE}/documents",
+                json={"path": f"spec/{name}.html", "title": name.upper(), "kind": "capability"},
+                headers=auth_headers,
+            )
+            assert created.status_code == 201, created.text
+        reindexed = await app.post(
+            f"{BASE}/spec/reindex", json={"home": f"spec/{names[0]}.html"}, headers=auth_headers
+        )
+        assert reindexed.status_code == 200, reindexed.text
+
+    async def test_arranging_a_document_rerenders_it_and_its_recursive_home(
+        self, app, auth_headers, tmp_path
+    ):
+        await self._seed(app, auth_headers, tmp_path, "home", "area", "other")
+
+        response = await app.post(
+            f"{BASE}/spec/documents/arrange",
+            json={"path": "spec/area.html", "parent": "spec/home.html"},
+            headers=auth_headers,
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["path"] == "spec/area.html"
+        assert body["parent"] == "spec/home.html"
+        assert set(body["corpus"]["rerendered"]) == {"spec/home.html", "spec/area.html"}
+        assert body["corpus"]["skipped"] == []
+
+        index_path = tmp_path / "spec" / "index.json"
+        manifest_data = json.loads(index_path.read_text(encoding="utf-8"))
+        area_entry = next(d for d in manifest_data["documents"] if d["path"] == "spec/area.html")
+        assert area_entry["parent"] == "spec/home.html"
+        other_entry = next(d for d in manifest_data["documents"] if d["path"] == "spec/other.html")
+        assert other_entry["parent"] is None
+
+        home_html = (tmp_path / "spec" / "home.html").read_text(encoding="utf-8")
+        assert "AREA" in home_html
+        assert "aw-map" in home_html
+        area_html = (tmp_path / "spec" / "area.html").read_text(encoding="utf-8")
+        assert "aw-nav" in area_html
+
+    async def test_setting_parent_to_null_unparents(self, app, auth_headers, tmp_path):
+        await self._seed(app, auth_headers, tmp_path, "home", "area")
+        first = await app.post(
+            f"{BASE}/spec/documents/arrange",
+            json={"path": "spec/area.html", "parent": "spec/home.html"},
+            headers=auth_headers,
+        )
+        assert first.status_code == 200, first.text
+
+        response = await app.post(
+            f"{BASE}/spec/documents/arrange",
+            json={"path": "spec/area.html", "parent": None},
+            headers=auth_headers,
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["parent"] is None
+
+        index_path = tmp_path / "spec" / "index.json"
+        manifest_data = json.loads(index_path.read_text(encoding="utf-8"))
+        area_entry = next(d for d in manifest_data["documents"] if d["path"] == "spec/area.html")
+        assert area_entry["parent"] is None
+
+    async def test_an_unknown_document_is_refused(self, app, auth_headers, tmp_path):
+        await self._seed(app, auth_headers, tmp_path, "home")
+        response = await app.post(
+            f"{BASE}/spec/documents/arrange",
+            json={"path": "spec/nope.html", "parent": None},
+            headers=auth_headers,
+        )
+        assert response.status_code == 404, response.text
+
+    async def test_an_unknown_parent_is_refused(self, app, auth_headers, tmp_path):
+        await self._seed(app, auth_headers, tmp_path, "home", "area")
+        response = await app.post(
+            f"{BASE}/spec/documents/arrange",
+            json={"path": "spec/area.html", "parent": "spec/nope.html"},
+            headers=auth_headers,
+        )
+        assert response.status_code == 422, response.text
+        codes = {d["code"] for d in response.json()["detail"]["diagnostics"]}
+        assert "manifest_unknown_parent" in codes
+
+        index_path = tmp_path / "spec" / "index.json"
+        manifest_data = json.loads(index_path.read_text(encoding="utf-8"))
+        area_entry = next(d for d in manifest_data["documents"] if d["path"] == "spec/area.html")
+        assert area_entry["parent"] is None
+
+    async def test_a_self_parent_is_refused(self, app, auth_headers, tmp_path):
+        await self._seed(app, auth_headers, tmp_path, "home", "area")
+        response = await app.post(
+            f"{BASE}/spec/documents/arrange",
+            json={"path": "spec/area.html", "parent": "spec/area.html"},
+            headers=auth_headers,
+        )
+        assert response.status_code == 422, response.text
+        codes = {d["code"] for d in response.json()["detail"]["diagnostics"]}
+        assert "manifest_self_parent" in codes
+
+    async def test_a_cycle_is_refused(self, app, auth_headers, tmp_path):
+        await self._seed(app, auth_headers, tmp_path, "home", "area", "leaf")
+        first = await app.post(
+            f"{BASE}/spec/documents/arrange",
+            json={"path": "spec/area.html", "parent": "spec/home.html"},
+            headers=auth_headers,
+        )
+        assert first.status_code == 200, first.text
+        second = await app.post(
+            f"{BASE}/spec/documents/arrange",
+            json={"path": "spec/leaf.html", "parent": "spec/area.html"},
+            headers=auth_headers,
+        )
+        assert second.status_code == 200, second.text
+
+        response = await app.post(
+            f"{BASE}/spec/documents/arrange",
+            json={"path": "spec/home.html", "parent": "spec/leaf.html"},
+            headers=auth_headers,
+        )
+        assert response.status_code == 422, response.text
+        codes = {d["code"] for d in response.json()["detail"]["diagnostics"]}
+        assert "manifest_parent_cycle" in codes
+
+        index_path = tmp_path / "spec" / "index.json"
+        manifest_data = json.loads(index_path.read_text(encoding="utf-8"))
+        home_entry = next(d for d in manifest_data["documents"] if d["path"] == "spec/home.html")
+        assert home_entry["parent"] is None
+
+    async def test_the_placement_survives_a_subsequent_reindex(self, app, auth_headers, tmp_path):
+        await self._seed(app, auth_headers, tmp_path, "home", "area")
+        arranged = await app.post(
+            f"{BASE}/spec/documents/arrange",
+            json={"path": "spec/area.html", "parent": "spec/home.html"},
+            headers=auth_headers,
+        )
+        assert arranged.status_code == 200, arranged.text
+
+        response = await app.post(f"{BASE}/spec/reindex", headers=auth_headers)
+        assert response.status_code == 200, response.text
+        assert response.json()["corpus"]["rerendered"] == []
+        assert response.json()["corpus"]["skipped"] == []
+
+        index_path = tmp_path / "spec" / "index.json"
+        manifest_data = json.loads(index_path.read_text(encoding="utf-8"))
+        area_entry = next(d for d in manifest_data["documents"] if d["path"] == "spec/area.html")
+        assert area_entry["parent"] == "spec/home.html"
