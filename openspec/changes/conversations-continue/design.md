@@ -173,6 +173,30 @@ description next to a new parameter would teach the wrong model of a surface thi
 specifically about. `mcp_server.py` may import only stdlib + fastmcp, and the flag is passed
 straight through to the Hub, so nothing new is imported.
 
+### D7 — The cutover fix stays in this change
+
+The forward-direction cutover break is a **separate, pre-existing defect**. It predates the reply
+defect, has nothing to do with replies, and the operator has never reported hitting it. Folding it
+in roughly doubles the work and is what forces `lineage_id`, migration `0085`, and phases 1 and 2 of
+seven. It was raised explicitly as a scope question and the operator chose to keep it.
+
+The reason it belongs here: **both defects have one root cause.** Delivery is keyed on a conversation
+identifier, and a conversation identifier is not stable across the thing the product does to long
+conversations. The reply defect is that reading the key backwards is not implemented; the cutover
+defect is that the key itself expires. Fixing only the first leaves the second at the same seam, and
+the reverse rule would work right up until someone accepts a checkpoint mid-exchange — which is
+precisely when a long exchange most needs it.
+
+*Alternative considered: ship the reverse lookup and `start_new_thread` alone*, roughly 60 lines and
+no schema change, and treat lineage as a follow-up. Rejected by the operator. Worth recording what
+it would have cost rather than what it would have saved: the reverse rule would have shipped with a
+known dead corner, and the scenario "Continuation survives the replying side's cutover" would have
+had to be written as a non-goal instead of a requirement. A spec that carves out the case its own
+mechanism cannot reach is harder to finish later than one that never claimed it.
+
+Checkpointing is `offered` by default (`hub/hub/db/models.py:142`), not automatic, so the corner
+needs an operator to accept a prompt. That is why it was a real question rather than an obvious one.
+
 ## Risks / Trade-offs
 
 - **A reply lands somewhere the sender did not expect.** → The reverse rule only fires where a new
@@ -220,6 +244,8 @@ without reverting the migration is safe in either order.
 
 1. Should `start_new_thread` be surfaced to the operator anywhere, or is it agent-only? The composer
    has no notion of "reply into a new thread" today, and this change does not add one.
+   (Scope was the other open question here — whether the cutover fix belonged in this change at all.
+   Answered by the operator: it stays. See D7.)
 2. Answered while writing D5: the entry is already distinguished — left-aligned, named for the
    sending agent, in that agent's colour, against the operator's right-aligned "You". The
    remaining question is one of density rather than attribution: at what length does a thread
