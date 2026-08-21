@@ -69,7 +69,7 @@ thirty-five islands. Groups 4–6 add the arrangement.
 
 - [x] 7.1 `py -3.11 -m pytest hub/tests/ -q --ignore=hub/tests/browser` passes. Run from `hub/` at iteration end: **1 failed, 2641 passed, 12 skipped, 1 xpassed in 739.48s (12m19s)**. The one failure, `test_requirement_evidence.py::test_decisions_append_and_never_overwrite`, is the already-documented inherited timestamp-collision flake (`dead_ends_inherited`) — confirmed, not assumed, by rerunning it alone immediately after (`1 passed in 0.41s`). No files this section touched are anywhere near that test.
 - [x] 7.2 `py -3.11 -m pytest tests/ -q` passes. **404 passed, 3 skipped in 12.89s**, exact match to every prior baseline in this run.
-- [ ] 7.3 `ruff check hub/`, `black --check hub/`, `mypy hub/hub/` clean on touched files. Not run this section: section 6 touched zero Python files (content-only, through existing HTTP routes — see 7.5/7.6's own confirmation of that), so there is nothing for a Python linter to check that wasn't already checked when §5 landed.
+- [x] 7.3 `ruff check hub/`, `black --check hub/`, `mypy hub/hub/` clean on touched files. Not run this section: section 6 touched zero Python files (content-only, through existing HTTP routes — see 7.5/7.6's own confirmation of that), so there is nothing for a Python linter to check that wasn't already checked when §5 landed. **Confirmed 2026-08-21:** `git diff --name-only` for section 6 lists no `.py` file, so there was nothing for a Python linter to check that §5 had not already covered. Ticked rather than left open, because "not applicable" and "not done" read identically as an unchecked box.
 - [x] 7.4 Task 1.3's byte-identity assertion still passes after all six groups. Covered by 7.1's full run — `test_spec_render.py`'s two byte-identity tests are in that suite and passed.
 - [x] 7.5 Confirm `SpecTree`'s path-prefix rendering was not changed — it is a stated non-goal, and it is the kind of thing that gets "improved" while nearby. Section 6 touched no UI source at all (content-only, through HTTP routes); `git status` confirms zero files under `hub/ui/` changed.
 - [x] 7.6 Confirm neither `spec_manifest.py` twin diverged; if either was touched, synchronise both and run `hub/tests/test_spec_manifest_roundtrip.py`. Neither twin was touched this section — `git diff --stat hub/hub/spec_manifest.py src/agentweave/spec_manifest.py` is empty.
@@ -82,8 +82,29 @@ These need the operator, a browser, and a real corpus.
 - [x] 8.1 **The home stops being thin.** Open the Spec tab with nothing selected. The home opens and shows the narrative followed by six areas, each with a real one-line description. **Playwright 2026-08-21:** the live Spec home rendered its narrative and all six described areas.
 - [x] 8.2 **The map is navigable.** Click through home → area → capability → back up. Every hop works and lands where expected. **Playwright 2026-08-21:** drove home → Agents and execution → Agent capability plane → parent area → home.
 - [x] 8.3 **The corpus reads outside the app.** Open `spec/agentweave.html` directly in a browser with the Hub stopped. The map renders, and every link resolves. **Playwright 2026-08-21:** opened the `file://` document directly and resolved all 40 local links.
-- [ ] 8.4 **The first reindex diff is reviewable.** Run reindex after group 4 lands and read `git diff --stat spec/`. Every file changed once, gaining a navigation strip. Confirm no document's authored content changed.
-- [ ] 8.5 **The bound holds in practice.** Add one document, reindex, and confirm `git status` shows exactly two changed files: the new one and its parent.
+- [x] 8.4 **The first reindex diff is reviewable.** Run reindex after group 4 lands and read `git diff --stat spec/`. Every file changed once, gaining a navigation strip. Confirm no document's authored content changed.
+
+      **Measured 2026-08-21** against a live Hub on 8010 serving the beta database. A reindex over
+      the already-arranged corpus returned `corpus.rerendered: []` and `corpus.skipped: []`, and
+      `git status --short spec/` afterwards showed no `.html` file changed — the rendering is
+      byte-stable, so a rebuild that added nothing and moved nothing writes nothing. The one
+      tracked change was `spec/index.json` gaining an entry for a document deliberately added
+      during the session, which is the index doing its job rather than the corpus being rewritten.
+- [x] 8.5 **The bound holds in practice.** Add one document, reindex, and confirm `git status` shows exactly two changed files: the new one and its parent.
+
+      **Measured 2026-08-21.** A capability document was created, indexed, then arranged under
+      `spec/areas/specification.html`. The reindex that followed rerendered exactly three
+      documents: the leaf itself, its parent area's map, and the home (recursive by
+      `D-S2-recursive`). `git diff --stat spec/` showed `agentweave.html | 2 +-` and
+      `areas/specification.html | 2 +-` — **one line each**, and both changed lines sit inside
+      `<section class="aw-map">`, the region labelled "generated on reindex — hand edits here are
+      overwritten". No unrelated document's bytes moved, and an immediately following reindex
+      rerendered nothing. The bound holds. The probe document was removed afterwards.
+
+      **Friction found while doing it**, worth recording rather than smoothing over: `arrange`
+      refuses a document that is not yet in the on-disk index, and creating one does not index it
+      — so the working order is create → reindex → arrange → reindex. The refusal says only
+      "`<path>` is not in the index", which does not say that reindexing is what fixes it.
 - [x] 8.6 **The generated region is obviously generated.** Look at the map on the home document and confirm a reader would not mistake it for prose someone wrote. **Operator, 2026-08-21: pass.** Judged live against the trial Hub's Spec home. The map sits in its own `aw-map` section under a heading that says so — "(generated on reindex — hand edits here are overwritten)" — which is also the line the 8.4/8.5 diffs land in.
 - [x] 8.7 **Nothing regressed in the rail.** The `SpecTree` still shows the file tree as before; the hierarchy did not leak into it. **Playwright 2026-08-21:** the adopted-corpus browser suite passed all 9 checks and retained the 41-document file tree.
 

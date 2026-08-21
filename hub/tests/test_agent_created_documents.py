@@ -322,3 +322,38 @@ async def test_no_schema_states_the_retired_operator_only_rule():
     schema = SpecDocumentSubmission.model_json_schema()
     description = schema.get("description", "")
     assert "operator" not in description.lower() or "create_spec_document" in description
+
+
+@pytest.mark.asyncio
+async def test_creation_does_not_depend_on_the_agent_job_allowance(app, run_headers, tmp_path):
+    """Task 5.5, design D5: `allow_agent_jobs` gates *jobs*, and must not gate this.
+
+    Every other test here already runs against `proj-test`, which never sets the flag — so the
+    flow was known to work while it was false, but only incidentally, and an incidental pass says
+    nothing about intent. Asserted against both values explicitly, with the false case written
+    first: a future reader changing the job allowance should see this fail if they reach for the
+    same flag to gate document creation.
+    """
+    from hub.db.models import Project
+
+    async def set_allowance(value: bool) -> None:
+        async with async_session_factory() as session:
+            project = await session.get(Project, "proj-test")
+            project.allow_agent_jobs = value
+            await session.commit()
+
+    await set_allowance(False)
+    async with async_session_factory() as session:
+        project = await session.get(Project, "proj-test")
+        assert project.allow_agent_jobs is False
+
+    while_disallowed = await app.post(CREATE, json={}, headers=run_headers)
+    assert while_disallowed.status_code == 201, while_disallowed.text
+    first_path = while_disallowed.json()["path"]
+    assert await _row(first_path) is not None
+
+    await set_allowance(True)
+    allowed = await app.post(CREATE, json={}, headers=run_headers)
+    assert allowed.status_code == 201, allowed.text
+    # Distinct documents either way — the flag changes nothing about this route at all.
+    assert allowed.json()["path"] != first_path
