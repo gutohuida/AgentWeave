@@ -1,24 +1,18 @@
 {
   "purpose": "Overnight run of 2026-08-21/22. Two halves. FIRST: implement openspec change conversations-continue, phases 1 through 6 (phase 7 is human verification and is NOT yours). SECOND: a per-screen UI refinement pass producing standalone HTML mocks the operator reviews in the morning. The first half is the priority and the operator explicitly chose 'keep trying all night' if it stalls -- do not abandon it to reach the UI work.",
-
   "branch": "autonomous/2026-08-21-refine-and-continue",
   "parent_branch": "master",
-  "parent_sha": "f1d6c08",
-  "parent_note": "master at f1d6c08 = 'docs(design): write the visual identity refinement contract', pushed. The operator works on master. Branch from f1d6c08, never from a previous autonomous branch. In the morning the diff to read is `git log master..HEAD`.",
-
+  "parent_sha": "aa12ba7",
+  "parent_note": "master at aa12ba7 = 'chore(autonomous): brief the 2026-08-21 overnight run', pushed. That commit contains THIS FILE, so the branch must be cut from it -- cutting from an earlier sha would leave the branch without its own brief. The operator works on master. Never branch from a previous autonomous branch. In the morning the diff to read is `git log master..HEAD`.",
   "started_at": "2026-08-21T23:10:00+01:00",
   "stop_at": "2026-08-22T09:00:00+01:00",
   "stop_when_queue_empties": true,
   "iteration": 0,
   "last_heartbeat": null,
   "log_file": ".claude/autonomous/2026-08-21-refine-and-continue-log.md",
-
   "driver": "Windows Scheduled Task 'AgentWeaveAutonomousSession' -> .claude/skills/autonomous-session/scripts/run-iteration.ps1 -> headless `claude -p`, EVERY 5 MINUTES, self-unregistering past stop_at. 5 minutes is safe and correct because the task is registered -MultipleInstances IgnoreNew (install-driver.ps1:106): a firing landing mid-iteration is dropped by the scheduler, so a short interval cannot overlap -- it only shortens the idle gap after an iteration ends. Measured on run 2 at 15 minutes: iterations ran 4-19 min, ~40% of firings were dropped, and each drop cost a full interval of idle. Session-bound drivers (ScheduleWakeup, CronCreate) are deliberately NOT used: the 2026-08-15 run asked for nine hours and got forty minutes.",
-
   "operator_intent_verbatim": "Let's prepare a autonomous run for this night. I want to implement the conversation-continue and after I want the agents to do exploration and mock. [...] Each trigger will be responsible for one thing. It's a loop that will repeat the process for every screen that we have. One example: The task and cards. The cards look very plain, with no texture, no animation or fine details just a box with things written on it and the task board the same. A lot of things look very plain with no fines no attention to detail... no nice feeling. So the first run for each screen would be a explore run where the agent would search the internet for ui/ux patterns for that type of screen, nice details, animations, colors, icons, fonts, information that is lacking, hovers things like that. The second trigger will validate that information and then create a mock of that page based on what was explored and what exists and the visual identity of agentweave. The third and fourth would use playwright to iterate and improve on the mock and would save that. So I can review it in the morning.",
-
   "prepared_by": "/autonomous-prep, interactive session 2026-08-21 ~22:00-23:10. Every decision below was taken WITH the operator, awake. Do not re-open them.",
-
   "runway_verified_at_prep": {
     "ui_suite": "cd hub/ui && npx vitest run -> 121 files, 1220 tests passed, 2026-08-21 22:59",
     "playwright": "py -3.11 chromium launches headless OK. scripts/uishot.py is the screenshot harness and was written for exactly this case -- its docstring notes a headless firing cannot screenshot the way an interactive session can, and that Playwright + Read closes the loop.",
@@ -28,7 +22,6 @@
     "hub_suite": "NOT run at prep. Run it early in your first Hub iteration, in file chunks -- the full suite is ~7 minutes and exceeds the 600s command cap. `pytest hub/tests/ tests/` together fails collection.",
     "trial_hub": "Port 8010 is STOPPED and its database was rebuilt fresh this evening. Project proj-5e960453 exists with 41 spec documents, 452 requirements, 9 charters, 2 runners, and ZERO agents/conversations/tasks. You do not need the Hub running for any queue item -- the mocks are standalone HTML. If you start it, start it from hub/ and never on port 8000."
   },
-
   "queue": [
     {
       "id": "C1",
@@ -60,7 +53,6 @@
       "title": "conversations-continue phase 6 - the outbound message folds",
       "detail": "tasks.md section 6. Carry subject through TimelineEntry (agent_chat.py) and agentChat.ts, and fold the OUTBOUND branch of MessageEntry in AgentTimeline.tsx. WorkRow in the same file is the existing pattern -- reuse its shape. Do not fold the inbound branch. Ends with npm run build then `py -3.11 scripts/refresh_ui_bundle.py` FROM THE REPO ROOT, committing hub/ui/src and hub/hub/static/ui together."
     },
-
     {
       "id": "U0a",
       "title": "UI system pass 1 - foundations",
@@ -71,35 +63,61 @@
       "title": "UI system pass 2 - component vocabulary",
       "detail": "Operator asked specifically for this: 'do a deep dive on UI/UX patterns types of buttons as well, controls, color coding etc.' Produce design/mocks/_system/controls.html -- the full button taxonomy (which kinds exist, what each is for, every state), form and input controls, toggles, selects, menus, badges, chips, and a colour-coding SYSTEM using the existing semantic tokens and the 8-colour agent scale. Today this vocabulary is inconsistent; fixing that inconsistency is in scope, inventing new colours is not."
     },
-
     {
       "id": "S1",
       "title": "Screen 1 - conversation + composer + left navigation (4 passes)",
       "detail": "THE MAIN SCREEN. ConversationView, AgentTimeline (MessageEntry, WorkRow, agent output), the composer and its control row, Sidebar/AgentTree/SidebarItem. Four passes, one per iteration: P1 explore, P2 validate + mock variants, P3 Playwright screenshot + critique + iterate, P4 second iterate + RATIONALE.md + add to the review index."
     },
-    { "id": "S2", "title": "Screen 2 - task board + task cards (4 passes)", "detail": "TasksBoard, TaskCard, TaskDetailDrawer. The operator named this as the worst offender: 'The cards look very plain, with no texture, no animation or fine details just a box with things written on it and the task board the same.' Same four passes." },
-    { "id": "S3", "title": "Screen 3 - the right side panel (4 passes)", "detail": "PanelShell and its tabs -- FileTree, FilePreview, SpecIndexTab, LoopsIndexTab, FilesIndexTab. Always on screen while working. T3 Code's RightPanelTabs.tsx / RightPanelSheet.tsx / FileBrowserPanel.tsx are the closest reference material available. Same four passes." },
-    { "id": "S4", "title": "Screen 4 - the task DAG / dependency board (4 passes)", "detail": "DependencyBoard, DependencyBoardView. Carries the waived task-dependencies check 11.1 (edges go stale when a collapsed layer is expanded) and the operator wants it eventually moved into the right panel -- see openspec/explorations/2026-08-21-the-execution-graph-in-the-panel.md. Mock it BOTH standalone and panel-embedded. Same four passes." },
-    { "id": "S5", "title": "Screen 5 - the rendered spec documents (4 passes)", "detail": "The spec HTML the product itself generates -- hub/hub/spec_render.py, not React. This is the product's actual output and what a spec-driven tool is judged on. A mock is HTML either way so the process is unchanged; note in RATIONALE.md that implementing it later touches Python templates, not components." },
-    { "id": "S6", "title": "Screen 6 - questions and permission prompts (4 passes)", "detail": "QuestionsPanel, AnswerForm, and the permission decision card. These are the moments the product STOPS and demands the operator. Rarely seen is not the same as unimportant -- if they look plain the product feels cheapest exactly when it is asking for trust." },
-    { "id": "S7", "title": "Screen 7 - the overview screen (4 passes)", "detail": "OverviewPage. The landing surface and the first impression." },
-    { "id": "S8", "title": "Overflow screens, only if the night allows", "detail": "In order: jobs (JobsPage/JobCard/JobForm), agents (AgentsPage/AgentCard/AgentSettingsPage), logs + activity, the command palette. Do NOT start one of these while an earlier screen has unfinished passes." },
-
-    { "id": "Z", "title": "Build the review index", "detail": "Run this whenever a screen finishes its four passes, and again as the LAST action before stop_at. design/mocks/index.html: one page linking every mock and variant, with its before/after screenshots inline and a one-line summary. This is the single artifact the operator opens in the morning -- if it does not exist, the night's work is much harder to review." }
+    {
+      "id": "S2",
+      "title": "Screen 2 - task board + task cards (4 passes)",
+      "detail": "TasksBoard, TaskCard, TaskDetailDrawer. The operator named this as the worst offender: 'The cards look very plain, with no texture, no animation or fine details just a box with things written on it and the task board the same.' Same four passes."
+    },
+    {
+      "id": "S3",
+      "title": "Screen 3 - the right side panel (4 passes)",
+      "detail": "PanelShell and its tabs -- FileTree, FilePreview, SpecIndexTab, LoopsIndexTab, FilesIndexTab. Always on screen while working. T3 Code's RightPanelTabs.tsx / RightPanelSheet.tsx / FileBrowserPanel.tsx are the closest reference material available. Same four passes."
+    },
+    {
+      "id": "S4",
+      "title": "Screen 4 - the task DAG / dependency board (4 passes)",
+      "detail": "DependencyBoard, DependencyBoardView. Carries the waived task-dependencies check 11.1 (edges go stale when a collapsed layer is expanded) and the operator wants it eventually moved into the right panel -- see openspec/explorations/2026-08-21-the-execution-graph-in-the-panel.md. Mock it BOTH standalone and panel-embedded. Same four passes."
+    },
+    {
+      "id": "S5",
+      "title": "Screen 5 - the rendered spec documents (4 passes)",
+      "detail": "The spec HTML the product itself generates -- hub/hub/spec_render.py, not React. This is the product's actual output and what a spec-driven tool is judged on. A mock is HTML either way so the process is unchanged; note in RATIONALE.md that implementing it later touches Python templates, not components."
+    },
+    {
+      "id": "S6",
+      "title": "Screen 6 - questions and permission prompts (4 passes)",
+      "detail": "QuestionsPanel, AnswerForm, and the permission decision card. These are the moments the product STOPS and demands the operator. Rarely seen is not the same as unimportant -- if they look plain the product feels cheapest exactly when it is asking for trust."
+    },
+    {
+      "id": "S7",
+      "title": "Screen 7 - the overview screen (4 passes)",
+      "detail": "OverviewPage. The landing surface and the first impression."
+    },
+    {
+      "id": "S8",
+      "title": "Overflow screens, only if the night allows",
+      "detail": "In order: jobs (JobsPage/JobCard/JobForm), agents (AgentsPage/AgentCard/AgentSettingsPage), logs + activity, the command palette. Do NOT start one of these while an earlier screen has unfinished passes."
+    },
+    {
+      "id": "Z",
+      "title": "Build the review index",
+      "detail": "Run this whenever a screen finishes its four passes, and again as the LAST action before stop_at. design/mocks/index.html: one page linking every mock and variant, with its before/after screenshots inline and a one-line summary. This is the single artifact the operator opens in the morning -- if it does not exist, the night's work is much harder to review."
+    }
   ],
-
   "current": "C1",
   "next_action": "Cut the branch autonomous/2026-08-21-refine-and-continue from master at f1d6c08, then do queue item C1: conversations-continue phase 1. Read openspec/changes/conversations-continue/{proposal,design,tasks}.md first -- all three, they are short and design.md D3 and D7 explain choices you must not re-litigate. Write hub/tests/test_migrations.py::test_migration_0085_adds_lineage_id BEFORE the migration. Then add Conversation.lineage_id in hub/hub/db/models.py, write hub/hub/migrations/versions/0085_conversation_lineage.py (add column, backfill lineage_id = id, then index; guard for a missing conversations table the way 0033/0034 do), bump HEAD_REVISION to '0085' in hub/tests/test_migrations.py:39 and the head assertion in hub/tests/test_project_persistence.py, and set lineage_id to the conversation's own id in new_conversation in hub/hub/conversations.py. Verify with `cd hub && py -3.11 -m pytest tests/test_migrations.py tests/test_project_persistence.py -q`. Tick tasks.md boxes 1.1-1.6 only for what you actually ran and saw pass.",
-
   "iteration_shape": "One unit of work per firing, sized to finish inside the turn, ending pushed. Prefer a small finished thing to a large half-thing -- half a thing is what dies badly. A screen 'pass' (P1, P2, P3 or P4) is one firing. A conversations-continue phase is one firing, or two if the phase is large. Tick a tasks.md box ONLY for something you ran and saw pass. Start any Hub pytest run EARLY in the turn, not at the end -- it takes several minutes and exceeds the command cap if run whole, so run it in file chunks.",
-
   "screen_pass_protocol": {
     "P1_explore": "WebSearch for UI/UX patterns for this KIND of surface -- details, motion, states, colour coding, iconography, typography, and information that is missing rather than merely unstyled. ALSO read the T3 Code sourcemaps for the equivalent surface, and ALSO read the current AgentWeave component, including its comments: several encode why they look as they do, and undoing a deliberate decision is not an improvement. Write design/mocks/<screen>/RESEARCH.md -- findings with sources, and what specifically is missing from the current screen.",
     "P2_validate_and_mock": "FIRST validate the research against design/IDENTITY.md's rejection test and DISCARD anything that fails, saying which clause it failed. Then build design/mocks/<screen>/<variant>.html -- self-contained HTML importing ../../../hub/ui/src/index.css so it uses the real tokens. Two or three variants exploring DEGREE of refinement (restrained / considered / expressive), never different design languages. Include realistic content, not lorem ipsum.",
     "P3_iterate": "Screenshot every variant in BOTH themes with scripts/uishot.py, Read the PNGs, critique them honestly against the rejection test, and fix what you see. The point of this pass is that you LOOK at the result -- an unviewed mock is an unfinished mock.",
     "P4_finish": "Second iteration on the same basis, then write design/mocks/<screen>/RATIONALE.md (what was researched, what changed, why, what was rejected and under which clause) and add the screen to design/mocks/index.html with its before/after shots."
   },
-
   "limits": [
     "Operator, verbatim: 'You can create variants but do not change the overall tone of the app. I want to fines things not a complete jump in design. Not going from this to material design for example.' design/IDENTITY.md makes this testable. Clause 5 of its rejection test outranks every other consideration.",
     "The UI half produces MOCKS ONLY. Do not modify hub/ui/src for any screen item. The single exception is queue item C6, which is a specified part of conversations-continue.",
@@ -114,7 +132,6 @@
     "Never mark a task complete on the strength of a plan existing. Only verified implementation closes a task.",
     "Every timestamp from PowerShell Get-Date -Format 'yyyy-MM-ddTHH:mm:sszzz' or Python datetime.now().astimezone(). Git Bash `date` on this machine prints UTC but labels it +0100, which lands a heartbeat an hour in the future and stalls the loop."
   ],
-
   "pre_authorised": [
     "If a conversations-continue phase goes red, keep working it -- the operator chose 'keep trying all night' over moving to the UI work. Cost if wrong: no mocks by morning. Only move on if a phase is blocked by something genuinely outside the repo.",
     "If the C2 sender-side test fails before its implementation lands, that is EXPECTED (a live pre-existing defect). Proceed.",
@@ -124,7 +141,6 @@
     "If the queue runs dry before stop_at, deepen S1 and S2 with further variants rather than starting screens beyond S8. They are the surfaces the operator sees most.",
     "Choose your own variant names if restrained/considered/expressive do not fit a given surface, but keep them degrees of the SAME language."
   ],
-
   "decisions_for_user": [
     {
       "id": "D-direction",
@@ -148,7 +164,6 @@
       "status": "open"
     }
   ],
-
   "dead_ends_inherited": [
     "scripts/refresh_ui_bundle.py lives at the REPO ROOT, not under hub/ui. Running it from hub/ui fails with a file-not-found and leaves the bundle stale.",
     "Port 8010 serves hub/hub/static/ui, a COMMITTED BUILD ARTEFACT. A UI source change does not appear there until npm run build + refresh_ui_bundle.py, or unless you point at the Vite dev server on 5173. Check which you captured before trusting a screenshot.",
@@ -158,8 +173,6 @@
     "The Hub writes spec/index.json with CRLF on Windows, so a reindex dirties a tracked file with pure line-ending churn. Not your bug -- see exploration 2026-08-21-the-reindex-rewrites-line-endings.md. Do not 'fix' it by committing the churn.",
     "openspec validate reads only the FIRST PHYSICAL LINE of a requirement for its modal verb."
   ],
-
   "do_not_idle": "If next_action is somehow already done, do not stop and do not invent work outside the queue. Take the next unfinished queue item in order, update current/next_action, and say so in the log.",
-
   "heartbeat_note": "Refresh last_heartbeat to NOW early in your turn and keep it fresh while working -- it is what keeps an interactive session and this driver off each other. At the very END, after everything is pushed, set it to ~40 minutes in the past and commit that one-line change so the next firing picks up immediately instead of standing down against your own heartbeat."
 }
