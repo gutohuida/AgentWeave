@@ -1030,3 +1030,89 @@ tests covered the touched call paths. That failed in **both** directions:
 done, however small the diff looks.** Section 5 adds neither — but section 7 (read model) and
 section 8 (board) may.
 
+---
+
+## Iteration 11 — S3 section 5 landed and verified, full suite green (headless firing, arrived dirty at 09:5x, landed 10:03+01:00)
+
+**Arrived to a dirty tree, same pattern as most of run 1.** `git log` showed `1e9a4e2` ("Open run 2
+on the same branch, aimed at the gate") as HEAD, matching `STATE.json` exactly — but the working
+tree carried the entire section-5 diff: a new `hub/hub/dependency_gate.py`, edits to
+`task_transition_service.py` and `run_task_binding.py`, three test files, and `tasks.md`'s 5.1–5.9
+all ticked with full landing notes and a `**Verified, not assumed.**` paragraph already written. A
+prior headless firing (between run 2's 09:30 start and this one) had done the entire section, run
+its own verification, and died before committing — the same failure mode as run 1's iterations
+1–3, 5, 6 and 9. This iteration's job was verify-then-land, not build-from-scratch.
+
+**Verified independently rather than trusting the note.**
+
+- `hub/hub/dependency_gate.py` read in full: `evaluate(session, task) -> DependencyRefusal`, a pure
+  query joining `TaskDependency` to `Task`, sorting each unmet prerequisite into `unmet` (anything
+  short of `approved`) or `rejected` (permanent, different remedy). Confirmed against design D2
+  directly (`openspec/changes/task-dependencies/design.md:64`, "Met at `approved`, not at
+  `completed`") that `MET_STATUS = "approved"` is checking the depended-on **task's own `status`
+  field** — a real value in the task lifecycle CLAUDE.md documents
+  (`pending → assigned → in_progress → completed → under_review → approved`), not a
+  `SpecDocument.phase` question. That was the one place this section could have gone wrong subtly
+  (conflating "the document that declared the dependency is approved" with "the depended-on task
+  itself is approved") and the code has it right.
+- `task_transition_service.py` diff: `DependencyUnmetError(TransitionRefusedError)` added beside
+  `GateUnsatisfiedError`, same shape (`http_status = 409`, carries `.refusal`). The gate call sits
+  inside `apply_transition`, guarded by `if to_status == "in_progress":`, immediately after
+  `_guard_author_is_not_reviewer` and before the existing requirement-gate block — same placement
+  reasoning, before the history row, so every caller is covered without knowing the gate exists.
+- `run_task_binding.py`: the `except TransitionRefusedError` catch around `bind_run_to_task`'s call
+  already existed (for the author/reviewer path) and needed no new branch — only its comment was
+  corrected to say the dependency gate can now also be why it fires, and to name `S4` as where the
+  loop itself learns to route around a gated task rather than sit idle on one.
+
+**Ran the tests myself, not carried over.**
+`pytest hub/tests/test_dependency_gate.py hub/tests/test_task_transitions_api.py
+hub/tests/test_run_task_binding.py hub/tests/test_task_transition_service.py
+hub/tests/test_task_transitions.py -q` → **159 passed**, exact match to the landing note.
+`pytest hub/tests/test_spec_task_dependencies.py hub/tests/test_spec_declared_tasks.py
+hub/tests/test_spec_board_task_convergence.py hub/tests/test_requirement_gate.py
+hub/tests/test_task_transitions_api.py -q` → **73 passed**, exact match. `ruff check` and
+`black --check` on all six touched files → clean. `mypy` on the three touched non-test files,
+filtered to lines actually attributed to them (not the 298-error project-wide total, which is
+dominated by transitively-pulled-in modules): exactly two errors, both missing-parameter-annotation
+on `DependencyUnmetError.__init__`, the identical pre-existing pattern `GateUnsatisfiedError.__init__`
+already carries two classes above it in the same file — confirmed by checking those lines sit
+outside every diff hunk (`git diff | grep '^@@'`), i.e. genuinely pre-existing, not introduced here.
+
+**Ran the full `hub/tests/` suite myself, kicked off early and backgrounded rather than assumed
+clean from the note's stated intent to run it.** `pytest tests/ -q --ignore=tests/browser` from
+`hub/`: **2696 passed, 12 skipped, 1 xpassed, 0 failed in 848.77s (14m08s)**. Zero failures against
+run 2's own baseline (2669 passed, 0 failed) — the exact check run 1's closing entry said this run
+must not skip again after section 5 changes runtime behaviour on a shared choke point. Appended the
+real number to `tasks.md`'s 5-section note, which had been left saying only "result recorded in the
+log once it completes."
+
+**Task 5.7 (refuse recording a dependency for a hand-made task) was correctly left unimplemented,
+verified rather than taken on faith.** The note's own reasoning — `TaskDependency` rows are created
+in exactly one place, `spec_tasks.py::_materialise_edges`, whose `task` argument is always drawn
+from a query already filtered to `spec_document_id IS NOT NULL` — was re-derived independently by
+re-reading `spec_tasks.py:123-135` and grepping `TaskDependency(` across `hub/hub/` (one non-test
+hit). No reachable caller exists today; adding a defensive check for it would be exactly the kind
+of speculative error handling this codebase's own conventions ask not to add. Confirmed the note is
+right to leave it as "verified unreachable," not silently skipped.
+
+**No corrections were needed to the prior firing's work.** Committed as `13c8a2a` ("Land
+task-dependencies S3 section 5: the gate"), staging exactly the seven files the diff touched — no
+`git add -A`. Pushed.
+
+**Tasks.md now stands at 31/80** (counted directly:
+`grep -c '^\- \[x\]' openspec/changes/task-dependencies/tasks.md` → 31, not the 22/80 the prior
+`STATE.json` entry carried — that figure predates this section; recording the real count rather
+than propagating a stale one). `current` stays **S3**; section 6 (the rename refusal — closing
+the latent hole D6 names, where an approved document's path could be freed by archiving or
+reopening it first) is next. It is small (four tasks) and self-contained: change
+`rename_document`'s check in `hub/hub/spec_service.py:665` from `document.phase ==
+spec_lifecycle.APPROVED` to a check on `document.first_approved_at is not None` (the column section
+3 already added and already populated on the `approved` transition, per `spec_lifecycle.transition()`),
+then test the two holes this closes (approve → archive → rename; approve → reopen → rename, both
+must now refuse) and that a never-approved document still renames. Also check whether any existing
+test asserted the archived-rename path worked — if one does, per task 6.4 it encoded the hole and
+must be fixed with the fact stated in the commit, not silently adjusted.
+
+---
+
