@@ -21,7 +21,7 @@ from hub.checkpoint_cutover import (
 from hub.checkpoint_generation import CheckpointBody, render_body
 from hub.checkpoint_trigger import consider
 from hub.checkpoints import compute_envelope, create_checkpoint
-from hub.conversations import get_conversation_by_id
+from hub.conversations import get_conversation_by_id, peer_bound_conversation
 from hub.db.engine import async_session_factory
 from hub.db.models import (
     Agent,
@@ -47,6 +47,10 @@ async def _conversation(db, conversation_id="conv-1", **overrides):
         "lifecycle": "open",
         "origin": "operator",
         "title": "Wire up the worker",
+        # `new_conversation` sets this to the row's own id; this fixture constructs the model
+        # directly, so it has to do the same or every row here looks like a pre-migration row
+        # with no lineage of its own.
+        "lineage_id": conversation_id,
     }
     fields.update(overrides)
     conversation = Conversation(**fields)
@@ -147,6 +151,146 @@ async def test_a_peer_binding_follows_the_line_of_work_across_a_cutover(app):
         successor, _ = await cut_over(db, conversation, checkpoint)
 
     assert successor.bound_sender_conversation_id == "conv-sender"
+
+
+# --------------------------------------------------------------------------- lineage
+
+
+@pytest.mark.asyncio
+async def test_a_successor_shares_the_predecessors_lineage(app):
+    async with async_session_factory() as db:
+        conversation = await _conversation(db)
+        checkpoint = await _ready_checkpoint(db, conversation)
+        successor, _ = await cut_over(db, conversation, checkpoint)
+        predecessor = await get_conversation_by_id(db, "conv-1")
+
+    assert successor.lineage_id == predecessor.lineage_id == "conv-1"
+
+
+@pytest.mark.asyncio
+async def test_a_non_successor_conversation_is_its_own_lineage(app):
+    async with async_session_factory() as db:
+        conversation = await _conversation(db)
+
+    assert conversation.lineage_id == "conv-1"
+
+
+@pytest.mark.asyncio
+async def test_sending_from_a_successor_reaches_its_already_bound_recipient_thread(app):
+    """The sender-side half of the cutover contract. This is a live defect until the forward
+    lookup widens to lineage membership: a successor sends under a new conversation id, no
+    thread is bound to that id yet, and delivery mints a second recipient thread instead of
+    reaching the one already open for this line of work."""
+    async with async_session_factory() as db:
+        sender_predecessor = await _conversation(db, conversation_id="conv-a1")
+        await _conversation(
+            db,
+            conversation_id="conv-b1",
+            agent="haiku-1",
+            bound_sender_conversation_id="conv-a1",
+            bound_sender_agent=None,
+        )
+        checkpoint = await _ready_checkpoint(db, sender_predecessor)
+        sender_successor, _ = await cut_over(db, sender_predecessor, checkpoint)
+
+        found = await peer_bound_conversation(
+            db,
+            project_id=PROJECT,
+            recipient="haiku-1",
+            sender_conversation_id=sender_successor.id,
+            sender=AGENT,
+        )
+
+    assert found is not None
+    assert found.id == "conv-b1"
+
+
+@pytest.mark.asyncio
+async def test_a_correspondent_reaches_the_newest_open_conversation_after_a_cutover(app):
+    """The recipient side of a cutover -- already correct before this phase via the
+    `bound_sender_*` copy, kept here as a regression check now that the lookup runs through a
+    lineage subquery instead of a bare equality."""
+    async with async_session_factory() as db:
+        await _conversation(db, conversation_id="conv-sender", agent="sender-agent")
+        recipient_predecessor = await _conversation(
+            db, bound_sender_conversation_id="conv-sender", bound_sender_agent=None
+        )
+        checkpoint = await _ready_checkpoint(db, recipient_predecessor)
+        recipient_successor, _ = await cut_over(db, recipient_predecessor, checkpoint)
+
+        found = await peer_bound_conversation(
+            db,
+            project_id=PROJECT,
+            recipient=AGENT,
+            sender_conversation_id="conv-sender",
+            sender="sender-agent",
+        )
+
+    assert found is not None
+    assert found.id == recipient_successor.id
+    assert found.lifecycle == "open"
+
+
+@pytest.mark.asyncio
+async def test_lineage_resolves_with_no_checkpoint_rows_present(app):
+    """The widened lookup is a lineage match on `Conversation` alone -- a sender and recipient
+    that never checkpointed still resolve, with no `checkpoints` row anywhere in the picture."""
+    async with async_session_factory() as db:
+        await _conversation(db, conversation_id="conv-a1")
+        await _conversation(
+            db,
+            conversation_id="conv-b1",
+            agent="haiku-1",
+            bound_sender_conversation_id="conv-a1",
+            bound_sender_agent=None,
+        )
+
+        found = await peer_bound_conversation(
+            db,
+            project_id=PROJECT,
+            recipient="haiku-1",
+            sender_conversation_id="conv-a1",
+            sender=AGENT,
+        )
+
+    assert found is not None
+    assert found.id == "conv-b1"
+
+
+@pytest.mark.asyncio
+async def test_a_self_lineage_row_resolves_exactly_as_the_old_equality_did(app):
+    """The backfill's safety net: for every existing conversation -- never cut over, its own
+    lineage of one -- the lineage subquery reduces to the same single-id match the old bare
+    equality made, so the widening changes nothing for the ordinary case."""
+    async with async_session_factory() as db:
+        await _conversation(db, conversation_id="conv-a1")
+        await _conversation(
+            db,
+            conversation_id="conv-b1",
+            agent="haiku-1",
+            bound_sender_conversation_id="conv-a1",
+            bound_sender_agent=None,
+        )
+        # A decoy sharing no lineage with conv-a1, bound to a conversation of its own.
+        await _conversation(db, conversation_id="conv-c1")
+        await _conversation(
+            db,
+            conversation_id="conv-d1",
+            agent="haiku-1",
+            bound_sender_conversation_id="conv-c1",
+            bound_sender_agent=None,
+        )
+
+        found = await peer_bound_conversation(
+            db,
+            project_id=PROJECT,
+            recipient="haiku-1",
+            sender_conversation_id="conv-a1",
+            sender=AGENT,
+        )
+
+    assert found is not None
+    assert found.id == "conv-b1"
 
 
 # --------------------------------------------------------------------------- refusals

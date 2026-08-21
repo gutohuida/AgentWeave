@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Dict, Iterable, List, Optional
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .db.models import (
@@ -190,6 +190,13 @@ async def peer_bound_conversation(
 
     Filters on `open` and takes the newest: a binding whose thread the operator archived resolves
     to the successor bound to the same sender, not to the archived one.
+
+    Matched on the sender's *lineage*, not its bare id: a cutover mints the sender a new
+    conversation id, and without this widening every message sent from a successor would fail to
+    find the thread already bound to its predecessor and mint a second one. The bare-id equality
+    stays alongside it — a sender conversation id with no `Conversation` row of its own (the Hub
+    and the scheduler pass identifiers that were never rows to begin with) has no lineage to look
+    up, so the literal match is what still finds it.
     """
     conditions = [
         Conversation.project_id == project_id,
@@ -197,7 +204,18 @@ async def peer_bound_conversation(
         Conversation.lifecycle == "open",
     ]
     if sender_conversation_id:
-        conditions.append(Conversation.bound_sender_conversation_id == sender_conversation_id)
+        sender_lineage = (
+            select(Conversation.lineage_id)
+            .where(Conversation.id == sender_conversation_id)
+            .scalar_subquery()
+        )
+        lineage_siblings = select(Conversation.id).where(Conversation.lineage_id == sender_lineage)
+        conditions.append(
+            or_(
+                Conversation.bound_sender_conversation_id == sender_conversation_id,
+                Conversation.bound_sender_conversation_id.in_(lineage_siblings),
+            )
+        )
     else:
         # Both halves matter: without the NULL check a senderless message could resolve onto a
         # thread bound to one of that sender's conversations, which is a different binding.

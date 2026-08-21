@@ -34,21 +34,21 @@ the code does rather than what the requirement says.
 Covers `agent-conversation-handoff` — *A cutover carries the line of work to the successor in both
 directions*.
 
-- [ ] 2.1 Add tests to the checkpoint-cutover suite for all five scenarios: successor shares the
+- [x] 2.1 Add tests to the checkpoint-cutover suite for all five scenarios: successor shares the
       predecessor's lineage; an agent sending **from** a successor reaches its already-bound
       recipient thread without creating one; a correspondent replying into a cut-over line reaches
       the newest open conversation; lineage resolves with no checkpoint rows present; a
       non-successor conversation is its own lineage. **2.2 is where the currently-failing one is
       expected** — the sender-side case is a live defect today, so that test should fail before 2.3
       and pass after
-- [ ] 2.2 In `hub/hub/checkpoint_cutover.py`, set `successor.lineage_id = predecessor.lineage_id`
+- [x] 2.2 In `hub/hub/checkpoint_cutover.py`, set `successor.lineage_id = predecessor.lineage_id`
       alongside the existing `bound_sender_*` copy at lines 108-110
-- [ ] 2.3 Widen the forward lookup in `peer_bound_conversation` (`hub/hub/conversations.py:172`)
+- [x] 2.3 Widen the forward lookup in `peer_bound_conversation` (`hub/hub/conversations.py:172`)
       from `bound_sender_conversation_id == src.id` to "bound to any conversation sharing
       `src.lineage_id`", leaving the senderless `bound_sender_agent` branch untouched
-- [ ] 2.4 Confirm by test that a self-lineage row resolves exactly as the old equality test did —
+- [x] 2.4 Confirm by test that a self-lineage row resolves exactly as the old equality test did —
       this is what makes the backfill safe for every existing conversation
-- [ ] 2.5 Run the conversations and cutover suites
+- [x] 2.5 Run the conversations and cutover suites
 
 ## 3. A reply continues the conversation
 
