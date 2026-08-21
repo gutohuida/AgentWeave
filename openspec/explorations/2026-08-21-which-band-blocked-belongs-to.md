@@ -1,6 +1,7 @@
 # Exploration — Which band `blocked` belongs to (2026-08-21)
 
-**Status:** ANSWERED, with a defect found on the way. Read from source; nothing run.
+**Status:** ANSWERED and **FIXED** (§5 item 1), reproduced by execution first. §4a is **not** fixed —
+see §5's closing paragraph and §7.
 **Answers:** `loop-notices-and-reacts` task 3.4 — *"Decide which band `blocked` belongs to and record
 the reasoning where the classification lives. It is claimable by the loop yet means 'waiting on a
 person', and today's four sets disagree about it — this is the one classification the existing code
@@ -118,19 +119,32 @@ it. Each subsequent tick can add another orphaned question to the pile.
 Every individual piece here is correct and well-reasoned. The defect is entirely in their
 composition, and it exists only because `blocked` is claimable.
 
-**Not measured.** No loop was driven into this state; this is read from source. It should be
-reproduced before being fixed, in the order this session's other three loop bugs were —
-run first, then fix.
+**MEASURED, 2026-08-21.** Reproduced before fixing, in the order this session's other three loop
+bugs were. Two attempts, and the failed one is the more informative:
+
+- A **behavioural** reproduction (a loop whose only task is `blocked`, fired three times) **hung**
+  against the unfixed code, twice, at ~3 s CPU. That is not contention — it is the bug. The test
+  supplies its mock with two reads, enough for the one firing that should reach a spawn; unfixed,
+  **all four firings spawned**, the mock ran dry inside an awaited background task, and the await
+  never returned. The hang *is* the reproduction, just an unreadable one.
+- A **mechanism** reproduction then measured it cleanly in **0.31 s**:
+  `assert "blocked" not in CLAIMABLE_LOOP_TASK_STATUSES` →
+  `AssertionError: assert 'blocked' not in ('in_progress', 'blocked', 'assigned', 'pending',
+  'revision_needed')`.
+
+After the fix the behavioural test passes in the same run as everything else — `test_scheduler.py`
+**31 passed in 12.82 s**, up from 28 (two new tests, plus a third parametrization as `blocked` joined
+the derived gap). The hang not recurring is itself the confirmation that firings stopped spawning.
 
 ## 5. What to change
 
-Small, and mostly deletion:
+Small, and mostly deletion. **Items 1, 2 and 4 are done; 3 is a note for whoever writes group 3.**
 
-1. **Remove `"blocked"` from `CLAIMABLE_LOOP_TASK_STATUSES`** (`scheduler.py:259`). The queue then
+1. ✅ **Remove `"blocked"` from `CLAIMABLE_LOOP_TASK_STATUSES`** (`scheduler.py:259`). The queue then
    stalls on it, `_loop_stall_reason`'s existing message reports it in the per-status breakdown
    (`"no claimable task among N open (1 blocked, …)"`), and the loop recovers by itself the tick
    after the answer arrives.
-2. **Fix the docstrings that will become wrong.** `_claim_loop_task` (`scheduler.py:311`) and the
+2. ✅ **Fix the docstrings that will become wrong.** `_claim_loop_task` (`scheduler.py:311`) and the
    comment at `scheduler.py:967` both name `blocked` as a resume case, and
    `_first_startable_candidate:277` lists it among the statuses one transition from `in_progress`.
 3. **Task 3.3's literal changes.** The claimable set becomes
@@ -138,15 +152,24 @@ Small, and mostly deletion:
    be written against the *corrected* literal, or the refactor will faithfully preserve this bug.
    Worth saying explicitly in 3.3, since its whole purpose is to stop behaviour changing under a
    refactor and here the behaviour change is the point.
-4. **The derived-gap test needs its expectation widened.**
+4. ✅ **The derived-gap test needs its expectation widened.**
    `test_a_stalled_loop_queue_is_neither_claimable_nor_drained` derives the gap from `TRANSITIONS`;
    after this, the gap is `completed`, `under_review`, `blocked`. Widening it by hand is fine —
    deriving *which* gap members are correct is the judgement this document is making.
 
-**A separate, smaller fix, worth doing either way:** `park_task_for_question` returning `None` for an
-already-`blocked` task should still stamp `question.blocked_task_id`. The task is already parked for
-a question; a second question about the same task should also be able to release it. That closes §4a
-independently of the band decision, and is the safer of the two if only one is taken.
+**A separate, smaller fix — DELIBERATELY NOT TAKEN, and still open.** `park_task_for_question`
+returning `None` for an already-`blocked` task should still stamp `question.blocked_task_id`. The
+task is already parked for a question; a second question about the same task should also be able to
+release it. That closes §4a independently of the band decision.
+
+It is left undone for two reasons. Item 1 closes the **loop's** route into §4a — the loop no longer
+fires an agent at a blocked task, so it can no longer manufacture the second question. And the fix
+changes what a `Question`/`Task` binding means, which is a semantic change to the operator-in-the-loop
+path rather than a scheduling one, and belongs to whoever owns that decision.
+
+**§4a therefore remains reachable** by any route that runs an agent on a blocked task without the
+loop: a manual trigger, or an operator triggering the agent directly. The symptom is unchanged —
+answer the newest question and nothing is released.
 
 ## 6. Where the reasoning should live
 

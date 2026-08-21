@@ -33,7 +33,7 @@ from hub.db.models import (
     Run,
     Task,
 )
-from hub.run_task_binding import TERMINAL_FOR_BINDING
+from hub.run_task_binding import TERMINAL_FOR_BINDING, release_block_for_question
 from hub.scheduler import (
     _LOOP_BRIEFING_CHECKPOINT_CHARS,
     CLAIMABLE_LOOP_TASK_STATUSES,
@@ -729,8 +729,37 @@ def test_only_the_awaiting_someone_else_statuses_sit_in_the_claim_stop_gap():
     `_loop_stall_reason` names the wait rather than the claim swallowing it. Anything else in the
     gap is a bug -- `revision_needed` was, until 2026-08-20, and it stalled a loop whose reviewer
     had done everything right.
+
+    `blocked` joined on 2026-08-21, moving *out* of the claim rather than failing to enter it. It is
+    the most literal member: the "someone else" is a person, and the thing being waited on is a
+    question only they can answer. Widening this expectation is the deliberate half of that change --
+    the gap growing is correct here, where for `revision_needed` it was the bug.
     """
-    assert _statuses_in_neither_set() == {"completed", "under_review"}
+    assert _statuses_in_neither_set() == {"completed", "under_review", "blocked"}
+
+
+def test_blocked_is_not_claimable_because_nothing_the_loop_can_fire_will_answer_it():
+    """The mirror of the test below, and the reason they differ.
+
+    Both statuses mean "work that stopped". `revision_needed` stopped because a reviewer sent it
+    back, so the loop's own agent is exactly who resumes it. `blocked` stopped because a person was
+    asked a question, and `park_task_for_question` is the only way in -- so a task sitting here has
+    an **unanswered** question, and no agent the loop can fire is able to answer it.
+
+    Answering is the resume: `release_block_for_question` moves the task to `in_progress`, which is
+    claimable, on the very next tick. So stalling costs nothing and claiming costs a spawned agent
+    per tick that cannot advance the work.
+
+    See `openspec/explorations/2026-08-21-which-band-blocked-belongs-to.md`.
+    """
+    assert "blocked" not in CLAIMABLE_LOOP_TASK_STATUSES
+    # Not terminal either -- it sits in the stall gap with `completed` and `under_review`, which is
+    # what makes `_loop_stall_reason` name it instead of the claim swallowing it.
+    assert "blocked" not in TERMINAL_FOR_BINDING
+    assert "blocked" in _statuses_in_neither_set()
+    # And the two sets that already agreed keep agreeing.
+    assert "blocked" not in agents_api._ACTIVE_TASK_STATUSES
+    assert "blocked" not in checkpoints._LIVE_TASK_STATUSES
 
 
 def test_revision_needed_is_claimable_so_a_returned_review_resumes():
@@ -931,6 +960,153 @@ async def test_loop_whose_tasks_are_all_completed_but_unapproved_skips_instead_o
         unblocked = await db.get(Task, "task-spin-unblocked")
         assert unblocked.status == "assigned"
         assert unblocked.assignee == "loop-agent-spin"
+
+
+@pytest.mark.asyncio
+async def test_loop_whose_only_task_is_blocked_on_an_unanswered_question_skips_instead_of_spinning(
+    app, auth_headers, bind_runner
+):
+    """§4 of `openspec/explorations/2026-08-21-which-band-blocked-belongs-to.md`.
+
+    The same spin as the test above, reached by the one route that fix left open. That fix keys on
+    *the claim returned nothing* -- `_do_fire_job` consults `_loop_stall_reason` only when
+    `claimed_task is None`. `blocked` was in `CLAIMABLE_LOOP_TASK_STATUSES`, so the claim returned
+    something and the stall check was never reached.
+
+    A task sitting in `blocked` provably has an **unanswered** question: `park_task_for_question` is
+    the only thing that enters the status, and `release_block_for_question` moves it straight to
+    `in_progress` the moment that question is answered or declined. So firing an agent at it cannot
+    make progress -- the answer is what makes progress -- which is the same "someone else's turn" the
+    gap already holds `completed` and `under_review` for.
+
+    Before `blocked` left the claimable set this asserted `[True, True, True]`, three spawned runs,
+    and a briefing that never mentioned the block: `_compose_loop_briefing` emits title, description
+    and acceptance criteria only, so the agent received a blocked task rendered exactly like a fresh
+    one. The last block is the recovery, and it is why stalling costs nothing.
+    """
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {"loop-agent-blocked": {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    await bind_runner("loop-agent-blocked", cli="claude")
+
+    # Two reads, for the ONE firing that should reach a spawn -- the recovery at the end. If a
+    # stalled firing ever spawns again, this runs dry and the test says so rather than passing.
+    fake_session = MagicMock()
+    fake_session.pid = 4848
+    fake_session.read.side_effect = [
+        '{"type":"result","subtype":"success","is_error":false,"session_id":"sess-blocked-recover"}\n',
+        "",
+    ]
+    fake_session.wait.return_value = 0
+
+    now = datetime.now(timezone.utc)
+    async with async_session_factory() as db:
+        job = await _make_job(db, suffix="blocked", agent="loop-agent-blocked")
+        loop = await _make_loop(
+            db,
+            job_id=job.id,
+            purpose="waiting on an answer nobody has given",
+            stop_when_queue_empties=True,
+        )
+        db.add(
+            Task(
+                id="task-blocked-1",
+                project_id="proj-test",
+                title="started, then hit something only a person can supply",
+                status="blocked",
+                blocked_reason="Which database should the migration target?",
+                assignee="loop-agent-blocked",
+                loop_id=loop.id,
+                created_at=now - timedelta(minutes=9),
+                updated=now - timedelta(minutes=9),
+            )
+        )
+        db.add(
+            Question(
+                id="q-blocked-1",
+                project_id="proj-test",
+                from_agent="loop-agent-blocked",
+                question="Which database should the migration target?",
+                blocking=True,
+                answered=False,
+                blocked_task_id="task-blocked-1",
+            )
+        )
+        await db.commit()
+
+    firings = []
+    with patch(  # noqa: SIM117
+        "hub.api.v1.agent_trigger.PtySession.spawn", MagicMock(return_value=fake_session)
+    ):
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            scheduler = JobScheduler()
+            for _ in range(3):
+                async with async_session_factory() as db:
+                    fresh_job = await db.get(AIJob, job.id)
+                    firings.append(
+                        await scheduler._fire_job_internal(
+                            fresh_job, trigger="scheduled", session=db
+                        )
+                    )
+                for task in list(agent_trigger._background_runs):
+                    await task
+
+    assert firings == [False, False, False]
+
+    async with async_session_factory() as db:
+        # Stalled, not finished: the answer may still arrive, so the cron must keep ticking.
+        refreshed_job = await db.get(AIJob, job.id)
+        assert refreshed_job.enabled is True
+
+        refreshed_loop = (await db.execute(select(Loop).where(Loop.job_id == job.id))).scalar_one()
+        assert refreshed_loop.stop_reason is None
+        assert refreshed_loop.stopped_at is None
+
+        # The task is left exactly as it was, still waiting, still saying what for.
+        parked = await db.get(Task, "task-blocked-1")
+        assert parked.status == "blocked"
+        assert parked.blocked_reason == "Which database should the migration target?"
+
+        # Nothing spawned. Three skipped JobRuns, each naming what is being waited on.
+        job_runs = (await db.execute(select(JobRun).where(JobRun.job_id == job.id))).scalars().all()
+        assert len(job_runs) == 3
+        assert {r.status for r in job_runs} == {"skipped"}
+        assert all("stalled" in r.error_summary for r in job_runs)
+        assert all("1 blocked" in r.error_summary for r in job_runs)
+
+        runs = (
+            (await db.execute(select(Run).where(Run.agent == "loop-agent-blocked"))).scalars().all()
+        )
+        assert runs == []
+
+    # The answer arriving is the recovery, and it needs no help from the loop: the release moves the
+    # task to `in_progress`, which is claimable, so the very next tick works it.
+    async with async_session_factory() as db:
+        question = await db.get(Question, "q-blocked-1")
+        question.answered = True
+        question.answer = "The trial one, on 8010."
+        released = await release_block_for_question(db, question)
+        assert released is not None
+        assert released.status == "in_progress"
+        assert released.blocked_reason is None
+        await db.commit()
+
+    with patch(  # noqa: SIM117
+        "hub.api.v1.agent_trigger.PtySession.spawn", MagicMock(return_value=fake_session)
+    ):
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            async with async_session_factory() as db:
+                fresh_job = await db.get(AIJob, job.id)
+                recovered = await scheduler._fire_job_internal(
+                    fresh_job, trigger="scheduled", session=db
+                )
+            for task in list(agent_trigger._background_runs):
+                await task
+
+    assert recovered is True
 
 
 @pytest.mark.asyncio

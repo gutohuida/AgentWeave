@@ -254,9 +254,26 @@ def _loop_queue_order() -> tuple:
 #: (`checkpoints.py`) -- and only this one dissented, which is what marks it as an oversight rather
 #: than a policy. Resumed, not re-entered: like `assigned`, it is non-pending, so `_do_fire_job`
 #: leaves its status alone and the agent takes it back to `in_progress` itself.
+#:
+#: `blocked` LEFT this tuple on 2026-08-21, and it is the one status here that moved outwards. The
+#: three above were omissions -- work the loop's own agent could resume, invisible to the claim. This
+#: is the opposite: `park_task_for_question` (`run_task_binding.py`) is the only way into `blocked`,
+#: and `release_block_for_question` moves the task straight to `in_progress` the moment the question
+#: is answered *or declined*. So a task sitting in `blocked` provably has an **unanswered** question,
+#: and no agent this loop can fire is able to answer it -- the answer is what resumes the work, and
+#: it arrives from a person. That puts it with `completed` and `under_review` in the stall gap:
+#: someone else's turn.
+#:
+#: The test that separates it from `revision_needed`, which went the other way the day before, is
+#: whether firing an agent makes progress *possible*. For `revision_needed` it does. For `blocked` it
+#: cannot, and claiming it routed around the 2026-08-20 spin fix entirely: `_do_fire_job` consults
+#: `_loop_stall_reason` only when the claim returned nothing, so a claimable `blocked` task meant an
+#: agent spawned every tick against work that could not move -- while `_compose_loop_briefing` never
+#: mentions `blocked_reason` or the open question, so that agent was handed a blocked task rendered
+#: exactly like a fresh one. Reasoning and the second defect it caused:
+#: `openspec/explorations/2026-08-21-which-band-blocked-belongs-to.md`.
 CLAIMABLE_LOOP_TASK_STATUSES: tuple = (
     "in_progress",
-    "blocked",
     "assigned",
     "pending",
     "revision_needed",
@@ -274,9 +291,9 @@ async def _first_startable_candidate(
     `in_progress` needs no fresh gate check and is always returned immediately: it is already
     running, no `-> in_progress` transition is about to happen, and a prerequisite that regressed
     under it is D8's "flagged, not stopped" case, not a reason to skip past it. Every other
-    claimable status (`pending`, `assigned`, `blocked`, `revision_needed`) is one `apply_transition`
-    away from `in_progress` -- the same edge `dependency_gate.evaluate` guards (`blocked ->
-    in_progress` included) -- so checking it here is what makes claimability and startability agree
+    claimable status (`pending`, `assigned`, `revision_needed`) is one `apply_transition` away from
+    `in_progress` -- the same edge `dependency_gate.evaluate` guards -- so checking it here is what
+    makes claimability and startability agree
     (design D10) instead of the loop re-claiming a task the gate will only refuse.
 
     Uses `dependency_gate.evaluate` directly rather than a second readiness computation -- two
@@ -308,7 +325,7 @@ async def _first_startable_candidate(
 
 async def _claim_loop_task(session: AsyncSession, loop: Loop) -> Optional[Task]:
     """The queue item this firing works on (design D3): resume the loop's existing active task
-    (`in_progress`, `blocked`, or `assigned`) if one exists, else claim the oldest startable
+    (`in_progress` or `assigned`) if one exists, else claim the oldest startable
     `pending` one -- skipping past a gated candidate in queue order rather than claiming it and
     letting the dependency gate refuse the transition (design D10, section 9).
 
@@ -337,10 +354,13 @@ async def _loop_stall_reason(session: AsyncSession, loop: Loop) -> Optional[str]
     as open by the stop condition at the same time. Reproduced before it was fixed, in
     `test_loop_whose_tasks_are_all_completed_but_unapproved_spins`.
 
-    `completed` and `under_review` are what remain in that gap, and they belong there: both mean
-    "someone else's turn". An earlier version of this docstring called them "the only two", which
-    was wrong -- `revision_needed` was a third, and it did not belong, so it became claimable on
-    2026-08-20 rather than stalling here. `test_a_stalled_loop_queue_is_neither_claimable_nor_drained`
+    `completed`, `under_review` and `blocked` are what remain in that gap, and all three belong
+    there: each means "someone else's turn". An earlier version of this docstring called the first
+    two "the only two", which was wrong -- `revision_needed` was a third, and it did *not* belong, so
+    it became claimable on 2026-08-20 rather than stalling here. `blocked` joined the gap from the
+    other direction on 2026-08-21, leaving the claim rather than entering it: its "someone else" is a
+    person holding an unanswered question, which is the most literal membership of the three.
+    `test_a_stalled_loop_queue_is_neither_claimable_nor_drained`
     derives the gap from the transition map instead of restating it, so the next status added to the
     machine cannot fall into it unnoticed.
 
@@ -964,8 +984,8 @@ class JobScheduler:
                         logger.info(f"Job {job.id} fire skipped: {stall_reason}")
                         return False
                 if claimed_task is not None:
-                    # Only a `pending` task is *entered*; `assigned`/`in_progress`/`blocked` are
-                    # being resumed, so their status stays untouched (design D3). `assigned` became
+                    # Only a `pending` task is *entered*; `assigned`/`in_progress` are being
+                    # resumed, so their status stays untouched (design D3). `assigned` became
                     # reachable here on 2026-08-19 — see CLAIMABLE_LOOP_TASK_STATUSES — which is
                     # exactly the resume case this branch already guarded for.
                     if claimed_task.status == "pending":
