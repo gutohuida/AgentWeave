@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { getJson, postJson, patchJson, fetchWithAuth } from './client'
+import { getJson, postJson, patchJson } from './client'
 import { useConfigStore } from '@/store/configStore'
 
 export interface JobRun {
@@ -177,16 +177,12 @@ export function useResumeJob() {
   })
 }
 
-export function useDeleteJob() {
+export function useArchiveJob() {
   const queryClient = useQueryClient()
   const { selectedProjectId: projectId } = useConfigStore()
   return useMutation({
-    mutationFn: async (id: string) => {
-      const res = await fetchWithAuth(`/api/v1/projects/${projectId}/jobs/${id}`, {
-        method: 'DELETE',
-      })
-      return res.ok
-    },
+    mutationFn: (id: string) =>
+      postJson<Job>(`/api/v1/projects/${projectId}/jobs/${id}/archive`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['project', projectId, 'jobs'] }),
   })
 }

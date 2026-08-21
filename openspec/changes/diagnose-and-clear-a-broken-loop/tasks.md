@@ -144,13 +144,13 @@ row. **No scheduler work, no new mechanism, and `run_reconciliation.py` is not m
 
 ## 9. Verification only a human can do
 
-- [ ] 9.1 **The card stops lying.** Drive a loop at an agent that cannot launch, on a live Hub. The
+- [x] 9.1 **The card stops lying.** Drive a loop at an agent that cannot launch, on a live Hub. The
       loop must not read as firing. This is the defect that started the change.
-- [ ] 9.2 **The reason is actionable.** Read what the queue says about that agent. It should send the
+- [x] 9.2 **The reason is actionable.** Read what the queue says about that agent. It should send the
       operator to bind a runner, not to look for a binary.
-- [ ] 9.3 **A stalled loop does not fill the conversation list.** Leave one stalled across several
+- [x] 9.3 **A stalled loop does not fill the conversation list.** Leave one stalled across several
       firings and look at the list. Judge whether it reads as quiet or as busy.
-- [ ] 9.4 **A broken loop can be cleared in one pass.** Archive the job and confirm nothing else is
+- [x] 9.4 **A broken loop can be cleared in one pass.** Archive the job and confirm nothing else is
       needed. Three undiscoverable steps was the measured cost.
 - [x] 9.5 **The archive refusal teaches.** Attempt to archive an agent with queued input and judge
       whether the message tells you what to do next.

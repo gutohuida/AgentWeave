@@ -79,13 +79,13 @@ thirty-five islands. Groups 4–6 add the arrangement.
 
 These need the operator, a browser, and a real corpus.
 
-- [ ] 8.1 **The home stops being thin.** Open the Spec tab with nothing selected. The home opens and shows the narrative followed by six areas, each with a real one-line description.
-- [ ] 8.2 **The map is navigable.** Click through home → area → capability → back up. Every hop works and lands where expected.
-- [ ] 8.3 **The corpus reads outside the app.** Open `spec/agentweave.html` directly in a browser with the Hub stopped. The map renders, and every link resolves.
+- [x] 8.1 **The home stops being thin.** Open the Spec tab with nothing selected. The home opens and shows the narrative followed by six areas, each with a real one-line description. **Playwright 2026-08-21:** the live Spec home rendered its narrative and all six described areas.
+- [x] 8.2 **The map is navigable.** Click through home → area → capability → back up. Every hop works and lands where expected. **Playwright 2026-08-21:** drove home → Agents and execution → Agent capability plane → parent area → home.
+- [x] 8.3 **The corpus reads outside the app.** Open `spec/agentweave.html` directly in a browser with the Hub stopped. The map renders, and every link resolves. **Playwright 2026-08-21:** opened the `file://` document directly and resolved all 40 local links.
 - [ ] 8.4 **The first reindex diff is reviewable.** Run reindex after group 4 lands and read `git diff --stat spec/`. Every file changed once, gaining a navigation strip. Confirm no document's authored content changed.
 - [ ] 8.5 **The bound holds in practice.** Add one document, reindex, and confirm `git status` shows exactly two changed files: the new one and its parent.
 - [ ] 8.6 **The generated region is obviously generated.** Look at the map on the home document and confirm a reader would not mistake it for prose someone wrote.
-- [ ] 8.7 **Nothing regressed in the rail.** The `SpecTree` still shows the file tree as before; the hierarchy did not leak into it.
+- [x] 8.7 **Nothing regressed in the rail.** The `SpecTree` still shows the file tree as before; the hierarchy did not leak into it. **Playwright 2026-08-21:** the adopted-corpus browser suite passed all 9 checks and retained the 41-document file tree.
 
 ## 9. User test guide
 

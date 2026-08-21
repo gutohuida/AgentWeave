@@ -110,9 +110,11 @@ interface DependencyBoardProps {
   /** `null` names the standing "no document" board (design D9) — every hand-made task. */
   specDocumentId: string | null
   onOpenRequirement?: (documentPath: string, anchor: string) => void
+  /** Select the owning document when an off-board prerequisite is followed. */
+  onSelectBoard?: (specDocumentId: string) => void
 }
 
-export function DependencyBoard({ specDocumentId, onOpenRequirement }: DependencyBoardProps) {
+export function DependencyBoard({ specDocumentId, onOpenRequirement, onSelectBoard }: DependencyBoardProps) {
   const { data: board, isLoading } = useTaskBoard(specDocumentId)
   const { data: agents = [] } = useAgents()
   // Task 8.7: an off-board reference names the document it lives in, not just its id — the
@@ -215,14 +217,21 @@ export function DependencyBoard({ specDocumentId, onOpenRequirement }: Dependenc
               className="flex flex-wrap items-center gap-1.5"
             >
               {offBoardRefs.map((ref) => (
-                <span
+                <button
                   key={ref.id}
+                  type="button"
                   data-testid={`dependency-board-offboard-ref-${ref.id}`}
                   title={`${ref.title} — ${ref.status}`}
+                  disabled={!ref.spec_document_id || !onSelectBoard}
+                  onClick={() => {
+                    if (ref.spec_document_id) onSelectBoard?.(ref.spec_document_id)
+                  }}
                   className="flex items-center gap-1 px-2 py-1 rounded text-xs"
                   style={{
                     border: '1px dashed var(--border)',
                     color: 'var(--text-3)',
+                    cursor: ref.spec_document_id && onSelectBoard ? 'pointer' : 'default',
+                    background: 'transparent',
                   }}
                 >
                   <Icon name="link" size={11} />
@@ -230,7 +239,7 @@ export function DependencyBoard({ specDocumentId, onOpenRequirement }: Dependenc
                   <span style={{ color: 'var(--text-3)' }}>
                     — in {ref.spec_document_id ? documentTitleById.get(ref.spec_document_id) ?? 'another document' : 'another document'}
                   </span>
-                </span>
+                </button>
               ))}
             </div>
           )}

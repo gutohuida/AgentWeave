@@ -355,15 +355,18 @@ describe('DependencyBoard', () => {
       )
       const { DependencyBoard: Board } = await import('@/components/tasks/DependencyBoard')
       const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      const onSelectBoard = vi.fn()
       render(
         <QueryClientProvider client={client}>
-          <Board specDocumentId="spdoc-1" />
+          <Board specDocumentId="spdoc-1" onSelectBoard={onSelectBoard} />
         </QueryClientProvider>,
       )
 
       const ref = screen.getByTestId('dependency-board-offboard-ref-ext-1')
       expect(ref).toHaveTextContent('External prerequisite')
       expect(ref).toHaveTextContent('The Other Document')
+      fireEvent.click(ref)
+      expect(onSelectBoard).toHaveBeenCalledWith('doc-other')
     })
 
     it('draws nothing when every prerequisite is on this board', async () => {

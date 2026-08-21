@@ -95,7 +95,11 @@ export function DependencyBoardView({ onOpenRequirement }: DependencyBoardViewPr
         {structureHint}
       </p>
       <div className="flex-1 overflow-hidden">
-        <DependencyBoard specDocumentId={selectedId} onOpenRequirement={onOpenRequirement} />
+        <DependencyBoard
+          specDocumentId={selectedId}
+          onOpenRequirement={onOpenRequirement}
+          onSelectBoard={setManualSelection}
+        />
       </div>
     </div>
   )

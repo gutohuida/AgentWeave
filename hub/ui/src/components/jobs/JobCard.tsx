@@ -12,7 +12,7 @@ interface JobCardProps {
   onRun: (id: string) => void
   onPause: (id: string) => void
   onResume: (id: string) => void
-  onDelete: (id: string) => void
+  onArchive: (id: string) => void
   isPending: boolean
   /** A loop's queue count or current item, clicked: switch to the Tasks tab filtered to this
    *  loop's tasks. Same mechanism `SpecDocumentTasksLink` already proved live (design D5). */
@@ -176,9 +176,9 @@ function LoopBlock({ job, onOpenTasks }: { job: Job; onOpenTasks?: (taskIds: str
   )
 }
 
-export function JobCard({ job, onRun, onPause, onResume, onDelete, isPending, onOpenTasks }: JobCardProps) {
+export function JobCard({ job, onRun, onPause, onResume, onArchive, isPending, onOpenTasks }: JobCardProps) {
   const [expanded, setExpanded] = useState(false)
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [showArchiveConfirm, setShowArchiveConfirm] = useState(false)
 
   return (
     <div
@@ -267,18 +267,18 @@ export function JobCard({ job, onRun, onPause, onResume, onDelete, isPending, on
             </Button>
           )}
 
-          {showDeleteConfirm ? (
+          {showArchiveConfirm ? (
             <div className="flex items-center gap-1">
-              <Button variant="destructive" size="xs" onClick={() => onDelete(job.id)} disabled={isPending}>
-                Confirm
+              <Button variant="destructive" size="xs" onClick={() => onArchive(job.id)} disabled={isPending}>
+                Archive
               </Button>
-              <Button variant="outline" size="xs" onClick={() => setShowDeleteConfirm(false)}>
+              <Button variant="outline" size="xs" onClick={() => setShowArchiveConfirm(false)}>
                 Cancel
               </Button>
             </div>
           ) : (
-            <Button variant="outline" size="xs" onClick={() => setShowDeleteConfirm(true)} disabled={isPending} title="Delete" aria-label="Delete" style={{ color: 'var(--red)' }}>
-              <Icon name="delete" size={16} />
+            <Button variant="outline" size="xs" onClick={() => setShowArchiveConfirm(true)} disabled={isPending} title="Archive" aria-label="Archive" style={{ color: 'var(--red)' }}>
+              <Icon name="archive" size={16} />
             </Button>
           )}
         </div>

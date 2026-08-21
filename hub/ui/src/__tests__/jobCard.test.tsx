@@ -49,7 +49,7 @@ function renderCard(job: Job, onOpenTasks?: (taskIds: string[]) => void) {
         onRun={noop}
         onPause={noop}
         onResume={noop}
-        onDelete={noop}
+        onArchive={noop}
         isPending={false}
         onOpenTasks={onOpenTasks}
       />
@@ -58,6 +58,29 @@ function renderCard(job: Job, onOpenTasks?: (taskIds: string[]) => void) {
 }
 
 describe('JobCard loop block', () => {
+  it('offers an honest archive action and confirms it', async () => {
+    const user = userEvent.setup()
+    const onArchive = vi.fn()
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={client}>
+        <JobCard
+          job={baseJob()}
+          onRun={noop}
+          onPause={noop}
+          onResume={noop}
+          onArchive={onArchive}
+          isPending={false}
+        />
+      </QueryClientProvider>,
+    )
+
+    await user.click(screen.getByLabelText('Archive'))
+    await user.click(screen.getByRole('button', { name: 'Archive' }))
+    expect(onArchive).toHaveBeenCalledWith('job-1')
+    expect(screen.queryByLabelText('Delete')).not.toBeInTheDocument()
+  })
+
   it('renders no loop block for a plain job, even expanded', async () => {
     const user = userEvent.setup()
     loopTasks = []

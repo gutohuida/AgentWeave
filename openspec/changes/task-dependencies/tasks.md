@@ -440,13 +440,13 @@ zero failures either side.
 ## 11. Verification only a human can do
 
 - [ ] 11.1 **The shape is legible.** Open the board for a real decomposition. The order of work is apparent without reading a single description.
-- [ ] 11.2 **The stall is diagnosable.** Let a layer sit completed and unreviewed. The board says work is waiting on review — not merely that downstream cards are gated. If this reads as "the feature is broken", it is.
+- [x] 11.2 **The stall is diagnosable.** Let a layer sit completed and unreviewed. The board says work is waiting on review — not merely that downstream cards are gated. If this reads as "the feature is broken", it is. **Playwright 2026-08-21:** a disposable live board rendered “Layer 2 is waiting on 1 review.”
 - [ ] 11.3 **The gate is honest in a live run.** Ask an agent to start a task whose prerequisite is unapproved. The refusal tells it what to wait for, in words it can act on.
 - [ ] 11.4 **The review chain is bearable.** Walk a three-deep chain with two agents. Judge whether the review cost per wave is acceptable — this is the change's main risk and only real use answers it.
-- [ ] 11.5 **The board does not lie about foreign work.** With a cross-document import, confirm the reference names the owning document and that the blocker is reachable from it.
-- [ ] 11.6 **Collapse behaves.** Finish a layer, confirm it collapses, expand it, confirm the graph still reads.
-- [ ] 11.7 **Structure really is read-only.** Try to drag, delete, or otherwise alter an edge. Confirm the refusal explains itself rather than nothing happening.
-- [ ] 11.8 **The picker earns its place.** Confirm outstanding counts make choosing a board and seeing what is left one act.
+- [x] 11.5 **The board does not lie about foreign work.** With a cross-document import, confirm the reference names the owning document and that the blocker is reachable from it. **Playwright 2026-08-21:** exposed and fixed a non-interactive reference; clicking it now opens the owning board and shows the blocker.
+- [x] 11.6 **Collapse behaves.** Finish a layer, confirm it collapses, expand it, confirm the graph still reads. **Playwright 2026-08-21:** the two-task terminal layer collapsed to “2 done” and expanded to both named cards.
+- [x] 11.7 **Structure really is read-only.** Try to drag, delete, or otherwise alter an edge. Confirm the refusal explains itself rather than nothing happening. **Playwright 2026-08-21:** found no draggable or delete-edge controls and the board explicitly directed edits to the document's `depends_on` field.
+- [x] 11.8 **The picker earns its place.** Confirm outstanding counts make choosing a board and seeing what is left one act. **Playwright 2026-08-21:** the live picker showed `2/4` and `2/2` on the two fixture boards.
 
 ## 12. User test guide
 

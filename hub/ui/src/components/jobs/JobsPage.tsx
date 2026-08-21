@@ -10,15 +10,13 @@ import {
   useRunJob,
   usePauseJob,
   useResumeJob,
-  useDeleteJob,
+  useArchiveJob,
   useCreateJob,
   JobCreate,
 } from '@/api/jobs'
 
-// D16: `DELETE` now always refuses (a job archives instead) — mirrors `ChartersPage`'s own
-// `errorDetail`, the existing pattern here for turning a thrown `ApiError` into readable text.
 function errorDetail(error: unknown): string {
-  if (!(error instanceof Error)) return 'Could not delete job'
+  if (!(error instanceof Error)) return 'Could not archive job'
   try {
     const parsed = JSON.parse(error.message) as { detail?: string }
     return parsed.detail ?? error.message
@@ -36,20 +34,20 @@ export function JobsPage({ onOpenTasks }: JobsPageProps) {
   const { data: jobs, isLoading } = useJobs()
   const [showForm, setShowForm] = useState(false)
   const [filter, setFilter] = useState<'all' | 'active' | 'paused'>('all')
-  const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [archiveError, setArchiveError] = useState<string | null>(null)
 
   const runJob = useRunJob()
   const pauseJob = usePauseJob()
   const resumeJob = useResumeJob()
-  const deleteJob = useDeleteJob()
+  const archiveJob = useArchiveJob()
   const createJob = useCreateJob()
 
-  const isPending = runJob.isPending || pauseJob.isPending || resumeJob.isPending || deleteJob.isPending || createJob.isPending
+  const isPending = runJob.isPending || pauseJob.isPending || resumeJob.isPending || archiveJob.isPending || createJob.isPending
 
-  const handleDelete = (id: string) => {
-    setDeleteError(null)
-    deleteJob.mutate(id, {
-      onError: (error: unknown) => setDeleteError(errorDetail(error)),
+  const handleArchive = (id: string) => {
+    setArchiveError(null)
+    archiveJob.mutate(id, {
+      onError: (error: unknown) => setArchiveError(errorDetail(error)),
     })
   }
 
@@ -94,13 +92,13 @@ export function JobsPage({ onOpenTasks }: JobsPageProps) {
         </Button>
       </div>
 
-      {deleteError && (
+      {archiveError && (
         <div
           role="alert"
           className="mx-4 mt-3 rounded-md px-3 py-2 text-xs"
           style={{ background: tint('var(--red)'), color: 'var(--red)' }}
         >
-          {deleteError}
+          {archiveError}
         </div>
       )}
 
@@ -152,7 +150,7 @@ export function JobsPage({ onOpenTasks }: JobsPageProps) {
                 onRun={runJob.mutate}
                 onPause={pauseJob.mutate}
                 onResume={resumeJob.mutate}
-                onDelete={handleDelete}
+                onArchive={handleArchive}
                 isPending={isPending}
                 onOpenTasks={onOpenTasks}
               />
