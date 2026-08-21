@@ -497,3 +497,68 @@ first route in this change an operator interacts with directly rather than only 
 second mechanism — see `next_action` for the specific call shape considered.
 
 ---
+
+## Iteration 5 — S2 section 5, the `arrange` route (headless firing, found dirty at 05:28, landed 05:38+01:00)
+
+Same pattern as iterations 1–3: arrived to a dirty tree, not a clean one at `ecfec61`. The prior
+firing (started 05:13, per `driver.log`) had done the entire section-5 implementation — route,
+schema, six tests, `tasks.md` landing notes for 5.1–5.6, all reading as complete and well-reasoned
+— then ended its turn saying only "I'll pause here and wait for the background test task", without
+the notification ever landing in that process. Nothing was committed. This iteration's whole job
+was verifying that work was real rather than assumed, then landing it.
+
+**What was on disk, verified rather than trusted:**
+
+- `hub/hub/api/v1/spec.py`: `POST /project/spec/documents/arrange`, right after `reindex()` and
+  before `adopt_corpus()`. Takes `{path, parent}`, validates by building a candidate `Manifest`
+  (`dataclasses.replace` on the one entry), round-tripping it through `dump_manifest` →
+  `load_manifest` — the exact function that owns unknown-parent/self-parent/cycle — rather than
+  reimplementing any of the three, per the `next_action`'s explicit instruction. A revalidation
+  failure returns the manifest diagnostics verbatim (422); the path not being in the index at all
+  is a distinct 404 the three manifest rules have nothing to say about. On success: writes the
+  index, calls `spec_service.rerender_corpus` (iteration 4's function) over the *whole* revalidated
+  manifest rather than a narrower three-path version, broadcasts `spec_updated`, returns
+  `{path, parent, corpus: {rerendered, skipped}}` — the same `corpus` shape iteration 4 put on
+  `/spec/reindex`, deliberately, for consistency between the two routes that both re-render.
+- `hub/tests/test_spec_index_writer.py`: `TestArrangeRoute`, 7 tests — arranging under a parent
+  re-renders exactly `{moved, recursive home}` and leaves an unrelated sibling untouched (asserted
+  by reading its file, not just trusting the response); `parent: null` unparents; an unknown
+  document 404s; unknown parent / self-parent / a genuine three-document cycle each 422 with their
+  manifest diagnostic code, and — checked, not assumed — leave `index.json` unchanged on disk after
+  the refusal; a placement survives a subsequent `/spec/reindex` with an empty
+  `rerendered`/`skipped` response, proving persistence rather than a reset.
+- `tasks.md` §5: all six boxes ticked with landing notes already written to the same standard as
+  §4's.
+
+**Verification actually run this iteration, not carried over from the note:**
+
+- `py -3.11 -m pytest tests/test_spec_index_writer.py -q` → **31 passed** (24 pre-existing + 7 new),
+  matching the landing note's own claim exactly.
+- `ruff check hub/api/v1/spec.py tests/test_spec_index_writer.py` → clean.
+  `black --check` on both → clean (Python-3.11-vs-3.12 AST-parse warning is environmental, not a
+  formatting diff — both files reported "would be left unchanged").
+- `mypy hub/api/v1/spec.py` → the 297 project-wide errors are unrelated pre-existing debt in other
+  modules (`agent_actions.py` and friends, pulled in transitively); filtering to lines actually
+  attributed to `spec.py` gives **zero**.
+- Targeted neighbourhood run — `test_spec_render.py test_spec_corpus_context.py
+  test_operator_authored_documents.py test_spec_capability_kind.py test_spec_archive.py
+  test_spec_documents_api.py` → **126 passed**.
+- Full CLI suite (`py -3.11 -m pytest tests/ -q` from repo root) → **404 passed, 3 skipped**,
+  exact match to every prior baseline in this run.
+- Full Hub suite (`py -3.11 -m pytest tests/ -q --ignore=tests/browser` from `hub/`) → **1 failed,
+  2641 passed, 12 skipped, 1 xpassed in 768.47s (12m48s)**. The one failure,
+  `test_evidence_latest_review_signal.py::test_a_later_acceptance_replaces_the_reason_shown`, is
+  the exact inherited timestamp-collision signature already documented in
+  `dead_ends_inherited` (an order assertion between two records created moments apart) — confirmed,
+  not assumed, by rerunning it alone immediately after: **1 passed**. No new flake signature this
+  time, and neither of the other two previously-seen flaky tests fired in this run at all —
+  consistent with genuine timing flakiness, not a regression pattern.
+
+No corrections were needed to the prior firing's work — everything it wrote checked out on
+inspection and under test. `current` stays S2; `next_action` moves to §6, the arrangement itself
+(the six area documents, real authored prose, and reparenting the 32 filed capability documents) —
+the first part of this change that is content-authoring rather than pure plumbing, so it's sized
+down to a smaller slice (create the areas and set their parent to the home) rather than the whole
+section in one iteration, per `iteration_shape`'s "prefer a small finished thing".
+
+---
