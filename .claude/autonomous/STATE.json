@@ -9,7 +9,7 @@
   "stop_when_queue_empties": false,
   "run": 3,
   "iteration": 5,
-  "last_heartbeat": "2026-08-21T16:11:06+01:00",
+  "last_heartbeat": "2026-08-21T15:32:56+01:00",
   "log_file": ".claude/autonomous/2026-08-20-open-specs-log.md",
   "driver": "Windows Scheduled Task 'AgentWeaveAutonomousSession' -> .claude/skills/autonomous-session/scripts/run-iteration.ps1 -> headless `claude -p`, every 20 minutes, self-unregistering past stop_at. Each firing is a fresh process; all continuity is this file plus the log. Session-bound drivers (ScheduleWakeup, CronCreate) are deliberately NOT used — the 2026-08-15 run asked for nine hours and got forty minutes because the interactive session went away.",
   "operator_intent_verbatim": "I'm going to sleep. There is a lot specs opens for development. Work on them in any order you see fit. I won't respond to anything anymore. Most things are specced out. Prepare a autonomous run until 8AM. Good night",
