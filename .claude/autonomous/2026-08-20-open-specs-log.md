@@ -1116,3 +1116,75 @@ must be fixed with the fact stated in the commit, not silently adjusted.
 
 ---
 
+
+---
+
+## Run 2 intervention — the loop livelocked on a background task, and a human had to break it (11:16–11:45)
+
+**Section 5, the gate, landed** as `13c8a2a`. `task_transition_service` now carries its third guard,
+refusing `→ in_progress` (including the `blocked → in_progress` resume edge) until every prerequisite
+is approved, with a distinct permanent refusal for a rejected one. Iteration 11 verified it against
+159 + 73 targeted tests before landing work a previous firing had left uncommitted.
+**`task-dependencies` is no longer inert.**
+
+### Then the loop stopped making progress for fifty minutes
+
+```
+10:36:23  Waiting on the full suite run and the monitor notification before proceeding to commit.
+10:36:25  --- iteration end (exit 0) ---
+10:46:46  Taking over.  --- iteration start ---
+10:52:38  Waiting for the backgrounded full `hub/tests/` suite (task b47o6c4uc) to finish...
+10:52:38  --- iteration end (exit 0) ---
+11:01:46  Taking over.  --- iteration start ---
+11:06:47  I'll pause here and resume automatically once the background test run finishes...
+11:06:47  --- iteration end (exit 0) ---
+11:16:46  Taking over.  --- iteration start ---   ← died without even logging an end
+```
+
+**The cause is structural, and it is the harness's fault rather than the model's.** Each firing is a
+fresh `claude -p` process. When its turn ends the process exits, and every command it backgrounded
+dies with it. Three iterations in a row started a ~15-minute test suite in the background, ended the
+turn in order to "wait" for it, and killed the thing they were waiting for. No notification was ever
+coming.
+
+The consequence was the exact failure `iteration_shape` and the skill both warn about: **section 6's
+finished work sat uncommitted across four iteration boundaries.** Nothing was lost only because a
+human looked.
+
+The iteration prompt says *"Verify it: run the tests"* and never says the process will not outlive
+the turn. A model that reaches for a background task and a completion notification is behaving
+reasonably given what it was told.
+
+### The intervention
+
+1. Unregistered the Scheduled Task to stop further firings racing the repair.
+2. Ran the full `hub/tests/` suite **in the interactive session, which does persist**:
+   **2699 passed, 84 skipped, 1 xpassed, 0 failed** — with section 6's uncommitted work in the tree.
+3. **Mutation-checked section 6 rather than trusting it**, since it was written by a firing that then
+   died: reverting `rename_document`'s check to `phase == APPROVED` makes exactly the two new tests
+   fail (`..._approved_and_then_archived_is_still_not_renamed`, `..._reopened_...`) and nothing else.
+   Restored the file, reconfirmed `test_spec_rename.py` 22 passed and `ruff` clean.
+4. Landed it as `1db9781`. **`task-dependencies` now stands at 39/80.**
+
+Task 6.4 deserves a note: the run checked whether any existing test had asserted the archived-rename
+path *worked*, and found none — so the hole was **untested rather than wrongly asserted**, and
+nothing had to be unwound.
+
+### The rule now written into STATE.json as `NEVER_BACKGROUND_AND_WAIT`
+
+- Never end a turn waiting for anything. There is nothing to wait for.
+- Run the full suite in the **foreground** if you run it. A firing's execution limit is two hours;
+  the 15-minute *firing interval* is not a deadline, because `MultipleInstances=IgnoreNew` simply
+  skips the next firing while you work.
+- If the full suite genuinely will not fit, **commit and push on the targeted tests you did run**,
+  and put "full suite not run, next iteration must" in `next_action`. A committed section with a
+  stated verification gap is recoverable. Uncommitted work is what gets lost.
+- Never end an iteration with a dirty tree. This is what breaking that rule looks like.
+
+### Priority change for the rest of the window
+
+`next_action` now sends the loop to **section 7 (reading dependencies, 4 tasks)** and then
+**section 9, not section 8.** Section 9's own title is *"without this the change deadlocks every
+loop"* — and with §5 landed and §9 absent, **that is the state this branch is in right now.**
+Section 8 is the board: 13 tasks, touches `hub/ui/src`, and drags in a UI bundle rebuild. Closing the
+deadlock window is worth more than the board.
