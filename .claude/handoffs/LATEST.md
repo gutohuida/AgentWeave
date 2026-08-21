@@ -1,1 +1,1 @@
-.claude/handoffs/handoff-0069-2026-08-21-1405-the-loop-became-a-flow-and-three-loop-bugs-died.md
+.claude/handoffs/handoff-0070-2026-08-21-1624-driving-the-hub-found-seven-defects-and-a-change-to-hold-them.md
