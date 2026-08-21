@@ -1748,3 +1748,123 @@ on the backend loop files was still standing at the end of this turn — no rele
 carried forward verbatim into `next_action` again, with a note that `do_not_idle` should reach for
 `loop-notices-and-reacts` only once that claim actually lifts. `stop_at` (19:00) is a little under two
 hours and thirty minutes out.
+
+## Iteration 7 — task-dependencies section 8, fifth and last pass: 8.15, 8.16, 8.13 (16:29-16:41+01:00)
+
+Arrived to a clean tree at `53df465`, matching `STATE.json` exactly — no reconciliation needed.
+Re-fetched `origin/autonomous/2026-08-20-open-specs` twice this turn (once at the start, once after
+landing) and found no new remote commits either time; the interactive session's handoff 0070
+(`4405905`, 16:27) had already merged before iteration 6 ended and is included in `53df465`.
+
+**Read handoff 0070 in full before picking work, because it changes the coordination picture.** The
+interactive session's own status is "chunk complete" as of 16:24 -- everything of theirs committed
+and pushed at `264a299` -- and it explicitly asks whoever resumes next to *release* the
+`concurrent_session_claim` on the backend loop files "if you are NOT going to keep fixing these
+files." That sentence is addressed to whoever resumes the *interactive* session, not to this
+autonomous run: `STATE.json`'s own governance for this run is narrower and firmer -- carry the claim
+forward verbatim "until an iteration finds it removed." Nobody removed it. So the claim still stands
+for this run's purposes, and `hub/hub/scheduler.py`, `run_reconciliation.py`, `launchability.py`,
+`run_task_binding.py`, `api/v1/agents.py`, `api/v1/jobs.py`, `api/v1/inbound_queue.py`, and
+`test_scheduler.py` stayed untouched again this turn. `diagnose-and-clear-a-broken-loop` (the new
+change the interactive session proposed) is wall-to-wall the same claimed files for its remaining
+groups (2-7 touch `scheduler.py`/`jobs.py` directly per the handoff's own "Next steps"), so it is not
+an escape hatch around the claim -- treated as equally off-limits this turn.
+
+**Landed 8.15, 8.16 and 8.13 -- section 8's last three tasks, all it had.** `next_action`'s PASS 5
+grouping named a fourth task, 8.14, that turned out not to exist: `tasks.md` has no 8.14, only
+8.13/8.15/8.16 (checked with `grep -n "8\.14"` across both `tasks.md` and `design.md` -- zero hits).
+`next_action` had inherited a miscount; corrected in this entry rather than repeated.
+
+**8.15, the liveness cue.** Needed no new backend field: `task.assignee_status === 'running'` is
+already the Hub's own fresh-heartbeat liveness read (`effective_heartbeat_status`,
+`hub/hub/agent_status.py`, served on every `TaskResponse` well before this change) -- exactly D12's
+"a run is executing *now*," distinct from the `in_progress` badge the same way `has_open_divergence`
+already distinguishes "the board claims work is running" from "nothing actually is." `TaskCard.tsx`
+computes `isLive` from it and applies a green `boxShadow` ring (`0 0 0 2px
+color-mix(in srgb, var(--green) 40%, transparent)`) to the card's own root -- no second card
+component, D12's third constraint held by construction since this is the same `TaskCard` the board
+already reuses (8.3).
+
+**8.16, gated on `prefers-reduced-motion`, both branches genuinely tested.** New
+`hub/ui/src/lib/motion.ts` (`prefersReducedMotion()`), a plain `window.matchMedia` read -- not a
+hook/subscription, since the accessibility floor is "never animate when asked not to," not "react
+live to an OS setting mid-session," and a subscription would be speculative machinery for a signal
+nothing here needs to catch changing mid-render. Deliberately diverges from this codebase's existing
+precedent (`LoopTab.tsx`'s live dot, which relies entirely on `index.css`'s blanket
+`prefers-reduced-motion: reduce` rule and states outright "no component-level `matchMedia` check is
+needed") because 8.16's own wording asks to "test both branches," and a pure-CSS media query is not
+observable from `vitest`/jsdom without loading real stylesheets, which this test setup does not do.
+So: `TaskCard.tsx` reads `prefersReducedMotion()` once per render and withholds a new
+`task-live-pulse` class (new `@keyframes` in `index.css`) when true; the `boxShadow` ring itself is
+unconditional on `isLive` alone, so reduced motion degrades to a **static hue**, not to nothing -- the
+task's own wording, not a paraphrase. The colour-or-motion-alone constraint (D12's second bullet) was
+already met by the pre-existing `assignee_status` text pill a few lines below (renders the word
+"running"), asserted directly in a new test rather than assumed. New
+`hub/ui/src/__tests__/taskLivenessCue.test.tsx` (6 tests): nothing shown for an idle or merely
+stalled assignee, the testid present when live, the text pill present alongside the cue, and the two
+motion branches -- `window.matchMedia` mocked to `matches: true`/`false` (the global stub in
+`setup.ts` already defaults `false`; this file overrides it per test with `vi.spyOn`) -- asserting the
+class is present/absent and that the ring (`boxShadow`) survives the reduced-motion branch either
+way.
+
+**Verified, not assumed.** `npx tsc --noEmit` clean. `npx eslint` on all four touched/new files,
+`--max-warnings 0`, clean. Targeted (`taskLivenessCue.test.tsx`, `taskDivergenceControls.test.tsx`,
+the file already covering "what a card says") -> **19 passed**. Full `hub/ui` `vitest run`, in the
+**foreground**: **121 files / 1214 passed** -- exactly the prior pass's 1208 + 6 new tests, 0 failed,
+0 regressed. `openspec validate task-dependencies --strict` and `--all --strict` both clean (42/42).
+No Python touched (second pass in a row), so per `lesson_from_run1` the full `hub/tests/` suite was
+not rerun.
+
+**8.13, last as always.** `npm run build` then `py -3.11 scripts/refresh_ui_bundle.py`; confirmed the
+new class actually reached the shipped artefact by grepping the built CSS directly
+(`grep -c task-live-pulse hub/hub/static/ui/assets/*.css` -> 1) rather than trusting a clean exit
+code -- Tailwind's content-scanning purge does not touch hand-written `@layer base` rules, but a typo
+in the class name between the component and the stylesheet would not have shown up any other way.
+Committed `hub/ui/src`, `hub/hub/static/ui`, `hub/ui/src/lib/motion.ts` and the new test file as
+explicit paths (`5ff02b0`), then a small follow-up commit (`5ab6131`) recording this pass's
+verification paragraph in `tasks.md` after the fact -- the landing notes were written into the tasks
+themselves before the first commit, per convention, but the fuller verification paragraph (matching
+passes 1-4's own shape) was drafted after, once the live-browser attempt below had actually run.
+
+**Live-browser verification is partial, and this entry says so rather than rounding up.** Started the
+Vite dev server against 8010 (`AW_DEV_HUB=http://127.0.0.1:8010 npm run dev`) -- port 5173 was already
+held by another process on this machine (confirmed via `netstat`, not assumed whose), so Vite bound
+5174 instead, reachable and confirmed serving (`curl` 200). Checked every task on `proj-ff695d96`
+(the trial Hub's one project with real data) via the real API for a live `assignee_status: 'running'`
+-- all seven were `idle` at the time, so the *pulsing* branch could not be photographed without
+spinning up a real agent run first, which this pass judged disproportionate to a CSS-styling check:
+cost, wall-clock, and touching a project this run's own convention has treated as read-only all
+along. The "off" branch and the toggle/board around it were already verified live in the fourth pass
+(commit `d1605c2`) and nothing in this pass touches that path, so it was not re-shot. The "on"
+branch's actual DOM output -- the `task-live-*` testid, the `task-live-pulse` class, the `boxShadow`
+ring -- **is** verified against real React output via `@testing-library/react`'s `render()` (jsdom,
+not a mock renderer), which is why the test file mocks only `window.matchMedia`, the one browser API
+jsdom does not implement meaningfully, rather than mocking the component. Dev server stopped
+(`Stop-Process`, confirmed via a second `netstat`) before finishing the turn.
+
+**`task-dependencies` grep-counted totals need a footnote this entry is adding, not just repeating.**
+The file's own note at 8.13 ("left at 8.13 rather than renumbered -- renumbering... produced duplicate
+headers twice") is truer than prior entries' raw `grep -c '^\- \[x\]'` counts credited: 8.10 and 8.11
+each appear **twice** in the file -- once as an unchecked stub from the section's first pass, once
+with the real landing note from the fourth pass -- so a naive grep double-counts both the total and
+the done figure. Parsed properly (last occurrence per task number wins, `86` unique task numbers, not
+`88`): **`task-dependencies` is 78/86**, not the "79/88" the previous `next_action` was carrying.
+Section 8 itself is genuinely **16/16, complete** -- every one of its own numbers, duplicates included,
+resolves to `[x]` when the later occurrence is trusted over the earlier stub. The 8 remaining tasks
+are all of section 11 (human-only, not this run's to attempt). This is a bookkeeping correction, not
+new work; the duplicate lines themselves were not touched, matching the file's own stated reason for
+leaving them.
+
+**With section 8 done, `task-dependencies` has nothing left this run is permitted to attempt** --
+section 11 is human-only. Checked the rest of `run3_available_work` for anything else genuinely open:
+`corpus-aware-documents` (45/55) has only section 8 (human-only) and 6.6/6.7 left, both explicitly
+operator content-authorship, not code (`tasks.md`'s own words: "do not treat writing them as part of
+this change's completion"); `agent-created-documents` (27/35) has only its human-only section 6;
+`loop-notices-and-reacts` (0/44) and `diagnose-and-clear-a-broken-loop`'s remaining groups both sit
+on the claimed backend files; `loop-becomes-a-flow` is explicitly forbidden. Every item this run is
+both permitted and able to advance is either finished or blocked. `do_not_idle`'s own fallback for
+exactly this situation is: write up what the run learned, or drive the product end to end and record
+what breaks -- not a full end-to-end drive this turn (no fresh findings surfaced beyond the live-cue
+gap above, and the interactive session already spent a full session doing exactly that today,
+producing the seven defects `diagnose-and-clear-a-broken-loop` now owns). `stop_at` (19:00) is under
+two and a half hours out.
