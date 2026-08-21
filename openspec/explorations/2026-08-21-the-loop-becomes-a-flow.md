@@ -182,7 +182,87 @@ implemented now and nothing here disturbs it.
 the flow *uses* to fire a reviewer. The two are one design: Shape B says the work is takeable, the
 flow says who takes it and when.
 
-## 8. Open questions
+## 8. Three tiers, one row — and how an agent tells them apart
+
+The operator proposed a taxonomy: a flow gets you *"from 0 to spec fulfilled"*, a loop is *"a way an
+agent can keep working on a sequence of tasks"*, and a job is *"run apart from it, no sequence, just
+one task from time to time"* — then asked whether that over-complicates things.
+
+**It does not, and the reason is that all three already exist as configurations of one row:**
+
+```
+   AIJob, no Loop row                      ──▶  JOB
+        one agent, no queue, no sequence
+
+   AIJob + Loop, spec_document_id = NULL   ──▶  LOOP
+        one agent, a queue of hand-made tasks, worked in order
+
+   AIJob + Loop, spec_document_id SET      ──▶  FLOW
+        a decomposition, its graph, and whoever it takes
+```
+
+`Loop.spec_document_id` is already `nullable=True, unique=True`, and §150 already says *"A loop MAY
+declare one specification document as its queue's source."* **The flow is a loop that declares a
+document** — which is the right dividing line, because everything a flow needs beyond a loop
+(dependencies, an order, who reviews what) comes *from the document*. A document-less loop has none
+of those and needs none of the machinery.
+
+**DECIDED: three configurations, not three objects.** Three tables, three route families and three UI
+surfaces for one row with two optional columns would fork every rule written this week into three
+copies. The real cost of adopting the vocabulary is **vocabulary debt** — the code, the API, the
+`agent-loops` capability and the MCP tools all say "loop" — and this codebase has a cautionary tale
+about one concept with several names: four constants answering *"is this task live"* is how both
+stall bugs survived.
+
+### 8.1 Choosing one — DECIDED: a third tool
+
+The problem the operator named: an agent sees one tool whose behaviour changes completely depending
+on an optional parameter.
+
+```
+   job  vs loop   ──▶  two tools, two docstrings          already clear
+   loop vs flow   ──▶  one tool, one optional parameter   ambiguous
+```
+
+The precedent settles it. `create_job` and `create_loop` (`hub/hub/mcp_server.py:505`, `:536`) are
+**two tools that write the same table** — both create an `AIJob`, and `create_loop` additionally
+writes a `Loop` row. **The tool surface teaches; it does not mirror the schema.** A third verb
+differing by whether a document is declared is the same pattern a third time.
+
+So: `create_flow` requires a document and refuses without one; `create_loop` refuses a document and
+names `create_flow` as the alternative. That refusal style is already this file's convention —
+`create_loop` refuses a missing stop condition outright (*"a loop that cannot stop is not created"*),
+and `create_task`'s `loop_id` refusal names `send_message` as the way round.
+
+**Cost, stated:** 21 tools become 22, and every tool is context carried on every turn.
+
+*Rejected:* **one tool that refuses ambiguity** — cheaper in context, but an agent still has to read a
+description to learn two things exist, where a verb it can see is self-announcing.
+*Rejected:* **the parameter is enough** — an agent that omits the document silently gets a
+single-agent loop with no reviews, and nothing tells it why nothing is being reviewed.
+
+### 8.2 Knowing which one you are inside — DECIDED: the briefing says
+
+A separate problem, and the more important one: an agent working inside a flow did not choose it.
+
+```
+   finishing a task in a LOOP  ──▶  carry on to the next
+   finishing a task in a FLOW  ──▶  the flow routes it. Do NOT hand it off yourself.
+```
+
+An agent that cannot tell will either duplicate the flow's routing or assume routing that never
+happens. **No tool fixes this, because the agent has no reason to ask.** That is the same shape as
+item 10, where the capability worked and nothing told anyone it existed
+(`2026-08-20-an-agent-messaging-its-other-conversation.md`).
+
+Every firing already composes a briefing (`_compose_loop_briefing`), which is the one place an agent
+reliably reads. It states which this is **and what follows for the agent** — not merely a label.
+
+*Rejected:* **a tool to ask** — costs nothing per turn, and an agent that does not know to ask never
+asks. *Rejected:* **make it not matter** — would require a document-less loop to route reviews too,
+running the flow machinery for everything.
+
+## 9. Open questions
 
 - **Parallelism** (§6). The scope question. Everything else works either way.
 - **How does a flow know who should review?** Three layers already sketched in the previous
@@ -194,10 +274,16 @@ flow says who takes it and when.
   different, and only the second is worth surfacing.
 - **Does a flow fire an agent that has no runner bound?** Today `AIJob.agent` is validated at
   creation. A flow selecting an agent at firing time can select an unlaunchable one.
-- **Does `Loop` keep its name?** *"Flow"* describes the thing better and the rename would touch a
-  lot: table, API routes, UI, the `agent-loops` capability, MCP tools, and the operator's own
-  vocabulary. Cosmetic against everything else here, and worth deciding once rather than drifting
-  into both words.
+- **Does `Loop` keep its name?** Sharpened by §8: a `create_flow` tool puts *"flow"* into the agent
+  surface while the table, routes, UI and the `agent-loops` capability all still say *"loop"*. Both
+  words then name real and different things — a flow is a loop that declares a document — so this is
+  no longer a straight rename but a question of whether the **storage** word should stay `Loop` while
+  the **vocabulary** distinguishes three tiers. Recommendation: leave the table alone, especially
+  while `task-dependencies` is being implemented against it, and revisit only if the two words start
+  disagreeing rather than nesting.
+- **What exactly does the briefing say, and how long is it?** §8.2 decides that it says which tier
+  this is and what follows; the wording is unwritten, and `agent-loops` §257 bounds the briefing, so
+  it competes for room with the checkpoint and the task.
 - **`§626 consecutive firings occupy one row`** — written when consecutive firings meant one agent
   repeating. Two agents in sequence is the normal case for a flow and is not one event.
 - **What does the operator see?** A flow's board is the dependency board of `task-dependencies`,
