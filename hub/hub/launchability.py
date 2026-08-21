@@ -34,6 +34,14 @@ RUNNER_CLI: Dict[str, Optional[str]] = {
     "copilot": "copilot",
 }
 
+#: Not a runner, and deliberately not a key of `RUNNER_CLI`: the value `get_agent_config` reports
+#: for a roster agent that has **no** `Runner` bound at all. Distinct from `"native"`, whose
+#: `RUNNER_CLI` entry is `None` and therefore falls back to the agent's own name — which is exactly
+#: the masking this exists to end. Measured on the trial Hub 2026-08-21: an agent with
+#: `runner_id IS NULL` was reported as `Runner CLI 'probe-norunner' was not found in PATH`, sending
+#: the operator to look for a binary named after their own agent.
+RUNNER_UNBOUND = "unbound"
+
 
 def probe_agent(name: str, config: Dict[str, Any]) -> Dict[str, Any]:
     """Return a launchability verdict for one agent.
@@ -56,6 +64,20 @@ def probe_agent(name: str, config: Dict[str, Any]) -> Dict[str, Any]:
             "authorized": True,
             "runnable": False,
             "reason": "Runner is set to manual — no CLI to launch automatically.",
+        }
+
+    if runner == RUNNER_UNBOUND:
+        # Same shape as `manual` above, for the same reason: there is no CLI to look for, so
+        # every question below this point is the wrong question. Says what is actually wrong and
+        # what fixes it, because the alternative — falling through to the `name` fallback — names
+        # a binary that was never supposed to exist.
+        return {
+            "runner": runner,
+            "cli": None,
+            "present": False,
+            "authorized": True,
+            "runnable": False,
+            "reason": "No runner is bound to this agent. Bind one in the Hub UI before it can run.",
         }
 
     cli_override = config.get("cli")
@@ -294,11 +316,23 @@ def access_path_notice(access_path: str) -> str:
 async def get_agent_config(project_id: str, agent: str, db: AsyncSession) -> Dict[str, Any]:
     """Return the merged runner config `probe_agent` expects for one agent.
 
-    Merges two sources, in increasing priority: the session-synced `agents.<name>` entry
+    Merges three sources, in increasing priority: the session-synced `agents.<name>` entry
     (session.json, pushed by the CLI — has `runner`/`model`/`cli`/`env_vars`/`yolo` for
-    CLI-configured agents) and any self-registered `Agent.config` JSON.
+    CLI-configured agents), any self-registered `Agent.config` JSON, and — since 2026-08-21 —
+    **the bound `Runner` record**, which is the roster's own answer and outranks both.
+
+    That third source used to be missing here and was pasted into two call sites instead
+    (`api/v1/agents.py` and `api/v1/inbound_queue.py`, which carried byte-identical blocks
+    loading the `Agent`, loading its `Runner`, and overwriting `runner`/`model`). Both patched
+    the *bound* case only, so the **unbound** case — `runner_id IS NULL` — still fell through
+    `RUNNER_CLI["native"] is None` to the agent-name fallback, and reported a missing CLI named
+    after the agent. Doing it here fixes both surfaces at once and gives the unbound case a name
+    of its own (`RUNNER_UNBOUND`) rather than a wrong one.
+
+    A **self-registered** agent is exempt: it manages its own execution and legitimately has no
+    `Runner`, so calling it unbound would refuse something that works.
     """
-    from .db.models import Agent, ProjectSession
+    from .db.models import Agent, ProjectSession, Runner
 
     result = await db.execute(select(ProjectSession).where(ProjectSession.project_id == project_id))
     row = result.scalars().first()
@@ -316,4 +350,24 @@ async def get_agent_config(project_id: str, agent: str, db: AsyncSession) -> Dic
     agent_row = agent_result.scalars().first()
     if agent_row and agent_row.config:
         meta = {**agent_row.config, **meta}
+
+    if agent_row is not None and not agent_row.self_registered:
+        if agent_row.runner_id:
+            runner_row = await db.get(Runner, agent_row.runner_id)
+            if runner_row is not None:
+                # Overwrites rather than defers to session.json: the bound Runner is what
+                # `agent_trigger` actually launches, so anything else here would describe an
+                # agent nobody is going to start.
+                meta["runner"] = runner_row.cli
+                meta["model"] = runner_row.model
+        elif "runner" not in meta:
+            # Unbound means *nothing anywhere says how to launch this* — not merely "no Runner
+            # row". A CLI-configured agent carries its runner in session.json and no `Runner` is
+            # expected; `test_agent_with_no_bound_runner_has_no_collaboration_verdict` pins that
+            # such an agent stays launchable, and `..._reports_configured_agents` pins that one
+            # whose session.json says `manual` keeps the manual reason. Both would break under a
+            # rule keyed on `runner_id` alone, and both are right: the Hub cannot *trigger* these
+            # agents, which is a separate verdict (`collaboration_ready`) that already says so.
+            meta["runner"] = RUNNER_UNBOUND
+
     return meta

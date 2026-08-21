@@ -3,6 +3,7 @@
 import pytest
 
 from hub.launchability import (
+    RUNNER_UNBOUND,
     access_path_notice,
     get_agent_config,
     probe_agent,
@@ -13,6 +14,26 @@ from hub.launchability import (
 
 
 class TestProbeAgent:
+    def test_an_unbound_agent_says_so_instead_of_naming_a_cli_after_itself(self, monkeypatch):
+        """The masking measured on the trial Hub 2026-08-21, and the reason `native` is not enough.
+
+        An agent with `runner_id IS NULL` used to reach the `RUNNER_CLI["native"] is None` fallback
+        at the bottom of `probe_agent`, whose default CLI is **the agent's own name** — so the queue
+        status read `Runner CLI 'probe-norunner' was not found in PATH.` and sent the operator
+        looking for a binary that was never meant to exist. `inbound_queue.py`'s own comment records
+        the same masking being fixed once for the *bound* case; this is the branch that fix missed.
+
+        `which` is made to succeed for everything, so a fallthrough would report runnable rather
+        than merely a different message — the assertion fails loudly instead of subtly.
+        """
+        monkeypatch.setattr("hub.launchability.shutil.which", lambda cli: "/usr/bin/" + cli)
+        result = probe_agent("probe-norunner", {"runner": RUNNER_UNBOUND})
+        assert result["runnable"] is False
+        assert result["cli"] is None
+        assert "no runner is bound" in result["reason"].lower()
+        # The agent's own name must not appear as a binary anyone should go looking for.
+        assert "probe-norunner" not in result["reason"]
+
     def test_manual_runner_is_never_runnable(self):
         result = probe_agent("claude", {"runner": "manual"})
         assert result["runnable"] is False
@@ -487,3 +508,53 @@ async def test_get_agent_config_falls_back_to_session_wide_hub_client(app, auth_
 
     assert default_config["hub_client"] == "cli"
     assert override_config["hub_client"] == "mcp"
+
+
+@pytest.mark.asyncio
+async def test_get_agent_config_reports_the_bound_runner_and_names_the_unbound_case(
+    app, auth_headers, bind_runner
+):
+    """The bound `Runner` is the third source, and it outranks session.json.
+
+    It used to be neither — `get_agent_config` read only session.json and `Agent.config`, and two
+    call sites (`api/v1/agents.py`, `api/v1/inbound_queue.py`) pasted byte-identical blocks to
+    compensate. Both covered the bound case; neither covered the unbound one, which is why an agent
+    with `runner_id IS NULL` was reported as a missing CLI named after itself (measured on the
+    trial Hub, 2026-08-21).
+
+    Session.json deliberately says `kimi` here while the bound runner says `claude`: the bound
+    runner is what `agent_trigger` will actually launch, so it must win, and asserting on the
+    disagreement is what proves precedence rather than coincidence.
+    """
+    from hub.db.engine import async_session_factory
+
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {"bound-agent": {"runner": "kimi"}, "unbound-agent": {}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    await bind_runner("bound-agent", cli="claude")
+    await bind_runner("unbound-agent", cli="claude")
+
+    # Unbind the second one. This is the only route to the state -- creation refuses it
+    # ("Provide either runner_id or both provider and model"), which is why the invariant held
+    # everywhere except here.
+    patched = await app.patch(
+        "/api/v1/projects/proj-test/agents/unbound-agent",
+        json={"runner_id": None},
+        headers=auth_headers,
+    )
+    assert patched.status_code == 200
+    assert patched.json()["runner_id"] is None
+
+    async with async_session_factory() as db:
+        bound = await get_agent_config("proj-test", "bound-agent", db)
+        unbound = await get_agent_config("proj-test", "unbound-agent", db)
+
+    assert bound["runner"] == "claude"
+    assert unbound["runner"] == RUNNER_UNBOUND
+
+    # And the verdict the operator actually reads.
+    assert probe_agent("unbound-agent", unbound)["runnable"] is False
+    assert "no runner is bound" in probe_agent("unbound-agent", unbound)["reason"].lower()
