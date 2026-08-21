@@ -9,7 +9,7 @@ table instead of the CLI's session.json.
 """
 
 from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from sqlalchemy import select
@@ -208,6 +208,30 @@ async def test_job_arriving_while_agent_runs_is_queued(app, auth_headers, bind_r
         assert queued[0].origin_type == "job"
 
 
+@pytest.mark.asyncio
+async def test_job_that_cannot_start_records_the_queue_reason_as_failed():
+    from hub.turn_scheduler import ScheduleResult
+
+    async with async_session_factory() as db:
+        job = await _make_job(db, suffix="cannot-start", agent="unbound-job-agent")
+
+    reason = "No runner is bound to this agent. Bind a runner before starting it."
+    with patch(
+        "hub.turn_scheduler.schedule_agent",
+        AsyncMock(return_value=ScheduleResult(waiting_reason=reason)),
+    ):
+        scheduler = JobScheduler()
+        async with async_session_factory() as db:
+            fresh_job = await db.get(AIJob, job.id)
+            success = await scheduler._fire_job_internal(fresh_job, trigger="scheduled", session=db)
+
+    assert success is True
+    async with async_session_factory() as db:
+        run = (await db.execute(select(JobRun).where(JobRun.job_id == job.id))).scalar_one()
+        assert run.status == "failed"
+        assert run.error_summary == reason
+
+
 async def _make_loop(db, *, job_id, **fields):
     loop = Loop(id=f"loop-{job_id}", project_id="proj-test", job_id=job_id, **fields)
     db.add(loop)
@@ -248,6 +272,12 @@ async def test_loop_with_past_stop_at_skips_the_fire_and_disables_the_job():
         run = (await db.execute(select(JobRun).where(JobRun.job_id == job.id))).scalar_one()
         assert run.status == "skipped"
         assert run.error_summary == loop.stop_reason
+        conversations = (
+            (await db.execute(select(Conversation).where(Conversation.agent == job.agent)))
+            .scalars()
+            .all()
+        )
+        assert conversations == []
 
     # A subsequent manual fire still refuses — the job stays disabled, it does not fire anyway.
     async with async_session_factory() as db:
@@ -922,6 +952,13 @@ async def test_loop_whose_tasks_are_all_completed_but_unapproved_skips_instead_o
         assert {r.status for r in job_runs} == {"skipped"}
         assert all("stalled" in r.error_summary for r in job_runs)
         assert all("2 completed" in r.error_summary for r in job_runs)
+
+        conversations = (
+            (await db.execute(select(Conversation).where(Conversation.agent == job.agent)))
+            .scalars()
+            .all()
+        )
+        assert conversations == []
 
         runs = (await db.execute(select(Run).where(Run.agent == "loop-agent-spin"))).scalars().all()
         assert runs == []

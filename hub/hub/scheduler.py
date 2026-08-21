@@ -814,20 +814,6 @@ class JobScheduler:
                     agent=job.agent,
                     provider_session_id=resume_session_id,
                 )
-            if conversation is None:
-                conversation = new_conversation(
-                    project_id=job.project_id, agent=job.agent, origin="job"
-                )
-                if resume_session_id:
-                    conversation.provider_session_id = resume_session_id
-                session.add(conversation)
-                # A job names no conversation either, and fires unattended — the case where a
-                # silently changed posture is least likely to be noticed.
-                await inherit_runtime_overrides(session, conversation)
-            # Named from the job, not its message: a schedule fires the same message repeatedly,
-            # and the job's name is what the operator recognises the thread by.
-            name_conversation(conversation, job.name)
-
             # Create run record
             run_id = f"run-{short_id()}"
             run = JobRun(
@@ -838,7 +824,7 @@ class JobScheduler:
                 status="fired",
                 trigger=trigger,
                 session_id=resume_session_id,
-                conversation_id=conversation.id,
+                conversation_id=conversation.id if conversation is not None else None,
             )
             session.add(run)
 
@@ -997,6 +983,22 @@ class JobScheduler:
                 )
                 content = f"{briefing}\n{job.message}"
 
+            # Refused firings leave no conversation implying work happened. Resume lookup stays
+            # above the refusal points so an existing conversation is still reused, but a new row
+            # is created only once the firing is known to proceed.
+            if conversation is None:
+                conversation = new_conversation(
+                    project_id=job.project_id, agent=job.agent, origin="job"
+                )
+                if resume_session_id:
+                    conversation.provider_session_id = resume_session_id
+                session.add(conversation)
+                await inherit_runtime_overrides(session, conversation)
+            # Named from the job, not its message: a schedule fires the same message repeatedly,
+            # and the job's name is what the operator recognises the thread by.
+            name_conversation(conversation, job.name)
+            run.conversation_id = conversation.id
+
             entry = new_entry(
                 project_id=job.project_id,
                 agent=job.agent,
@@ -1032,7 +1034,17 @@ class JobScheduler:
                 session, job.project_id, "queue_entry_queued", queue_payload, agent=job.agent
             )
             await sse_manager.broadcast(job.project_id, "queue_entry_queued", queue_payload)
-            await schedule_agent(job.project_id, job.agent)
+            schedule_result = await schedule_agent(job.project_id, job.agent)
+            if (
+                schedule_result.waiting_reason
+                and schedule_result.waiting_reason != "agent is already running"
+            ):
+                # This is the same terminal outcome startup reconciliation would eventually
+                # record, reached honestly at the moment the Hub knows no turn began. Reusing
+                # `failed` also keeps JobCard's existing error-summary presentation.
+                run.status = "failed"
+                run.error_summary = schedule_result.waiting_reason
+                await session.commit()
 
             await sse_manager.broadcast(
                 job.project_id,
