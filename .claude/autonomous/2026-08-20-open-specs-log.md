@@ -1402,3 +1402,88 @@ UI-touching work (16 tasks, `hub/ui/src`, ends with `8.13`'s `make ui` bundle re
 unit, sized to a session larger than one 20-minute firing; consider taking it in two or three passes
 rather than one. `loop-notices-and-reacts` (0/44, backend only, no hazard) remains available as a
 smaller change of pace. `stop_at` (19:00) is still nearly four hours out.
+
+## Iteration 3 — task-dependencies section 8, first pass: 8.1, 8.2, 8.3, 8.12 (15:19-15:28+01:00)
+
+Arrived to a clean tree at `8595dfc`, matching STATE.json exactly (branch, parent, last commit).
+`next_action` named section 8 (the board, 16 tasks, UI-touching, hazard confirmed lifted by
+`e7446c2`'s D12) as the obvious next unit, sized to 2-3 passes with the first being "8.1-8.3
+layout+TaskCard reuse". Read `tasks.md` §8 and `design.md` D8/D9/D12 in full before writing
+anything, and read the section 7 backend (`hub/hub/schemas/tasks.py`'s `TaskDependencyRef`/
+`TaskResponse.prerequisites`/`dependents`/`dependency_state`, and `hub/hub/api/v1/tasks.py`'s
+`GET /tasks/board` and `GET /tasks/boards`) to confirm it was fully landed and unread by any
+frontend code — grepping the whole `hub/ui/src` tree for `dependency_state`/`prerequisites`/
+`/tasks/board` came back empty, confirming this pass starts from nothing rather than extending a
+partial wire-up.
+
+**Built the layer-assignment engine as pure functions in a new file, not inside the component.**
+`hub/ui/src/lib/dependencyBoardLayout.ts`: `assignDepths(tasks, edges)` does a memoised DFS,
+`depth(t) = 1 + max(depth(p) for p in prerequisites(t))` — the longest path, not the first or
+shortest, which is what 8.1 actually asks for and what a naive "depth = 1 + depth(first
+prerequisite)" would get wrong on a diamond shape. `groupByDepth` buckets and sorts shallowest
+first. Originally wrote both inside `DependencyBoard.tsx` itself; `eslint --max-warnings 0` caught
+`react-refresh/only-export-components` on both exports (a component file exporting plain functions
+breaks Vite fast refresh) — moved to `lib/`, matching the project's own convention (`agentColors.ts`,
+`hubTime.ts`) rather than suppressing the warning.
+
+**The component**, `hub/ui/src/components/tasks/DependencyBoard.tsx`: fetches via a new
+`useTaskBoard(specDocumentId)` hook (added to `hub/ui/src/api/tasks.ts` alongside the
+`TaskDependencyRef` type and the `prerequisites`/`dependents`/`dependency_state` fields `Task`
+itself was missing — the backend has served them since section 7 but nothing on the frontend read
+them until now), lays out `groupByDepth`'s layers as stacked rows, and draws edges as a single
+absolutely-positioned `<svg>` behind the cards. Line coordinates come from `getBoundingClientRect()`
+on real card refs *after* layout (`useEdgeLines`), not from the layer/column math — recomputed on
+mount, on window resize, and via a `ResizeObserver` on the container and every card, since a layer
+reflowing can move everything below it without the container's own size changing. An edge naming a
+task with no card on this board (an off-board import, task 8.7's territory, not yet built) is
+skipped rather than drawn to nowhere. Every card is the real `TaskCard`, opening the same
+`TaskDetailDrawer` the seven-column board uses — no second card component, which is 8.3 in full and
+is what design's own risk section warns a naive build would produce.
+
+**8.12 folded in rather than left for later.** It asks to *decide* "good enough" edge routing before
+implementing it — since the implementation above already commits to straight lines with no crossing
+minimisation, the decision and the landing are the same act. Recorded as a technical call in a
+`design.md` D8 addendum rather than escalated to `decisions_for_user`: unlike D4's payload shape or
+D12's per-card-vs-header question, nothing about line style is stored data or hard to change later,
+and 8.12's own wording already names crossing minimisation as "unbounded... to polish" rather than
+an open product question.
+
+**Deliberately not done this pass: wiring it into `App.tsx`'s `tasks` tab.** That is task 8.11 (the
+view toggle), explicitly the plan's third pass. So the component exists and is fully tested but is
+not reachable from a running Hub yet — noted plainly in both the tasks.md landing note and here,
+rather than either skipping verification or overreaching into 8.11 to make it demoable.
+
+**Verified, not assumed.** 11 new tests: `hub/ui/src/__tests__/dependencyBoard.test.tsx` (9 —
+`assignDepths` on a chain, on a diamond proving longest-path over first-prerequisite, on a cycle
+guarded rather than hanging, on an off-board prerequisite ignored rather than throwing;
+`groupByDepth`'s ordering; three component renders confirming layer placement by depth, `TaskCard`
+reuse including that clicking still opens `TaskDetailDrawer`, and that exactly one `<line>` is drawn
+per on-board edge while an off-board one draws none) and 2 more in `tasksApi.test.tsx` for
+`useTaskBoard`'s request shape — including the `null` case, which must still fire (unlike
+`useDocumentTasks(null)`) because `null` names the standing "no document" board, not "nothing
+selected yet". `npx tsc --noEmit` clean. `npx eslint <touched files> --max-warnings 0` clean (this
+is what caught the fast-refresh warning above, before it shipped). Full `hub/ui` `vitest run`, in
+the **foreground**: **119 files / 1183 passed** — exactly the prep baseline (1172) + 11 new tests,
+0 failed, 0 regressed. (The `Error: boom` lines in the run's own output are `ErrorBoundary.test.tsx`
+deliberately throwing to test the boundary — pre-existing, not this pass's.) No Python touched, so
+`ruff`/`black`/`mypy`/`pytest hub/tests/` were not run for this pass — nothing in the diff crosses
+into `hub/hub/`.
+
+`openspec validate task-dependencies --strict` and `--all --strict` both clean (41/41).
+
+Committed as `181b202` (`git add` of the seven explicit paths — the new `dependencyBoardLayout.ts`,
+`DependencyBoard.tsx`, `dependencyBoard.test.tsx`, and the four modified files; no `git add -A`) and
+pushed clean. `git status` before staging showed only this pass's own files — no concurrent-session
+commits landed on the branch during this iteration's ~9 minutes.
+
+`task-dependencies` section 8 stands at 4/16 (8.1, 8.2, 8.3, 8.12). Remaining in section 8: 8.4
+(reword-and-confirm the badge reads standalone — small), 8.5 (document picker + no-document board),
+8.6 (collapse a terminal layer), 8.7 (off-board import references — the `useEdgeLines` skip above
+already tolerates these existing, this task is drawing them, not just not-crashing on them), 8.8
+(the three stalled states, design D8's main risk mitigation), 8.9 (regressed-prerequisite flag),
+8.10 (no structural editing affordance), 8.11 (the view toggle — this is where `DependencyBoard`
+actually becomes reachable), 8.13 (`make ui`, always last), 8.14 (the liveness cue's D12 per-card
+placement — the layout already supports several running cards per layer with no rework, per D12's
+own claim, but the visual cue itself is unbuilt), 8.15 (the pulsing hue), 8.16
+(`prefers-reduced-motion`). Section 11 (human-only, 8) is not this run's. `stop_at` (19:00) is
+still a little over three hours out.
