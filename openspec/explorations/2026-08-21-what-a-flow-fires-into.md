@@ -154,14 +154,21 @@ but its justification is **same work** — and under a flow those two stop coinc
 The three existing scenarios all survive, incidentally: none of them asserts that firings from one
 loop *must* collapse, only what collapsing must preserve when it happens.
 
-**Candidate resolution, not decided:** key the collapse on sameness rather than on loop identity —
-consecutive firings collapse when they share an agent, and stay separate when they do not. A
-single-agent flow then behaves exactly like a loop today, which is the same regression bar
-`loop-becomes-a-flow` already sets for itself (*a flow with one agent behaves identically to a loop
-today*). No new configuration, and the existing three scenarios keep their meaning.
+**CORRECTION (same session, on reading the change rather than only the current spec): this is already
+fixed in the proposal, and Finding C is therefore not a finding against `loop-becomes-a-flow`.**
 
-This belongs in `loop-becomes-a-flow`'s `agent-loops` delta, which already modifies that capability.
-It is not there now.
+`openspec/changes/loop-becomes-a-flow/specs/agent-loops/spec.md:27-57` already modifies this
+requirement to read *"created by the same loop **and belonging to the same agent**"*, adds *"A change
+of agent SHALL break the run. Consecutive firings by different agents are different events — under a
+flow, an implementer followed by a reviewer is the ordinary case, and collapsing them together would
+hide the handover that is the most informative thing on the list"*, and carries a scenario for it.
+
+That is the same resolution this section arrived at independently, which is mild evidence the change
+is thinking clearly — but it was already written, and this document originally claimed it was not.
+The error was reading `openspec/specs/agent-loops/spec.md` and §9 without checking the delta.
+
+**What survives:** the defect is real in the *current* corpus, so it is live until this change lands.
+Nothing more.
 
 ---
 
@@ -194,7 +201,9 @@ accept or reject them:
    is better: the reaper is for crashes, and this is not a crash.
 4. **`get_agent_config` should carry `Agent.runner_id`**, so the unbound case stops falling through
    to the agent-name fallback. This one is a small fix with value independent of the flow.
-5. **§626 should key collapse on the agent, not the loop.** §4 above.
+5. ~~**§626 should key collapse on the agent, not the loop.**~~ **Already done** in the change's
+   `agent-loops` delta — see the correction in §4. Listed only so a reader of this list does not go
+   looking for it.
 
 Items 2, 3 and 4 are **loop bugs today**, not flow bugs. They are only listed here because the flow
 is what makes them reachable without an operator mistake.
