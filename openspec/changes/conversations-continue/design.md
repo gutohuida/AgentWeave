@@ -143,9 +143,24 @@ for a new one are contradictory, and silently preferring one would hide a caller
 
 The reverse rule tests ownership and lifecycle, not `origin`. A delegation begun in an operator's
 conversation returns to it, so one line of work stays in one place. The visible consequence is that
-an operator's thread can show entries whose originating agent is not the one they are talking to;
-`origin_agent` is already carried on the entry, so this is a rendering question rather than a data
-one, and it needs checking rather than assuming.
+an operator's thread shows an inbound entry authored by an agent the operator never addressed.
+
+**The correspondent is already visible in that thread, and attribution already works.** Checked
+rather than assumed:
+
+- `_message_to_timeline` (`hub/hub/api/v1/agent_chat.py:203-206`) already puts the delegating
+  agent's *outbound* message into the operator's timeline as an `outbound_peer` entry. The third
+  agent's name is therefore present today; this change adds the other half of an exchange whose
+  first half is already on screen.
+- `_queue_entry_to_timeline` (`agent_chat.py:171-180`) classifies any non-operator, non-job origin
+  as `inbound_peer` and carries `participant = origin_agent`.
+- `participantLabel` (`hub/ui/src/components/agents/AgentTimeline.tsx:738-745`) labels
+  `operator_input` as "You", right-aligned, and `inbound_peer` with the sending agent's name,
+  left-aligned; line 849 colours it by that agent's own colour.
+
+So a continued reply cannot be mistaken for something the operator wrote, and needs no new
+rendering. What remains is a judgement no test makes: whether a two-party thread that now carries a
+*complete* third-party exchange still reads as the operator's conversation rather than as a log.
 
 *Alternative considered: continue only into `origin: peer` threads.* Rejected by the operator — it
 splits a single line of work across two conversations, which is the problem being fixed.
@@ -164,9 +179,10 @@ straight through to the Hub, so nothing new is imported.
   thread would otherwise have been minted, so nothing moves from one existing thread to another.
   The worst case is a message in the thread it was replying to, which is the intent.
 
-- **An operator's conversation gains traffic they did not send** (D5). → Accepted deliberately.
-  Mitigation is presentational: confirm the entry renders its originating agent in an
-  operator-origin thread, and treat a failure there as part of this change, not a follow-up.
+- **An operator's conversation gains traffic they did not send** (D5). → Accepted deliberately,
+  and smaller than it first appears: the delegating agent's outbound message is already rendered in
+  that thread, and inbound peer entries are already labelled and coloured by their sending agent
+  (see D5). No rendering work is implied. The open part is legibility at length, not attribution.
 
 - **`lineage_id` is wrong for pre-existing cutover chains**, since backfill sets it to `id`. → Those
   threads behave exactly as they do today: no better, no worse. No delivery that currently works
@@ -204,8 +220,10 @@ without reverting the migration is safe in either order.
 
 1. Should `start_new_thread` be surfaced to the operator anywhere, or is it agent-only? The composer
    has no notion of "reply into a new thread" today, and this change does not add one.
-2. When the reverse rule delivers into an operator-origin thread, should the entry be visually
-   distinguished from one the operator's own correspondent sent? D5 assumes existing rendering is
-   adequate; the task list verifies it rather than trusting it.
+2. Answered while writing D5: the entry is already distinguished — left-aligned, named for the
+   sending agent, in that agent's colour, against the operator's right-aligned "You". The
+   remaining question is one of density rather than attribution: at what length does a thread
+   carrying a full third-party exchange stop being readable as the operator's own conversation?
+   Task 6.6 is where that gets judged.
 3. Does anything besides `checkpoint_cutover.py` create a conversation that ought to inherit a
    lineage? A sweep of `new_conversation` call sites is part of the work.

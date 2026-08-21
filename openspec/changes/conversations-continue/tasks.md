@@ -107,12 +107,13 @@ and a real exchange — the defect this change fixes was found by watching one, 
       occupies **two** conversations total, and that each agent's side reads as one continuous
       thread
 - [ ] 6.2 Ask one agent something in your own conversation and have it delegate to a second agent.
-      Confirm the second agent's reply appears **in your thread**, and that the UI makes clear which
-      agent sent it (design.md open question 2 — judge whether the existing rendering is enough, and
-      record the answer either way)
-- [ ] 6.3 Check that a delegated reply arriving in an operator thread is not mistaken for a message
-      from the agent you were talking to. This is the risk D5 accepts; it is a judgement about
-      whether the thread stays readable, which no test can make
+      Confirm the second agent's reply appears **in your thread**, left-aligned and labelled with
+      that agent's name. Attribution is already implemented (D5) — this confirms it holds on the new
+      path, it is not an open design question
+- [ ] 6.3 Judge whether the thread still reads as *your* conversation once it carries a complete
+      third-party exchange rather than only the outbound half it shows today. This is the risk D5
+      accepts, and the only part of it that is genuinely open. If it reads as a log, say so — that
+      is a finding about density, not a reason to drop continuity
 - [ ] 6.4 Trigger a checkpoint cutover mid-exchange, then have the correspondent reply. Confirm the
       reply lands in the successor and that nothing new is opened
 - [ ] 6.5 Have an agent start a new thread deliberately and confirm the separation is legible in the
