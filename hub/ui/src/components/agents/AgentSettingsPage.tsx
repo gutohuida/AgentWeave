@@ -217,8 +217,10 @@ function SectionContent({ agent, section }: { agent: AgentSummary; section: Agen
 function ArchiveControl({ agent }: { agent: AgentSummary }) {
   const archive = useArchiveAgent()
   const archived = agent.lifecycle === 'archived'
-  const refusal =
-    archive.error instanceof ApiError ? archive.error.message : archive.error ? 'Could not save.' : null
+  const queueRefusal = archive.error instanceof ApiError ? parseQueueArchiveRefusal(archive.error) : null
+  const refusal = archive.error instanceof ApiError
+    ? queueRefusal?.message ?? archive.error.message
+    : archive.error ? 'Could not save.' : null
 
   return (
     <div>
@@ -232,12 +234,39 @@ function ArchiveControl({ agent }: { agent: AgentSummary }) {
         {archived ? 'Unarchive agent' : 'Archive agent'}
       </Button>
       {refusal && (
-        <p role="alert" className="mt-2 text-[11px]" style={{ color: 'var(--amber)' }}>
-          {refusal}
-        </p>
+        <div role="alert" className="mt-2 space-y-2 text-[11px]" style={{ color: 'var(--amber)' }}>
+          <p>{refusal}</p>
+          {queueRefusal && (
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={archive.isPending}
+              onClick={() => archive.mutate({
+                agent: agent.name,
+                archived: true,
+                discardQueueEntryIds: queueRefusal.ids,
+              })}
+            >
+              Discard {queueRefusal.ids.length} queued message{queueRefusal.ids.length === 1 ? '' : 's'} and archive — cannot be undone
+            </Button>
+          )}
+        </div>
       )}
     </div>
   )
+}
+
+function parseQueueArchiveRefusal(error: ApiError): { message: string; ids: string[] } | null {
+  try {
+    const detail = (JSON.parse(error.message) as { detail?: unknown }).detail
+    if (!detail || typeof detail !== 'object' || Array.isArray(detail)) return null
+    const value = detail as { message?: unknown; blocking_queue_entry_ids?: unknown }
+    if (typeof value.message !== 'string' || !Array.isArray(value.blocking_queue_entry_ids)) return null
+    const ids = value.blocking_queue_entry_ids.filter((id): id is string => typeof id === 'string')
+    return ids.length ? { message: value.message, ids } : null
+  } catch {
+    return null
+  }
 }
 
 /**

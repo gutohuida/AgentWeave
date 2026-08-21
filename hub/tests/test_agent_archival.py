@@ -111,6 +111,50 @@ async def test_a_running_agent_is_refused_with_a_reason(app, auth_headers):
 
 
 @pytest.mark.asyncio
+async def test_queued_input_refusal_names_exactly_what_can_be_discarded(app, auth_headers):
+    from hub.conversations import new_conversation
+    from hub.db.engine import async_session_factory
+    from hub.inbound_queue import new_entry
+
+    await _register(app, auth_headers, "queued-agent")
+    async with async_session_factory() as session:
+        conversation = new_conversation(
+            project_id="proj-test", agent="queued-agent", origin="operator"
+        )
+        session.add(conversation)
+        session.add(
+            new_entry(
+                project_id="proj-test",
+                agent="queued-agent",
+                origin_type="operator",
+                content="work that will be discarded",
+                hop_depth=0,
+                conversation_id=conversation.id,
+            )
+        )
+        await session.commit()
+
+    refused = await app.post(
+        "/api/v1/projects/proj-test/agents/queued-agent/archive", headers=auth_headers
+    )
+    assert refused.status_code == 409
+    detail = refused.json()["detail"]
+    assert detail["blocking_queue_entry_count"] == 1
+    assert len(detail["blocking_queue_entry_ids"]) == 1
+    assert "Discard" in detail["message"]
+
+    cleared = await app.delete(
+        f"/api/v1/projects/proj-test/queue/entries/{detail['blocking_queue_entry_ids'][0]}",
+        headers=auth_headers,
+    )
+    assert cleared.status_code == 200
+    archived = await app.post(
+        "/api/v1/projects/proj-test/agents/queued-agent/archive", headers=auth_headers
+    )
+    assert archived.status_code == 200
+
+
+@pytest.mark.asyncio
 async def test_the_project_summary_roster_also_drops_archived_agents(app, auth_headers):
     """The rail draws from `useProjects()`, not `useAgents()` — a second roster.
 

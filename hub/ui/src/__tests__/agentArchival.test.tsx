@@ -97,4 +97,26 @@ describe('an agent is archived, never deleted', () => {
       expect(screen.getByRole('alert')).toHaveTextContent(/run in progress/i),
     )
   })
+
+  it('offers to discard only the named queued entries and says the loss is permanent', async () => {
+    const user = userEvent.setup()
+    archiveError = new ApiError(409, JSON.stringify({
+      detail: {
+        message: 'codex-1 has 2 queued messages. Discard them to archive the agent.',
+        blocking_queue_entry_count: 2,
+        blocking_queue_entry_ids: ['queue-1', 'queue-2'],
+      },
+    }))
+    renderIdentity(agent())
+
+    const remedy = await screen.findByRole('button', { name: /discard 2 queued messages and archive/i })
+    expect(remedy).toHaveTextContent(/cannot be undone/i)
+    await user.click(remedy)
+
+    expect(archiveMutate).toHaveBeenCalledWith({
+      agent: 'codex-1',
+      archived: true,
+      discardQueueEntryIds: ['queue-1', 'queue-2'],
+    })
+  })
 })

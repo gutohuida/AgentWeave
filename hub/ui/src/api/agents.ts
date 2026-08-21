@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { getJson, patchJson, postJson } from './client'
+import { deleteJson, getJson, patchJson, postJson } from './client'
 import { useConfigStore } from '@/store/configStore'
 import { onSseReconnect, useSSE, SSEEvent } from '@/hooks/useSSE'
 import { hubDate } from '@/lib/hubTime'
@@ -177,11 +177,23 @@ export function useArchiveAgent() {
   const queryClient = useQueryClient()
   const { selectedProjectId: projectId } = useConfigStore()
   return useMutation({
-    mutationFn: ({ agent, archived }: { agent: string; archived: boolean }) =>
-      postJson<{ name: string; lifecycle: string }>(
+    mutationFn: async ({
+      agent,
+      archived,
+      discardQueueEntryIds = [],
+    }: {
+      agent: string
+      archived: boolean
+      discardQueueEntryIds?: string[]
+    }) => {
+      for (const entryId of discardQueueEntryIds) {
+        await deleteJson(`/api/v1/projects/${projectId}/queue/entries/${entryId}`)
+      }
+      return postJson<{ name: string; lifecycle: string }>(
         `/api/v1/projects/${projectId}/agents/${agent}/${archived ? 'archive' : 'unarchive'}`,
         {},
-      ),
+      )
+    },
     onSuccess: () => {
       // Every roster variant, not just the open one — the settings page is reading `all`, and it
       // is the surface the operator is looking at when this resolves.
