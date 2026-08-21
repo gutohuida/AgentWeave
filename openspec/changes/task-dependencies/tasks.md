@@ -12,8 +12,12 @@ behaviour.
 - [x] 1.4 Write its description too, including that the referenced document must be approved and why. Landed on `ImportedFrom.document` (`hub/hub/spec_payload.py`): *"Path of the document that owns this task. It must be approved: a task cannot import work from a document nobody has signed off on, and until it is, the imported dependency names nothing a reader or an approver can rely on."* — the "why" is stated, not just the rule, matching 1.2's standard and the task's own instruction.
 - [x] 1.5 Round-trip test: a payload with dependencies and imports survives render → `extract_payload` → validate unchanged. `test_a_round_trip_with_local_dependencies_and_an_import_loses_nothing` (`hub/tests/test_spec_payload.py`) — a two-task payload (one imported entry, one local task with `depends_on: [that imported entry's key]`) through `payload_to_dict(validate_payload(...))` → `embed_payload` → `extract_payload`, asserts the recovered dict is byte-for-byte equal to what was stored, AND that re-validating the recovered dict produces the same dict again (not just JSON-equal once). Needed one supporting fix to make the round trip actually lossless: `payload_to_dict` now calls `model_dump(mode="json", by_alias=True)` — without `by_alias=True` the aliased `from_` field would have serialised back out as the key `"from_"` instead of `"from"`, silently renaming the field on every save. Two narrower tests also added: `test_a_local_depends_on_names_a_sibling_key` and `test_an_imported_entry_needs_no_description_or_requirements`. The file went from 20 tests to 23 (3 new, 0 removed, all 20 pre-existing ones still pass unchanged); ran `pytest hub/tests/test_spec_payload.py hub/tests/test_spec_declared_tasks.py hub/tests/test_spec_board_task_convergence.py -q` → **38 passed** (the latter two files exercise `materialise()` against the same `Task` shape and were unaffected). Also ran `ruff check`, `black --check` (reformatted the new test file once, then clean) and `mypy hub/spec_payload.py` — all clean.
 
-**Added 2026-08-21, after 1.1–1.5 landed.** One more payload field, decided while this change was
-in flight so the corpus needs one migration rather than two. Design D11.
+**Added 2026-08-21, after 1.1–1.5 landed and after implementation had moved past this group.**
+One more payload field, decided while this change was in flight so the corpus needs one migration
+rather than two. Design D11.
+
+**These three are outstanding and easy to miss**, because a worker walking groups in order is already
+past group 1. Task 10.0 gates the change on them.
 
 - [ ] 1.6 Add `reviewer: Optional[str] = None` to `spec_payload.Task`. Optional, and a document that
       names none must validate and materialise exactly as it does today.
@@ -198,6 +202,10 @@ zero failures either side.
 
 ## 10. Verification an agent can do
 
+- [ ] 10.0 **Check group 1 first.** It was reopened on 2026-08-21, after implementation had moved
+      past it, to add the reviewer field (1.6–1.8, design D11). A worker walking groups in order will
+      have skipped them. This change is not complete until they are done, and
+      `loop-becomes-a-flow`'s reviewer resolution depends on the field existing.
 - [ ] 10.1 `py -3.11 -m pytest hub/tests/ -q --ignore=hub/tests/browser` passes.
 - [ ] 10.2 `py -3.11 -m pytest tests/ -q` passes.
 - [ ] 10.3 `ruff check hub/`, `black --check hub/`, `mypy hub/hub/` clean on touched files; `cd hub/ui && npm run lint`.
