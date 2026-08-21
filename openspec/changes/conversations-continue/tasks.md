@@ -13,21 +13,21 @@ the code does rather than what the requirement says.
 
 ## 1. The line of work
 
-- [ ] 1.1 Add `test_migration_0085_adds_lineage_id` to `hub/tests/test_migrations.py`, asserting the
+- [x] 1.1 Add `test_migration_0085_adds_lineage_id` to `hub/tests/test_migrations.py`, asserting the
       column exists after upgrade, that every pre-existing row is backfilled to its own `id`, and
       that downgrade drops it
-- [ ] 1.2 Add `lineage_id` to `Conversation` in `hub/hub/db/models.py`, indexed
-- [ ] 1.3 Write `hub/hub/migrations/versions/0085_conversation_lineage.py` — add the column,
+- [x] 1.2 Add `lineage_id` to `Conversation` in `hub/hub/db/models.py`, indexed
+- [x] 1.3 Write `hub/hub/migrations/versions/0085_conversation_lineage.py` — add the column,
       backfill `lineage_id = id`, then index it; guard for a missing `conversations` table as
       `0033`/`0034` do, since an upgrade from an early revision reaches it with only that
       revision's tables
-- [ ] 1.4 Bump `HEAD_REVISION` to `"0085"` in `hub/tests/test_migrations.py:39` **and** the head
+- [x] 1.4 Bump `HEAD_REVISION` to `"0085"` in `hub/tests/test_migrations.py:39` **and** the head
       assertion in `hub/tests/test_project_persistence.py`
-- [ ] 1.5 Set `lineage_id` to the conversation's own id in `new_conversation`
+- [x] 1.5 Set `lineage_id` to the conversation's own id in `new_conversation`
       (`hub/hub/conversations.py`). The sweep is already done — design.md open question 3 lists all
       eight call sites and `checkpoint_cutover.py:91` is the only one that inherits. Confirm the
       list still holds rather than repeating the sweep
-- [ ] 1.6 Run `cd hub && py -3.11 -m pytest tests/test_migrations.py tests/test_project_persistence.py -q`
+- [x] 1.6 Run `cd hub && py -3.11 -m pytest tests/test_migrations.py tests/test_project_persistence.py -q`
 
 ## 2. A cutover keeps the line of work
 

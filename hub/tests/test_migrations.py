@@ -36,7 +36,7 @@ ALEMBIC_INI = Path(__file__).parent.parent / "hub" / "alembic.ini"
 # The revision `alembic upgrade head` must land on. Named once so the assertion and its failure
 # message cannot disagree — they did, for two head bumps, telling anyone debugging a failure to go
 # read the wrong migration.
-HEAD_REVISION = "0084"
+HEAD_REVISION = "0085"
 
 
 # ---------------------------------------------------------------------------
@@ -2859,3 +2859,43 @@ def test_migration_0084_creates_task_dependency_references(tmp_path) -> None:
 
         indexes = {row[1] for row in conn.execute("PRAGMA index_list(task_dependency_references)")}
         assert "ix_task_dependency_references_task" in indexes
+
+
+def test_migration_0085_adds_lineage_id(tmp_path) -> None:
+    """`conversations.lineage_id` lands, every pre-existing row backfills to its own `id`, the
+    column is indexed, and downgrade drops it — see design.md D3."""
+    db_file = tmp_path / "old_0034_lineage.db"
+    _create_0034_conversations_state(db_file)
+
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run_alembic_with(db_url)
+
+    with sqlite3.connect(db_file) as conn:
+        assert conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == (
+            HEAD_REVISION
+        )
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(conversations)")}
+        assert "lineage_id" in columns
+
+        assert conn.execute(
+            "SELECT lineage_id FROM conversations WHERE id = 'conv-existing'"
+        ).fetchone() == ("conv-existing",)
+
+        indexes = {row[1] for row in conn.execute("PRAGMA index_list(conversations)")}
+        assert "ix_conversations_lineage_id" in indexes
+
+    from alembic import command
+    from alembic.config import Config
+
+    cfg = Config(str(ALEMBIC_INI))
+    cfg.set_main_option("sqlalchemy.url", db_url)
+    with patch.object(settings, "database_url", db_url):
+        command.downgrade(cfg, "0084")
+
+    with sqlite3.connect(db_file) as conn:
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(conversations)")}
+        assert "lineage_id" not in columns
+        # The row itself survives — only the lineage_id column is dropped.
+        assert conn.execute(
+            "SELECT id FROM conversations WHERE id = 'conv-existing'"
+        ).fetchone() == ("conv-existing",)

@@ -97,12 +97,16 @@ def new_conversation(*, project_id: str, agent: str, origin: str) -> Conversatio
     if origin not in CONVERSATION_ORIGINS:
         raise ValueError(f"origin must be one of {CONVERSATION_ORIGINS}, got {origin!r}")
     now = datetime.now(timezone.utc)
+    conversation_id = f"conv-{short_id()}"
     return Conversation(
-        id=f"conv-{short_id()}",
+        id=conversation_id,
         project_id=project_id,
         agent=agent,
         lifecycle="open",
         origin=origin,
+        # Its own lineage until a checkpoint cutover says otherwise
+        # (`checkpoint_cutover.py`, conversations-continue phase 2).
+        lineage_id=conversation_id,
         created_at=now,
         updated_at=now,
     )
