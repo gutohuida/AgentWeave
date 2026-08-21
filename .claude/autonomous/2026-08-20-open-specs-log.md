@@ -1312,3 +1312,93 @@ tasks, now unblocked), section 11 (human-only, not this run's), section 12 (test
 `loop-notices-and-reacts` (0/44, backend only, no hazard) remains the largest clean block if a later
 iteration wants a change of pace. `next_action` in `STATE.json` names section 10 or 12 as the likely
 next small unit, without handing over a queue — run 3's own framing.
+
+## Iteration 2 — task-dependencies sections 10 and 12 (14:49-15:15+01:00)
+
+Arrived at `629301b`, matching `STATE.json` exactly; `last_heartbeat` (14:08:52) was 41 minutes
+stale, past grace, no live session holding the branch at start. `git status` showed a dirty tree —
+`hub/hub/scheduler.py`, `hub/tests/test_scheduler.py`, and an exploration doc — matching iteration
+1's own note about a concurrent session actively editing those three files. Left them untouched
+throughout, per `CONCURRENT_SESSION_IS_EXPECTED`.
+
+**Read section 10 against what already exists before writing anything.** `run3_available_work`
+named section 10 (agent-verifiable, now unblocked since 1.6-1.8 landed) and section 12 (test guide,
+1 task) as the two small next units. Surveyed the four dependency test files
+(`test_dependency_gate.py`, `test_task_dependency_reads.py`, `test_spec_task_dependencies.py`,
+`test_task_transitions_api.py`, `test_loop_claim_dependency_gate.py`) before writing anything new —
+five of 10.4-10.9's six scenarios were already covered by earlier sections' tests
+(import-resolves-to-existing-task for 10.5, running-on-regressed for 10.6, the two
+rejected-vs-unmet tests for 10.7, `spec_completeness`'s own 24 for 10.8, the board's 4 for 10.9).
+**The one gap:** nothing exercised a real *declared* three-hop chain end to end — the gate's own
+tests and the HTTP wiring tests both build `TaskDependency` rows by hand rather than through a
+document's `depends_on`. Added
+`test_the_whole_chain_gates_hop_by_hop_on_approved_not_completed`
+(`hub/tests/test_spec_task_dependencies.py`): declares A, B (`depends_on: [A]`), C
+(`depends_on: [B]`) in one document, approves it for real (materialising real edges), then walks
+each task hop by hop through the real operator `PATCH /tasks/{id}` route — confirming B stays
+gated while A is only `completed` (not `approved`), C stays gated while B is unstarted AND while B
+is merely `in_progress`, and each unblocks only once its immediate prerequisite reaches `approved`.
+
+**One self-inflicted mistake, caught before it shipped.** The first `Edit` inserting the new test
+appended after what a truncated `Read` (offset 330, limit 44 against a 374-line file) made look
+like the file's last line — but line 374 itself, one line past the read window, held the true last
+statement of the *previous* test (`assert references[0].reason == "not_declared"`). The edit landed
+that orphaned assertion inside the new test's body instead, and `pytest` caught it immediately as a
+`NameError` (`references` undefined) rather than a silent pass. Fixed by moving the line back into
+the test it belonged to. Lesson for next time: a `Read` whose `offset + limit` lands exactly on a
+prior `wc -l` total is reading right up to, not past, the last line — worth a `tail -c` sanity check
+before trusting it as "the end of the file."
+
+**Verified, not assumed, and run in the foreground.** Targeted suite (five dependency files) — 67
+passed. `ruff check`/`black --check` on the touched test file — clean (one reformat needed after
+the fix, applied and reconfirmed). Full `hub/tests/ -q --ignore=hub/tests/browser`, run in the
+**foreground** per `NEVER_BACKGROUND_AND_WAIT` (the Bash tool auto-backgrounded it past its 600s
+cap; polled to completion with a blocking `TaskOutput` rather than ending the turn): **2724 passed,
+12 skipped, 1 xpassed, 0 failed in 870.77s (14m30s)** — +4 over iteration 1's baseline of 2720; +1
+is this section's own new test, +3 is the concurrent session's then-uncommitted `scheduler.py`/
+`test_scheduler.py` work sitting in the same working tree (see below). CLI suite: **404 passed, 3
+skipped in 17.56s**, exact match. `mypy` on the six files this change actually touches
+(`spec_payload.py`, `spec_tasks.py`, `dependency_gate.py`, `task_transition_service.py`,
+`spec_completeness.py`, `spec_lifecycle.py`) surfaced only two pre-existing, non-regression
+patterns (an untyped constructor param mirroring an older sibling class; a deliberately dynamic,
+commented, non-persisted attribute) — recorded with file:line in tasks.md rather than chased. Whole-
+package `mypy hub/` carries 377 pre-existing errors in files this change never touches; not this
+section's to fix. `cd hub/ui && npm run lint` — exit 0.
+
+**Section 12 fit in the same turn.** Wrote the operator-facing test guide (`12.1`) as prose directly
+under the task, matching S1's and S2's own convention rather than a separate file. Seven numbered
+steps mirroring the automated coverage (chain gating, completed-is-not-enough, one-hop-at-a-time,
+rejected-vs-unmet, regression-flags-without-stopping, cross-document import), each with an
+*Expect*/*Failure looks like* pair. Led with the confusion 10.2 itself names — a task gated on an
+unreviewed-but-not-yet-approved prerequisite reads identically, via `dependency_state`, to one
+gated on a genuinely broken dependency — and named it as an open gap for section 8 (the board) to
+close, not something this guide can paper over.
+
+**`openspec validate task-dependencies --strict` and `openspec validate --all --strict`** both
+clean (41/41) after the edits.
+
+**The concurrent session landed five commits (`dc37b1a` through `bd3bdcb`) into this same branch
+while this iteration worked**, including `e7446c2` "Decide how the board shows concurrent work,
+unblocking section 8" — design D12, which is what tasks.md 8.14 already referenced when this
+iteration read section 8 earlier. Confirmed via `git show --stat` that none of the five touched
+`STATE.json`. By the time this iteration was ready to commit, `git status` showed only the two
+files this iteration itself changed — the concurrent session's own `scheduler.py`/
+`test_scheduler.py` edits, dirty at the start of the turn, had been committed by then. Staged and
+committed explicitly (`git add hub/tests/test_spec_task_dependencies.py
+openspec/changes/task-dependencies/tasks.md` — no `git add -A`), landed as `547c09d`, pushed clean.
+One commit-message wording gap for the record: the message only names "section 10" though the diff
+(and the tasks.md content) carries both 10 and 12 — noted here rather than amending a pushed commit.
+
+**`task-dependencies` now stands at 63/87.** Remaining: section 8 (board, 16 tasks) and section 11
+(human-only, 8, not this run's) — 10 and 12 are both done. **Section 8's hazard is confirmed
+lifted, not just plausibly lifted:** read `e7446c2`'s full diff to `design.md` D12 directly rather
+than trusting the commit subject — it states outright *"This unblocks section 8... it was the sole
+reason the board was marked unsafe to build"* and explains why per-card display needs no rework
+once a flow starts several tasks at once. `run3_hazards`' own condition for building section 8
+("build it so that showing more than one active task per document is an additive change, and say in
+the commit that you did") is now satisfied by construction: D12 chose per-card exactly because nothing
+about a card needs to change shape when more of them run at once. Section 8 is now open, unhazarded,
+UI-touching work (16 tasks, `hub/ui/src`, ends with `8.13`'s `make ui` bundle rebuild) — a good next
+unit, sized to a session larger than one 20-minute firing; consider taking it in two or three passes
+rather than one. `loop-notices-and-reacts` (0/44, backend only, no hazard) remains available as a
+smaller change of pace. `stop_at` (19:00) is still nearly four hours out.
