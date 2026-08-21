@@ -50,6 +50,8 @@ from hub.db.models import (
     SpecRequirementRevision,
     SpecRigorEvent,
     Task,
+    TaskDependency,
+    TaskDependencyReference,
     TaskIntegration,
     TaskRequirementLink,
     TaskRequirementReference,
@@ -71,6 +73,8 @@ PROJECT_SCOPED_TABLE_NAMES = [
     "evidence_footprints",
     "turn_usage",
     "task_requirement_links",
+    "task_dependencies",
+    "task_dependency_references",
     "spec_requirement_revisions",
     "requirement_evidence",
     "task_transitions",
@@ -316,6 +320,26 @@ async def _seed_full_project(session, project_id: str, tag: str) -> None:
     session.add(
         TaskRequirementReference(
             id=f"taskref-{tag}", project_id=project_id, task_id=f"task-{tag}", reference="#FR-1"
+        )
+    )
+    # A dependency needs two tasks to be an edge rather than a self-loop, so the prerequisite is
+    # its own row. `task_dependencies` is the only project-scoped table naming `tasks` twice.
+    session.add(Task(id=f"task-{tag}-prereq", project_id=project_id, title="Prerequisite"))
+    session.add(
+        TaskDependency(
+            id=f"taskdep-{tag}",
+            project_id=project_id,
+            task_id=f"task-{tag}",
+            depends_on_task_id=f"task-{tag}-prereq",
+        )
+    )
+    session.add(
+        TaskDependencyReference(
+            id=f"taskdepref-{tag}",
+            project_id=project_id,
+            task_id=f"task-{tag}",
+            reference="other-doc#t1",
+            reason="document_not_approved",
         )
     )
     session.add(

@@ -870,3 +870,92 @@ section that changes runtime behaviour rather than sitting inert. **This run is 
 `stop_at`.** The Windows Scheduled Task is documented as self-unregistering past `stop_at`, so this
 may be the last iteration that fires tonight; `STATE.json`'s `next_action` is still being written for
 section 5 in case one more firing lands, but nobody should be surprised if it does not.
+
+---
+
+## Closing entry — the morning check found four real failures (interactive, 2026-08-21 08:45–09:40)
+
+The operator returned at 08:45 and asked how the night went. Rather than relay the run's own
+claims, the suites were re-run from scratch. **The Hub suite was red: 4 failed, 2665 passed.**
+
+This is exactly what the run's own last iteration predicted. It had closed section 4 with the full
+suite unrun, said so plainly, and told whoever came next to check the backgrounded result before
+touching `spec_tasks.py` or the migrations further. That warning was correct and it was load-bearing.
+
+### What actually failed, and the diagnosis that was wrong the first time
+
+**Three in `test_project_delete_api.py`** — one root cause. `task-dependencies` §3 added two
+project-scoped tables (`task_dependencies`, `task_dependency_references`) and never told the test
+that mirrors them. **The production sweep was never broken**: `_project_scoped_tables()`
+(`hub/hub/project_lifecycle.py:307`) derives from `Base.metadata.sorted_tables` and picks up
+anything carrying a `project_id` column, so deletion handled both tables from the moment they
+existed. What failed is the hand-maintained `PROJECT_SCOPED_TABLE_NAMES` list, which exists
+precisely so adding a project-scoped table forces a conscious decision. The tripwire fired as
+designed.
+
+**One in `test_spec_render.py`** — and the first diagnosis of it was wrong, which is worth recording
+rather than quietly correcting. It was attributed to `c2492c7` ("S2 section 3: the generated map")
+by reasoning about which commits touched `spec_render.py`. Bisecting all eleven commits instead
+pinned it to **`758db52`** — `task-dependencies` §1 — which touches `spec_payload.py`, not the
+renderer. `render_document` embeds the stored payload verbatim, so a payload that grows fields grows
+the embedded JSON. **Reasoning about which files a commit touched was not a substitute for running
+the test at each commit**, and it named the wrong change.
+
+Measured delta, before → after, one tag per line:
+
+```
+234c234,236
+<       ]
+---
+>       ],
+>       "depends_on": [],
+>       "from": null
+```
+
+Nothing else — no corpus region, no stylesheet change. So §1.3's actual guarantee, that the
+`corpus is None` branch renders no *region*, was never violated.
+
+### The fixes — two test files, no product code
+
+- `test_spec_render.py`: recaptured `_BASELINE_DIGEST`, and extended its comment to record the third
+  recapture, its cause, and the rule for next time — diff the render against the previous commit
+  first; a digest that moves with no corpus argument, no stylesheet edit and no payload field added
+  is a real regression, not a recapture.
+- `test_project_delete_api.py`: added both table names to `PROJECT_SCOPED_TABLE_NAMES`, their model
+  imports, and fixture rows. A dependency needs two tasks to be an edge rather than a self-loop, so
+  the prerequisite is its own row.
+
+### Verified, including a mutation check
+
+- `pytest tests/test_project_delete_api.py tests/test_spec_render.py -q` → **67 passed**.
+- **Mutation check**, because a passing test is not evidence of a test with teeth: excluded
+  `task_dependencies` from `_project_scoped_tables()` and confirmed
+  `test_delete_leaves_no_orphans_in_any_project_scoped_table` **fails**, then restored the file and
+  confirmed it byte-identical with `git status`.
+- Full Hub suite → **2669 passed, 84 skipped, 1 xpassed, 0 failed** in 780s. Same 2669 total as the
+  red run, with the four failures now passing.
+- `ruff check` and `black --check` clean on both files.
+- The digest recapture was verified by rendering the document at `8cb9b84` and at HEAD and diffing
+  the output, not by trusting the new value. The script is kept at
+  `.claude/autonomous/scratch/render_dump.py` (gitignored).
+
+### The lesson for the next run
+
+The run stopped running the full Hub suite once sections got small, reasoning that targeted tests
+covered the touched call paths. That reasoning failed in both directions here:
+
+- The **render regression is in a touched path** and a targeted selection still missed it, because
+  the change was in `spec_payload.py` and the failing test lives in `test_spec_render.py`. Targeted
+  selection follows the file you edited, not the files that depend on it.
+- The **delete tripwire is cross-cutting** and no targeted selection would ever have picked it.
+
+A cheap rule that would have caught both: after adding a **table** or a **payload field**, run the
+full suite before calling the section done, regardless of how small the diff looks.
+
+### Still open, unchanged by this morning
+
+All human-only verification for S1 and S2, the three decisions in `decisions_for_user`, and the
+consequence flagged to the operator: because the payload gained two fields, the next reindex
+rewrites all 41 documents on disk with `"depends_on": []` and `"from": null` in their embedded JSON.
+Inherent to adding payload fields, not a defect — but worth seeing deliberately given how much of
+`document-adoption` was about not churning the corpus.
