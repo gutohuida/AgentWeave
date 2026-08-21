@@ -136,6 +136,37 @@ After the fix the behavioural test passes in the same run as everything else —
 **31 passed in 12.82 s**, up from 28 (two new tests, plus a third parametrization as `blocked` joined
 the derived gap). The hang not recurring is itself the confirmation that firings stopped spawning.
 
+### And then driven on a live Hub, 2026-08-21
+
+The trial Hub on 8010 was restarted onto the fixed code and a loop was built to reach this state by
+hand: one task walked `pending → assigned → in_progress → blocked` through the operator API, with a
+`blocked_reason` of *"Which database should the migration target?"*.
+
+**Fired twice. Both refused, identically:**
+
+```json
+{"detail": "loop queue is stalled: no claimable task among 1 open (1 blocked)"}
+```
+
+Both `JobRun`s recorded `skipped` with that reason as their `error_summary` (`run-81dcbffe`,
+`run-52048b07`, read from the `job_runs` table). `firing_active: false`. `current_task: null`. And
+**no agent run was created** — verified against the `runs` table, not an endpoint.
+
+**Visibility survived exactly as predicted.** The loop's queue summary still read
+`{"blocked": 1}`, because `queue_counts` carries no status filter while the current-item derivation
+shares the claim's tuple. The blocked task stops being *current* and stays *counted*, which is what
+keeps the board and the firing agreeing.
+
+**Recovery, also measured.** Releasing the block (`blocked → in_progress`) cleared `blocked_reason`
+by itself — `release_reason` doing its job — and the very next firing claimed the task and spawned a
+real agent: `run-424f7dda`, agent `builder`, **completed, exit 0, 8 seconds**. So stalling costs
+nothing and the recovery needs no help from the loop, which was the whole argument in §2.
+
+**Side by side with the Finding A probe** in `2026-08-21-what-a-flow-fires-into.md` §2a, the contrast
+is the point: a *stalled* firing records `skipped`, leaves `firing_active` false, and spawns nothing;
+a *stranded* one records `in_progress`, leaves the card reading "firing" until the Hub restarts, and
+also spawns nothing. Same absence of an agent, opposite stories told to the operator.
+
 ## 5. What to change
 
 Small, and mostly deletion. **Items 1, 2 and 4 are done; 3 is a note for whoever writes group 3.**
