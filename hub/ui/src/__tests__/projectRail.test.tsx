@@ -248,10 +248,22 @@ describe('the rail while the Spec screen is open', () => {
     useConfigStore.setState({ selectedProjectId: 'proj-a' })
   })
 
+  /** The rail opens folded, so reaching a nested document means opening its ancestors. */
+  const unfoldTo = (docPath: string) => {
+    const segments = docPath.split('/').slice(0, -1)
+    for (let depth = 2; depth <= segments.length; depth += 1) {
+      const dir = segments.slice(0, depth).join('/')
+      const folder = screen.queryByTestId(`spec-tree-directory-${dir}`)
+      if (folder && folder.getAttribute('aria-expanded') === 'false') fireEvent.click(folder)
+    }
+  }
+
   it('replaces the project tree with the specification tree', () => {
     renderRail({ destination: specDestination, activePage: 'spec' })
 
     expect(screen.getByTestId('spec-rail-tree')).toBeInTheDocument()
+    // Folded by default in the rail, so the document is reached through its folders.
+    unfoldTo(SPEC_CHANGE)
     expect(screen.getByTestId(`spec-tree-document-${SPEC_CHANGE}`)).toBeInTheDocument()
     // The project tree is not also there — that is the whole point.
     expect(screen.queryByTestId('rail-project-proj-a')).not.toBeInTheDocument()
@@ -270,26 +282,35 @@ describe('the rail while the Spec screen is open', () => {
     const onOpenSpecDocument = vi.fn()
     renderRail({ destination: specDestination, activePage: 'spec', onOpenSpecDocument })
 
+    unfoldTo(SPEC_CHANGE)
     expect(screen.getByTestId(`spec-tree-document-${SPEC_CHANGE}`)).toHaveAttribute('aria-current', 'true')
     fireEvent.click(screen.getByTestId(`spec-tree-document-${SPEC_HOME}`))
     expect(onOpenSpecDocument).toHaveBeenCalledWith('proj-a', SPEC_HOME)
   })
 
-  it('folds a directory away, and remembers it', () => {
+  it('opens the rail folded, so the corpus does not unroll on arrival', () => {
+    renderRail({ destination: specDestination, activePage: 'spec' })
+
+    // The operator asked for this on 2026-08-21: 41 documents unrolled before anyone asked.
+    const folder = screen.getByTestId('spec-tree-directory-spec/changes')
+    expect(folder).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByTestId(`spec-tree-document-${SPEC_CHANGE}`)).not.toBeInTheDocument()
+  })
+
+  it('unfolds a directory in one press, and remembers it', () => {
     const { unmount } = renderRail({ destination: specDestination, activePage: 'spec' })
 
-    const folder = screen.getByTestId('spec-tree-directory-spec/changes')
-    expect(folder).toHaveAttribute('aria-expanded', 'true')
+    unfoldTo(SPEC_CHANGE)
     expect(screen.getByTestId(`spec-tree-document-${SPEC_CHANGE}`)).toBeInTheDocument()
+    expect(screen.getByTestId('spec-tree-directory-spec/changes')).toHaveAttribute('aria-expanded', 'true')
 
-    fireEvent.click(folder)
-    expect(screen.queryByTestId(`spec-tree-document-${SPEC_CHANGE}`)).not.toBeInTheDocument()
-    // The folder itself stays, or there would be no way to unfold it.
-    expect(screen.getByTestId('spec-tree-directory-spec/changes')).toHaveAttribute('aria-expanded', 'false')
-
-    // A tree that forgets what you folded away is a tree you fold away again every time.
+    // A tree that forgets what you unfolded is a tree you unfold again every time.
     unmount()
     renderRail({ destination: specDestination, activePage: 'spec' })
+    expect(screen.getByTestId(`spec-tree-document-${SPEC_CHANGE}`)).toBeInTheDocument()
+
+    // And folding it back still works, and is still remembered.
+    fireEvent.click(screen.getByTestId('spec-tree-directory-spec/changes'))
     expect(screen.queryByTestId(`spec-tree-document-${SPEC_CHANGE}`)).not.toBeInTheDocument()
   })
 })

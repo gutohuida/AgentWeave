@@ -38,9 +38,25 @@ export function SpecTree({ inventory, currentPath = null, onSelect, density = 'd
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(loadCollapsed)
   const indent = density === 'rail' ? 12 : 14
 
+  /**
+   * In the rail, a directory nobody has touched starts folded.
+   *
+   * The stored map records folds the operator actually chose; an absent entry used to mean
+   * "expanded", so opening the Spec screen unrolled the whole corpus — 41 documents — before the
+   * operator had asked for any of it. The rail is navigation, so it opens on the handful of
+   * top-level folders and one click opens the one that is wanted (operator, 2026-08-21).
+   *
+   * The picker keeps the old default deliberately. It is reached by Ctrl+K to *find* something,
+   * and a browser that shows three folder names and no documents until you click is a worse
+   * answer to "what is in here" than a long list. Only the default differs — an explicit fold is
+   * still shared between both homes.
+   */
+  const defaultCollapsed = density === 'rail'
+  const isCollapsed = (path: string) => collapsed[path] ?? defaultCollapsed
+
   const toggle = (path: string) => {
     setCollapsed((state) => {
-      const next = { ...state, [path]: !state[path] }
+      const next = { ...state, [path]: !(state[path] ?? defaultCollapsed) }
       try {
         localStorage.setItem(COLLAPSED_KEY, JSON.stringify(next))
       } catch {
@@ -50,9 +66,14 @@ export function SpecTree({ inventory, currentPath = null, onSelect, density = 'd
     })
   }
 
+  /** Derived from the rows, not from the stored map: with folds defaulting to collapsed, a
+   *  directory the operator has never touched is absent from the map and still folded. */
   const collapsedDirs = useMemo(
-    () => Object.entries(collapsed).filter(([, isCollapsed]) => isCollapsed).map(([path]) => path),
-    [collapsed],
+    () =>
+      rows
+        .filter((row) => row.kind === 'directory' && (collapsed[row.path] ?? defaultCollapsed))
+        .map((row) => row.path),
+    [rows, collapsed, defaultCollapsed],
   )
   /** Hidden when any ancestor is folded. Tested by path prefix rather than by threading a parent
    *  through every row: the paths already encode the hierarchy, and a folded grandparent has to
@@ -78,7 +99,7 @@ export function SpecTree({ inventory, currentPath = null, onSelect, density = 'd
             key={`dir:${row.path}`}
             type="button"
             data-testid={`spec-tree-directory-${row.path}`}
-            aria-expanded={!collapsed[row.path]}
+            aria-expanded={!isCollapsed(row.path)}
             onClick={() => toggle(row.path)}
             title={row.path}
             style={{
@@ -90,7 +111,7 @@ export function SpecTree({ inventory, currentPath = null, onSelect, density = 'd
               paddingLeft: 10 + row.depth * indent,
               border: 'none',
               background: 'none',
-              fontSize: 11,
+              fontSize: 12,
               fontWeight: 600,
               color: 'var(--text-3)',
               textAlign: 'left',
@@ -100,13 +121,13 @@ export function SpecTree({ inventory, currentPath = null, onSelect, density = 'd
             <span
               style={{
                 display: 'inline-flex',
-                transform: collapsed[row.path] ? undefined : 'rotate(90deg)',
+                transform: isCollapsed(row.path) ? undefined : 'rotate(90deg)',
                 transition: 'transform var(--dur-fast) var(--ease)',
               }}
             >
-              <Icon name="chevron_right" size={12} />
+              <Icon name="chevron_right" size={14} />
             </span>
-            <Icon name="folder_open" size={12} />
+            <Icon name="folder_open" size={14} />
             {row.label}
           </button>
         ) : (
@@ -133,7 +154,7 @@ export function SpecTree({ inventory, currentPath = null, onSelect, density = 'd
               border: 'none',
               background: row.path === currentPath ? 'var(--surface-2)' : 'none',
               color: row.path === currentPath ? 'var(--text)' : 'var(--text-2)',
-              fontSize: 12,
+              fontSize: 13,
               textAlign: 'left',
               cursor: row.node?.missing ? 'not-allowed' : 'pointer',
               // Archived is dimmed but still openable, unlike missing — one is drift, the other is
@@ -142,9 +163,9 @@ export function SpecTree({ inventory, currentPath = null, onSelect, density = 'd
               borderRadius: 'var(--radius-sm)',
             }}
           >
-            <Icon name={row.node?.archived ? 'archive' : 'article'} size={12} />
+            <Icon name={row.node?.archived ? 'archive' : 'article'} size={14} />
             <span className="truncate">{row.label}</span>
-            <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--text-3)' }}>
+            <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-3)' }}>
               {trailingLabel(row.label, row.path, row.node)}
             </span>
           </button>
