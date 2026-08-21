@@ -11,11 +11,59 @@
       "order": 10
     },
     {
+      "path": "spec/areas/agents-and-execution.html",
+      "title": "Agents and execution",
+      "kind": "system-map",
+      "status": "exploring",
+      "parent": "spec/agentweave.html",
+      "order": 360
+    },
+    {
+      "path": "spec/areas/conversations.html",
+      "title": "Conversations",
+      "kind": "system-map",
+      "status": "exploring",
+      "parent": "spec/agentweave.html",
+      "order": 370
+    },
+    {
+      "path": "spec/areas/interface.html",
+      "title": "Interface",
+      "kind": "system-map",
+      "status": "exploring",
+      "parent": "spec/agentweave.html",
+      "order": 380
+    },
+    {
+      "path": "spec/areas/specification.html",
+      "title": "Specification",
+      "kind": "system-map",
+      "status": "exploring",
+      "parent": "spec/agentweave.html",
+      "order": 390
+    },
+    {
+      "path": "spec/areas/the-local-instance.html",
+      "title": "The local instance",
+      "kind": "system-map",
+      "status": "exploring",
+      "parent": "spec/agentweave.html",
+      "order": 400
+    },
+    {
+      "path": "spec/areas/work-and-traceability.html",
+      "title": "Work and traceability",
+      "kind": "system-map",
+      "status": "exploring",
+      "parent": "spec/agentweave.html",
+      "order": 410
+    },
+    {
       "path": "spec/capabilities/agent-capability-plane/spec.html",
       "title": "Agent capability plane",
       "kind": "capability",
       "status": "current",
-      "parent": null,
+      "parent": "spec/areas/agents-and-execution.html",
       "order": 20
     },
     {
@@ -23,7 +71,7 @@
       "title": "Agent charter",
       "kind": "capability",
       "status": "current",
-      "parent": null,
+      "parent": "spec/areas/agents-and-execution.html",
       "order": 30
     },
     {
@@ -31,7 +79,7 @@
       "title": "Agent composer",
       "kind": "capability",
       "status": "current",
-      "parent": null,
+      "parent": "spec/areas/conversations.html",
       "order": 40
     },
     {
@@ -39,7 +87,7 @@
       "title": "Agent configuration",
       "kind": "capability",
       "status": "current",
-      "parent": null,
+      "parent": "spec/areas/agents-and-execution.html",
       "order": 50
     },
     {
@@ -47,7 +95,7 @@
       "title": "Agent context onboarding",
       "kind": "capability",
       "status": "current",
-      "parent": null,
+      "parent": "spec/areas/agents-and-execution.html",
       "order": 60
     },
     {
@@ -55,7 +103,7 @@
       "title": "Agent context usage",
       "kind": "capability",
       "status": "current",
-      "parent": null,
+      "parent": "spec/areas/agents-and-execution.html",
       "order": 70
     },
     {
@@ -63,7 +111,7 @@
       "title": "Agent conversation handoff",
       "kind": "capability",
       "status": "current",
-      "parent": null,
+      "parent": "spec/areas/conversations.html",
       "order": 80
     },
     {
@@ -71,7 +119,7 @@
       "title": "Agent conversation workspace",
       "kind": "capability",
       "status": "current",
-      "parent": null,
+      "parent": "spec/areas/conversations.html",
       "order": 90
     },
     {
@@ -79,7 +127,7 @@
       "title": "Agent loops",
       "kind": "capability",
       "status": "current",
-      "parent": null,
+      "parent": "spec/areas/work-and-traceability.html",
       "order": 100
     },
     {
@@ -87,7 +135,7 @@
       "title": "Agent run sandboxing",
       "kind": "capability",
       "status": "current",
-      "parent": null,
+      "parent": "spec/areas/agents-and-execution.html",
       "order": 110
     },
     {
@@ -95,7 +143,7 @@
       "title": "Agent stream events",
       "kind": "capability",
       "status": "current",
-      "parent": null,
+      "parent": "spec/areas/conversations.html",
       "order": 120
     },
     {
@@ -103,7 +151,7 @@
       "title": "Agent tool surface",
       "kind": "capability",
       "status": "current",
-      "parent": null,
+      "parent": "spec/areas/agents-and-execution.html",
       "order": 130
     },
     {
@@ -111,7 +159,7 @@
       "title": "App lifecycle",
       "kind": "capability",
       "status": "current",
-      "parent": null,
+      "parent": "spec/areas/the-local-instance.html",
       "order": 140
     },
     {
@@ -119,7 +167,7 @@
       "title": "Conversation checkpoint",
       "kind": "capability",
       "status": "current",
-      "parent": null,
+      "parent": "spec/areas/conversations.html",
       "order": 150
     },
     {
@@ -127,7 +175,7 @@
       "title": "Conversation lifecycle",
       "kind": "capability",
       "status": "current",
-      "parent": null,
+      "parent": "spec/areas/conversations.html",
       "order": 160
     },
     {
@@ -135,7 +183,7 @@
       "title": "Conversation side panel",
       "kind": "capability",
       "status": "current",
-      "parent": null,
+      "parent": "spec/areas/conversations.html",
       "order": 170
     },
     {
@@ -143,7 +191,7 @@
       "title": "Hub interaction feedback",
       "kind": "capability",
       "status": "current",
-      "parent": null,
+      "parent": "spec/areas/interface.html",
       "order": 180
     },
     {
@@ -151,7 +199,7 @@
       "title": "Hub workspace shell",
       "kind": "capability",
       "status": "current",
-      "parent": null,
+      "parent": "spec/areas/interface.html",
       "order": 190
     },
     {
@@ -159,7 +207,7 @@
       "title": "Local project workspace",
       "kind": "capability",
       "status": "current",
-      "parent": null,
+      "parent": "spec/areas/the-local-instance.html",
       "order": 200
     },
     {
@@ -167,7 +215,7 @@
       "title": "Model catalog",
       "kind": "capability",
       "status": "current",
-      "parent": null,
+      "parent": "spec/areas/agents-and-execution.html",
       "order": 210
     },
     {
@@ -175,7 +223,7 @@
       "title": "Opencode config",
       "kind": "capability",
       "status": "current",
-      "parent": null,
+      "parent": "spec/areas/the-local-instance.html",
       "order": 220
     },
     {
@@ -183,7 +231,7 @@
       "title": "Operator agent creation",
       "kind": "capability",
       "status": "current",
-      "parent": null,
+      "parent": "spec/areas/agents-and-execution.html",
       "order": 230
     },
     {
@@ -191,7 +239,7 @@
       "title": "Project environment settings",
       "kind": "capability",
       "status": "current",
-      "parent": null,
+      "parent": "spec/areas/the-local-instance.html",
       "order": 240
     },
     {
@@ -199,7 +247,7 @@
       "title": "Project instructions",
       "kind": "capability",
       "status": "current",
-      "parent": null,
+      "parent": "spec/areas/the-local-instance.html",
       "order": 340
     },
     {
@@ -207,7 +255,7 @@
       "title": "Quiet hours",
       "kind": "capability",
       "status": "current",
-      "parent": null,
+      "parent": "spec/areas/the-local-instance.html",
       "order": 350
     },
     {
@@ -215,7 +263,7 @@
       "title": "Requirement traceability",
       "kind": "capability",
       "status": "current",
-      "parent": null,
+      "parent": "spec/areas/specification.html",
       "order": 250
     },
     {
@@ -223,7 +271,7 @@
       "title": "Run task binding",
       "kind": "capability",
       "status": "current",
-      "parent": null,
+      "parent": "spec/areas/work-and-traceability.html",
       "order": 260
     },
     {
@@ -231,7 +279,7 @@
       "title": "Runner registry",
       "kind": "capability",
       "status": "current",
-      "parent": null,
+      "parent": "spec/areas/agents-and-execution.html",
       "order": 270
     },
     {
@@ -239,7 +287,7 @@
       "title": "Runtime diagnostics",
       "kind": "capability",
       "status": "current",
-      "parent": null,
+      "parent": "spec/areas/the-local-instance.html",
       "order": 280
     },
     {
@@ -247,7 +295,7 @@
       "title": "Spec chat session",
       "kind": "capability",
       "status": "current",
-      "parent": null,
+      "parent": "spec/areas/specification.html",
       "order": 290
     },
     {
@@ -255,7 +303,7 @@
       "title": "Spec document authority",
       "kind": "capability",
       "status": "current",
-      "parent": null,
+      "parent": "spec/areas/specification.html",
       "order": 300
     },
     {
@@ -263,7 +311,7 @@
       "title": "Task lifecycle governance",
       "kind": "capability",
       "status": "current",
-      "parent": null,
+      "parent": "spec/areas/work-and-traceability.html",
       "order": 310
     },
     {
@@ -271,7 +319,7 @@
       "title": "Trace timeline",
       "kind": "capability",
       "status": "current",
-      "parent": null,
+      "parent": "spec/areas/work-and-traceability.html",
       "order": 320
     },
     {
@@ -279,7 +327,7 @@
       "title": "Usage accounting",
       "kind": "capability",
       "status": "current",
-      "parent": null,
+      "parent": "spec/areas/the-local-instance.html",
       "order": 330
     }
   ]

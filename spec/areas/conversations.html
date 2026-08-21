@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Conversations</title>
+<meta name="aw-spec-kind" content="system-map">
+<meta name="aw-spec-status" content="exploring">
+<meta name="aw-spec-rigor" content="sketch">
+<meta name="aw-spec-schema-version" content="1">
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+    --surface-2: #21262d; --surface: #161b22;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+:root[data-theme="dark"] {
+  --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+  --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+  --surface-2: #21262d; --surface: #161b22;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 2rem 2.5rem 4rem; background: var(--bg); color: var(--fg);
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+h1 { font-size: 1.75rem; margin: 0 0 .25rem; }
+h2 { font-size: 1.15rem; margin: 2.5rem 0 .75rem; padding-bottom: .3rem;
+     border-bottom: 1px solid var(--border); }
+h3 { font-size: 1rem; margin: 1.5rem 0 .4rem; }
+p { margin: .5rem 0; }
+ul, ol { margin: .5rem 0; padding-left: 1.4rem; }
+li { margin: .25rem 0; }
+a { color: var(--aw-accent); }
+.aw-meta { color: var(--muted); font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-nav { font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-nav a { margin-right: .6rem; }
+.aw-map-list { list-style: none; margin: .5rem 0; padding-left: 0; }
+.aw-map-list .aw-map-list { padding-left: 1.25rem; margin-top: .5rem; }
+.aw-map-item { margin: .75rem 0; }
+.aw-map-item > p { margin: .2rem 0; }
+.aw-chip { display: inline-block; padding: .1rem .5rem; border-radius: 999px;
+           background: var(--surface-2); font-size: .78rem; margin-right: .4rem; }
+.aw-requirement { border-left: 3px solid var(--border); padding: .1rem 0 .1rem .9rem;
+                  margin: 1.1rem 0; }
+.aw-requirement-must { border-left-color: var(--aw-accent); }
+.aw-requirement-should { border-left-color: var(--aw-warn); }
+.aw-requirement-may { border-left-color: var(--border); }
+.aw-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8rem;
+         color: var(--muted); }
+.aw-modal { font-weight: 600; }
+.aw-modal-must { color: var(--aw-accent); }
+.aw-modal-should { color: var(--aw-warn); }
+.aw-modal-may { color: var(--fg); font-weight: 400; }
+.aw-chip-rigor-gate { color: var(--aw-accent); border: 1px solid var(--aw-accent); }
+.aw-chip-rigor-contract { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Phase is a lifecycle, and the question it answers is "can I rely on this?". `approved` and a
+   capability's `current` are settled and take the done tone; `proposed` is waiting on an operator
+   decision and takes warn; `exploring` and `archived` are quiet for opposite reasons — one has not
+   arrived yet, the other has been superseded. Deliberately NOT the accent: this document already
+   spends accent on links and on MUST, and a third meaning would empty it of any. `kind` keeps the
+   plain chip on purpose — it is a category, not a state, and hue there ranks nothing. */
+.aw-chip-phase-done { color: var(--aw-ok); border: 1px solid var(--aw-ok); }
+.aw-chip-phase-waiting { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+.aw-chip-phase-quiet { color: var(--muted); }
+.aw-chip-phase-archived { color: var(--muted); text-decoration: line-through; }
+/* An unresolved question blocks `propose`, so it is a real state and not a label. Resolved stays
+   the plain chip — the reader needs to find what is still open, not celebrate what is closed. */
+.aw-chip-open { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Limits is where a reader is most likely to be misled, and it read identically to Checked. */
+.aw-limits { color: var(--aw-warn); }
+/* The first screenful was entirely monochrome, so the document read as texty however the
+   requirements below were coloured. This puts the same modal scheme where the eye lands first,
+   carrying counts rather than decoration. */
+.aw-summary { margin: 0 0 1.5rem; font-size: .9rem; color: var(--muted); }
+.aw-summary .aw-count { font-weight: 600; }
+.aw-summary-sep { color: var(--border); margin: 0 .45rem; }
+.aw-rationale { color: var(--muted); font-size: .9rem; }
+.aw-refs { font-size: .82rem; color: var(--muted); }
+.aw-note { color: var(--muted); font-style: italic; }
+.aw-empty { color: var(--muted); }
+table { border-collapse: collapse; margin: .75rem 0; width: 100%; }
+th, td { border: 1px solid var(--border); padding: .4rem .6rem; text-align: left;
+         vertical-align: top; font-size: .92rem; }
+code, pre { background: var(--surface); border-radius: 4px; }
+code { padding: .1rem .3rem; font-size: .88em; }
+</style>
+</head>
+<body>
+<h1>Conversations</h1>
+<p class="aw-meta"><span class="aw-chip">system-map</span><span class="aw-chip aw-chip-phase-quiet">exploring</span><span class="aw-chip">sketch</span></p>
+<p class="aw-nav"><a href="../agentweave.html">Home</a><a href="../agentweave.html">AgentWeave</a></p>
+
+<section><h2 id="summary">Summary</h2><p>The operator-facing surface for talking with an agent: the composer that starts a turn, the conversation workspace a chat lives in, how a conversation hands off between agents or sessions, the stream of events a running turn emits, the checkpoint that closes a chunk of work, and the side panel that shows what&#x27;s happening alongside the chat itself.</p></section><section><h2 id="requirements">Requirements</h2><p class="aw-empty">No requirements yet.</p></section><section><h2 id="open-questions">Open questions</h2><p class="aw-empty">None outstanding.</p></section>
+<section class="aw-map"><h2 id="map">Map <span class="aw-note">(generated on reindex — hand edits here are overwritten)</span></h2><ul class="aw-map-list"><li class="aw-map-item"><a href="../capabilities/agent-composer/spec.html">Agent composer</a> <span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><p>The conversation composer helps operators reference workspace files and skills, invoke built-in commands, and redirect the next turn to another configured agent without leaving the conversation surface or violating immutable conversation scope.</p></li><li class="aw-map-item"><a href="../capabilities/agent-conversation-handoff/spec.html">Agent conversation handoff</a> <span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><p>Durable conversation transitions from the agent conversation workspace: preserve the current AgentWeave conversation in a checkpoint, create one successor conversation, resume from the checkpoint, and then continue that successor conversation normally. Conversation identity is AgentWeave&#x27;s own `conversation_id`, allocated before any provider process starts; the provider session is nullable continuation data beneath it, never the operator-facing identity a handoff transitions between.</p></li><li class="aw-map-item"><a href="../capabilities/agent-conversation-workspace/spec.html">Agent conversation workspace</a> <span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><p>The AgentWeave conversation is the primary workspace surface: navigation reaches an agent&#x27;s conversation directly, the operator can keep talking to an agent while it is running, and the composer is a bounded, draft-persisting input with a minimal always-visible control set. Everything that is not a per-conversation control has left the composer. Navigation is a tree of project → agent → conversation, and it is where conversations are selected, started, and acted on; agent settings are reached from the agent&#x27;s row; handoff and fold-all sit on the conversation header. The conversation-actions overflow menu is gone, and no menu on the conversation surface serves as a conversation switcher. AgentWeave owns a durable `conversation_id` that exists before any provider process starts and never changes across runs, retries, stops, or provider-session binding; the provider session is nullable continuation data beneath it, never the operator-facing identity. Conversations are labelled by title, never by identifier — the title, origin, rename and archival rules themselves belong to `conversation-lifecycle`.</p></li><li class="aw-map-item"><a href="../capabilities/agent-stream-events/spec.html">Agent stream events</a> <span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><p class="aw-empty">no summary yet</p></li><li class="aw-map-item"><a href="../capabilities/conversation-checkpoint/spec.html">Conversation checkpoint</a> <span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><p>A checkpoint is the Hub&#x27;s durable record of where a conversation got to: a structured envelope it computes and can therefore verify, carrying one markdown body only a model can write. It replaces a design in which the agent was asked to write a file — observed twice producing an artifact in an unreachable place and then producing nothing at all, both times reported as ready because readiness meant the run had ended.</p></li><li class="aw-map-item"><a href="../capabilities/conversation-lifecycle/spec.html">Conversation lifecycle</a> <span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><p>A conversation is a durable record with a life of its own, independent of the provider session beneath it. It carries a human-readable title so no operator surface has to fall back to an identifier, and an immutable origin recording what created it — the operator, a peer agent, a handoff, the spec workflow, or a job. It can be renamed by the operator, and a title the operator set is never overwritten by a generated one. Whether titles are generated at all is a per-project setting that is off by default; when on, the titling run is bound to no conversation, resumes no provider session, and is invisible in every timeline. A conversation can be archived and unarchived. Archiving is a reversible act of tidying, never a destructive one: an archived conversation stays fully readable, and archiving is refused rather than forced when a run has not ended or inbound queue entries have not been delivered. An agent that addresses an archived conversation is told so, told to open a new one, and handed back its own submitted content so the retry is mechanical rather than reconstructive.</p></li><li class="aw-map-item"><a href="../capabilities/conversation-side-panel/spec.html">Conversation side panel</a> <span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><p>One shell beside a conversation, hosting one tab at a time. Specification documents, the workspace file tree and the loops index each used to mean something different by &quot;open on the right&quot;. This capability makes them one surface with one set of rules: a tab strip the operator controls, index tabs that launch keyed detail tabs, per-project tab configuration with a single global width, and one resize/overlay rule that does not vary by what is being shown.</p></li></ul></section><script type="application/agentweave-spec+json" id="aw-spec-payload">
+{
+  "schema_version": 1,
+  "kind": "system-map",
+  "title": "Conversations",
+  "summary": "The operator-facing surface for talking with an agent: the composer that starts a turn, the conversation workspace a chat lives in, how a conversation hands off between agents or sessions, the stream of events a running turn emits, the checkpoint that closes a chunk of work, and the side panel that shows what's happening alongside the chat itself.",
+  "problem": "",
+  "scope": {
+    "in_scope": [],
+    "non_goals": []
+  },
+  "requirements": [],
+  "acceptance_criteria": [],
+  "tasks": [],
+  "algorithms": [],
+  "design": "",
+  "evidence": {
+    "checked": [],
+    "limits": []
+  },
+  "lifecycle": "",
+  "open_questions": [],
+  "aw_identity": {
+    "requirements": {},
+    "high_water": 0,
+    "retired": {},
+    "digests": {}
+  }
+}
+</script>
+</body>
+</html>

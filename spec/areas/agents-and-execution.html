@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agents and execution</title>
+<meta name="aw-spec-kind" content="system-map">
+<meta name="aw-spec-status" content="exploring">
+<meta name="aw-spec-rigor" content="sketch">
+<meta name="aw-spec-schema-version" content="1">
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+    --surface-2: #21262d; --surface: #161b22;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+:root[data-theme="dark"] {
+  --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+  --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+  --surface-2: #21262d; --surface: #161b22;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 2rem 2.5rem 4rem; background: var(--bg); color: var(--fg);
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+h1 { font-size: 1.75rem; margin: 0 0 .25rem; }
+h2 { font-size: 1.15rem; margin: 2.5rem 0 .75rem; padding-bottom: .3rem;
+     border-bottom: 1px solid var(--border); }
+h3 { font-size: 1rem; margin: 1.5rem 0 .4rem; }
+p { margin: .5rem 0; }
+ul, ol { margin: .5rem 0; padding-left: 1.4rem; }
+li { margin: .25rem 0; }
+a { color: var(--aw-accent); }
+.aw-meta { color: var(--muted); font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-nav { font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-nav a { margin-right: .6rem; }
+.aw-map-list { list-style: none; margin: .5rem 0; padding-left: 0; }
+.aw-map-list .aw-map-list { padding-left: 1.25rem; margin-top: .5rem; }
+.aw-map-item { margin: .75rem 0; }
+.aw-map-item > p { margin: .2rem 0; }
+.aw-chip { display: inline-block; padding: .1rem .5rem; border-radius: 999px;
+           background: var(--surface-2); font-size: .78rem; margin-right: .4rem; }
+.aw-requirement { border-left: 3px solid var(--border); padding: .1rem 0 .1rem .9rem;
+                  margin: 1.1rem 0; }
+.aw-requirement-must { border-left-color: var(--aw-accent); }
+.aw-requirement-should { border-left-color: var(--aw-warn); }
+.aw-requirement-may { border-left-color: var(--border); }
+.aw-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8rem;
+         color: var(--muted); }
+.aw-modal { font-weight: 600; }
+.aw-modal-must { color: var(--aw-accent); }
+.aw-modal-should { color: var(--aw-warn); }
+.aw-modal-may { color: var(--fg); font-weight: 400; }
+.aw-chip-rigor-gate { color: var(--aw-accent); border: 1px solid var(--aw-accent); }
+.aw-chip-rigor-contract { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Phase is a lifecycle, and the question it answers is "can I rely on this?". `approved` and a
+   capability's `current` are settled and take the done tone; `proposed` is waiting on an operator
+   decision and takes warn; `exploring` and `archived` are quiet for opposite reasons — one has not
+   arrived yet, the other has been superseded. Deliberately NOT the accent: this document already
+   spends accent on links and on MUST, and a third meaning would empty it of any. `kind` keeps the
+   plain chip on purpose — it is a category, not a state, and hue there ranks nothing. */
+.aw-chip-phase-done { color: var(--aw-ok); border: 1px solid var(--aw-ok); }
+.aw-chip-phase-waiting { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+.aw-chip-phase-quiet { color: var(--muted); }
+.aw-chip-phase-archived { color: var(--muted); text-decoration: line-through; }
+/* An unresolved question blocks `propose`, so it is a real state and not a label. Resolved stays
+   the plain chip — the reader needs to find what is still open, not celebrate what is closed. */
+.aw-chip-open { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+/* Limits is where a reader is most likely to be misled, and it read identically to Checked. */
+.aw-limits { color: var(--aw-warn); }
+/* The first screenful was entirely monochrome, so the document read as texty however the
+   requirements below were coloured. This puts the same modal scheme where the eye lands first,
+   carrying counts rather than decoration. */
+.aw-summary { margin: 0 0 1.5rem; font-size: .9rem; color: var(--muted); }
+.aw-summary .aw-count { font-weight: 600; }
+.aw-summary-sep { color: var(--border); margin: 0 .45rem; }
+.aw-rationale { color: var(--muted); font-size: .9rem; }
+.aw-refs { font-size: .82rem; color: var(--muted); }
+.aw-note { color: var(--muted); font-style: italic; }
+.aw-empty { color: var(--muted); }
+table { border-collapse: collapse; margin: .75rem 0; width: 100%; }
+th, td { border: 1px solid var(--border); padding: .4rem .6rem; text-align: left;
+         vertical-align: top; font-size: .92rem; }
+code, pre { background: var(--surface); border-radius: 4px; }
+code { padding: .1rem .3rem; font-size: .88em; }
+</style>
+</head>
+<body>
+<h1>Agents and execution</h1>
+<p class="aw-meta"><span class="aw-chip">system-map</span><span class="aw-chip aw-chip-phase-quiet">exploring</span><span class="aw-chip">sketch</span></p>
+<p class="aw-nav"><a href="../agentweave.html">Home</a><a href="../agentweave.html">AgentWeave</a></p>
+
+<section><h2 id="summary">Summary</h2><p>How an agent comes to exist and run inside a project: the roster identity, the runner it is bound to, the charter that shapes its behavior, the model it calls, the tool surface it is offered, how it onboards into a turn&#x27;s context and uses that context once running, and the sandbox its run executes inside.</p></section><section><h2 id="requirements">Requirements</h2><p class="aw-empty">No requirements yet.</p></section><section><h2 id="open-questions">Open questions</h2><p class="aw-empty">None outstanding.</p></section>
+<section class="aw-map"><h2 id="map">Map <span class="aw-note">(generated on reindex — hand edits here are overwritten)</span></h2><ul class="aw-map-list"><li class="aw-map-item"><a href="../capabilities/agent-capability-plane/spec.html">Agent capability plane</a> <span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><p>One least-privilege, run-authenticated application contract for agent-caused effects and scoped reads, shared identically by HTTP and MCP. Established by `openspec/changes/agent-capability-plane`. **Reconciled 2026-08-07.** The equal-capability requirement below previously named &quot;ordinary commands&quot; as a third adapter. No such command exists — the CLI was reduced to local instance management — and `openspec/explorations/2026-08-02-product-direction.md` states that the reduced CLI is not an agent capability adapter.</p></li><li class="aw-map-item"><a href="../capabilities/agent-charter/spec.html">Agent charter</a> <span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><p>Define project-scoped, operator-authored behavior charters, their one-time migration seed from the legacy role guides, and the single explicit charter binding used to build each agent&#x27;s context.</p></li><li class="aw-map-item"><a href="../capabilities/agent-configuration/spec.html">Agent configuration</a> <span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><p>An agent&#x27;s configuration is a destination of its own, not a dialog and not a panel inside a conversation. It divides into sections named for what an operator is trying to do — identity, execution, charter, interaction, context, access, workspace — and it holds only settings: observations about a running agent stay with the conversation, where they are useful. An agent is archived, never deleted, because every run the Hub records is attributed to one. What creation collects is bounded by whether it changes the first turn; everything else is here.</p></li><li class="aw-map-item"><a href="../capabilities/agent-context-onboarding/spec.html">Agent context onboarding</a> <span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><p>Define generated model-facing context, project operating profiles, and Hub/MCP onboarding, sourced from Hub-owned records, so every agent the Hub knows starts work with complete, fresh, non-placeholder project context — including the names of the peers it can address.</p></li><li class="aw-map-item"><a href="../capabilities/agent-context-usage/spec.html">Agent context usage</a> <span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><p class="aw-empty">no summary yet</p></li><li class="aw-map-item"><a href="../capabilities/agent-run-sandboxing/spec.html">Agent run sandboxing</a> <span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><p>Defines the sandbox posture the Hub imposes on a spawned agent run, independent of whatever configuration happens to exist on the machine the Hub process runs on. Originated by `openspec/changes/2026-08-06-claude-non-yolo-permission-mode`.</p></li><li class="aw-map-item"><a href="../capabilities/agent-tool-surface/spec.html">Agent tool surface</a> <span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><p>Defines what an agent may do through HTTP and MCP, and how that access is established. Originated by `openspec/changes/2026-07-30-hub-native-experience`; the identity requirement below carries the `openspec/changes/agent-capability-plane` revision (run-credential authentication in place of environment-variable binding). `openspec/changes/single-runtime` removed the per-runner access-path selection and command-based-fallback requirements below, since it deletes the CLI collaboration commands they depended on — HTTP and MCP are the only two paths now. **Reconciled 2026-08-07.** The first requirement below previously limited the surface to *causing effects*, while the next one required an agent to read the task ledger and receive an answer — a contradiction recorded in `openspec/explorations/2026-08-02-product-direction.md`. The effect-only sentence is replaced by the least-privilege read boundary that document prescribes; the prohibition on reading around the delivery system is preserved unchanged.</p></li><li class="aw-map-item"><a href="../capabilities/model-catalog/spec.html">Model catalog</a> <span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><p class="aw-empty">no summary yet</p></li><li class="aw-map-item"><a href="../capabilities/operator-agent-creation/spec.html">Operator agent creation</a> <span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><p>Define how an operator creates a project-scoped, runner-bound agent from the Hub while preserving launchability truth, optional charter guidance, stable identity, and lazy worktree isolation.</p></li><li class="aw-map-item"><a href="../capabilities/runner-registry/spec.html">Runner registry</a> <span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><p>Define project-scoped, Hub-owned runner records that separate reusable execution capability from agent identity and provide explicit, operator-managed agent bindings.</p></li></ul></section><script type="application/agentweave-spec+json" id="aw-spec-payload">
+{
+  "schema_version": 1,
+  "kind": "system-map",
+  "title": "Agents and execution",
+  "summary": "How an agent comes to exist and run inside a project: the roster identity, the runner it is bound to, the charter that shapes its behavior, the model it calls, the tool surface it is offered, how it onboards into a turn's context and uses that context once running, and the sandbox its run executes inside.",
+  "problem": "",
+  "scope": {
+    "in_scope": [],
+    "non_goals": []
+  },
+  "requirements": [],
+  "acceptance_criteria": [],
+  "tasks": [],
+  "algorithms": [],
+  "design": "",
+  "evidence": {
+    "checked": [],
+    "limits": []
+  },
+  "lifecycle": "",
+  "open_questions": [],
+  "aw_identity": {
+    "requirements": {},
+    "high_water": 0,
+    "retired": {},
+    "digests": {}
+  }
+}
+</script>
+</body>
+</html>

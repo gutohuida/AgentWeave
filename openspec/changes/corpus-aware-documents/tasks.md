@@ -57,23 +57,23 @@ thirty-five islands. Groups 4–6 add the arrangement.
 
 ## 6. The arrangement itself
 
-- [ ] 6.1 Create the six area documents through `POST /project/documents` — the correct route, since these are genuinely new. Kind `system-map` (design, open question 3).
-- [ ] 6.2 Author a short narrative for each: what this area of the product is, in a paragraph. The map beneath it is generated.
-- [ ] 6.3 Set each area's parent to `spec/agentweave.html`.
-- [ ] 6.4 Set each of the 32 filed capability documents' parent to its area, per design D4.
-- [ ] 6.5 Reindex and confirm the home and all six area maps regenerated, and nothing else did.
-- [ ] 6.6 Enrich the home document's authored narrative — the "thin" complaint is about this prose, and the generated map does not replace it.
+- [x] 6.1 Create the six area documents through `POST /project/documents` — the correct route, since these are genuinely new. Kind `system-map` (design, open question 3). Landed against the live trial Hub (8010, `proj-5e960453`, database `~/.agentweave/hub/profiles/beta/agentweave.db`): `spec/areas/{agents-and-execution,conversations,specification,work-and-traceability,the-local-instance,interface}.html`, all created at 201, `exploring` phase. **The 8010 process was serving code from before S2 section 5 landed** (no `/arrange` route in its own `/openapi.json` — confirmed by querying it directly, not assumed) — restarted it (`Stop-Process` then `py -3.11 -m uvicorn hub.main:app --host 127.0.0.1 --port 8010` from `hub/`, `DATABASE_URL` pointed explicitly at the beta profile db confirmed by checking which sqlite file the create calls had just written to) before doing anything the new route was needed for. Permitted: port 8010 is the test Hub and STATE.json's limits explicitly allow driving and restarting it. The six documents and their content (written before the restart) were confirmed to survive it via `GET /project/documents?prefix=spec/areas/`.
+- [x] 6.2 Author a short narrative for each: what this area of the product is, in a paragraph. The map beneath it is generated. Written as each area's `summary` field via `PUT /project/documents/{path}/content`, real paragraphs (not placeholders) — see the six `summary` strings in `testbed/scratch/arrange_areas.py` (throwaway driver script, not shipped) for the exact text landed.
+- [x] 6.3 Set each area's parent to `spec/agentweave.html`. All six done through the real `POST /project/spec/documents/arrange` route landed in section 5 — not by hand-editing `spec/index.json`. Required a reindex first (`spec/index.json` is what `arrange` reads from disk, and a freshly-created document isn't filed into it until a reindex runs; the first arrange attempt correctly 404'd `"... is not in the index"` before that reindex, confirming the route's own refusal path rather than a bug).
+- [x] 6.4 Set each of the 32 filed capability documents' parent to its area, per design D4. **All 34 are placeable, not 32** — `project-instructions` and `quiet-hours` (the two design.md marked `*` "no row today") both already have rows in `spec/index.json` today, confirmed by reading the index directly before arranging, so `document-adoption`'s real run (handoff 0067) closed that gap already; both were included. All 34 arranged through the real route (scripted loop, `testbed/scratch/arrange_areas.py`, not 34 hand-typed calls) — each call's own response confirmed the touched set was exactly `{home, that area, that one capability}`, matching section 5's own bound.
+- [x] 6.5 Reindex and confirm the home and all six area maps regenerated, and nothing else did. A final `POST /project/spec/reindex` after all 40 arrange calls returned `{"rerendered": [], "skipped": []}` — expected and correct, not a bug: each arrange call already re-rendered its own affected set as it went (section 5's behaviour), so nothing was left for a trailing reindex to catch. Read the actual rendered files by eye, not just trusted the 200s: `spec/agentweave.html`'s map is recursive (all six areas, each listing its own capabilities nested underneath, per `D-S2-recursive`) with relative links (`areas/agents-and-execution.html`, `capabilities/agent-capability-plane/spec.html`); `spec/areas/interface.html`'s map is direct-children-only (`../capabilities/hub-interaction-feedback/spec.html`, `../capabilities/hub-workspace-shell/spec.html`); a capability page's own nav strip shows both hops correctly (`spec/capabilities/hub-workspace-shell/spec.html` → `../../agentweave.html` "Home" and `../../areas/interface.html` "Interface"); `model-catalog` and `agent-context-usage` render "no summary yet" in the map exactly where D8 said they would. `git status --short spec/` shows exactly 36 modified files (home + 34 capabilities + `index.json`) plus 6 new area files under `spec/areas/` — nothing else. Task 7.7's grep (`http://`, `https://`, `<link`, `<script src`) turned up one hit, in `agent-composer/spec.html`, pre-existing prose (`"see https://example.com/foo"` inside a requirement's own example scenario text, not a resource tag) — not introduced by this section, checked rather than assumed.
+- [ ] 6.6 Enrich the home document's authored narrative — the "thin" complaint is about this prose, and the generated map does not replace it. Not done this iteration; left for a follow-up, per the task list's own separation from 6.1-6.5.
 - [ ] 6.7 **Content backlog, tracked separately:** the eight documents with no usable summary (design D8). They will render as gaps until written. Do not treat writing them as part of this change's completion.
 
 ## 7. Verification an agent can do
 
-- [ ] 7.1 `py -3.11 -m pytest hub/tests/ -q --ignore=hub/tests/browser` passes.
-- [ ] 7.2 `py -3.11 -m pytest tests/ -q` passes.
-- [ ] 7.3 `ruff check hub/`, `black --check hub/`, `mypy hub/hub/` clean on touched files.
-- [ ] 7.4 Task 1.3's byte-identity assertion still passes after all six groups.
-- [ ] 7.5 Confirm `SpecTree`'s path-prefix rendering was not changed — it is a stated non-goal, and it is the kind of thing that gets "improved" while nearby.
-- [ ] 7.6 Confirm neither `spec_manifest.py` twin diverged; if either was touched, synchronise both and run `hub/tests/test_spec_manifest_roundtrip.py`.
-- [ ] 7.7 Confirm no external resource was introduced into a rendered document — grep the rendered output for `http://`, `https://`, `<link` and `<script src`.
+- [x] 7.1 `py -3.11 -m pytest hub/tests/ -q --ignore=hub/tests/browser` passes. Run from `hub/` at iteration end: **1 failed, 2641 passed, 12 skipped, 1 xpassed in 739.48s (12m19s)**. The one failure, `test_requirement_evidence.py::test_decisions_append_and_never_overwrite`, is the already-documented inherited timestamp-collision flake (`dead_ends_inherited`) — confirmed, not assumed, by rerunning it alone immediately after (`1 passed in 0.41s`). No files this section touched are anywhere near that test.
+- [x] 7.2 `py -3.11 -m pytest tests/ -q` passes. **404 passed, 3 skipped in 12.89s**, exact match to every prior baseline in this run.
+- [ ] 7.3 `ruff check hub/`, `black --check hub/`, `mypy hub/hub/` clean on touched files. Not run this section: section 6 touched zero Python files (content-only, through existing HTTP routes — see 7.5/7.6's own confirmation of that), so there is nothing for a Python linter to check that wasn't already checked when §5 landed.
+- [x] 7.4 Task 1.3's byte-identity assertion still passes after all six groups. Covered by 7.1's full run — `test_spec_render.py`'s two byte-identity tests are in that suite and passed.
+- [x] 7.5 Confirm `SpecTree`'s path-prefix rendering was not changed — it is a stated non-goal, and it is the kind of thing that gets "improved" while nearby. Section 6 touched no UI source at all (content-only, through HTTP routes); `git status` confirms zero files under `hub/ui/` changed.
+- [x] 7.6 Confirm neither `spec_manifest.py` twin diverged; if either was touched, synchronise both and run `hub/tests/test_spec_manifest_roundtrip.py`. Neither twin was touched this section — `git diff --stat hub/hub/spec_manifest.py src/agentweave/spec_manifest.py` is empty.
+- [x] 7.7 Confirm no external resource was introduced into a rendered document — grep the rendered output for `http://`, `https://`, `<link` and `<script src`. Grepped the whole `spec/` corpus (not just this section's changed files): one hit, in `agent-composer/spec.html`, pre-existing prose inside a requirement's own example scenario text (`"see https://example.com/foo"`), not a resource tag and not introduced by this section — confirmed by reading it, not assumed. Zero hits in any file section 6 actually changed.
 
 ## 8. Verification only a human can do
 
@@ -89,4 +89,65 @@ These need the operator, a browser, and a real corpus.
 
 ## 9. User test guide
 
-- [ ] 9.1 Write the operator-facing test guide: what to run, in what order, what a correct result looks like, and what a wrong one looks like. Lead with 8.4 and 8.5 — the two checks on *which files were written*. The failure mode this change most plausibly ships with is not a wrong map but a rebuild that quietly rewrites the corpus, and that is invisible unless someone looks at the diff.
+- [x] 9.1 Write the operator-facing test guide: what to run, in what order, what a correct result looks like, and what a wrong one looks like. Lead with 8.4 and 8.5 — the two checks on *which files were written*. The failure mode this change most plausibly ships with is not a wrong map but a rebuild that quietly rewrites the corpus, and that is invisible unless someone looks at the diff.
+
+**Setup.** This repository, registered as a project (`proj-5e960453`), against the trial Hub on
+port 8010 — never the Hub whose code is being edited. `spec/` already holds the arranged corpus
+from this change's own §6 landing: a home, six areas, and 34 filed capabilities each with a parent.
+Before anything else, confirm `git status --short spec/` prints nothing — a clean baseline is what
+steps 1 and 2 both diff against.
+
+1. **A rebuild changes nothing it shouldn't.** With the corpus already arranged and untouched, run
+   `POST /project/spec/reindex`.
+   *Expect:* the response's `corpus.rerendered` and `corpus.skipped` are both empty, and
+   `git status --short spec/` still prints nothing afterward.
+   *Failure looks like:* any file changes on a reindex that added nothing and moved nothing — that
+   means the byte-comparison the rebuild uses to decide what to write is unstable (rendering the
+   same input twice produces different bytes), and every reindex would quietly touch the whole
+   corpus regardless of what actually changed.
+
+2. **One document, one file.** Add one new document under an existing area (or move one leaf
+   between areas) and reindex.
+   *Expect:* `git diff --stat spec/` shows exactly the touched leaf's file and its parent's map
+   changed, plus the home (the home's map is recursive over the whole corpus, so any change below
+   it changes what the home lists too — see decision `D-S2-recursive`). No unrelated document's
+   bytes move.
+   *Failure looks like:* a reindex after one small change rewrites documents nowhere near it — the
+   bound this change promises (§4.8) does not hold in practice.
+
+3. **The home stops being thin.** Open the Spec tab with nothing selected, or open
+   `spec/agentweave.html` directly.
+   *Expect:* the narrative is followed by a generated map of all six areas, each area listing its
+   own capabilities nested underneath — the whole corpus visible from one page, not six separate
+   clicks.
+   *Failure looks like:* the home shows only its own narrative with no map, or the map lists the
+   six areas with no capabilities nested under them.
+
+4. **The map is navigable end to end.** From the home, click into an area, then into one of its
+   capabilities, then use the capability's own navigation strip to climb back up.
+   *Expect:* every hop lands on the expected document — home → area → capability → area → home —
+   and the capability's nav strip shows both "Home" and its area's name.
+   *Failure looks like:* a broken link, a hop that lands on the wrong document, or a capability
+   whose nav strip is missing the area hop.
+
+5. **The corpus reads outside the app.** Stop the Hub. Open `spec/agentweave.html` directly from
+   disk in a browser.
+   *Expect:* the map renders and every link resolves — the point of computing links as relative
+   filesystem paths (§2.3) rather than URLs the Hub serves.
+   *Failure looks like:* a broken link, a blank map, or a link that only resolves while the Hub is
+   running.
+
+6. **The generated region reads as generated, not authored.** Look at the map section on any
+   document with children.
+   *Expect:* a visible "(generated on reindex — hand edits here are overwritten)" label
+   distinguishes it from the authored narrative above it.
+   *Failure looks like:* a reader could plausibly mistake the map for hand-written prose and try
+   editing it directly — it will be silently overwritten on the next reindex.
+
+7. **A missing summary is visible, not silently blank.** Find a capability whose summary is empty
+   or still a sync placeholder — `model-catalog` and `agent-context-usage` both are, at last check
+   (§6.7's tracked content backlog).
+   *Expect:* its entry in the parent's map reads "no summary yet" in a visibly muted style, not a
+   blank line.
+   *Failure looks like:* the document is silently absent from the map, or renders with no visual
+   distinction from a document that does have a summary.
