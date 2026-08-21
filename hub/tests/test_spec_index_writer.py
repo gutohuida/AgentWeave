@@ -16,9 +16,14 @@ import json
 import pytest
 
 from hub import spec_documents
+from hub.agent_auth import hash_run_token
+from hub.db.engine import async_session_factory
+from hub.db.models import Run
 from hub.spec_manifest import load_manifest
+from hub.spec_payload import SCHEMA_VERSION
 
 BASE = "/api/v1/projects/proj-test/project"
+AGENT = "/api/v1/agent-actions/spec/documents"
 
 
 def test_no_agent_facing_tool_can_write_the_index():
@@ -374,3 +379,255 @@ class TestReindexRoute:
         await app.post(f"{BASE}/spec/reindex", headers=auth_headers)
         second = (tmp_path / "spec" / "index.json").read_text(encoding="utf-8")
         assert first == second
+
+
+@pytest.fixture
+async def run_headers():
+    """A run credential, for writing content through `/agent-actions` (corpus-aware-documents §4
+    tests need an approved document, and only an agent submission — not `POST /documents`, which
+    leaves a document empty — can carry it through `propose`'s completeness check)."""
+    token = "aw_run_corpus-rerender-secret"
+    async with async_session_factory() as session:
+        session.add(
+            Run(
+                id="run-corpus-rerender",
+                project_id="proj-test",
+                agent="claude-1",
+                status="running",
+                turn_depth=0,
+                capability_token_hash=hash_run_token(token),
+            )
+        )
+        await session.commit()
+    return {"Authorization": f"Bearer {token}"}
+
+
+def _full_document(**overrides):
+    """A payload complete enough to clear `propose`'s completeness check."""
+    payload = {
+        "schema_version": SCHEMA_VERSION,
+        "kind": "change-spec",
+        "title": "Corpus rerender demo",
+        "scope": {"in_scope": ["the thing"], "non_goals": ["the other thing"]},
+        "requirements": [
+            {"key": "alpha", "statement": "It responds within 200ms", "modal": "MUST"}
+        ],
+        "acceptance_criteria": [
+            {"key": "c1", "requirement": "alpha", "given": "g", "when": "w", "then": "t"}
+        ],
+        "tasks": [{"key": "t1", "description": "Build it", "requirements": ["alpha"]}],
+    }
+    payload.update(overrides)
+    return payload
+
+
+class TestReindexCorpusRerender:
+    """corpus-aware-documents §4: reindex re-renders exactly the documents whose corpus
+    navigation or map changed — design D2's bound — and updates `content_digest` (D7) for the
+    ones with a row, driven from each file's own embedded payload rather than the database (D6).
+    """
+
+    async def test_setting_a_parent_rerenders_the_parent_and_the_recursive_home_and_nothing_else(
+        self, app, auth_headers, tmp_path
+    ):
+        for name in ("home", "area", "other"):
+            _write(tmp_path, f"spec/{name}.html")
+            created = await app.post(
+                f"{BASE}/documents",
+                json={"path": f"spec/{name}.html", "title": name.upper(), "kind": "capability"},
+                headers=auth_headers,
+            )
+            assert created.status_code == 201, created.text
+
+        first = await app.post(
+            f"{BASE}/spec/reindex", json={"home": "spec/home.html"}, headers=auth_headers
+        )
+        assert first.status_code == 200, first.text
+        # The home document itself gains no home link (nothing to link to but itself) and, with
+        # no children yet, no map either — so its first render is a no-op change. `area` and
+        # `other` each gain a home link, so both differ from the `corpus=None` starter file
+        # `POST /documents` wrote and are re-rendered.
+        assert set(first.json()["corpus"]["rerendered"]) == {"spec/area.html", "spec/other.html"}
+        assert first.json()["corpus"]["skipped"] == []
+
+        # Arrange `area` under `home` by hand-editing the index — the operator's other route
+        # (`POST /project/spec/documents/arrange`) is a later section of this same change and
+        # does not exist yet; D4 already documents hand-editing the file as a legitimate way to
+        # rearrange the corpus.
+        index_path = tmp_path / "spec" / "index.json"
+        manifest_data = json.loads(index_path.read_text(encoding="utf-8"))
+        for doc in manifest_data["documents"]:
+            if doc["path"] == "spec/area.html":
+                doc["parent"] = "spec/home.html"
+        index_path.write_text(json.dumps(manifest_data, indent=2) + "\n", encoding="utf-8")
+
+        before_other = (tmp_path / "spec" / "other.html").read_text(encoding="utf-8")
+
+        second = await app.post(f"{BASE}/spec/reindex", headers=auth_headers)
+        assert second.status_code == 200, second.text
+        body = second.json()
+        # `area` changed directly (it gained a parent link); `home` changed because its map is
+        # recursive over the whole corpus (design D-S2-recursive) and now has one entry. `other`
+        # has no relation to either and its file is untouched — not even rewritten byte-identically.
+        assert set(body["corpus"]["rerendered"]) == {"spec/home.html", "spec/area.html"}
+        assert body["corpus"]["skipped"] == []
+
+        after_other = (tmp_path / "spec" / "other.html").read_text(encoding="utf-8")
+        assert before_other == after_other
+
+        home_html = (tmp_path / "spec" / "home.html").read_text(encoding="utf-8")
+        assert "AREA" in home_html
+        assert "aw-map" in home_html
+        area_html = (tmp_path / "spec" / "area.html").read_text(encoding="utf-8")
+        assert "aw-nav" in area_html
+
+    async def test_a_rebuild_that_changes_nothing_writes_no_file(self, app, auth_headers, tmp_path):
+        _write(tmp_path, "spec/spec.html")
+        await app.post(
+            f"{BASE}/documents",
+            json={"path": "spec/spec.html", "title": "Only", "kind": "capability"},
+            headers=auth_headers,
+        )
+        first = await app.post(f"{BASE}/spec/reindex", headers=auth_headers)
+        assert first.status_code == 200, first.text
+
+        before = (tmp_path / "spec" / "spec.html").stat().st_mtime_ns
+        second = await app.post(f"{BASE}/spec/reindex", headers=auth_headers)
+        assert second.status_code == 200, second.text
+        assert second.json()["corpus"]["rerendered"] == []
+        assert second.json()["corpus"]["skipped"] == []
+        after = (tmp_path / "spec" / "spec.html").stat().st_mtime_ns
+        assert before == after
+
+    async def test_an_approved_document_regenerates_rather_than_being_refused(
+        self, app, auth_headers, run_headers, tmp_path
+    ):
+        home_path = "spec/home.html"
+        child_path = "spec/changes/approved-demo/spec.html"
+        for path, title, kind in (
+            (home_path, "Home", "capability"),
+            (child_path, "Approved demo", "change-spec"),
+        ):
+            _write(tmp_path, path)
+            created = await app.post(
+                f"{BASE}/documents",
+                json={"path": path, "title": title, "kind": kind},
+                headers=auth_headers,
+            )
+            assert created.status_code == 201, created.text
+
+        baseline = await app.post(
+            f"{BASE}/spec/reindex", json={"home": home_path}, headers=auth_headers
+        )
+        assert baseline.status_code == 200, baseline.text
+
+        submitted = await app.post(
+            AGENT, json={"path": child_path, "document": _full_document()}, headers=run_headers
+        )
+        assert submitted.status_code == 200, submitted.text
+        await app.post(
+            f"{BASE}/documents/close-exploration", params={"path": child_path}, headers=auth_headers
+        )
+        await app.post(
+            f"{BASE}/documents/propose", params={"path": child_path}, headers=auth_headers
+        )
+        approved = await app.post(
+            f"{BASE}/documents/phase",
+            params={"path": child_path, "to": "approved"},
+            json={"reason": ""},
+            headers=auth_headers,
+        )
+        assert approved.status_code == 200, approved.text
+        assert approved.json()["phase"] == "approved"
+
+        # Confirm the refusal this section deliberately bypasses actually fires on the ordinary
+        # write path, so the next assertion is proof of something real.
+        refused = await app.post(
+            AGENT, json={"path": child_path, "document": _full_document()}, headers=run_headers
+        )
+        assert refused.status_code == 422
+        assert refused.json()["detail"]["code"] == "document_approved"
+
+        # Arrange the approved document under home, forcing a corpus-driven re-render of it.
+        index_path = tmp_path / "spec" / "index.json"
+        manifest_data = json.loads(index_path.read_text(encoding="utf-8"))
+        for doc in manifest_data["documents"]:
+            if doc["path"] == child_path:
+                doc["parent"] = home_path
+        index_path.write_text(json.dumps(manifest_data, indent=2) + "\n", encoding="utf-8")
+
+        response = await app.post(f"{BASE}/spec/reindex", headers=auth_headers)
+        assert response.status_code == 200, response.text
+        assert child_path in response.json()["corpus"]["rerendered"]
+
+        listed = await app.get(f"{BASE}/specs", headers=auth_headers)
+        entry = next(s for s in listed.json()["specs"] if s["path"] == child_path)
+        assert entry["state"] == "filed"
+        child_html = (tmp_path / "spec" / "changes" / "approved-demo" / "spec.html").read_text(
+            encoding="utf-8"
+        )
+        assert "aw-nav" in child_html
+
+    async def test_drift_is_not_reported_after_a_regeneration_but_is_after_an_outside_edit(
+        self, app, auth_headers, tmp_path
+    ):
+        """`/spec/drift/detect` is requirement-evidence drift, unrelated to a document's own
+        content digest — that divergence is reported inline on the next write attempt
+        (`spec_lifecycle.divergence`, surfaced as `result["divergence"]` by `PUT .../content`).
+        Design D7's promise is exercised here at that boundary: a rerender updates the digest, so
+        the very next write reports no divergence; an edit made outside the Hub after that does.
+        """
+        home_path = "spec/home.html"
+        child_path = "spec/child.html"
+        for path, title in ((home_path, "Home"), (child_path, "Child")):
+            _write(tmp_path, path)
+            created = await app.post(
+                f"{BASE}/documents",
+                json={"path": path, "title": title, "kind": "capability"},
+                headers=auth_headers,
+            )
+            assert created.status_code == 201, created.text
+        await app.post(f"{BASE}/spec/reindex", json={"home": home_path}, headers=auth_headers)
+
+        index_path = tmp_path / "spec" / "index.json"
+        manifest_data = json.loads(index_path.read_text(encoding="utf-8"))
+        for doc in manifest_data["documents"]:
+            if doc["path"] == child_path:
+                doc["parent"] = home_path
+        index_path.write_text(json.dumps(manifest_data, indent=2) + "\n", encoding="utf-8")
+
+        rerendered = await app.post(f"{BASE}/spec/reindex", headers=auth_headers)
+        assert child_path in rerendered.json()["corpus"]["rerendered"]
+
+        clean_write = await app.put(
+            f"{BASE}/documents/{child_path}/content",
+            json={
+                "document": {
+                    "schema_version": SCHEMA_VERSION,
+                    "kind": "capability",
+                    "title": "Child",
+                }
+            },
+            headers=auth_headers,
+        )
+        assert clean_write.status_code == 200, clean_write.text
+        assert clean_write.json()["divergence"] is None
+
+        child_file = tmp_path / "spec" / "child.html"
+        child_file.write_text(
+            child_file.read_text(encoding="utf-8") + "<!-- edited outside -->", encoding="utf-8"
+        )
+
+        dirty_write = await app.put(
+            f"{BASE}/documents/{child_path}/content",
+            json={
+                "document": {
+                    "schema_version": SCHEMA_VERSION,
+                    "kind": "capability",
+                    "title": "Child",
+                }
+            },
+            headers=auth_headers,
+        )
+        assert dirty_write.status_code == 200, dirty_write.text
+        assert dirty_write.json()["divergence"] is not None

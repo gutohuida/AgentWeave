@@ -15,7 +15,7 @@ contract, rather than trusting a caller's classification.
 
 from __future__ import annotations
 
-from typing import Any, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
@@ -1071,6 +1071,8 @@ async def reindex(
     )
 
     written = None
+    rerendered: List[str] = []
+    rerender_skipped: List[Dict[str, Any]] = []
     if manifest is not None:
         spec_documents.write_index(workspace, manifest)
         written = {
@@ -1078,6 +1080,13 @@ async def reindex(
             "documents": len(manifest.documents),
             "home": manifest.home,
         }
+        # corpus-aware-documents §4: a rebuilt manifest can change what a document's own
+        # navigation or map should say even when neither `results` nor `written` above name
+        # it — a sibling being added changes nothing about *this* document's requirements or
+        # the index file, only what its parent's map now lists.
+        rerendered, rerender_skipped = await spec_service.rerender_corpus(
+            session, workspace, manifest, rows
+        )
 
     await session.commit()
     return {
@@ -1099,6 +1108,10 @@ async def reindex(
         "index": {
             "written": written,
             "diagnostics": list(discovery_diagnostics) + list(index_diagnostics),
+        },
+        "corpus": {
+            "rerendered": rerendered,
+            "skipped": rerender_skipped,
         },
     }
 

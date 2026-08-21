@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,6 +28,7 @@ from . import (
 )
 from .db.models import InboundQueueEntry, SpecDocument, SpecDocumentMerge, SpecEditProposal
 from .project_workspace import ProjectWorkspace
+from .spec_manifest import Manifest
 from .spec_payload import (
     PayloadError,
     SpecPayload,
@@ -794,3 +795,86 @@ async def rerender_phase(
     )
     spec_documents.write_document(workspace, document.path, rewritten)
     document.content_digest = spec_lifecycle.digest(rewritten)
+
+
+async def rerender_corpus(
+    session: AsyncSession,
+    workspace: ProjectWorkspace,
+    manifest: Manifest,
+    rows: List[SpecDocument],
+) -> Tuple[List[str], List[Dict[str, Any]]]:
+    """Re-render every document whose corpus navigation or map no longer matches its file.
+
+    corpus-aware-documents §4. Every document in the manifest is a candidate — what stays
+    bounded (design D2) is the *write*, not the read: each candidate's freshly rendered bytes
+    are compared against what its file already holds, and only a real difference is written.
+    Comparing rendered bytes rather than manifest structure alone is deliberate: a structural
+    diff (parent, order) would miss a child's summary being filled in after the fact (design
+    D8, §6.7's content backlog) — that edits no manifest field, so a structure-only comparison
+    would leave a parent's map showing "no summary yet" forever. Reindex already reads every
+    document once for the requirement index (`spec_index.reindex_project`) and again for
+    `corpus_summaries`; rendering every candidate for a byte comparison costs no new order of
+    I/O, and it is operator-triggered, not on a hot path.
+
+    Driven from each file's own embedded payload (design D6), never the database, so this works
+    identically for a document the Hub created and one that arrived by clone. A document whose
+    file carries no readable payload is skipped and reported, never guessed at (design D6).
+    """
+    summaries = spec_documents.corpus_summaries(workspace, manifest)
+    by_path = {row.path: row for row in rows}
+    actor = spec_lifecycle.Actor(kind="system", name="reindex")
+
+    rerendered: List[str] = []
+    skipped: List[Dict[str, Any]] = []
+
+    for entry in manifest.documents:
+        current = spec_documents.read_document(workspace, entry.path)
+        if current is None:
+            skipped.append({"path": entry.path, "reason": "file_missing"})
+            continue
+        stored = extract_payload(current)
+        if stored is None:
+            skipped.append({"path": entry.path, "reason": "no_readable_payload"})
+            continue
+        try:
+            payload = validate_payload(stored)
+        except PayloadError:
+            skipped.append({"path": entry.path, "reason": "no_readable_payload"})
+            continue
+
+        identifiers, _ = spec_identity.read_identity(stored)
+        # A path filed in the manifest always has a row today (`build_index` only files
+        # documents that are both on disk and known to the Hub) — the fallback below is
+        # defensive, not reachable through that route, so a future caller that files a
+        # rowless document does not lose its phase and rigor rather than crashing.
+        document = by_path.get(entry.path)
+        phase = document.phase if document is not None else entry.status
+        rigor = document.rigor if document is not None else "sketch"
+        context = spec_documents.build_corpus_context(manifest, entry.path, summaries)
+        rendered = render_document(
+            payload,
+            identifiers,
+            phase=phase,
+            stored_payload=stored,
+            rigor=rigor,
+            corpus=context,
+        )
+        if rendered == current:
+            continue
+
+        spec_documents.write_document(workspace, entry.path, rendered)
+        rerendered.append(entry.path)
+
+        # A document with no row has no digest to update and nothing to attribute the event
+        # to — it is re-rendered too (design D7), just without either.
+        if document is not None:
+            document.content_digest = spec_lifecycle.digest(rendered)
+            await spec_lifecycle.record_event(
+                session,
+                document,
+                kind="rerendered",
+                actor=actor,
+                detail={"path": entry.path},
+            )
+
+    return rerendered, skipped

@@ -1768,7 +1768,9 @@ class SpecDocumentEvent(Base):
         String(64), ForeignKey("spec_documents.id"), nullable=False
     )
     project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
-    # What changed: "created", "content", or "phase".
+    # What changed: "created", "content", "phase", or "rerendered" (a Hub-initiated
+    # regeneration of the navigation/map region, distinct from authored content — see
+    # corpus-aware-documents design D6/D7).
     kind: Mapped[str] = mapped_column(String(32), nullable=False)
     actor_kind: Mapped[str] = mapped_column(String(16), nullable=False)
     # The agent's name, or how the operator identified themselves. Never accepted from a request

@@ -382,3 +382,118 @@ the recursion boundary for 3.6. This iteration's job was confirming each note wa
 throughout §1–3's landing notes finally stops being true for real documents.
 
 ---
+
+## Iteration 4 — S2 section 4, regeneration on reindex (headless firing, 04:14–04:57+01:00)
+
+**Found the tree clean this time** — first iteration in this run's history without a prior
+firing's uncommitted work waiting to be verified-and-landed. Started fresh: read `tasks.md` §4
+(4.1–4.11), `design.md` D6/D7, and the `reindex()` route (`hub/hub/api/v1/spec.py:1035`) before
+writing anything.
+
+**Wrote `spec_service.rerender_corpus`**, called from `reindex()` right after `write_index`.
+Signature: `(session, workspace, manifest, rows) -> (rerendered: List[str], skipped: List[dict])`.
+For every document in the freshly built manifest: read the file, `extract_payload`,
+`validate_payload`, build its `CorpusContext` via `build_corpus_context` (summaries computed once
+via `corpus_summaries`, per §1.5's existing decision — not re-read per document), render, and
+compare the result to what the file already holds. Only a real byte difference is written; on a
+write, a document with a row gets `content_digest` updated and a new `rerendered` event recorded
+(`Actor(kind="system", name="reindex")`, same shape `spec_index.reindex_project` already uses for
+its own system events). `kind` has no database CHECK constraint — confirmed by reading
+`SpecDocumentEvent`'s `__table_args__` before assuming a migration was needed; only its comment
+needed updating. The route's response gained a `"corpus": {"rerendered": [...], "skipped": [...]}`
+key alongside the existing `"documents"`/`"references"`/`"index"`.
+
+**Deliberately deviated from task 4.1's literal instruction, and said so in `tasks.md` rather than
+silently reinterpreting it.** 4.1 says to diff the new manifest against `existing` structurally
+(parent, order) to decide what to re-render. Working through it by hand first: a structural diff
+would never re-render a parent whose child's *summary* changed, because a summary edit touches no
+manifest field — and §6.7's own task list ("fill in the eight missing summaries, design D8") has
+nothing else that would ever refresh a map to show a newly-written summary. So `rerender_corpus`
+renders every document in the manifest unconditionally and diffs the *bytes* against what the file
+already holds; only the write is bounded (design D2's actual stated concern), not the read. Cost:
+no new order of I/O — `spec_index.reindex_project` and `corpus_summaries` already read every
+document once each, unconditionally, on every reindex call, and this route is operator-triggered,
+not a hot path. Recorded as a decision in both `tasks.md` (4.1's landing note) and here, with the
+smaller/reversible framing `PA-policy` asks for: swapping back to a structural diff is deleting
+code, not rewriting it, if the extra renders ever matter at real corpus scale (still ~35 documents).
+
+**Found two `design.md` inconsistencies while implementing, and recorded rather than silently
+patched around.** (1) D2's own diagram — "adding a capability re-renders exactly one file: its
+area" — predates and contradicts the later `D-S2-recursive` decision (§3.6, PA-4): verified
+empirically with a throwaway 3-level manifest built directly against `build_corpus_context` (not
+assumed from reading the code) that adding a leaf under an area *does* change the home's rendered
+bytes too, because the home's map is genuinely recursive over the whole tree. (2) D7 names
+`POST /spec/drift/detect` as what reports a document whose content no longer matches its digest —
+read that route's actual implementation (`hub/hub/api/v1/spec.py:844`) and it is
+`requirement_evidence.detect_drift`, entirely about requirement/evidence drift, unrelated to
+`SpecDocument.content_digest`. The real mechanism is `spec_lifecycle.divergence`, called inside
+`spec_service._apply_and_write` and surfaced as `result["divergence"]` on the next
+`PUT .../documents/{path}/content`. Neither is a defect in this iteration's landing; both are
+recorded as a decision in `tasks.md` §4's own notes rather than either "fixed" (not this section's
+job) or silently worked around (would have left the design doc wrong with no trace).
+
+**Tests (4.8–4.11) written against verified behaviour, not the task list's literal framing, once
+the framing turned out imprecise.** All four landed in `tests/test_spec_index_writer.py`,
+`TestReindexCorpusRerender`:
+- `test_setting_a_parent_rerenders_the_parent_and_the_recursive_home_and_nothing_else` (4.8) —
+  three documents, no arrange route exists yet (that's §5, not built), so the test hand-edits
+  `spec/index.json` the way D4 already documents as legitimate. First reindex (no prior index)
+  re-renders `area` and `other` but *not* `home` itself — verified by running the test, not
+  guessed: the home document gains no home-link (nothing to link to but itself) and has no map yet
+  (no children), so its first corpus-aware render is byte-identical to the `corpus=None` starter
+  file `POST /documents` already wrote. Setting `area`'s parent to `home` and reindexing again
+  re-renders exactly `{home, area}`; `other`'s file is asserted byte-for-byte untouched, not just
+  "still correct".
+- `test_a_rebuild_that_changes_nothing_writes_no_file` (4.9) — asserts an empty
+  `rerendered`/`skipped` response and an unchanged `mtime_ns`.
+- `test_an_approved_document_regenerates_rather_than_being_refused` (4.10) — walks a document
+  through `close-exploration` → `propose` → `phase?to=approved` via HTTP (no completeness-gate
+  shortcuts), confirms the *ordinary* write path is refused with `document_approved` first (proof
+  the refusal being bypassed is real, not assumed), then arranges it under a parent by hand and
+  confirms reindex still re-renders it.
+- `test_drift_is_not_reported_after_a_regeneration_but_is_after_an_outside_edit` (4.11) — built
+  against the *real* divergence mechanism (see design.md finding above, not the task's literal
+  `/spec/drift/detect` reference): a rerender updates the digest, so the next
+  `PUT .../content` reports `"divergence": null`; hand-editing the file after that makes the next
+  write report a non-null divergence.
+
+All 24 tests in the file pass (`py -3.11 -m pytest tests/test_spec_index_writer.py -q` →
+**24 passed**), including the 16 pre-existing ones (untouched, still green — confirms nothing in
+this iteration's rewiring broke the plain reindex path). Also ran
+`test_spec_render.py test_spec_corpus_context.py test_operator_authored_documents.py
+test_spec_capability_kind.py test_spec_archive.py test_spec_documents_api.py` together:
+**150 passed**. `ruff check` and `black --check` clean on every touched file (black reformatted
+the new test file once — a real diff, applied, not undone). `mypy` on the three touched
+non-test files (`spec_service.py`, `api/v1/spec.py`, `db/models.py`) reports zero errors *in those
+files*; the 296 errors mypy reports overall are 100% pre-existing, in unrelated modules pulled in
+transitively (confirmed by filtering mypy's own output to just the three touched paths).
+
+**Full suites, both green against this iteration's diff, one new flake signature confirmed
+inherited rather than assumed.** CLI (`py -3.11 -m pytest tests/ -q` from the repo root): **404
+passed, 3 skipped**, exact match to every prior baseline in this run. Hub
+(`py -3.11 -m pytest tests/ -q --ignore=tests/browser` from `hub/`): **4 failed, 2631 passed, 12
+skipped, 1 xpassed in 754.92s (12m34s)**. Two failures are the already-known flakes
+(`test_checkpoint_record.py`'s lineage test, `test_spec_index.py`'s reworded-requirement test —
+timestamp-collision, see `dead_ends_inherited`). The other two —
+`test_evidence_latest_review_signal.py::test_a_later_acceptance_replaces_the_reason_shown` and
+`test_requirement_evidence.py::test_decisions_append_and_never_overwrite` — were new to this run's
+log, so checked before assuming they were inherited: neither file is anywhere near this iteration's
+diff, and running both directly (`pytest tests/test_evidence_latest_review_signal.py::... tests/
+test_requirement_evidence.py::... -q`) gave **2 passed**. Both assert an order between two records
+(a rejected-then-accepted decision pair; an append sequence) created moments apart in the same
+test — the identical signature to the already-documented `test_spec_index.py` flake, just in
+sibling files. Recorded as a broadened `dead_ends_inherited` entry rather than either chased as a
+regression or silently ignored.
+
+**Tasks.md**: all of §4 (4.1–4.11) ticked, each with a landing note; 4.1's note states the
+deviation and its reasoning in full so a later reader isn't left to reverse-engineer why the code
+doesn't match the task's literal words. A "decisions taken without asking" block was added at the
+end of §4 for the two judgment calls above (byte-diff over structural-diff; not editing
+`design.md`'s two stale references), per `PA-policy`.
+
+**Section 5 (setting a document's place — the `arrange` route) starts next iteration.** It is the
+first route in this change an operator interacts with directly rather than only seeing through
+`reindex`, and it can lean on `rerender_corpus` for its own re-render step rather than inventing a
+second mechanism — see `next_action` for the specific call shape considered.
+
+---
