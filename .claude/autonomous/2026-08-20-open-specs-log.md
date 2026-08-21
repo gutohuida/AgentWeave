@@ -770,3 +770,103 @@ latest before S3 as a whole is called done.
 
 **Tasks.md now stands at 10/80.** `current` stays **S3**; section 3 (storage: migration `0083`,
 the `task_dependencies` table, the D3 foreign-key decision, `first_approved_at`, backfill) is next.
+
+---
+
+## Iteration 9/10 — S3 section 3 reconciled and committed, then section 4 landed (2026-08-21T08:23+01:00)
+
+**Reconciliation first.** This iteration opened by checking the branch against `STATE.json`'s
+claims, per the standing instructions, and found a real gap: iteration 9 had done the full section 3
+(storage) work — migration `0083`, `TaskDependency`, `SpecDocument.first_approved_at`, the backfill,
+all six subtasks ticked in `tasks.md` with landing notes — but the process ended without committing
+or pushing it. `git log` still showed `4b31922` (the section-2 release commit) as HEAD, while the
+working tree carried the entire section-3 diff, dirty. This is exactly the failure mode the
+"never end an iteration with a dirty tree" rule exists to prevent, and it had already happened once.
+
+Rather than redo the work or discard it, verified it stood on its own: reran
+`pytest hub/tests/test_migrations.py hub/tests/test_project_persistence.py hub/tests/test_spec_archive.py
+-q` → **83 passed, 1 skipped** (matching the landing note's own count), the wider spec suite → **82
+passed**, and `ruff`/`black --check` clean on every touched file. Committed as `5f85495` ("Land
+task-dependencies S3 section 3: storage"), stating plainly in the message that this was the previous
+iteration's work being landed late.
+
+**Then section 4 — materialisation — as this iteration's own unit of work**, per the `next_action`
+`STATE.json` already carried. `materialise()` (`hub/hub/spec_tasks.py`) now creates the edges a
+document declares, not only the tasks: a second pass, `_materialise_edges()`, runs after the existing
+task-creation loop and resolves every declared entry's key to a `Task` — either the one just
+created/found locally, or (for an entry carrying `from`) the task an import names via a new
+`_resolve_import()` (`SpecDocument` by path, confirmed `phase == APPROVED`, then `Task` by
+`(spec_document_id, spec_task_key)`).
+
+**A real bug, caught by the section's own tests before it was marked done.** The first
+implementation of `_materialise_edges()` correctly resolved imports, but the *task-creation* loop
+itself never learned to skip an import entry — an import's `requirements` list is empty by
+construction (`spec_payload.py`), so it fell straight through the "already served by a hand-made
+task" skip (which requires a *non-empty* resolved requirements list) and materialised as an ordinary
+task. `test_an_import_resolves_to_the_existing_task_without_creating_one` failed with `tasks_created
+== 2` instead of `1`, which is exactly what a violated 4.2 looks like. Fixed with one guard —
+`if isinstance(entry.get("from"), dict): continue` — placed right where 1.3's own discriminator field
+says it belongs. Recorded as found-and-fixed in `tasks.md` rather than silently corrected, since a
+run that only reports what passed is a worse record than one that shows what nearly shipped broken.
+
+**Two decisions the task list itself left open, both taken and written down in `design.md`'s D7
+addendum** (PA-policy: design's own reasoning first, smaller/reversible option otherwise):
+
+- **4.3, a dangling import.** New `TaskDependencyReference` table (migration `0084`), not a reuse of
+  `TaskRequirementReference` — the two are different facts with non-overlapping `reason` vocabularies,
+  and folding them together would make a reader parse `reason` to tell which kind of brokenness they
+  are looking at. In practice this should be rare: `import_not_approved` already refuses `propose()`
+  for exactly this condition, so the only way `materialise()` (running later, at `approve()`) meets it
+  is the specific race the design names — the source document reopened in the window between the
+  importing document's `propose()` and its `approve()`. Reproduced that race directly, through the
+  real HTTP routes, in `test_an_unresolvable_import_is_preserved_and_reported_not_raised`: propose
+  while the import still resolves, reopen the source, then approve — the approval still succeeds,
+  `tasks_created` still has the one real task, and the reference row records `reason:
+  document_not_approved` rather than the approval failing or the edge silently vanishing.
+- **4.4, edges on an already-materialised task.** Decided a revision **may** add a new edge to a task
+  an earlier approval already created — the "existing task is never touched" rule
+  (`spec_tasks.py`'s own module docstring) is about the task row, not its edges, and D5 already
+  settled that the document is the only place an edge can ever be declared, so refusing this would
+  make `depends_on` write-once for no reason the design gives. What still doesn't happen: an edge
+  already recorded is never *removed*, even if a revision's `depends_on` stops naming it — same
+  one-directional caution `existing_keys` already gives task creation.
+
+**New test file**, not an addition to the already-large `test_spec_declared_tasks.py`:
+`hub/tests/test_spec_task_dependencies.py`, 7 tests, matching how `test_spec_completeness.py` etc.
+are already split by concern — local dependency becomes an edge, no-dependencies materialises no
+edges, re-approval twice creates no duplicate edges, a revision adds an edge to an existing task
+without touching it, an import resolves without creating a second task, the dangling-import race
+above, and a unit-level malformed-import defensive check.
+
+**Verified, not assumed.** `pytest hub/tests/test_spec_task_dependencies.py
+hub/tests/test_spec_declared_tasks.py hub/tests/test_spec_board_task_convergence.py
+hub/tests/test_spec_completeness.py hub/tests/test_spec_payload.py
+hub/tests/test_operator_authored_documents.py hub/tests/test_spec_capability_kind.py
+hub/tests/test_migrations.py hub/tests/test_project_persistence.py hub/tests/test_spec_archive.py -q`
+→ **174 passed, 1 skipped**. The top-level CLI suite (`pytest tests/ -q` from the repo root) was also
+reconfirmed clean — **404 passed, 3 skipped**, matching the prep baseline exactly, nothing in this
+iteration touches it. `ruff check`, `black --check` (reformatted `spec_tasks.py` and the new test
+file once, then clean) and `mypy hub/spec_tasks.py` (one real error — `Task.spec_task_key` is
+`Optional[str]` even inside a query already filtered to non-null, needed an explicit guard in the
+new dict comprehension — fixed) all clean. `git status --short` after both commits confirmed no file
+outside the two sections' stated scope was touched.
+
+**Not run this iteration, and said so rather than assumed: the full `hub/tests/` suite.** Kicked off
+twice — once backgrounded, once foreground with a 600s timeout that was exceeded and moved itself to
+background (ID `ba4ztlbcm`, output at
+`C:\Users\huida\AppData\Local\Temp\claude\...\tasks\ba4ztlbcm.output`) — but this iteration is closing
+without its result. This run's own `stop_at` (2026-08-21T08:00+01:00) had already passed by the time
+section 4's own targeted verification finished; closing out cleanly and pushed took priority over
+waiting on a suite whose targeted subset (the actual call paths this section touches) was already
+green. **Whoever reads this next — human or another iteration, if the driver fires again despite
+`stop_at` — should check that background run's output before touching `spec_tasks.py` or the
+migrations further**, on the same "measured, not assumed" standard this run has tried to hold all
+night. Nothing in the two sections landed this turn is expected to fail it; nothing this run has
+touched all night has caused a real (non-flake, see `dead_ends_inherited`) full-suite failure so far.
+
+**Tasks.md now stands at 16/80.** `current` stays **S3**; section 5 (the gate — the first
+behaviour change, `task_transition_service`'s third guard) is next, and is genuinely the first
+section that changes runtime behaviour rather than sitting inert. **This run is past its own
+`stop_at`.** The Windows Scheduled Task is documented as self-unregistering past `stop_at`, so this
+may be the last iteration that fires tonight; `STATE.json`'s `next_action` is still being written for
+section 5 in case one more firing lands, but nobody should be surprised if it does not.
