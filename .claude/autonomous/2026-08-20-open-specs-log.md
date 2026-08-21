@@ -1564,3 +1564,104 @@ liveness cue and its `prefers-reduced-motion` gate). Section 11 (human-only) is 
 `concurrent_session_claim` on the backend loop files was still standing at the end of this turn —
 no message from the interactive session releasing it — so it is carried forward verbatim into
 `next_action` again. `stop_at` (19:00) is a little under three hours and ten minutes out.
+
+## Iteration 5 — task-dependencies section 8, third pass: 8.7, 8.8, 8.9 (15:45-16:11+01:00)
+
+Arrived at `95f4c01`, `last_heartbeat` stale (15:03, over 40 minutes old) — branch free. Found
+`hub/hub/launchability.py` and `hub/tests/test_launchability.py` dirty exactly as the
+`concurrent_session_claim` still standing in `STATE.json` said, plus the untracked
+`openspec/changes/diagnose-and-clear-a-broken-loop/` iteration 4 had already noted — left both
+alone all turn, never staged, never read for content.
+
+Continued section 8's PASS 3 grouping from the prior `next_action`: 8.7 (off-board references),
+8.8 (the three stalled states), 8.9 (regressed-prerequisite flag) — all three landed, not a subset,
+since each turned out to be one bounded function plus a render site rather than open-ended work.
+
+**8.7** needed one backend field `TaskDependencyRef` didn't have: `spec_document_id`, so an
+off-board reference can name *which* document it lives in rather than a bare title. Added to
+`hub/hub/schemas/tasks.py` and populated in `_attach_dependencies` (`hub/hub/api/v1/tasks.py`) —
+free on the on-board side (`response.spec_document_id` already exists) and one extra selected
+column on the existing `other_rows` query for the off-board side, no second query. Frontend's
+`offBoardPrerequisites(tasks)` reads it straight off every on-board task's own already-fetched
+`prerequisites` list — the board's own `edges` list only carries ids, but `_attach_dependencies`
+had already resolved title/status/document for every id touching the page, on-board or not, so
+nothing new needed fetching. Rendered once, above every layer, as a dashed pill (not per-layer:
+these aren't laid out, only referenced), naming the document via `useTaskBoards()`'s
+already-cached titles.
+
+**8.8** turned out not to need a new backend value at all. The design's three-row table (gated /
+waiting-on-review / gated-on-rejected) maps onto the backend's two non-null `dependency_state`
+values plus a split: `dependency_state === 'gated'` covers both "not yet approved" and "done,
+nothing reviewing" alike, and the two are distinguished by reading each unmet prerequisite's own
+`status` (already on the card via `prerequisites`) — `completed`/`under_review` means the work is
+finished and nothing is reviewing it (D8's middle row, the mitigation this task exists for),
+anything earlier means still being worked. `dependencyStallState(task)` does the classification;
+`layerStallSummary(tasks)` counts the three across a layer and renders design's own example
+sentence shape, "Layer N is waiting on M reviews[, K gated..., J gated on a rejected...]", shown
+only when the layer has at least one stalled task.
+
+**8.9** landed on `TaskCard.tsx` directly, not `DependencyBoard.tsx` — `dependency_state` is
+already attached to every `TaskResponse` any page fetches (task 7.2), not only a board's, so
+putting the badge on the shared card means a regressed prerequisite is visible wherever that task's
+card appears, matching design D8's "flagged, not stopped" (the gate only guards `-> in_progress`;
+nothing here touches the task's own status). A red pill, "Prerequisite regressed", deliberately a
+different colour from the existing amber "Stalled" divergence badge next to it — one means a run
+stopped reporting in, the other means an actual fact about the world changed.
+
+**One thing found and deliberately not fixed, out of scope.** While choosing an icon for 8.7's
+reference pill, found that `TaskCard.tsx` already calls `Icon name="alert_triangle"` and
+`Icon name="help_circle"` (the "Stalled" badge and the "Waiting on you" block), and neither name is
+in `Icon.tsx`'s `ICONS` map — confirmed by reading the whole map, not guessing. Per the component's
+own contract ("an unknown name renders nothing and only warns to the console"), both render nothing
+today; the text next to them still carries the meaning, so nothing visibly breaks, but the icon is
+silently absent. Pre-existing, not this pass's, and not touched — this pass's own new icon uses
+`"link"`, which *is* mapped, specifically to avoid adding a third instance of the same trap. Worth
+a follow-up someday (either add the two names to `ICONS` or swap the call sites to a mapped name),
+not blocking anything in section 8.
+
+**Verified, not assumed.** This pass touched Python (a new field on `TaskDependencyRef`), so per
+the run's own `lesson_from_run1` — "after adding a database table or a payload field, run the FULL
+hub/tests/ suite" — the full suite was run rather than trusting the targeted selection, in the
+**foreground**, started early in the turn. New backend test
+`test_board_prerequisite_ref_carries_its_own_document`; targeted file
+`pytest hub/tests/test_task_dependency_reads.py -q` → 11 passed. `ruff check` and `black --check`
+clean on both touched Python files; `mypy` on the same two files shows zero errors attributable to
+either (grepped the two paths out of the run's pre-existing ~301-line baseline of unrelated
+`no-untyped-def` noise elsewhere — zero hits for these files). Full `hub/tests/` suite: **2727
+passed, 84 skipped, 1 xpassed, 0 failed in 964.22s (16m4s)** — run backgrounded automatically by the
+tool after its 120s default timeout elapsed, then actively polled to completion in the same turn
+(never abandoned per `NEVER_BACKGROUND_AND_WAIT`) via the harness's own background-output file,
+which stayed at 0 bytes for several minutes first (pytest's stdout is block-buffered when
+redirected to a file, not a bug in the wait). 2727 vs. run3's own 2699-passed baseline is +28, not
+this pass's +1 test — `git log` mid-wait showed the concurrent interactive session had landed two
+commits of its own into the same tree while the suite ran (`022cd36`, `5f0c10f`); `git show --stat`
+on both confirmed neither touches a file this pass touched, so the extra passes are their tests,
+not a discrepancy in this pass's own count.
+
+Frontend: `npx tsc --noEmit` clean. `npx eslint <every touched file> --max-warnings 0` clean — one
+warning self-caught before shipping, an unmemoised `useMemo` dependency on `board?.tasks ?? []` (a
+fresh array reference every render); fixed by dropping the `useMemo` entirely rather than adding a
+second stringified-dependency workaround, since `offBoardPrerequisites` is one cheap pass over data
+already in hand. Full `hub/ui` `vitest run`, in the **foreground**: **120 files / 1206 passed** —
+exactly the prior pass's 1190 + 16 new tests (8 pure-function across `offBoardPrerequisites` and
+`dependencyStallState`, 5 rendered on `DependencyBoard`, 3 on `TaskCard`), 0 failed, 0 regressed.
+`openspec validate task-dependencies --strict` and `--all --strict` both clean (42/42 — one more
+item than the prior pass's 41, the concurrent session's own new `diagnose-and-clear-a-broken-loop`
+proposal, not this pass's).
+
+Wrote the landing notes directly into `tasks.md` (8.7, 8.8, 8.9's own numbered items plus a "third
+pass" verification paragraph, following the file's own convention from passes one and two) before
+staging. Committed the ten explicit paths (`git add` by name — the two backend loop files the
+concurrent session still had dirty stayed untouched throughout, confirmed via
+`git diff --stat -- hub/hub/launchability.py hub/tests/test_launchability.py` returning empty right
+before staging) as `4c03bae` and pushed clean.
+
+`task-dependencies` now stands at **73/87** (grep-counted, not carried forward): section 8 is 10/16
+(8.1–8.9, 8.12). Remaining in section 8 (6 tasks): 8.10 (no structural editing affordance), 8.11
+(the view toggle — wires `DependencyBoardView` into `App.tsx`, the point this becomes reachable
+from a running Hub, verify live against 8010 once done rather than only via `vitest`), 8.13
+(`make ui`, always last), 8.14–8.16 (D12's liveness cue, its pulsing hue, and the
+`prefers-reduced-motion` gate). Section 11 (human-only, 8 tasks) is not this run's — that is
+everything left in the change. `concurrent_session_claim` on the backend loop files was still
+standing at the end of this turn — no release message found — carried forward verbatim into
+`next_action` again. `stop_at` (19:00) is a little under three hours out.
