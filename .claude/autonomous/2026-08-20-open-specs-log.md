@@ -1665,3 +1665,86 @@ from a running Hub, verify live against 8010 once done rather than only via `vit
 everything left in the change. `concurrent_session_claim` on the backend loop files was still
 standing at the end of this turn — no release message found — carried forward verbatim into
 `next_action` again. `stop_at` (19:00) is a little under three hours out.
+
+## Iteration 6 — task-dependencies section 8, fourth pass: 8.10, 8.11 (16:15-16:26+01:00)
+
+Arrived at `0786386`, `last_heartbeat` 15:32:56 — 43 minutes old, past the 25-minute grace, so the
+branch was free per the interlock's own rule. Found a new remote commit not yet in local history:
+`264a299` ("Decide the three open questions, and one of them dissolved on the way"), the interactive
+session revising `openspec/changes/diagnose-and-clear-a-broken-loop/{design.md,tasks.md}` only — two
+files, no code. Read it before assuming safety: it touches neither this run's files nor the claimed
+backend loop files, so it pulled cleanly with no reconciliation needed.
+
+**`concurrent_session_claim` checked, not assumed still standing.** The last commit touching any of
+the seven claimed backend files was `022cd36` at 15:49 — 26 minutes before this iteration started —
+and that commit's own text ends "Task 1.5 ... is deliberately left open," naming more work still
+coming on two of the claimed files (`agents.py`, `inbound_queue.py`). No release message anywhere.
+Honoured the claim and stayed in section 8's UI work, per `next_action`'s own instruction.
+
+**Continued section 8's PASS 4 grouping exactly as scoped: 8.10 (no editing affordance) and 8.11
+(the view toggle).**
+
+**8.10** turned out to be mostly a confirmation, in the same shape as 8.4: grepped `DependencyBoard.tsx`
+and `DependencyBoardView.tsx` for anything that could mutate `depends_on` and found nothing — design
+D5 ("the document is the only writer of edges") already held by construction. The actual gap was that
+nothing *said* so; an operator looking for an edit control would find silence, not an explanation.
+Added `structureHint` to `DependencyBoardView.tsx`, rendered as a line below the picker: "Dependencies
+are set in the document — edit its depends_on field to change them" for a document board, and D5's own
+named consequence — "Hand-made tasks belong to no document, so they can never have a dependency" — for
+the standing "no document" board, rather than one generic sentence for both. New test asserts both
+strings, one per board selection.
+
+**8.11** wires `DependencyBoardView` into `App.tsx`'s `tasks` tab for the first time — the point this
+component becomes reachable from a running Hub rather than only its own test file. Added `tasksView`
+state (`'board' | 'dependencies'`, default `'board'`), following the `activity` tab's `activitySubview`
+pattern exactly: two buttons, `aria-pressed`, no stored preference. `onOpenRequirement` is built once
+in the tab branch and threaded to whichever view is mounted, since `TaskCard`'s requirement chip means
+the same thing either way. `TasksBoard.tsx` itself was not touched — confirmed via `git diff --stat`
+showing zero lines, not just assumed from not having opened the file — so "the seven-column board
+unchanged" is verified, matching the task's own wording.
+
+**Verified live against 8010, not only via `vitest`, since this is the one task in the section whose
+whole point is becoming visible in a real browser.** Started
+`AW_DEV_HUB=http://127.0.0.1:8010 npm run dev` in the background (a long-running dev server, not
+something the turn waited *on* — distinct from `NEVER_BACKGROUND_AND_WAIT`'s "backgrounded a
+one-shot command and ended the turn" failure mode). First screenshot attempt against
+`http://127.0.0.1:5173` connection-refused; `netstat` showed Vite bound `[::1]:5173` only (IPv6
+loopback) on this machine — `http://localhost:5173` resolved and worked, worth recording since the
+next UI-verification task will hit the same wall. Used `py -3.11 scripts/uishot.py` against
+`proj-5e960453` (this repo's own trial project — registered, but has zero tasks, so it only proved the
+empty-state and the toggle itself) and, to see a real populated dependency board, `proj-ff695d96`
+("aw-loop10", a different project registered on the same trial Hub, read-only — nothing in either
+project was written to). Screenshots showed: the Board/Dependencies toggle rendering with Board active
+by default; clicking Dependencies mounting the real picker (title + outstanding/total), a real card
+layout, and 8.10's structure hint reading correctly beneath the picker; `aw-loop10`'s document board
+rendering all 5 of its real tasks in a single unlayered row. That flat layout was checked against the
+raw `GET /tasks/board` response before trusting it as correct rather than a bug — the document
+declares zero `depends_on` edges, so depth-0-for-everyone is exactly right. Screenshots were viewed via
+`Read` then deleted from `testbed/scratch/` — not committed, matching the run's screenshot convention
+elsewhere. Dev server stopped via `TaskStop` before finishing the turn.
+
+**Verified, not assumed, in the standard sense too.** `npx tsc --noEmit` clean. `npx eslint` on all
+four touched files, `--max-warnings 0`, clean. Targeted suite (`dependencyBoardView.test.tsx`,
+`dependencyBoard.test.tsx`, `App-mount.test.tsx`, `tasksApi.test.tsx`, `tasksBoardFilter.test.tsx`,
+`blockedStaysInProgress.test.tsx`) → **58 passed**. Full `hub/ui` `vitest run`, in the **foreground**:
+**120 files / 1208 passed** — exactly the prior pass's 1206 + 2 new tests, 0 failed, 0 regressed (the
+two `Error: boom` traces in the console output are `ErrorBoundary.test.tsx` intentionally throwing,
+present in every run of that file). `openspec validate task-dependencies --strict` and `--all --strict`
+both clean (42/42). No Python touched, so the full `hub/tests/` suite was not rerun — `lesson_from_run1`'s
+trigger (a new table or payload field) did not happen this pass.
+
+Wrote the landing notes into `tasks.md` (8.10, 8.11's own numbered items plus a "fourth pass"
+verification paragraph, same convention as the prior three passes) before staging. Confirmed the seven
+claimed backend files still showed an empty `git diff --stat` immediately before staging. Committed
+the five explicit paths as `d1605c2`. Pulled first — found `264a299` (the interactive session's
+design-only revision, described above) already on the remote branch, disjoint from this commit's
+files — and pushed clean.
+
+`task-dependencies` now stands at **75/88** (grep-counted): section 8 is 12/16 (8.1–8.12). Remaining
+in section 8 (4 tasks, PASS 5): 8.14–8.16 (D12's liveness cue, its pulsing hue, the
+`prefers-reduced-motion` gate) and 8.13 (`make ui`, always last). This is the section's last pass —
+once it lands, the change is 79/88 with only section 11 (human-only) left. `concurrent_session_claim`
+on the backend loop files was still standing at the end of this turn — no release message found —
+carried forward verbatim into `next_action` again, with a note that `do_not_idle` should reach for
+`loop-notices-and-reacts` only once that claim actually lifts. `stop_at` (19:00) is a little under two
+hours and thirty minutes out.
