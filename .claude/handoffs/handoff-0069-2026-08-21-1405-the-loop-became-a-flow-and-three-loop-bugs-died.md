@@ -3,9 +3,19 @@
 **Date:** 2026-08-21T14:05:00+01:00 · **Branch:** `autonomous/2026-08-20-open-specs` · **HEAD:** `1e06755`
 **Agent:** Claude Opus 5 (1M context) (Claude Code, interactive)
 **Previous handoff:** `.claude/handoffs/handoff-0068-2026-08-21-1315-two-runs-landed-eight-sections-and-the-driver-lost-40-percent.md`
-**Status:** chunk complete. Working tree clean. **4 unpushed** on this branch (`bb95e66`, `d7cee5d`,
-`c2dda7c`, `1e06755`). Run 3 is armed in STATE.json but its **driver is not installed** — one
-command, in Next steps.
+**Status:** chunk complete. **4 unpushed** at the time of writing (`bb95e66`, `d7cee5d`, `c2dda7c`,
+`1e06755`).
+
+**AMENDED 14:12, minutes after writing.** The operator installed the run-3 driver at **14:04:36, every
+20 minutes**, while this file was being written. So two statements below were true when written and
+are now false: the working tree is **not clean** (iteration 1 is mid-flight), and next step 1's
+"driver is not installed" is **done**. The driver question in next step 1 is still open on its
+merits — 20 minutes is the same interval that lost run 2 about 40% of its firings — but it is now a
+question about a *running* driver, not an unarmed one.
+
+**What iteration 1 is doing:** implementing `task-dependencies` 1.6–1.8, the reviewer field. That is
+the stranded work task 10.0 was added to surface, so the gate worked — the run found it on its first
+firing rather than closing the change without it.
 
 ## Goal
 
@@ -80,7 +90,7 @@ extension the operator's *"improve the loop, do not rebuild it"* decision asked 
 |---|---|
 | Branch | `autonomous/2026-08-20-open-specs` (the runs push it; `master` is 16 ahead of `origin/master` and **must not be pushed** per STATE.json) |
 | Run 2 | **over.** `stop_at` 13:00 passed; driver self-unregistered as designed |
-| Run 3 | **armed in STATE.json** (`stop_at` 19:00, `iteration` 0, heartbeat back-dated to 12:55) but the **scheduled task is NOT installed** |
+| Run 3 | **LIVE.** Armed in STATE.json (`stop_at` 19:00) and installed at 14:04:36, `PT20M`. First firing took the stranded reviewer field. Next firing 14:24:36 |
 | Hub, port 8010 | untouched all session. No Hub started, no browser opened, no port bound |
 | This repo as a project | still **not** registered |
 
@@ -242,7 +252,10 @@ Standing, still in force:
 
 ## Git state
 
-- **Branch:** `autonomous/2026-08-20-open-specs`. **HEAD:** `1e06755`. **Working tree clean.**
+- **Branch:** `autonomous/2026-08-20-open-specs`. **HEAD:** `cac830b` (this handoff).
+- **Working tree was clean at `1e06755`; it is now dirty** — `hub/hub/spec_payload.py` and
+  `hub/tests/test_spec_payload.py`, run 3's iteration 1 writing the reviewer field. Not mine, and not
+  to be reverted or stashed. **Do not `git stash` on this branch** — see Dead ends.
 - **4 unpushed:** `bb95e66`, `d7cee5d`, `c2dda7c`, `1e06755`. Run 3 will push them on its first
   iteration, or `git push` does it now.
 - `master` is **16 ahead of `origin/master`** and STATE.json says do not push it.
@@ -250,7 +263,8 @@ Standing, still in force:
 
 ## Next steps
 
-1. **Decide the driver question, then install it.** Handoff 0068 next-step 2 says *"Fix
+1. **Decide the driver question — the driver is already running at 20 minutes.** Handoff 0068
+   next-step 2 says *"Fix
    `run-iteration.ps1` before arming any run 3"* — it is **not done**, and my "clear to fire" verdict
    did not account for it. What I verified: the invocation at `run-iteration.ps1:115` **is**
    synchronous, so the "wrapper exits early" diagnosis looks imprecise — but the symptom (40% of
