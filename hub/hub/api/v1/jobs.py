@@ -227,6 +227,10 @@ async def _batch_loop_summaries(
     firing_active_jobs: set = set()
     firing_result = await session.execute(
         select(JobRun.job_id)
+        .join(
+            Run,
+            (Run.conversation_id == JobRun.conversation_id) & (Run.status == "running"),
+        )
         .where(JobRun.job_id.in_(job_ids), JobRun.status == "in_progress")
         .distinct()
     )
@@ -821,22 +825,35 @@ async def archive_job(
         raise HTTPException(status_code=404, detail="Job not found")
     if job.archived_at is not None:
         raise HTTPException(status_code=400, detail="job is already archived")
-    if agent_identity is not None or run_identity is not None:
-        loop_result = await session.execute(select(Loop).where(Loop.job_id == job_id))
-        if loop_result.scalar_one_or_none() is not None:
-            raise HTTPException(
-                status_code=400,
-                detail="this job has a loop; loops are archived by the operator only",
-            )
+    loop_result = await session.execute(select(Loop).where(Loop.job_id == job_id))
+    loop = loop_result.scalar_one_or_none()
+    if (agent_identity is not None or run_identity is not None) and loop is not None:
+        raise HTTPException(
+            status_code=400,
+            detail="this job has a loop; loops are archived by the operator only",
+        )
 
-    job.archived_at = datetime.now(timezone.utc)
+    archived_at = datetime.now(timezone.utc)
+    job.archived_at = archived_at
+    job.enabled = False
     job.updated_by_run_id = run_identity
+    if loop is not None:
+        loop.archived_at = archived_at
 
     await session.commit()
     await session.refresh(job)
 
     await sse_manager.broadcast(project_id, "job_archived", {"id": job_id})
     await persist_event(session, project_id, "job_archived", {"id": job_id}, agent=agent_identity)
+
+    try:
+        from ...scheduler import get_scheduler
+
+        scheduler = get_scheduler()
+        if scheduler:
+            await scheduler.remove_job(job_id)
+    except Exception:
+        pass
 
     loop_summaries = await _batch_loop_summaries(session, [job_id])
     job.loop = loop_summaries.get(job_id)

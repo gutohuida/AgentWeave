@@ -7,7 +7,7 @@ from fastapi import HTTPException
 
 from hub.api.v1.loops import _require_operator
 from hub.db.engine import async_session_factory
-from hub.db.models import AIJob, JobRun, Loop, Task
+from hub.db.models import AIJob, JobRun, Loop, Run, Task
 from hub.utils import persist_event
 
 
@@ -179,6 +179,16 @@ async def test_firing_active_reflects_an_in_progress_job_run(app, auth_headers):
                 project_id="proj-test",
                 status="in_progress",
                 trigger="scheduled",
+                conversation_id="conv-firing-a",
+            )
+        )
+        db.add(
+            Run(
+                id="agent-run-firing-a",
+                project_id="proj-test",
+                agent=job_a.agent,
+                conversation_id="conv-firing-a",
+                status="running",
             )
         )
         db.add(
@@ -204,6 +214,35 @@ async def test_firing_active_reflects_an_in_progress_job_run(app, auth_headers):
     by_id = {row["id"]: row for row in listing.json()}
     assert by_id[loop_a.id]["firing_active"] is True
     assert by_id[loop_b.id]["firing_active"] is False
+
+
+@pytest.mark.asyncio
+async def test_archiving_a_job_retires_its_loop_without_erasing_history(app, auth_headers):
+    async with async_session_factory() as db:
+        job = await _make_job(db, suffix="archive-with-loop")
+        loop = await _make_loop(db, job_id=job.id, purpose="history survives")
+        db.add(
+            JobRun(
+                id="run-archive-with-loop",
+                job_id=job.id,
+                project_id="proj-test",
+                status="completed",
+                trigger="manual",
+            )
+        )
+        await db.commit()
+
+    response = await app.post(
+        f"/api/v1/projects/proj-test/jobs/{job.id}/archive", headers=auth_headers
+    )
+    assert response.status_code == 200, response.text
+
+    default = await app.get("/api/v1/projects/proj-test/loops", headers=auth_headers)
+    assert loop.id not in {row["id"] for row in default.json()}
+    detail = await app.get(f"/api/v1/projects/proj-test/loops/{loop.id}", headers=auth_headers)
+    assert detail.status_code == 200
+    assert detail.json()["purpose"] == "history survives"
+    assert [row["id"] for row in detail.json()["history"]] == ["run-archive-with-loop"]
 
 
 @pytest.mark.asyncio
