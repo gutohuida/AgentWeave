@@ -24,14 +24,21 @@ re-approving a document something an operator learns to fear.
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import requirement_links, spec_identity
-from .db.models import Loop, SpecDocument, SpecRequirement, Task
-from .spec_lifecycle import Actor
+from .db.models import (
+    Loop,
+    SpecDocument,
+    SpecRequirement,
+    Task,
+    TaskDependency,
+    TaskDependencyReference,
+)
+from .spec_lifecycle import APPROVED, Actor
 from .utils import short_id
 
 logger = logging.getLogger(__name__)
@@ -113,10 +120,10 @@ async def materialise(
         .first()
     )
 
-    existing_keys = set(
+    existing_task_rows = (
         (
             await session.execute(
-                select(Task.spec_task_key).where(
+                select(Task).where(
                     Task.project_id == document.project_id,
                     Task.spec_document_id == document.id,
                     Task.spec_task_key.is_not(None),
@@ -126,6 +133,14 @@ async def materialise(
         .scalars()
         .all()
     )
+    existing_keys = {row.spec_task_key for row in existing_task_rows}
+    # Every local task this document has ever materialised, by key — reused below to resolve edges
+    # for a task this call did not itself create (4.4: a revision may add an edge to an existing
+    # task even though the task row itself is never touched). The query above already filters to
+    # `spec_task_key IS NOT NULL`; the `is not None` here is only to satisfy the type checker.
+    local_tasks: Dict[str, Task] = {
+        row.spec_task_key: row for row in existing_task_rows if row.spec_task_key is not None
+    }
 
     # The document's own key→identifier map. `spec_index` rebuilds the whole index from this, so it
     # is the same source of truth, read the same way — not a second interpretation of the file.
@@ -159,6 +174,11 @@ async def materialise(
             continue
         key = entry.get("key")
         if not isinstance(key, str) or not key or key in existing_keys:
+            continue
+        if isinstance(entry.get("from"), dict):
+            # 4.2, the one new rule in this loop: an imported entry resolves to the task it names
+            # and never creates one of its own. `_materialise_edges` below is what resolves it —
+            # this loop is only for entries that declare new work.
             continue
 
         wanted = entry.get("requirements")
@@ -209,9 +229,156 @@ async def materialise(
             )
 
         existing_keys.add(key)
+        local_tasks[key] = task
         created.append(task)
 
+    await _materialise_edges(session, document, declared, local_tasks)
+
     return created
+
+
+async def _resolve_import(
+    session: AsyncSession, project_id: str, imported: Any
+) -> Tuple[Optional[Task], Optional[str]]:
+    """The task an imported entry (`Task.from_`) names, or why it could not be found.
+
+    Defensive, not redundant: `spec_completeness`'s `import_not_approved` check already refuses
+    `propose()` for an import naming an unapproved document, but `materialise()` runs at `approve()`
+    — a later moment — and nothing stops the referenced document being reopened in between (design
+    D7's own note on this). This is the only place that race can actually surface.
+    """
+    if not isinstance(imported, dict):
+        return None, "malformed_import"
+    doc_path = imported.get("document")
+    key = imported.get("key")
+    if not isinstance(doc_path, str) or not doc_path or not isinstance(key, str) or not key:
+        return None, "malformed_import"
+
+    doc = (
+        (
+            await session.execute(
+                select(SpecDocument).where(
+                    SpecDocument.project_id == project_id, SpecDocument.path == doc_path
+                )
+            )
+        )
+        .scalars()
+        .first()
+    )
+    if doc is None:
+        return None, "document_not_found"
+    if doc.phase != APPROVED:
+        return None, "document_not_approved"
+
+    task = (
+        (
+            await session.execute(
+                select(Task).where(Task.spec_document_id == doc.id, Task.spec_task_key == key)
+            )
+        )
+        .scalars()
+        .first()
+    )
+    if task is None:
+        return None, "key_not_found"
+    return task, None
+
+
+async def _materialise_edges(
+    session: AsyncSession,
+    document: SpecDocument,
+    declared: List[Any],
+    local_tasks: Dict[str, Task],
+) -> None:
+    """The `depends_on` edges declared entries name, once every entry's task is known (or known
+    unresolvable).
+
+    Runs over **every** locally-declared entry, not only what this call's task-creation pass
+    created — task 4.4's decision: `spec_tasks.py`'s "a task that already exists is never touched"
+    rule (module docstring) is about the task row itself, not its incoming edges. Since the document
+    is the only writer of edges at all (design D5), a revision that adds a new `depends_on` to an
+    already-materialised task has nowhere else to declare that edge, so re-approving adds it. What
+    the rule still protects: nothing here ever *removes* an edge a prior approval created, even if a
+    revision's `depends_on` no longer names it — the same one-directional caution `existing_keys`
+    already gives task creation.
+
+    An imported entry (`from_` set) never gets edges of its own — it is a resolution target other
+    entries' `depends_on` can name, not a node materialised here (4.2).
+    """
+    resolved: Dict[str, Tuple[Optional[Task], Optional[str]]] = {}
+    for entry in declared:
+        if not isinstance(entry, dict):
+            continue
+        key = entry.get("key")
+        if not isinstance(key, str) or not key:
+            continue
+        imported = entry.get("from")
+        if isinstance(imported, dict):
+            resolved[key] = await _resolve_import(session, document.project_id, imported)
+        else:
+            task = local_tasks.get(key)
+            # A key this document declared but for which no task row exists — e.g. every
+            # requirement it named was already served by a hand-made task (the `already_served`
+            # skip above). It is still a legal `depends_on` target by name, per `spec_completeness`,
+            # but there is no task to point an edge at.
+            resolved[key] = (task, None if task is not None else "local_task_not_materialised")
+
+    for entry in declared:
+        if not isinstance(entry, dict) or isinstance(entry.get("from"), dict):
+            continue
+        key = entry.get("key")
+        task = local_tasks.get(key) if isinstance(key, str) else None
+        if task is None:
+            continue
+
+        # Replaced wholesale per task on every call (`absorb_free_text`'s `replace=True`
+        # precedent) — a reference that resolves on a later approval must not linger.
+        await session.execute(
+            delete(TaskDependencyReference).where(TaskDependencyReference.task_id == task.id)
+        )
+
+        wanted = entry.get("depends_on")
+        dep_keys = (
+            [d for d in wanted if isinstance(d, str) and d] if isinstance(wanted, list) else []
+        )
+        if not dep_keys:
+            continue
+
+        existing_edges = set(
+            (
+                await session.execute(
+                    select(TaskDependency.depends_on_task_id).where(
+                        TaskDependency.task_id == task.id
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        for dep_key in dep_keys:
+            target, reason = resolved.get(dep_key, (None, "not_declared"))
+            if target is None:
+                session.add(
+                    TaskDependencyReference(
+                        id=f"tdr-{short_id()}",
+                        project_id=document.project_id,
+                        task_id=task.id,
+                        reference=dep_key,
+                        reason=reason or "unresolved",
+                    )
+                )
+                continue
+            if target.id == task.id or target.id in existing_edges:
+                continue
+            existing_edges.add(target.id)
+            session.add(
+                TaskDependency(
+                    id=f"tdep-{short_id()}",
+                    project_id=document.project_id,
+                    task_id=task.id,
+                    depends_on_task_id=target.id,
+                )
+            )
 
 
 async def materialise_quietly(

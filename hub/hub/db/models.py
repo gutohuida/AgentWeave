@@ -2075,6 +2075,42 @@ class TaskDependency(Base):
     )
 
 
+class TaskDependencyReference(Base):
+    """A declared `depends_on` entry that `materialise()` could not turn into an edge, kept verbatim.
+
+    `TaskRequirementReference`'s precedent, for the same reason (`task-dependencies` design D7):
+    "unresolvable requirement names are preserved rather than dropped… the unrecognised name is the
+    evidence of what went wrong" — extended here to a dangling *dependency* rather than a dangling
+    requirement.
+
+    In practice this should be rare and specifically about **imports**: an unresolved local key is
+    caught by `spec_completeness`'s `depends_on_unresolved` check and refused at `propose()`, so a
+    document cannot reach `approved` (where `materialise()` runs) carrying one. An import is
+    different — `import_not_approved` is checked at `propose()` too, but the referenced document can
+    be reopened in the window between a document's `propose()` and its `approve()`, which is exactly
+    the race this table exists to record rather than silently swallow or raise out of an approval.
+
+    Rows are replaced per task on every `materialise()` call (mirrors `absorb_free_text`'s
+    `replace=True` default): a reference that resolves on a later approval is removed, not left
+    stale beside the edge that superseded it.
+    """
+
+    __tablename__ = "task_dependency_references"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
+    task_id: Mapped[str] = mapped_column(String(64), ForeignKey("tasks.id"), nullable=False)
+    # The depends_on key exactly as declared — not the document/key it names, which is exactly what
+    # could not be resolved.
+    reference: Mapped[str] = mapped_column(Text, nullable=False)
+    # Why it did not resolve: "document_not_found", "document_not_approved", "key_not_found", or
+    # "malformed_import".
+    reason: Mapped[str] = mapped_column(String(32), nullable=False, default="unknown")
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+
+    __table_args__ = (Index("ix_task_dependency_references_task", "task_id"),)
+
+
 # Open at the edges on purpose. Evidence is whatever demonstrates the work, and constraining it to
 # what was imaginable at design time is how a record stops describing what was actually done. Values
 # outside this list are accepted; the list is what the surfaces know how to label.

@@ -207,6 +207,34 @@ A **dangling import** at materialise time follows the existing precedent rather 
 unresolvable requirement names are *"preserved rather than dropped… the unrecognised name is the
 evidence of what went wrong"* (`spec_tasks.py:204-206`).
 
+**Addendum, decided at task 4.3: its own table, `task_dependency_references`, not
+`task_requirement_references`.** The two are different facts — a dangling requirement reference is a
+string that never named anything this project has; a dangling dependency reference is a `depends_on`
+key that names a real entry in *this* document (so `spec_completeness` already accepted it) whose
+import target could not be resolved to an existing task at materialise time. Sharing the table would
+mean a reader can no longer tell a broken reference from a broken edge without also reading `reason`,
+and the two tables' `reason` vocabularies do not overlap (`unknown`/`ambiguous`/`unparsed` vs.
+`document_not_found`/`document_not_approved`/`key_not_found`/`malformed_import`). In practice this
+case should be rare: `import_not_approved` already refuses `propose()` for exactly this condition,
+so the only way `materialise()` (which runs at `approve()`, a later moment) meets it is the document
+being reopened in the window between the importing document's `propose()` and its `approve()` — the
+race this addendum exists to name. Rows are replaced wholesale per task on every `materialise()`
+call, mirroring `absorb_free_text`'s `replace=True` default, so a reference that resolves on a later
+approval is removed rather than left stale.
+
+**Addendum, decided at task 4.4: a revision may add a new edge to a task an earlier approval already
+materialised.** The existing rule in `spec_tasks.py`'s own module docstring — *"a task that already
+exists is never touched"* — predates dependencies and is about the task **row**: status, assignee,
+description. It says nothing about incoming edges, because none existed yet when it was written.
+Read against D5 (*"the document is the only writer of edges"*), the two rules do not conflict, they
+compose: the document is the only place an edge can ever be declared, so if a revision adds a new
+`depends_on` naming an already-materialised task, re-approving is the only way that edge is ever
+recorded at all — refusing it would make `depends_on` write-once for a task that gained a dependency
+after its first approval, which nothing in D1–D7 asks for. What the rule still protects, and what
+`_materialise_edges` deliberately preserves: nothing here ever *removes* an edge a prior approval
+created, even if a revision's `depends_on` no longer names it — same one-directional caution
+`existing_keys` already gives task creation itself.
+
 ### D8 — The board draws depth downward, and must distinguish stalled from gated
 
 **Top to bottom, because the axes are not symmetric.** Width is bounded by `agent_budget` (8); depth

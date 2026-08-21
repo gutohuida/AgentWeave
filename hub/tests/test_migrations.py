@@ -36,7 +36,7 @@ ALEMBIC_INI = Path(__file__).parent.parent / "hub" / "alembic.ini"
 # The revision `alembic upgrade head` must land on. Named once so the assertion and its failure
 # message cannot disagree — they did, for two head bumps, telling anyone debugging a failure to go
 # read the wrong migration.
-HEAD_REVISION = "0083"
+HEAD_REVISION = "0084"
 
 
 # ---------------------------------------------------------------------------
@@ -2826,3 +2826,36 @@ def test_migration_0083_leaves_a_never_approved_document_null(tmp_path) -> None:
             "SELECT first_approved_at FROM spec_documents WHERE id = 'd2'"
         ).fetchone()[0]
     assert value is None
+
+
+def test_migration_0084_is_guarded_when_tasks_does_not_exist(tmp_path) -> None:
+    """Same early-revision state as 0083's own guard test: no `tasks` table to point at."""
+    db_file = tmp_path / "early_0084.db"
+    _create_0034_conversations_state(db_file)
+
+    _run_alembic_with(f"sqlite+aiosqlite:///{db_file}")
+
+    with sqlite3.connect(db_file) as conn:
+        assert conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == (
+            HEAD_REVISION
+        )
+        tables = {
+            row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        }
+        assert "tasks" not in tables
+        assert "task_dependency_references" not in tables
+
+
+def test_migration_0084_creates_task_dependency_references(tmp_path) -> None:
+    """The table lands with its task index, mirroring `task_requirement_references`' shape."""
+    db_file = tmp_path / "fresh_0084.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    _run_alembic_with(db_url)
+
+    with sqlite3.connect(db_file) as conn:
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(task_dependency_references)")}
+        assert {"id", "project_id", "task_id", "reference", "reason", "created_at"} <= columns
+
+        indexes = {row[1] for row in conn.execute("PRAGMA index_list(task_dependency_references)")}
+        assert "ix_task_dependency_references_task" in indexes
