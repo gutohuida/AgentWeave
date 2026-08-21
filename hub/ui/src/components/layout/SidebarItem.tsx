@@ -62,7 +62,7 @@ const activeIndicatorStyle = (active: boolean): CSSProperties => ({
 })
 
 const badgeStyle = (danger: boolean): CSSProperties => ({
-  fontSize: 10,
+  fontSize: 11,
   borderRadius: 9999,
   padding: '1px 5px',
   background: danger ? 'var(--red)' : 'var(--surface-3)',
@@ -121,7 +121,7 @@ export function SidebarItem({
                   top: 2,
                   right: 4,
                   padding: '0 3px',
-                  fontSize: 9,
+                  fontSize: 10,
                 }
               : badgeStyle(badge.danger)
           }

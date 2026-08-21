@@ -37,7 +37,7 @@ const ITEM_STYLE: React.CSSProperties = {
   width: '100%',
   padding: '6px 10px',
   borderRadius: 'var(--radius-sm)',
-  fontSize: 12,
+  fontSize: 13,
   color: 'var(--text-2)',
   cursor: 'pointer',
   outline: 'none',
@@ -108,7 +108,7 @@ export function RowMenu({
             >
               <span>{item.label}</span>
               {item.disabled && item.reason && (
-                <span style={{ fontSize: 10, color: 'var(--text-3)' }}>{item.reason}</span>
+                <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{item.reason}</span>
               )}
             </DropdownMenu.Item>
           ))}

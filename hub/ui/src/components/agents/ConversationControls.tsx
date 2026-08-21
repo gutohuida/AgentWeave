@@ -87,7 +87,7 @@ export function ConversationControls({
 
       {isRunning && (
         <Button variant="destructive" size="xs" className="shrink-0" onClick={onStop} disabled={isStopping} title="Terminate the in-progress run">
-          <Icon name="stop" size={12} />
+          <Icon name="stop" size={14} />
           {isStopping ? 'Stopping…' : 'Stop turn'}
         </Button>
       )}
@@ -105,7 +105,7 @@ export function ConversationControls({
         title={reason ?? 'Write a checkpoint and continue in a new conversation'}
         onClick={onHandoff}
       >
-        <Icon name="move_up" size={12} />
+        <Icon name="move_up" size={14} />
         {handoffLabel}
       </Button>
 

@@ -151,7 +151,7 @@ export function PanelShell({ projectId, availableTabs, describeTab, renderTabCon
                 ref={registerTabButton(tab.id)}
                 data-testid={`panel-tab-${tab.id}`}
                 className="flex min-w-0 items-center gap-1.5 border-0 bg-transparent"
-                style={{ fontSize: 12, cursor: 'pointer', padding: '2px 2px' }}
+                style={{ fontSize: 13, cursor: 'pointer', padding: '2px 2px' }}
                 onClick={() => activateTab(projectId, tab.id)}
                 onKeyDown={(event) => handleStripKeyDown(event, index)}
               >
@@ -172,7 +172,7 @@ export function PanelShell({ projectId, availableTabs, describeTab, renderTabCon
                   closeTab(projectId, tab.id)
                 }}
               >
-                <Icon name="close" size={12} />
+                <Icon name="close" size={14} />
               </button>
             </div>
           )
@@ -206,7 +206,7 @@ export function PanelShell({ projectId, availableTabs, describeTab, renderTabCon
           >
             <p
               className="mb-4 text-center"
-              style={{ color: 'var(--text-3)', fontSize: 12 }}
+              style={{ color: 'var(--text-3)', fontSize: 13 }}
             >
               Open a panel
             </p>
@@ -227,7 +227,7 @@ export function PanelShell({ projectId, availableTabs, describeTab, renderTabCon
                 >
                   <Icon name={descriptor.icon} size={18} />
                   <span style={{ fontSize: 13, fontWeight: 500 }}>{descriptor.label}</span>
-                  <span style={{ fontSize: 11, color: 'var(--text-3)' }}>
+                  <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
                     {PANEL_BLURBS[descriptor.id] ?? ''}
                   </span>
                 </button>

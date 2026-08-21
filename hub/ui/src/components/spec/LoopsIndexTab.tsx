@@ -137,7 +137,7 @@ export function LoopsIndexTab({
                       style={{ fontSize: 11, color: 'var(--text-2)' }}
                       data-testid={`loops-index-agent-${loop.id}`}
                     >
-                      <Icon name="smart_toy" size={11} style={{ color: 'var(--text-3)' }} />
+                      <Icon name="smart_toy" size={13} style={{ color: 'var(--text-3)' }} />
                       {loop.agent}
                     </span>
                   )}

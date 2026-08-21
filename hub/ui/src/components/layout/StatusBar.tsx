@@ -146,7 +146,7 @@ export function StatusBar({ onOpenSetup }: StatusBarProps) {
         )}
 
         {data?.project_name && (
-          <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
+          <span style={{ fontSize: 13, color: 'var(--text-3)' }}>
             {data.project_name}
           </span>
         )}

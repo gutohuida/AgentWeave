@@ -229,7 +229,7 @@ export function AgentTimeline({
               style={{ color: 'var(--text-3)', opacity: 0.55 }}
               title="Fold this turn"
             >
-              <Icon name="expand_more" size={11} />
+              <Icon name="expand_more" size={13} />
               fold
             </button>
             <TurnBody
@@ -490,7 +490,7 @@ function WorkBlockDisclosure({ entries }: { entries: TimelineEntry[] }) {
       >
         <Icon
           name="expand_more"
-          size={12}
+          size={14}
           style={{ opacity: 0.55, transform: open ? undefined : 'rotate(-90deg)' }}
         />
         Work · {entries.length} step{entries.length === 1 ? '' : 's'}
@@ -506,7 +506,7 @@ function WorkBlockDisclosure({ entries }: { entries: TimelineEntry[] }) {
                 : `${highlights.writes} write${highlights.writes === 1 ? '' : 's'}`
             }
           >
-            <Icon name="edit" size={11} />
+            <Icon name="edit" size={13} />
             {highlights.files.length === 1
               ? highlights.files[0]
               : highlights.files.length > 1
@@ -520,7 +520,7 @@ function WorkBlockDisclosure({ entries }: { entries: TimelineEntry[] }) {
             style={{ color: 'var(--red)' }}
             title={`${highlights.failures} call${highlights.failures === 1 ? '' : 's'} failed`}
           >
-            <Icon name="alert_triangle" size={11} />
+            <Icon name="alert_triangle" size={13} />
             {highlights.failures} failed
           </span>
         )}
@@ -655,7 +655,7 @@ function WorkRow({ entry, paired }: { entry: TimelineEntry; paired?: TimelineEnt
       className="flex flex-col w-full text-left font-mono text-[12px] py-[2.5px]"
     >
       <span className="flex gap-[.55rem] items-baseline w-full min-w-0">
-        <Icon name={iconName} size={12} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
+        <Icon name={iconName} size={14} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
         <b style={{ color: 'var(--text)', fontWeight: 500 }}>{displayLabel}</b>
         {/* The call's own subject, inline and truncated. Scanning a run of six `shell` calls is
             impossible when every row says only "shell". */}
@@ -775,7 +775,7 @@ function MessageEntry({
       className="text-[11px]"
       style={{ color: 'var(--text-3)' }}
     >
-      <Icon name="close" size={12} />
+      <Icon name="close" size={14} />
     </button>
   )
 

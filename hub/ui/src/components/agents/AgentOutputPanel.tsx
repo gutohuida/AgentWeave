@@ -1016,7 +1016,7 @@ export function AgentOutputPanel({
                 disabled={isSending}
                 onClick={handleContinue}
               >
-                <Icon name="play_arrow" size={12} />
+                <Icon name="play_arrow" size={14} />
                 Continue
               </Button>
               <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>
@@ -1037,7 +1037,7 @@ export function AgentOutputPanel({
             name={
               handoffState === 'preparing' ? 'hourglass_top' : startsFresh ? 'move_up' : 'link'
             }
-            size={12}
+            size={14}
           />
           {/* A conversation is named by its title here as it is everywhere else — the identifier
               this used to print is not a label (spec: "Conversations are labelled by title"). */}

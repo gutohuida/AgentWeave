@@ -212,7 +212,7 @@ export function ModelPicker({ provider, effectiveModel, onChangeModel }: ModelPi
                       }}
                     >
                       <span className="flex min-w-0 items-center gap-1.5">
-                        {active && <Icon name="check" size={12} style={{ color: 'var(--blue)' }} />}
+                        {active && <Icon name="check" size={14} style={{ color: 'var(--blue)' }} />}
                         <span className="min-w-0 flex-1 truncate">{model.label}</span>
                       </span>
                       <button

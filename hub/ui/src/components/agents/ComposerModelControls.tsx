@@ -116,7 +116,7 @@ export function ControlOption({
       className="row-item w-full text-left"
       style={{ color: 'var(--text)' }}
     >
-      {active && <Icon name="check" size={12} style={{ color: 'var(--blue)' }} />}
+      {active && <Icon name="check" size={14} style={{ color: 'var(--blue)' }} />}
       {icon}
       <span className="min-w-0 flex-1 truncate">{label}</span>
     </button>

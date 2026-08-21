@@ -188,7 +188,7 @@ export function Sidebar({
         className={compact ? 'mb-3 flex flex-col items-center gap-1' : 'mb-5 flex items-center gap-2 px-2'}
         style={{ fontSize: 13, fontWeight: 700 }}
       >
-        <span className="inline-flex h-6 w-6 items-center justify-center rounded-md text-[10px]" style={{ background: 'var(--primary)', color: 'var(--primary-foreground)' }}>AW</span>
+        <span className="inline-flex h-6 w-6 items-center justify-center rounded-md text-[11px]" style={{ background: 'var(--primary)', color: 'var(--primary-foreground)' }}>AW</span>
         {!compact && <span className="flex-1">AgentWeave</span>}
         {onCompactChange && (
           <Button
@@ -238,7 +238,7 @@ export function Sidebar({
           </Button>
           <div className="mb-3 px-2">
             <div className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Agent settings</div>
-            <div className="truncate text-[11px]" style={{ color: 'var(--text-3)' }}>{agentSettings.agent}</div>
+            <div className="truncate text-[12px]" style={{ color: 'var(--text-3)' }}>{agentSettings.agent}</div>
           </div>
           <nav aria-label="Agent settings sections" className="flex flex-col gap-0.5">
             {AGENT_SETTINGS_SECTIONS.map((section) => (
@@ -273,7 +273,7 @@ export function Sidebar({
           </Button>
           <div className="mb-3 px-2">
             <div className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Configuration</div>
-            <div className="truncate text-[11px]" style={{ color: 'var(--text-3)' }}>{configuredProject?.name ?? configuration.projectId}</div>
+            <div className="truncate text-[12px]" style={{ color: 'var(--text-3)' }}>{configuredProject?.name ?? configuration.projectId}</div>
           </div>
           <nav aria-label="Environment sections" className="flex flex-col gap-0.5">
             {ENVIRONMENT_SECTIONS.map((section) => (
@@ -294,7 +294,7 @@ export function Sidebar({
       ) : (
         <>
           <div className="flex items-center justify-between px-1 pb-2">
-            <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>Projects</span>
+            <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>Projects</span>
             <Button
               variant="ghost"
               size="icon-xs"
@@ -335,7 +335,7 @@ export function Sidebar({
                     >
                       <span className="min-w-0 flex-1">
                         <span className="block truncate">{project.name}</span>
-                        {duplicateName && <span className="block truncate text-[10px]" style={{ color: 'var(--text-3)' }}>{project.path_display ?? 'Directory unavailable'}</span>}
+                        {duplicateName && <span className="block truncate text-[11px]" style={{ color: 'var(--text-3)' }}>{project.path_display ?? 'Directory unavailable'}</span>}
                       </span>
                       <span className="h-2 w-2 shrink-0 rounded-full" data-testid={`project-state-${project.id}`} title={project.directory_state} style={{ background: project.directory_state === 'available' ? 'var(--green)' : 'var(--red)' }} />
                     </button>
@@ -454,7 +454,7 @@ function CompactRail({
                 aria-label={project.name}
                 title={project.name}
                 onClick={() => onOpenProject(project.id)}
-                className="inline-flex h-7 w-7 items-center justify-center rounded-md text-[10px] font-semibold"
+                className="inline-flex h-7 w-7 items-center justify-center rounded-md text-[11px] font-semibold"
                 style={{
                   background: activeProject ? 'var(--surface-3)' : 'var(--surface-2)',
                   border: `1px solid ${activeProject ? 'var(--border-hi)' : 'var(--border)'}`,

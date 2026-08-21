@@ -236,7 +236,7 @@ export function AgentTree({
                   ))}
                 {conversations.length === 0 && (
                   <span
-                    className="px-2 py-1 text-[11px]"
+                    className="px-2 py-1 text-[12px]"
                     data-testid={`no-conversations-${projectId}-${agent.name}`}
                     style={{ color: 'var(--text-3)' }}
                   >

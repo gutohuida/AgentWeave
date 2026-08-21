@@ -113,7 +113,7 @@ export function RecencyView({
 
       {conversations.length === 0 && (
         <span
-          className="px-2 py-1 text-[11px]"
+          className="px-2 py-1 text-[12px]"
           data-testid={`recency-empty-${projectId}`}
           style={{ color: 'var(--text-3)' }}
         >

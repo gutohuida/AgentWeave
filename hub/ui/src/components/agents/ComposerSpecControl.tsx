@@ -144,7 +144,7 @@ export function ComposerSpecControl({
         title="Close the document — it is kept, not deleted"
         aria-label="Close the document"
       >
-        <Icon name="close" size={12} />
+        <Icon name="close" size={14} />
       </Button>
     </span>
   )

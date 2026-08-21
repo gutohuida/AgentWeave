@@ -232,7 +232,7 @@ export function TaskCard({ task, assigneeColorIndex, onOpenRequirement, onOpen }
               border: `1px solid color-mix(in srgb, ${blockedAccent} 25%, transparent)`,
             }}
           >
-            <Icon name="help_circle" size={12} style={{ color: blockedAccent, marginTop: 2 }} />
+            <Icon name="help_circle" size={14} style={{ color: blockedAccent, marginTop: 2 }} />
             <div className="min-w-0">
               <p className="text-[11px] font-medium" style={{ color: blockedAccent }}>
                 Waiting on you
@@ -274,7 +274,7 @@ export function TaskCard({ task, assigneeColorIndex, onOpenRequirement, onOpen }
                 color: 'var(--amber)',
               }}
             >
-              <Icon name="alert_triangle" size={10} />
+              <Icon name="alert_triangle" size={12} />
               Stalled
             </span>
           )}
@@ -302,7 +302,7 @@ export function TaskCard({ task, assigneeColorIndex, onOpenRequirement, onOpen }
                 color: 'var(--red)',
               }}
             >
-              <Icon name="warning" size={10} />
+              <Icon name="warning" size={12} />
               Prerequisite regressed
             </span>
           )}

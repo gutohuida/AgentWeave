@@ -52,7 +52,7 @@ export function FileTree({ paths, currentPath = null, onSelect }: FileTreeProps)
 
   if (rows.length === 0) {
     return (
-      <p style={{ padding: 10, fontSize: 12, color: 'var(--text-3)' }}>
+      <p style={{ padding: 10, fontSize: 13, color: 'var(--text-3)' }}>
         No files in this workspace yet.
       </p>
     )
@@ -78,7 +78,7 @@ export function FileTree({ paths, currentPath = null, onSelect }: FileTreeProps)
               paddingLeft: 10 + row.depth * 14,
               border: 'none',
               background: 'none',
-              fontSize: 11,
+              fontSize: 12,
               fontWeight: 600,
               color: 'var(--text-3)',
               textAlign: 'left',
@@ -92,9 +92,9 @@ export function FileTree({ paths, currentPath = null, onSelect }: FileTreeProps)
                 transition: 'transform var(--dur-fast) var(--ease)',
               }}
             >
-              <Icon name="chevron_right" size={12} />
+              <Icon name="chevron_right" size={14} />
             </span>
-            <Icon name="folder_open" size={12} />
+            <Icon name="folder_open" size={14} />
             {row.label}
           </button>
         ) : (
@@ -116,7 +116,7 @@ export function FileTree({ paths, currentPath = null, onSelect }: FileTreeProps)
               border: 'none',
               background: row.path === currentPath ? 'var(--surface-2)' : 'none',
               color: row.path === currentPath ? 'var(--text)' : 'var(--text-2)',
-              fontSize: 12,
+              fontSize: 13,
               textAlign: 'left',
               cursor: 'pointer',
               borderRadius: 'var(--radius-sm)',
@@ -124,7 +124,7 @@ export function FileTree({ paths, currentPath = null, onSelect }: FileTreeProps)
           >
             <Icon
               name={fileIconFor(row.path)}
-              size={12}
+              size={14}
               style={{ color: fileColourFor(row.path), flexShrink: 0 }}
             />
             <span className="truncate">{row.label}</span>

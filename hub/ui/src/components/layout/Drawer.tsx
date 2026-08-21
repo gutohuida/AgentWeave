@@ -60,7 +60,7 @@ export function Drawer({
             className="flex items-center justify-between px-3 py-2 shrink-0"
             style={{ borderBottom: '1px solid var(--border)' }}
           >
-            <Dialog.Title style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)' }}>
+            <Dialog.Title style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>
               {title}
             </Dialog.Title>
             <Dialog.Close

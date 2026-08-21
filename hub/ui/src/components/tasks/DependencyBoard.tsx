@@ -234,7 +234,7 @@ export function DependencyBoard({ specDocumentId, onOpenRequirement, onSelectBoa
                     background: 'transparent',
                   }}
                 >
-                  <Icon name="link" size={11} />
+                  <Icon name="link" size={13} />
                   {ref.title}
                   <span style={{ color: 'var(--text-3)' }}>
                     — in {ref.spec_document_id ? documentTitleById.get(ref.spec_document_id) ?? 'another document' : 'another document'}

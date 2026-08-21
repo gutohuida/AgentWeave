@@ -77,7 +77,7 @@ export function LogLine({ entry }: LogLineProps) {
       >
         <span className="w-3 shrink-0" style={{ color: 'var(--text-3)', opacity: 0.6 }}>
           {hasData && (
-            <Icon name={expanded ? 'expand_more' : 'chevron_right'} size={12} />
+            <Icon name={expanded ? 'expand_more' : 'chevron_right'} size={14} />
           )}
         </span>
         <span className="shrink-0 w-[156px]" style={{ color: 'var(--text-3)', opacity: 0.7 }}>{ts}</span>
@@ -102,7 +102,7 @@ export function LogLine({ entry }: LogLineProps) {
           style={{ color: 'var(--text-3)' }}
           title="Copy entry"
         >
-          <Icon name={copied ? 'check' : 'content_copy'} size={12} style={{ color: copied ? 'var(--blue)' : undefined }} />
+          <Icon name={copied ? 'check' : 'content_copy'} size={14} style={{ color: copied ? 'var(--blue)' : undefined }} />
         </button>
       </div>
 

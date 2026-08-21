@@ -101,11 +101,11 @@ export function LoopFiringGroup({
               style={{ background: agentColor }}
             />
           )}
-          <Icon name="sync" size={11} className="shrink-0" style={{ color: 'var(--text-3)' }} />
+          <Icon name="sync" size={13} className="shrink-0" style={{ color: 'var(--text-3)' }} />
           <span className="min-w-0 flex-1 truncate">{label}</span>
           <span
             data-testid={`${testId}-count`}
-            className="shrink-0 text-[10px]"
+            className="shrink-0 text-[11px]"
             style={{ color: 'var(--text-3)' }}
           >
             {conversations.length}

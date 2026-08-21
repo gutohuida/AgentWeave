@@ -34,7 +34,7 @@ export function ProjectHeader({
         <h1 className="truncate text-sm font-semibold" style={{ color: 'var(--text)' }}>{projectName}</h1>
         {directoryAvailable ? (
           <>
-            <p className="truncate text-[10px]" style={{ color: 'var(--text-3)' }}>
+            <p className="truncate text-[11px]" style={{ color: 'var(--text-3)' }}>
               {agentCount} agent{agentCount === 1 ? '' : 's'}
             </p>
             {/* Structure, not a joined string (composer/chrome refinement §5): each segment
@@ -45,7 +45,7 @@ export function ProjectHeader({
                 that navigates nowhere should not look interactive). */}
             {pathSegments.length > 0 && (
               <p
-                className="flex min-w-0 items-center overflow-hidden text-[10px]"
+                className="flex min-w-0 items-center overflow-hidden text-[11px]"
                 title={pathDisplay ?? undefined}
                 style={{ color: 'var(--text-3)' }}
               >
@@ -63,7 +63,7 @@ export function ProjectHeader({
             )}
           </>
         ) : (
-          <p role="status" className="truncate text-[10px]" style={{ color: 'var(--amber)' }}>
+          <p role="status" className="truncate text-[11px]" style={{ color: 'var(--amber)' }}>
             Directory unavailable
           </p>
         )}
