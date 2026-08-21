@@ -179,8 +179,10 @@ file. `mypy` on the two touched non-test files: no errors attributable to either
 lines outside the diff, same method every prior section used). Full `hub/tests/` suite run twice
 this section, in the **foreground** per `NEVER_BACKGROUND_AND_WAIT`: once before touching code
 (baseline with sections 5-7 in the tree, confirming the concurrent session's section 7 landing:
-**2711 passed, 12 skipped, 1 xpassed, 0 failed in 891s**) and once after section 9's changes,
-result recorded in the log once it completes.
+**2711 passed, 12 skipped, 1 xpassed, 0 failed in 891s**) and once after section 9's changes:
+**2718 passed, 12 skipped, 1 xpassed, 0 failed in 925s** — exactly seven more passing tests than
+the baseline, matching the seven new tests this section adds (9.1, 9.2, 9.3, 9.4, 9.5, 9.9, 9.10),
+zero failures either side.
 
 ## 10. Verification an agent can do
 

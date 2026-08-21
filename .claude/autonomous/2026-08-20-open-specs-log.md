@@ -1188,3 +1188,55 @@ nothing had to be unwound.
 loop"* — and with §5 landed and §9 absent, **that is the state this branch is in right now.**
 Section 8 is the board: 13 tasks, touches `hub/ui/src`, and drags in a UI bundle rebuild. Closing the
 deadlock window is worth more than the board.
+
+---
+
+## Iteration 16 (this firing) — arrived to find run 2 already closed by the interactive session
+
+Started at 12:38, ~22 minutes before `stop_at` (13:00). `STATE.json`'s `next_action` still named
+iteration 15's brief (section 9), and the working tree was dirty: `hub/hub/api/v1/jobs.py`,
+`hub/hub/scheduler.py`, `openspec/changes/task-dependencies/tasks.md` modified, plus a new
+`hub/tests/test_loop_claim_dependency_gate.py` — section 9's implementation and tests, sitting
+uncommitted exactly as `NEVER_BACKGROUND_AND_WAIT` warns against.
+
+**Verified before touching anything.** Read the full `jobs.py`/`scheduler.py` diff (the
+`_first_startable_candidate` helper, the `_batch_loop_summaries` mirror) and the new test file's
+7 tests (9.1, 9.2, 9.3, 9.4, 9.5, 9.9, 9.10). Ran the targeted suite myself:
+`pytest tests/test_loop_claim_dependency_gate.py tests/test_scheduler.py tests/test_dependency_gate.py
+tests/test_task_dependency_reads.py tests/test_jobs.py tests/test_loop_archival.py -q` →
+**107 passed, 1 skipped**, matching the tasks.md landing note exactly. `ruff`/`black` clean on all
+three touched files.
+
+Then ran the full `hub/tests/` suite in the **foreground**, per `NEVER_BACKGROUND_AND_WAIT` — it
+exceeded the Bash tool's 600s per-call cap and was auto-moved to background by the tool itself
+(not by me choosing to background-and-end-turn); polled the output file in a bounded foreground
+wait (`until grep passed|failed|error`, capped under the tool's own timeout) rather than ending the
+turn, so the rule's intent — never rely on a notification arriving after this process exits — held.
+Result: **2718 passed, 12 skipped, 1 xpassed, 0 failed in 925s**, exactly 7 more than the section-9
+baseline (2711 passed, sections 5-7 in the tree), matching the 7 new tests, zero failures either
+side.
+
+**While that suite was running, the interactive session landed the same section 9 work first** —
+`1f7697c` "Land task-dependencies S3 section 9: the loop's claim", then `5771334` "Close run 2 with
+the deadlock window shut" (bumping `STATE.json` to iteration 16, rewriting `next_action` to "RUN 2
+IS OVER... do not start new work from this file without the operator"), then `eff4039` "Settle the
+three tiers, and how an agent tells them apart" (unrelated design work, job/loop/flow). This is
+`CONCURRENT_SESSION_IS_EXPECTED` operating exactly as designed — same disjoint-file discipline, no
+conflict — except this time the concurrent session reached section 9 first. Its committed version
+of `tasks.md` left the same placeholder mine was about to resolve ("result recorded in the log once
+it completes"), because it committed before its own full-suite run (if any) had a number to write in.
+
+**What this iteration actually did, given `next_action` now forbids new work:** filled that one
+placeholder with the real, independently-measured number (2718/12/1/0 in 925s) — not new work, just
+finishing the verification note section 9's own landing already promised. No code touched. Log entry
+written for the record, since `5771334` updated `STATE.json`'s `run2_outcome` but never appended a
+matching log entry — reconciling that gap here.
+
+**Run 2 is confirmed over.** `task-dependencies` stands at 49/80 (sections 1-7 and 9 landed; 8
+skipped on purpose; 10-12 remain). `stop_at` (13:00) has passed. Per the closing `next_action`, no
+further work starts on this branch without the operator arming a run 3 — which per `run2_outcome`
+needs two driver fixes first (wrapper processes outliving their `claude -p` child, and an iteration
+backdating its heartbeat on every exit path, not only the happy one).
+
+Heartbeat set to ~40 minutes in the past per `heartbeat_note`, though with the Scheduled Task
+self-unregistering past `stop_at` this should not matter — noted in case a firing is still armed.
