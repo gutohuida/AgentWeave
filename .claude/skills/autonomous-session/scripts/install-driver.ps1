@@ -21,8 +21,14 @@
     Repository root. Defaults to this script's grandparent-of-grandparent.
 
 .PARAMETER EveryMinutes
-    Interval between iterations. Keep it longer than a typical iteration or firings overlap;
-    15 is a reasonable floor for real work.
+    Interval between iterations. Make it SHORTER than a typical iteration, not longer -- the
+    settings below use MultipleInstances IgnoreNew, so a firing that lands mid-iteration is
+    dropped by the scheduler and cannot overlap. The interval therefore does not bound how long
+    an iteration may take; it only bounds how long the driver sits idle after one ends.
+
+    Measured 2026-08-21, run 2, at 15 minutes: iterations ran 4-19 minutes, roughly 40% of
+    firings were dropped mid-iteration, and each drop cost up to a full interval of idle time.
+    Lengthening the interval makes that worse. 5 is a good default.
 
 .PARAMETER UntilHHmm
     Local wall-clock time to stop, e.g. "10:00". Resolved here to an absolute instant; a time
@@ -32,7 +38,7 @@
     Scheduled Task name. Also used to find and remove it again.
 
 .EXAMPLE
-    powershell -File install-driver.ps1 -EveryMinutes 15 -UntilHHmm "10:00"
+    powershell -File install-driver.ps1 -EveryMinutes 5 -UntilHHmm "10:00"
 
 .EXAMPLE
     # Remove it
@@ -41,7 +47,7 @@
 
 param(
   [string] $Repo = (Resolve-Path (Join-Path $PSScriptRoot "..\..\..\..")).Path,
-  [int]    $EveryMinutes = 15,
+  [int]    $EveryMinutes = 5,
   [string] $UntilHHmm = "10:00",
   [string] $TaskName = "AgentWeaveAutonomousSession"
 )
@@ -86,7 +92,14 @@ $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) `
   -RepetitionInterval (New-TimeSpan -Minutes $EveryMinutes)
 
 # WakeToRun: the machine staying awake is the one precondition the driver cannot supply itself.
-# StartWhenAvailable: a missed firing runs late rather than being skipped silently.
+# StartWhenAvailable: a firing missed because the machine was asleep runs late rather than being
+# skipped -- which is NOT the same as the IgnoreNew drop below, and does not cover it.
+#
+# MultipleInstances IgnoreNew is what makes a short interval safe and a long one pointless: two
+# iterations can never run at once, because the scheduler refuses to start the second. Note that
+# the refusal is SILENT -- it writes nothing to driver.log, so a dropped firing looks in the log
+# exactly like a firing that never happened. Diagnose by comparing trigger times against the
+# "--- iteration start/end ---" pairs, not by looking for an error.
 $settings = New-ScheduledTaskSettingsSet `
   -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
   -StartWhenAvailable -WakeToRun `
