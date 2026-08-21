@@ -46,6 +46,21 @@ export interface Task {
   requirement_ids?: string[]
   requirement_links?: RequirementLink[]
   unresolved_requirements?: { reference: string; reason: string }[]
+  /** `TaskDependency` read from both ends — enough to render an edge without a second fetch
+   *  (`task-dependencies` task 7.1). Absent on a response that never attached dependencies. */
+  prerequisites?: TaskDependencyRef[]
+  dependents?: TaskDependencyRef[]
+  /** `"gated"` | `"gated_on_rejected"` | `"running_on_regressed"` | `null` — derived per request,
+   *  never stored (task 7.2, design D1). */
+  dependency_state?: string | null
+}
+
+/** A prerequisite or dependent named on a `Task` — enough to draw an edge without fetching the
+ *  other end of it. */
+export interface TaskDependencyRef {
+  id: string
+  title: string
+  status: string
 }
 
 /** One checked tie between a task and a requirement. `statement` is null where the document no
@@ -160,6 +175,53 @@ export function useDocumentTasks(documentId: string | null) {
         `/api/v1/projects/${projectId}/tasks?spec_document_id=${encodeURIComponent(documentId ?? '')}`,
       ),
     enabled: isConfigured && !!projectId && !!documentId,
+  })
+}
+
+/** One edge in a board's graph: `task_id` depends on `depends_on_task_id`. */
+export interface TaskBoardEdge {
+  task_id: string
+  depends_on_task_id: string
+}
+
+export interface TaskBoard {
+  spec_document_id: string | null
+  tasks: Task[]
+  edges: TaskBoardEdge[]
+}
+
+/**
+ * One document's tasks and the edges between them, in one call (`task-dependencies` task 7.3,
+ * design D9). `specDocumentId` of `null` is not "nothing selected" — it names the standing
+ * "no document" board (every hand-made task, which per design D5 can never have an edge), so this
+ * stays enabled for it rather than treating null as disabled the way `useDocumentTasks` does.
+ */
+export function useTaskBoard(specDocumentId: string | null) {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  return useQuery<TaskBoard>({
+    queryKey: ['project', projectId, 'tasks', 'board', specDocumentId],
+    queryFn: () => {
+      const qs = specDocumentId ? `?spec_document_id=${encodeURIComponent(specDocumentId)}` : ''
+      return getJson<TaskBoard>(`/api/v1/projects/${projectId}/tasks/board${qs}`)
+    },
+    enabled: isConfigured && !!projectId,
+  })
+}
+
+/** The picker: every board that has tasks, with outstanding counts (task 7.4, design D9). */
+export interface TaskBoardSummary {
+  spec_document_id: string | null
+  title: string | null
+  total: number
+  outstanding: number
+}
+
+export function useTaskBoards() {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  return useQuery<{ boards: TaskBoardSummary[] }>({
+    queryKey: ['project', projectId, 'tasks', 'boards'],
+    queryFn: () => getJson<{ boards: TaskBoardSummary[] }>(`/api/v1/projects/${projectId}/tasks/boards`),
+    enabled: isConfigured && !!projectId,
   })
 }
 

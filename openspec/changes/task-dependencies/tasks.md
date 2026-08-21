@@ -124,9 +124,9 @@ past group 1. Task 10.0 gates the change on them.
 
 ## 8. The board
 
-- [ ] 8.1 Layer assignment: longest-path depth, so a task sits below **everything** it depends on rather than below its first prerequisite.
-- [ ] 8.2 Top-to-bottom layout, converging edges drawn.
-- [ ] 8.3 **Reuse `TaskCard`.** A board that grows its own card component is how the two views diverge (design, risks).
+- [x] 8.1 Layer assignment: longest-path depth, so a task sits below **everything** it depends on rather than below its first prerequisite. Landed: `assignDepths(tasks, edges)` (`hub/ui/src/lib/dependencyBoardLayout.ts`) — memoised DFS per task, `depth(t) = 1 + max(depth(p) for p in prerequisites(t))`, `0` for a task with none. Explicitly tested against the failure mode a first-prerequisite or shortest-path rule would produce (a diamond `a→b→d` and `a→d`, asserting `d` sits at depth 2, below `b`, not depth 1 from the direct edge alone). A prerequisite outside the board's own task set (an off-board import, task 8.7's territory) contributes nothing to depth rather than throwing. A cycle — which should never reach the board, `spec_completeness`'s `dependency_cycle` check refuses it at proposal — is guarded with a `visiting` set so a bug elsewhere degrades to a wrong layer, not a hung tab; tested directly.
+- [x] 8.2 Top-to-bottom layout, converging edges drawn. Landed: `DependencyBoard.tsx` renders `groupByDepth`'s layers as stacked rows (shallowest first, top of the scroll), each a CSS grid of cards. Edges are a single absolutely-positioned `<svg>` behind the cards, one `<line>` per edge, coordinates measured from the real DOM (`useEdgeLines`) after layout via `getBoundingClientRect`, relative to the scrolling container so it holds under scroll — recomputed on mount, on window resize, and via a `ResizeObserver` on the container and every card (a layer reflowing can move cards below it without the container itself changing size). Converging edges (two prerequisites into one dependent) draw as two independent lines into the same point, which is what "converging" asks for at this stage — see the 8.12 addendum below for what is deliberately not attempted yet. An edge naming an off-board task (no matching card ref) is skipped rather than drawn to nowhere or thrown on.
+- [x] 8.3 **Reuse `TaskCard`.** A board that grows its own card component is how the two views diverge (design, risks). Landed: `DependencyBoard.tsx` renders the real `TaskCard` per task (same `assigneeColorIndex`, `onOpenRequirement`, `onOpen` props `TasksBoard.tsx` passes it) and opens the same `TaskDetailDrawer` — one drawer for the whole board, exactly F5's pattern. No second card component exists anywhere in this diff.
 - [ ] 8.4 Confirm the status badge reads correctly **on its own, with no status column** — `TaskCard.tsx:235` already renders it, where it is currently redundant with the column. (Reworded 2026-08-21: it used to say "the only status signal", which D12's liveness cue makes false. The intent was always that the badge must not *need* the column, not that nothing else may appear.)
 - [ ] 8.5 Document picker with outstanding counts, plus the standing "no document" board.
 - [ ] 8.6 Collapse a layer whose tasks are all terminal; expandable. Do not collapse a partly finished layer.
@@ -135,7 +135,27 @@ past group 1. Task 10.0 gates the change on them.
 - [ ] 8.9 Mark a running task whose prerequisite regressed.
 - [ ] 8.10 No editing affordance for structure. Where an operator tries, say dependencies are changed by editing the document.
 - [ ] 8.11 View toggle; the seven-column board unchanged.
-- [ ] 8.12 Decide what "good enough" edge routing is **before** implementing it. Crossing minimisation in a layered DAG is a known hard problem and an unbounded one to polish.
+- [x] 8.12 Decide what "good enough" edge routing is **before** implementing it. Crossing minimisation in a layered DAG is a known hard problem and an unbounded one to polish. Decided and landed together as a technical call rather than an operator one — see design.md's D8 addendum: a direct straight line per edge, no crossing minimisation or bundling, redrawn on layout change. Recorded rather than escalated to `decisions_for_user` because nothing about it is stored data or hard to reverse — it is one function, and 8.12's own wording already names the deferred part as "unbounded... to polish," not an open product question.
+
+**Verified, not assumed — first pass (8.1, 8.2, 8.3, 8.12), 2026-08-21.** New files
+`hub/ui/src/lib/dependencyBoardLayout.ts` (the pure layer-assignment functions, so they are not
+tangled into a component export and do not trip `react-refresh/only-export-components`) and
+`hub/ui/src/components/tasks/DependencyBoard.tsx`; extended `hub/ui/src/api/tasks.ts` with the
+`TaskDependencyRef`/`prerequisites`/`dependents`/`dependency_state` fields the section 7 backend
+already served but no frontend type carried yet, plus `useTaskBoard`/`useTaskBoards` (the latter
+for 8.5, added now since it is a one-line wrap of an already-landed endpoint, not used by this
+pass). New test files `hub/ui/src/__tests__/dependencyBoard.test.tsx` (9 tests: the longest-path
+property directly, the cycle guard, the off-board-prerequisite skip, `groupByDepth`'s ordering, and
+three component-level renders confirming layer placement, `TaskCard` reuse — including that the
+drawer F5 already wires up still opens — and edge-count) and two more in `tasksApi.test.tsx` for
+`useTaskBoard`'s request shape, including the `null` case (the standing "no document" board, which
+must fire unlike `useDocumentTasks(null)`). `npx tsc --noEmit` clean. `npx eslint ... --max-warnings
+0` on every touched file clean (the pure functions living in `lib/` rather than the component file
+is what keeps that at zero rather than two fast-refresh warnings). Full `hub/ui` `vitest run`: **119
+files / 1183 passed** — exactly baseline 1172 + 11 new tests, 0 failed, 0 regressed. **Not yet
+wired into `App.tsx`'s `tasks` tab** — that is task 8.11 (the view toggle), deliberately a later
+pass, so this component is reachable today only from its own tests, not from a running Hub. The
+remaining tasks in this section (8.4–8.11, 8.13–8.16) are unstarted.
 - [ ] 8.14 **Concurrent work shows per card (design D12, operator decision 2026-08-21).** This is the decision `loop-becomes-a-flow` 9.4 deferred, and it is what makes section 8 safe to build: a layer holding several running tasks is just several cards each showing what it is doing, so nothing here needs rework when a flow starts more than one at a time.
 - [ ] 8.15 **The liveness cue.** A slow pulsing hue around a card whose task has a live run. It says something the badge does not — the badge says the task *is* `in_progress`, the cue says a run is executing *now*, and `has_open_divergence` exists because those two can disagree.
 - [ ] 8.16 Gate the animation on `prefers-reduced-motion`, degrading to a static hue, and confirm nothing is carried by colour or motion alone. Test both branches.

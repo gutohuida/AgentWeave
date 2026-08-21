@@ -266,6 +266,17 @@ between a working feature and one that looks broken.
 is operator-only, so this is rare and always an explicit act. Enforcement is a guard; awareness is a
 display; keeping them apart is what stops an agent losing its task mid-turn.
 
+**Addendum, 2026-08-21 (task 8.12) — edge routing decided as a technical call, not an operator
+one.** "Good enough" for a first landing is a straight line from the bottom-centre of a prerequisite
+card to the top-centre of a dependent card, measured from the real DOM after layout
+(`useEdgeLines` in `DependencyBoard.tsx`) and redrawn on resize and on any card's own size change.
+No crossing minimisation, no bundling of parallel edges, no curve fitting. This is deliberately not
+escalated to `decisions_for_user`: unlike D4's payload shape or D12's per-card-vs-header question,
+nothing about the line style is visible in stored data or hard to change later — it is a rendering
+detail behind one function, and task 8.12 itself names crossing minimisation as "a known hard
+problem and an unbounded one to polish," i.e. explicitly out of scope for a first landing rather
+than an open product question.
+
 ### D9 — One board per document, plus one for tasks that have none
 
 `Task.spec_document_id` already exists (`spec_tasks.py:194`), so a per-document board is a filter on a
