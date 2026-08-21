@@ -301,3 +301,62 @@ recent one" — stale since the binding contract shipped. Also update whatever t
 `mcp_server.py`'s restatements agree with the Hub's schema (task 5.4) and add a test that the
 published description doesn't claim recency and declares `start_new_thread` with its default (task
 5.1). Read design.md D6 first — it's the shortest phase left and names the exact lines.
+
+## Iteration 5 — 2026-08-22T00:55:37+01:00 — C5: the tool surface tells the truth
+
+Implemented `conversations-continue` tasks.md section 5, all five boxes.
+
+- `hub/hub/mcp_server.py`: `send_message` gained `start_new_thread: bool = False`, threaded into
+  the `_hub_request` payload dict alongside `conversation_id`. Nothing new imported — the flag is a
+  pure pass-through, matching `AgentMessageCreate`'s existing field of the same name from C4.
+  Rewrote the `conversation_id` docstring (lines 191-194), which still said "Leave unset to use
+  their most recent one" — stale since the binding contract shipped in phases 2/3. It now says
+  "continue the thread already bound between you and them, or to start one if none is bound yet",
+  and added a paragraph for `start_new_thread` naming the refusal-with-`conversation_id` rule from
+  D4.
+- `hub/tests/test_mcp_server.py`: updated `test_send_message_payload_contains_no_identity_or_run`'s
+  expected body to include `"start_new_thread": False` and fixed its own comment, which repeated
+  the same stale "most recent conversation" framing. Added
+  `test_send_message_docstring_does_not_claim_recency_and_declares_start_new_thread` (task 5.1) —
+  asserts `"recent"` is absent from the docstring (case-insensitive, so it also catches "Recent"),
+  `"start_new_thread"` is named, and the parameter's actual default (read via `inspect.signature`,
+  not just grepped from the docstring) is `False`.
+- `hub/tests/test_mcp_body_contract.py`: added `test_send_message_starting_a_new_thread_is_accepted`
+  (task 5.4) — same shape as the existing `conversation_id`-naming test, sends `start_new_thread=True`
+  through the real `AgentMessageCreate` route model. This file exists specifically because
+  `conversation_id` drifted between the tool and the agent schema once already (see its module
+  docstring); `start_new_thread` is a second field added to the same two places, so it gets the
+  same join test rather than trusting C4's schema-only test to be a large enough net.
+
+**Verified, not assumed.**
+- `pytest tests/test_mcp_server.py tests/test_mcp_body_contract.py tests/test_conversation_start_new_thread.py tests/test_conversation_reply.py -q`
+  → 52 passed.
+- `git stash -- hub/mcp_server.py` (source only, tests kept) → reran the two mcp test files → 3
+  failed exactly as expected: the payload-shape test (old body has no `start_new_thread` key), the
+  new docstring test (`TypeError: unexpected keyword argument`), and the new body-contract test
+  (same `TypeError`) — 38 passed. `git stash pop` restored the change, rerun → 41 passed.
+- **Full `hub/tests/` suite, chunked** (178 files, `split -n l/3`, three ~59-file chunks): chunk 1 —
+  750 passed, 1 skipped, 1 xpassed (233s). Chunk 2 — 1 failure,
+  `test_evidence_latest_review_signal.py::test_a_later_acceptance_replaces_the_reason_shown`; reran
+  that file alone → 4 passed. Same test name as the pre-existing order/state flake iteration 4's
+  log already identified on a different chunk split, unrelated to this change (nothing in C5
+  touches evidence review) — confirmed rather than assumed, not fixed, matches the "not this
+  iteration's bug" precedent. Otherwise 1022 passed, 9 skipped (349s). Chunk 3 — 980 passed, 2
+  skipped (236s). Total 2753 passed (2751 from iteration 4 plus this phase's 2 new tests), zero
+  failures attributable to this change.
+- `py -3.11 -m ruff check hub/` → all checks passed. `black --check hub/` → 396 files unchanged
+  (both run over the whole `hub/` tree per task 5.5, not just the touched files).
+- `npx openspec validate conversations-continue --strict` → valid.
+
+Ticked `tasks.md` boxes 5.1–5.5 — all five ran and passed as described above. Phase 5 of 7 is now
+complete; phase 7 remains explicitly out of scope (human verification).
+
+**Next:** C6 — conversations-continue phase 6 (tasks.md section 6, "the outbound message folds").
+Carry `subject` through `TimelineEntry` (`hub/hub/api/v1/agent_chat.py`) and
+`hub/ui/src/api/agentChat.ts`, then fold the OUTBOUND branch of `MessageEntry` in
+`hub/ui/src/components/agents/AgentTimeline.tsx` — `WorkRow` in the same file is the existing
+pattern to reuse. Do not fold the inbound branch (design.md explains why in phase 6's section, not
+yet reread this iteration — read it first). This is the only queue item permitted to touch
+`hub/ui/src`; ends with `cd hub/ui && npm run build` then `py -3.11 scripts/refresh_ui_bundle.py`
+FROM THE REPO ROOT, committing `hub/ui/src` and `hub/hub/static/ui` together. Likely two iterations
+given the UI build step.

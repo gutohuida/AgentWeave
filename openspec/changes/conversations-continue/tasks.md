@@ -90,16 +90,16 @@ Covers `agent-conversation-workspace` — *An agent can start a new thread delib
 Covers `agent-tool-surface` — *The outbound message tool describes how delivery is actually
 resolved*.
 
-- [ ] 5.1 Add a test asserting the published `send_message` description does not claim recency
+- [x] 5.1 Add a test asserting the published `send_message` description does not claim recency
       delivery, and that `start_new_thread` is declared with its default
-- [ ] 5.2 Add `start_new_thread` to `send_message` in `hub/hub/mcp_server.py:174-208` and pass it
+- [x] 5.2 Add `start_new_thread` to `send_message` in `hub/hub/mcp_server.py:174-208` and pass it
       through to `POST /messages`. This file is spawned standalone and may import **only** stdlib +
       fastmcp — the flag is a pass-through, so nothing new is imported
-- [ ] 5.3 Rewrite the `conversation_id` docstring, which currently says "Leave unset to use their
+- [x] 5.3 Rewrite the `conversation_id` docstring, which currently says "Leave unset to use their
       most recent one" (`hub/hub/mcp_server.py:191-194`) — recency was removed when the binding
       contract shipped
-- [ ] 5.4 Update the test that asserts `mcp_server.py`'s restatements agree with the Hub
-- [ ] 5.5 Run `py -3.11 -m ruff check hub/`, `black --check hub/`, and the full
+- [x] 5.4 Update the test that asserts `mcp_server.py`'s restatements agree with the Hub
+- [x] 5.5 Run `py -3.11 -m ruff check hub/`, `black --check hub/`, and the full
       `cd hub && py -3.11 -m pytest tests/ -q`
 
 ## 6. The outbound message folds

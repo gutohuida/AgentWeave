@@ -178,6 +178,7 @@ def send_message(
     message_type: MessageType = "message",
     task_id: Optional[str] = None,
     conversation_id: Optional[str] = None,
+    start_new_thread: bool = False,
 ) -> Dict[str, Any]:
     """Send an attributable message through the recipient's durable inbound queue.
 
@@ -189,9 +190,13 @@ def send_message(
             "direct_trigger". Leave unset for an ordinary message.
         task_id: Optional task this message relates to.
         conversation_id: Which of the recipient's conversations to send into. Leave unset to
-            use their most recent one, or to start a new one if they have none. Sending to an
-            archived conversation fails and returns your content back, so you can retry
-            without it.
+            continue the thread already bound between you and them, or to start one if none is
+            bound yet. Sending to an archived conversation fails and returns your content back,
+            so you can retry without it.
+        start_new_thread: Bypass the bound thread and start a fresh one with this recipient,
+            which becomes the new bound thread for later messages. Refused together with an
+            explicit conversation_id — naming a thread and asking for a new one are
+            contradictory.
     """
     result = _hub_request(
         "POST",
@@ -203,6 +208,7 @@ def send_message(
             "type": message_type,
             "task_id": task_id,
             "conversation_id": conversation_id,
+            "start_new_thread": start_new_thread,
         },
     )
     return {"success": True, "message_id": result.get("id")}
