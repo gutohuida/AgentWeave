@@ -36,8 +36,10 @@ it belongs to.
   belonging to the recipient, the message is delivered there.
 - **The reverse resolution survives a checkpoint cutover.** A cutover copies the forward binding to
   the successor (`checkpoint_cutover.py:108-110`) but leaves correspondents' rows pointing at the
-  archived predecessor. Conversations gain an explicit predecessor link so the reverse walk can
-  reach the successor. **This adds a column and a migration.**
+  archived predecessor. Conversations gain a `lineage_id`, so delivery matches a *line of work*
+  rather than a single conversation id. **This adds a column and a migration.** It also fixes a
+  pre-existing break in the forward direction — today an agent sending from a successor opens a new
+  thread at the handover, independently of this defect.
 - **An agent can branch deliberately.** `send_message` gains `start_new_thread: bool = False`.
   Omitted or false continues; true opens a fresh thread and binds it. This is the "or someone says
   it explicitly" half of the operator's rule, which has no mechanism today.
@@ -46,6 +48,12 @@ it belongs to.
 - `send_message`'s docstring is corrected: it still tells agents `conversation_id` unset means
   "use their most recent one" (`hub/hub/mcp_server.py:191-194`), which the binding contract
   replaced. It has been describing recency-based delivery since that behaviour was removed.
+- **An outbound peer message renders folded, showing its subject.** The same send is already
+  announced twice — once as an `agentweave.send_message` tool row, once as a full-content bubble —
+  and in a conversation where an agent delegates repeatedly the bubbles crowd out the agent's own
+  replies. The fold shows the recipient and the message's `subject`, which `send_message` already
+  requires as a short summary line and which `_message_to_timeline`
+  (`hub/hub/api/v1/agent_chat.py:203-208`) currently discards. Inbound messages are unchanged.
 
 ### Non-Goals
 
@@ -56,7 +64,13 @@ it belongs to.
 - **Not changing the senderless binding.** Hub- and scheduler-originated traffic keys on sender
   identity and gets one durable thread per source; that is a different contract and it is correct.
 - **Not introducing conversation-level participant lists or group threads.** A conversation stays
-  owned by exactly one agent; continuity is about which existing thread a message reaches.
+  owned by exactly one agent; continuity is about which existing thread a message reaches. The
+  alternative — one shared room every participant sees, with several agents contributing to a spec
+  at once — was raised while specifying this and deliberately deferred; see
+  `openspec/explorations/2026-08-21-the-shared-room.md`. Two-thread continuity is a precondition
+  for it rather than a detour around it.
+- **Not folding inbound peer messages, or turns.** Only the outbound half folds. A turn's folded
+  state stays the operator's, per the existing requirement that it is never derived from position.
 - **Not auto-branching on any heuristic** — no topic detection, no idle timeout, no length trigger.
   A new thread starts on a cutover or on an explicit request, and on nothing else.
 
@@ -76,6 +90,10 @@ None. This completes an existing contract rather than introducing a new surface.
   the handover in *both* directions, not only the forward one it preserves today.
 - `agent-tool-surface`: `send_message` gains a parameter, and its description of delivery is
   currently wrong.
+- `agent-conversation-workspace` also gains the outbound fold. It sits beside the existing
+  requirement that a **turn's** folded state is never derived from position (spec.md:594); a peer
+  message is not a turn, and the new requirement says so rather than leaving the two to be read as
+  contradictory.
 
 ## Impact
 
@@ -84,14 +102,21 @@ None. This completes an existing contract rather than introducing a new surface.
 - `hub/hub/conversations.py` — `peer_bound_conversation` gains reverse resolution.
 - `hub/hub/api/v1/messages.py:184-201` — the mint-on-miss branch becomes mint-on-miss-after-reverse,
   and honours `start_new_thread`.
-- `hub/hub/db/models.py` — `Conversation` gains a predecessor link. No such column exists today;
+- `hub/hub/db/models.py` — `Conversation` gains `lineage_id`. No lineage column exists today;
   cutover lineage is only recoverable indirectly through `checkpoints.previous_checkpoint_id`.
+  design.md D3 explains why a lineage key beats a predecessor pointer.
 - `hub/hub/migrations/versions/` — one new migration, guarded for a missing table.
-- `hub/hub/checkpoint_cutover.py` — records the predecessor link when opening a successor.
+- `hub/hub/checkpoint_cutover.py` — the successor inherits its predecessor's `lineage_id`.
 - `hub/hub/mcp_server.py` — the `send_message` parameter and its corrected docstring. This file is
   spawned standalone and may import only stdlib + fastmcp; the parameter is passed through to the
   Hub, so nothing new is imported.
 - `hub/hub/schemas/` — the message-create schema carries the new flag.
+- `hub/hub/api/v1/agent_chat.py` — `TimelineEntry` carries `subject`; `_message_to_timeline` stops
+  discarding it.
+- `hub/ui/src/components/agents/AgentTimeline.tsx` — the outbound branch of `MessageEntry` folds.
+  `WorkRow` in the same file is the established pattern for a folded row with an inline truncated
+  detail and an expand.
+- `hub/ui/src/api/agentChat.ts` — the `TimelineEntry` type gains `subject`.
 
 **Tests**
 

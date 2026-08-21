@@ -2,8 +2,11 @@
 
 Phases are ordered so that each one leaves the tree working. Phase 1 is the schema the rest needs,
 phase 2 fixes the pre-existing cutover break in the direction that already has a contract, phase 3
-adds the reverse rule, phase 4 adds deliberate branching, phase 5 corrects the tool description, and
-phase 6 is what only a human can judge.
+adds the reverse rule, phase 4 adds deliberate branching, phase 5 corrects the tool description,
+phase 6 folds the outbound bubble, and phase 7 is what only a human can judge.
+
+Phase 6 is independent of 1-5 — it touches rendering only. If the routing work is split out, it
+travels with either half.
 
 Every phase opens with its test task. A test written after the implementation tends to assert what
 the code does rather than what the requirement says.
@@ -98,26 +101,54 @@ resolved*.
 - [ ] 5.5 Run `py -3.11 -m ruff check hub/`, `black --check hub/`, and the full
       `cd hub && py -3.11 -m pytest tests/ -q`
 
-## 6. Human verification
+## 6. The outbound message folds
+
+Covers `agent-conversation-workspace` — *An outbound peer message renders folded, showing its
+subject*. Independent of phases 1-5: it touches rendering only, and could ship on its own.
+
+- [ ] 6.1 Add tests for all five scenarios: an outbound entry renders folded; two messages to the
+      same recipient with different subjects fold to different lines; expanding shows the content;
+      an expanded message stays expanded as entries are appended; an inbound message is unaffected
+- [ ] 6.2 Add `subject` to `TimelineEntry` in `hub/hub/api/v1/agent_chat.py:59-78` and stop
+      discarding it in `_message_to_timeline` (line 203-208), which today passes only `id`, `kind`,
+      `content`, `timestamp` and `participant`
+- [ ] 6.3 Add `subject` to the `TimelineEntry` type in `hub/ui/src/api/agentChat.ts`
+- [ ] 6.4 Fold the outbound branch of `MessageEntry`
+      (`hub/ui/src/components/agents/AgentTimeline.tsx:849-895`). `WorkRow` in the same file is the
+      pattern — a header row, an inline truncated detail, `useState` for expansion. Reuse its shape
+      rather than inventing a second one; do **not** fold the inbound branch
+- [ ] 6.5 Confirm a message with no subject still folds to something readable — subject is required
+      by `send_message`, but the column is nullable and older rows predate it
+- [ ] 6.6 Run `cd hub/ui && npx vitest run`, `npm run lint`, `npx tsc --noEmit`
+- [ ] 6.7 `cd hub/ui && npm run build`, then `py -3.11 scripts/refresh_ui_bundle.py` from the repo
+      root, and commit `hub/ui/src` and `hub/hub/static/ui` together
+
+## 7. Human verification
 
 Not agent-verifiable. Each needs the trial Hub on 8010 with at least two agents bound to a runner,
 and a real exchange — the defect this change fixes was found by watching one, not by reading code.
 
-- [ ] 6.1 Have two agents exchange four or more messages. Confirm in the UI that the exchange
+- [ ] 7.1 Have two agents exchange four or more messages. Confirm in the UI that the exchange
       occupies **two** conversations total, and that each agent's side reads as one continuous
       thread
-- [ ] 6.2 Ask one agent something in your own conversation and have it delegate to a second agent.
+- [ ] 7.2 Ask one agent something in your own conversation and have it delegate to a second agent.
       Confirm the second agent's reply appears **in your thread**, left-aligned and labelled with
       that agent's name. Attribution is already implemented (D5) — this confirms it holds on the new
       path, it is not an open design question
-- [ ] 6.3 Judge whether the thread still reads as *your* conversation once it carries a complete
+- [ ] 7.3 Judge whether the thread still reads as *your* conversation once it carries a complete
       third-party exchange rather than only the outbound half it shows today. This is the risk D5
       accepts, and the only part of it that is genuinely open. If it reads as a log, say so — that
       is a finding about density, not a reason to drop continuity
-- [ ] 6.4 Trigger a checkpoint cutover mid-exchange, then have the correspondent reply. Confirm the
+- [ ] 7.4 Trigger a checkpoint cutover mid-exchange, then have the correspondent reply. Confirm the
       reply lands in the successor and that nothing new is opened
-- [ ] 6.5 Have an agent start a new thread deliberately and confirm the separation is legible in the
+- [ ] 7.5 Have an agent start a new thread deliberately and confirm the separation is legible in the
       UI — that it reads as a deliberate branch rather than as the scattering this change removes
-- [ ] 6.6 Judge whether a continuing thread grows uncomfortably long before a checkpoint is
+- [ ] 7.6 Judge whether a continuing thread grows uncomfortably long before a checkpoint is
       suggested. Continuity means threads no longer reset on every reply; if the checkpoint prompt
       now arrives too late, that is a finding for a separate change, not a reason to reopen this one
+- [ ] 7.7 Read a conversation where an agent delegated three or more times. Judge whether the folded
+      outbound rows make the agent's own replies findable again, and whether the subject line is
+      actually informative — a subject the agent wrote carelessly folds to a useless row, and that
+      would be a finding about the prompt, not the fold
+- [ ] 7.8 Confirm the fold does not reintroduce the scroll bounce fixed in handoff 0072. Expanding
+      an entry changes height mid-conversation, which is exactly the shape of that defect

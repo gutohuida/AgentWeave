@@ -157,3 +157,56 @@ silently would discard a caller's stated intent.
   thread
 - **THEN** the message is refused
 - **AND** no conversation is created and no message is delivered
+
+### Requirement: An outbound peer message renders folded, showing its subject
+
+An outbound peer message SHALL render folded by default, showing its recipient and its subject on a
+single line, and SHALL expand to its full content when the operator asks for it.
+
+An outbound message is the agent's own act, not something addressed to the operator reading the
+conversation. It is already announced twice: the `send_message` call renders as a tool row, and the
+message renders again as a full bubble carrying the entire body. In a conversation where an agent
+delegates several times, the bubbles crowd out the agent's own replies to the operator.
+
+The folded line SHALL show the message's **subject**, which the outbound message surface already
+requires as a short summary line and which the conversation currently discards. A fold that shows
+only the recipient's name is not sufficient: several messages to the same recipient would fold to
+identical rows, which is the failure the tool-row detail line already exists to prevent.
+
+This does not conflict with the requirement that *a turn's folded state is set by the operator,
+never by its position*. That requirement governs **turns** — an agent's own reply to the operator —
+and a peer message is not a turn. Foldedness here is derived from the kind of entry, never from
+where the entry sits in the conversation, and appending an entry SHALL NOT change the folded state
+of any other.
+
+An operator who expands an outbound message SHALL keep it expanded as the conversation grows, on
+the same terms as any other manually expanded entry.
+
+Inbound peer messages are unaffected. They are addressed to the agent whose conversation is being
+read, and they carry content the operator has not otherwise seen.
+
+#### Scenario: An outbound message is folded when it appears
+
+- **WHEN** an agent sends a peer message from a conversation being read
+- **THEN** the outbound entry renders folded
+- **AND** the folded line shows the recipient and the message's subject
+
+#### Scenario: The subject distinguishes messages to the same recipient
+
+- **WHEN** an agent sends two peer messages with different subjects to the same recipient
+- **THEN** the two folded lines differ
+
+#### Scenario: Expanding shows the message
+
+- **WHEN** the operator expands a folded outbound message
+- **THEN** its full content is rendered
+
+#### Scenario: An expanded outbound message stays expanded
+
+- **WHEN** the operator expands an outbound message and further entries are appended
+- **THEN** it remains expanded
+
+#### Scenario: An inbound message is not folded
+
+- **WHEN** a peer message arrives into the conversation being read
+- **THEN** it renders with its content visible, as it does today
