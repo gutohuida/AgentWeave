@@ -873,3 +873,76 @@ Begin with P1 (explore only): read `TasksBoard.tsx`, `TaskCard.tsx`, `TaskDetail
 full, `WebSearch` for kanban/task-card UI patterns, read the T3 Code sourcemaps for the closest
 equivalent surfaces, and write `design/mocks/S2/RESEARCH.md`. No mock this iteration — same
 one-pass-per-firing rhythm as every screen so far.
+
+## Iteration 13 — 2026-08-22T02:32:30+01:00 — S2 P1: explore (task board + task cards)
+
+Branch/log/STATE.json reconciled cleanly on entry — clean tree, HEAD matched iteration 12's commit
+(`4ee2615`, the release-heartbeat commit).
+
+**Read `TaskCard.tsx`, `TasksBoard.tsx`, `TaskDetailDrawer.tsx`, and `TaskIntegrationNote.tsx` in
+full**, including comments — same discipline as every prior screen. Found several deliberate,
+documented decisions that must survive the mock unchanged: purple-for-blocked vs. amber-for-stalled
+as *opposite* signals (not degrees of the same problem); "Stalled" as a renamed label after a real
+operator complaint about jargon (2026-08-10); the `task-live-pulse` ring (D12) that already respects
+`prefers-reduced-motion` and is deliberately never the sole carrier of the "running" fact; sticky
+column headers with a `-12px` offset hack fixed directly in response to the operator losing column
+context while scrolling; the centred-modal drawer geometry, which reverses an *earlier* right-side
+design on the operator's own explicit 2026-08-17 quote ("I don't want a ticket that takes the whole
+screen... just that central popup"); `blocked` deliberately has no column of its own (R3).
+
+**Found a real bug while reading, not a styling opinion.** `TaskCard.tsx:309` and
+`TaskDetailDrawer.tsx:257` both render `<StatusBadge status={task.priority} />`. `Badge.tsx`'s
+`STATUS_STYLES` map is keyed by task *status* values (`pending`, `in_progress`, …) and holds no
+entries for priority values at all. Cross-checked the Hub's own source of truth,
+`hub/hub/schemas/tasks.py:26` (`_PRIORITIES = ["low", "medium", "high", "critical"]`), confirming
+every priority value misses the map and falls through to `STATUS_STYLES.pending ?? NEUTRAL`. So
+today, a `critical` task and a `low` one render an *identical* grey pill — priority is never actually
+colour-coded, which is exactly the gap the operator's own brief named. Recorded as finding 1 in
+`RESEARCH.md`, flagged to fix for real in the mock (a proper `PRIORITY_STYLES` map) and to call out
+in `RATIONALE.md` later as a genuine product bug, separate from the visual-refinement work.
+
+**Four `WebSearch` queries**: general 2026 kanban card texture/hover/motion trends, Jira/Asana
+information density, Linear's issue-row design (hairline borders + inset shadows instead of drop
+shadows, priority-glyph + status-ring + coloured-pill mix — validation that AgentWeave's own
+charcoal/hairline identity is already in the right family, not a reason to import a new one), and
+drag-and-drop kanban interaction patterns (drop-zone sizing, destination-column highlight,
+idle→hover→grab→move→drop microstates, ARIA equivalents).
+
+**T3 Code sourcemaps**: no kanban/task-board surface exists in T3 Code at all (it's a chat-based
+coding tool) — searched `index-DiDfaONg.js.map`'s `sources` list for `kanban|task|board|card|todo`
+and confirmed this directly rather than assuming. Read the three closest analogues instead:
+`ProposedPlanCard.tsx` (a `rounded-[24px]` card — the same 24px AgentWeave already reserves for
+`--radius-content` — with a badge+title header, overflow-menu icon button, and a collapsed-body
+fade-out-gradient-plus-expand-button idiom), `ComposerPreviewAnnotationCards.tsx` (a compact chip
+card with an `icon + count` stat row and a hover-reveal corner remove button — the stat idiom maps
+directly onto a task's own unshown counts, like requirement links or acceptance criteria), and
+skimmed `ProviderInstanceCard.tsx` (less relevant, a settings table, confirmed by grep rather than a
+full read). Extracted to `testbed/scratch/t3ref/` (gitignored), read, deleted immediately after per
+`IDENTITY.md`'s reference-material rule — nothing quoted at length, nothing committed.
+
+**Wrote `design/mocks/S2/RESEARCH.md`** — ten concrete, code-verified gaps (the priority-badge bug;
+no hover elevation, only an inline border-colour swap with no CSS `:hover` rule; no press/active
+state; bare per-column empty states despite `EmptyState` existing and being used only for the
+whole-board case; no drag-and-drop at all, confirmed absent by reading both files — a missing
+*feature*, not a style gap, mocked per `pre_authorised` rather than implemented; an all-same-shaped
+badge row with no icons; requirement chips and informational badges sharing identical visual weight;
+`TaskIntegrationNote` breaking the card's own pill/block pattern with bare coloured text; no
+`tabular-nums` on the timestamp; the description clamp having no fade/expand affordance) plus a
+"what's already good" section naming every decision above that must not be undone, with file:line
+citations throughout.
+
+**Verified, not assumed.**
+- Re-read `Badge.tsx`'s `STATUS_STYLES` object directly and cross-referenced every key against
+  `hub/hub/schemas/tasks.py`'s `_PRIORITIES` list before writing the bug up — didn't infer this from
+  memory or pattern-matching.
+- Grepped `TaskCard.tsx` and `TasksBoard.tsx` for `draggable`/dnd imports before claiming
+  drag-and-drop is absent, rather than assuming from a first skim.
+- Searched the T3 sourcemap's `sources` array programmatically for kanban/board/card filenames before
+  claiming no direct equivalent exists, rather than asserting it.
+- `git status --short` after cleanup → only `design/mocks/S2/RESEARCH.md` new, `.claude/autonomous/`
+  state files modified. `testbed/scratch/t3ref/` removed, no stray files.
+
+**Next:** S2 P2 — validate every `RESEARCH.md` finding against `IDENTITY.md`'s rejection test, then
+build `design/mocks/S2/<variant>.html` (two or three variants, both themes, realistic task content
+across all seven statuses plus blocked/stalled/merged cases), fixing the priority-badge bug for real
+in the mock's own styles.
