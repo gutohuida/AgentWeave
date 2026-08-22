@@ -239,7 +239,7 @@ a:focus-visible, button:focus-visible {
 <p>Which task status transitions are legal, who may perform them, how an illegal one is refused, and the durable append-only record of every accepted transition. Established by <code>openspec/changes/2026-08-10-task-transition-machine</code> (roadmap change <strong>B1</strong>). Before it, a task's status was whatever the last writer said: <code>update_task_for_actor</code> applied <code>task.status = body.status</code> with no adjacency and no actor rule, and the MCP <code>update_task</code> tool handed that to every bound agent — so a run could move its own work from <code>in_progress</code> to <code>approved</code> in one call. This capability governs <strong>validity</strong>: that a recorded transition is legal, attributed, and made by an entitled actor.</p>
 </section>
 
-<section><h2 id="requirements">Requirements</h2>
+<section id="requirements"><h2>Requirements</h2>
 
 <div class="aw-requirement aw-requirement-must" id="FR-1" data-total="10">
 <div class="aw-id-row"><span class="aw-id">FR-1</span><button class="aw-copy-btn" type="button" data-copy="#FR-1" onclick="awCopyAnchor(this)">Copy link</button></div>
@@ -300,7 +300,7 @@ a:focus-visible, button:focus-visible {
 
 </section>
 
-<section><h2 id="acceptance">Acceptance criteria</h2>
+<section id="acceptance"><h2>Acceptance criteria</h2>
 <table>
 <colgroup><col class="aw-col-req"><col class="aw-col-given"><col class="aw-col-when"><col class="aw-col-then"></colgroup>
 <thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead>

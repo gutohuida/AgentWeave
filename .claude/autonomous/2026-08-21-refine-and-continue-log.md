@@ -1998,3 +1998,78 @@ nav link, before capturing. Read the results and critique honestly: in particula
 "REQUIREMENT N OF 10" counter reads as noise at this mock's 10-of-10 density versus how it would
 read at the real document's 32, and whether the empty-Given em dash is legible enough at real
 reading size (the P2 review screenshot was too compressed to confirm either way).
+
+## Iteration 27 — 2026-08-22T04:47:25+01:00 — S5 P3: Playwright iterate on the rendered spec document
+
+Branch and log matched `STATE.json` on entry: HEAD was `48c3c2a` ("release heartbeat for next
+firing"), one commit past `105e225` (S5 P2). Read `restrained.html` and `considered.html` in full
+before touching anything.
+
+**Wrote `testbed/scratch/shot_s5_p3.py`** (Playwright, throwaway per the pre-authorised fallback —
+`uishot.py` targets the Hub's own theme button, not a standalone file's toolbar). For each of the
+two variants × two themes it captures: a resting full-page shot, a clipped shot of `#FR-3` after a
+real `.hover()`, a clipped shot of an acceptance-table row after `.hover()`, a clipped shot of the
+first task card after `.hover()`, and two focus-visible shots reached by real `page.keyboard.press
+("Tab")` from the first nav link (not `.focus()` — Chromium's focus-visible heuristic does not
+reliably arm on programmatic focus, keyboard traversal does) — landing on the second nav link and
+then the first requirement's copy button.
+
+**Found a real, confirmed bug carried over from P2, not a new defect introduced this pass.** The
+first run's `hover-row` and `full` screenshots showed the acceptance table completely unaffected by
+any of its dedicated CSS: no narrowed Given column, no alternating row bands, no em-dash placeholder
+in empty Given cells, no hover tint. Sampled pixels down the column at (700, y) for every 8px from
+y=0–392 — pure `(255,255,255)` throughout, confirming zero effect, not just a subtle one. Root
+cause: in both files, `<section><h2 id="acceptance">Acceptance criteria</h2><table>...` puts the
+`id` on the `<h2>`, not on an ancestor of the `<table>` — so every rule scoped `#acceptance table`,
+`#acceptance col.*`, `#acceptance td.aw-cell-empty`, `#acceptance tr[data-group]`, and (in
+`considered.html`) `#acceptance tbody tr:hover` silently matched nothing, because the h2 has no
+table descendant. The same misplacement existed on `#requirements` (used only for
+`counter-reset: aw-req`), but that one accidentally still counted 1–10 correctly, because CSS falls
+back to an implicit root-level counter when no ancestor establishes one in scope — lucky, not
+correct, and fragile if this document is ever embedded alongside another counter-using instance
+(e.g. on the `index.html` queue item Z will build).
+
+**Fixed by moving the `id` from the `<h2>` onto the enclosing `<section>`** for both `#requirements`
+and `#acceptance`, in both `restrained.html` and `considered.html` — matching the pattern `#tasks`
+already used correctly (`<section id="tasks"><h2>Tasks</h2>`, which is why the task-card styling
+*did* render correctly the first time). Checked first that nothing inside either mock links to
+`#requirements` or `#acceptance` by href (grepped both files) — the browser's own outline sidebar
+that would consume such an anchor lives in the Hub shell, not reproduced here, so retargeting the id
+from an inline heading to its section is anchor-neutral. No other section (`#summary`, `#evidence`,
+`#open-questions`, `#map`) has any CSS rule keyed off its id being an ancestor of anything, so left
+those as-is — fixed only what was actually broken.
+
+**Re-ran the screenshot script and read every image.** Confirmed by both full-page and pixel-level
+inspection: the Given column is now visibly narrow with a legible muted em dash in every empty cell,
+requirement rows alternate a faint band, and hovering a row now tints it with a clearly visible pale
+accent wash in `considered.html` (`restrained.html` correctly has no row-hover rule at all — its own
+header comment states table-row hover is deliberately deferred to `considered.html`, so its absence
+there is intended, not a miss). Requirement hover (`considered.html`) shows the left border swapping
+to accent and a soft `--surface` background; task-card hover shows border tint + a translateY lift +
+soft shadow; both read clearly in light and dark. Focus-visible via real Tab traversal shows a crisp
+2px accent outline on the copy button and (in `considered.html`) on nav links; `restrained.html`'s
+copy button has its own `:focus-visible` rule and its nav link correctly falls back to the browser's
+native focus ring, consistent with the file's stated minimalism (no custom nav-hover/focus was ever
+claimed for restrained). **Clause 7 of the rejection test (interactive states are real) is now
+verified by actually triggering the states, not spot-read in the stylesheet** — closing the honesty
+gap P2's log entry flagged explicitly.
+
+**Answered the two questions P3 was queued to answer.** The "REQUIREMENT N OF 10" counter reads as a
+small, unobtrusive uppercase label at this mock's 10-of-10 density in the full-page screenshot — it
+does not compete with the requirement text or crowd the layout; nothing about its size or weight
+would change at the real document's 32 (it is a fixed-size label, not something that grows with the
+count), so no adjustment was made. The empty-Given em dash is clearly legible at normal reading
+size, once the underlying `#acceptance` scoping bug was fixed to make it appear at all — the P2
+screenshot could not have confirmed this because the rule producing the dash was silently inert.
+
+**Verified.** `py -3.11 -c "import json; json.load(...)"` on `STATE.json` after editing. Deleted all
+regenerated PNGs (gitignored, matches the S2/S4/S5-P2 precedent of no committed screenshots).
+`git status --short` → only the two modified `design/mocks/S5/*.html` files — staged and committed.
+
+**Next:** S5 P4 — a second iteration pass on the same basis (look again, fix anything remaining),
+then write `design/mocks/S5/RATIONALE.md` (what was researched, what changed and why, what was
+rejected and under which clause, including the two scoped-clause resolutions from P2 and the
+`#acceptance`/`#requirements` id-scoping bug found and fixed this pass) and add S5 to
+`design/mocks/index.html` with its before/after shots — noting `index.html` does not exist yet
+(queue item Z), so P4 is where S5's own entry is written but the review index itself is still
+pending until Z runs.
