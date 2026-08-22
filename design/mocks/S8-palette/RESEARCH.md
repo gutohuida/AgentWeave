@@ -149,3 +149,39 @@ a violation) and build 2-3 variants in `design/mocks/S8-palette/` exploring degr
 (footer hints + highlighting alone, vs. + agent colour + secondary lines, vs. + recent-items
 feature note) using realistic content (real-looking agent names, task titles, conversation
 snippets, doc titles) — not lorem ipsum — importing `../../../hub/ui/src/index.css`.
+
+## P3 findings (adversarial pass, both variants, both themes, plus a narrow viewport)
+
+Measured actual rendered row heights via Playwright DOM queries rather than eyeballing: at the
+production `min(60vh, 420px)` list cap, `restrained.html`'s single-line rows (~34px) fit ~12 rows;
+`considered.html`'s two-line rows (~49px where a row has a secondary line, ~35px where it doesn't)
+fit ~9. That's a real, measured density cost under clause 6 for rows that gain a secondary line —
+worth stating plainly in `RATIONALE.md` rather than asserting "no row lost" without qualification:
+row *count* per screenful drops for `considered.html`'s richer rows even though information *per
+row* goes up. Whether the net reads as "at least as much information per screen" is a judgement
+call for P4/the operator, not a re-litigation here — flagging the trade-off, not undoing the design.
+
+Found and fixed one real bug: at a narrow viewport (480px), `considered.html`'s command palette
+overflowed its `.stage` demo container — measured `stageWidth: 424px` vs. actual rendered
+`paletteWidth: 543px` — because `.stage-narrow` (a flex item of `.stage`, `justify-content: center`)
+had no `width`/`min-width: 0` of its own, so its default flex min-content size let long unwrapped
+`row-title`/`row-sub` text push the whole chain (`stage-narrow` → `command-palette` → rows) wider
+than the viewport instead of shrinking and eliding via the existing `text-overflow: ellipsis`
+rules. Visually this clipped the section copy behind the demo box ("TASKS" render as "S",
+"CONVERSATIONS" as "ERSATIONS" in a 480px-wide capture). Fixed with
+`.stage-narrow { min-width: 0; width: 100%; }` — confirmed by DOM measurement
+(`paletteWidth` 543px → 365px, fits inside a 424px stage) and by re-screenshotting at 480px in both
+themes (clean) and at 1440px (unchanged from before the fix — `width: 100%` is capped by the
+existing `max-width: 620px`, so the normal-width render is identical). `restrained.html` never hit
+this because it has no long unwrapped secondary-line text forcing a wide min-content box.
+
+## Next (P4)
+
+Second iteration pass (this P3 pass already did the "screenshot, look, fix" work — the overflow bug
+above is that fix), then write `RATIONALE.md` covering: what was researched, what changed and why,
+what was rejected and under which clause, AND the density trade-off measured above (state it, don't
+bury it). Add S8-palette to `design/mocks/index.html` with before/after shots. That closes S8 at
+8/8 sub-passes for the command palette and — per `S8`'s stated sub-order — the whole `S8` overflow
+item, since the command palette was its last remaining sub-screen. After that, queue item `Z`
+(rebuild the review index in full) is next per its own "run again as the LAST action before
+`stop_at`" instruction — check wall-clock against `stop_at` before starting it.

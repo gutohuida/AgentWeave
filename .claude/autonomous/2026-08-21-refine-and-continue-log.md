@@ -3573,4 +3573,56 @@ read as the same app after a cold second look?) and clause 6 (density — `consi
 grew from one line to two; confirm how many rows still fit the existing `min(60vh, 420px)` cap is
 still reasonable) — plus a narrower-viewport check if time allows. If nothing new turns up, P3
 can be brief and the next iteration moves straight to P4 (`RATIONALE.md` + review index) rather
+
+## Iteration 51 — 2026-08-22T08:16:30+01:00 — S8-palette P3: iterate
+
+Verified branch/log/STATE.json agreed before starting (`d50b3a4` = HEAD, a released-heartbeat commit
+on top of `47885b9` S8-palette P2, matching STATE.json exactly). ~44 minutes to `stop_at`.
+
+`screen_pass_protocol.P3_iterate`, the adversarial pass P2's closing note called for: clause 6
+density measurement plus a narrower-viewport check on both variants, both themes.
+
+**Density (clause 6), measured via Playwright DOM queries rather than eyeballing**: at the
+production `.command-palette [cmdk-list] { max-height: min(60vh, 420px) }` cap, `restrained.html`'s
+single-line rows render ~34px and fit ~12 in the cap; `considered.html`'s two-line rows render ~49px
+(rows with a secondary line) or ~35px (rows without one, e.g. a bare agent name in the recent-items
+demo) and fit ~9. That's a real, measured row-count cost for `considered.html`'s richer rows, worth
+stating plainly rather than asserting "no row lost" unqualified — recorded in `RESEARCH.md`'s new
+"P3 findings" section as a trade-off for `RATIONALE.md` (P4) to state honestly: row count per
+screenful drops even though information per row rises, and whether that nets out as "at least as
+much information per screen" is a judgement call to make explicitly, not to silently assert.
+
+**Narrower-viewport check (480px) found and fixed a real bug**: `considered.html`'s command palette
+overflowed its own `.stage` demo container — `stageWidth` measured 424px, `paletteWidth` measured
+543px. Root cause: `.stage-narrow` is a flex item of `.stage` (`justify-content: center`) with a
+`max-width` but no `width`/`min-width: 0` of its own, so flexbox's default min-content sizing let
+the long unwrapped `row-title`/`row-sub` text in richer rows push `stage-narrow` → `.command-palette`
+→ rows wider than the viewport instead of shrinking so the existing `text-overflow: ellipsis` rules
+could take over. Visually this clipped section copy behind the demo box in a 480px capture — "TASKS"
+rendered as "S", "CONVERSATIONS" as "ERSATIONS". `restrained.html` never hit this since it has no
+long unwrapped secondary-line text to force a wide min-content box. Fixed with one line —
+`.stage-narrow { min-width: 0; width: 100%; }` (width capped by the existing `max-width: 620px`, so
+normal-width rendering is provably unchanged) — confirmed by DOM re-measurement
+(`paletteWidth` 543px → 365px, fits inside the 424px stage) and by re-screenshotting at 480px in
+both themes (clean, legible, no clipping) and at 1440px (pixel-identical layout to before the fix).
+
+Appended both findings to `design/mocks/S8-palette/RESEARCH.md` under a new "P3 findings" heading so
+P4 has them in hand rather than needing to re-derive. `git status --short` showed only
+`RESEARCH.md` and `considered.html` modified before staging — no stray screenshots (all temp PNGs
+and scripts were under `/tmp`, deleted after use).
+
+**This closes the "screenshot, look, fix" half of S8-palette's P3.** Per protocol P3 is meant to be
+followed by a second iteration under P4, but since this pass already found and fixed a genuine bug
+(not zero findings), the next iteration should do P4 properly: a second look for anything P3 missed,
+then `RATIONALE.md` (research summary, what changed and why, what was rejected and under which
+clause, AND the density trade-off above stated plainly) and add S8-palette to
+`design/mocks/index.html`. That closes `S8` in full — the command palette was its last remaining
+sub-screen per `S8`'s stated sub-order.
+
+**Next**: S8-palette P4 — `screen_pass_protocol.P4_finish`. Write `RATIONALE.md`, add to the review
+index, then move to queue item `Z` (rebuild `design/mocks/index.html` in full — not just append,
+per iteration 48's precedent when it closed S8-logs) as the new `current`. Runway is short (~40
+minutes to `stop_at` `2026-08-22T09:00:00+01:00` as this iteration closes) — `Z`'s own instruction
+to run "again as the LAST action before `stop_at`" means Z is very likely the last thing this run
+does; budget time for it rather than starting a new screen.
 than padding it artificially.
