@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en" data-mode="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AgentWeave — Right panel (considered)</title>
+<link rel="stylesheet" href="../../../hub/ui/src/index.css" />
+<style>
+  /* ══════════════════════════════════════════════════════════════
+     Mock only. Every colour/radius/duration/easing below resolves to
+     an existing token in hub/ui/src/index.css — nothing here is a
+     literal hex, a new radius, or a new duration/easing. See
+     RESEARCH.md / RATIONALE.md for what each change answers.
+     ══════════════════════════════════════════════════════════════ */
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { min-height: 100vh; padding-bottom: 80px; }
+
+  .doc { width: min(100%, 1360px); margin-inline: auto; padding: 32px 28px 0; }
+
+  .doc-header {
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 24px;
+    padding-bottom: 28px; border-bottom: 1px solid var(--border-region); margin-bottom: 32px;
+  }
+  .doc-title { font-size: 22px; font-weight: 600; letter-spacing: -0.01em; }
+  .doc-subtitle { margin-top: 6px; font-size: 13px; color: var(--text-2); max-width: 760px; line-height: 1.55; }
+  .doc-meta { margin-top: 10px; font-size: 11px; color: var(--text-3); }
+  .theme-toggle {
+    flex: none; display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px;
+    border-radius: var(--radius-lg); border: 1px solid var(--border); background: var(--surface-2);
+    color: var(--text); font-size: 12px; font-weight: 500; cursor: pointer;
+    transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+  }
+  .theme-toggle:hover { background: var(--surface-3); border-color: var(--border-hi); }
+  .theme-toggle:focus-visible { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring); outline: none; }
+
+  section.mock-section { margin-bottom: 44px; }
+  .section-eyebrow { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); margin-bottom: 6px; }
+  .section-title { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+  .section-note { font-size: 12.5px; color: var(--text-2); line-height: 1.6; max-width: 860px; margin-bottom: 18px; }
+  .section-note code { background: var(--surface-2); border-radius: var(--radius-sm); padding: 1px 5px; font-size: 11.5px; }
+
+  .ic { display: inline-flex; flex: none; }
+  .ic svg { display: block; }
+
+  /* ═══════════════════════ Panel chrome (shared) ═══════════════════════ */
+  .panel-frame {
+    background: var(--bg); border: 1px solid var(--border-region); border-radius: var(--radius-xl);
+    display: flex; flex-direction: column; height: 560px; overflow: hidden;
+  }
+  .panel-strip {
+    display: flex; align-items: center; gap: 3px; overflow-x: auto; padding: 7px 7px 0;
+    border-bottom: 1px solid var(--border); flex: none; scrollbar-width: thin;
+  }
+  .tab-pill {
+    display: flex; align-items: center; gap: 6px; flex: none; height: 27px; padding: 0 9px;
+    border-radius: 9999px; font-size: 12px; color: var(--text-2); cursor: pointer; position: relative;
+    transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+  }
+  .tab-pill:hover { background: var(--row-hover); }
+  .tab-pill[data-active="true"] { background: var(--surface-2); color: var(--text); }
+  .tab-pill[data-active="true"]:hover { background: var(--surface-3); }
+  .tab-label { max-width: 128px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tab-icon-slot { display: grid; flex: none; }
+  .tab-icon-slot > * { grid-area: 1 / 1; transition: opacity var(--dur-fast) var(--ease); }
+  .tab-icon-slot .tab-close-icon { opacity: 0; }
+  .tab-pill:hover .tab-icon-slot .tab-close-icon,
+  .tab-pill[data-force="hover"] .tab-icon-slot .tab-close-icon { opacity: 1; }
+  .tab-pill:hover .tab-icon-slot .tab-identity-icon,
+  .tab-pill[data-force="hover"] .tab-icon-slot .tab-identity-icon { opacity: 0; }
+  .tab-close-icon:hover { color: var(--text); }
+  .tab-add {
+    display: inline-flex; align-items: center; justify-content: center; flex: none; width: 27px; height: 27px;
+    border-radius: 9999px; color: var(--text-3); cursor: pointer; margin-left: 2px;
+    transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+  }
+  .tab-add:hover { background: var(--row-hover); color: var(--text); }
+  .panel-body { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; }
+
+  /* Tooltip on truncated tab labels — CSS-only, no JS needed to demonstrate it */
+  .tab-pill[data-tooltip] { position: relative; }
+  .tab-pill[data-tooltip]:hover::after, .tab-pill[data-force="tooltip"]::after {
+    content: attr(data-tooltip); position: absolute; top: calc(100% + 6px); left: 0; z-index: 5;
+    background: var(--surface-3); border: 1px solid var(--border-hi); border-radius: var(--radius-sm);
+    padding: 4px 8px; font-size: 11px; color: var(--text); white-space: nowrap; pointer-events: none;
+    box-shadow: 0 4px 12px rgb(0 0 0 / 0.28);
+  }
+
+  /* ─── Row states (file tree / files index / loops index / spec browser) ── */
+  .row {
+    display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 10px; border: none;
+    background: none; color: var(--text-2); font-size: 13px; text-align: left; cursor: pointer;
+    border-radius: var(--radius-sm); transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+  }
+  .row:hover, .row[data-force="hover"] { background: var(--row-hover); color: var(--text); }
+  .row:active, .row[data-force="press"] { background: var(--row-active); }
+  .row[data-active="true"], .row[data-force="selected"] { background: var(--row-selected); color: var(--text); }
+  .row:focus-visible, .row[data-force="focus"] { outline: none; box-shadow: inset 0 0 0 2px var(--ring); }
+  .row-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+  .row-dir { font-size: 12px; font-weight: 600; color: var(--text-3); }
+  .row-chevron { transition: transform var(--dur-fast) var(--ease); flex: none; }
+  .row-chevron[data-open="true"] { transform: rotate(90deg); }
+  .row-guide { position: relative; }
+  .row-guide::before {
+    content: ''; position: absolute; left: var(--guide-x, 20px); top: 0; bottom: 0; width: 1px;
+    background: var(--border);
+  }
+
+  /* ─── Search field ─────────────────────────────────────────────── */
+  .search-wrap { position: relative; margin: 8px 10px; flex: none; }
+  .search-input {
+    width: 100%; height: 30px; padding: 0 28px 0 30px; border-radius: var(--radius-lg);
+    border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-size: 12.5px;
+    transition: border-color var(--dur-fast) var(--ease), background-color var(--dur-fast) var(--ease);
+  }
+  .search-input::placeholder { color: var(--text-3); }
+  .search-input:hover { border-color: var(--border-hi); }
+  .search-input:focus-visible { outline: none; border-color: var(--ring); background: var(--surface); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 22%, transparent); }
+  .search-icon { position: absolute; left: 9px; top: 50%; transform: translateY(-50%); color: var(--text-3); pointer-events: none; }
+  .search-clear {
+    position: absolute; right: 6px; top: 50%; transform: translateY(-50%); width: 18px; height: 18px;
+    display: inline-flex; align-items: center; justify-content: center; border-radius: 9999px;
+    color: var(--text-3); cursor: pointer; transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+  }
+  .search-clear:hover { background: var(--row-hover); color: var(--text); }
+
+  /* ─── Empty-state launcher cards ─────────────────────────────────── */
+  .launcher-hint { text-align: center; font-size: 13px; color: var(--text-3); margin-bottom: 16px; }
+  .launcher-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; width: 100%; max-width: 420px; margin: 0 auto; }
+  .launcher-card {
+    display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 12px;
+    border-radius: var(--radius-md); background: var(--surface-2); border: 1px solid var(--border);
+    color: var(--text); cursor: pointer; position: relative; text-align: left;
+    transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease),
+                transform var(--dur-fast) var(--ease), box-shadow var(--dur-base) var(--ease);
+  }
+  .launcher-card:hover, .launcher-card[data-force="hover"] {
+    background: var(--surface-3); border-color: var(--border-hi); transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgb(0 0 0 / 0.20), inset 0 1px var(--lift-hi);
+  }
+  .launcher-card:active, .launcher-card[data-force="press"] {
+    transform: translateY(0); background: color-mix(in srgb, var(--surface-2) 84%, var(--press-lo));
+    box-shadow: inset 0 1px 3px var(--press-lo);
+  }
+  .launcher-card:focus-visible, .launcher-card[data-force="focus"] {
+    outline: none; box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring);
+  }
+  .launcher-card[data-force="disabled"] {
+    opacity: 0.55; cursor: not-allowed; pointer-events: none;
+  }
+  .launcher-title { font-size: 13px; font-weight: 500; }
+  .launcher-desc { font-size: 12px; color: var(--text-3); line-height: 1.4; }
+  .launcher-badge {
+    position: absolute; top: 8px; right: 8px; min-width: 16px; height: 16px; padding: 0 5px;
+    display: inline-flex; align-items: center; justify-content: center; border-radius: 9999px;
+    font-size: 10px; font-weight: 700; background: color-mix(in srgb, var(--green) 18%, transparent);
+    color: var(--green); font-variant-numeric: tabular-nums;
+  }
+
+  /* ─── File preview header ─────────────────────────────────────── */
+  .preview-header { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--border); flex: none; }
+  .breadcrumb { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--text-3); overflow: hidden; flex: 1; min-width: 0; }
+  .breadcrumb-seg { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .breadcrumb-seg:last-child { color: var(--text-2); }
+  .breadcrumb-sep { flex: none; opacity: 0.6; }
+  .preview-actions { display: flex; align-items: center; gap: 2px; flex: none; }
+  .icon-btn {
+    display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px;
+    border-radius: var(--radius-sm); border: none; background: transparent; color: var(--text-3); cursor: pointer;
+    transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+  }
+  .icon-btn:hover, .icon-btn[data-force="hover"] { background: var(--row-hover); color: var(--text); }
+  .icon-btn[data-force="copied"] { color: var(--green); }
+  .code-pane { flex: 1; overflow: auto; padding: 10px 12px; font-family: ui-monospace, "SF Mono", monospace; font-size: 12px; line-height: 1.65; color: var(--text-2); }
+  .code-pane .ln { color: var(--text-3); display: inline-block; width: 26px; text-align: right; margin-right: 12px; user-select: none; }
+  .code-pane .kw { color: var(--blue); }
+  .code-pane .str { color: var(--green); }
+  .code-pane .com { color: var(--text-3); font-style: italic; }
+
+  /* ─── Loops list row ──────────────────────────────────────────── */
+  .loop-row { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; border-radius: var(--radius-sm); cursor: pointer; transition: background-color var(--dur-fast) var(--ease); }
+  .loop-row:hover, .loop-row[data-force="hover"] { background: var(--row-hover); }
+  .loop-top { display: flex; align-items: center; gap: 8px; }
+  .loop-name { font-size: 13px; font-weight: 500; color: var(--text); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .loop-meta { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-3); padding-left: 2px; }
+  .badge { display: inline-flex; align-items: center; gap: 4px; border-radius: 9999px; padding: 1px 7px; font-size: 10px; font-weight: 500; }
+  .b-success { background: color-mix(in srgb, var(--green) 10%, transparent); border: 1px solid color-mix(in srgb, var(--green) 20%, transparent); color: var(--green); }
+  .b-warning { background: color-mix(in srgb, var(--amber) 10%, transparent); border: 1px solid color-mix(in srgb, var(--amber) 20%, transparent); color: var(--amber); }
+  .b-danger { background: color-mix(in srgb, var(--red) 10%, transparent); border: 1px solid color-mix(in srgb, var(--red) 20%, transparent); color: var(--red); }
+  .b-neutral { background: color-mix(in srgb, var(--text-2) 10%, transparent); border: 1px solid color-mix(in srgb, var(--text-2) 20%, transparent); color: var(--text-2); }
+  .agent-dot { width: 6px; height: 6px; border-radius: 9999px; flex: none; }
+  .status-dot { width: 5px; height: 5px; border-radius: 9999px; background: currentColor; }
+
+  .toolbar-row { display: flex; align-items: center; justify-content: space-between; padding: 4px 10px 8px; flex: none; }
+  .ctl-switch-row { display: flex; align-items: center; gap: 7px; }
+  .ctl-switch-label { font-size: 12px; color: var(--text-2); }
+  .ctl-switch { position: relative; width: 30px; height: 18px; flex: none; border-radius: 9999px; background: var(--surface-3); border: 1px solid var(--border); cursor: pointer; transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease); }
+  .ctl-switch-thumb { position: absolute; top: 1px; left: 1px; width: 14px; height: 14px; border-radius: 9999px; background: var(--text-3); transition: transform var(--dur-fast) var(--ease), background-color var(--dur-fast) var(--ease); }
+  .ctl-switch[data-checked] { background: var(--ring); border-color: var(--ring); }
+  .ctl-switch[data-checked] .ctl-switch-thumb { transform: translateX(12px); background: var(--primary-foreground); }
+
+  /* ─── Context menu ────────────────────────────────────────────── */
+  .menu-panel { width: 190px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 4px; box-shadow: 0 8px 24px rgb(0 0 0 / 0.28); }
+  .menu-item { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 9px; border-radius: var(--radius-sm); font-size: 12.5px; color: var(--text-2); cursor: pointer; transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease); }
+  .menu-item span.label { color: var(--text); }
+  .menu-item:hover, .menu-item[data-force="hover"] { background: var(--row-hover); }
+  .menu-item.danger span.label { color: var(--red); }
+  .menu-sep { height: 1px; background: var(--border); margin: 4px 2px; }
+
+  /* ─── Skeleton loading ────────────────────────────────────────── */
+  .sk { background: linear-gradient(90deg, var(--surface-2), var(--surface-3), var(--surface-2)); background-size: 200% 100%; animation: sk-shimmer 1.6s ease-in-out infinite; border-radius: var(--radius-sm); }
+  @media (prefers-reduced-motion: reduce) { .sk { animation: none; background: var(--surface-2); } }
+  @keyframes sk-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+  .sk-row { display: flex; align-items: center; gap: 8px; padding: 6px 10px; }
+  .sk-icon { width: 14px; height: 14px; border-radius: var(--radius-sm); flex: none; }
+  .sk-line { height: 10px; flex: 1; }
+  .sk-line.w-60 { max-width: 60%; }
+
+  /* ─── Layout for the two side-by-side reference frames ─────────── */
+  .frame-pair { display: flex; gap: 18px; align-items: flex-start; flex-wrap: wrap; }
+  .frame-col { flex: 1 1 380px; max-width: 420px; }
+  .frame-col-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-3); margin-bottom: 8px; }
+
+  .states-strip { display: grid; grid-template-columns: repeat(4, minmax(180px, 1fr)); gap: 14px; }
+  .state-cell { display: flex; flex-direction: column; gap: 6px; }
+  .state-cell-label { font-size: 11px; color: var(--text-3); text-align: center; }
+
+  .legend { margin-top: 8px; padding: 14px 16px; border-radius: var(--radius-lg); background: var(--surface); border: 1px solid var(--border-region); font-size: 11.5px; color: var(--text-3); line-height: 1.7; }
+  .legend code { background: var(--surface-2); border-radius: var(--radius-sm); padding: 1px 5px; font-size: 11px; }
+</style>
+</head>
+<body>
+<div class="doc">
+  <div class="doc-header">
+    <div>
+      <div class="doc-title">Right side panel — considered</div>
+      <div class="doc-subtitle">
+        Full application of <code>design/mocks/S3/RESEARCH.md</code>'s nine findings across
+        <code>PanelShell</code>'s tab strip, <code>FileTree</code>, <code>FilesIndexTab</code>,
+        <code>LoopsIndexTab</code>, <code>SpecDocumentBrowser</code> and <code>FilePreview</code>.
+        Structure and interaction design are unchanged — ARIA tablist, keyboard nav, the
+        search-or-browse pattern, the trust boundary between <code>FilePreview</code> and
+        <code>MarkdownMessage</code> — the change is states, feedback and a handful of
+        conventional affordances that were never designed in.
+      </div>
+      <div class="doc-meta">Variant 2 of 2 · degree: considered · S3 P2</div>
+    </div>
+    <button class="theme-toggle" onclick="document.documentElement.dataset.mode = document.documentElement.dataset.mode === 'dark' ? 'light' : 'dark'">
+      <span id="theme-label">dark</span> · toggle theme
+    </button>
+  </div>
+
+  <!-- ══════════════════ Finding 2: tab strip ══════════════════ -->
+  <section class="mock-section">
+    <div class="section-eyebrow">Finding 2 — the tab strip gives no feedback until it's already active</div>
+    <div class="section-title">Pill tabs, a crossfading close icon, tooltips, a context menu</div>
+    <div class="section-note">
+      Today an inactive tab has zero hover state — only the always-visible close button is a real
+      <code>&lt;button&gt;</code> a cursor registers against. Below: pill shape (same radius scale,
+      just fully rounded per the existing <code>9999px</code> already used for filter chips and
+      badges elsewhere in the app — not a new geometry), a hover wash from <code>--row-hover</code>,
+      the identity icon and close icon sharing one slot that crossfades on hover (saves the
+      horizontal space a second always-visible icon costs — clause 6, density), a tooltip on
+      truncated labels, and a right-click context menu built from <code>controls.html</code>'s
+      <code>.menu-panel</code>/<code>.menu-item</code> vocabulary rather than a new menu style.
+    </div>
+    <div class="frame-pair">
+      <div class="frame-col">
+        <div class="frame-col-label">Tab strip — five tabs, one truncated, one hovered</div>
+        <div class="panel-strip" style="border-bottom:none; padding-bottom:7px;">
+          <div class="tab-pill" data-active="true">
+            <span class="tab-icon-slot" style="width:14px;height:14px;">
+              <span class="tab-identity-icon">${'{'}FOLDER_O{'}'}</span>
+            </span>
+            <span class="tab-label">Files</span>
+          </div>
+          <div class="tab-pill" data-force="hover" data-tooltip="loop:conversations-continue-phase-6-fold-outbound-messages">
+            <span class="tab-icon-slot" style="width:14px;height:14px;">
+              <span class="tab-identity-icon">${'{'}LOOP_ICON{'}'}</span>
+              <span class="tab-close-icon">${'{'}CLOSE{'}'}</span>
+            </span>
+            <span class="tab-label">…-fold-outbound-messages</span>
+          </div>
+          <div class="tab-pill">
+            <span class="tab-icon-slot" style="width:14px;height:14px;">
+              <span class="tab-identity-icon">${'{'}FILE_ICON{'}'}</span>
+              <span class="tab-close-icon">${'{'}CLOSE{'}'}</span>
+            </span>
+            <span class="tab-label">panelTabsStore.ts</span>
+          </div>
+          <div class="tab-pill">
+            <span class="tab-icon-slot" style="width:14px;height:14px;">
+              <span class="tab-identity-icon">${'{'}DOC_ICON{'}'}</span>
+              <span class="tab-close-icon">${'{'}CLOSE{'}'}</span>
+            </span>
+            <span class="tab-label">design.md</span>
+          </div>
+          <div class="tab-add">${'{'}ADD{'}'}</div>
+        </div>
+        <div class="state-cell-label" style="text-align:left; margin-top:4px;">hover the second tab in the file to see the tooltip; the middle tab is forced-hover to show the crossfade</div>
+      </div>
+      <div class="frame-col">
+        <div class="frame-col-label">Right-click a tab — context menu</div>
+        <div class="menu-panel">
+          <div class="menu-item" data-force="hover"><span class="ic" style="width:14px;height:14px;">${'{'}CLOSE{'}'}</span><span class="label">Close</span></div>
+          <div class="menu-item"><span class="ic" style="width:14px;height:14px;">${'{'}CLOSE_OTHERS{'}'}</span><span class="label">Close others</span></div>
+          <div class="menu-item"><span class="ic" style="width:14px;height:14px;">${'{'}CLOSE_RIGHT{'}'}</span><span class="label">Close to the right</span></div>
+          <div class="menu-sep"></div>
+          <div class="menu-item danger"><span class="ic" style="width:14px;height:14px;">${'{'}CLOSE_ALL{'}'}</span><span class="label">Close all</span></div>
+        </div>
+        <div class="state-cell-label" style="text-align:left; margin-top:8px;">Absent from <code>PanelShell</code> today; also closes on middle-click, standard for a tab strip. A missing affordance per <code>screen_pass_protocol</code>'s "note information that is lacking" — not implemented here, only demonstrated.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════ Finding 3: launcher cards ══════════════════ -->
+  <section class="mock-section">
+    <div class="section-eyebrow">Finding 3 — the empty-state launchers are static, and discard a number the app already has</div>
+    <div class="section-title">Launcher cards get real states and a live count</div>
+    <div class="section-note">
+      <code>PanelShell</code>'s empty state (task 2.1, added after the operator's "when we open the
+      right screen and there is nothing there weird") is good information architecture with no
+      surface: no hover, no press, no focus-visible ring beyond the browser default. The loops
+      launcher also throws away <code>LoopsIndexTab</code>'s own <code>counts.running</code> the
+      moment the tab is closed. Badge below only appears when count &gt; 0 — a project with nothing
+      running shows a plain card, exactly as today.
+    </div>
+    <div class="launcher-hint">Open a panel</div>
+    <div class="launcher-grid">
+      <div class="launcher-card" data-force="hover">
+        <span class="ic" style="width:18px;height:18px;">${'{'}DOC_ICON{'}'}</span>
+        <span class="launcher-title">Specs</span>
+        <span class="launcher-desc">Browse and read specification documents</span>
+      </div>
+      <div class="launcher-card">
+        <span class="launcher-badge">3</span>
+        <span class="ic" style="width:18px;height:18px;">${'{'}LOOP_ICON{'}'}</span>
+        <span class="launcher-title">Loops</span>
+        <span class="launcher-desc">What is running, and what it has queued</span>
+      </div>
+      <div class="launcher-card" data-force="press">
+        <span class="ic" style="width:18px;height:18px;">${'{'}FOLDER_O{'}'}</span>
+        <span class="launcher-title">Files</span>
+        <span class="launcher-desc">Browse this project's workspace files</span>
+      </div>
+      <div class="launcher-card" data-force="focus">
+        <span class="ic" style="width:18px;height:18px;">${'{'}LOOP_ICON{'}'}</span>
+        <span class="launcher-title">Loops</span>
+        <span class="launcher-desc">What is running, and what it has queued</span>
+      </div>
+    </div>
+    <div class="states-strip" style="margin-top:16px; grid-template-columns: repeat(4, minmax(90px, 140px)); justify-content: center;">
+      <div class="state-cell-label">hover — lift + wash</div>
+      <div class="state-cell-label">rest — live count badge</div>
+      <div class="state-cell-label">press — settles inward</div>
+      <div class="state-cell-label">focus-visible — keyboard nav</div>
+    </div>
+  </section>
+
+  <!-- ══════════════════ Finding 1: row states ══════════════════ -->
+  <section class="mock-section">
+    <div class="section-eyebrow">Finding 1 — no row anywhere has a hover, press or selected state</div>
+    <div class="section-title"><code>--row-hover</code> / <code>--row-active</code> / <code>--row-selected</code> exist and are unused</div>
+    <div class="section-note">
+      Confirmed by grep across all five files — zero matches for these token names despite every
+      row setting <code>background: 'none'</code> at rest with no <code>:hover</code> rule at all.
+      Applied here exactly as the tokens are named, no new colour introduced.
+    </div>
+    <div class="states-strip">
+      <div class="state-cell">
+        <button class="row"><span class="ic" style="width:14px;height:14px;color:var(--agent-2);">${'{'}FILE_ICON{'}'}</span><span class="row-name">agent_chat.py</span></button>
+        <div class="state-cell-label">rest</div>
+      </div>
+      <div class="state-cell">
+        <button class="row" data-force="hover"><span class="ic" style="width:14px;height:14px;color:var(--agent-2);">${'{'}FILE_ICON{'}'}</span><span class="row-name">agent_chat.py</span></button>
+        <div class="state-cell-label">hover — --row-hover</div>
+      </div>
+      <div class="state-cell">
+        <button class="row" data-force="press"><span class="ic" style="width:14px;height:14px;color:var(--agent-2);">${'{'}FILE_ICON{'}'}</span><span class="row-name">agent_chat.py</span></button>
+        <div class="state-cell-label">press — --row-active</div>
+      </div>
+      <div class="state-cell">
+        <button class="row" data-force="selected"><span class="ic" style="width:14px;height:14px;color:var(--agent-2);">${'{'}FILE_ICON{'}'}</span><span class="row-name">agent_chat.py</span></button>
+        <div class="state-cell-label">selected — --row-selected</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════ Composite: the panel itself ══════════════════ -->
+  <section class="mock-section">
+    <div class="section-eyebrow">The panel, assembled</div>
+    <div class="section-title">Files tab open, alongside a loops tab and a file preview</div>
+    <div class="section-note">
+      Everything above, together, inside <code>PanelShell</code>'s real proportions. Search field
+      gets a leading icon and a clear button (finding 5); tree rows carry the hover/selected
+      treatment; directories now distinguish <code>folder_open</code> from a closed state — see
+      <code>RATIONALE.md</code> for why the real fix needs an <code>Icon.tsx</code> map entry this
+      mock cannot make; a light connecting guide marks depth without literal texture (clause 7).
+    </div>
+    <div class="frame-pair">
+      <!-- Files tab -->
+      <div class="frame-col">
+        <div class="frame-col-label">Files — tree, search, states</div>
+        <div class="panel-frame">
+          <div class="panel-strip">
+            <div class="tab-pill" data-active="true"><span class="tab-icon-slot" style="width:14px;height:14px;"><span class="tab-identity-icon">${'{'}FOLDER_O{'}'}</span></span><span class="tab-label">Files</span></div>
+            <div class="tab-pill"><span class="tab-icon-slot" style="width:14px;height:14px;"><span class="tab-identity-icon">${'{'}LOOP_ICON{'}'}</span><span class="tab-close-icon">${'{'}CLOSE{'}'}</span></span><span class="tab-label">Loops</span></div>
+            <div class="tab-add">${'{'}ADD{'}'}</div>
+          </div>
+          <div class="panel-body">
+            <div class="search-wrap">
+              <span class="ic search-icon" style="width:14px;height:14px;">${'{'}SEARCH{'}'}</span>
+              <input class="search-input" placeholder="Search files…" value="agent" readonly />
+              <span class="search-clear">${'{'}CLOSE{'}'}</span>
+            </div>
+            <div style="flex:1; overflow:auto; padding-bottom:6px;">
+              <div class="row row-dir row-guide" style="--guide-x:17px;"><span class="row-chevron ic" data-open="true" style="width:12px;height:12px;">${'{'}CHEVRON_R{'}'}</span><span class="ic" style="width:14px;height:14px;">${'{'}FOLDER_O{'}'}</span><span class="row-name">hub/hub</span></div>
+              <button class="row row-guide" style="padding-left:34px; --guide-x:17px;" data-force="hover"><span class="ic" style="width:14px;height:14px;color:var(--agent-2);">${'{'}FILE_ICON{'}'}</span><span class="row-name">agent_chat.py</span></button>
+              <button class="row row-guide" data-active="true" style="padding-left:34px; --guide-x:17px;"><span class="ic" style="width:14px;height:14px;color:var(--agent-6);">${'{'}FILE_ICON{'}'}</span><span class="row-name">checkpoint_cutover.py</span></button>
+              <button class="row row-guide" style="padding-left:34px; --guide-x:17px;"><span class="ic" style="width:14px;height:14px;color:var(--agent-6);">${'{'}FILE_ICON{'}'}</span><span class="row-name">conversations.py</span></button>
+              <div class="row row-dir row-guide" style="--guide-x:17px;"><span class="row-chevron ic" style="width:12px;height:12px;">${'{'}CHEVRON_R{'}'}</span><span class="ic" style="width:14px;height:14px;">${'{'}FOLDER_C{'}'}</span><span class="row-name">hub/tests</span></div>
+              <div class="row row-dir row-guide" style="--guide-x:17px;"><span class="row-chevron ic" data-open="true" style="width:12px;height:12px;">${'{'}CHEVRON_R{'}'}</span><span class="ic" style="width:14px;height:14px;">${'{'}FOLDER_O{'}'}</span><span class="row-name">hub/ui/src/components/spec</span></div>
+              <button class="row row-guide" style="padding-left:34px; --guide-x:17px;"><span class="ic" style="width:14px;height:14px;color:var(--blue);">${'{'}FILE_TS{'}'}</span><span class="row-name">PanelShell.tsx</span></button>
+              <button class="row row-guide" style="padding-left:34px; --guide-x:17px;"><span class="ic" style="width:14px;height:14px;color:var(--blue);">${'{'}FILE_TS{'}'}</span><span class="row-name">FileTree.tsx</span></button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- File preview -->
+      <div class="frame-col">
+        <div class="frame-col-label">Finding 4 — file preview gets a header</div>
+        <div class="panel-frame">
+          <div class="panel-strip">
+            <div class="tab-pill" data-active="true" data-tooltip="hub/hub/checkpoint_cutover.py"><span class="tab-icon-slot" style="width:14px;height:14px;"><span class="tab-identity-icon">${'{'}FILE_ICON{'}'}</span></span><span class="tab-label">checkpoint_cutover.py</span></div>
+          </div>
+          <div class="preview-header">
+            <div class="breadcrumb">
+              <span class="breadcrumb-seg">hub</span><span class="breadcrumb-sep">/</span>
+              <span class="breadcrumb-seg">hub</span><span class="breadcrumb-sep">/</span>
+              <span class="breadcrumb-seg">checkpoint_cutover.py</span>
+            </div>
+            <div class="preview-actions">
+              <button class="icon-btn" data-force="hover" title="Copy path">${'{'}COPY{'}'}</button>
+              <button class="icon-btn" title="Refresh">${'{'}REFRESH{'}'}</button>
+            </div>
+          </div>
+          <div class="code-pane">
+<div><span class="ln">108</span><span class="kw">    successor</span>.bound_sender_kind = predecessor.bound_sender_kind</div>
+<div><span class="ln">109</span><span class="kw">    successor</span>.bound_sender_id = predecessor.bound_sender_id</div>
+<div><span class="ln">110</span><span class="kw">    successor</span>.lineage_id = predecessor.lineage_id  <span class="com"># inherits, never regenerates</span></div>
+<div><span class="ln">111</span></div>
+<div><span class="ln">112</span><span class="com"># D3: a lineage key beats a predecessor pointer because...</span></div>
+          </div>
+        </div>
+        <div class="state-cell-label" style="text-align:left; margin-top:6px;">Copy button shown mid-click (green check per the existing success token) — path is always visible now, not only in the truncated tab label.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════ Loops tab + toggle + skeleton ══════════════════ -->
+  <section class="mock-section">
+    <div class="section-eyebrow">Findings 6 &amp; 7 — a bare checkbox, and "Loading…" as plain text</div>
+    <div class="section-title">Loops tab: a real switch, and a skeleton that matches row shape</div>
+    <div class="section-note">
+      <code>LoopsIndexTab</code>'s "Show archived" is a native <code>&lt;input type="checkbox"&gt;</code>
+      today; <code>controls.html</code> already defines <code>.ctl-switch</code>. Loading state
+      replaces a centred "Loading…" paragraph with skeleton rows sized like the rows that will
+      actually arrive — <code>foundations.html</code>'s shimmer, not a spinner.
+    </div>
+    <div class="frame-pair">
+      <div class="frame-col">
+        <div class="frame-col-label">Loaded — ending-state badges unchanged (D17)</div>
+        <div class="panel-frame" style="height:280px;">
+          <div class="toolbar-row">
+            <span style="font-size:12px; color:var(--text-3);">3 running</span>
+            <div class="ctl-switch-row">
+              <span class="ctl-switch-label">Show archived</span>
+              <span class="ctl-switch"><span class="ctl-switch-thumb"></span></span>
+            </div>
+          </div>
+          <div style="flex:1; overflow:auto; padding:0 4px 6px;">
+            <div class="loop-row" data-force="hover">
+              <div class="loop-top"><span class="loop-name">conversations-continue phase 6 — fold outbound</span><span class="badge b-success"><span class="status-dot"></span>running</span></div>
+              <div class="loop-meta"><span class="ic" style="width:12px;height:12px;">${'{'}SMART_TOY{'}'}</span>@builder · queue 2</div>
+            </div>
+            <div class="loop-row">
+              <div class="loop-top"><span class="loop-name">S3 P2 — right panel mocks</span><span class="badge b-success"><span class="status-dot"></span>running</span></div>
+              <div class="loop-meta"><span class="ic" style="width:12px;height:12px;">${'{'}SMART_TOY{'}'}</span>@researcher · queue 0</div>
+            </div>
+            <div class="loop-row">
+              <div class="loop-top"><span class="loop-name">Migration 0085 — lineage backfill</span><span class="badge b-warning"><span class="status-dot"></span>1 open question</span></div>
+              <div class="loop-meta"><span class="ic" style="width:12px;height:12px;">${'{'}SMART_TOY{'}'}</span>@builder · queue 1</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="frame-col">
+        <div class="frame-col-label">Loading — skeleton rows, not "Loading…"</div>
+        <div class="panel-frame" style="height:280px;">
+          <div class="toolbar-row"><span class="sk sk-line w-60" style="height:12px;"></span></div>
+          <div style="flex:1; padding-top:4px;">
+            <div class="sk-row"><span class="sk sk-icon"></span><span class="sk sk-line w-60"></span></div>
+            <div class="sk-row"><span class="sk sk-icon"></span><span class="sk sk-line" style="max-width:45%;"></span></div>
+            <div class="sk-row"><span class="sk sk-icon"></span><span class="sk sk-line" style="max-width:70%;"></span></div>
+            <div class="sk-row"><span class="sk sk-icon"></span><span class="sk sk-line w-60"></span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="legend">
+    Rejection test: every colour above resolves to a token in <code>hub/ui/src/index.css</code> ·
+    both themes checked · durations are <code>--dur-fast/base/slow</code> only, easing is
+    <code>--ease</code> only · radii derive from <code>--radius</code> · states shown, not just rest ·
+    same three index tabs, same file preview, same loops list as today — nothing removed, several
+    findings (context menu, breadcrumb, live-count badge, closed-folder glyph) demonstrated as
+    missing features per pre-authorisation, not silently implemented.
+  </div>
+</div>
+<script>
+  document.querySelector('.theme-toggle').addEventListener('click', () => {
+    document.getElementById('theme-label').textContent = document.documentElement.dataset.mode === 'dark' ? 'dark' : 'light'
+  })
+
+  // Icon placeholders -> real inline SVGs, lucide-shaped, matching Icon.tsx's actual glyphs
+  // (folder_open, chevron_right, close, add, search, refresh, content_copy, smart_toy, description).
+  const ICONS = {
+    FOLDER_O: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg>',
+    FOLDER_C: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>',
+    FILE_ICON: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2Z"/><path d="M14 2v6h6"/></svg>',
+    FILE_TS: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2Z"/><path d="M14 2v6h6"/><path d="M9 15v-1h3M10.5 14v4"/></svg>',
+    DOC_ICON: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2Z"/><path d="M14 2v6h6M9 13h6M9 17h6"/></svg>',
+    LOOP_ICON: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>',
+    CHEVRON_R: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%"><path d="m9 6 6 6-6 6"/></svg>',
+    CLOSE: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%"><path d="M18 6 6 18M6 6l12 12"/></svg>',
+    CLOSE_OTHERS: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="m9 9 6 6M15 9l-6 6"/></svg>',
+    CLOSE_RIGHT: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%"><path d="M4 12h10M10 7l5 5-5 5M19 5v14"/></svg>',
+    CLOSE_ALL: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%"><path d="M18 6 6 18M6 6l12 12"/><path d="M22 6 10 18"/></svg>',
+    ADD: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M12 5v14M5 12h14"/></svg>',
+    SEARCH: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>',
+    REFRESH: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg>',
+    COPY: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
+    SMART_TOY: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%"><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M12 8V4M9 2h6"/><circle cx="9" cy="14" r="1" fill="currentColor" stroke="none"/><circle cx="15" cy="14" r="1" fill="currentColor" stroke="none"/><path d="M9 18h6"/></svg>',
+  }
+  document.body.innerHTML = document.body.innerHTML.replace(/\$\{'\{'\}(\w+)\{'\}'\}/g, (m, name) => ICONS[name] ?? '')
+</script>
+</body>
+</html>

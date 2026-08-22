@@ -1273,3 +1273,95 @@ explore-only, matching S1 and S2's own first passes.
 importing `../../../hub/ui/src/index.css`) with realistic content spanning all three index tabs plus
 an open `file:` tab and an open `spec:` tab, reusing U0a/U0b's already-established vocabulary rather
 than inventing new primitives.
+
+## Iteration 18 — 2026-08-22T03:24:31+01:00 — S3 P2: validate + mock (right side panel)
+
+Branch/log/STATE.json reconciled cleanly on entry — clean tree, HEAD matched iteration 17's commit
+(`0993645`).
+
+**Validated every `RESEARCH.md` finding against `IDENTITY.md`'s rejection test before building
+anything**, same discipline as S1/S2. All 9 pass, nothing discarded: none touches the palette
+(clause 1 — every colour is a token, confirmed by grep against both mocks before screenshotting,
+only literal is `9999px` for full rounding, same precedent as S2's `.pill`/filter chips); both
+themes stay legible (clause 2, verified by screenshot below, not assumed); every duration is
+`--dur-fast/base/slow` and every easing is `--ease` (clause 3, grep-confirmed zero raw `ms` values);
+radii derive from `--radius*` (clause 4); reads as the same panel refined, not a different product
+— pill tabs are the existing `9999px` shape already used elsewhere in the app, not a new geometry
+(clause 5); nothing removed — same three index tabs, same file preview, same loops list, several
+findings (tab context menu, breadcrumb copy button, launcher live-count badge, closed-folder glyph)
+demonstrated as pre-authorised missing-feature findings rather than removed scope (clause 6); every
+state is shown, not just resting (clause 7 — hover/press/selected/focus-visible forced via
+`data-force` throughout, same pattern as S1/S2).
+
+**Built two variants**, matching S1/S2's precedent of restrained + considered (not a third
+"expressive" — nothing in this pass's findings needed a third degree; see RATIONALE note to write
+in P4 if that judgement should be revisited):
+
+- `design/mocks/S3/restrained.html` — smallest fix: apply `--row-hover/-active/-selected` to every
+  row exactly as named, a real CSS hover/press on the launcher cards and tab strip (still both icons
+  per tab, no crossfade), a search icon, and the file's path once above the preview content. No
+  context menu, no live-count badge, no shimmer animation — checkbox stays native.
+- `design/mocks/S3/considered.html` — full application: pill-shaped tabs with a hover wash, the
+  identity/close icon crossfade via a `grid` slot (saves horizontal density per clause 6, matching
+  T3's pattern), tooltips on truncated tab labels, a right-click context menu built from
+  `controls.html`'s `.menu-panel`/`.menu-item` (demonstrated, not wired to real close-others/-right
+  logic — a mock, not a feature), a live-count badge on the loops launcher card sourced from the
+  number `LoopsIndexTab` already computes, a breadcrumb + copy-path header on `FilePreview`, and
+  `foundations.html`'s shimmer skeleton replacing "Loading…" text. `LoopsIndexTab`'s "Show archived"
+  checkbox becomes `controls.html`'s `.ctl-switch`.
+
+**Screenshotted, both variants, both themes — and found a real bug by looking.**
+`scripts/uishot.py` assumes the live app's own "Switch to dark mode" button role (same quirk S1
+iteration 10/11 and S2 iteration 14 already worked around) — these static mocks flip
+`document.documentElement.dataset.mode` via their own `.theme-toggle` handler instead, so used a
+direct-Playwright script at `%TEMP%\s3shots\capture.py` (1400×1000 viewport, full-page PNGs,
+console errors captured) rather than `uishot.py` directly. Zero console errors beyond the
+pre-existing `net::ERR_FILE_NOT_FOUND` for a webfont the standalone mocks don't carry (same as every
+prior pass — not a regression).
+
+Read all four PNGs. **`restrained.html` had a real layout bug, invisible from source review alone:**
+the tab-strip close icon (`.tab-close`, used three times) had no explicit `width`/`height` — CSS
+class only set `display: inline-flex` with no sizing — while its inlined SVG used `width="100%"
+height="100%"`. With no intrinsic container size to resolve the percentage against, the `X` glyph
+ballooned to fill the entire `.panel-frame`, covering the tree and the code pane in both the "Files
+— tab hover, search icon, tree states" and "File preview" composite panels. This was present in
+`considered.html`'s equivalent icon too on first write, but that file's version sits inside
+`.tab-icon-slot` which the CSS *does* give an explicit `14px`×`14px` inline size (a `grid`
+crossfade slot needs one to stack two icons), so it never manifested there — confirmed by grep that
+every other icon usage across both files has an explicit pixel size, either via an inline style or a
+sized parent. Fixed by giving `.tab-close` `width: 14px; height: 14px; flex: none` directly, matching
+the sizing convention every other bare icon span in these two files already follows. Re-screenshotted
+`restrained-dark.png`/`restrained-light.png` after the fix — both composite panels render correctly,
+full tree and code pane visible, tab strip legible.
+
+No other defects found on inspection: badges, agent-colour dots, the pill-tab crossfade-forced state,
+the context-menu illustration, and the skeleton shimmer all render as intended in both themes; light
+theme keeps contrast on every token-derived colour (green "running" badge, amber "1 open question",
+blue syntax highlight in the code pane).
+
+**Verified, not assumed.**
+- `grep -nE "#[0-9a-fA-F]{3,8}\b"` against both files → zero matches (no literal hex).
+- `grep -noE "[0-9]+ms"` against both files → zero matches (no raw duration).
+- `grep -nE "border-radius:\s*[0-9]"` against both files → only `9999px` (full rounding, same
+  precedent as S2), no other literal radius.
+- Four screenshots read via the `Read` tool, not assumed correct from source — this is what caught
+  the `.tab-close` sizing bug.
+- `git status --short` after the fix → only the two new `design/mocks/S3/*.html` files plus the
+  usual `.claude/autonomous/` state churn. Nothing under `hub/ui/src` touched (mock-only pass, S3
+  carries no C6-style exception).
+
+**Not done this iteration, deliberately:** no `RATIONALE.md`, no review-index entry — those are P4's
+job, matching `screen_pass_protocol`'s four-pass split and S1/S2's own iteration boundaries. P3 (a
+second look-and-critique pass) is also not yet run; the bug caught above was found during this same
+build+screenshot pass rather than a separate iterate pass, which is earlier than S1/S2's own P3 found
+theirs — worth noting in P4 whether S3 needs a full second P3 iteration or can move straight to P4's
+finish since the obvious defect already surfaced and was fixed here.
+
+**Next:** S3 P3 — a second, deliberate look at both variants beside their pre-mock screenshots (none
+taken of the *current* `PanelShell` itself yet — worth capturing one for the before/after in P4)
+critiquing honestly against the rejection test one more time, particularly: whether the considered
+variant's context-menu illustration reads as clearly "demonstrated, not wired" or risks looking like
+a broken real control; whether the tooltip's `::after` CSS-only approach errs from how a real
+`title`-replacement tooltip component would behave; and whether the two-variant set (no third
+"expressive") is the right call for this screen the way it was for S1/S2, or whether the panel's
+"always on screen" status (unlike S1/S2's page-navigated surfaces) argues for a subtler third degree.
