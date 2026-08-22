@@ -2537,3 +2537,61 @@ build `design/mocks/S7/<variant>.html` — two or three degrees of refinement, s
 importing `../../../hub/ui/src/index.css`, realistic content (several agents across different
 statuses including `stalled`, a populated and an empty agent-grid variant), all interaction states,
 both themes.
+
+## Iteration 34 — 2026-08-22T05:47:53+01:00 — S7 P2 (screen_pass_protocol.P2_validate_and_mock)
+
+Branch and log verified to match STATE.json before starting: `git log --oneline -5` showed HEAD at
+`9fa103d` (the prior iteration's heartbeat-release commit), matching STATE.json's implied position.
+
+**Validated S7's RESEARCH.md against `design/IDENTITY.md`'s rejection test first**, as the protocol
+requires, before writing any HTML. Every proposed fix passed:
+
+- Token-driven transitions replacing the literal `0.15s` string, focus-visible/press states, and a
+  hover/active rule for `.lifted-surface` — clauses 1/3 (tokens only), 7 (states in scope).
+- Section-grouping dividers using the existing `--border-region` hairline the page's own header
+  already uses — no new divider style, clause 3/4 untouched.
+- Icons on the three workspace buttons, sourced from `Icon.tsx`'s already-mapped `task_alt`
+  (`ListChecks`), `description` (`FileText`), `schedule` (`Clock`) — clause 5 (no new icon source).
+- A status-change one-shot ring, kept explicitly distinct from the always-on `pulse` glow the
+  component comment marks as deliberate — does not touch the do-not-undo finding from P1.
+- The populated-preview empty state (missing-feature #3) — opacity/grayscale only, no new colour,
+  clause 1 intact.
+
+Nothing from RESEARCH.md was discarded; all of it cleared the test.
+
+**Built two variants**, not three — `restrained.html` (token-driven states, dressed empty/loading,
+no structural change) and `considered.html` (adds grouping dividers, workspace icons, stagger-in,
+status-change ring, populated-preview empty state). Judged a third "expressive" variant would not
+show a reader anything considered.html doesn't already demonstrate at this surface's scale — the
+`limits`/`pre_authorised` fields explicitly allow choosing variant count/names per screen, and S7 is
+six loosely-coupled inline sections rather than one focal interaction, so two degrees of the same
+language read as distinct while a third would just repeat considered.html's ideas with more
+adjectives. Recorded here so P4's RATIONALE.md can state it as a deliberate choice, not an omission.
+
+Both files are self-contained HTML importing `../../../hub/ui/src/index.css` (real tokens, not
+copies), a light/dark toggle matching every prior screen's `data-mode` flip pattern, and realistic
+content: 5 agents spanning `running`/`waiting`/`stalled`/`idle` (including the `stalled` case
+RESEARCH.md and IDENTITY.md both call out), a populated budgets panel, four task-status chips, a
+5-entry activity ticker, plus a dedicated first-run section (empty + loading) and an interaction-
+states strip (resting/hover/press/focus-visible/status-change, satisfying rejection-test clause 7).
+
+**Verified by rendering, not by inspection alone.** `uishot.py` targets the live app and looks for a
+button named "Switch to dark mode" to trigger its theme click — these mocks use their own toggle, so
+per the pre-authorized fallback ("if uishot.py cannot render a mock, open the HTML with Playwright
+directly") a short inline Python/Playwright script opened each file directly, screenshotted the
+initial (dark) state, clicked `.theme-toggle`, and screenshotted again (light) — 4 PNGs total, all
+Read and visually checked: layout intact, both themes legible against the rejection test, no clipped
+text, the skeleton sheen and card stagger visible in the dark captures. 3 `net::ERR_FILE_NOT_FOUND`
+console errors appeared on both files (font subresources) — confirmed pre-existing and not
+introduced by this pass by running the identical check against `design/mocks/S6/restrained.html`,
+which threw the same 3 errors. Verification PNGs were deleted after review (`design/mocks/S7/
+_check_*.png`) since the repo's blanket `*.png` gitignore (see `dead_ends_inherited`) blocks
+committing them as-is and P3/P4 will produce the real before/after pair for the review index.
+
+`git status --short` before staging showed only the two new HTML files — no stray scratch files.
+`STATE.json` re-validated with `py -3.11 -c "import json; json.load(...)"` after editing.
+
+**Next:** S7 P3 — `screen_pass_protocol.P3_iterate`: screenshot both variants in both themes (same
+direct-Playwright approach as this pass, not `uishot.py`), Read the PNGs with a colder second look,
+critique honestly against the rejection test, and fix what's found. This pass's own review found the
+files clean, so P3 is a genuine second look, not a rerun of the same checks.

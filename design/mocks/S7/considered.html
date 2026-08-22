@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en" data-mode="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AgentWeave — Overview (considered)</title>
+<link rel="stylesheet" href="../../../hub/ui/src/index.css" />
+<style>
+  /* ══════════════════════════════════════════════════════════════
+     Mock only. Every colour/radius/duration/easing below resolves to
+     an existing token in hub/ui/src/index.css. Builds on restrained.html:
+     adds section-group dividers (RESEARCH.md's "no cue for which blocks
+     are related" finding), a stagger-in on the agent grid, icons on the
+     workspace buttons (task_alt/schedule/description already exist in
+     Icon.tsx — flagged missing feature #1), a status-dot pulse-on-CHANGE
+     demo (not just the existing static pulse-while-running), and a
+     populated-preview empty state (flagged missing feature #3) alongside
+     the plain one. Still the same six sections, same information, same
+     palette — full application of the motion/state scale, not a
+     redesign. See RATIONALE.md for what's rejected and why.
+     ══════════════════════════════════════════════════════════════ */
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { min-height: 100vh; padding-bottom: 80px; }
+
+  .doc { width: min(100%, 980px); margin-inline: auto; padding: 32px 28px 0; }
+
+  .doc-header {
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 24px;
+    padding-bottom: 28px; border-bottom: 1px solid var(--border-region); margin-bottom: 32px;
+  }
+  .doc-title { font-size: 22px; font-weight: 600; letter-spacing: -0.01em; }
+  .doc-subtitle { margin-top: 6px; font-size: 13px; color: var(--text-2); max-width: 760px; line-height: 1.55; }
+  .theme-toggle {
+    flex: none; display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px;
+    border-radius: var(--radius-lg); border: 1px solid var(--border); background: var(--surface-2);
+    color: var(--text); font-size: 12px; font-weight: 500; cursor: pointer;
+    transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+  }
+  .theme-toggle:hover { background: var(--surface-3); border-color: var(--border-hi); }
+  .theme-toggle:focus-visible { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring); outline: none; }
+
+  section.mock-section { margin-bottom: 44px; }
+  .section-eyebrow { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); margin-bottom: 6px; }
+  .section-title { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+  .section-note { font-size: 12.5px; color: var(--text-2); line-height: 1.6; max-width: 800px; margin-bottom: 18px; }
+  .section-note code { background: var(--surface-2); border-radius: var(--radius-sm); padding: 1px 5px; font-size: 11.5px; }
+
+  svg.ic { width: 1em; height: 1em; }
+
+  .overview-frame {
+    background: var(--bg); border: 1px solid var(--border-region); border-radius: var(--radius-lg);
+    padding: 24px; max-width: 900px;
+  }
+
+  /* ─────────── Grouping — the fix for "six blocks, one undifferentiated stack" ───────────
+     Groups related blocks under a shared eyebrow + a hairline divider one step lighter
+     than any control border (--border-region, same token the doc itself uses above),
+     rather than adding a second border style. Header/budgets are "state", agent grid is
+     "attention", workspace+tasks+activity is "navigate". Groups keep 24px between them;
+     items inside a group keep 16px — the rhythm now carries the hierarchy instead of a
+     single uniform 24px everywhere. */
+  .ov-group + .ov-group { margin-top: 28px; padding-top: 24px; border-top: 1px solid var(--border-region); }
+  .ov-group > * + * { margin-top: 16px; }
+  .ov-group-label { font-size: 10px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--text-3); margin: 0 0 2px; }
+
+  .ov-header h1 { font-size: 15px; font-weight: 650; color: var(--text); margin: 0; letter-spacing: -0.005em; }
+  .ov-header p { font-size: 12px; color: var(--text-3); margin: 4px 0 0; }
+
+  .ov-budgets {
+    border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface);
+    padding: 16px 18px;
+  }
+  .ov-budgets h2 { font-size: 13px; font-weight: 600; color: var(--text); margin: 0 0 10px; }
+  .ov-budget-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-top: 1px solid var(--border-region); }
+  .ov-budget-row:first-of-type { border-top: none; }
+  .ov-budget-label { font-size: 12px; color: var(--text-2); }
+  .ov-budget-value { font-size: 12px; color: var(--text); font-variant-numeric: tabular-nums; }
+  .ov-budget-chip {
+    display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; font-weight: 500;
+    padding: 1px 7px; border-radius: 9999px; margin-left: 8px;
+    background: color-mix(in srgb, var(--blue) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--blue) 24%, transparent);
+    color: var(--blue);
+  }
+
+  .ov-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+  .ov-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 10px; cursor: pointer; text-align: left; width: 100%; font: inherit; color: inherit;
+    transition: border-color var(--dur-fast) var(--ease), background-color var(--dur-fast) var(--ease),
+                box-shadow var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease);
+    animation: card-in var(--dur-slow) var(--ease) both;
+  }
+  @keyframes card-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+  @media (prefers-reduced-motion: reduce) { .ov-card { animation: none; } }
+  .ov-card:hover { border-color: var(--border-hi); background: var(--surface-2); box-shadow: 0 2px 8px rgb(0 0 0 / 0.16); }
+  .ov-card:active { transform: translateY(1px) scale(0.995); background: var(--row-active); }
+  .ov-card:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring); }
+  .ov-card-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .ov-dot { width: 8px; height: 8px; border-radius: 9999px; flex: none; transition: background-color var(--dur-base) var(--ease), box-shadow var(--dur-base) var(--ease); }
+  .ov-card-name { font-size: 13px; font-weight: 500; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ov-card-stats { display: flex; align-items: center; gap: 12px; font-size: 11px; color: var(--text-3); margin-bottom: 8px; }
+  .ov-ctx-track { height: 2px; border-radius: 9999px; background: var(--surface-3); overflow: hidden; margin-top: 6px; }
+  .ov-ctx-fill { height: 100%; border-radius: 9999px; transition: width var(--dur-slow) var(--ease); }
+  .ov-card-seen { font-size: 11px; color: var(--text-3); margin: 6px 0 0; }
+  .ov-card-msg { font-size: 11px; color: var(--text-3); margin: 2px 0 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* Status-change pulse — a one-shot ring expansion distinct from the existing
+     always-on `pulse` glow (kept, per RESEARCH.md's "do not undo" note). This
+     fires once when a status LABEL changes, so a transition reads as an event,
+     not just an instant colour swap. */
+  @keyframes status-change-ring {
+    0% { box-shadow: 0 0 0 0 var(--ring-color, var(--blue)); }
+    70% { box-shadow: 0 0 0 6px transparent; }
+    100% { box-shadow: 0 0 0 0 transparent; }
+  }
+  .ov-dot.just-changed { animation: status-change-ring var(--dur-slow) var(--ease) 1; }
+  @media (prefers-reduced-motion: reduce) { .ov-dot.just-changed { animation: none; } }
+
+  .ov-workspace { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .ov-work-btn {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 16px; cursor: pointer; border: none; font: inherit; text-align: left; width: 100%;
+    transition: box-shadow var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease),
+                background-color var(--dur-fast) var(--ease);
+  }
+  .ov-work-btn:hover { box-shadow: 0 2px 6px rgb(0 0 0 / 0.14), inset 0 1px var(--lift-hi); background: var(--surface-2); }
+  .ov-work-btn:active { box-shadow: inset 0 1px var(--press-lo); transform: translateY(1px); background: var(--row-active); }
+  .ov-work-btn:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring); }
+  .ov-work-icon { flex: none; width: 28px; height: 28px; border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center; background: var(--surface-3); color: var(--text-2); }
+  .ov-work-icon svg { width: 15px; height: 15px; }
+  .ov-work-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .ov-work-label { font-size: 12px; font-weight: 600; color: var(--text); }
+  .ov-work-detail { font-size: 11px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .ov-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .ov-chip {
+    display: inline-flex; align-items: center; gap: 6px; border-radius: 9999px; padding: 4px 10px 4px 8px;
+    font-size: 12px; background: var(--surface-2); border: 1px solid var(--border); color: var(--text-2);
+    cursor: pointer; transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease);
+  }
+  .ov-chip:hover { background: var(--row-hover); border-color: var(--border-hi); }
+  .ov-chip:active { transform: scale(0.97); background: var(--row-active); }
+  .ov-chip:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring); }
+  .ov-chip-dot { width: 6px; height: 6px; border-radius: 9999px; transition: transform var(--dur-fast) var(--ease); }
+  .ov-chip:hover .ov-chip-dot { transform: scale(1.3); }
+  .ov-chip-count { color: var(--text); font-weight: 500; }
+
+  .ov-ticker-wrap { position: relative; }
+  .ov-ticker {
+    display: flex; align-items: center; gap: 8px; overflow-x: auto; height: 28px; padding: 0 4px;
+    scrollbar-width: none;
+  }
+  .ov-ticker::-webkit-scrollbar { display: none; }
+  .ov-ticker-wrap::after {
+    content: ''; position: absolute; top: 0; right: 0; bottom: 0; width: 28px; pointer-events: none;
+    background: linear-gradient(to right, transparent, var(--bg));
+  }
+  .ov-pill {
+    display: inline-flex; align-items: center; gap: 6px; flex: none; border-radius: 9999px;
+    padding: 2px 8px; font-size: 11px; color: var(--text-2); background: var(--surface-2); border: 1px solid var(--border);
+    animation: pill-in var(--dur-base) var(--ease) both;
+  }
+  @keyframes pill-in { from { opacity: 0; transform: translateX(-4px); } to { opacity: 1; transform: translateX(0); } }
+  @media (prefers-reduced-motion: reduce) { .ov-pill { animation: none; } }
+  .ov-pill-dot { width: 5px; height: 5px; border-radius: 9999px; }
+  .ov-pill-dot.live { animation: pill-dot-pulse 1.6s var(--ease) infinite; }
+  @keyframes pill-dot-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+  @media (prefers-reduced-motion: reduce) { .ov-pill-dot.live { animation: none; } }
+
+  .ov-empty {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
+    padding: 28px 24px; text-align: center;
+  }
+  .ov-empty svg { width: 26px; height: 26px; color: var(--text-3); margin-bottom: 8px; }
+  .ov-empty-title { font-size: 13px; font-weight: 600; color: var(--text); margin: 0 0 4px; }
+  .ov-empty-detail { font-size: 12px; color: var(--text-3); margin: 0; }
+  .ov-empty-detail code { background: var(--surface-2); border-radius: var(--radius-sm); padding: 1px 5px; }
+
+  /* Populated-preview empty state — flagged missing feature #3. A ghosted sketch
+     of the shape that will exist, not just a sentence. Opacity-only, no new colour. */
+  .ov-empty-preview { position: relative; overflow: hidden; text-align: left; padding: 0; }
+  .ov-empty-preview-sketch { padding: 18px; opacity: 0.4; filter: grayscale(0.4); pointer-events: none; user-select: none; }
+  .ov-empty-preview-overlay {
+    position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: linear-gradient(180deg, transparent, var(--surface) 55%);
+    padding: 16px;
+  }
+  .ov-empty-preview-overlay svg { width: 24px; height: 24px; color: var(--text-3); margin-bottom: 8px; }
+
+  .ov-skeleton-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+  .ov-skel-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px; height: 92px; }
+  .ov-skel-line { height: 8px; border-radius: 4px; background: var(--surface-3); overflow: hidden; position: relative; }
+  .ov-skel-line + .ov-skel-line { margin-top: 8px; }
+  .ov-skel-line::after {
+    content: ''; position: absolute; inset: 0; transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, var(--row-hover), transparent);
+    animation: skel-sheen 1.4s var(--ease) infinite;
+  }
+  @keyframes skel-sheen { to { transform: translateX(100%); } }
+  @media (prefers-reduced-motion: reduce) { .ov-skel-line::after { animation: none; } }
+
+  .states-strip { display: flex; gap: 22px; flex-wrap: wrap; margin-top: 6px; }
+  .state-cell { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+  .state-cell-label { font-size: 10.5px; color: var(--text-3); font-family: var(--font-mono, monospace); }
+
+  .legend { max-width: 900px; margin: 48px auto 0; padding: 16px 18px; border-top: 1px solid var(--border-region); font-size: 11.5px; color: var(--text-3); line-height: 1.7; }
+</style>
+</head>
+<body>
+<div class="doc">
+  <div class="doc-header">
+    <div>
+      <div class="doc-title">Overview — considered</div>
+      <div class="doc-subtitle">
+        Full application of the motion and state scale on top of restrained.html: grouping
+        dividers replace the uniform 24px stack, the agent grid staggers in, workspace buttons
+        get icons, and both a plain and a populated-preview empty state are shown. Same six
+        sections, same information, same palette.
+      </div>
+    </div>
+    <button class="theme-toggle" onclick="document.documentElement.dataset.mode = document.documentElement.dataset.mode === 'dark' ? 'light' : 'dark'; document.getElementById('theme-label').textContent = document.documentElement.dataset.mode">
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+      <span id="theme-label">dark</span>
+    </button>
+  </div>
+
+  <!-- ══════════════════ Populated overview ══════════════════ -->
+  <section class="mock-section">
+    <div class="section-eyebrow">OverviewPage — populated</div>
+    <div class="section-title">Landing surface, five agents across four statuses, grouped</div>
+    <div class="section-note">
+      Three groups replace the uniform stack — <em>state</em> (header + budgets), <em>attention</em>
+      (agent grid, the "is something broken" signal moved conceptually to its own group per the
+      F-pattern research), <em>navigate</em> (workspace shortcuts, tasks, activity). Grouping uses
+      the same <code>--border-region</code> hairline the page's own header already uses — no new
+      divider style. Cards stagger in with <code>--dur-slow</code>; reduced-motion users get the
+      un-animated end state directly.
+    </div>
+
+    <div class="overview-frame">
+      <div class="ov-group">
+        <div class="ov-header">
+          <h1>Overview</h1>
+          <p>5 agents · 12 tasks · agentweave-hub</p>
+        </div>
+        <div class="ov-budgets">
+          <h2>Budgets</h2>
+          <div class="ov-budget-row">
+            <span class="ov-budget-label">Session total</span>
+            <span class="ov-budget-value">$4.82 <span class="ov-budget-chip">under budget</span></span>
+          </div>
+          <div class="ov-budget-row">
+            <span class="ov-budget-label">claude-1</span>
+            <span class="ov-budget-value">$1.94</span>
+          </div>
+          <div class="ov-budget-row">
+            <span class="ov-budget-label">codex-2</span>
+            <span class="ov-budget-value">$1.20</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="ov-group">
+        <p class="ov-group-label">Attention</p>
+        <div class="ov-grid">
+          <button class="ov-card" type="button" style="animation-delay: 0ms;">
+            <div class="ov-card-head"><span class="ov-dot" style="background: var(--green); box-shadow: 0 0 0 2px color-mix(in srgb, var(--green) 25%, transparent);"></span><span class="ov-card-name">claude-1</span></div>
+            <div class="ov-card-stats"><span>3 tasks</span><span>18 msgs</span></div>
+            <div class="ov-ctx-track"><div class="ov-ctx-fill" style="width: 34%; background: var(--green);"></div></div>
+            <p class="ov-card-seen">last seen 2m ago</p>
+            <p class="ov-card-msg">Implementing migration 0085…</p>
+          </button>
+          <button class="ov-card" type="button" style="animation-delay: 40ms;">
+            <div class="ov-card-head"><span class="ov-dot just-changed" style="background: var(--amber); --ring-color: var(--amber);"></span><span class="ov-card-name">codex-2</span></div>
+            <div class="ov-card-stats"><span>1 task</span><span>6 msgs</span></div>
+            <div class="ov-ctx-track"><div class="ov-ctx-fill" style="width: 61%; background: var(--amber);"></div></div>
+            <p class="ov-card-seen">last seen 4m ago</p>
+            <p class="ov-card-msg">Waiting on operator answer</p>
+          </button>
+          <button class="ov-card" type="button" style="animation-delay: 80ms;">
+            <div class="ov-card-head"><span class="ov-dot" style="background: var(--amber); box-shadow: 0 0 0 2px color-mix(in srgb, var(--amber) 25%, transparent);"></span><span class="ov-card-name">claude-3</span></div>
+            <div class="ov-card-stats"><span>2 tasks</span><span>41 msgs</span></div>
+            <div class="ov-ctx-track"><div class="ov-ctx-fill" style="width: 88%; background: var(--amber);"></div></div>
+            <p class="ov-card-seen">last seen 19m ago</p>
+            <p class="ov-card-msg">Stalled — heartbeat lost mid-run</p>
+          </button>
+          <button class="ov-card" type="button" style="animation-delay: 120ms;">
+            <div class="ov-card-head"><span class="ov-dot" style="background: var(--text-3);"></span><span class="ov-card-name">codex-4</span></div>
+            <div class="ov-card-stats"><span>0 tasks</span><span>2 msgs</span></div>
+            <p class="ov-card-seen">last seen 1h ago</p>
+          </button>
+          <button class="ov-card" type="button" style="animation-delay: 160ms;">
+            <div class="ov-card-head"><span class="ov-dot" style="background: var(--green); box-shadow: 0 0 0 2px color-mix(in srgb, var(--green) 25%, transparent);"></span><span class="ov-card-name">claude-5</span></div>
+            <div class="ov-card-stats"><span>4 tasks</span><span>27 msgs</span></div>
+            <div class="ov-ctx-track"><div class="ov-ctx-fill" style="width: 22%; background: var(--green);"></div></div>
+            <p class="ov-card-seen">last seen just now</p>
+            <p class="ov-card-msg">Running hub/tests/test_migrations.py…</p>
+          </button>
+        </div>
+      </div>
+
+      <div class="ov-group">
+        <p class="ov-group-label">Navigate</p>
+        <div class="ov-workspace" aria-label="Project workspace summary">
+          <button class="ov-work-btn lifted-surface" type="button">
+            <span class="ov-work-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg></span>
+            <span class="ov-work-body"><span class="ov-work-label">Tasks</span><span class="ov-work-detail">12 total</span></span>
+          </button>
+          <button class="ov-work-btn lifted-surface" type="button">
+            <span class="ov-work-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg></span>
+            <span class="ov-work-body"><span class="ov-work-label">Spec</span><span class="ov-work-detail">Requirements and evidence</span></span>
+          </button>
+          <button class="ov-work-btn lifted-surface" type="button">
+            <span class="ov-work-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
+            <span class="ov-work-body"><span class="ov-work-label">Jobs</span><span class="ov-work-detail">Scheduled agent work</span></span>
+          </button>
+        </div>
+
+        <div>
+          <h2 style="font-size:13px;font-weight:600;color:var(--text);margin:0 0 8px;">Tasks</h2>
+          <div class="ov-chips">
+            <button class="ov-chip" type="button"><span class="ov-chip-dot" style="background: var(--blue);"></span>In progress<span class="ov-chip-count">4</span></button>
+            <button class="ov-chip" type="button"><span class="ov-chip-dot" style="background: var(--amber);"></span>Under review<span class="ov-chip-count">2</span></button>
+            <button class="ov-chip" type="button"><span class="ov-chip-dot" style="background: var(--green);"></span>Approved<span class="ov-chip-count">5</span></button>
+            <button class="ov-chip" type="button"><span class="ov-chip-dot" style="background: var(--red);"></span>Revision needed<span class="ov-chip-count">1</span></button>
+          </div>
+        </div>
+
+        <div>
+          <h2 style="font-size:13px;font-weight:600;color:var(--text);margin:0 0 8px;">Activity</h2>
+          <div class="ov-ticker-wrap">
+            <div class="ov-ticker">
+              <span class="ov-pill" style="animation-delay:0ms;"><span class="ov-pill-dot live" style="background: var(--green);"></span><span style="font-weight:500;color:var(--text);">claude-5</span>task started<span style="color:var(--text-3);">just now</span></span>
+              <span class="ov-pill" style="animation-delay:30ms;"><span class="ov-pill-dot" style="background: var(--amber);"></span><span style="font-weight:500;color:var(--text);">claude-3</span>context warning<span style="color:var(--text-3);">3m ago</span></span>
+              <span class="ov-pill" style="animation-delay:60ms;"><span class="ov-pill-dot" style="background: var(--green);"></span><span style="font-weight:500;color:var(--text);">codex-2</span>question asked<span style="color:var(--text-3);">4m ago</span></span>
+              <span class="ov-pill" style="animation-delay:90ms;"><span class="ov-pill-dot" style="background: var(--green);"></span><span style="font-weight:500;color:var(--text);">claude-1</span>task completed<span style="color:var(--text-3);">6m ago</span></span>
+              <span class="ov-pill" style="animation-delay:120ms;"><span class="ov-pill-dot" style="background: var(--green);"></span><span style="font-weight:500;color:var(--text);">codex-4</span>agent connected<span style="color:var(--text-3);">1h ago</span></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════ Empty states — plain and populated-preview ══════════════════ -->
+  <section class="mock-section">
+    <div class="section-eyebrow">First run — missing feature #3, mocked and flagged</div>
+    <div class="section-title">Empty state variants</div>
+    <div class="section-note">
+      Left: the same dressed empty state as restrained.html. Right: a populated-preview — a
+      ghosted, non-interactive sketch of what the grid looks like once agents connect, gradient-
+      masked into the same message. This is a genuine options-widening idea per the pre-
+      authorization, not a required change; RATIONALE.md records both as candidates.
+    </div>
+    <div style="display:flex; gap:16px; flex-wrap:wrap;">
+      <div style="flex:1; min-width:320px;">
+        <div class="state-cell-label" style="margin-bottom:8px;">plain — title + detail</div>
+        <div class="ov-empty">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin: 0 auto 8px;"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4M8 16h.01M16 16h.01"/></svg>
+          <p class="ov-empty-title">No agents connected</p>
+          <p class="ov-empty-detail">Run <code>agentweave start</code> to connect agents.</p>
+        </div>
+      </div>
+      <div style="flex:1; min-width:320px;">
+        <div class="state-cell-label" style="margin-bottom:8px;">populated-preview — candidate, not required</div>
+        <div class="ov-empty ov-empty-preview">
+          <div class="ov-empty-preview-sketch ov-grid">
+            <div class="ov-card"><div class="ov-card-head"><span class="ov-dot" style="background: var(--green);"></span><span class="ov-card-name">claude-1</span></div><div class="ov-card-stats"><span>2 tasks</span></div></div>
+            <div class="ov-card"><div class="ov-card-head"><span class="ov-dot" style="background: var(--text-3);"></span><span class="ov-card-name">codex-2</span></div><div class="ov-card-stats"><span>0 tasks</span></div></div>
+          </div>
+          <div class="ov-empty-preview-overlay">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4M8 16h.01M16 16h.01"/></svg>
+            <p class="ov-empty-title">No agents connected</p>
+            <p class="ov-empty-detail">Run <code>agentweave start</code> to connect agents.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="height: 20px;"></div>
+    <div class="state-cell-label" style="margin-bottom:8px;">loading — shaped like the grid it replaces</div>
+    <div class="ov-skeleton-grid" style="max-width: 460px;">
+      <div class="ov-skel-card"><div class="ov-skel-line" style="width:60%;"></div><div class="ov-skel-line" style="width:40%;"></div><div class="ov-skel-line" style="width:80%;"></div></div>
+      <div class="ov-skel-card"><div class="ov-skel-line" style="width:50%;"></div><div class="ov-skel-line" style="width:35%;"></div><div class="ov-skel-line" style="width:70%;"></div></div>
+    </div>
+  </section>
+
+  <!-- ══════════════════ Interaction states ══════════════════ -->
+  <section class="mock-section">
+    <div class="section-eyebrow">Interaction states</div>
+    <div class="section-title">Card, workspace button, chip, status-change</div>
+    <div class="section-note">
+      The status-change ring is a one-shot animation, distinct from the existing always-on
+      <code>pulse</code> glow kept from the current component (do-not-undo, per RESEARCH.md) —
+      it marks the moment a status transitions, not an ongoing state.
+    </div>
+    <div class="states-strip">
+      <div class="state-cell">
+        <button class="ov-card" type="button" style="width:180px; animation:none;">
+          <div class="ov-card-head"><span class="ov-dot" style="background: var(--green);"></span><span class="ov-card-name">claude-1</span></div>
+        </button>
+        <span class="state-cell-label">resting</span>
+      </div>
+      <div class="state-cell">
+        <button class="ov-card" type="button" style="width:180px; animation:none; border-color: var(--border-hi); background: var(--surface-2); box-shadow: 0 2px 8px rgb(0 0 0 / 0.16);">
+          <div class="ov-card-head"><span class="ov-dot" style="background: var(--green);"></span><span class="ov-card-name">claude-1</span></div>
+        </button>
+        <span class="state-cell-label">hover — lift + surface-2</span>
+      </div>
+      <div class="state-cell">
+        <button class="ov-card" type="button" style="width:180px; animation:none; outline:none; box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring);">
+          <div class="ov-card-head"><span class="ov-dot" style="background: var(--green);"></span><span class="ov-card-name">claude-1</span></div>
+        </button>
+        <span class="state-cell-label">focus-visible</span>
+      </div>
+      <div class="state-cell">
+        <div class="ov-card" style="width:180px; animation:none; cursor:default;">
+          <div class="ov-card-head"><span class="ov-dot just-changed" style="background: var(--red); --ring-color: var(--red);"></span><span class="ov-card-name">claude-3</span></div>
+        </div>
+        <span class="state-cell-label">status just changed — one-shot ring</span>
+      </div>
+      <div class="state-cell">
+        <button class="ov-work-btn lifted-surface" type="button" style="width:150px; box-shadow: inset 0 1px var(--press-lo); transform: translateY(1px); background: var(--row-active);">
+          <span class="ov-work-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg></span>
+          <span class="ov-work-label">Tasks</span>
+        </button>
+        <span class="state-cell-label">pressed</span>
+      </div>
+    </div>
+  </section>
+
+  <div class="legend">
+    Rejection test: every colour resolves to a token in <code>hub/ui/src/index.css</code> · both
+    themes via the toggle above · durations are <code>--dur-fast</code>/<code>--dur-base</code>/
+    <code>--dur-slow</code> only, easing is <code>--ease</code> only, all motion respects
+    <code>prefers-reduced-motion</code> · radii derive from <code>--radius</code> · resting, hover,
+    press, focus-visible and a status-change transition all shown · same six sections, same
+    information as <code>OverviewPage.tsx</code> today, plus icons and grouping — nothing removed.
+  </div>
+</div>
+</body>
+</html>
