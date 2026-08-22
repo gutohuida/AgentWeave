@@ -2325,3 +2325,90 @@ clause 5 with a day's distance from having written them rather than an hour's. F
 adversarial look turns up; if genuinely nothing turns up, say so explicitly and name what was
 specifically checked, the same way this pass's own P1-recap did. P4 (second iteration + `RATIONALE.md`
 + add to `design/mocks/index.html`) is the firing after that.
+
+## Iteration 31 — 2026-08-22T05:22:51+01:00 — S6 P3: adversarial iterate — questions and permission prompts
+
+**Branch state on entry.** `autonomous/2026-08-21-refine-and-continue` at `9e77010` (heartbeat release
+after S6 P2). Matched STATE.json. Clean tree.
+
+**Went beyond P2's own screenshot check, per the previous pass's own instruction.** P2 already
+screenshotted all four combinations (variant × theme) at resting state and read every PNG — genuinely
+thorough, but resting state only. This pass forced real interaction with Playwright rather than relying
+on the `data-force="press"` attribute the mocks themselves expose for static demonstration:
+
+- Real keyboard `:focus-visible` via `page.keyboard.press("Tab")` walking to Deny, both files, both
+  themes — ring renders correctly using `--bg`/`--ring` tokens.
+- Real mouse `:hover` on `.btn-scope` ("Always allow this session") and `.q-row`, both files, both
+  themes.
+- Real `mousedown`-held `:active` on Allow (not just the `data-force` static demonstration), both
+  files, both themes — visible press state (`--primary-active` fill, inset `--press-lo`).
+- A 420px narrow-viewport full-page capture of both files (below the 900px content column) to check
+  wrapping behaviour nothing in P1/P2 exercised.
+
+**One false alarm, chased down rather than left ambiguous.** An initial debug script (three raw `Tab`
+presses, no wait, checking `getComputedStyle` immediately) showed Deny's focus-visible `box-shadow`
+completely absent in `considered.html` — looked like a real regression against `restrained.html`, which
+had shown the ring correctly in P2's own screenshots. Investigated rather than assumed: re-ran the same
+check with an explicit 300ms wait before reading computed style, and the ring appeared exactly as
+specified (`rgb(250,250,250) 0 0 0 2px, rgb(80,99,216) 0 0 0 4px` in light mode, matching `--bg`/`--ring`
+precisely). The absence was `getComputedStyle` sampled mid-transition at t≈0, since `box-shadow`
+transitions over `--dur-fast` (150ms) and my first debug script had zero wait between the Tab press and
+the style read. Confirmed this was a timing artifact of the *test script*, not a defect in the mock, by
+reproducing the same false negative on `restrained.html` too when the wait was removed there as well —
+both files behave identically and correctly once actually settled. Recorded here so a future pass does
+not repeat the same false alarm.
+
+**Confirmed intentional, not a gap:** `restrained.html`'s `.q-row` has no `:hover` rule at all (static
+across the hover screenshot), while `considered.html`'s does. This matches both files' own stated intent
+(restrained = smallest fix, considered = fuller state coverage) — not an oversight in restrained.
+
+**Checked the blocking-question agent-name colour against the real component before treating it as a
+new design decision.** `.q-agent.blocking { color: var(--red); }` overrides an agent's own identity
+colour with the blocking-state red — worth double-checking against IDENTITY.md's "colour reinforces
+identity, never carries it alone" clause. Read `hub/ui/src/components/questions/QuestionsPanel.tsx`
+directly: line 40 already does `style={{ color: 'var(--red)' }}` for `q.from_agent` on a blocking
+question in the **real, shipped** component today. The mock is reproducing existing, deliberate product
+behaviour, not introducing a new one — correctly left alone.
+
+**One genuine, verified pre-existing defect found and recorded, not fixed** (mocks-only scope for this
+queue item — the C6 exception does not apply here). `hub/ui/src/components/agents/PermissionRequestCard.tsx:103`
+sets `fontFamily: 'var(--font-mono)'` as an inline style. Grepped the whole of `hub/ui/src` and
+`index.css`: `--font-mono` is **never declared** as a CSS custom property anywhere — the app's actual
+monospace styling comes from a `.font-mono` utility class (`index.css:229-230`, applied to
+`code, pre, kbd, samp`), not a variable of that name. The inline style therefore resolves to nothing in
+the browser today, so the command-detail text in the real, running `PermissionRequestCard` likely does
+**not** render in monospace despite the component's evident intent. Both S6 mock files independently
+wrote `font-family: var(--font-mono, ui-monospace, monospace)` — same broken variable name, but with a
+CSS `var()` fallback that makes it render correctly regardless. Net effect: the mocks accidentally read
+*better* than the current shipped component on this one specific detail, which a morning reader comparing
+mock-to-real might notice as an unexplained improvement. Recording it here and flagging it for
+`RATIONALE.md` in P4, rather than fixing `PermissionRequestCard.tsx` itself, which is out of this queue
+item's scope (mocks only). A real fix later is small: either add `--font-mono` as a declared token, or
+change the inline style to `className="font-mono"`.
+
+**Re-checked clause 5 with distance, as instructed.** Read both mock files again in full and set them
+beside a fresh read of the three real components (`PermissionRequestCard.tsx`, `AgentQuestionCard.tsx`,
+`QuestionsPanel.tsx`/`AnswerForm.tsx`). Still reads as the same product refined — button vocabulary,
+spacing, and radius all match the rest of the product; nothing added a second geometry or a new hue.
+Confirms P2's own conclusion rather than repeating it uncritically.
+
+**No mock-file changes this pass.** Every check confirmed correctness or resolved a false alarm; no
+defect was found *in* `restrained.html`/`considered.html` themselves. Recorded honestly, matching the
+project's own standard for reporting a clean pass rather than manufacturing a fix.
+
+**Verified.** Screenshot/debug work done via `testbed/scratch/shot_s6_p3.py` and ad hoc `py -3.11 -c`
+Playwright snippets, all against the gitignored `testbed/scratch/` tree — confirmed via
+`git check-ignore -v` before writing, deleted (`shot_s6_p3.py` and its `s6_p3_shots/` output directory)
+after use. `git status --short` after cleanup showed only `.claude/autonomous/STATE.json` modified.
+`STATE.json` re-validated with `py -3.11 -c "import json; json.load(open(...))"` after each edit.
+
+**Next:** S6 P4 — `screen_pass_protocol.P4_finish`: a second iteration on the same basis (nothing to
+change in the mocks themselves this time, since P3 found no defect in them — only the noted
+`--font-mono` finding in the real component, which belongs in `RATIONALE.md`, not a mock edit), then
+write `design/mocks/S6/RATIONALE.md` (what P1 researched, what P2 built and why, what was rejected under
+which IDENTITY.md clause — honestly, nothing was rejected this screen, P1's research cleared the
+rejection test cleanly — and the `--font-mono` finding), then add S6 to `design/mocks/index.html`. Before
+assuming S6 is the only screen missing from the index, check whether `design/mocks/index.html` exists yet
+at all and which of S1–S5 it already covers — Z's own instruction is to rebuild the index whenever a
+screen finishes its four passes, so if it was never started, P4 needs to true up the whole index, not
+just append S6.
