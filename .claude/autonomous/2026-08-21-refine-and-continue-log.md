@@ -1191,3 +1191,85 @@ and read the T3 Code sourcemaps for the closest equivalents (`RightPanelTabs.tsx
 `RightPanelSheet.tsx`, `FileBrowserPanel.tsx`, already named in `STATE.json`'s S3 queue entry as the
 closest reference material). Write `design/mocks/S3/RESEARCH.md`. Do not build a mock this iteration —
 P2 is the next firing, per the established one-pass-per-firing rhythm.
+
+## Iteration 17 — 2026-08-22T03:13:31+01:00 — S3 P1: explore (the right side panel)
+
+Branch/log/STATE.json reconciled cleanly on entry — clean tree, HEAD matched iteration 16's commit
+(`0ce17cc`, the release-heartbeat commit).
+
+**Read in full, including comments:** `PanelShell.tsx`, `FileTree.tsx`, `FilePreview.tsx`,
+`SpecIndexTab.tsx`, `SpecDocumentBrowser.tsx` (the shared engine behind `SpecIndexTab` and the
+Ctrl/Cmd+K picker), `LoopsIndexTab.tsx`, `FilesIndexTab.tsx`, `fileIcons.ts`, and `RowMenu.tsx` (the
+tab strip's "+" affordance). Several deliberate decisions worth not undoing: `FilePreview`'s explicit
+refusal to reuse `MarkdownMessage` (a load-bearing "no `rehypePlugins`, ever" trust boundary — a
+workspace file is content the operator opened themselves, agent/peer output is not); `PanelShell`'s
+launcher-grid empty state, replacing one line of grey text after the operator's 2026-08-19 "when we
+open the right screen and there is nothing there weird"; `fileIcons.ts`'s whole-filename-before-
+extension precedence and its explicit note that colour, not shape, carries recognition at 12px;
+`LoopsIndexTab`'s `ending_state`-only bucketing (design D17) and its 2026-08-19 agent-attribution row.
+
+**`grep`-confirmed, not assumed:** `--row-hover`/`--row-active`/`--row-selected` exist in
+`hub/ui/src/index.css` and appear in none of the five panel-tab component files — every row in
+`FileTree`, `FilesIndexTab`, `LoopsIndexTab`, and `SpecDocumentBrowser` sets a static `background` at
+rest with no `:hover` rule at all. Also confirmed `Icon.tsx`'s icon map has `folder_open` but no
+closed-folder entry, so `FileTree.tsx`'s unconditional `<Icon name="folder_open" ... />` shows the
+same glyph whether a directory is collapsed or expanded — a real, checkable gap, not a styling
+opinion, but one whose real fix needs a new `Icon.tsx` map entry (source change, out of scope for a
+mock — flagged for `RATIONALE.md` only).
+
+**T3 Code sourcemaps.** Recreated the extraction approach from scratch this iteration (no cached
+script survives between firings): a small Python script (`json.load` each `*.js.map`, filter
+`sources[]` for target substrings, print `sourcesContent`) located and read `RightPanelTabs.tsx`,
+`RightPanelSheet.tsx` (via the same `index-*.js.map`), and `FileBrowserPanel.tsx` (via
+`FilePreviewPanel-*.js.map`) — the exact three files this queue item's own `STATE.json` detail named
+as closest reference material. Read via the repo's own `/tmp` → `C:\Users\huida\AppData\Local\Temp`
+mapping (confirmed with `cygpath -w` after the `Read` tool first rejected the bash-relative path).
+Patterns worth carrying, restated for this palette rather than copied (per `IDENTITY.md`'s "design
+reference only" rule — nothing quoted here at length, nothing committed from T3's source): pill-
+shaped scrollable tabs with a hover wash on inactive tabs; the close icon cross-fading in over the
+identity icon on tab hover rather than sitting beside it always-visible (a real density cost in
+AgentWeave's current two-icon-per-tab layout); every tab title wrapped in a tooltip so truncation
+never loses the full name; a tab context menu (close / close others / close to the right / close
+all) and middle-click-to-close, both entirely absent from `PanelShell`; empty-state launcher cards
+with real hover/press/disabled-with-reason states and a live-count badge on the card whose tab
+already has one to show (T3 badges its Agents card with a running-subagent count; AgentWeave's
+`loops` launcher discards the `counts.running` number `LoopsIndexTab` already computes); file-tree
+row backgrounds built from low-percentage `color-mix(in srgb, currentColor N%, transparent)` — which
+is structurally identical to what AgentWeave's own `--row-hover` et al. already do, so this is "apply
+the existing token" rather than "adopt a new technique."
+
+**General web research** (side-panel/file-tree/tabbed-panel patterns, code-preview-pane conventions,
+uxpatterns.dev's Tabs pattern): breadcrumb/path headers and copy-to-clipboard buttons are
+conventional on a file/code preview pane, both absent from `FilePreview.tsx`; search fields
+conventionally carry a leading icon and Escape-to-clear, both absent from `FilesIndexTab` and
+`SpecDocumentBrowser`'s inputs; horizontal scrolling tab strips (already `PanelShell`'s structural
+choice) are specifically the right pattern when tab count is dynamic and may exceed width — confirms
+the structure is right and only the visual layer around it is under-designed.
+
+**Checked against U0a/U0b** (`foundations.html`, `controls.html`) so P2 reuses rather than reinvents:
+skeleton primitives (`.sk-line`/`.sk-row`/`.sk-chip`) for the three tabs' plain `Loading…` text, a
+real toggle (`.ctl-switch`) for `LoopsIndexTab`'s bare `<input type="checkbox">` "Show archived", and
+`.menu-panel`/`.menu-item` for the tab-strip context menu this pass found missing.
+
+**Wrote `design/mocks/S3/RESEARCH.md`** — what was read, the T3 reference findings, the general web
+findings, an explicit "what's already good, leave it alone" section, and a numbered "what's missing,
+concretely" list of 9 items for P2 to work from.
+
+**Verified, not assumed.**
+- `grep -rn "row-hover\|row-active\|row-selected"` against the five component files → zero matches,
+  confirming finding 1 before writing it.
+- `grep -n "folder" hub/ui/src/components/common/Icon.tsx` → only `folder_open`, `folder_plus`,
+  `folder_search`; no bare `folder` entry, confirming the collapsed/expanded glyph finding.
+- Read each of the three T3 source files in full via the extraction script's output, not a summary.
+- `git status --short` after writing → only `design/mocks/S3/RESEARCH.md` new plus the usual
+  `.claude/autonomous/` state files. Nothing under `hub/ui/src` touched (this is a mock-only pass).
+
+**Not done this iteration, deliberately:** no mock built — `screen_pass_protocol.P1_explore` is
+explore-only, matching S1 and S2's own first passes.
+
+**Next:** S3 P2 — validate the RESEARCH.md findings against `design/IDENTITY.md`'s rejection test
+(state which clause anything gets discarded under, same discipline as S1/S2), then build
+`design/mocks/S3/<variant>.html` (2–3 variants exploring degree of refinement, self-contained HTML
+importing `../../../hub/ui/src/index.css`) with realistic content spanning all three index tabs plus
+an open `file:` tab and an open `spec:` tab, reusing U0a/U0b's already-established vocabulary rather
+than inventing new primitives.
