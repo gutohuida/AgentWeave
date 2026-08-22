@@ -2639,3 +2639,93 @@ then write `design/mocks/S7/RATIONALE.md` (what was researched, what changed, wh
 and under which clause — including the two-variant-not-three decision already recorded in P2's log
 entry) and add S7 to `design/mocks/index.html` with before/after shots, using the data-URI-inline
 approach `dead_ends_inherited` prescribes for the `*.png` gitignore problem.
+
+## Iteration 36 — 2026-08-22T06:07:18+01:00 — S7 P4: finish, RATIONALE.md, review index (screen_pass_protocol.P4_finish)
+
+Branch and `git log` matched STATE.json exactly on entry (HEAD `ecc3f84`, iteration 35 recorded).
+`last_heartbeat` refreshed to now early in the turn.
+
+**P4 deliberately ran a different KIND of check than P2/P3**, both of which worked from static
+screenshots at desktop width. Two checks:
+
+1. **A real keyboard `Tab` walk** — repeatedly pressing `Tab` and reading
+   `document.activeElement.className` after each press, not reading a `:focus-visible` CSS rule off
+   a screenshot. Confirmed the P1-identified focus-ring gap on the agent-card analogue actually
+   activates via real keyboard navigation in both `restrained.html` and `considered.html`, in both
+   themes — the ring is not merely declared and unused.
+2. **A real 420px-viewport reflow check** (same width S6's P3 used as precedent) —
+   `document.documentElement.scrollWidth` vs. the 420px viewport. `restrained.html`: no overflow.
+   **`considered.html`: 558px scrollWidth against a 420px viewport — a genuine, reproducible bug.**
+
+**Bisected the overflow element-by-element** (`.doc` → `.overview-frame` → `.ov-group` → `.ov-grid`
+→ `.ov-workspace`) by reading each element's `getBoundingClientRect().width` and `.scrollWidth` via
+Playwright. Isolated it precisely to `.ov-workspace`'s three-column `repeat(3, 1fr)` grid: the track
+itself sized correctly (~107px/column), but `.ov-work-btn` (the grid item) had no `min-width`
+override, so its default `min-width: auto` used its full content-based minimum — icon (28px,
+`flex: none`) + gap (10px) + padding (32px) + the un-wrapped `.ov-work-detail` text (e.g.
+"Requirements and evidence") — instead of shrinking to the track's computed width. Classic CSS
+Grid/Flexbox "child pushes a fixed-track container wider than its parent" failure, and exactly the
+kind of defect that cannot show up in a desktop-width screenshot, where there was always enough room
+for every track to reach its content-based minimum without visible constraint.
+
+**Fixed with one property**: added `min-width: 0` to `considered.html`'s `.ov-work-btn` rule. Re-ran
+the identical bisection afterward — `scrollWidth` dropped from 558 to exactly 420, matching the
+viewport, and `.ov-work-detail`'s existing `overflow: hidden; text-overflow: ellipsis` now actually
+takes effect instead of being overridden by the unshrunk parent minimum. Re-ran the full hover/
+focus/420px battery on BOTH files afterward to confirm no regression: both clean.
+`restrained.html` has no icon and shorter, non-nowrap detail text in the same button and measured no
+overflow both before and after the check — left untouched rather than "fixed" defensively without a
+proven defect in that file.
+
+**Visually confirmed the fix** by rendering both the pre-fix (`git show HEAD:...considered.html`,
+copied to a throwaway `_before.html`) and post-fix states at 420px width, cropped to the workspace
+row: before shows "Jobs" completely clipped off-screen after "Tasks"/"Spec"; after shows all three
+buttons fitting with ellipsis-truncated detail text. Both crops kept only long enough to embed as
+base64 in the review index (below), then deleted along with `_before.html` and every throwaway
+script (`_p4_check.py`, `_p4_debug.py`, `_gen_shots.py`, `_splice_index.py`) and PNG directory
+(`_p4_shots/`, `_shots/`) — `git status --short` confirmed only the intended diff before each
+commit-relevant check.
+
+**`design/mocks/S7/RATIONALE.md` written**, matching every prior screen's format: research → seven
+findings (three of them missing features), what was rejected and under which IDENTITY.md clause
+(nothing was discarded — all seven passed; `ProviderStatusBanner.tsx`'s glass container was read for
+layout shape only and explicitly not carried over, clause 7), the two-not-three-variant call already
+recorded in iteration 34's log entry, a P3 section (colder screenshot re-read, no defect), and a full
+P4 section documenting the real-interaction method and the defect found and fixed above.
+
+**`design/mocks/index.html` rebuilt** — the placeholder `S7 — S8 and the final review-index rebuild`
+`pending` section was replaced with the real, done S7 entry: summary, links to all four S7 files,
+four screenshots (`restrained`/`considered` × `dark`/`light`, 960×1400, captured via a throwaway
+direct-Playwright script since these mocks use their own `.theme-toggle`, not `uishot.py`'s target)
+embedded as base64 `data:image/png` URIs per `dead_ends_inherited`'s prescribed workaround for the
+repo's blanket `*.png` gitignore rule, and a `fix-block` with the before/after crop pair proving the
+420px defect and its fix. A fresh `S8 and the final review-index rebuild` `pending` placeholder was
+appended after S7's entry, matching what every earlier screen's completion did to the placeholder
+that followed it.
+
+**Verified by rendering the actual index.html**, not by trusting the splice script: loaded it in
+Playwright, scrolled to the new S7 section and to the fix-block, screenshotted both, and read the
+images — the summary text, all four theme/variant screenshots, and the before/after pair all render
+correctly. Checked `document.images` programmatically: 40 total, 0 with `naturalWidth === 0` (i.e.
+zero broken images across the entire index, not just the new section). Console showed the same 3
+pre-existing font `net::ERR_FILE_NOT_FOUND` errors as every other page checked this run. Also
+sanity-checked the spliced HTML's structural balance directly (`<section>` open/close count both 9,
+exactly one `<script>` tag, S7's done title appears exactly once, the new S8 placeholder text is
+present) before considering the splice trustworthy.
+
+`git status --short` before staging showed exactly the three real changes: `design/mocks/S7/
+considered.html` (the one-line CSS fix), the new `design/mocks/S7/RATIONALE.md`, and `design/mocks/
+index.html` — no stray scratch files, no leftover `_shots`/`_p4_shots` directories, no leftover
+`_before.html`. `STATE.json` re-validated with `py -3.11 -c "import json; json.load(...)"` after
+editing.
+
+**S7 is now fully done — all four passes (P1–P4) complete and verified, including one real defect
+found and fixed at the pass built specifically to find what static screenshots structurally cannot.**
+
+**Next:** S8 P1 — the first S8 sub-screen in its stated order (jobs: `JobsPage`/`JobCard`/
+`JobForm`). Per `screen_pass_protocol.P1_explore`: WebSearch UI/UX patterns for job-scheduling/
+cron-like list screens, read the T3 Code sourcemaps for an analogue, read the current AgentWeave
+components including their comments, and write `design/mocks/S8-jobs/RESEARCH.md`. S8 bundles four
+sub-screens under one queue id; each gets its own four-pass unit and its own mock directory
+(`S8-jobs/`, `S8-agents/`, `S8-logs/`, `S8-palette/` or similar), per the queue item's own text and
+`pre_authorised`'s "do not start a later S8 sub-screen while an earlier one has unfinished passes."
