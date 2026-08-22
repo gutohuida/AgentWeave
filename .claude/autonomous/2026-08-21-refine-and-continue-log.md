@@ -3852,3 +3852,38 @@ Logging this as a sixth consecutive no-op.
 With `stop_at` now under 6 minutes away, this run is at its natural end. The driver's own
 `stop_when_queue_empties`/`stop_at` guard is the correct mechanism to end it — this is very likely
 the last iteration before the driver self-unregisters past `stop_at`.
+
+## Iteration 59 — 2026-08-22T08:58:48+01:00 — no-op: stop_at reached, run concluding
+
+Branch (`autonomous/2026-08-21-refine-and-continue`) and `git log` matched STATE.json exactly on
+entry (`1560859` = HEAD, iteration 58's heartbeat-release commit; nothing to reconcile). `stop_at`
+(`2026-08-22T09:00:00+01:00`) was ~1 minute out at start — this iteration begins essentially at the
+stop boundary.
+
+`git log -1 -- design/mocks/` (`86de63b`, iteration 53) and `git log -1 -- hub/hub hub/ui/src`
+(`0908b68`, phase 6) show no commits since iteration 58 — nothing could have drifted.
+
+Re-ran the same cheap Playwright check on `design/mocks/index.html` from a throwaway inline script
+(no file left behind): 12 `.screen-card`s, 56 `<img>` tags, 0 broken images, exactly 1
+`.screen-card.pending` (the `_system` card, correctly still pending), 0 `pageerror`s, 3
+`requestfailed` (the pre-existing `@fontsource` bare-specifier 404s under raw `file://`, present in
+every prior check, unrelated to any image). Identical to iterations 53-58 — no regression.
+
+C1-C6, U0a/U0b, S1-S8, and Z remain at the same honest end state left by iteration 53. `_system`
+P3/P4 remains the one open item and is not reopened without an operator steer (`D-direction` still
+open). No new work exists inside the queue; `do_not_idle` forbids inventing scope outside it.
+Logging this as a seventh consecutive no-op.
+
+`stop_at` has now been reached. `stop_when_queue_empties` is true and the queue has been confirmed
+empty of actionable work across seven consecutive iterations (53 through this one). This run is at
+its natural, intended end. The driver's own guard is the correct mechanism to end it; the next
+scheduled firing (5 minutes out) should find the task self-unregistered past `stop_at` and take no
+further action. Following the established convention, the heartbeat is still released below so
+that, in the unlikely event a firing lands before self-unregistration completes, it is not blocked
+by its own stale heartbeat and can perform the same cheap no-op check rather than idling.
+
+Summary for the morning: the night's work concluded at iteration 53 (Z closed the queue, 12 screens
+mocked, review index built at `design/mocks/index.html`). Iterations 54-59 were verification-only
+no-ops confirming nothing regressed while waiting for `stop_at`. The one open item is `_system`
+P3/P4 (screenshot-iterate + RATIONALE.md), deliberately not reopened pending operator direction on
+`D-direction`. Review entry point: `design/mocks/index.html`. Diff to read: `git log master..HEAD`.
