@@ -946,3 +946,100 @@ citations throughout.
 build `design/mocks/S2/<variant>.html` (two or three variants, both themes, realistic task content
 across all seven statuses plus blocked/stalled/merged cases), fixing the priority-badge bug for real
 in the mock's own styles.
+
+## Iteration 14 — 2026-08-22T02:47:16+01:00 — S2 P2: validate + mock (task board + task cards)
+
+Branch/log/STATE.json reconciled cleanly on entry — clean tree, HEAD matched iteration 13's commit
+(`ef06f6b`).
+
+**Validate.** Re-read all ten `RESEARCH.md` findings against `IDENTITY.md`'s rejection test line by
+line before building anything. All ten pass, nothing discarded: none touches the palette (clause 1);
+the priority fix reuses the existing amber/red already on the same card (Stalled, Prerequisite
+regressed) rather than a new hue, and `--blue` appears only on the status pill (already its role) and
+the selected/focus ring (clause 2); the requirement-chip and empty-column treatments derive from
+`--radius*` (clause 3/4); no new type (clause 4); every new glyph maps to an icon `Icon.tsx` already
+declares mapped (see the bug below) rather than inventing a fifth icon source (clause 5); density is
+unchanged — same seven columns, same card count per column as a realistic board, nothing narrowed to
+make room (clause 6); every card state is demonstrated, not just resting (clause 7).
+
+**Read before building**, in full: `TaskCard.tsx`, `Badge.tsx`, `TasksBoard.tsx`,
+`TaskIntegrationNote.tsx`, `agentColorVars`/`colorTint.ts`'s `tint()` recipe (replicated exactly —
+`color-mix(in srgb, TOKEN N%, transparent)` — rather than approximated), and `index.css` for the exact
+elevation/radius/duration tokens `foundations.html` already named. Confirmed `EmptyState.tsx`'s
+icon-circle shape before building the column-level empty state so the new one reads as a smaller
+member of the same family, not a competing pattern.
+
+**A second real bug, found while building, not by P1.** Cross-checked every `Icon name="..."` string
+`TaskCard.tsx`/`TasksBoard.tsx` actually passes against `Icon.tsx`'s `ICONS` map (read in full — 84
+entries). `help_circle`, `alert_triangle`, `filter_alt`, and `expand_less` are used at four call sites
+(`TaskCard.tsx`'s blocked box and Stalled badge, `TasksBoard.tsx`'s requirement-filter banner and
+rejected-section chevron) but none of the four exists in the map — only `help`, `warning`,
+`filter_list`, and `expand_more` do. `Icon()`'s own fallback path (`Icon.tsx:313-322`) renders `null`
+for an unmapped name, so all four render nothing in the shipped product today: the blocked box has no
+icon, the Stalled badge has no icon (the Prerequisite-regressed badge does — it correctly uses
+`warning`), the filter banner has no icon, and the rejected-section toggle has no chevron at all in
+either state. Not in `RESEARCH.md` — recorded in `STATE.json`'s `next_action` for `RATIONALE.md` to
+carry forward as finding 11, separate from finding 1's bug, with these exact file:line citations.
+
+**Built two variants**, not three — same reasoning as S1: `restrained`/`considered` read as a clear
+degree difference on this screen without inventing a decoration-only "expressive" reading, and a third
+variant would mean a third full seven-column board with no new finding to justify it.
+
+`design/mocks/S2/considered.html` — the fuller treatment. Real `PRIORITY_STYLES` (neutral → neutral →
+amber → red) with a hand-drawn flag glyph disambiguating it by shape from the same-coloured
+Stalled/Prerequisite-regressed badges; hover = lift + `surface-3` + shadow (`--dur-base`), press =
+settle + `--press-lo` inset; a column-empty treatment with a small icon tile; requirement chips
+bordered and clickable-looking vs. italic informational text; `TaskIntegrationNote` as a bordered,
+icon-led block for all three outcomes (merged/failed-with-retry/skipped-no-branch); a description
+fade-into-clamp on the one card whose text runs long (T3's `ProposedPlanCard` idiom); a forced
+four-state strip (rest/hover/press/selected via `data-force`, matching `foundations.html`'s
+convention); and a drag-and-drop *illustration* (a mid-drag card plus a highlighted drop-zone) —
+finding 5 is a missing feature, mocked per `pre_authorised`, explicitly not built. `design/mocks/S2/restrained.html`
+— the smallest fix per finding: the priority map as a plain colour dot instead of a glyph, hover/press
+as real CSS rules with no lift or shadow, the empty column as centred text in a dashed box, requirement
+chips differentiated by a border alone, the integration note as a coloured left-rule instead of a full
+block, and a three-state strip (rest/hover/press only, no selected/dragging, no drag-and-drop section)
+— deliberately less than `considered`, not an unfinished copy of it. Both files use all seven real
+columns (`Pending/Assigned/In Progress/Under Review/Completed/Approved/Needs Revision`), keep `blocked`
+out of its own column (R3), keep the sticky `-12px` header offset, and keep the centred-drawer geometry
+implied by the "open" affordance — none of `RESEARCH.md`'s "must not be redesigned" list was touched.
+
+**A real bug in the mock's own authoring, caught before it shipped.** First draft of the icon
+substitution used a `${'{'}NAME{'}'}` placeholder text convention with a regex intended to match it —
+the regex required a second `$` that the placeholder text itself never contained
+(`${'{'}NAME{'}'}`, not `${'{'}NAME${'}'}`), so every icon slot would have rendered the literal
+placeholder text instead of an SVG. Caught by the same discipline as every prior pass — rendering and
+reading the result rather than trusting the source — before considering the file finished, not
+after. Fixed the regex to match the placeholder actually written; re-verified with a scripted check for
+literal `${` surviving into the rendered page's text (`page.inner_text('body')`), zero matches after
+the fix, in both files.
+
+**Verified, not assumed.** Direct-Playwright (`file://`, 1500×1100, both themes, both files) for: zero
+unexpected console errors (only the pre-existing webfont 404 every prior mock also shows), zero leftover
+`${` placeholder text in the rendered body, and a full-page screenshot read for each of the four
+renders. Confirmed by reading the PNGs: the priority flag/dot renders legibly at 9-11px in both themes;
+the live-pulse card's green ring is visible; the blocked purple box, Stalled amber badge, and
+Prerequisite-regressed red badge all carry real icons now (not the broken names the product itself
+still ships); the empty "Assigned" column reads as an empty state, not a rendering gap; the rejected
+section's chevron rotates on click (`in-file <script>`, not a framework); and — cropped in for a close
+read — the flag glyph is legible as a flag at its actual on-card size in both themes, not a stray mark.
+No console errors, no clipped text, no stray hue in either file, either theme.
+
+**Not done this iteration, deliberately.** No formal P3 critique-and-fix pass — what happened above was
+build-time verification (catching the placeholder-regex bug, confirming legibility), not the honest
+"screenshot, read, critique against the rejection test, fix" cycle `screen_pass_protocol.P3_iterate`
+asks for as its own pass. Flagged explicitly in `next_action` so the next iteration doesn't skip it on
+the strength of this one's screenshots.
+
+**Verified.**
+- `git status --short` after cleanup → only `design/mocks/S2/considered.html` and
+  `design/mocks/S2/restrained.html` new (plus the usual `.claude/autonomous/` state files). No stray
+  `.png`, no scratch files under `/tmp` or `C:\tmp` left behind (both cleaned explicitly — this
+  machine's Bash `/tmp` and Python's `/tmp` resolve to different real paths, `C:\tmp` is the one Python
+  actually writes to; noting this here since it cost a few minutes of confusion this iteration).
+
+**Next:** S2 P3 — the honest iterate pass. Screenshot both variants, both themes (four captures) via
+direct Playwright, read them fresh, critique against `IDENTITY.md`'s rejection test without the
+build-time bias of already believing they're right, and fix anything found. Look specifically at the
+states-strip and drag-and-drop sections, which were confirmed rendering but not critiqued this
+iteration.
