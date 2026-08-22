@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-mode="dark">
+<html lang="en" data-mode="light">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -258,9 +258,9 @@
         and an aligned <code>info</code> chip + copy affordance across both surfaces.
       </div>
     </div>
-    <button class="theme-toggle" onclick="document.documentElement.dataset.mode = document.documentElement.dataset.mode === 'dark' ? 'light' : 'dark'; document.getElementById('theme-label').textContent = document.documentElement.dataset.mode">
+    <button class="theme-toggle" onclick="toggleMockTheme()" aria-label="Switch to dark mode" title="Switch to dark mode">
       <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
-      <span id="theme-label">dark</span>
+      <span id="theme-label">light</span>
     </button>
   </div>
 
@@ -608,5 +608,16 @@
     implementation later, not shipped by this mock.
   </div>
 </div>
+<script>
+  function toggleMockTheme() {
+    var next = document.documentElement.dataset.mode === 'dark' ? 'light' : 'dark';
+    document.documentElement.dataset.mode = next;
+    var label = next === 'dark' ? 'Switch to light mode' : 'Switch to dark mode';
+    document.getElementById('theme-label').textContent = next;
+    var btn = document.querySelector('.theme-toggle');
+    btn.setAttribute('aria-label', label);
+    btn.setAttribute('title', label);
+  }
+</script>
 </body>
 </html>

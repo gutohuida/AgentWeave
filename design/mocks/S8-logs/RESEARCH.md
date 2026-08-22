@@ -166,3 +166,47 @@ one.
 No finding failed the test outright this pass; the one direction that would have (per-category hue
 scale) was rejected before reaching a mock, per finding-rejection practice `S8-jobs` established.
 Full clause-by-clause re-check happens again in P2 against the actual built HTML, per protocol.
+
+## P3 — iterate
+
+Both mocks booted `data-mode="dark"` with a bare toggle (flip `dataset.mode`, no `aria-label`) —
+the same defect S8-agents' P3 found and fixed. `scripts/uishot.py`'s dark-capture path looks for a
+button named exactly `"Switch to dark mode"` (the real app's own pattern, `ProjectHeader.tsx`/
+`StatusBar.tsx`) and clicks it once, with no light-mode-toggle route at all; against a mock booted
+dark with no matching label, `--theme dark` would silently capture the wrong default state and
+`--theme light` had nothing to click. Fixed identically to the S8-agents precedent: both mocks now
+default `data-mode="light"`, and a `toggleMockTheme()` function flips `aria-label`/`title` between
+`"Switch to dark mode"`/`"Switch to light mode"` matching `ProjectHeader.tsx` exactly. Verified
+`py -3.11 scripts/uishot.py --url file:///.../restrained.html --theme light|dark` (and
+`considered.html`) captured all four correctly *unmodified* — no per-mock Playwright workaround
+needed, same fix, same verification method, third screen running in a row where this exact toggle
+recipe is now the default rather than something to rediscover.
+
+Read all four captures fresh. Clause-by-clause against `IDENTITY.md`'s rejection test:
+
+- **Clause 1 (tokens only)** — grepped both files for hex/`rgb()`/`rgba()` literals. Two hits in
+  `restrained.html` (`rgb(0 0 0 / 0.16)`, `rgb(0 0 0 / 0.2)`, both shadow alpha), one in
+  `considered.html` (`rgb(0 0 0 / 0.2)`); matches existing non-chromatic shadow-alpha practice
+  already validated for this same reason in S8-agents' P3. A third apparent hit (`#4c1a`) in both
+  files is a conversation-ID string in mock content ("replied in #conversations-continue" /
+  "reply queued in conversation #4c1a"), not a CSS colour — false positive from the regex, not a
+  violation.
+- **Clause 3 (durations/easing)** — every discrete-interaction `transition` is `--dur-fast`/
+  `--dur-base`/`--dur-slow` with `--ease`, no ad hoc literal. Two ambient/infinite `animation`s
+  (`pulse-dot 1.6s`, `skel-sheen 1.4s`) are hardcoded rather than token-driven — checked against
+  the same precedent S8-agents' P3 established (`task-live-pulse 2.4s ease-in-out infinite` in
+  `index.css` is itself hardcoded): the `--dur-*` scale is scoped to discrete transitions, not
+  ambient/looping ones, so this is consistent with the codebase's own practice, not a gap.
+- **Clause 4 (radius)** — segmented control, chips, table rows, volume strip and the JSON-expand
+  panel all reuse `--radius`/`--radius-sm`/`--radius-lg`; nothing new.
+- **Clauses 2, 5, 6, 7** held on inspection: `--blue` appears only on focus rings and the arrival
+  flash (never a status fill — Live/severity still read green/amber/red from the existing map);
+  icons are lucide-style inline SVG only; density is unchanged from P2 (the volume strip is still
+  the only net-new row); both variants read as the same app refined, legible in both themes; the
+  interaction-states strip in both variants demonstrates resting/hover/active/focus-visible/live
+  explicitly, and `considered.html` additionally demonstrates the arrival-flash mid-fade state.
+
+No clause failures survived the critique — the only real defect found was the theme-toggle bug,
+now fixed and verified. `git status --short` shows only the two mock HTML files and this section
+modified; no other tree changes this pass. Verification screenshots (4 PNGs, written under `/tmp`
+via `uishot.py --out`) were deleted after reading, per the blanket `*.png` `.gitignore`.

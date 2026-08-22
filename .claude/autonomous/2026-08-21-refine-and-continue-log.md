@@ -3370,3 +3370,40 @@ live app's own theme toggle; direct-Playwright with `as_uri()` is the proven fal
 iteration and by S8-agents' P3), read the PNGs, critique honestly against `IDENTITY.md`'s rejection
 test, and fix whatever the critique finds — the point of this pass is looking at the result, not
 re-confirming what P2 already checked.
+
+## Iteration 47 — 2026-08-22T07:46:00+01:00 — S8-logs P3: iterate
+
+Verified branch/log/STATE.json all agreed before starting (`13fd9ec` = HEAD, a released-heartbeat
+commit, matches STATE.json exactly). `screen_pass_protocol.P3_iterate` for the two mocks P2 built
+(`restrained.html`, `considered.html`).
+
+**Found and fixed the same theme-toggle defect S8-agents' P3 hit.** Both mocks booted
+`data-mode="dark"` with a bare `dataset.mode` flip and no `aria-label` — `scripts/uishot.py`'s
+dark-capture path clicks a button named exactly `"Switch to dark mode"` (the real app's own
+pattern) once, with no light-mode route; against these mocks `--theme dark` would have silently
+captured the (already-dark) default and `--theme light` had nothing to click. Fixed identically to
+the established precedent: both default `data-mode="light"` now, and a `toggleMockTheme()`
+function flips `aria-label`/`title` between `"Switch to dark mode"`/`"Switch to light mode"`
+matching `ProjectHeader.tsx` exactly. Verified `py -3.11 scripts/uishot.py --url file:///... --theme
+light|dark` against both files unmodified — all four captures (2 variants × 2 themes) succeeded.
+
+Read all four screenshots fresh. Critiqued clause by clause against `IDENTITY.md`'s rejection test:
+tokens-only held (grep for hex/`rgb()`/`rgba()` found only the same non-chromatic shadow-alpha
+idiom already validated for this reason, plus one false positive — a `#4c1a` conversation-ID
+string in mock content, not a colour); durations/easing held (two ambient/infinite `animation`s at
+hardcoded `1.4s`/`1.6s` match the same `task-live-pulse` precedent S8-agents' P3 already
+established as out-of-scope for `--dur-*`); radius, icons, density, legibility-in-both-themes and
+the demonstrated interaction states all held on inspection. No clause failures survived — the only
+real defect was the toggle bug, now fixed. Wrote all of this into `RESEARCH.md`'s new "P3 —
+iterate" section.
+
+Deleted the four verification PNGs (written under `/tmp` via `uishot.py --out`) after reading, per
+the blanket `*.png` `.gitignore`. `git status --short` showed only `RESEARCH.md` and the two mock
+HTML files before staging — no other tree changes.
+
+**Next**: S8-logs P4 — `screen_pass_protocol.P4_finish`. Second, fresh iteration on the mocks, then
+write `design/mocks/S8-logs/RATIONALE.md` (what was researched, what changed and why, what was
+rejected and under which clause — including the corrected two-subviews-one-tab queue premise from
+P1 and the toggle-default fix from this pass) and add S8-logs to `design/mocks/index.html` with its
+before/after shots per `dead_ends_inherited`'s data-URI approach. This closes S8-logs (4/4 passes)
+and leaves only the command palette as S8's remaining sub-screen per S8's stated sub-order.
