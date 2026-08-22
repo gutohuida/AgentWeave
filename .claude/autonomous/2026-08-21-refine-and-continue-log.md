@@ -3295,3 +3295,78 @@ re-does it against actual built HTML, the authoritative check). Build
 importing `../../../hub/ui/src/index.css`, with realistic log/event content (not lorem ipsum),
 covering BOTH the `ActivityLog` feed and the `LogsView` console since they are one screen's two
 subviews joined by the (now-fixed-in-mock) segmented switcher.
+
+## Iteration 46 — 2026-08-22T07:39:29+01:00 — S8-logs P2: validate + mock
+
+Branch/log/STATE.json reconciled cleanly on entry: HEAD matched STATE.json's `iteration: 45`
+commit (`6b15547`, S8-logs P1's research), tree clean, `next_action` pointed at
+`screen_pass_protocol.P2_validate_and_mock` for the activity/log console pair.
+
+**Validate.** Re-checked RESEARCH.md's eight findings against `design/IDENTITY.md`'s rejection
+test before building anything, per protocol (P1 already pre-checked once; this is the
+authoritative re-check against what actually gets built). All eight pass unchanged from the
+preliminary pass: no new hue anywhere (the per-category-colour direction stays rejected — category
+chips get a weight/dot cue, never a seventh hue), `--blue` stays reserved for focus/selection/the
+arrival-flash tint (never a status fill — the Live dot and volume "peak" spike use green/red from
+the existing `SEVERITY_CHIP` map), radii and type scale unchanged, icons stay lucide-style inline
+SVG only, density cost is exactly one thin row (the volume strip) and nothing else grows, no
+gradient/glass-as-decoration.
+
+**Build.** Read `LogsView.tsx`, `LogLine.tsx`, `ActivityLog.tsx`, `EventRow.tsx` again in full for
+exact markup/class shapes (not just structure from P1's read), `lib/colorTint.ts` (`tint()` is
+`color-mix(in srgb, token %, transparent)` at 10% — used that exact formula everywhere a
+severity/status tint appears in the mock, closing finding 8 rather than reintroducing a duplicate),
+and `design/mocks/S8-jobs/restrained.html` for the established self-contained-mock recipe (button
+classes, skeleton shimmer, states-strip, legend) to reuse rather than reinvent per-screen CSS.
+
+Two variants, matching this run's established restrained/considered split (not three — the same
+"degree, not a new language" reasoning S1 and S8-jobs already used):
+
+`design/mocks/S8-logs/restrained.html` — the smallest fix per finding: a real segmented control
+(track + sliding active fill) replacing the two bare `aria-pressed` buttons (finding 1); a single
+thin severity-tinted volume-bars strip above the log table, the SigNoz-named baseline the screen
+lacked entirely (finding 2); log rows are real `role="button" tabindex="0"` elements with a visible
+`box-shadow: inset 0 0 0 2px var(--ring)` focus ring and a rotating (not swapping) expand chevron,
+closing the one true accessibility gap found this run (finding 3); `ActivityLog`'s feed cards gain
+an `info` severity chip and a hover-reveal copy button to match `LogLine`'s console-side affordances
+(finding 4); every severity/category chip now transitions on `--dur-fast`/`--ease` instead of
+snapping instantly, and the feed's chip motion uses the same recipe instead of its hardcoded
+`0.15s` literal (finding 5); table and feed loading both get shape-matched skeleton rows instead of
+bare `"Loading…"` text or an ambiguous empty state (finding 6); a disabled dashed `.*` glyph next to
+search notes the missing regex mode without implementing it (finding 7, feature gap only).
+
+`design/mocks/S8-logs/considered.html` — the same fixes taken one degree further: new log/feed
+entries arrive with a brief `--dur-slow` fade from a blue-tinted background to transparent instead
+of a hard cut (reusing one motion language for the same "just arrived" event across both subviews,
+not inventing two); the volume strip's highest bar gets a small peak-value callout; category chips
+carry a small weight-only dot so the active one reads at a glance without a new hue; the regex hint
+becomes a real (still `cursor: not-allowed`, still disabled) `.*` toggle button next to search
+rather than a bare glyph; skeleton rows fade in staggered by 60ms instead of appearing as a flat
+block, gated behind `prefers-reduced-motion` like every other motion addition this run.
+
+**Verified, not assumed.** No test suite applies to static mocks. Wrote a throwaway
+`testbed/scratch/check_s8_logs.py` (deleted after use) that opened both files directly via
+`pathlib.Path(...).resolve().as_uri()` — plain relative `file://` paths break on this machine's
+Windows path handling, the same fix S8-agents' P3 iteration already found — in both themes,
+captured full-page PNGs, and asserted zero console/page errors beyond the pre-existing
+`@fontsource` `file://` 404s already documented in `dead_ends_inherited`. All four captures (2
+variants × 2 themes) came back with `errors: none`. Read all four PNGs: both variants render
+legibly in both light and dark, the segmented control's active fill is visible, severity/category
+chips and the volume strip read clearly against both surfaces, the expanded JSON panel and
+interaction-states strip are legible, and the arrival-flash row in `considered.html` had already
+settled to its resting (transparent) state by the time the 300ms-delayed screenshot fired — correct
+`animation: ... both` behaviour, not a stuck mid-fade artefact. Deleted the four verification PNGs
+and the throwaway script afterward — `git status --short` showed only the two new mock HTML files
+before staging.
+
+**Not done this iteration, deliberately:** no `RATIONALE.md` and no `index.html` entry —
+`screen_pass_protocol.P2_validate_and_mock` scopes this firing to variant construction plus the
+validate step; P3 (Playwright screenshot + honest critique + iterate against the rejection test) is
+the next queue firing, P4 (second iterate + RATIONALE.md + review-index entry) after that.
+
+**Next:** S8-logs P3 — `screen_pass_protocol.P3_iterate`. Screenshot every variant in both themes
+with `scripts/uishot.py` if it can drive a standalone file (per the dead-ends note, it expects the
+live app's own theme toggle; direct-Playwright with `as_uri()` is the proven fallback used this
+iteration and by S8-agents' P3), read the PNGs, critique honestly against `IDENTITY.md`'s rejection
+test, and fix whatever the critique finds — the point of this pass is looking at the result, not
+re-confirming what P2 already checked.
