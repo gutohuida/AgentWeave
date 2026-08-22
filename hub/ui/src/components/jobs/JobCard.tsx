@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { formatDistanceToNow } from 'date-fns'
 import { Icon } from '@/components/common/Icon'
-import { Badge } from '@/components/common/Badge'
+import { Badge, StatusBadge } from '@/components/common/Badge'
 import { Button } from '@/components/ui/button'
 import { Job, JobRun, useJobHistory } from '@/api/jobs'
 import { useTasks } from '@/api/tasks'
@@ -157,9 +157,13 @@ function LoopBlock({ job, onOpenTasks }: { job: Job; onOpenTasks?: (taskIds: str
           Queue: {totalQueued}
         </span>
         {Object.entries(loop.queue).map(([status, count]) => (
-          <Badge key={status} variant="secondary" className="text-[10px]">
-            {status}: {count}
-          </Badge>
+          <span key={status} className="inline-flex items-center gap-1">
+            <span className="sr-only">{status}: {count}</span>
+            <span aria-hidden="true" className="inline-flex items-center gap-1">
+              <StatusBadge status={status} />
+              <span className="text-[10px] tabular-nums" style={{ color: 'var(--text-3)' }}>{count}</span>
+            </span>
+          </span>
         ))}
       </div>
 
@@ -198,9 +202,8 @@ export function JobCard({ job, onRun, onPause, onResume, onArchive, isPending, o
 
   return (
     <div
+      className="interactive-card elevation-resting"
       style={{
-        background: 'var(--surface-2)',
-        border: '1px solid var(--border)',
         borderRadius: 'var(--radius)',
         overflow: 'hidden',
       }}
@@ -214,7 +217,7 @@ export function JobCard({ job, onRun, onPause, onResume, onArchive, isPending, o
                 {job.name}
               </p>
               {job.source === 'local' && (
-                <Badge variant="secondary" className="text-[10px]">Local</Badge>
+                <Badge variant="info" className="text-[10px]"><Icon name="home" size={11} />Local</Badge>
               )}
             </div>
 
@@ -239,7 +242,9 @@ export function JobCard({ job, onRun, onPause, onResume, onArchive, isPending, o
             className="shrink-0 rounded-full"
             aria-label={expanded ? 'Collapse job details' : 'Expand job details'}
           >
-            <Icon name={expanded ? 'expand_less' : 'expand_more'} size={20} />
+            <span style={{ display: 'flex', transform: expanded ? 'rotate(180deg)' : undefined, transition: 'transform var(--dur-fast) var(--ease)' }}>
+              <Icon name="expand_more" size={20} />
+            </span>
           </Button>
         </div>
 
@@ -266,7 +271,7 @@ export function JobCard({ job, onRun, onPause, onResume, onArchive, isPending, o
 
         {/* Action buttons */}
         <div className="flex items-center gap-2 mt-3">
-          <Button variant="outline" size="xs" onClick={() => onRun(job.id)} disabled={isPending || !job.enabled} title="Run now">
+          <Button variant="primary" size="xs" onClick={() => onRun(job.id)} disabled={isPending || !job.enabled} title="Run now">
             <Icon name="play_arrow" size={16} />
             Run
           </Button>

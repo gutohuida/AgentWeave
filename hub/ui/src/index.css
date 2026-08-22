@@ -372,6 +372,18 @@
     box-shadow: 0 0 0 1px color-mix(in oklab, var(--destructive) 35%, transparent);
   }
   textarea.control-field { resize: vertical; }
+  .control-choice {
+    width: 16px;
+    height: 16px;
+    flex: none;
+    accent-color: var(--text);
+    cursor: pointer;
+  }
+  .control-choice:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+  .control-choice:disabled { cursor: default; opacity: 0.5; }
   select.control-field {
     appearance: none;
     cursor: pointer;
@@ -706,6 +718,15 @@
      hooks used below, so it composes with the app's own tokens rather than a competing look. */
   .command-palette-overlay {
     background: var(--scrim);
+    animation: palette-overlay-in var(--dur-fast) var(--ease);
+  }
+  .command-palette {
+    animation: palette-in var(--dur-base) var(--ease);
+    transform-origin: top center;
+  }
+  @keyframes palette-overlay-in { from { opacity: 0; } }
+  @keyframes palette-in {
+    from { opacity: 0; transform: translateX(-50%) translateY(-4px) scale(.97); }
   }
   .command-palette [cmdk-input] {
     width: 100%;
@@ -735,21 +756,62 @@
   }
   .command-palette [cmdk-item] {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 8px;
-    padding: 7px 8px;
+    padding: 6px 8px;
     border-radius: var(--radius-md);
+    border-left: 2px solid transparent;
     color: var(--text);
     cursor: pointer;
+    transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+  }
+  .command-palette [cmdk-item]:hover:not([data-selected="true"]) {
+    background: var(--row-hover);
   }
   .command-palette [cmdk-item][data-selected="true"] {
     background: var(--surface-2);
+    border-left-color: var(--ring);
+  }
+  .command-palette [cmdk-item] mark { background: transparent; color: var(--text); font-weight: 700; }
+  .palette-row-icon { margin: 4px; flex: none; }
+  .palette-agent-icon {
+    display: flex; align-items: center; justify-content: center; width: 24px; height: 24px;
+    flex: none; border: 1px solid; border-radius: var(--radius-sm);
+  }
+  .palette-agent-dot { width: 8px; height: 8px; margin: 6px 7px 0 3px; flex: none; border-radius: 9999px; }
+  .palette-row-main { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 1px; }
+  .palette-row-title, .palette-row-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .palette-row-title { font-size: 12px; }
+  .palette-row-sub { color: var(--text-3); font-size: 10.5px; }
+  .palette-status-chip {
+    flex: none; margin-top: 2px; padding: 1px 5px; border-radius: var(--radius-sm);
+    background: var(--surface-3); color: var(--text-2); font-size: 9px; line-height: 1.5;
+    text-transform: uppercase; letter-spacing: .03em;
+  }
+  .palette-status-chip[data-status="in_progress"],
+  .palette-status-chip[data-status="under_review"],
+  .palette-status-chip[data-status="proposed"] { background: color-mix(in srgb, var(--amber) 15%, transparent); color: var(--amber); }
+  .palette-status-chip[data-status="approved"],
+  .palette-status-chip[data-status="current"] { background: color-mix(in srgb, var(--green) 15%, transparent); color: var(--green); }
+  .palette-status-chip[data-status="rejected"],
+  .palette-status-chip[data-status="revision_needed"] { background: color-mix(in srgb, var(--red) 15%, transparent); color: var(--red); }
+  .palette-footer {
+    display: flex; align-items: center; gap: 14px; padding: 7px 12px;
+    border-top: 1px solid var(--border); background: var(--surface-2); color: var(--text-3); font-size: 10.5px;
+  }
+  .palette-footer span { display: inline-flex; align-items: center; gap: 4px; }
+  .palette-footer kbd {
+    min-width: 18px; padding: 2px 4px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+    background: var(--surface-3); color: var(--text-2); font: 10px 'JetBrains Mono', monospace; text-align: center;
   }
   .command-palette [cmdk-empty] {
     padding: 24px 16px;
     text-align: center;
     font-size: 12px;
     color: var(--text-3);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .command-palette, .command-palette-overlay { animation: none; }
   }
 
   /* ─── Row treatment ─────────────────────────────────────────────

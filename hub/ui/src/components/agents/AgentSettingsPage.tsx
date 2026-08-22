@@ -43,7 +43,13 @@ export function AgentSettingsPage({ agent, section }: AgentSettingsPageProps) {
   const summary = roster.find((candidate) => candidate.name === agent) ?? null
 
   if (isLoading) {
-    return <Shell>Loading…</Shell>
+    return (
+      <div className="workspace-content space-y-3" aria-label="Loading agent settings">
+        <div className="skeleton h-6 w-32" />
+        <div className="skeleton h-4 w-80 max-w-full" />
+        {[0, 1, 2].map((row) => <div key={row} className="skeleton h-20 w-full" />)}
+      </div>
+    )
   }
   if (!summary) {
     return <Shell>This agent is no longer in the roster.</Shell>

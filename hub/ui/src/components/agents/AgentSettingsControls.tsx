@@ -65,7 +65,7 @@ export function DescriptionSetting({ agent }: { agent: AgentSummary }) {
         onChange={(event) => setDraft(event.target.value)}
         onBlur={commit}
         disabled={update.isPending}
-        className="w-full px-3 py-2 rounded-md text-sm resize-y"
+        className="control-field w-full px-3 py-2 rounded-md text-sm resize-y"
         style={{
           background: 'var(--surface-3)',
           color: 'var(--text)',
@@ -144,7 +144,7 @@ export function WaitingSetting({
               if (event.key === 'Enter') event.currentTarget.blur()
             }}
             disabled={update.isPending}
-            className="w-24 px-3 py-2 rounded-md text-sm"
+            className="control-field w-24 px-3 py-2 rounded-md text-sm"
             style={{
               background: 'var(--surface-3)',
               color: 'var(--text)',
@@ -192,7 +192,7 @@ export function PermissionDefaultSetting({ agent }: { agent: AgentSummary }) {
         onChange={(event) => update.mutate({ agent: agent.name, mode: event.target.value || null })}
         disabled={update.isPending}
         aria-label={`Default permissions for ${agent.name}`}
-        className="w-full px-3 py-2 rounded-md text-sm"
+        className="control-field w-full px-3 py-2 rounded-md text-sm"
         style={{
           background: 'var(--surface-3)',
           color: 'var(--text)',
@@ -238,7 +238,7 @@ export function RunnerPicker({ agent }: { agent: AgentSummary }) {
         }}
         disabled={bindRunner.isPending}
         aria-label={`Runner for ${agent.name}`}
-        className="w-full px-3 py-2 rounded-md text-sm"
+        className="control-field w-full px-3 py-2 rounded-md text-sm"
         style={{
           background: 'var(--surface-3)',
           color: 'var(--text)',
@@ -281,7 +281,7 @@ export function CharterPicker({ agent }: { agent: AgentSummary }) {
         })}
         disabled={bindCharter.isPending}
         aria-label={`Charter for ${agent.name}`}
-        className="w-full px-3 py-2 rounded-md text-sm"
+        className="control-field w-full px-3 py-2 rounded-md text-sm"
         style={{
           background: 'var(--surface-3)',
           color: 'var(--text)',
@@ -345,7 +345,7 @@ export function CheckpointOverrideSetting({ agent }: { agent: AgentSummary }) {
           value={agent.checkpoint_mode ?? ''}
           onChange={(event) => updateMode.mutate({ agent: agent.name, mode: event.target.value || null })}
           aria-label={`Automatic checkpointing for ${agent.name}`}
-          className="w-full px-3 py-2 rounded-md text-sm"
+          className="control-field w-full px-3 py-2 rounded-md text-sm"
           style={selectStyle}
         >
           <option value="">Inherit the project's setting</option>
@@ -363,7 +363,7 @@ export function CheckpointOverrideSetting({ agent }: { agent: AgentSummary }) {
           value={unit}
           onChange={(event) => setUnit(event.target.value as 'percent' | 'tokens')}
           aria-label={`Threshold unit for ${agent.name}`}
-          className="px-3 py-2 rounded-md text-sm"
+          className="control-field px-3 py-2 rounded-md text-sm"
           style={selectStyle}
         >
           <option value="percent">Percent</option>
@@ -377,7 +377,7 @@ export function CheckpointOverrideSetting({ agent }: { agent: AgentSummary }) {
           onChange={(event) => setEntry(event.target.value)}
           onBlur={commit}
           aria-label={`Checkpoint threshold for ${agent.name}`}
-          className="w-28 px-3 py-2 rounded-md text-sm"
+          className="control-field w-28 px-3 py-2 rounded-md text-sm"
           style={selectStyle}
         />
       </div>
@@ -428,7 +428,7 @@ export function CheckpointGrantsSetting({ agent }: { agent: AgentSummary }) {
               update.mutate({ agent: agent.name, grant: row.grant, enabled: event.target.checked })
             }
             aria-label={`${row.label} for ${agent.name}`}
-            className="mt-0.5"
+            className="control-choice mt-0.5"
           />
           <span>
             <span className="text-sm" style={{ color: 'var(--text)' }}>{row.label}</span>
@@ -468,7 +468,7 @@ export function EvidenceGrantSetting({ agent }: { agent: AgentSummary }) {
             })
           }
           aria-label={`Accept evidence for ${agent.name}`}
-          className="mt-0.5"
+          className="control-choice mt-0.5"
         />
         <span>
           <span className="text-sm" style={{ color: 'var(--text)' }}>Accept or reject evidence</span>

@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { formatDistanceToNow } from 'date-fns'
 import { useProjectConversations, type AgentConversation } from '@/api/agentChat'
 import type { ProjectAgentSummary } from '@/api/projects'
 import { Icon } from '@/components/common/Icon'
@@ -8,6 +9,7 @@ import { capRows, groupConsecutiveFirings } from '@/lib/loopGrouping'
 import { ConversationRow } from './ConversationRow'
 import { LoopFiringGroup } from './LoopFiringGroup'
 import { RowMenu, type RowMenuItem } from './RowMenu'
+import { hubDate } from '@/lib/hubTime'
 
 /** How many of an agent's conversations the tree shows before the rest go behind an expander.
  *
@@ -152,7 +154,16 @@ export function AgentTree({
                   className="h-2 w-2 shrink-0 rounded-full"
                   style={{ background: colors.accent }}
                 />
-                <span className="min-w-0 flex-1 truncate">{agent.name}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate">{agent.name}</span>
+                  <span className="block truncate text-[10px]" style={{ color: 'var(--text-3)' }}>
+                    {agent.status === 'running'
+                      ? 'Running now'
+                      : agent.last_seen
+                        ? `Seen ${formatDistanceToNow(hubDate(agent.last_seen), { addSuffix: true })}`
+                        : 'No activity yet'}
+                  </span>
+                </span>
                 {!expanded && needsAttention && (
                   <span
                     data-testid={`rail-agent-attention-${projectId}-${agent.name}`}

@@ -450,19 +450,27 @@ export default function App() {
     } else if (destination.tab === 'activity') {
       projectContent = (
         <div className="flex h-full flex-col">
-          <div className="flex gap-1 px-4 pt-3">
+          <div className="px-4 pt-3">
+            <div
+              className="inline-flex gap-1 rounded-lg p-1"
+              role="group"
+              aria-label="Activity view"
+              style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}
+            >
             {(['activity', 'logs'] as const).map((view) => (
               <button
                 key={view}
                 type="button"
                 data-testid={`activity-subview-${view}`}
                 onClick={() => setActivitySubview(view)}
-                className="px-3 py-1.5 text-xs capitalize"
+                data-active={activitySubview === view ? 'true' : 'false'}
+                className="row-item w-auto rounded-md px-3 py-1.5 text-xs capitalize"
                 aria-pressed={activitySubview === view}
               >
                 {view}
               </button>
             ))}
+            </div>
           </div>
           <div className="min-h-0 flex-1 overflow-auto">
             {activitySubview === 'activity' ? <ActivityLog /> : <LogsView />}

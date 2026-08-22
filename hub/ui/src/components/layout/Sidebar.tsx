@@ -72,6 +72,15 @@ const AGENT_SECTION_LABELS: Record<AgentSettingsSection, string> = {
   access: 'Access',
   workspace: 'Workspace',
 }
+const AGENT_SECTION_ICONS: Record<AgentSettingsSection, string> = {
+  identity: 'badge',
+  execution: 'terminal',
+  charter: 'description',
+  interaction: 'forum',
+  context: 'memory',
+  access: 'lock',
+  workspace: 'folder_open',
+}
 const SECTION_LABELS: Record<EnvironmentSection, string> = {
   quality: 'Quality',
   instructions: 'Instructions',
@@ -253,6 +262,7 @@ export function Sidebar({
                   onOpenAgentSettings?.(agentSettings.projectId, agentSettings.agent, section)
                 }
               >
+                <Icon name={AGENT_SECTION_ICONS[section]} size={14} />
                 {AGENT_SECTION_LABELS[section]}
               </button>
             ))}

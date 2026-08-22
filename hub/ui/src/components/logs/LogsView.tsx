@@ -4,14 +4,15 @@ import { useLogAgents, useLogs } from '@/api/logs'
 import { Button } from '@/components/ui/button'
 import { LogLine } from './LogLine'
 import { useQueryClient } from '@tanstack/react-query'
+import { tint } from '@/lib/colorTint'
 
 const SEVERITIES = ['all', 'error', 'warn', 'info', 'debug'] as const
 type Severity = (typeof SEVERITIES)[number]
 
 const SEVERITY_ACTIVE_STYLE: Record<Severity, { bg: string; color: string }> = {
   all:   { bg: 'var(--surface-3)', color: 'var(--text)' },
-  error: { bg: 'color-mix(in srgb, var(--red) 15%, transparent)', color: 'var(--red)' },
-  warn:  { bg: 'color-mix(in srgb, var(--amber) 15%, transparent)', color: 'var(--amber)' },
+  error: { bg: tint('var(--red)', 15), color: 'var(--red)' },
+  warn:  { bg: tint('var(--amber)', 15), color: 'var(--amber)' },
   info:  { bg: 'var(--surface-3)', color: 'var(--text)' },
   debug: { bg: 'var(--surface-3)', color: 'var(--text-2)' },
 }
@@ -101,10 +102,10 @@ export function LogsView() {
         className="flex flex-col gap-2 px-3 py-2.5 shrink-0 border-b"
         style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}
       >
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {/* Search */}
           <div
-            className="relative flex-1 flex items-center"
+            className="relative flex min-w-[180px] flex-1 items-center"
             style={{
               background: 'var(--surface-2)',
               borderRadius: 4,
@@ -117,7 +118,7 @@ export function LogsView() {
               placeholder="Search event type, agent, data…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full h-8 pl-9 pr-3 text-xs focus:outline-none bg-transparent"
+              className="control-field w-full h-8 pl-9 pr-3 text-xs bg-transparent"
               style={{ color: 'var(--text)' }}
             />
           </div>
@@ -126,12 +127,15 @@ export function LogsView() {
           <select
             value={agentFilter}
             onChange={(e) => setAgentFilter(e.target.value)}
-            className="h-8 px-2 text-xs focus:outline-none rounded"
+            className="control-field h-8 px-2 text-xs rounded"
             style={{
               background: 'var(--surface-2)',
               border: '1px solid var(--border-hi)',
               color: 'var(--text)',
               borderRadius: 4,
+              width: 'auto',
+              minWidth: 120,
+              maxWidth: 180,
             }}
           >
             <option value="">All agents</option>
@@ -204,7 +208,9 @@ export function LogsView() {
         style={{ background: 'var(--bg)' }}
       >
         {isLoading ? (
-          <p className="font-mono text-xs p-4" style={{ color: 'var(--text-3)' }}>Loading…</p>
+          <div className="space-y-2 p-3" aria-label="Loading log entries">
+            {[0, 1, 2, 3, 4, 5].map((row) => <div key={row} className="skeleton h-6 w-full" aria-hidden="true" />)}
+          </div>
         ) : filtered.length === 0 ? (
           <p className="font-mono text-xs p-4" style={{ color: 'var(--text-3)' }}>
             {search || severity !== 'all' || agentFilter

@@ -8,15 +8,10 @@
   "started_at": "2026-08-22T14:30:00+01:00",
   "stop_at": "2026-08-22T20:00:00+01:00",
   "stop_when_queue_empties": true,
-  "iteration": 7,
-  "last_heartbeat": "2026-08-22T15:41:07+01:00",
+  "iteration": 8,
+  "last_heartbeat": "2026-08-22T16:44:27+01:00",
   "log_file": ".claude/autonomous/2026-08-22-ui-finesse-log.md",
   "queue": [
-    {
-      "id": "F7",
-      "title": "Refine jobs, activity, logs, agents and command palette",
-      "detail": "Apply the considered S8-jobs, S8-logs, S8-agents and S8-palette treatments to the actual live components named by App.tsx: JobsPage/JobCard/JobForm, ActivityLog/LogsView, AgentSettingsPage and AgentTree surfaces, CommandPalette. Do not revive dead AgentCard or legacy unreachable pages. Preserve filters, live state and actions. Fix the existing command-palette dialog title/description accessibility warning while here. Run focused tests and Playwright evidence in both themes/narrow width."
-    },
     {
       "id": "F8",
       "title": "Research, mock, correct and implement every remaining reachable surface",
@@ -34,7 +29,7 @@
     }
   ],
   "current": null,
-  "next_action": "Apply the considered S8-jobs, S8-logs, S8-agents and S8-palette treatments to the actual live components named by App.tsx: JobsPage/JobCard/JobForm, ActivityLog/LogsView, AgentSettingsPage and AgentTree surfaces, CommandPalette. Do not revive dead AgentCard or legacy unreachable pages. Preserve filters, live state and actions. Fix the existing command-palette dialog title/description accessibility warning while here. Run focused tests and Playwright evidence in both themes/narrow width.",
+  "next_action": "Re-read App.tsx and navigation after F1-F7 and produce a route-to-component coverage table in the run log. For reachable surfaces not covered by the approved mocks (including environment/project management, runners, charters, instructions, accounting, quality, diagnostics and worktrees if still reachable), follow the same flow: inspect current behavior and strong primary/reference patterns, make a small standalone considered mock only when structure is genuinely new, render with Playwright, critique and correct it, then implement. Skip proven dead/legacy components and record evidence for the skip. Keep the visual language consistent rather than inventing a new one per page.",
   "decisions_for_user": [],
   "limits": [
     "Stay on autonomous/2026-08-22-ui-finesse and push only that branch; do not merge, open a PR, release, publish or deploy.",

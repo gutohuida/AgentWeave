@@ -76,13 +76,17 @@ export function ActivityLog() {
     pausedRef.current = paused
   }, [paused])
   const [severityFilter, setSeverityFilter] = useState<SeverityFilter>('all')
+  const [loadingHistory, setLoadingHistory] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!isConfigured || !projectId) return
+    let cancelled = false
     setEvents([])
+    setLoadingHistory(true)
     getJson<SSEEvent[]>(`/api/v1/projects/${projectId}/events/history?limit=200`)
       .then((history) => {
+        if (cancelled) return
         setEvents((prev) => {
           const existingIds = new Set(prev.map((e) => e.timestamp + e.type))
           const fresh = history
@@ -92,6 +96,12 @@ export function ActivityLog() {
         })
       })
       .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setLoadingHistory(false)
+      })
+    return () => {
+      cancelled = true
+    }
   }, [isConfigured, projectId])
 
   // The shared SSE stream is instance-wide (every project's events, per
@@ -152,7 +162,16 @@ export function ActivityLog() {
         className="flex-1 overflow-y-auto rounded-xl p-3"
         style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
       >
-        {visibleEvents.length === 0 ? (
+        {loadingHistory ? (
+          <div className="space-y-3" aria-label="Loading activity">
+            {[0, 1, 2, 3, 4].map((row) => (
+              <div key={row} className="flex items-center gap-3" aria-hidden="true">
+                <div className="skeleton h-9 w-9 rounded-full" />
+                <div className="skeleton h-8 flex-1" />
+              </div>
+            ))}
+          </div>
+        ) : visibleEvents.length === 0 ? (
           <EmptyState icon="monitoring" title="Waiting for events…" description="SSE events will stream here in real time." />
         ) : (
           <>

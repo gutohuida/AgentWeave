@@ -60,7 +60,7 @@ function renderPalette(overrides: Partial<Parameters<typeof CommandPalette>[0]> 
   }
   render(
     <CommandPalette
-      agents={[{ name: 'claude' }]}
+      agents={[{ name: 'claude', color_index: 2, status: 'running', display_model: 'Claude' }]}
       conversations={[conversationFixture]}
       documents={[documentFixture]}
       tasks={[taskFixture]}
@@ -91,6 +91,16 @@ describe('command palette — open and close', () => {
     renderPalette()
     fireEvent.keyDown(document, { key: 'k', metaKey: true })
     await waitFor(() => expect(screen.getByPlaceholderText(PLACEHOLDER)).toBeInTheDocument())
+  })
+
+  it('names and describes the dialog and exposes keyboard guidance', async () => {
+    renderPalette()
+    fireEvent.keyDown(document, { key: 'k', ctrlKey: true })
+    const dialog = await screen.findByRole('dialog', { name: 'Command palette' })
+    expect(dialog).toHaveAccessibleDescription(/current project's agents, tasks/i)
+    expect(screen.getByText('Navigate')).toBeInTheDocument()
+    expect(screen.getByText('Open')).toBeInTheDocument()
+    expect(screen.getByText('Close')).toBeInTheDocument()
   })
 
   it('does not open when a text input has focus and a literal "k" is typed without the modifier', async () => {
@@ -135,5 +145,14 @@ describe('command palette — the four action kinds', () => {
     await screen.findByText('Ship the thing')
     await userEvent.click(screen.getByText('Ship the thing'))
     expect(callbacks.onOpenTask).toHaveBeenCalledWith('task-1')
+  })
+
+  it('shows existing status and recency context without changing selection behavior', async () => {
+    renderPalette()
+    fireEvent.keyDown(document, { key: 'k', ctrlKey: true })
+    expect(await screen.findByText('in progress')).toBeInTheDocument()
+    expect(screen.getByText(/unassigned · updated/i)).toBeInTheDocument()
+    expect(screen.getByText(/baseline · updated/i)).toBeInTheDocument()
+    expect(screen.getByText(/conversation · updated/i)).toBeInTheDocument()
   })
 })
