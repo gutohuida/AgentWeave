@@ -3722,3 +3722,37 @@ shows the touched set is exactly conversations-continue phases 1-6 (commits `5e8
 under `src/agentweave` or `tests/` (the CLI's own suite) changed this session. All UI-mock work
 (U0a/U0b/S1-S8/Z) touched only `design/mocks/`, never `hub/ui/src` or `hub/hub` — confirm that still
 holds before trusting any prior iteration's "suite passed" claim without a fresh run.
+
+## Iteration 54 — 2026-08-22T08:34:19+01:00 — no-op: queue confirmed empty, index re-verified
+
+Branch (`autonomous/2026-08-21-refine-and-continue`) and `git log` matched STATE.json exactly on
+entry (`75ef9c9` = HEAD, a heartbeat-release commit; nothing to reconcile). ~26 minutes to `stop_at`
+(`2026-08-22T09:00:00+01:00`).
+
+Iteration 53 left the queue with nothing actionable and `do_not_idle`'s explicit instruction for
+this case: verify the index still renders, confirm no queue item regressed, and log a no-op rather
+than fabricate work. Did exactly that.
+
+**Re-ran the Playwright check** on `design/mocks/index.html` (`py -3.11`, `pathlib.Path(...).as_uri()`
+per the standing recipe for git-bash's broken `/c/...` paths): 12 `.screen-card`s, 56 `<img>` tags,
+0 broken images, 0 `pageerror`s, 3 `requestfailed` (the pre-existing `@fontsource` bare-specifier
+404s every mock importing `index.css` hits under raw `file://`, unrelated to any image). A first pass
+counted 2 elements matching `.pending` rather than iteration 53's reported 1 — traced to a looser
+selector (`.pending` alone matches both `.screen-card.pending` and the nested `.screen-status.pending`
+div on the *same* card) rather than an actual second pending card; `grep` confirmed only one
+`screen-card pending` in the file. Not a regression.
+
+**Confirmed no queue item regressed**: `git log -- design/mocks/` and `git log -- hub/hub hub/ui/src`
+show no commits since iteration 53's `86de63b`, so nothing could have drifted. C1-C6, U0a/U0b, S1-S8,
+and Z remain exactly as iteration 53 left them.
+
+No new work to do inside remaining runway; `do_not_idle` forbids inventing scope outside the queue.
+Logging this explicitly as a no-op per iteration 53's own instruction for this case.
+
+**For the next session** (whether this run continues past `stop_at` or a fresh session picks this up
+later): the one open item is `design/mocks/_system/` (U0a/U0b) — P1+P2 exist, P3 (Playwright
+screenshot + critique) and P4 (`RATIONALE.md` + index entry) do not. That is the correct next unit of
+work if UI-mock work continues, per `do_not_idle`'s note not to re-open it without an operator steer
+first, since `D-direction` is still open. `stop_when_queue_empties` is `true` and the queue is in fact
+empty of actionable work — the driver's own `stop_at` guard (past which it self-unregisters) is the
+correct place for this run to end.
