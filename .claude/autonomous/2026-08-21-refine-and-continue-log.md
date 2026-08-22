@@ -3222,3 +3222,76 @@ feed UI/UX patterns (density, filtering, colour-coding by level, timestamp treat
 conventions), and the T3 Code sourcemaps for the closest equivalent surface. Write
 `design/mocks/S8-logs/RESEARCH.md` with findings, sources, and what is missing versus merely
 unstyled, per the same protocol every prior screen this run used.
+
+## Iteration 45 — 2026-08-22T07:27:26+01:00 — S8-logs P1: explore
+
+Verified branch/log/STATE.json agreed before starting (`e8a51fd` = HEAD, S8-agents P4's commit,
+matched STATE.json exactly). Per `S8`'s sub-order and `pre_authorised`, next sub-screen is
+**S8-logs** — `screen_pass_protocol.P1_explore`.
+
+**Corrected the queue's framing before reading code.** The queue lists four components as one
+screen; `App.tsx:441-461` shows they are two **subviews of a single `activity` tab**
+(`ActivityLog`/`EventRow` = human-facing narrative feed, `LogsView`/`LogLine` = dense developer
+console), switched by a button pair that turned out to be the plainest control found all run: two
+bare `<button>`s with only `aria-pressed`, no background, border, fill, or motion at all. That
+switcher is now RESEARCH.md's finding 1 and the most concrete fix in scope — direct reuse of the
+segmented-control pattern `_system/controls.html` (U0b) already built.
+
+Read all four components in full, including comments, plus `hub/ui/src/index.css` for available
+tokens and the U0a/U0b system mocks this screen inherits from. Notable reads:
+
+- `LogsView.tsx`'s toolbar chips (severity + category) carry **no `transition` property at all** —
+  not merely an untokenised duration, an actual zero: state changes snap instantly. Worse than the
+  "44 ad-hoc transitions" `IDENTITY.md` already measured project-wide, since those at least animate.
+- `LogLine.tsx`'s expandable rows are a `<div onClick>` with no `role`/`tabIndex`/keyboard handler —
+  a genuine accessibility gap (keyboard-unreachable), not a styling one, the first of that specific
+  kind found this run.
+- `EventRow.tsx`'s `SEVERITY_CHIP` omits `info` (no chip shown) and has no copy-entry affordance,
+  while its sibling `LogLine.tsx` has both, reading the same backend `severity` field — drift, not a
+  deliberate difference between the two personas.
+- `LogsView.tsx`'s `SEVERITY_ACTIVE_STYLE` reimplements `color-mix()` inline instead of calling the
+  shared `tint()` helper its own sibling `LogLine.tsx` already imports from `lib/colorTint.ts` —
+  duplicated colour computation, same computed result today but a maintenance gap if the scale ever
+  changes.
+
+**External research.** `WebFetch` on PatternFly's log-viewer guidelines page returned no usable
+content (client-rendered, nothing in the static HTML) — noted and moved on rather than fabricating
+from memory. `WebFetch` on SigNoz's logs-UI article was substantive: names log-volume-at-a-glance as
+a UX baseline, which `LogsView` lacks entirely (zero visual overview, pure list) — finding 2, a real
+missing-information gap by that source's own standard. `WebSearch` also surfaced Chrome DevTools
+console conventions (severity + text + **regex** filter is the near-universal trio; AgentWeave's
+search is substring-only) and Papertrail's log-colorization practice (colorizing *by source*, not
+just severity, is common). The Papertrail angle was **checked and explicitly rejected before
+reaching P2**: AgentWeave's 7 filter categories getting their own hues would need 7 new colours,
+which fails `IDENTITY.md` clause 1 (no new hues) and the "semantic colour is earned" principle —
+recorded as a rejected direction in RESEARCH.md rather than silently dropped, so a later pass doesn't
+re-propose it.
+
+T3 Code sourcemaps have no standalone log-console equivalent — the closest is
+`ThreadTerminalDrawer.tsx`, an in-thread embedded terminal, a different surface. Read it anyway per
+protocol: it derives terminal theme colours from real computed CSS custom properties at runtime
+rather than hardcoding, and uses the same `opacity-0` + `transition-colors` hover-reveal idiom
+`LogLine`'s copy button already uses independently. Confirms the token-driven direction is right;
+nothing new to import from it. Not quoted at length or committed, per `IDENTITY.md`'s reference-only
+rule.
+
+Wrote `design/mocks/S8-logs/RESEARCH.md`: what was read, external sources with links, eight findings
+(the bare subview switcher, missing volume overview, the keyboard-accessibility gap, the
+`info`-chip/copy-button asymmetry, zero-transition toolbar chips, no skeleton loading in either
+subview, the rejected regex/colorization feature gaps noted for `RATIONALE.md` per
+`pre_authorised`'s "mock every missing feature, don't build it," and the duplicated `tint()` vs.
+inline `color-mix()`), a "what must not change" section, and a preliminary clause-by-clause
+rejection-test pass (none failed; the rejected per-category-hue direction is the one that would have
+failed clause 1, caught before it reached a mock).
+
+Docs-only pass — no code under `hub/ui/src` changed, nothing to build or test-run this iteration.
+`git status --short` showed only `design/mocks/S8-logs/RESEARCH.md` (new) plus the routine
+`STATE.json` heartbeat/next_action update before committing.
+
+**Next**: S8-logs P2 — `screen_pass_protocol.P2_validate_and_mock`. Re-validate RESEARCH.md's
+findings against `design/IDENTITY.md`'s rejection test (this pass already pre-checked once; P2
+re-does it against actual built HTML, the authoritative check). Build
+`design/mocks/S8-logs/<variant>.html` — 2-3 variants exploring degree of refinement, self-contained,
+importing `../../../hub/ui/src/index.css`, with realistic log/event content (not lorem ipsum),
+covering BOTH the `ActivityLog` feed and the `LogsView` console since they are one screen's two
+subviews joined by the (now-fixed-in-mock) segmented switcher.
