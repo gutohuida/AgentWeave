@@ -21,7 +21,9 @@ function tone(token: string): { bg: string; border: string; color: string } {
 }
 
 const NEUTRAL = tone('var(--text-2)')
-const INFO = tone('var(--blue)')
+// In-progress/info needs attention but is not terminal. Amber carries that
+// meaning; blue remains reserved for focus and selection.
+const INFO = tone('var(--amber)')
 const WARNING = tone('var(--amber)')
 const SUCCESS = tone('var(--green)')
 const DANGER = tone('var(--red)')
@@ -50,18 +52,12 @@ export function Badge({ children, variant = 'default', className, pill = false }
   const s = VARIANT_STYLES[variant]
   return (
     <span
-      className={className}
+      className={['aw-chip', className].filter(Boolean).join(' ')}
+      data-pill={pill || undefined}
       style={{
-        display: 'inline-flex',
-        alignItems: 'center',
         background: s.bg,
         border: `1px solid ${s.border}`,
         color: s.color,
-        borderRadius: pill ? 9999 : 'var(--radius-sm)',
-        padding: pill ? '1px 6px' : '2px 8px',
-        fontSize: 11,
-        fontWeight: 500,
-        lineHeight: 1.4,
       }}
     >
       {children}
@@ -73,17 +69,12 @@ export function StatusBadge({ status, pill }: { status: string; pill?: boolean }
   const s = STATUS_STYLES[status] ?? STATUS_STYLES.pending
   return (
     <span
+      className="aw-chip"
+      data-pill={pill || undefined}
       style={{
-        display: 'inline-flex',
-        alignItems: 'center',
         background: s.bg,
         border: `1px solid ${s.border}`,
         color: s.color,
-        borderRadius: pill ? 9999 : 'var(--radius-sm)',
-        padding: pill ? '1px 6px' : '2px 8px',
-        fontSize: 11,
-        fontWeight: 500,
-        lineHeight: 1.4,
         textTransform: 'capitalize',
       }}
     >

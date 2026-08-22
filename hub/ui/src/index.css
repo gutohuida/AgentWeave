@@ -321,6 +321,144 @@
     box-shadow: 0 1px 2px rgb(0 0 0 / 0.08), inset 0 1px var(--lift-hi);
   }
 
+  /* Considered elevation vocabulary. Surface lightness does the structural work;
+     shadows are restrained edge cues, never a dark halo around content. */
+  .elevation-ground {
+    background: var(--rail);
+    border: 1px solid var(--border-region);
+  }
+  .elevation-resting {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.08), inset 0 1px var(--lift-hi);
+  }
+  .elevation-nested {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    box-shadow: 0 2px 6px rgb(0 0 0 / 0.14), inset 0 1px var(--lift-hi);
+  }
+  .elevation-overlay {
+    background: var(--surface-3);
+    border: 1px solid var(--border-hi);
+    box-shadow: 0 4px 14px rgb(0 0 0 / 0.20), inset 0 1px var(--lift-hi);
+  }
+
+  /* Shared field recipe. Components keep ownership of dimensions so adopting the
+     primitive cannot make an existing dense form taller. */
+  .control-field {
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    outline: none;
+    background: var(--surface-2);
+    color: var(--text);
+    transition: border-color var(--dur-fast) var(--ease),
+                box-shadow var(--dur-fast) var(--ease),
+                background-color var(--dur-fast) var(--ease),
+                opacity var(--dur-fast) var(--ease);
+  }
+  .control-field::placeholder { color: var(--text-3); }
+  .control-field:hover:not(:disabled) { border-color: var(--border-hi); }
+  .control-field:focus-visible {
+    border-color: var(--border-hi);
+    box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring);
+  }
+  .control-field:disabled {
+    opacity: 0.5;
+    pointer-events: none;
+  }
+  .control-field[aria-invalid="true"] {
+    border-color: color-mix(in oklab, var(--destructive) 60%, transparent);
+    box-shadow: 0 0 0 1px color-mix(in oklab, var(--destructive) 35%, transparent);
+  }
+  textarea.control-field { resize: vertical; }
+  select.control-field {
+    appearance: none;
+    cursor: pointer;
+    padding-right: 32px;
+  }
+  .control-select-wrap { position: relative; }
+  .control-select-icon {
+    position: absolute;
+    top: 50%;
+    right: 10px;
+    color: var(--text-3);
+    pointer-events: none;
+    transform: translateY(-50%);
+    transition: color var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease);
+  }
+  .control-select-wrap:focus-within .control-select-icon { color: var(--text-2); }
+
+  /* Badges and chips share geometry and motion; their colour remains owned by
+     the semantic/category/agent family that rendered them. */
+  .aw-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1.4;
+    transition: background-color var(--dur-fast) var(--ease),
+                border-color var(--dur-fast) var(--ease),
+                color var(--dur-fast) var(--ease),
+                opacity var(--dur-fast) var(--ease);
+  }
+  .aw-chip[data-pill="true"] {
+    border-radius: 9999px;
+    padding-block: 1px;
+  }
+  button.aw-chip:hover:not(:disabled),
+  [role="button"].aw-chip:hover:not([aria-disabled="true"]) {
+    border-color: var(--border-hi);
+  }
+  .aw-chip[data-selected="true"] {
+    box-shadow: 0 0 0 1px var(--ring);
+  }
+  .aw-chip:disabled,
+  .aw-chip[aria-disabled="true"] {
+    opacity: 0.5;
+    pointer-events: none;
+  }
+
+  /* Shape-matched loading keeps layout stable while content arrives. The
+     static shape remains when reduced motion removes the sweep. */
+  .skeleton {
+    position: relative;
+    overflow: hidden;
+    border-radius: var(--radius-sm);
+    background: var(--surface-3);
+  }
+  .skeleton::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, var(--border-hi), transparent);
+    transform: translateX(-100%);
+    animation: skeleton-shimmer 1.8s var(--ease) infinite;
+  }
+  @keyframes skeleton-shimmer { to { transform: translateX(100%); } }
+
+  .interactive-card {
+    transition: border-color var(--dur-fast) var(--ease),
+                box-shadow var(--dur-fast) var(--ease),
+                background-color var(--dur-fast) var(--ease),
+                opacity var(--dur-fast) var(--ease),
+                transform var(--dur-base) var(--ease);
+  }
+  .interactive-card:hover { border-color: var(--border-hi); }
+  .interactive-card:active { box-shadow: inset 0 1px var(--press-lo); }
+  .interactive-card[data-selected="true"] {
+    border-color: var(--ring);
+    box-shadow: 0 0 0 1px var(--ring);
+  }
+  .interactive-card[aria-disabled="true"] {
+    opacity: 0.5;
+    pointer-events: none;
+  }
+
   /* Command palette (D3) — cmdk ships no styles of its own, only the `cmdk-*` data-attribute
      hooks used below, so it composes with the app's own tokens rather than a competing look. */
   .command-palette-overlay {

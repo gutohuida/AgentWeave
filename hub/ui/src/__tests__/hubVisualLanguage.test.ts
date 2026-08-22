@@ -51,6 +51,22 @@ describe('Hub UI mock alignment contracts', () => {
     expect(cssSource).toContain('@media (prefers-reduced-motion: reduce)')
   })
 
+  it('ships the considered elevation, field, chip, card, and skeleton foundations', () => {
+    for (const primitive of [
+      '.elevation-ground',
+      '.elevation-resting',
+      '.elevation-nested',
+      '.elevation-overlay',
+      '.control-field',
+      '.aw-chip',
+      '.interactive-card',
+      '.skeleton',
+    ]) {
+      expect(cssSource).toContain(primitive)
+    }
+    expect(cssSource).toContain('animation: skeleton-shimmer 1.8s var(--ease) infinite')
+  })
+
   it('uses named SVG icons instead of literal or corrupted project glyphs', () => {
     expect(sidebarSource).toContain("import { Icon }")
     expect(sidebarSource).not.toMatch(/[ÃÂâ]/)
