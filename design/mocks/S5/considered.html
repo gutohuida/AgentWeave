@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Task lifecycle governance — S5 mock (considered)</title>
+<!--
+  Mock only — see restrained.html's header comment for the full framing
+  (reproduces spec_render.py's _STYLE verbatim, additive-only below it, no
+  navigation script). This file carries everything restrained.html fixes,
+  applied more fully, plus two things restrained deliberately deferred:
+
+  MOTION AND ELEVATION NEED A SECOND, SCOPED CLAUSE-1-STYLE RESOLUTION.
+  IDENTITY.md clause 3 requires every duration to be --dur-fast|base|slow —
+  but those tokens live in hub/ui/src/index.css, which this standalone
+  document does not import (same reasoning RESEARCH.md already gave for
+  clause 1). The resolution applied here, parallel to that one: this
+  document's own _STYLE gains --aw-dur-fast/--aw-dur-base and --aw-ease,
+  VALUE-IDENTICAL to the Hub's --dur-fast/--dur-base/--ease (150ms/250ms,
+  cubic-bezier(0.16,1,0.3,1)) — not a new scale, a mirror of the one that
+  already exists, kept in this document's own namespace because it must
+  still animate correctly with zero Hub stylesheet present. Recorded here
+  AND in RATIONALE.md so this doesn't read as an invented duration.
+
+  Adds: hover/press/focus-visible states on every interactive element
+  (rejection-test clause 7), elevation on hover built from color-mix of
+  --fg over --bg (no new hex, no borrowed --lift-hi since that Hub token
+  isn't in scope here), grouped acceptance rows with a per-requirement
+  visual band + row-hover, and prefers-reduced-motion support.
+-->
+<meta name="aw-spec-kind" content="capability">
+<meta name="aw-spec-status" content="current">
+<meta name="aw-spec-rigor" content="sketch">
+<meta name="aw-spec-schema-version" content="1">
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+    --surface-2: #21262d; --surface: #161b22;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
+  --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
+  --surface-2: #eaeef2; --surface: #f6f8fa;
+}
+:root[data-theme="dark"] {
+  --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+  --aw-accent: #4493f8; --aw-warn: #d29922; --aw-ok: #3fb950;
+  --surface-2: #21262d; --surface: #161b22;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 2rem 2.5rem 4rem; background: var(--bg); color: var(--fg);
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+h1 { font-size: 1.75rem; margin: 0 0 .25rem; }
+h2 { font-size: 1.15rem; margin: 2.5rem 0 .75rem; padding-bottom: .3rem;
+     border-bottom: 1px solid var(--border); }
+h3 { font-size: 1rem; margin: 1.5rem 0 .4rem; }
+p { margin: .5rem 0; }
+ul, ol { margin: .5rem 0; padding-left: 1.4rem; }
+li { margin: .25rem 0; }
+a { color: var(--aw-accent); }
+.aw-meta { color: var(--muted); font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-nav { font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-nav a { margin-right: .6rem; }
+.aw-map-list { list-style: none; margin: .5rem 0; padding-left: 0; }
+.aw-map-list .aw-map-list { padding-left: 1.25rem; margin-top: .5rem; }
+.aw-map-item { margin: .75rem 0; }
+.aw-map-item > p { margin: .2rem 0; }
+.aw-chip { display: inline-block; padding: .1rem .5rem; border-radius: 999px;
+           background: var(--surface-2); font-size: .78rem; margin-right: .4rem; }
+.aw-requirement { border-left: 3px solid var(--border); padding: .1rem 0 .1rem .9rem;
+                  margin: 1.1rem 0; }
+.aw-requirement-must { border-left-color: var(--aw-accent); }
+.aw-requirement-should { border-left-color: var(--aw-warn); }
+.aw-requirement-may { border-left-color: var(--border); }
+.aw-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8rem;
+         color: var(--muted); }
+.aw-modal { font-weight: 600; }
+.aw-modal-must { color: var(--aw-accent); }
+.aw-modal-should { color: var(--aw-warn); }
+.aw-modal-may { color: var(--fg); font-weight: 400; }
+.aw-chip-rigor-gate { color: var(--aw-accent); border: 1px solid var(--aw-accent); }
+.aw-chip-rigor-contract { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+.aw-chip-phase-done { color: var(--aw-ok); border: 1px solid var(--aw-ok); }
+.aw-chip-phase-waiting { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+.aw-chip-phase-quiet { color: var(--muted); }
+.aw-chip-phase-archived { color: var(--muted); text-decoration: line-through; }
+.aw-chip-open { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
+.aw-limits { color: var(--aw-warn); }
+.aw-summary { margin: 0 0 1.5rem; font-size: .9rem; color: var(--muted); }
+.aw-summary .aw-count { font-weight: 600; }
+.aw-summary-sep { color: var(--border); margin: 0 .45rem; }
+.aw-rationale { color: var(--muted); font-size: .9rem; }
+.aw-refs { font-size: .82rem; color: var(--muted); }
+.aw-note { color: var(--muted); font-style: italic; }
+.aw-empty { color: var(--muted); }
+table { border-collapse: collapse; margin: .75rem 0; width: 100%; }
+th, td { border: 1px solid var(--border); padding: .4rem .6rem; text-align: left;
+         vertical-align: top; font-size: .92rem; }
+code, pre { background: var(--surface); border-radius: 4px; }
+code { padding: .1rem .3rem; font-size: .88em; }
+
+/* ══════════════════ Additive refinement below. New tokens --aw-dur-fast /
+   --aw-dur-base / --aw-ease mirror hub/ui/src/index.css's --dur-fast /
+   --dur-base / --ease value-for-value — see header comment. ══════════════ */
+:root { --aw-dur-fast: 150ms; --aw-dur-base: 250ms; --aw-ease: cubic-bezier(0.16, 1, 0.3, 1); }
+@media (prefers-reduced-motion: reduce) {
+  :root { --aw-dur-fast: 0ms; --aw-dur-base: 0ms; }
+}
+
+.mock-toolbar {
+  position: fixed; top: 12px; right: 12px; z-index: 10; display: flex; gap: 6px;
+  font: 12px/1 -apple-system, sans-serif;
+}
+.mock-toolbar button {
+  border: 1px solid var(--border); background: var(--surface); color: var(--fg);
+  border-radius: 6px; padding: 6px 10px; cursor: pointer; font: inherit;
+  transition: border-color var(--aw-dur-fast) var(--aw-ease), color var(--aw-dur-fast) var(--aw-ease);
+}
+.mock-toolbar button[aria-pressed="true"] { border-color: var(--aw-accent); color: var(--aw-accent); }
+
+a { transition: color var(--aw-dur-fast) var(--aw-ease); }
+a:hover { color: color-mix(in srgb, var(--aw-accent) 80%, var(--fg)); }
+a:focus-visible, button:focus-visible {
+  outline: 2px solid var(--aw-accent); outline-offset: 2px; border-radius: 3px;
+}
+
+.aw-modal { display: inline-flex; align-items: center; padding: .05rem .5rem; border-radius: 999px; font-size: .78rem;
+            transition: background-color var(--aw-dur-fast) var(--aw-ease); }
+.aw-modal-must { background: color-mix(in srgb, var(--aw-accent) 16%, var(--bg)); color: var(--aw-accent); }
+.aw-modal-should { background: color-mix(in srgb, var(--aw-warn) 16%, var(--bg)); color: var(--aw-warn); }
+.aw-modal-may { background: var(--surface-2); color: var(--muted); font-weight: 500; }
+
+#requirements { counter-reset: aw-req; }
+.aw-requirement {
+  counter-increment: aw-req; position: relative; border-radius: 6px; padding: .5rem .9rem;
+  transition: background-color var(--aw-dur-base) var(--aw-ease), border-left-color var(--aw-dur-fast) var(--aw-ease);
+}
+.aw-requirement:hover { background: var(--surface); }
+.aw-requirement::before {
+  content: "Requirement " counter(aw-req) " of " attr(data-total);
+  display: block; font-size: .72rem; color: var(--muted); text-transform: uppercase;
+  letter-spacing: .03em; margin-bottom: .15rem;
+}
+
+.aw-id-row { display: flex; align-items: center; gap: .4rem; }
+.aw-copy-btn {
+  border: 1px solid var(--border); background: transparent; color: var(--muted);
+  border-radius: 4px; font-size: .68rem; line-height: 1; padding: .15rem .4rem;
+  cursor: pointer; font-family: inherit;
+  transition: border-color var(--aw-dur-fast) var(--aw-ease), color var(--aw-dur-fast) var(--aw-ease),
+              background-color var(--aw-dur-fast) var(--aw-ease);
+}
+.aw-requirement:hover .aw-copy-btn { border-color: var(--border); }
+.aw-copy-btn:hover { border-color: var(--aw-accent); color: var(--aw-accent); background: color-mix(in srgb, var(--aw-accent) 8%, transparent); }
+.aw-copy-btn[data-copied="true"] { border-color: var(--aw-ok); color: var(--aw-ok); background: color-mix(in srgb, var(--aw-ok) 10%, transparent); }
+
+.aw-rationale {
+  position: relative; padding-left: .9rem; border-left: 2px solid var(--border); margin-top: .5rem;
+  transition: border-left-color var(--aw-dur-fast) var(--aw-ease);
+}
+.aw-requirement:hover .aw-rationale { border-left-color: var(--muted); }
+.aw-rationale::before {
+  content: "Why"; display: block; font-size: .68rem; text-transform: uppercase;
+  letter-spacing: .04em; color: var(--muted); opacity: .75; margin-bottom: .15rem;
+}
+
+#acceptance table { table-layout: fixed; }
+#acceptance col.aw-col-req { width: 9%; }
+#acceptance col.aw-col-given { width: 12%; }
+#acceptance col.aw-col-when, #acceptance col.aw-col-then { width: 39.5%; }
+#acceptance td.aw-cell-empty { color: var(--muted); }
+#acceptance td.aw-cell-empty::after { content: "—"; }
+#acceptance tr[data-group="odd"] td { background: var(--surface); }
+#acceptance tbody tr { transition: background-color var(--aw-dur-fast) var(--aw-ease); }
+#acceptance tbody tr:hover td { background: color-mix(in srgb, var(--aw-accent) 6%, var(--bg)); }
+#acceptance tr[data-first="true"] td:first-child { border-left: 2px solid var(--aw-accent); }
+
+#tasks ul { list-style: none; padding-left: 0; }
+#tasks li {
+  border: 1px solid var(--border); border-radius: 8px; padding: .65rem .85rem;
+  margin: .55rem 0; background: var(--surface); position: relative;
+  transition: border-color var(--aw-dur-fast) var(--aw-ease), box-shadow var(--aw-dur-base) var(--aw-ease),
+              transform var(--aw-dur-fast) var(--aw-ease);
+}
+#tasks li:hover {
+  border-color: color-mix(in srgb, var(--aw-accent) 40%, var(--border));
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--fg) 10%, transparent);
+  transform: translateY(-1px);
+}
+#tasks .aw-refs { display: block; margin-top: .35rem; font-size: 0; }
+#tasks .aw-refs .aw-chip {
+  font-size: .74rem; margin: .15rem .3rem .15rem 0; background: var(--surface-2);
+  transition: background-color var(--aw-dur-fast) var(--aw-ease);
+}
+#tasks li:hover .aw-refs .aw-chip { background: color-mix(in srgb, var(--aw-accent) 10%, var(--surface-2)); }
+
+.aw-map-list > .aw-map-item {
+  padding: .5rem .6rem .75rem; margin: 0; border-radius: 8px; border-bottom: 1px solid var(--border);
+  transition: background-color var(--aw-dur-fast) var(--aw-ease);
+}
+.aw-map-list > .aw-map-item:hover { background: var(--surface); }
+.aw-map-list > .aw-map-item:last-child { border-bottom: none; }
+.aw-map-item .aw-chip-phase-quiet { border: 1px solid var(--border); }
+
+.aw-nav { display: flex; align-items: center; gap: .35rem; }
+.aw-nav a { margin-right: 0; border-radius: 4px; padding: .1rem .3rem; }
+.aw-nav a:hover { background: var(--surface); }
+.aw-nav a:not(:last-child)::after { content: "›"; color: var(--muted); margin-left: .35rem; }
+
+.aw-summary {
+  font-size: .92rem; padding: .55rem .8rem; border-radius: 8px; background: var(--surface);
+  border: 1px solid var(--border);
+}
+</style>
+</head>
+<body>
+
+<div class="mock-toolbar">
+  <button type="button" onclick="document.documentElement.setAttribute('data-theme','light'); this.setAttribute('aria-pressed','true'); this.nextElementSibling.setAttribute('aria-pressed','false');" aria-pressed="true">Light</button>
+  <button type="button" onclick="document.documentElement.setAttribute('data-theme','dark'); this.setAttribute('aria-pressed','true'); this.previousElementSibling.setAttribute('aria-pressed','false');" aria-pressed="false">Dark</button>
+</div>
+
+<h1>Task lifecycle governance</h1>
+<p class="aw-meta"><span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><span class="aw-chip">sketch</span></p>
+<p class="aw-nav"><a href="../../../spec/agentweave.html">Home</a><a href="../../../spec/areas/work-and-traceability.html">Work and traceability</a></p>
+<p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">8</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-modal aw-modal-should"><span class="aw-count">1</span> SHOULD</span><span class="aw-summary-sep">·</span><span class="aw-modal aw-modal-may"><span class="aw-count">1</span> MAY</span><span class="aw-summary-sep">·</span><span class="aw-count">10</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">22</span> criteria</p>
+
+<section><h2 id="summary">Summary</h2>
+<p>Which task status transitions are legal, who may perform them, how an illegal one is refused, and the durable append-only record of every accepted transition. Established by <code>openspec/changes/2026-08-10-task-transition-machine</code> (roadmap change <strong>B1</strong>). Before it, a task's status was whatever the last writer said: <code>update_task_for_actor</code> applied <code>task.status = body.status</code> with no adjacency and no actor rule, and the MCP <code>update_task</code> tool handed that to every bound agent — so a run could move its own work from <code>in_progress</code> to <code>approved</code> in one call. This capability governs <strong>validity</strong>: that a recorded transition is legal, attributed, and made by an entitled actor.</p>
+</section>
+
+<section><h2 id="requirements">Requirements</h2>
+
+<div class="aw-requirement aw-requirement-must" id="FR-1" data-total="10">
+<div class="aw-id-row"><span class="aw-id">FR-1</span><button class="aw-copy-btn" type="button" data-copy="#FR-1" onclick="awCopyAnchor(this)">Copy link</button></div>
+<p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL define, in one place, the set of legal moves between task statuses, and SHALL refuse any status change that is not a member of that set. The eight statuses (<code>pending</code>, <code>assigned</code>, <code>in_progress</code>, <code>completed</code>, <code>under_review</code>, <code>revision_needed</code>, <code>approved</code>, <code>rejected</code>) remain as they are; what changes is that adjacency becomes declared rather than absent.</p>
+<p class="aw-rationale">A refusal MUST name the task's current status and the statuses reachable from it, so a caller can correct itself without guessing. A refused transition MUST leave the task and its history unchanged. Re-declaring the status a task already holds SHALL be accepted as a no-op and MUST NOT append a history entry, so a retried or duplicated call does not manufacture a transition that never happened.</p>
+</div>
+
+<div class="aw-requirement aw-requirement-must" id="FR-2" data-total="10">
+<div class="aw-id-row"><span class="aw-id">FR-2</span><button class="aw-copy-btn" type="button" data-copy="#FR-2" onclick="awCopyAnchor(this)">Copy link</button></div>
+<p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL restrict the status a task may be created with to the declared entry statuses <code>pending</code> and <code>assigned</code>, and SHALL refuse creation in any other status. A lifecycle that can be entered anywhere is not a lifecycle.</p>
+<p class="aw-rationale">This restriction SHALL hold identically over direct HTTP and MCP. Creation SHALL NOT record a transition — a task's history begins with its first move, and its entry status is already stated by the task itself.</p>
+</div>
+
+<div class="aw-requirement aw-requirement-must" id="FR-3" data-total="10">
+<div class="aw-id-row"><span class="aw-id">FR-3</span><button class="aw-copy-btn" type="button" data-copy="#FR-3" onclick="awCopyAnchor(this)">Copy link</button></div>
+<p><span class="aw-modal aw-modal-must">SHALL</span> Every transition the map reserves to the operator SHALL be reachable by the operator through the application, not only through the API. A rule that grants the operator exclusive authority while providing no surface on which to exercise it grants nothing.</p>
+<p class="aw-rationale">The control SHALL offer only those transitions legal for the operator from the task's current status, so an illegal move is not presented and then refused.</p>
+</div>
+
+<div class="aw-requirement aw-requirement-must" id="FR-4" data-total="10">
+<div class="aw-id-row"><span class="aw-id">FR-4</span><button class="aw-copy-btn" type="button" data-copy="#FR-4" onclick="awCopyAnchor(this)">Copy link</button></div>
+<p><span class="aw-modal aw-modal-must">SHALL</span> The transition map SHALL declare, per edge, which kinds of actor may take it. The operator SHALL have edges no agent run has; the operator SHALL NOT have permission to make a move the map does not declare.</p>
+<p class="aw-rationale">Moving a task to <code>rejected</code> from any non-terminal status other than <code>under_review</code> SHALL be permitted to the operator only. <code>approved</code> and <code>rejected</code> SHALL be reopenable — by the operator only. No agent run may leave either status.</p>
+</div>
+
+<div class="aw-requirement aw-requirement-must" id="FR-5" data-total="10">
+<div class="aw-id-row"><span class="aw-id">FR-5</span><button class="aw-copy-btn" type="button" data-copy="#FR-5" onclick="awCopyAnchor(this)">Copy link</button></div>
+<p><span class="aw-modal aw-modal-must">MUST</span> The system SHALL persist one immutable record per accepted status transition, identifying the task, the status moved from, the status moved to, the responsible run and agent where they exist, the kind of actor, what caused the transition, and the time. Records MUST NOT be updated or deleted by any application path.</p>
+</div>
+
+<div class="aw-requirement aw-requirement-must" id="FR-6" data-total="10">
+<div class="aw-id-row"><span class="aw-id">FR-6</span><button class="aw-copy-btn" type="button" data-copy="#FR-6" onclick="awCopyAnchor(this)">Copy link</button></div>
+<p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL refuse a transition to <code>approved</code> requested by an agent when that same agent recorded the task's transition into <code>completed</code>. Author and reviewer MUST be distinct agents.</p>
+<p class="aw-rationale">Distinctness is on agent identity, not run identity. Every turn an agent takes is a new run, so a rule requiring only "a different run" is satisfied by an agent continuing its own work and forbids nothing — observed in live use on 2026-08-10. The operator SHALL be permitted to approve work regardless of who produced it.</p>
+</div>
+
+<div class="aw-requirement aw-requirement-must" id="FR-7" data-total="10">
+<div class="aw-id-row"><span class="aw-id">FR-7</span><button class="aw-copy-btn" type="button" data-copy="#FR-7" onclick="awCopyAnchor(this)">Copy link</button></div>
+<p><span class="aw-modal aw-modal-must">MUST</span> Transition validation, actor separation, and history recording SHALL be enforced at the shared application layer, so the same rules apply whether a run acts over direct HTTP or through the MCP adapter. The adapter MUST surface a refusal as a typed failure.</p>
+</div>
+
+<div class="aw-requirement aw-requirement-must" id="FR-8" data-total="10">
+<div class="aw-id-row"><span class="aw-id">FR-8</span><button class="aw-copy-btn" type="button" data-copy="#FR-8" onclick="awCopyAnchor(this)">Copy link</button></div>
+<p><span class="aw-modal aw-modal-must">SHALL</span> The system SHALL be able to move a task as a consequence of an event it observes, acting as the responsible run rather than as an actor of its own kind. Such a transition SHALL be subject to every legality and actor rule that governs a transition the run itself requests.</p>
+<p class="aw-rationale">There SHALL NOT be a third actor kind for the system. A system actor would require every edge to declare whether the system may take it, and would admit moves for which no one is accountable.</p>
+</div>
+
+<div class="aw-requirement aw-requirement-should" id="FR-9" data-total="10">
+<div class="aw-id-row"><span class="aw-id">FR-9</span><button class="aw-copy-btn" type="button" data-copy="#FR-9" onclick="awCopyAnchor(this)">Copy link</button></div>
+<p><span class="aw-modal aw-modal-should">SHOULD</span> The board SHOULD group history entries by agent rather than by arrival time when a task carries more than a handful.</p>
+<p class="aw-rationale">Six transitions from one agent read as one situation, not six.</p>
+</div>
+
+<div class="aw-requirement aw-requirement-may" id="FR-10" data-total="10">
+<div class="aw-id-row"><span class="aw-id">FR-10</span><button class="aw-copy-btn" type="button" data-copy="#FR-10" onclick="awCopyAnchor(this)">Copy link</button></div>
+<p><span class="aw-modal aw-modal-may">MAY</span> A project may disable operator-only reopening entirely, for a single-operator project where the distinction carries no weight.</p>
+</div>
+
+</section>
+
+<section><h2 id="acceptance">Acceptance criteria</h2>
+<table>
+<colgroup><col class="aw-col-req"><col class="aw-col-given"><col class="aw-col-when"><col class="aw-col-then"></colgroup>
+<thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th></tr></thead>
+<tbody>
+<tr data-group="odd" data-first="true"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"></td><td>a caller moves a task from <code>in_progress</code> to <code>completed</code></td><td>the task's status becomes <code>completed</code>; the transition is recorded</td></tr>
+<tr data-group="odd"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"></td><td>an agent run moves a task from <code>in_progress</code> directly to <code>approved</code></td><td>the request is refused with a typed error naming the reachable statuses; the task is unchanged; no transition is recorded</td></tr>
+<tr data-group="odd"><td><a href="#FR-1">FR-1</a></td><td class="aw-cell-empty"></td><td>a caller sets a task's status to the status it already holds</td><td>the request succeeds; no transition is recorded</td></tr>
+<tr data-group="even" data-first="true"><td><a href="#FR-2">FR-2</a></td><td class="aw-cell-empty"></td><td>a caller creates a task with status <code>approved</code>, <code>completed</code>, or <code>under_review</code></td><td>the request is refused; no task is created</td></tr>
+<tr data-group="even"><td><a href="#FR-2">FR-2</a></td><td class="aw-cell-empty"></td><td>a caller creates a task with status <code>pending</code> or <code>assigned</code>, or states no status</td><td>the task is created; no transition is recorded</td></tr>
+<tr data-group="odd" data-first="true"><td><a href="#FR-3">FR-3</a></td><td class="aw-cell-empty"></td><td>the operator views a task in a given status</td><td>the transitions offered are exactly those the map declares legal for an operator</td></tr>
+<tr data-group="odd"><td><a href="#FR-3">FR-3</a></td><td class="aw-cell-empty"></td><td>the operator wishes to reject a task at <code>pending</code>, or reopen an <code>approved</code> task</td><td>the application provides a way to do it</td></tr>
+<tr data-group="even" data-first="true"><td><a href="#FR-4">FR-4</a></td><td class="aw-cell-empty"></td><td>an agent run moves a task from <code>in_progress</code> to <code>rejected</code></td><td>the request is refused; the task's status is unchanged</td></tr>
+<tr data-group="even"><td><a href="#FR-4">FR-4</a></td><td class="aw-cell-empty"></td><td>the operator moves a task from any non-terminal status to <code>rejected</code></td><td>the request succeeds</td></tr>
+<tr data-group="odd" data-first="true"><td><a href="#FR-5">FR-5</a></td><td class="aw-cell-empty"></td><td>one run moves a task to <code>completed</code> and a different run later moves it to <code>approved</code></td><td>the history contains both transitions; each names its own responsible run</td></tr>
+<tr data-group="odd"><td><a href="#FR-5">FR-5</a></td><td class="aw-cell-empty"></td><td>any application path attempts to modify or remove an existing transition record</td><td>no such path exists</td></tr>
+<tr data-group="even" data-first="true"><td><a href="#FR-6">FR-6</a></td><td class="aw-cell-empty"></td><td>the agent that moved a task to <code>completed</code> requests the move to <code>approved</code></td><td>the request is refused with a typed error stating that approval requires a different agent</td></tr>
+<tr data-group="even"><td><a href="#FR-6">FR-6</a></td><td class="aw-cell-empty"></td><td>the operator approves a task, including one they moved to <code>completed</code> themselves</td><td>the request succeeds; the transition is recorded as an operator action</td></tr>
+<tr data-group="odd" data-first="true"><td><a href="#FR-7">FR-7</a></td><td class="aw-cell-empty"></td><td>an illegal transition is attempted over direct HTTP and the equivalent through MCP</td><td>both are refused; both refusals carry the same meaning</td></tr>
+<tr data-group="even" data-first="true"><td><a href="#FR-8">FR-8</a></td><td class="aw-cell-empty"></td><td>the system would move a task automatically but that move is not an edge available to the responsible run</td><td>no transition occurs; the task is unchanged</td></tr>
+<tr data-group="odd" data-first="true"><td><a href="#FR-9">FR-9</a></td><td>a task has accumulated six or more history entries from one agent</td><td>the board renders its history</td><td>entries from that agent appear grouped rather than interleaved by time</td></tr>
+<tr data-group="even" data-first="true"><td><a href="#FR-10">FR-10</a></td><td class="aw-cell-empty"></td><td>a single-operator project reopens an <code>approved</code> task</td><td>the reopen is permitted whether or not the project disabled the distinction</td></tr>
+</tbody>
+</table>
+</section>
+
+<section><h2 id="evidence">Evidence and coverage limits</h2>
+<h3>Checked</h3>
+<ul><li>Translated from <code>openspec/specs/task-lifecycle-governance/spec.md</code>. Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten.</li></ul>
+<h3 class="aw-limits">Limits</h3>
+<ul><li><code>scenarios-state-no-starting-state</code>: most criteria have an empty GIVEN because the source scenario states only WHEN/THEN. Left empty rather than invented — a starting state written here would be new prose nobody reviewed.</li></ul>
+</section>
+
+<section id="tasks"><h2>Tasks</h2>
+<ul>
+<li><strong>Declare the transition map</strong> — a single table of legal (from, to, actor-kind) edges the API, the MCP adapter and the operator control all read from the same place.<span class="aw-refs"><span class="aw-chip">satisfies</span><a class="aw-chip" href="#FR-1">FR-1</a><a class="aw-chip" href="#FR-4">FR-4</a></span></li>
+<li><strong>Restrict creation to entry statuses</strong> — refuse a create call that states a non-entry status over either transport.<span class="aw-refs"><span class="aw-chip">satisfies</span><a class="aw-chip" href="#FR-2">FR-2</a></span></li>
+<li><strong>Author/reviewer separation on approval</strong> — refuse same-agent approve, keyed on agent identity rather than run identity.<span class="aw-refs"><span class="aw-chip">satisfies</span><a class="aw-chip" href="#FR-6">FR-6</a></span></li>
+<li><strong>Persist an append-only transition log</strong> — one immutable record per accepted transition, never updated or deleted.<span class="aw-refs"><span class="aw-chip">satisfies</span><a class="aw-chip" href="#FR-5">FR-5</a></span></li>
+</ul>
+</section>
+
+<section><h2 id="open-questions">Open questions</h2>
+<ul>
+<li><span class="aw-chip aw-chip-open">open</span>Should the instance carry an agent's please-add-this-task request and hand the operator a one-click accept?</li>
+<li><span class="aw-chip aw-chip-open">open</span>Should system-caused transitions surface differently in the board than actor-caused ones, or is the transition log enough?</li>
+</ul>
+</section>
+
+<section class="aw-map"><h2 id="map">Map <span class="aw-note">(generated on reindex — hand edits here are overwritten)</span></h2>
+<ul class="aw-map-list">
+<li class="aw-map-item"><a href="#">Run-to-task binding</a> <span class="aw-chip">exploration</span><span class="aw-chip aw-chip-phase-quiet">exploring</span><p>Whether a transition happens at all when reality changes — liveness, as distinct from the validity this capability governs.</p></li>
+<li class="aw-map-item"><a href="#">Agent capability plane</a> <span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><p>One least-privilege, run-authenticated application contract for agent-caused effects and scoped reads, shared identically by HTTP and MCP.</p></li>
+<li class="aw-map-item"><a href="#">Agent charter</a> <span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><p>Project-scoped, operator-authored behavior charters and the single explicit charter binding used to build each agent's context.</p></li>
+</ul>
+</section>
+
+<script>
+  // Mock-only: clipboard convenience, not a navigation/anchor interceptor.
+  function awCopyAnchor(btn) {
+    var frag = btn.getAttribute('data-copy');
+    var url = location.href.split('#')[0] + frag;
+    if (navigator.clipboard) { navigator.clipboard.writeText(url).catch(function(){}); }
+    btn.setAttribute('data-copied', 'true');
+    var label = btn.textContent;
+    btn.textContent = 'Copied';
+    setTimeout(function () { btn.textContent = label; btn.removeAttribute('data-copied'); }, 1400);
+  }
+</script>
+</body>
+</html>

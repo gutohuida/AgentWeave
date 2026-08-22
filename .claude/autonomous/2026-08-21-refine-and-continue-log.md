@@ -1910,3 +1910,91 @@ rereading the corrected section.
 explicitly at P2 whether to also demonstrate the standalone (non-Hub-embedded, OS-preference-driven)
 theme path alongside the Hub-embedded one that `hubTheme.ts` produces, per `RESEARCH.md`'s closing
 note — this screen is a real standalone artefact in a way no other screen in the queue is.
+
+## Iteration 26 — 2026-08-22T04:40:37+01:00 — S5 P2: validate + mock the rendered spec document
+
+Branch and log matched STATE.json on entry: HEAD was `fc3951b` ("release heartbeat for next
+firing"), one commit past `0086438` (S5 P1). Read `RESEARCH.md` (187 lines) and `IDENTITY.md` in
+full before touching anything.
+
+**Validated all 10 `RESEARCH.md` findings against the rejection test**, applying clause 1 as
+`RESEARCH.md` already scoped it for this screen (a colour must resolve to a token already declared
+in `spec_render.py`'s own `_STYLE`, not `hub/ui/src/index.css` — that document is standalone and
+the Hub's stylesheet is not in its cascade). None failed; all 10 were incorporated into the mock
+rather than any being discarded.
+
+**Built `design/mocks/S5/restrained.html` and `considered.html`.** Both reproduce `_STYLE`
+byte-for-byte and are strictly additive below it — nothing inside the reproduced block was edited,
+so a diff against the real renderer's own stylesheet shows only additions. Content is composited
+from three real corpus documents rather than invented: FR-1–FR-8 verbatim from
+`spec/capabilities/task-lifecycle-governance/spec.html` (the dense, 100%-MUST document
+`RESEARCH.md`'s findings were measured against), FR-9/FR-10 (SHOULD/MAY) verbatim text borrowed
+from `spec/capabilities/quiet-hours/spec.html` and re-anchored — the sampled document has no
+SHOULD/MAY of its own, so without this the modal-tone system's other two tones would go
+undemonstrated — and open questions plus map children verbatim from `spec/agentweave.html`, since
+neither the sampled document nor any document in the current corpus populates Open Questions or
+Tasks. The Tasks section content is therefore composed in `_tasks()`'s own voice
+(`<strong>title</strong> — description — satisfies FR-N`) rather than lifted from a real document,
+and this is stated plainly rather than passed off as sampled.
+
+**Each of the 10 findings got a fix:**
+1. Modal MUST/SHOULD/MAY as filled pills (`color-mix` of the existing tone token over `--bg`, no
+   new hue) instead of colour-on-text.
+2. Rationale gets a small-caps "Why" label and a left rule, subordinating it to the requirement
+   statement instead of relying on colour alone.
+3. The acceptance table's Given column is narrowed via `<colgroup>` and empty cells render a muted
+   em dash instead of blank space claiming width.
+4. A CSS-counter-only "Requirement N of 10" label (no script) — `data-total` is trivial for
+   `spec_render.py` to emit since it already knows `len(payload.requirements)`.
+5. A copy-anchor button beside each requirement's id, using a small inert clipboard script —
+   confirmed this does **not** cross `spec_render.py`'s stated no-navigation-script boundary, since
+   it copies to the clipboard and never intercepts an anchor click or adds same-document navigation.
+6. Tasks render as bordered rows with `satisfies` chips instead of trailing muted text.
+7. Map children get a divider between siblings instead of one unbroken list.
+8. The in-frame breadcrumb gets a chevron separator instead of bare adjacent links (full
+   deduplication against the shell's own breadcrumb is out of scope — that's `SpecDocumentPanel.tsx`,
+   confirmed in P1).
+9. Left alone — the bare "Loading…" text lives in `SpecDocumentPanel.tsx`, not this document.
+10. The already-good summary line is kept and, in `considered.html`, gets a light card treatment so
+    it doesn't look identical in weight to the plain paragraphs below it.
+
+**A second scoped-clause resolution, parallel to clause 1's.** `considered.html` needed motion, and
+IDENTITY.md clause 3 names `--dur-fast/base/slow` — tokens that live in `hub/ui/src/index.css`,
+unreachable from this standalone document for the same reason clause 1 needed scoping in
+`RESEARCH.md`. Resolved the same way: added `--aw-dur-fast`/`--aw-dur-base`/`--aw-ease` to this
+document's own `_STYLE`, value-identical to the Hub's (150ms/250ms, the same
+`cubic-bezier(0.16,1,0.3,1)`) — a mirror of the existing scale, not an invented one. Stated in both
+files' header comments; will be repeated in `RATIONALE.md` at P4 so it isn't read as a stray
+duration later.
+
+**Decided the standalone-vs-embedded question `RESEARCH.md` raised at P1**, rather than leaving it
+open: did not build a fourth separate file. Both mocks already exercise both cascade layers a real
+opening of this document would hit — `@media (prefers-color-scheme)` (the OS-preference path, live
+whenever the review toolbar hasn't forced a theme) and `:root[data-theme]` (the Hub-embedded path,
+forced by the toolbar exactly the way `hubTheme.ts` forces it). A fourth file would duplicate all
+this content for no new token combination. Recorded as the explicit decision the closing note asked
+for.
+
+**Verified by screenshot, not just by reading the CSS.** `uishot.py` targets the Hub app's own
+localStorage-driven theme button and would not have found this file's custom review toolbar, so
+wrote a throwaway `testbed/scratch/shot_s5.py` (Playwright, loads the two files directly via
+`file://`, clicks the toolbar's Dark button, captures both themes) per the pre-authorised fallback
+for exactly this case. Read all 4 PNGs (restrained × considered × light × dark): legible in both
+themes (clause 2), same radius/token vocabulary as the untouched `_STYLE` (clauses 1/3/4), reads as
+the same document improved — pills and a counter label, not a new layout — rather than a redesign
+(clause 5), at least as much information on screen as before since nothing was removed, only added
+(clause 6). **Interactive states (clause 7) are real in the CSS but not confirmed by triggering
+them this pass** — the screenshots are resting-state only; `:hover`/`:focus-visible` were spot-read
+in the stylesheet, not exercised in Playwright. Recorded honestly rather than claimed as verified,
+and queued as the first thing P3 should do. Deleted all 4 PNGs after reading (gitignored, matches
+the no-committed-screenshots precedent already set by S2/S4).
+
+**Verified.** `py -3.11 -c "import json; json.load(...)"` on `STATE.json` after editing.
+`git status --short` → only the two new `design/mocks/S5/*.html` files — staged and committed.
+
+**Next:** S5 P3 — screenshot every variant in both themes again, this time actually triggering
+`:hover` on a requirement, a table row and a task card, and `:focus-visible` on a copy button and a
+nav link, before capturing. Read the results and critique honestly: in particular whether the
+"REQUIREMENT N OF 10" counter reads as noise at this mock's 10-of-10 density versus how it would
+read at the real document's 32, and whether the empty-Given em dash is legible enough at real
+reading size (the P2 review screenshot was too compressed to confirm either way).
