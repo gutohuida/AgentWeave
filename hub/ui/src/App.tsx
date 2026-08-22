@@ -36,6 +36,7 @@ import { useTasks } from '@/api/tasks'
 import { TasksBoard } from '@/components/tasks/TasksBoard'
 import { DependencyBoardView } from '@/components/tasks/DependencyBoardView'
 import { Button } from '@/components/ui/button'
+import { Icon } from '@/components/common/Icon'
 import { useSSE } from '@/hooks/useSSE'
 import { useWorkspaceNavigation } from '@/hooks/useWorkspaceNavigation'
 import {
@@ -55,6 +56,33 @@ import { useProjectConversations } from '@/api/agentChat'
 import { useConfigStore } from '@/store/configStore'
 import { useTaskFilterStore } from '@/store/taskFilterStore'
 import { CheckpointStatusBanner } from '@/components/checkpoints/CheckpointStatusBanner'
+
+export function HubConnectionState({ state, onRetry }: { state: 'pending' | 'unreachable'; onRetry?: () => void }) {
+  const pending = state === 'pending'
+  return (
+    <div className="flex h-screen items-center justify-center" style={{ background: 'var(--bg)' }} role={pending ? 'status' : undefined} aria-label={pending ? 'Connecting to the Hub' : undefined}>
+      <div className="trust-state" role={pending ? undefined : 'alert'}>
+        <span className={`trust-state-icon${pending ? '' : ' is-error'}`}><Icon name={pending ? 'sync' : 'error_outline'} size={22} /></span>
+        <h1 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>{pending ? 'Connecting to the Hub' : "Can't reach the Hub"}</h1>
+        {pending ? (
+          <div className="mx-auto mt-4 max-w-52 space-y-2" aria-hidden="true">
+            <div className="trust-state-skeleton w-full" />
+            <div className="trust-state-skeleton mx-auto w-2/3" />
+          </div>
+        ) : (
+          <>
+            <p className="mx-auto mt-2 text-xs" style={{ maxWidth: 320, color: 'var(--text-3)' }}>
+              The dashboard couldn&apos;t connect to the Hub server. Make sure it&apos;s running, then retry.
+            </p>
+            <Button variant="primary" size="md" onClick={onRetry} className="mt-4">
+              <Icon name="refresh" size={15} /> Retry
+            </Button>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
 
 const SIDEBAR_WIDTH_KEY = 'aw.sidebarWidth'
 const SIDEBAR_COLLAPSED_KEY = 'aw.sidebarCollapsed'
@@ -188,32 +216,11 @@ export default function App() {
   useSSE()
 
   if (bootstrapState === 'pending') {
-    return (
-      <div className="flex h-screen items-center justify-center" style={{ background: 'var(--bg)' }}>
-        <div className="text-sm opacity-70">Connecting…</div>
-      </div>
-    )
+    return <HubConnectionState state="pending" />
   }
 
   if (bootstrapState === 'unreachable') {
-    return (
-      <div className="flex h-screen items-center justify-center" style={{ background: 'var(--bg)' }}>
-        <div className="flex flex-col items-center gap-3 text-center">
-          <div className="text-sm" style={{ color: 'var(--text)' }}>Can&apos;t reach the Hub</div>
-          <div className="text-xs opacity-70" style={{ maxWidth: 320 }}>
-            The dashboard couldn&apos;t connect to the Hub server. Make sure it&apos;s running, then retry.
-          </div>
-          <Button
-            variant="primary"
-            size="md"
-            onClick={() => useConfigStore.getState().bootstrap()}
-            className="mt-1"
-          >
-            Retry
-          </Button>
-        </div>
-      </div>
-    )
+    return <HubConnectionState state="unreachable" onRetry={() => useConfigStore.getState().bootstrap()} />
   }
 
   const activePage: SidebarPage | 'overview' | null = destination.kind === 'project'

@@ -8,15 +8,10 @@
   "started_at": "2026-08-22T14:30:00+01:00",
   "stop_at": "2026-08-22T20:00:00+01:00",
   "stop_when_queue_empties": true,
-  "iteration": 6,
-  "last_heartbeat": "2026-08-22T15:17:35+01:00",
+  "iteration": 7,
+  "last_heartbeat": "2026-08-22T16:19:49+01:00",
   "log_file": ".claude/autonomous/2026-08-22-ui-finesse-log.md",
   "queue": [
-    {
-      "id": "F6",
-      "title": "Refine overview, questions and permission moments",
-      "detail": "Apply S6 and S7 considered treatments to OverviewPage, QuestionsPanel, answer forms, permission request cards, setup/unreachable/empty/loading/error states. These trust and stop points must be clear, calm and accessible. Preserve approval semantics and destructive-action hierarchy. Test keyboard and screen-reader names. Playwright-drive overview, question and permission states in both themes and narrow width; correct once."
-    },
     {
       "id": "F7",
       "title": "Refine jobs, activity, logs, agents and command palette",
@@ -39,7 +34,7 @@
     }
   ],
   "current": null,
-  "next_action": "Apply S6 and S7 considered treatments to OverviewPage, QuestionsPanel, answer forms, permission request cards, setup/unreachable/empty/loading/error states. These trust and stop points must be clear, calm and accessible. Preserve approval semantics and destructive-action hierarchy. Test keyboard and screen-reader names. Playwright-drive overview, question and permission states in both themes and narrow width; correct once.",
+  "next_action": "Apply the considered S8-jobs, S8-logs, S8-agents and S8-palette treatments to the actual live components named by App.tsx: JobsPage/JobCard/JobForm, ActivityLog/LogsView, AgentSettingsPage and AgentTree surfaces, CommandPalette. Do not revive dead AgentCard or legacy unreachable pages. Preserve filters, live state and actions. Fix the existing command-palette dialog title/description accessibility warning while here. Run focused tests and Playwright evidence in both themes/narrow width.",
   "decisions_for_user": [],
   "limits": [
     "Stay on autonomous/2026-08-22-ui-finesse and push only that branch; do not merge, open a PR, release, publish or deploy.",

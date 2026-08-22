@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Icon } from '@/components/common/Icon'
 import { Button } from '@/components/ui/button'
 import { useConfigStore, type ModeId } from '@/store/configStore'
@@ -15,6 +15,11 @@ export function SetupModal({ open, onClose }: SetupModalProps) {
   const [key,          setKey]          = useState(apiKey || '')
   const [proj,         setProj]         = useState(selectedProjectId || '')
   const [selectedMode, setSelectedMode] = useState<ModeId>(mode)
+  const urlInput = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (open) urlInput.current?.focus()
+  }, [open])
 
   if (!open) return null
 
@@ -34,49 +39,46 @@ export function SetupModal({ open, onClose }: SetupModalProps) {
     document.documentElement.dataset.mode = m
   }
 
-  const inputStyle: React.CSSProperties = {
-    background: 'var(--surface-2)',
-    border: '1px solid var(--border)',
-    borderRadius: 'var(--radius-sm)',
-    color: 'var(--text)',
-    padding: '8px 12px',
-    width: '100%',
-    fontSize: 13,
-    outline: 'none',
-  }
-
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
       style={{ background: 'var(--scrim)' }}
     >
       <div
-        className="w-full max-w-md p-6"
+        className="setup-dialog elevation-overlay w-full max-w-md p-6"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="setup-title"
+        aria-describedby="setup-description"
         style={{
           background: 'var(--surface)',
           borderRadius: 'var(--radius-lg)',
-          border: '1px solid var(--border)',
         }}
       >
         {/* Header */}
         <div className="mb-5 flex items-center gap-3">
           <Icon name="settings" size={22} style={{ color: 'var(--blue)' }} />
-          <h2 className="text-lg font-normal" style={{ color: 'var(--text)' }}>
+          <div>
+          <h2 id="setup-title" className="text-lg font-semibold" style={{ color: 'var(--text)' }}>
             Connect to AgentWeave Hub
           </h2>
+          <p id="setup-description" className="mt-1 text-xs" style={{ color: 'var(--text-3)' }}>Use the credentials and optional project context for this Hub instance.</p>
+          </div>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Hub URL */}
           <div>
-            <label className="mb-1.5 block text-xs font-medium" style={{ color: 'var(--text-3)' }}>
+            <label htmlFor="setup-hub-url" className="mb-1.5 block text-xs font-medium" style={{ color: 'var(--text-3)' }}>
               Hub URL
             </label>
             <input
+              ref={urlInput}
+              id="setup-hub-url"
               type="url"
               value={url}
               onChange={(e) => setUrl(e.target.value)}
-              style={inputStyle}
+              className="control-field px-3 py-2 text-[13px]"
               placeholder="http://localhost:8000"
               required
             />
@@ -84,14 +86,15 @@ export function SetupModal({ open, onClose }: SetupModalProps) {
 
           {/* API Key */}
           <div>
-            <label className="mb-1.5 block text-xs font-medium" style={{ color: 'var(--text-3)' }}>
+            <label htmlFor="setup-api-key" className="mb-1.5 block text-xs font-medium" style={{ color: 'var(--text-3)' }}>
               API Key
             </label>
             <input
+              id="setup-api-key"
               type="password"
               value={key}
               onChange={(e) => setKey(e.target.value)}
-              style={inputStyle}
+              className="control-field px-3 py-2 text-[13px]"
               placeholder="aw_live_..."
               required
             />
@@ -100,14 +103,15 @@ export function SetupModal({ open, onClose }: SetupModalProps) {
           {/* Project ID — optional manual override; normally auto-selected
               from the instance's project collection on bootstrap. */}
           <div>
-            <label className="mb-1.5 block text-xs font-medium" style={{ color: 'var(--text-3)' }}>
+            <label htmlFor="setup-project-id" className="mb-1.5 block text-xs font-medium" style={{ color: 'var(--text-3)' }}>
               Project ID (optional)
             </label>
             <input
+              id="setup-project-id"
               type="text"
               value={proj}
               onChange={(e) => setProj(e.target.value)}
-              style={inputStyle}
+              className="control-field px-3 py-2 text-[13px]"
               placeholder="auto-selected"
             />
           </div>
@@ -121,6 +125,7 @@ export function SetupModal({ open, onClose }: SetupModalProps) {
                 <button
                   key={m}
                   type="button"
+                  aria-pressed={selectedMode === m}
                   onClick={() => handleModePreview(m)}
                   className="flex flex-1 items-center justify-center gap-2 rounded-xl py-2.5 text-[13px] font-medium transition-all"
                   style={{

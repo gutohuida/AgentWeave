@@ -44,6 +44,8 @@ describe('permission request card', () => {
     expect(screen.getByText(/haiku-1 wants to use Write/)).toBeInTheDocument()
     // The path is what the operator decides on, not the parameter name it arrived under.
     expect(screen.getByText('C:/outside/secrets.txt')).toBeInTheDocument()
+    expect(screen.getByText('File change')).toHaveAttribute('data-impact', 'mutates')
+    expect(screen.getByLabelText('File change: C:/outside/secrets.txt')).toBeInTheDocument()
   })
 
   it('falls back to the command when there is no path', () => {
@@ -54,6 +56,19 @@ describe('permission request card', () => {
       />
     )
     expect(screen.getByText('rm -rf /tmp/x')).toBeInTheDocument()
+    expect(screen.getByText('Command')).toBeInTheDocument()
+  })
+
+  it('makes the explicit allow action primary without weakening deny', () => {
+    render(<PermissionRequestCard requests={[request()]} agent="haiku-1" />)
+    expect(screen.getByTestId('permission-allow-perm-1')).toHaveClass('bg-[var(--primary)]')
+    expect(screen.getByTestId('permission-deny-perm-1')).toHaveClass('border-[var(--border)]')
+  })
+
+  it('states position when more than one decision is waiting', () => {
+    render(<PermissionRequestCard requests={[request(), request({ id: 'perm-2' })]} agent="haiku-1" />)
+    expect(screen.getByText('1/2')).toBeInTheDocument()
+    expect(screen.getByText('2/2')).toBeInTheDocument()
   })
 
   it('offers no way to clear a request that is still being waited on', () => {

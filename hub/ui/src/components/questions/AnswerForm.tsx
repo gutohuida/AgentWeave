@@ -1,60 +1,38 @@
 import { useState } from 'react'
 import { useAnswerQuestion } from '@/api/questions'
+import { Button } from '@/components/ui/button'
 
 interface AnswerFormProps {
   questionId: string
+  agent: string
+  labelledBy: string
   onAnswered?: () => void
 }
 
-export function AnswerForm({ questionId, onAnswered }: AnswerFormProps) {
+export function AnswerForm({ questionId, agent, labelledBy, onAnswered }: AnswerFormProps) {
   const [answer, setAnswer] = useState('')
   const { mutate, isPending } = useAnswerQuestion()
 
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
+  function handleSubmit(event: React.FormEvent) {
+    event.preventDefault()
     if (!answer.trim()) return
     mutate({ id: questionId, answer: answer.trim() }, { onSuccess: () => { setAnswer(''); onAnswered?.() } })
   }
 
   return (
-    <form onSubmit={handleSubmit} className="mt-3 space-y-2">
+    <form onSubmit={handleSubmit} className="mt-3 space-y-2" aria-labelledby={labelledBy} aria-busy={isPending}>
       <textarea
         value={answer}
-        onChange={(e) => setAnswer(e.target.value)}
+        onChange={(event) => setAnswer(event.target.value)}
         placeholder="Type your answer…"
         rows={3}
-        className="w-full resize-none text-sm"
+        aria-label={`Answer ${agent}`}
+        className="control-field min-h-16 resize-none px-3 py-2 text-sm"
         disabled={isPending}
-        style={{
-          background: 'var(--surface-3)',
-          border: '1px solid var(--border)',
-          borderRadius: 'var(--radius-sm)',
-          color: 'var(--text)',
-          padding: '8px 12px',
-        }}
       />
-      <button
-        type="submit"
-        disabled={isPending || !answer.trim()}
-        className="disabled:opacity-50 disabled:cursor-not-allowed"
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: '8px',
-          height: 36,
-          borderRadius: 'var(--radius-sm)',
-          padding: '0 20px',
-          background: 'var(--surface-3)',
-          color: 'var(--text-2)',
-          border: '1px solid var(--border)',
-          fontSize: 13,
-          fontWeight: 500,
-          cursor: 'pointer',
-        }}
-      >
-        {isPending ? 'Submitting…' : 'Submit Answer'}
-      </button>
+      <Button type="submit" variant="primary" size="sm" disabled={isPending || !answer.trim()} aria-label={`Submit answer to ${agent}`}>
+        {isPending ? 'Submitting…' : 'Submit answer'}
+      </Button>
     </form>
   )
 }

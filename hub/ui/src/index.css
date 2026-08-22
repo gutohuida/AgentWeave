@@ -1120,6 +1120,19 @@
     border-radius: var(--radius-content);
     background: var(--surface-2);
     box-shadow: inset 0 1px rgba(255,255,255,0.05);
+    animation: interject-in var(--dur-base) var(--ease);
+    transition: border-color var(--dur-base) var(--ease),
+                box-shadow var(--dur-base) var(--ease),
+                opacity var(--dur-slow) var(--ease);
+  }
+  .conversation-interject:hover {
+    border-color: var(--border-hi);
+    box-shadow: inset 0 1px var(--lift-hi), 0 1px 2px rgb(0 0 0 / 0.12);
+  }
+  .conversation-interject.is-stale { opacity: 0.68; }
+  @keyframes interject-in {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
   }
   .interject-eyebrow {
     font-size: 11px;
@@ -1147,10 +1160,16 @@
   .interject-choice:hover:not(:disabled) {
     background: var(--row-hover);
     border-color: var(--border);
+    transform: translateX(1px);
   }
   .interject-choice[data-selected="true"] {
     background: var(--row-selected);
     border-color: var(--border-hi);
+  }
+  .interject-choice-check { animation: interject-check-in var(--dur-fast) var(--ease); }
+  @keyframes interject-check-in {
+    from { opacity: 0; transform: scale(0.6); }
+    to { opacity: 1; transform: scale(1); }
   }
   .interject-choice:disabled {
     opacity: 0.5;
@@ -1196,6 +1215,166 @@
     border-radius: var(--radius-sm);
     padding: 0 5px;
   }
+
+  /* S6/S7 considered trust moments and overview. These classes keep the high-stakes
+     decision surfaces calm and bounded while giving loading/empty states the shape of
+     the content they replace. */
+  .permission-kind {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 1px 5px;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-2);
+    background: color-mix(in srgb, var(--text-2) 8%, transparent);
+  }
+  .permission-kind[data-impact="mutates"] {
+    color: var(--amber);
+    border-color: color-mix(in srgb, var(--amber) 24%, transparent);
+    background: color-mix(in srgb, var(--amber) 8%, transparent);
+  }
+  .permission-detail {
+    display: block;
+    max-height: 10rem;
+    overflow: auto;
+    margin: 8px 0 10px;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    transition: border-color var(--dur-fast) var(--ease);
+  }
+  .permission-detail:hover { border-color: var(--border-hi); }
+  .permission-detail.is-stale { color: var(--text-3); }
+  .permission-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .permission-waiting { font-size: 11px; color: var(--text-3); }
+
+  .questions-page {
+    border: 1px solid var(--border-region);
+    border-radius: var(--radius-xl);
+    background: var(--bg);
+  }
+  .question-row {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface-2);
+    box-shadow: inset 0 1px var(--lift-hi);
+    transition: border-color var(--dur-base) var(--ease), background-color var(--dur-base) var(--ease);
+  }
+  .question-row:hover { border-color: var(--border-hi); background: var(--surface-3); }
+  .answered-questions summary svg { transition: transform var(--dur-fast) var(--ease); }
+  .answered-questions[open] summary svg { transform: rotate(180deg); }
+
+  .overview-group + .overview-group {
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border-region);
+  }
+  .overview-group-label {
+    margin-bottom: 10px;
+    color: var(--text-3);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .overview-accounting .settings-section {
+    padding: 16px 18px 18px;
+    border: 1px solid var(--border-region);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+    box-shadow: inset 0 1px var(--lift-hi);
+  }
+  .overview-accounting .settings-section-heading,
+  .overview-accounting .settings-section-rows { width: 100%; }
+  .overview-accounting .settings-section-heading { padding-bottom: 12px; }
+  .overview-accounting .settings-row { min-height: 62px; padding: 12px 0; }
+  .overview-agent-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 8px;
+  }
+  .overview-agent-card {
+    min-width: 0;
+    text-align: left;
+    padding: 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+    box-shadow: inset 0 1px var(--lift-hi);
+    transition: transform var(--dur-base) var(--ease), box-shadow var(--dur-base) var(--ease),
+                border-color var(--dur-fast) var(--ease), background-color var(--dur-fast) var(--ease);
+  }
+  .overview-agent-card:hover {
+    transform: translateY(-1px);
+    border-color: var(--border-hi);
+    background: var(--surface-2);
+    box-shadow: 0 4px 12px rgb(0 0 0 / 0.14), inset 0 1px var(--lift-hi);
+  }
+  .overview-agent-card:active { transform: translateY(0); box-shadow: inset 0 1px var(--press-lo); }
+  .overview-agent-card:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring); }
+  .overview-workspace-card {
+    min-width: 0;
+    transition: transform var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease),
+                border-color var(--dur-fast) var(--ease), background-color var(--dur-fast) var(--ease);
+  }
+  .overview-workspace-card:hover { transform: translateY(-1px); border-color: var(--border-hi); background: var(--surface-2); }
+  .overview-workspace-card:active { transform: translateY(0); box-shadow: inset 0 1px var(--press-lo); }
+  .overview-activity { position: relative; }
+  .overview-activity::after {
+    position: absolute;
+    inset: 0 0 0 auto;
+    width: 28px;
+    pointer-events: none;
+    background: linear-gradient(to right, transparent, var(--bg));
+    content: '';
+  }
+  .overview-activity-pill { animation: overview-pill-in var(--dur-base) var(--ease) both; }
+  @keyframes overview-pill-in {
+    from { opacity: 0; transform: translateX(-4px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+
+  .trust-state {
+    width: min(100% - 32px, 420px);
+    padding: 24px;
+    border: 1px solid var(--border-region);
+    border-radius: var(--radius-xl);
+    background: var(--surface);
+    box-shadow: 0 4px 14px rgb(0 0 0 / 0.16), inset 0 1px var(--lift-hi);
+    text-align: center;
+  }
+  .trust-state-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 46px;
+    height: 46px;
+    margin-bottom: 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface-2);
+    color: var(--text-2);
+  }
+  .trust-state-icon.is-error { color: var(--red); background: color-mix(in srgb, var(--red) 9%, var(--surface-2)); }
+  .trust-state-skeleton {
+    height: 8px;
+    border-radius: var(--radius-sm);
+    background: var(--surface-3);
+  }
+  .setup-dialog { animation: setup-dialog-in var(--dur-base) var(--ease); }
+  @keyframes setup-dialog-in {
+    from { opacity: 0; transform: translateY(6px) scale(0.99); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
   /* No border and no fill. The work block is subordinate to the message it belongs to — a boxed,
      filled panel drew more attention than the agent's own answer, which is the thing being read.
      The disclosure arrow and the indent carry the grouping instead. */
@@ -1215,7 +1394,14 @@
   @media (prefers-reduced-motion: reduce) {
     .composer-send-spinner,
     .timeline-empty-icon::after,
-    .new-conversation-icon::after { animation: none; }
+    .new-conversation-icon::after,
+    .conversation-interject,
+    .interject-choice-check,
+    .overview-activity-pill,
+    .setup-dialog { animation: none; }
+    .interject-choice:hover:not(:disabled),
+    .overview-agent-card:hover,
+    .overview-workspace-card:hover { transform: none; }
   }
 
   /* react-markdown output. `:not(pre) > .md-code` targets INLINE code only — a fenced code

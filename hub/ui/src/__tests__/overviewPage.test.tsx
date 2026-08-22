@@ -52,4 +52,10 @@ describe('Gap 6 — OverviewPage agent health grid', () => {
     expect(dotFor('claude-running').style.boxShadow).toContain('var(--green)')
     expect(dotFor('claude-stalled').style.boxShadow).toBe('')
   })
+
+  it('gives each agent card a status-bearing accessible name', () => {
+    render(<OverviewPage onNavigate={vi.fn()} />)
+    expect(document.querySelector('button[aria-label="Open claude-stalled, Stalled"]')).not.toBeNull()
+    expect(document.querySelector('button[aria-label="Open claude-running, Running"]')).not.toBeNull()
+  })
 })
