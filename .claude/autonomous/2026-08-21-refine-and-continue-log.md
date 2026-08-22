@@ -3517,3 +3517,60 @@ fine to leave S8-palette mid-pass for the next firing to continue; do not jump a
 `Z` (review-index rebuild) until S8-palette actually closes at 4/4 or `stop_at` arrives, whichever
 comes first — `Z`'s own instruction to run "again as the LAST action before `stop_at`" means a
 partial S8-palette is still better left for one more iteration than abandoned early for `Z`.
+
+## Iteration 50 — 2026-08-22T08:07:34+01:00 — S8-palette P2: validate + mock
+
+Verified branch/log/STATE.json agreed before starting (`27caa81` = HEAD, a released-heartbeat commit
+on top of `1b5d51a` S8-palette P1, matching STATE.json exactly). ~53 minutes to `stop_at`
+(`2026-08-22T09:00:00+01:00`).
+
+`screen_pass_protocol.P2_validate_and_mock`. RESEARCH.md had already run its findings against
+`IDENTITY.md`'s rejection test inline during P1 — re-checked and nothing new failed it, so went
+straight to building. Two variants, following S8-logs' established precedent of two rather than
+three (the research surfaced one real degree split — minimal fix vs. full pass — not three):
+
+- **`restrained.html`** — findings 1, 3, 4, 8. A persistent `Kbd`/`KbdGroup` footer
+  (↑↓ Navigate / ↵ Open / Esc Close), `<mark>`-based match highlighting (weight + foreground
+  strength only, no highlighter background), hover now visually distinct from keyboard-selection
+  (`--row-hover` wash vs. `--surface-2` + a `--ring` left accent bar — previously identical), a real
+  open/close scale+fade transition on `--dur-base`/`--ease` respecting
+  `prefers-reduced-motion`, and a named empty state ("Try an agent, task, document or conversation
+  name.") replacing the dead-end "No matches."
+- **`considered.html`** — adds findings 5, 6. Agent rows carry their own identity colour via
+  `--agent-N`/`-tint`/`-border` (reuse, not a new hue), every row gets a secondary information line
+  (task status chip, conversation speaker + highlighted snippet, doc phase) and trailing content
+  (timestamp / status chip) instead of empty space, and a "recent items" section on the empty query
+  — flagged explicitly as a genuine missing **feature** per the loop's pre-authorised allowance, not
+  shipped behaviour.
+
+Both reuse `[cmdk-input]`/`[cmdk-list]`/`[cmdk-group-heading]`/`[cmdk-item]`/`[cmdk-empty]`
+attribute-selector hooks straight from `index.css` rather than re-styling from scratch, so token
+fidelity is exact by construction, matching S8-logs' `.btn`/`.lchip` reuse pattern.
+
+**Screenshotted and read all four captures** (both variants × both themes) via
+`scripts/uishot.py` pointed at `file://` URLs — git-bash's `/c/...`-style path broke Playwright's
+`goto` with `ERR_FILE_NOT_FOUND`; `python -c "import pathlib; print(pathlib.Path(...).resolve().as_uri())"`
+produces a URL Playwright accepts, noting this for future iterations. Reading the PNGs (not just
+building the HTML) caught two real bugs before commit:
+
+1. `considered.html`'s Agent row highlighted `<mark>line</mark>` inside "claude-2" — "claude-2"
+   does not contain the substring "line" at all, a fabricated match invented while writing the mock
+   content, not a real search result. Fixed by moving the highlighted match into the row's secondary
+   line where it's a real substring.
+2. The disabled-row demo cell rendered its title and subtitle run together as
+   "watchdogno runner bound — disabled" with no line break. Cause: that row is deliberately a plain
+   non-`cmdk-item` `div` (T3 Code's dimmed/non-focusable disabled-row pattern), so the
+   `.command-palette [cmdk-item] .row-title`/`.row-sub` block-display rules — scoped to descendants
+   of `[cmdk-item]` — never applied to it. Fixed with an inline `display:block` on both spans.
+
+Re-screenshotted after both fixes; all four captures now read clean, legible in both themes, and —
+per clause 5 — the same command palette, improved, not a redesign.
+
+**Next**: S8-palette P3 — `screen_pass_protocol.P3_iterate`. The screenshot-and-fix work that P3
+names technically already happened during P2's build (two real bugs found and fixed from reading
+the PNGs), so P3 should be a fresh, more adversarial pass — specifically clause 5 (does it still
+read as the same app after a cold second look?) and clause 6 (density — `considered.html`'s rows
+grew from one line to two; confirm how many rows still fit the existing `min(60vh, 420px)` cap is
+still reasonable) — plus a narrower-viewport check if time allows. If nothing new turns up, P3
+can be brief and the next iteration moves straight to P4 (`RATIONALE.md` + review index) rather
+than padding it artificially.
