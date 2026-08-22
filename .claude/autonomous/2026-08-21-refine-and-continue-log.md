@@ -1729,3 +1729,87 @@ the C6 exception).
 to `design/mocks/index.html`. Remember the `*.png` gitignore blanket rule when building the index —
 inline screenshots as data-URIs in the HTML itself rather than trying to commit loose PNGs, as
 `dead_ends_inherited` already flags for whichever iteration reaches queue item `Z`.
+
+## Iteration 24 — 2026-08-22T04:20:39+01:00 — S4 P4: finish (task DAG / dependency board)
+
+**Verified branch/state on entry.** `git branch --show-current` = `autonomous/2026-08-21-refine-and-continue`,
+`git log --oneline -5` matched STATE.json exactly (heartbeat-release `23183a9` topmost, S4 P3
+`4f48ebf` beneath it). Working tree clean. No reconciliation needed.
+
+**What P4 requires per `screen_pass_protocol`:** a second iteration pass (re-look, fix anything
+else found), then `RATIONALE.md`, then add S4 to `design/mocks/index.html` with before/after shots.
+
+**Second look.** Re-ran a Playwright verification script (`testbed/scratch/s4p4/verify.py`,
+deleted after use) against both variants in both themes, same method as P3: baseline screenshot,
+count edges, click `layer0`'s toggle, count again, and for `considered` additionally hover the live
+card and count `.lineage-active`/`.lineage-dim`/`.edge-lineage-active`/`.edge-dim`. All counts
+matched P3 exactly (4→7 on expand for `restrained`, 7 constant for `considered`, 6 active/3 dim/4
+edge-active/3 edge-dim on hover) — confirming P3's fix was stable and nothing regressed.
+
+**Real bug found and fixed, by looking at the baseline screenshot, not by re-reading the JS.** The
+"collapsed" baseline screenshot (taken *before* any click, i.e. the page's actual default state)
+showed layer0's three "done" cards fully visible underneath a toggle whose chevron pointed right
+(collapsed) and whose label read "3 links hidden" — a direct contradiction on first paint, in both
+`restrained.html` and `considered.html`. Root cause, confirmed with
+`getComputedStyle(el).display`: `#sa-layer0-cards` carried the `hidden` HTML attribute (UA rule
+`[hidden] { display: none }`, specificity `(0,1,0)`) *and* the `.layer-cards { display: grid }`
+class rule (also `(0,1,0)`). Equal specificity ties resolve to cascade order, and an author
+stylesheet always applies after the UA stylesheet — so `display: grid` silently won and `hidden`
+did nothing, on every page load, for both the `sa-` (standalone) and `pe-` (panel-embedded) boards
+in both files. The JS collapse *model* (`boardState[prefix].collapsed = new Set([0])`) was correct
+throughout — edge counts and the hidden-link label were always right — only the cards' own paint
+ignored it. Fixed with the standard specificity-tiebreak idiom, `.layer-cards[hidden] { display:
+none; }` (an attribute selector on the same class, specificity `(0,2,0)`, unambiguous), added once
+in each file. Verified the fix directly (`display: none` at load, `hasAttribute('hidden'): true` in
+both files) and re-ran the full edge/hover script afterward: every count unchanged, confirming the
+fix touched only initial-paint visibility and nothing about the redraw logic. Re-screenshotted all
+four collapsed baselines and read them directly — layer0 now renders collapsed on load in both
+variants and both themes, matching its own chevron and hidden-count label.
+
+**RATIONALE.md written** (`design/mocks/S4/RATIONALE.md`) — the ten `RESEARCH.md` findings mapped
+to what each variant actually does, the CSS-specificity bug above written up in full, what was
+rejected (crossing-minimisation/orthogonal routing for `restrained` — its own subtitle says no new
+routing, that's `considered`'s job; a minimap/pan-zoom control — boards are small, considered and
+rejected in `RESEARCH.md`'s external-research section already; building the panel `tasks`/`dag` tab
+for real; a third "expressive" variant, same reasoning S3 gave for chrome that should recede/not
+add noise to a technical diagram; redesigning the off-board reference chip itself rather than only
+its missing connection) and what was left alone (three-way stall classification design D8,
+longest-path layering, the partly-finished-layer-never-collapses rule D9, the off-board chip's
+content, `EmptyState` on the zero-tasks case, and `TaskCard.tsx` itself — not re-researched, since
+S2 already did that work and both variants deliberately reuse its refined card rather than invent
+a third).
+
+**`design/mocks/index.html` rebuilt for S4.** Generated four representative screenshots (restrained
+dark/light showing layer0 correctly collapsed, considered dark/light showing the lineage-hover
+highlight) plus a before/after pair for the CSS-specificity bug — the "before" pair was captured by
+writing a throwaway sibling copy of `restrained.html` with the `.layer-cards[hidden]` fix line
+stripped back out (`design/mocks/S4/_tmp_buggy.html`, same directory so the relative `index.css`
+import still resolved, deleted immediately after the screenshot), never touching the real file's
+git history. All six inlined as base64 `data:image/png` URIs directly in `index.html`, per
+`dead_ends_inherited`'s standing guidance on the repo's blanket `*.png` gitignore rule — same
+pattern S1/S2/S3 already established, so this iteration didn't need to invent one. Replaced the old
+"S4 — S8 and the final review-index rebuild, not started" pending card with S4's real done section,
+and renamed the remaining placeholder to "S5 — S8 and the final review-index rebuild" so it still
+covers exactly what's left in the queue. Verified by loading `index.html` in Playwright: 6
+`screen-card` sections (was 5), S4's status now reads "4/4 passes done", all 24 `<img>` elements
+report `complete` with nonzero `naturalWidth` (0 broken), and the only console errors are the three
+pre-existing `@fontsource` `file://` 404s already documented in `dead_ends_inherited` (present on
+every mock under `design/mocks/`, not introduced here). Screenshotted the rendered S4 section and
+its fix-block directly and read both — legible, correctly laid out, matches the S1–S3 precedent.
+
+**Verified.** `py -3.11 -c "import json; json.load(...)"` on `STATE.json` after editing.
+`git status --short` → `design/mocks/S4/{restrained,considered}.html` modified (the one-line CSS
+fix each, carried over from P3's session plus this iteration's own second look — actually this
+iteration's own fix, P3's fix was the marker-id bug), `design/mocks/S4/RATIONALE.md` new,
+`design/mocks/index.html` modified. `testbed/scratch/s4p4/` (verification script, its screenshots,
+and the throwaway buggy-copy directory) all deleted after use — gitignored regardless, per
+`testbed/README.md`.
+
+**S4 is now fully done — all four passes (P1–P4) complete and verified.**
+
+**Next:** S5 — the rendered spec documents (`hub/hub/spec_render.py`, not React). P1 explore: read
+`spec_render.py` end to end, the templates it renders, WebSearch for documentation/spec-rendering
+UI patterns, and the T3 Code sourcemaps for anything comparable. Per `decisions_for_user`
+D-spec-render, note plainly in `RATIONALE.md` (written at P4) that implementing this one later
+touches Python templates, not React components — a different kind of change from every other
+screen in the queue. Write `design/mocks/S5/RESEARCH.md`.

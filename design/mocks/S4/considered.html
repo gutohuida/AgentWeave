@@ -127,6 +127,7 @@
   .layer-chevron svg { display: block; }
   .layer-hidden-count { color: var(--text-3); }
   .layer-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+  .layer-cards[hidden] { display: none; }
 
   /* ─── Edges: orthogonal, coloured, animated, ghost-on-collapse ───── */
   .edge { fill: none; stroke-width: 1.5; transition: opacity var(--dur-base) var(--ease), stroke-width var(--dur-fast) var(--ease); }
