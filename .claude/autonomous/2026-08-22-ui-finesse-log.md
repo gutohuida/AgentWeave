@@ -90,3 +90,31 @@
 - Browser critique caught one real regression from the shared select primitive: at 560px the log agent selector inherited `width:100%` and crushed search to an icon-sized box. Corrected the toolbar to wrap, bounded the selector, reran all 20 captures and inspected the corrected narrow log surface with a usable full search field. Temporary fixture/scripts were removed and port 4180 was stopped.
 - Refreshed `hub/hub/static/ui` from the final production build; strict source/bundle fingerprint verification passed 11 tests. What to distrust: browser data came from API-shaped fixture responses, so it proves the actual components' rendering, interactions, accessible metadata, project-history cancellation geometry and responsive/theme behavior, not a live Hub integration. Automated query/API contracts remain the integration evidence.
 - F7 is removed from the remaining queue. The next fresh process should perform F8 exactly as recorded in `next_action`: inventory every remaining reachable route, then research/mock only genuinely new structures and implement the uncovered live surfaces.
+
+## Iteration 9 - 17:03 Europe/Lisbon
+
+- Completed F8 only. Re-read `App.tsx`, `navigation.ts`, the live rail and the F1-F7 record before editing. The resulting route-to-component coverage inventory is:
+
+  | Reachable destination or overlay | Live component(s) | Refinement evidence |
+  |---|---|---|
+  | Bootstrap, setup, unreachable and error | `App`, `SetupModal`, shared trust states | F6 |
+  | Project shell, switcher, rail and tabs | `Sidebar`, `ProjectHeader`, `ProjectTabs` | F2 |
+  | New conversation and conversation | `NewConversationSurface`, `ConversationView`, composer/timeline/output | F2-F3 |
+  | Agent settings | `AgentSettingsPage` and the section rail | F7 |
+  | Overview and questions | `OverviewPage`, `QuestionsPanel`, interrupt cards | F6 |
+  | Tasks board and dependencies | `TasksBoard`, `DependencyBoardView`, task dialog | F4 |
+  | Specification and work panel | `SpecPage`, renderer, `PanelShell`, files/spec/loop tabs | F5 |
+  | Jobs | `JobsPage`, `JobCard`, `JobForm` | F7 |
+  | Activity and logs | `ActivityLog`, `LogsView` and row renderers | F7 |
+  | Quality, instructions, runners and charters | live environment pages | F8 |
+  | Worktrees, diagnostics, budgets and project settings | live environment pages | F8 |
+  | Add-project flow | `ProjectManagerModal` and directory picker entry | F8 |
+  | Command palette and persistent status | `CommandPalette`, `StatusBar` | F7 and earlier shell work |
+
+- `AgentCard` and the documented-but-nonexistent `AgentsPage` remain unreachable from `App.tsx`; they were not revived. `WorktreesPanel` is reachable, but there is no worktree activity query behind it, so it now presents a considered, honest empty state rather than fabricated operational data. The eight environment sections are all enumerated by `ENVIRONMENT_SECTIONS` and mounted by the environment-page record, so none were skipped.
+- Applied one shared configuration hierarchy rather than eight page-specific visual languages: project-configuration kicker and bounded section glyph, icon-bearing section navigation, narrow-width row reflow, shared controls, shaped skeletons and restrained resting elevation. Quality no longer spends selection blue on configuration values. Instructions, runners, charters, budgets and settings now use the shared field/chip vocabulary; runner and charter overlays use the existing lifted entrance treatment. Diagnostics is keyboard-scrollable and directly copyable. Add Project uses the shared field/button vocabulary and a persistent path preview glyph.
+- Research did not reveal a genuinely new structure: these are settings rows, small resource lists, a text editor, an honest empty state and a diagnostic code block, all already covered by the product identity and the local T3/product reference patterns. Per the F8 instruction, no standalone mock was created merely as a substitute for implementation.
+- Focused verification passed 7 Vitest files / 41 tests after adding configuration-hierarchy, diagnostics copy/keyboard and Worktrees truthfulness coverage. Mutation evidence: disconnecting the Diagnostics copy handler made the named `directly copyable` regression fail with zero clipboard calls; restoring it passed. Final verification passed 128 Vitest files / 1,256 tests, `npx tsc --noEmit`, and zero-warning ESLint. The expected `ErrorBoundary.test.tsx` console `boom` appeared while its suite passed.
+- Real-surface evidence: drove actual Quality, Instructions, Runners, Charters, Worktrees, Diagnostics, Budgets, Project Settings and Add Project components through an isolated Vite fixture on port 4181, never a Hub project and never port 8000. Captured all nine surfaces at 1280x820 and 560x820 in both themes (36 screenshots under `%TEMP%\agentweave-f8-shots`). Every render measured no horizontal overflow, keyboard focus reached `Copy status`, and browser console capture found no errors. Visual critique caught that applying `select.control-field` directly removed the settings controls' disclosure chevrons; moved all four onto the shared `Select` wrapper, reran all 36 captures, and inspected corrected desktop/narrow settings plus modal, budget, quality, charter, runner, instruction, diagnostic and Worktrees samples. Temporary harness files were removed and port 4181 was stopped.
+- Production build passed with the existing >500 kB chunk advisory. Refreshed `hub/hub/static/ui`; strict source/bundle fingerprint verification passed 11 tests. What to distrust: browser data came from API-shaped fixture responses, so this proves actual component rendering, control focus, responsive geometry and theme parity, not live-Hub integration or the surrounding `App` route transition. F9 is deliberately the whole-product integration pass.
+- F8 is removed from the remaining queue. The next fresh process should perform F9 exactly as recorded in `next_action`: whole-product visual and interaction QA across every reachable destination and the named shell interactions.

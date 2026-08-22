@@ -8,15 +8,10 @@
   "started_at": "2026-08-22T14:30:00+01:00",
   "stop_at": "2026-08-22T20:00:00+01:00",
   "stop_when_queue_empties": true,
-  "iteration": 8,
-  "last_heartbeat": "2026-08-22T16:05:34+01:00",
+  "iteration": 9,
+  "last_heartbeat": "2026-08-22T17:05:21+01:00",
   "log_file": ".claude/autonomous/2026-08-22-ui-finesse-log.md",
   "queue": [
-    {
-      "id": "F8",
-      "title": "Research, mock, correct and implement every remaining reachable surface",
-      "detail": "Re-read App.tsx and navigation after F1-F7 and produce a route-to-component coverage table in the run log. For reachable surfaces not covered by the approved mocks (including environment/project management, runners, charters, instructions, accounting, quality, diagnostics and worktrees if still reachable), follow the same flow: inspect current behavior and strong primary/reference patterns, make a small standalone considered mock only when structure is genuinely new, render with Playwright, critique and correct it, then implement. Skip proven dead/legacy components and record evidence for the skip. Keep the visual language consistent rather than inventing a new one per page."
-    },
     {
       "id": "F9",
       "title": "Whole-product visual and interaction QA",
@@ -29,7 +24,7 @@
     }
   ],
   "current": null,
-  "next_action": "Re-read App.tsx and navigation after F1-F7 and produce a route-to-component coverage table in the run log. For reachable surfaces not covered by the approved mocks (including environment/project management, runners, charters, instructions, accounting, quality, diagnostics and worktrees if still reachable), follow the same flow: inspect current behavior and strong primary/reference patterns, make a small standalone considered mock only when structure is genuinely new, render with Playwright, critique and correct it, then implement. Skip proven dead/legacy components and record evidence for the skip. Keep the visual language consistent rather than inventing a new one per page.",
+  "next_action": "Use Playwright against a safe test/trial surface, never port 8000 and never this repo as an AgentWeave project. Drive every reachable navigation destination at desktop and narrow widths in light and dark themes. Explicitly test project switching from the composer/shell with at least two projects, sidebar collapse/resize, panel tabs/resizing, command palette, empty/loading/error states and keyboard focus. Record screenshots or concise evidence in the log, fix every regression found, and add tests for behavioral defects.",
   "decisions_for_user": [],
   "limits": [
     "Stay on autonomous/2026-08-22-ui-finesse and push only that branch; do not merge, open a PR, release, publish or deploy.",

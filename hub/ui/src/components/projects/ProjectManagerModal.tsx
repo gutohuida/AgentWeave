@@ -4,6 +4,8 @@ import { useCreateProject, useOpenProject, type ProjectSummary } from '@/api/pro
 import { useNativeDialogAvailability, useOpenNativeDialog } from '@/api/nativeDialog'
 import { useDialogFocus } from '@/hooks/useDialogFocus'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Icon } from '@/components/common/Icon'
 import { joinProjectPath, projectNameProblem } from '@/lib/projectTarget'
 import { DirectoryPicker } from './DirectoryPicker'
 
@@ -121,7 +123,7 @@ export function ProjectManagerModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'var(--scrim)' }} role="dialog" aria-modal="true" aria-labelledby="project-manager-title">
-      <div ref={panelRef} className="lifted-surface w-[min(520px,calc(100vw-32px))] p-5" style={{ background: 'var(--surface)' }}>
+      <div ref={panelRef} className="lifted-surface surface-enter w-[min(520px,calc(100vw-32px))] p-5" style={{ background: 'var(--surface)' }}>
         <h2 id="project-manager-title" className="text-sm font-semibold">{mode === 'create' ? 'Create new project' : 'Add project'}</h2>
         <p className="mt-1 text-xs" style={{ color: 'var(--text-3)' }}>
           {isCreate
@@ -135,7 +137,7 @@ export function ProjectManagerModal({
         <label className="mt-4 block text-xs">
           {isCreate ? 'Create it in' : 'Directory path'}
           <div className="relative mt-1 flex gap-1.5">
-            <input autoFocus value={path} onChange={(event) => setPath(event.target.value)} className="block w-full min-w-0 rounded px-3 py-2" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }} />
+            <Input autoFocus value={path} onChange={(event) => setPath(event.target.value)} className="min-w-0 px-3 py-2" />
             {nativeAvailability?.available ? (
               <Button
                 type="button"
@@ -185,14 +187,13 @@ export function ProjectManagerModal({
         {isCreate && (
           <label className="mt-3 block text-xs">
             Project name
-            <input
+            <Input
               value={projectName}
               onChange={(event) => setProjectName(event.target.value)}
               aria-label="Project name"
               aria-invalid={nameProblem ? true : undefined}
               placeholder="my-project"
-              className="mt-1 block w-full rounded px-3 py-2"
-              style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}
+              className="mt-1 px-3 py-2"
             />
             <span className="mt-1 block text-[11px]" style={{ color: 'var(--text-3)' }}>
               This names the new folder and the project.
@@ -204,11 +205,11 @@ export function ProjectManagerModal({
             {nameProblem}
           </p>
         )}
-        <div data-testid="project-path-preview" className="mt-2 truncate rounded px-3 py-2 text-xs" style={{ background: 'var(--surface-2)', color: 'var(--text-3)' }}>{preview}</div>
+        <div data-testid="project-path-preview" className="mt-2 flex items-center gap-2 truncate rounded-md border px-3 py-2 font-mono text-xs" style={{ background: 'var(--surface-2)', borderColor: 'var(--border)', color: 'var(--text-3)' }}><Icon name="folder" size={13} className="shrink-0" />{preview}</div>
         {!isCreate && (
           <label className="mt-3 block text-xs">
             Display name <span style={{ color: 'var(--text-3)' }}>(optional)</span>
-            <input value={name} onChange={(event) => setName(event.target.value)} aria-label="Display name" className="mt-1 block w-full rounded px-3 py-2" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }} />
+            <Input value={name} onChange={(event) => setName(event.target.value)} aria-label="Display name" className="mt-1 px-3 py-2" />
           </label>
         )}
         {error && (
@@ -238,10 +239,10 @@ export function ProjectManagerModal({
           </div>
         )}
         <div className="mt-5 flex justify-end gap-2">
-          <button type="button" onClick={onClose}>Cancel</button>
-          <button type="button" onClick={() => submit()} disabled={!canSubmit || mutation.isPending} data-testid="confirm-project-action">
+          <Button variant="outline" size="sm" type="button" onClick={onClose}>Cancel</Button>
+          <Button variant="primary" size="sm" type="button" onClick={() => submit()} disabled={!canSubmit || mutation.isPending} data-testid="confirm-project-action">
             {mutation.isPending ? 'Workingâ€¦' : mode === 'create' ? 'Create project' : 'Add project'}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

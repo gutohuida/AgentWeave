@@ -923,6 +923,20 @@
     width: min(100%, 920px);
     padding-bottom: 18px;
   }
+  .settings-section-icon {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    margin-top: 1px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--surface-2);
+    color: var(--text-2);
+    box-shadow: inset 0 1px var(--lift-hi);
+  }
   .settings-section-rows {
     width: min(100%, 920px);
     border-top: 1px solid var(--border);
@@ -943,6 +957,14 @@
     justify-content: flex-end;
     gap: 8px;
     min-width: 180px;
+  }
+  .settings-code-surface {
+    max-height: min(62vh, 620px);
+    overflow: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--surface-2);
+    box-shadow: inset 0 1px var(--lift-hi);
   }
 
   .conversation-header-surface {
@@ -1640,6 +1662,11 @@
     }
     .workspace-content { padding: 18px 16px 32px; }
     .workspace-resizer { display: none; }
+    .settings-section { padding: 22px 16px 32px; }
+    .settings-section-heading { flex-direction: column; gap: 14px; }
+    .settings-row { align-items: flex-start; flex-direction: column; gap: 12px; }
+    .settings-row-control { width: 100%; min-width: 0; justify-content: flex-start; }
+    .settings-row-control > * { max-width: 100%; }
   }
 
   /* On coarse pointers, guarantee a reachable target without enlarging the

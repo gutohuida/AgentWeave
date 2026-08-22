@@ -91,6 +91,16 @@ const SECTION_LABELS: Record<EnvironmentSection, string> = {
   budgets: 'Budgets',
   settings: 'Settings',
 }
+const SECTION_ICONS: Record<EnvironmentSection, string> = {
+  quality: 'verified_user',
+  instructions: 'description',
+  runners: 'terminal',
+  charters: 'menu_book',
+  worktrees: 'file_vcs',
+  diagnostics: 'monitoring',
+  budgets: 'bar_chart',
+  settings: 'settings',
+}
 
 function loadFlags(key: string): Record<string, boolean> {
   try {
@@ -296,6 +306,7 @@ export function Sidebar({
                 aria-current={configuration.environmentSection === section ? 'page' : undefined}
                 onClick={() => onOpenEnvironment?.(configuration.projectId, section)}
               >
+                <Icon name={SECTION_ICONS[section]} size={14} />
                 {SECTION_LABELS[section]}
               </button>
             ))}

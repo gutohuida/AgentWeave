@@ -11,12 +11,13 @@ import {
 import { useModelCatalog } from '@/api/modelCatalog'
 import { useRunners } from '@/api/runners'
 import { Button } from '@/components/ui/button'
+import { Select } from '@/components/ui/input'
 import { DeleteProjectDialog } from '@/components/environment/DeleteProjectDialog'
 import { SettingsRow, SettingsSection } from '@/components/environment/SettingsSection'
 import { useConfigStore } from '@/store/configStore'
 import { describeThreshold } from '@/components/environment/describeThreshold'
 
-const inputClass = 'block w-48 rounded px-2 py-1.5 text-xs'
+const inputClass = 'control-field block w-48 px-2 py-1.5 text-xs'
 
 /** Token thresholds are stored as an actual count and entered in thousands, because that is the
  *  unit an operator thinks in — "150", not "150000". The conversion lives here, at the only place
@@ -71,8 +72,15 @@ export function ProjectSettingsPanel() {
     setNotesEntry(toEntryUnits(settings.checkpoint_threshold_mode, settings.checkpoint_notes_value))
   }, [settings])
 
-  if (!project || !form) return null
-  const fieldStyle = { background: 'var(--surface-2)', border: '1px solid var(--border)' }
+  if (!project || !form) {
+    return (
+      <SettingsSection title="Settings" description="Identity, collaboration limits, checkpointing, and where this project lives on disk.">
+        <div aria-label="Loading project settings" className="space-y-3 py-4">
+          {[0, 1, 2, 3, 4].map((row) => <div key={row} className="skeleton h-[58px] w-full" />)}
+        </div>
+      </SettingsSection>
+    )
+  }
   const error = update.error ?? relocate.error
 
   const set = <K extends keyof ProjectSettings>(key: K, value: ProjectSettings[K]) =>
@@ -121,22 +129,22 @@ export function ProjectSettingsPanel() {
     >
       <form id="project-settings-form" onSubmit={handleSave}>
       <SettingsRow label="Project name" description="The name used throughout the Hub to identify this project.">
-        <input aria-label="Project name" value={form.name} onChange={(event) => set('name', event.target.value)} className={inputClass} style={fieldStyle} />
+        <input aria-label="Project name" value={form.name} onChange={(event) => set('name', event.target.value)} className={inputClass} />
       </SettingsRow>
       <SettingsRow label="Hop budget" description="How many agent-to-agent hops a chain may take before it pauses for you.">
-        <input aria-label="Hop budget" type="number" min={1} required value={form.hop_budget} onChange={(event) => set('hop_budget', Number(event.target.value))} className={inputClass} style={fieldStyle} />
+        <input aria-label="Hop budget" type="number" min={1} required value={form.hop_budget} onChange={(event) => set('hop_budget', Number(event.target.value))} className={inputClass} />
       </SettingsRow>
       <SettingsRow label="Per-turn delivery cap" description="The maximum number of queued deliveries processed during one agent turn.">
-        <input aria-label="Per-turn delivery cap" type="number" min={1} required value={form.turn_delivery_cap} onChange={(event) => set('turn_delivery_cap', Number(event.target.value))} className={inputClass} style={fieldStyle} />
+        <input aria-label="Per-turn delivery cap" type="number" min={1} required value={form.turn_delivery_cap} onChange={(event) => set('turn_delivery_cap', Number(event.target.value))} className={inputClass} />
       </SettingsRow>
       <SettingsRow label="Agent budget" description="The maximum number of agents this project may run at the same time.">
-        <input aria-label="Agent budget" type="number" min={1} required value={form.agent_budget} onChange={(event) => set('agent_budget', Number(event.target.value))} className={inputClass} style={fieldStyle} />
+        <input aria-label="Agent budget" type="number" min={1} required value={form.agent_budget} onChange={(event) => set('agent_budget', Number(event.target.value))} className={inputClass} />
       </SettingsRow>
       <SettingsRow label="Token budget" description="An optional project-wide token allowance; leave blank for no limit.">
-        <input aria-label="Token budget" type="number" min={1} placeholder="No limit" value={form.token_budget ?? ''} onChange={(event) => set('token_budget', event.target.value ? Number(event.target.value) : null)} className={inputClass} style={fieldStyle} />
+        <input aria-label="Token budget" type="number" min={1} placeholder="No limit" value={form.token_budget ?? ''} onChange={(event) => set('token_budget', event.target.value ? Number(event.target.value) : null)} className={inputClass} />
       </SettingsRow>
       <SettingsRow label="Allow agent jobs" description="Agents may create and run scheduled jobs for this project.">
-        <input aria-label="Allow agent jobs" type="checkbox" checked={form.allow_agent_jobs} onChange={(event) => set('allow_agent_jobs', event.target.checked)} />
+        <input className="control-choice" aria-label="Allow agent jobs" type="checkbox" checked={form.allow_agent_jobs} onChange={(event) => set('allow_agent_jobs', event.target.checked)} />
       </SettingsRow>
 
       {/* Approving a task merges the agent's work into this branch. Until one is chosen nothing
@@ -157,7 +165,6 @@ export function ProjectSettingsPanel() {
           placeholder={mainBranch?.suggestion ?? 'Not chosen'}
           onChange={(event) => set('main_branch', event.target.value.trim() || null)}
           className={inputClass}
-          style={fieldStyle}
         />
       </SettingsRow>
       {mainBranch?.suggestion && !form.main_branch && (
@@ -174,17 +181,17 @@ export function ProjectSettingsPanel() {
       )}
 
       <SettingsRow label="Automatic checkpointing" description={MODE_DESCRIPTION[form.checkpoint_mode]}>
-        <select
+        <Select
           aria-label="Automatic checkpointing"
           value={form.checkpoint_mode}
           onChange={(event) => set('checkpoint_mode', event.target.value as ProjectSettings['checkpoint_mode'])}
-          className={inputClass}
-          style={fieldStyle}
+          wrapperClassName="w-48"
+          className="px-2 py-1.5 text-xs"
         >
           <option value="off">Off</option>
           <option value="offered">Offer me one</option>
           <option value="automatic">Do it automatically</option>
-        </select>
+        </Select>
       </SettingsRow>
       <SettingsRow
         label="Checkpoint at"
@@ -195,16 +202,16 @@ export function ProjectSettingsPanel() {
         }
       >
         <div className="flex items-center gap-2">
-          <select
+          <Select
             aria-label="Threshold unit"
             value={thresholdMode}
             onChange={(event) => set('checkpoint_threshold_mode', event.target.value as 'percent' | 'tokens')}
-            className="block w-28 rounded px-2 py-1.5 text-xs"
-            style={fieldStyle}
+            wrapperClassName="w-28"
+            className="px-2 py-1.5 text-xs"
           >
             <option value="percent">Percent</option>
             <option value="tokens">K tokens</option>
-          </select>
+          </Select>
           <input
             aria-label="Checkpoint threshold"
             type="number"
@@ -212,8 +219,7 @@ export function ProjectSettingsPanel() {
             placeholder="Default"
             value={thresholdEntry}
             onChange={(event) => setThresholdEntry(event.target.value)}
-            className="block w-24 rounded px-2 py-1.5 text-xs"
-            style={fieldStyle}
+            className="control-field block w-24 px-2 py-1.5 text-xs"
           />
         </div>
       </SettingsRow>
@@ -228,34 +234,33 @@ export function ProjectSettingsPanel() {
           placeholder="Default"
           value={notesEntry}
           onChange={(event) => setNotesEntry(event.target.value)}
-          className="block w-24 rounded px-2 py-1.5 text-xs"
-          style={fieldStyle}
+          className="control-field block w-24 px-2 py-1.5 text-xs"
         />
       </SettingsRow>
       <SettingsRow label="Continue automatically" description="After a checkpoint hands over, start the successor's first turn without waiting to be asked. Off means a Continue button — never a message you have to invent.">
-        <input aria-label="Continue automatically" type="checkbox" checked={form.checkpoint_auto_continue} onChange={(event) => set('checkpoint_auto_continue', event.target.checked)} />
+        <input className="control-choice" aria-label="Continue automatically" type="checkbox" checked={form.checkpoint_auto_continue} onChange={(event) => set('checkpoint_auto_continue', event.target.checked)} />
       </SettingsRow>
       <SettingsRow label="Checkpoint runner" description="Which runner writes checkpoints. A cheap model is usually right — the work runs elsewhere.">
-        <select
+        <Select
           aria-label="Checkpoint runner"
           value={form.checkpoint_runner_id ?? ''}
           onChange={(event) => set('checkpoint_runner_id', event.target.value || null)}
-          className={inputClass}
-          style={fieldStyle}
+          wrapperClassName="w-48"
+          className="px-2 py-1.5 text-xs"
         >
           <option value="">None — checkpointing stays off</option>
           {runners.map((runner) => (
             <option key={runner.id} value={runner.id}>{runner.name}</option>
           ))}
-        </select>
+        </Select>
       </SettingsRow>
       <SettingsRow label="Checkpoint model" description="Overrides the runner's own model for checkpoint generation.">
-        <select
+        <Select
           aria-label="Checkpoint model"
           value={form.checkpoint_model ?? ''}
           onChange={(event) => set('checkpoint_model', event.target.value || null)}
-          className={inputClass}
-          style={fieldStyle}
+          wrapperClassName="w-48"
+          className="px-2 py-1.5 text-xs"
         >
           <option value="">Use the runner's model</option>
           {catalog?.providers
@@ -263,7 +268,7 @@ export function ProjectSettingsPanel() {
             ?.models.map((model) => (
               <option key={model.id} value={model.id}>{model.label}</option>
             ))}
-        </select>
+        </Select>
       </SettingsRow>
 
       <SettingsRow label="Directory" description={project.path_display ?? project.working_directory ?? 'No directory bound'}>
@@ -272,7 +277,7 @@ export function ProjectSettingsPanel() {
         ) : (
           <div className="flex items-center gap-2">
             <span className="sr-only">Directory unavailable</span>
-            <input aria-label="New directory path" value={newPath} onChange={(event) => setNewPath(event.target.value)} className="block w-64 rounded px-2 py-1.5 text-xs" style={fieldStyle} />
+            <input aria-label="New directory path" value={newPath} onChange={(event) => setNewPath(event.target.value)} className="control-field block w-64 px-2 py-1.5 text-xs" />
             <Button type="button" variant="outline" size="sm" disabled={!newPath.trim() || relocate.isPending} onClick={() => relocate.mutate({ path: newPath.trim() })}>Locate project</Button>
           </div>
         )}

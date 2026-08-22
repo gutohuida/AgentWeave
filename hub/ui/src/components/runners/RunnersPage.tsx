@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Icon } from '@/components/common/Icon'
 import { EmptyState } from '@/components/common/EmptyState'
 import { Button } from '@/components/ui/button'
+import { Input, Select } from '@/components/ui/input'
 import { SettingsSection } from '@/components/environment/SettingsSection'
 import { tint } from '@/lib/colorTint'
 import {
@@ -50,9 +51,8 @@ export function RunnersPage() {
   if (isLoading) {
     return (
       <SettingsSection title="Runners" description="Reusable execution capability — which CLI and model an agent launches with.">
-        <div className="flex items-center gap-3 py-6">
-          <Icon name="sync" size={24} className="animate-spin" style={{ color: 'var(--text-3)' }} />
-          <span className="text-sm" style={{ color: 'var(--text-3)' }}>Loading runners…</span>
+        <div aria-label="Loading runners" className="space-y-2 py-4">
+          {[0, 1, 2].map((row) => <div key={row} className="skeleton h-14 w-full" />)}
         </div>
       </SettingsSection>
     )
@@ -91,7 +91,7 @@ export function RunnersPage() {
             {runners.map((runner) => (
               <div
                 key={runner.id}
-                className="flex items-center justify-between border-b py-2.5"
+                className="row-group interactive-card flex items-center justify-between rounded-md border-b px-2 py-2.5"
                 style={{ borderColor: 'var(--border)' }}
               >
                 <div className="min-w-0">
@@ -100,7 +100,7 @@ export function RunnersPage() {
                       {runner.name}
                     </span>
                     <span
-                      className="text-[11px] font-medium px-2 py-0.5 rounded-full capitalize"
+                      className="aw-chip capitalize"
                       style={{ background: 'var(--surface-3)', color: 'var(--text-3)' }}
                     >
                       {runner.cli}
@@ -186,11 +186,14 @@ function RunnerForm({
       onClick={onCancel}
     >
       <div
-        className="w-full max-w-md rounded-lg p-5"
-        style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="runner-form-title"
+        className="lifted-surface surface-enter w-[min(448px,calc(100vw-32px))] p-5"
+        style={{ background: 'var(--surface)' }}
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="text-base font-medium mb-4" style={{ color: 'var(--text)' }}>
+        <h2 id="runner-form-title" className="text-base font-medium mb-4" style={{ color: 'var(--text)' }}>
           {title}
         </h2>
         <div className="space-y-3">
@@ -198,11 +201,10 @@ function RunnerForm({
             <label className="block text-xs mb-1" style={{ color: 'var(--text-3)' }}>
               Name
             </label>
-            <input
+            <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full px-3 py-2 rounded-md text-sm"
-              style={{ background: 'var(--surface-2)', color: 'var(--text)', border: '1px solid var(--border)' }}
+              className="px-3 py-2 text-sm"
               placeholder="e.g. Claude Opus"
             />
           </div>
@@ -210,29 +212,27 @@ function RunnerForm({
             <label className="block text-xs mb-1" style={{ color: 'var(--text-3)' }}>
               CLI
             </label>
-            <select
+            <Select
               value={cli}
               disabled={!!initial}
               onChange={(e) => setCli(e.target.value as RunnerCli)}
-              className="w-full px-3 py-2 rounded-md text-sm capitalize"
-              style={{ background: 'var(--surface-2)', color: 'var(--text)', border: '1px solid var(--border)' }}
+              className="px-3 py-2 text-sm capitalize"
             >
               {CLI_OPTIONS.map((option) => (
                 <option key={option} value={option}>
                   {option}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
           <div>
             <label className="block text-xs mb-1" style={{ color: 'var(--text-3)' }}>
               Model (optional)
             </label>
-            <input
+            <Input
               value={model}
               onChange={(e) => setModel(e.target.value)}
-              className="w-full px-3 py-2 rounded-md text-sm"
-              style={{ background: 'var(--surface-2)', color: 'var(--text)', border: '1px solid var(--border)' }}
+              className="px-3 py-2 text-sm"
               placeholder="e.g. claude-sonnet-5"
             />
           </div>

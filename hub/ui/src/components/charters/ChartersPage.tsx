@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { EmptyState } from '@/components/common/EmptyState'
 import { Icon } from '@/components/common/Icon'
 import { Button } from '@/components/ui/button'
+import { Input, Textarea } from '@/components/ui/input'
 import { SettingsSection } from '@/components/environment/SettingsSection'
 import { tint } from '@/lib/colorTint'
 import {
@@ -57,9 +58,8 @@ export function ChartersPage() {
   if (isLoading) {
     return (
       <SettingsSection title="Charters" description="Authored behavior and boundaries that can be assigned to an agent.">
-        <div className="flex items-center gap-3 py-6">
-          <Icon name="sync" size={24} className="animate-spin" style={{ color: 'var(--text-3)' }} />
-          <span className="text-sm" style={{ color: 'var(--text-3)' }}>Loading charters...</span>
+        <div aria-label="Loading charters" className="space-y-2 py-4">
+          {[0, 1, 2].map((row) => <div key={row} className="skeleton h-16 w-full" />)}
         </div>
       </SettingsSection>
     )
@@ -100,7 +100,7 @@ export function ChartersPage() {
               return (
                 <div
                   key={charter.id}
-                  className="border-b py-2.5"
+                  className="interactive-card rounded-md border-b px-2 py-2.5"
                   style={{ borderColor: 'var(--border)' }}
                 >
                   <div className="flex items-start justify-between gap-4">
@@ -232,32 +232,32 @@ function CharterForm({
       <div
         role="dialog"
         aria-label={title}
-        className="w-full max-w-2xl rounded-lg p-5"
-        style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
+        aria-modal="true"
+        aria-labelledby="charter-form-title"
+        className="lifted-surface surface-enter w-[min(672px,calc(100vw-32px))] p-5"
+        style={{ background: 'var(--surface)' }}
         onClick={(event) => event.stopPropagation()}
       >
-        <h2 className="mb-4 text-base font-medium" style={{ color: 'var(--text)' }}>{title}</h2>
+        <h2 id="charter-form-title" className="mb-4 text-base font-medium" style={{ color: 'var(--text)' }}>{title}</h2>
         <label className="mb-1 block text-xs" style={{ color: 'var(--text-3)' }} htmlFor="charter-name">
           Name
         </label>
-        <input
+        <Input
           id="charter-name"
           aria-label="Charter name"
           value={name}
           onChange={(event) => setName(event.target.value)}
-          className="mb-3 w-full rounded-md px-3 py-2 text-sm"
-          style={{ background: 'var(--surface-2)', color: 'var(--text)', border: '1px solid var(--border)' }}
+          className="mb-3 px-3 py-2 text-sm"
         />
         <label className="mb-1 block text-xs" style={{ color: 'var(--text-3)' }} htmlFor="charter-content">
           Content
         </label>
-        <textarea
+        <Textarea
           id="charter-content"
           aria-label="Charter content"
           value={content}
           onChange={(event) => setContent(event.target.value)}
-          className="h-72 w-full resize-y rounded-md px-3 py-2 font-mono text-sm"
-          style={{ background: 'var(--surface-2)', color: 'var(--text)', border: '1px solid var(--border)' }}
+          className="h-72 px-3 py-2 font-mono text-sm"
         />
         <div className="mt-5 flex justify-end gap-2">
           <Button variant="outline" size="sm" onClick={onCancel}>Cancel</Button>
