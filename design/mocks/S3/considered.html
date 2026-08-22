@@ -519,10 +519,6 @@
   </div>
 </div>
 <script>
-  document.querySelector('.theme-toggle').addEventListener('click', () => {
-    document.getElementById('theme-label').textContent = document.documentElement.dataset.mode === 'dark' ? 'dark' : 'light'
-  })
-
   // Icon placeholders -> real inline SVGs, lucide-shaped, matching Icon.tsx's actual glyphs
   // (folder_open, chevron_right, close, add, search, refresh, content_copy, smart_toy, description).
   const ICONS = {
@@ -544,6 +540,9 @@
     SMART_TOY: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%"><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M12 8V4M9 2h6"/><circle cx="9" cy="14" r="1" fill="currentColor" stroke="none"/><circle cx="15" cy="14" r="1" fill="currentColor" stroke="none"/><path d="M9 18h6"/></svg>',
   }
   document.body.innerHTML = document.body.innerHTML.replace(/\$\{'\{'\}(\w+)\{'\}'\}/g, (m, name) => ICONS[name] ?? '')
+  document.querySelector('.theme-toggle').addEventListener('click', () => {
+    document.getElementById('theme-label').textContent = document.documentElement.dataset.mode === 'dark' ? 'dark' : 'light'
+  })
 </script>
 </body>
 </html>

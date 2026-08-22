@@ -1365,3 +1365,70 @@ a broken real control; whether the tooltip's `::after` CSS-only approach errs fr
 `title`-replacement tooltip component would behave; and whether the two-variant set (no third
 "expressive") is the right call for this screen the way it was for S1/S2, or whether the panel's
 "always on screen" status (unlike S1/S2's page-navigated surfaces) argues for a subtler third degree.
+
+## Iteration 19 — 2026-08-22T03:32:19+01:00 — S3 P3: iterate (right side panel)
+
+**Re-screenshotted both `design/mocks/S3/*.html` variants in both themes** via the existing
+`%TEMP%\s3shots\capture.py` direct-Playwright script (uishot.py still can't be used — these static
+mocks flip theme via their own `.theme-toggle` handler, not the live app's button role). Read all
+four PNGs fresh rather than trusting the P2 captures.
+
+**Found and fixed a real bug by looking, not by reading source.** In the light-theme captures the
+toggle button's own label was stuck reading "dark" even though the page had visibly switched to the
+light palette. Root cause, confirmed by direct Playwright evaluation (clicked `.theme-toggle`,
+compared `dataset.mode` vs `#theme-label` textContent before/after): both `considered.html` and
+`restrained.html` attach the label-updating `addEventListener('click', …)` *before* the trailing
+icon-substitution step `document.body.innerHTML = document.body.innerHTML.replace(...)`. That
+`innerHTML` reassignment reparses and rebuilds the entire `<body>` from a string to swap in the real
+SVGs — which discards every DOM node the listener was attached to and creates fresh ones parsed from
+the (unmodified) HTML string. The inline `onclick="…dataset.mode = …"` on the button survives because
+it's plain markup reflected into the new nodes, so the theme itself still flips correctly; only the
+runtime `addEventListener` was orphaned on a detached node. Fixed by moving the
+`addEventListener` call to *after* the `innerHTML` replace in both files (so it binds to the live
+node), verified directly via Playwright (`before ('dark','dark') after ('light','light')` for both
+files, was `after ('light','dark')` before the fix), then re-screenshotted and re-read all four PNGs
+to confirm the fix holds and introduced no new defect. Checked whether this is inherited: `S2`'s
+`considered.html` has the identical ordering bug (confirmed by the same before/after check) — `S1`'s
+doesn't, because `S1` has no `#theme-label` span at all. Not fixing S2 here — out of scope for this
+iteration, noting it so P4/RATIONALE or a later pass can decide whether to backport.
+
+No other defects found on this pass — badges, agent-colour dots, the pill-tab crossfade, the search
+field, tree row states, the loops toolbar switch and skeleton all still read correctly in both
+themes after the `.tab-close` sizing fix from P2 held up under a second look.
+
+**Answered the three questions `next_action` posed:**
+- *Context menu — demonstrated affordance or broken control?* Reads clearly as demonstrated: it sits
+  in its own labeled `frame-col` beside the tab strip rather than overlaid as if a real right-click
+  had triggered it, and the caption underneath states outright that it's "Absent from `PanelShell`
+  today … not implemented here, only demonstrated." No change needed.
+- *CSS-only `::after` tooltip — plausible vs a real tooltip component?* Checked whether the app has
+  an existing `Tooltip` component to diverge from: grepped `hub/ui/src/components` for `Tooltip` —
+  no dedicated component exists anywhere in the tree (54 files use native `title=` only). So this
+  isn't inconsistent with an established pattern, it's proposing one where none exists — correctly
+  scoped as a missing-feature note for `RATIONALE.md`, not a risk to fix.
+- *Does S3 need a third "expressive" variant, given the panel is always-on-screen chrome rather than
+  a navigated-to page like S1/S2?* Judged no. The panel is peripheral to where attention actually
+  goes while working; an expressive treatment on chrome that's *supposed* to recede risks reading as
+  the "complete jump in design" clause 5 forbids, more than S1/S2's navigated screens would. Two
+  variants stands, same call as S1/S2, but for a different reason worth stating explicitly in
+  `RATIONALE.md` rather than leaving it looking like an unexamined default.
+
+**Verified.**
+- `grep -c "addEventListener('click'" design/mocks/S3/*.html` → 1 per file, now positioned after the
+  `innerHTML` replace in both.
+- Playwright before/after check on both files, both directions (see above).
+- Four screenshots re-captured and re-read after the fix.
+- `git status --short` → only the two edited `design/mocks/S3/*.html` files plus the usual
+  `.claude/autonomous/` state churn.
+
+**Not done this iteration, deliberately:** no `RATIONALE.md`, no review-index entry, no before-shot
+of the current live `PanelShell.tsx` — all three are P4's job. The before-shot in particular needs
+the trial Hub started from `hub/` on port 8010, which is more setup than this pass's scope
+justified; flagging it here so P4 does it fresh rather than assuming a stale capture.
+
+**Next:** S3 P4 — second iteration pass (none of this iteration's findings required a further mock
+change beyond the toggle-label fix, so P4 can likely go straight to write-up), a before/after capture
+of the current live `PanelShell` (start the trial Hub from `hub/` on port 8010, screenshot, stop it
+cleanly), `design/mocks/S3/RATIONALE.md` covering the research, what changed, what was rejected
+(third variant, under clause 5, reasoning above), and adding S3 to `design/mocks/index.html` (item Z
+rebuild) alongside S1/S2's existing entries.
