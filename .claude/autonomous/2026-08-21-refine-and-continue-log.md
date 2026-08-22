@@ -1043,3 +1043,78 @@ direct Playwright, read them fresh, critique against `IDENTITY.md`'s rejection t
 build-time bias of already believing they're right, and fix anything found. Look specifically at the
 states-strip and drag-and-drop sections, which were confirmed rendering but not critiqued this
 iteration.
+
+## Iteration 15 — 2026-08-22T02:53:51+01:00 — S2 P3: iterate on the task-board mocks
+
+Branch/log/STATE.json reconciled cleanly on entry — clean tree, HEAD matched iteration 14's commit
+(`9cb5ac6`, the release-heartbeat commit).
+
+**Captured.** Direct-Playwright (`file://`, 1500×1100, both variants, both themes, full-page PNGs,
+console errors captured) — same approach as every prior screen since `uishot.py` still doesn't fit a
+static mock's own `.theme-toggle`. Zero console errors beyond the pre-existing webfont 404, zero
+leftover `${` placeholder text in either file. Read all four full-page PNGs fresh, then cropped and
+zoomed specific regions for a close read rather than trusting the full-page thumbnail's resolution.
+
+**Found and fixed a real legibility bug**, only visible by looking, not from the source: the flag
+glyph `considered.html` uses to disambiguate the `high`/`critical` priority pills by shape
+(`FLAG`/`FLAG_SM`, a thin `stroke-width: 2.4` outline at 9×9px) renders as an illegible mark that
+reads as the letter **"P"**, not a flag — confirmed in both themes, at every call site (the Finding-1
+before/after comparison, every `high`/`critical` card badge, and the states-strip). Checked whether
+this was a size problem or a shape problem by comparing against the other small glyphs on the same
+cards: `WARN_SM` (11px, also thin-stroke) reads clearly as a warning triangle, `HELP` (15px)
+reads clearly as a question-mark circle — so 9-11px isn't inherently too small for a stroke icon, but
+the flag's specific geometry (a thin vertical line plus a thin hooked stroke) collapses into
+noise at that size in a way a closed triangle or circle doesn't. Root cause, not just symptom: a
+stroked outline needs more pixels to read than a filled shape at the same size, and the flag was the
+only filled-in-real-use glyph built as a stroke.
+
+Fixed by replacing `FLAG`'s definition with a filled shape (`fill="currentColor"`, a solid pole
+`<rect>` plus a solid pennant `<path>`) instead of the stroked outline, and bumping both call sites
+from 9px to 11px (the before/after comparison's inline `.ic` style, and `FLAG_SM`'s derived size) to
+match `WARN_SM`'s already-confirmed-legible size — consistency across the card's small-glyph set, not
+an arbitrary second change. Re-screenshotted and cropped the same regions: the flag now reads clearly
+as a flag, both themes, at every call site (before/after table, board cards, states-strip).
+
+**The two regions `next_action` flagged as unreviewed, now actually critiqued:**
+- *States-strip* (`rest`/`hover`/`press`/`selected`, `data-force`-driven). Read correctly on the fixed
+  flag glyph. Sampled background pixel colour directly at each cell to confirm the four states are
+  genuinely distinct, not just visually similar in a screenshot: rest `rgb(29,29,33)` (`--surface-2`),
+  hover `rgb(38,38,43)` (`--surface-3`, lighter), press `rgb(25,25,28)` (darker, the `--press-lo` mix),
+  selected `rgb(29,29,33)` (same background as rest, distinguished by border/shadow alone — correct
+  per its own CSS rule, which only changes `border-color`/`box-shadow`, not background). No bug —
+  confirmed by measurement, not assumed from the render.
+- *Drag-and-drop illustration*. Both the mid-drag card (rotated, reduced opacity, elevated shadow) and
+  the highlighted drop-zone ("Drop to mark approved," dashed `--ring`-tinted border) render cleanly in
+  both themes — text fully legible, no clipping, no stray artefacts. No bug.
+
+**`restrained.html`** — full-page read in both themes, no cropping needed since it deliberately avoided
+the icon-legibility risk in the first place (a plain colour dot instead of a glyph for priority, per
+iteration 14's log). Confirmed clean: no bug, no fix needed. Notable for `RATIONALE.md` later —
+`restrained`'s smaller, glyph-free choice turned out to be the safer one at this information density,
+which is itself a finding about *degree*, not just a lesser version of `considered`.
+
+**Verified, not assumed.**
+- Direct-Playwright re-capture after the fix, both variants, both themes → 0 console errors, 0
+  leftover placeholder text.
+- Pixel-sampled crop-and-zoom (5×) read of the fixed flag glyph at its actual on-card size, both
+  themes, both the Finding-1 comparison table and a live board card (`Wire start_new_thread…`,
+  critical) — reads as a flag, not a letter, in every case checked.
+- `PIL.Image.getpixel` sampling of the four states-strip cells' background colour, confirming they
+  differ exactly as the CSS intends rather than trusting the screenshot's apparent similarity.
+- `git status --short` after cleanup → only `design/mocks/S2/considered.html` modified (plus the usual
+  `.claude/autonomous/` state files). Scratch dir `/tmp/s2shots` and the two throwaway Python scripts
+  removed — nothing left in `/tmp` or tracked in the repo.
+
+**Not done this iteration, deliberately:** no second iterate pass or `RATIONALE.md` yet —
+`screen_pass_protocol.P3_iterate` is exactly what happened this iteration (screenshot, read, critique,
+fix); `P4_finish` is the next firing: a second look for anything missed, `RATIONALE.md`, and adding S2
+to `design/mocks/index.html`.
+
+**Next:** S2 P4 — finish. Re-screenshot both variants/themes once more (four captures) to confirm the
+flag-glyph fix has no regression and look once more for anything missed, then write
+`design/mocks/S2/RATIONALE.md` (research → changes for all ten `RESEARCH.md` findings, including the
+two extra bugs found beyond `RESEARCH.md` itself — the priority-badge bug from P1/P2 and this
+iteration's flag-glyph legibility bug — what was rejected and under which `IDENTITY.md` clause, and
+the `restrained`-is-safer-at-this-density observation above), then extend
+`design/mocks/index.html` with S2's before/after shots (inline data-URIs, same approach as S1, per the
+`.gitignore` blanket `*.png` rule already noted in `dead_ends_inherited`).
