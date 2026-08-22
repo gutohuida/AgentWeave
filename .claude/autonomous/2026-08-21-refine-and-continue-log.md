@@ -3626,3 +3626,61 @@ minutes to `stop_at` `2026-08-22T09:00:00+01:00` as this iteration closes) — `
 to run "again as the LAST action before `stop_at`" means Z is very likely the last thing this run
 does; budget time for it rather than starting a new screen.
 than padding it artificially.
+
+## Iteration 52 — 2026-08-22T08:22:00+01:00 — S8-palette P4: finish
+
+Verified branch/log/STATE.json agreed before starting (`a30f984` = HEAD, S8-palette P3, matching
+STATE.json's `next_action` exactly). ~38 minutes to `stop_at`.
+
+`screen_pass_protocol.P4_finish`: a second look, then `RATIONALE.md`, then add S8-palette to the
+review index.
+
+**Second look.** Took fresh screenshots of both variants in both themes (`py -3.11 scripts/uishot.py`,
+`file://` URIs via `pathlib.Path(...).resolve().as_uri()` per the now-standard recipe for git-bash's
+broken `/c/...` paths) and read all four. Nothing new: every interaction-state row (resting, hovered,
+keyboard-selected, focus-visible, plus `considered.html`'s disabled row) renders legibly in both
+themes, the P3 narrow-viewport fix held at 1440px, and the recent-items feature note reads as a note
+rather than shipped behaviour. No further fixes needed — P3's adversarial pass already did the real
+work.
+
+**Wrote `design/mocks/S8-palette/RATIONALE.md`**: what was researched (eight findings from reading
+the component plus four external sources plus T3 Code's own command palette), what closed in each
+variant and why (`restrained.html` findings 1/3/4/8, `considered.html` adds 5/6), what was rejected
+under which clause (a single-hue-per-group colour scheme under clause 1, any structural redesign
+under clause 5), and the P3 density trade-off stated plainly — `considered.html`'s richer two-line
+rows fit ~9 in the palette's height cap against `restrained.html`'s ~12 single-line rows, a real
+row-count cost for a real information gain, left as a judgement call rather than asserted away in
+either direction.
+
+**Spliced S8-palette into `design/mocks/index.html`**, replacing the "S8-palette and the final
+review-index rebuild" pending placeholder with a done card in the exact structure `S8-logs`'s
+already established (four data-URI screenshots, screen-links, summary prose). Windows-native
+`python` (not the `python3` WindowsApps shim, which exit-codes 49 with no output on this machine —
+noting this for future iterations) read the four PNGs from `%TEMP%` and base64-spliced them via a
+regex swap on the placeholder block, run from `testbed/scratch/` (deleted after use, along with the
+verification script and the four temp PNGs — `git status --short` showed only the two intended
+files before staging).
+
+**Verified by rendering the rebuilt `index.html` in Playwright**, not by trusting the splice script:
+12 `.screen-card`s total (was 11), `S8-palette -- Command palette (Cmd+K)` present and marked done,
+56 `<img>` tags, zero broken images (`naturalWidth > 0` checked per image), zero page/console errors
+beyond three pre-existing `ERR_FILE_NOT_FOUND` resource fetches unrelated to any `<img>` (not
+introduced by this change — no image failed to decode). One pending card remains: `_system --
+foundations & controls` (U0a/U0b), which reached P2 in iteration 8 and was never carried to
+`RATIONALE.md`/indexed with shots — a real, pre-existing gap this iteration did not create and did
+not have runway to close; flagging it for whichever iteration runs `Z` in full.
+
+**This closes `S8` in full** — jobs, agents, logs, and now palette are all 4/4. Committed as
+`3c2f935`.
+
+**Next**: queue item `Z` — `design/mocks/index.html`'s own "run again as the LAST action before
+`stop_at`" instruction, and `stop_at` (`2026-08-22T09:00:00+01:00`) is now under 35 minutes away, so
+`Z` is almost certainly the last unit of work this run does. Scope for that pass: true up the whole
+index (confirm all of S1-S7 and every S8 sub-screen render correctly, per iteration 42's "trued up,
+not just appended to" precedent) and make a real decision about the `_system` pending card rather
+than leaving it silently stale — either give U0a/U0b a fast P3/P4 pass if time allows, or update its
+placeholder text to state plainly that it reached P2 and stalled there, so the operator reads an
+accurate status in the morning rather than a placeholder that has been technically wrong for over
+seven hours of run time. If wall-clock runs out before either, prioritise an accurate placeholder
+over a rushed full pass — a true "not indexed yet, built at P2" note costs one edit and beats an
+incomplete P3/P4 rushed in the last few minutes.
