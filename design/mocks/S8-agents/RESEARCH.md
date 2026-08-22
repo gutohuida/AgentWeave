@@ -158,3 +158,19 @@ Two mock targets, each with restrained/considered variants (light + dark, per
 
 Both stay within IDENTITY.md clause 1 (existing tokens only) and clause 3 (the existing radius
 scale) — nothing here needs a new geometry, only the vocabulary already built in `_system/`.
+
+## P2 correction — `.settings-row`/`.settings-row-control` are real, live classes
+
+This RESEARCH pass's own claim above ("not present in index.css — likely a global utility class
+defined elsewhere") was wrong; caught while building the mock, worth recording so P3/P4 and any
+later screen do not repeat it. `hub/ui/src/index.css:471-503` defines `.settings-section`,
+`.settings-section-heading`, `.settings-section-rows`, `.settings-row` and
+`.settings-row-control` with real token-based rules (`display:flex`, `min-height:76px`,
+`flex:none; min-width:180px; justify-content:flex-end` on the control). The first mock draft
+reused those exact class names for its own scratch layout, and because the mock imports the real
+`index.css`, the real rules won the cascade wherever the mock's own rule didn't explicitly
+override a property — `.settings-row-control`'s inherited `display:flex; flex:none` silently
+fought the mock's `flex:1`, collapsing one of the two select boxes to roughly a third of the
+other's width. Fixed by renaming the mock's scratch classes to `.arow`/`.arow-control` etc., which
+do not collide. The lesson for future mocks: grep `hub/ui/src/index.css` for a candidate scratch
+class name before using it, since a same-named real class always applies alongside it.

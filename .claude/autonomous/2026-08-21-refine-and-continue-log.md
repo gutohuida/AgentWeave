@@ -3033,3 +3033,70 @@ this pass.
 `design/IDENTITY.md`'s rejection test clause by clause, discard anything that fails (stating which
 clause), then build `design/mocks/S8-agents/<variant>.html` files for the two targets above, in both
 themes.
+
+---
+
+## Iteration 42 — 2026-08-22T07:01:57+01:00 — S8-agents P2: validate + mock
+
+Validated `RESEARCH.md`'s P2 plan against `design/IDENTITY.md`'s rejection test clause by clause —
+all seven pass: no new hues (agent identity dots use the existing `--agent-1..8` scale, context
+thresholds reuse `ContextUsageIndicator`'s own amber/red cutoffs, everything else resolves to a
+token in `hub/ui/src/index.css`); `--blue` untouched (only `--ring`/focus usage, no fills); the
+existing `--radius` scale only; the existing type family/scale; lucide icons only via inline SVG
+matching `Icon.tsx`'s existing paths, no new icon source; density preserved in `restrained.html`
+(same single-line row) and *increased* in `considered.html` (a fixed +4px per row buys back
+model/context/last-seen, nothing that fit before stops fitting); flat-neutral character throughout
+— no glass, no gradients, no drop shadows beyond the existing `--lift-hi`/inset recipe already used
+elsewhere in this run's mocks.
+
+Built `design/mocks/S8-agents/restrained.html` and `considered.html`, mocking the two real surfaces
+`RESEARCH.md` identified rather than the queue's literal `AgentsPage`/`AgentCard`:
+
+- **The rail roster** (`AgentTree` at ~250px sidebar width). Restrained: rows adopt
+  `SidebarItem.tsx`'s own left-indicator + accent-background hover/active recipe, which the tree
+  never reused despite sitting one component away; row-menu hover-reveal and expander/conversation
+  focus-visible added. Considered: returns model/context/last-seen to the row on a fixed two-line
+  grid (18px identity + 14px metrics, always present, `—` when null) — T3 Code's `AgentsPanel`
+  precedent, "changing data must never change their height" — plus a dressed empty state
+  (`No conversations yet — right-click for New conversation` with an icon, replacing the bare
+  string) and staggered row entrance respecting `prefers-reduced-motion`.
+- **Agent settings** (`AgentSettingsPage` Identity/Execution/Access + the section nav).
+  `AgentSettingsControls.tsx`'s raw `<select>`/`<input type=checkbox>`/`<textarea>` become
+  `_system/controls.html`'s `.ctl-select`/`.ctl-switch`/`.ctl-textarea` verbatim — a literal
+  swap-in per `RESEARCH.md`, not a redesign. The nav gains one small leading icon per section (T3
+  `SettingsSidebarNav` precedent at a comparable 7-section count). Considered adds a content-pane
+  loading skeleton shaped like the identity/description/archive rows it replaces, since
+  `AgentSettingsPage` today renders a bare `<Shell>Loading…</Shell>` string.
+
+**Verification, and a real bug caught by it.** `scripts/uishot.py`'s dark-mode toggle only
+recognizes the *real app's* `"Switch to dark mode"` accessible name, so it does nothing against a
+standalone mock with its own toggle button — used a small one-off Playwright script instead
+(load, click `button.theme-toggle`, screenshot both states) and read the PNGs. First render showed
+the Execution section's two `<select>` boxes at wildly different widths (188px vs 93px, then 130px
+after a partial fix) despite identical CSS classes and an identical 320px container on both —
+traced with `bounding_box()`/`getComputedStyle()` calls per element down to the actual cause:
+`hub/ui/src/index.css:471-503` already defines **real, live** `.settings-section`, `.settings-row`
+and `.settings-row-control` classes (`display:flex`, `min-height:76px`,
+`flex:none; min-width:180px; justify-content:flex-end` on the control) — and the mock's first draft
+had reused those exact names for its own scratch layout. Because the mock imports the real
+`index.css`, those rules applied alongside the mock's own `flex:1` wherever the mock didn't
+explicitly override a property, and the two rules fought unpredictably per row. This directly
+contradicts `RESEARCH.md`'s own P1 finding ("not present in index.css — likely a global utility
+class defined elsewhere") — corrected in a new section of `RESEARCH.md` rather than silently fixed,
+since the wrong claim would otherwise mislead a later pass. Fix: renamed the mock's scratch classes
+to `.arow`/`.arow-control` (grepped both files against `index.css` first to confirm no other
+custom name collides), which also let a temporary 280px-width hack be reverted back to the intended
+`width:100%`. Re-screenshotted both files, both themes, after the fix — all sections and the
+states-strip render at the correct shared width with no truncation.
+
+Cleaned up all one-off Python/Playwright scripts under `/tmp` before finishing — scratch tooling,
+never intended to be committed. `git status --short` shows only `RESEARCH.md` (the P2-correction
+addendum) modified and the two new mock HTML files — no other tree changes this pass.
+
+**Next**: S8-agents P3 — `screen_pass_protocol.P3_iterate`. Screenshot every variant in both themes
+(decide once, this iteration flagged it: either give the mock's own theme-toggle button an
+accessible name matching `"Switch to dark mode"` so `uishot.py`'s existing logic works unmodified,
+or keep a small reusable click-then-shoot Playwright helper — don't reinvent this per screen), then
+actually critique what's seen against `design/IDENTITY.md`'s rejection test with fresh eyes (this
+iteration's screenshot pass was verification of the layout fix, not the protocol's dedicated
+critique step) and fix whatever surfaces.

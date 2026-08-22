@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en" data-mode="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AgentWeave — Agent Roster & Settings (restrained)</title>
+<link rel="stylesheet" href="../../../hub/ui/src/index.css" />
+<style>
+  /* ══════════════════════════════════════════════════════════════
+     Mock only. Every colour/radius/duration/easing below resolves to
+     an existing token in hub/ui/src/index.css. RESEARCH.md corrected
+     the queue's premise: there is no AgentsPage, and AgentCard is dead
+     code. This mocks what actually renders — AgentTree's rail rows and
+     AgentSettingsPage's Identity/Execution/Interaction sections.
+
+     RESTRAINED — the smallest change that fixes what is unstyled
+     today: AgentTree rows adopt SidebarItem's own hover/active
+     language (a left indicator + accent background) instead of being
+     hand-rolled with none; AgentSettingsControls' raw <select>/
+     <input type=checkbox>/<textarea> become _system/controls.html's
+     .ctl-select/.ctl-check/.ctl-switch vocabulary verbatim (a literal
+     swap-in — U0b was built for exactly this gap); the settings nav
+     list gains one small leading icon per section, the cheapest single
+     fix T3 Code's SettingsSidebarNav suggested. Layout and information
+     are otherwise exactly today's AgentTree/AgentSettingsPage. See
+     considered.html for the fuller pass (model/context/last-seen data
+     returned to the row on a T3-style fixed-height grid, richer empty/
+     loading states, states-strip).
+     ══════════════════════════════════════════════════════════════ */
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { min-height: 100vh; padding-bottom: 80px; }
+
+  .doc { width: min(100%, 1100px); margin-inline: auto; padding: 32px 28px 0; }
+
+  .doc-header {
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 24px;
+    padding-bottom: 28px; border-bottom: 1px solid var(--border-region); margin-bottom: 32px;
+  }
+  .doc-title { font-size: 22px; font-weight: 600; letter-spacing: -0.01em; }
+  .doc-subtitle { margin-top: 6px; font-size: 13px; color: var(--text-2); max-width: 780px; line-height: 1.55; }
+  .theme-toggle {
+    flex: none; display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px;
+    border-radius: var(--radius-lg); border: 1px solid var(--border); background: var(--surface-2);
+    color: var(--text); font-size: 12px; font-weight: 500; cursor: pointer;
+    transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+  }
+  .theme-toggle:hover { background: var(--surface-3); border-color: var(--border-hi); }
+  .theme-toggle:focus-visible { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring); outline: none; }
+
+  section.mock-section { margin-bottom: 44px; }
+  .section-eyebrow { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); margin-bottom: 6px; }
+  .section-title { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+  .section-note { font-size: 12.5px; color: var(--text-2); line-height: 1.6; max-width: 860px; margin-bottom: 18px; }
+  .section-note code { background: var(--surface-2); border-radius: var(--radius-sm); padding: 1px 5px; font-size: 11.5px; }
+
+  svg.ic { width: 1em; height: 1em; }
+
+  /* ─── Buttons — reused verbatim from _system/controls.html (U0b) ─── */
+  .btn {
+    position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    border-radius: var(--radius-lg); border: 1px solid transparent;
+    font-weight: 500; cursor: pointer; outline: none; white-space: nowrap;
+    transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease),
+                box-shadow var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease), opacity var(--dur-fast) var(--ease);
+  }
+  .btn svg { width: 14px; height: 14px; opacity: 0.8; pointer-events: none; }
+  .btn.outline { background: var(--surface-2); color: var(--text); border-color: var(--border); box-shadow: 0 1px 2px rgb(0 0 0 / 0.16); }
+  .btn.outline:hover { border-color: var(--border-hi); background: var(--surface-3); }
+  .btn.outline:focus-visible { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring); }
+  .btn.destructive { background: transparent; color: var(--red); border-color: var(--border); }
+  .btn.destructive:hover { background: color-mix(in oklab, var(--destructive) 14%, transparent); border-color: color-mix(in oklab, var(--destructive) 45%, transparent); }
+  .btn.sz-xs  { height: 28px; gap: 4px;  border-radius: var(--radius-sm); padding: 0 calc(0.5rem - 1px);   font-size: 12px; }
+
+  /* ═══════════════ Target 1 — the rail roster (AgentTree) ═══════════════ */
+  .rail-frame {
+    width: 250px; background: var(--surface); border: 1px solid var(--border-region);
+    border-radius: var(--radius-lg); padding: 10px 8px; overflow: hidden;
+  }
+  .rail-heading { font-size: 10.5px; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.05em; padding: 4px 8px 8px; }
+
+  /* Row language borrowed verbatim from SidebarItem.tsx — left indicator + accent bg + border,
+     which AgentTree's own hand-rolled rows never adopted. Finding: AgentTree does not reuse
+     SidebarItem despite the identical shape. */
+  .agent-row-group { position: relative; display: flex; align-items: center; gap: 2px; border-radius: var(--radius-sm); }
+  .agent-row-indicator {
+    position: absolute; left: 0; top: 50%; transform: translateY(-50%); width: 2px; height: 0;
+    background: var(--text); border-radius: 0 2px 2px 0; transition: height var(--dur-fast) var(--ease);
+  }
+  .agent-row-group[data-active="true"] .agent-row-indicator,
+  .agent-row-group:hover .agent-row-indicator { height: 16px; }
+
+  .expander-btn {
+    flex: none; width: 24px; height: 24px; border-radius: var(--radius-sm); border: 1px solid transparent;
+    background: transparent; color: var(--text-3); display: inline-flex; align-items: center; justify-content: center;
+    cursor: pointer; transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+  }
+  .expander-btn:hover { background: var(--accent); color: var(--text); }
+  .expander-btn:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring); }
+  .expander-btn svg { transition: transform var(--dur-fast) var(--ease); }
+  .expander-btn[data-open="true"] svg { transform: rotate(90deg); }
+
+  .agent-row {
+    flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 8px;
+    border-radius: var(--radius-sm); border: 1px solid transparent; background: transparent;
+    color: var(--text-2); font-size: 13px; font-weight: 500; cursor: pointer; text-align: left;
+    transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+  }
+  .agent-row-group:hover .agent-row { background: var(--accent); color: var(--text); }
+  .agent-row-group[data-active="true"] .agent-row { background: var(--accent); border-color: var(--border); color: var(--text); }
+  .agent-row:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring); }
+  .agent-dot { width: 8px; height: 8px; border-radius: 9999px; flex: none; }
+  .agent-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .attn-dot { width: 6px; height: 6px; border-radius: 9999px; flex: none; background: var(--amber); }
+  .status-dot { width: 6px; height: 6px; border-radius: 9999px; flex: none; }
+
+  .row-menu-btn {
+    flex: none; width: 24px; height: 24px; border-radius: var(--radius-sm); border: none; background: transparent;
+    color: var(--text-3); display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+    opacity: 0; transition: opacity var(--dur-fast) var(--ease), background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+  }
+  .agent-row-group:hover .row-menu-btn, .agent-row-group[data-active="true"] .row-menu-btn { opacity: 1; }
+  .row-menu-btn:hover { background: var(--row-hover); color: var(--text); }
+
+  .conv-list { margin-left: 26px; display: flex; flex-direction: column; gap: 1px; margin-top: 1px; }
+  .conv-row {
+    display: flex; align-items: center; gap: 7px; height: 26px; padding: 0 8px; border-radius: var(--radius-sm);
+    border: 1px solid transparent; color: var(--text-3); font-size: 12px; cursor: pointer;
+    transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+  }
+  .conv-row:hover { background: var(--row-hover); color: var(--text-2); }
+  .conv-row[data-active="true"] { background: var(--accent); border-color: var(--border); color: var(--text); }
+  .conv-row .conv-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .conv-expander { color: var(--text-3); font-size: 12px; padding: 5px 8px; cursor: pointer; }
+  .conv-expander:hover { color: var(--text-2); }
+
+  .add-agent-row {
+    display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 8px; border-radius: var(--radius-sm);
+    border: 1px dashed var(--border); color: var(--text-3); font-size: 12.5px; font-weight: 500; cursor: pointer;
+    margin-top: 4px; transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+  }
+  .add-agent-row:hover { background: var(--accent); border-color: var(--border-hi); color: var(--text); }
+
+  /* ═══════════════ Target 2 — Agent Settings ═══════════════ */
+  .settings-shell { display: flex; gap: 0; background: var(--bg); border: 1px solid var(--border-region); border-radius: var(--radius-lg); overflow: hidden; max-width: 940px; }
+  .settings-nav { width: 200px; flex: none; border-right: 1px solid var(--border); padding: 14px 8px; }
+  .settings-nav-header { display: flex; align-items: center; gap: 8px; padding: 4px 8px 12px; }
+  .settings-back { width: 24px; height: 24px; border-radius: var(--radius-sm); border: none; background: transparent; color: var(--text-3); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease); }
+  .settings-back:hover { background: var(--accent); color: var(--text); }
+  .settings-nav-title { font-size: 12.5px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .nav-item {
+    position: relative; display: flex; align-items: center; gap: 9px; width: 100%; height: 32px; padding: 0 8px;
+    border-radius: var(--radius-sm); border: 1px solid transparent; background: transparent; color: var(--text-2);
+    font-size: 12.5px; font-weight: 500; cursor: pointer; text-align: left;
+    transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+  }
+  .nav-item svg { width: 14px; height: 14px; flex: none; opacity: 0.75; }
+  .nav-item:hover { background: var(--row-hover); color: var(--text); }
+  .nav-item[data-active="true"] { background: var(--accent); border-color: var(--border); color: var(--text); }
+  .nav-item[data-active="true"] svg { opacity: 1; }
+
+  .settings-content { flex: 1; min-width: 0; padding: 24px 28px; }
+  .settings-section-title { font-size: 15px; font-weight: 600; color: var(--text); margin: 0 0 4px; }
+  .settings-section-desc { font-size: 12px; color: var(--text-3); line-height: 1.5; margin: 0 0 20px; max-width: 560px; }
+  .arow { display: flex; gap: 24px; padding: 16px 0; border-top: 1px solid var(--border); }
+  .arow:first-of-type { border-top: none; padding-top: 0; }
+  .arow-label { width: 220px; flex: none; }
+  .arow-label-text { font-size: 13px; font-weight: 500; color: var(--text); }
+  .arow-desc { font-size: 11.5px; color: var(--text-3); line-height: 1.5; margin-top: 3px; }
+  .arow-control { flex: 1; min-width: 0; max-width: 320px; }
+
+  /* Controls — _system/controls.html's .ctl-* vocabulary, unchanged */
+  .ctl-input, .ctl-select, .ctl-textarea {
+    width: 100%; height: 34px; padding: 0 10px; border-radius: var(--radius-md);
+    border: 1px solid var(--border); background: var(--surface-2); color: var(--text);
+    font-size: 13px; outline: none;
+    transition: border-color var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease);
+  }
+  .ctl-textarea { height: auto; padding: 8px 10px; min-height: 56px; resize: vertical; font-family: inherit; line-height: 1.5; }
+  .ctl-input::placeholder, .ctl-textarea::placeholder { color: var(--text-3); }
+  .ctl-input:hover, .ctl-textarea:hover, .ctl-select:hover { border-color: var(--border-hi); }
+  .ctl-input:focus, .ctl-textarea:focus, .ctl-select:focus { border-color: var(--border-hi); box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring); }
+  .ctl-select { appearance: none; -webkit-appearance: none; cursor: pointer; padding-right: 32px; display: block; width: 100%; }
+  .select-wrap { position: relative; display: block; width: 100%; }
+  .select-chevron { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); width: 14px; height: 14px; color: var(--text-3); pointer-events: none; }
+
+  .ctl-switch { position: relative; width: 34px; height: 20px; flex: none; border-radius: 9999px;
+    border: 1px solid var(--border-hi); background: var(--surface-3); cursor: pointer;
+    transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease); }
+  .ctl-switch-thumb { position: absolute; top: 1px; left: 1px; width: 16px; height: 16px; border-radius: 9999px;
+    background: var(--text-2); box-shadow: 0 1px 2px rgb(0 0 0 / 0.3);
+    transition: transform var(--dur-fast) var(--ease), background-color var(--dur-fast) var(--ease); }
+  .ctl-switch[data-checked] { background: var(--ring); border-color: var(--ring); }
+  .ctl-switch[data-checked] .ctl-switch-thumb { transform: translateX(14px); background: var(--primary-foreground); }
+
+  .switch-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; }
+  .switch-row + .switch-row { border-top: 1px solid var(--border); }
+  .switch-label { flex: 1; min-width: 0; }
+  .switch-label-text { font-size: 12.5px; color: var(--text); }
+  .switch-label-hint { font-size: 11px; color: var(--text-3); margin-top: 2px; line-height: 1.5; }
+
+  .help-text { font-size: 11px; color: var(--text-3); margin-top: 6px; line-height: 1.5; }
+
+  .states-strip { display: flex; gap: 22px; flex-wrap: wrap; margin-top: 6px; }
+  .state-cell { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+  .state-cell-label { font-size: 10.5px; color: var(--text-3); font-family: var(--font-mono, monospace); }
+
+  .legend { max-width: 940px; margin: 48px auto 0; padding: 16px 18px; border-top: 1px solid var(--border-region); font-size: 11.5px; color: var(--text-3); line-height: 1.7; }
+</style>
+</head>
+<body>
+<div class="doc">
+  <div class="doc-header">
+    <div>
+      <div class="doc-title">Agent Roster & Settings — restrained</div>
+      <div class="doc-subtitle">
+        Mocks what actually renders — <code>AgentTree</code>'s rail rows and
+        <code>AgentSettingsPage</code>'s section content — not the queue's named
+        <code>AgentsPage</code>/<code>AgentCard</code>, neither of which is a live surface
+        (see RESEARCH.md). Smallest change that fixes what is unstyled today.
+      </div>
+    </div>
+    <button class="theme-toggle" onclick="document.documentElement.dataset.mode = document.documentElement.dataset.mode === 'dark' ? 'light' : 'dark'; document.getElementById('theme-label').textContent = document.documentElement.dataset.mode">
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+      <span id="theme-label">dark</span>
+    </button>
+  </div>
+
+  <!-- ══════════════════ Rail roster ══════════════════ -->
+  <section class="mock-section">
+    <div class="section-eyebrow">AgentTree — sidebar width, ~250px</div>
+    <div class="section-title">Rows adopt SidebarItem's own hover/active language</div>
+    <div class="section-note">
+      Today <code>AgentTree</code>'s rows are hand-rolled <code>row-item</code> markup with no
+      hover or focus treatment, despite <code>SidebarItem.tsx</code> — used one component away —
+      already having a considered left-indicator + accent-background recipe. This variant applies
+      that recipe verbatim to the agent row and the row-menu's hover-reveal, and adds
+      focus-visible to the expander and conversation rows. Same single-line row, same
+      <code>CONVERSATION_DISPLAY_CAP</code> density, same information.
+    </div>
+    <div class="rail-frame">
+      <div class="rail-heading">Agents</div>
+
+      <!-- Expanded agent, active, with attention -->
+      <div class="agent-row-group" data-active="true">
+        <span class="agent-row-indicator"></span>
+        <button class="expander-btn" data-open="true" aria-label="Collapse claude-1" aria-expanded="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+        <button class="agent-row" data-active="true">
+          <span class="agent-dot" style="background: var(--agent-1);"></span>
+          <span class="agent-name">claude-1</span>
+          <span class="status-dot" style="background: var(--green);" title="running"></span>
+        </button>
+        <button class="row-menu-btn" aria-label="Actions for claude-1">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+        </button>
+      </div>
+      <div class="conv-list">
+        <div class="conv-row" data-active="true"><span class="conv-name">Fix the checkout race</span></div>
+        <div class="conv-row"><span class="conv-name">Nightly refinement loop — firing 14</span></div>
+        <div class="conv-row"><span class="conv-name">Spec review: conversations-continue</span></div>
+        <div class="conv-expander">Show 4 more</div>
+      </div>
+
+      <!-- Collapsed agent, needs attention -->
+      <div class="agent-row-group">
+        <span class="agent-row-indicator"></span>
+        <button class="expander-btn" aria-label="Expand codex-2" aria-expanded="false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+        <button class="agent-row">
+          <span class="agent-dot" style="background: var(--agent-2);"></span>
+          <span class="agent-name">codex-2</span>
+          <span class="attn-dot" title="A conversation is waiting for you" role="img" aria-label="A conversation is waiting for you"></span>
+          <span class="status-dot" style="background: var(--text-3);" title="idle"></span>
+        </button>
+        <button class="row-menu-btn" aria-label="Actions for codex-2">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+        </button>
+      </div>
+
+      <!-- Collapsed, idle, hover state frozen for the shot -->
+      <div class="agent-row-group" style="background: none;">
+        <span class="agent-row-indicator" style="height: 16px;"></span>
+        <button class="expander-btn" aria-label="Expand claude-3" aria-expanded="false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+        <button class="agent-row" style="background: var(--accent); color: var(--text);">
+          <span class="agent-dot" style="background: var(--agent-3);"></span>
+          <span class="agent-name">claude-3</span>
+          <span class="status-dot" style="background: var(--text-3);" title="idle"></span>
+        </button>
+        <button class="row-menu-btn" style="opacity: 1;" aria-label="Actions for claude-3">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+        </button>
+      </div>
+
+      <button class="add-agent-row">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+        Add agent
+      </button>
+    </div>
+  </section>
+
+  <!-- ══════════════════ Agent settings ══════════════════ -->
+  <section class="mock-section">
+    <div class="section-eyebrow">AgentSettingsPage — Identity / Execution / Interaction</div>
+    <div class="section-title">Nav gains per-section icons; controls adopt the U0b vocabulary</div>
+    <div class="section-note">
+      <code>AgentSettingsControls.tsx</code>'s fields are raw HTML with inline styles today — a
+      literal swap to <code>_system/controls.html</code>'s <code>.ctl-select</code>/
+      <code>.ctl-check</code>/<code>.ctl-switch</code> recipe, not a redesign. The settings nav in
+      <code>Sidebar.tsx</code> is a bare seven-item text list; each item gains one small leading
+      icon, the cheapest fix T3 Code's <code>SettingsSidebarNav</code> suggests at a comparable
+      section count. Same seven sections, same rows, same copy.
+    </div>
+    <div class="settings-shell">
+      <div class="settings-nav">
+        <div class="settings-nav-header">
+          <button class="settings-back" aria-label="Back to roster">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
+          <span class="settings-nav-title">codex-2 settings</span>
+        </div>
+        <button class="nav-item" data-active="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 0 0-16 0"/></svg>
+          Identity
+        </button>
+        <button class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          Execution
+        </button>
+        <button class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="15" x2="15" y2="15"/><line x1="9" y1="11" x2="15" y2="11"/></svg>
+          Charter
+        </button>
+        <button class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          Interaction
+        </button>
+        <button class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
+          Context
+        </button>
+        <button class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          Access
+        </button>
+        <button class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+          Workspace
+        </button>
+      </div>
+
+      <div class="settings-content">
+        <p class="settings-section-title">Identity</p>
+        <p class="settings-section-desc">What this agent is called, and whether it is in use.</p>
+
+        <div class="arow">
+          <div class="arow-label">
+            <div class="arow-label-text">Name</div>
+            <div class="arow-desc">How this agent is addressed — by you, and by its peers when they send it a message.</div>
+          </div>
+          <div class="arow-control">
+            <span style="font-size:13px; color: var(--text);">codex-2</span>
+          </div>
+        </div>
+
+        <div class="arow">
+          <div class="arow-label">
+            <div class="arow-label-text">Description</div>
+            <div class="arow-desc">What this agent is for, for you. Nothing reads it into a turn — the charter is where behaviour is stated.</div>
+          </div>
+          <div class="arow-control">
+            <textarea class="ctl-textarea" placeholder="What this agent is for.">Reviews PRs against the openspec change before evidence is recorded.</textarea>
+          </div>
+        </div>
+
+        <div class="arow">
+          <div class="arow-label">
+            <div class="arow-label-text">Archive</div>
+            <div class="arow-desc">Take this agent out of the rail, task assignment and peer recipients without losing anything it has done. There is no way to delete an agent, by design.</div>
+          </div>
+          <div class="arow-control">
+            <button class="btn destructive sz-xs">Archive agent</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="mock-section">
+    <div class="section-eyebrow">AgentSettingsPage — Execution</div>
+    <div class="section-title">Runner and default-permissions selects, styled</div>
+    <div class="section-note">Same two rows as today, native <code>&lt;select&gt;</code> replaced with the themed <code>.ctl-select</code> and its lucide chevron.</div>
+    <div class="settings-shell">
+      <div class="settings-content" style="width: 100%;">
+        <div class="arow" style="border-top:none; padding-top:0;">
+          <div class="arow-label">
+            <div class="arow-label-text">Runner</div>
+            <div class="arow-desc">The execution capability this agent is bound to — its CLI, model and flags.</div>
+          </div>
+          <div class="arow-control">
+            <div class="select-wrap">
+              <select class="ctl-select">
+                <option>claude-sonnet-5 (claude)</option>
+                <option>codex-high (codex)</option>
+              </select>
+              <svg class="select-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+            </div>
+          </div>
+        </div>
+        <div class="arow">
+          <div class="arow-label">
+            <div class="arow-label-text">Default permissions</div>
+            <div class="arow-desc">What this agent may do when a conversation has not chosen a posture. The composer's Permissions pill overrides it for one conversation.</div>
+          </div>
+          <div class="arow-control">
+            <div class="select-wrap">
+              <select class="ctl-select">
+                <option>Built-in default (Edit files)</option>
+                <option>Ask me</option>
+                <option>Plan only</option>
+                <option>Full access</option>
+              </select>
+              <svg class="select-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+            </div>
+            <p class="help-text">Used when a conversation has not chosen one — including runs a peer or a schedule starts.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="mock-section">
+    <div class="section-eyebrow">AgentSettingsPage — Access</div>
+    <div class="section-title">Checkbox grants become <code>.ctl-switch</code></div>
+    <div class="section-note">
+      Four raw <code>&lt;input type="checkbox"&gt;</code> grants (two checkpoint reads, evidence
+      accept, plus the interaction waits' number inputs elsewhere) become the switch recipe —
+      a toggle reads as "on/off now" more clearly than a checkbox for a standing permission,
+      and it is the one new shape controls.html already introduced for exactly this.
+    </div>
+    <div class="settings-shell">
+      <div class="settings-content" style="width: 100%;">
+        <div class="arow" style="border-top:none; padding-top:0;">
+          <div class="arow-label">
+            <div class="arow-label-text">Grants</div>
+            <div class="arow-desc">Both closed by default. Reading a summary of a peer's work and reading the raw output behind it are different permissions.</div>
+          </div>
+          <div class="arow-control">
+            <div class="switch-row">
+              <div class="switch-label">
+                <div class="switch-label-text">Read other agents' checkpoints</div>
+                <div class="switch-label-hint">Summaries of where their conversations got to.</div>
+              </div>
+              <span class="ctl-switch" data-checked role="switch" aria-checked="true"><span class="ctl-switch-thumb"></span></span>
+            </div>
+            <div class="switch-row">
+              <div class="switch-label">
+                <div class="switch-label-text">Recall the observations behind them</div>
+                <div class="switch-label-hint">The original recorded output a checkpoint cites, verbatim.</div>
+              </div>
+              <span class="ctl-switch" role="switch" aria-checked="false"><span class="ctl-switch-thumb"></span></span>
+            </div>
+          </div>
+        </div>
+        <div class="arow">
+          <div class="arow-label">
+            <div class="arow-label-text">Evidence</div>
+            <div class="arow-desc">Authority over whether work is allowed to merge — not a widening of what can be read.</div>
+          </div>
+          <div class="arow-control">
+            <div class="switch-row">
+              <div class="switch-label">
+                <div class="switch-label-text">Accept or reject evidence</div>
+                <div class="switch-label-hint">This agent still cannot accept its own.</div>
+              </div>
+              <span class="ctl-switch" data-checked role="switch" aria-checked="true"><span class="ctl-switch-thumb"></span></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════ Interaction states ══════════════════ -->
+  <section class="mock-section">
+    <div class="section-eyebrow">Interaction states</div>
+    <div class="section-title">Row, nav item, switch</div>
+    <div class="section-note">Demonstrated, not just resting — clause 7 of the rejection test.</div>
+    <div class="states-strip">
+      <div class="state-cell">
+        <div class="rail-frame" style="width: 190px; padding: 6px;">
+          <div class="agent-row-group"><span class="agent-row-indicator"></span><button class="agent-row" style="padding-left:8px;"><span class="agent-dot" style="background: var(--agent-4);"></span><span class="agent-name">claude-4</span></button></div>
+        </div>
+        <span class="state-cell-label">resting</span>
+      </div>
+      <div class="state-cell">
+        <div class="rail-frame" style="width: 190px; padding: 6px;">
+          <div class="agent-row-group" data-active="true"><span class="agent-row-indicator" style="height:16px;"></span><button class="agent-row" style="padding-left:8px; background: var(--accent); color: var(--text);"><span class="agent-dot" style="background: var(--agent-4);"></span><span class="agent-name">claude-4</span></button></div>
+        </div>
+        <span class="state-cell-label">hover — new, was absent</span>
+      </div>
+      <div class="state-cell">
+        <button class="nav-item" data-active="true" style="width: 140px;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 0 0-16 0"/></svg>
+          Identity
+        </button>
+        <span class="state-cell-label">nav — active</span>
+      </div>
+      <div class="state-cell">
+        <span class="ctl-switch" data-checked><span class="ctl-switch-thumb"></span></span>
+        <span class="state-cell-label">switch — on</span>
+      </div>
+      <div class="state-cell">
+        <button class="btn outline sz-xs" style="outline:none; box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring);">Archive agent</button>
+        <span class="state-cell-label">focus-visible — new, was absent</span>
+      </div>
+    </div>
+  </section>
+
+  <div class="legend">
+    Rejection test: every colour resolves to a token in <code>hub/ui/src/index.css</code>
+    (agent identity dots use the existing <code>--agent-1..8</code> scale) · both themes via the
+    toggle above · durations are <code>--dur-fast</code> only, easing is <code>--ease</code> only ·
+    radii derive from <code>--radius</code> · resting, hover, active and focus-visible all shown ·
+    same rows, same seven settings sections, same information as
+    <code>AgentTree</code>/<code>AgentSettingsPage</code> today — no data added in this variant
+    (see <code>considered.html</code> for the model/context/last-seen exploration RESEARCH.md
+    flagged as a missing-information finding, not a styling gap).
+  </div>
+</div>
+</body>
+</html>
