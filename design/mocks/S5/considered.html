@@ -235,7 +235,7 @@ a:focus-visible, button:focus-visible {
 <p class="aw-nav"><a href="../../../spec/agentweave.html">Home</a><a href="../../../spec/areas/work-and-traceability.html">Work and traceability</a></p>
 <p class="aw-summary"><span class="aw-modal aw-modal-must"><span class="aw-count">8</span> MUST</span><span class="aw-summary-sep">·</span><span class="aw-modal aw-modal-should"><span class="aw-count">1</span> SHOULD</span><span class="aw-summary-sep">·</span><span class="aw-modal aw-modal-may"><span class="aw-count">1</span> MAY</span><span class="aw-summary-sep">·</span><span class="aw-count">10</span> requirements<span class="aw-summary-sep">·</span><span class="aw-count">22</span> criteria</p>
 
-<section><h2 id="summary">Summary</h2>
+<section id="summary"><h2>Summary</h2>
 <p>Which task status transitions are legal, who may perform them, how an illegal one is refused, and the durable append-only record of every accepted transition. Established by <code>openspec/changes/2026-08-10-task-transition-machine</code> (roadmap change <strong>B1</strong>). Before it, a task's status was whatever the last writer said: <code>update_task_for_actor</code> applied <code>task.status = body.status</code> with no adjacency and no actor rule, and the MCP <code>update_task</code> tool handed that to every bound agent — so a run could move its own work from <code>in_progress</code> to <code>approved</code> in one call. This capability governs <strong>validity</strong>: that a recorded transition is legal, attributed, and made by an entitled actor.</p>
 </section>
 
@@ -326,7 +326,7 @@ a:focus-visible, button:focus-visible {
 </table>
 </section>
 
-<section><h2 id="evidence">Evidence and coverage limits</h2>
+<section id="evidence"><h2>Evidence and coverage limits</h2>
 <h3>Checked</h3>
 <ul><li>Translated from <code>openspec/specs/task-lifecycle-governance/spec.md</code>. Requirement text and scenario WHEN/THEN are carried verbatim; nothing was rewritten.</li></ul>
 <h3 class="aw-limits">Limits</h3>
@@ -342,14 +342,14 @@ a:focus-visible, button:focus-visible {
 </ul>
 </section>
 
-<section><h2 id="open-questions">Open questions</h2>
+<section id="open-questions"><h2>Open questions</h2>
 <ul>
 <li><span class="aw-chip aw-chip-open">open</span>Should the instance carry an agent's please-add-this-task request and hand the operator a one-click accept?</li>
 <li><span class="aw-chip aw-chip-open">open</span>Should system-caused transitions surface differently in the board than actor-caused ones, or is the transition log enough?</li>
 </ul>
 </section>
 
-<section class="aw-map"><h2 id="map">Map <span class="aw-note">(generated on reindex — hand edits here are overwritten)</span></h2>
+<section class="aw-map" id="map"><h2>Map <span class="aw-note">(generated on reindex — hand edits here are overwritten)</span></h2>
 <ul class="aw-map-list">
 <li class="aw-map-item"><a href="#">Run-to-task binding</a> <span class="aw-chip">exploration</span><span class="aw-chip aw-chip-phase-quiet">exploring</span><p>Whether a transition happens at all when reality changes — liveness, as distinct from the validity this capability governs.</p></li>
 <li class="aw-map-item"><a href="#">Agent capability plane</a> <span class="aw-chip">capability</span><span class="aw-chip aw-chip-phase-done">current</span><p>One least-privilege, run-authenticated application contract for agent-caused effects and scoped reads, shared identically by HTTP and MCP.</p></li>

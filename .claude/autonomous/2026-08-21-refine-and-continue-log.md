@@ -2073,3 +2073,91 @@ rejected and under which clause, including the two scoped-clause resolutions fro
 `design/mocks/index.html` with its before/after shots — noting `index.html` does not exist yet
 (queue item Z), so P4 is where S5's own entry is written but the review index itself is still
 pending until Z runs.
+
+## Iteration 28 — 2026-08-22T04:54:34+01:00 — S5 P4: finish the rendered spec document
+
+Branch and log matched `STATE.json` on entry: HEAD was `ce1c087` ("release heartbeat for next
+firing"), one commit past `b4cfd99` (S5 P3). Read both mock files in full before touching anything.
+**Correction to iteration 27's own closing note**, made honestly rather than carried forward
+silently: `design/mocks/index.html` already existed at that point (created during earlier screens'
+P4 passes, confirmed by `git log` — S1/S2/S3/S4 each modified it) with a placeholder "S5 — S8"
+pending section already in place. The prior note's "index.html does not exist yet" was wrong; this
+iteration corrects course by rebuilding that placeholder in the established per-screen pattern
+rather than creating the file fresh.
+
+**Second look (the P4 "look again, fix anything remaining" step).** Wrote
+`testbed/scratch/shot_s5_p4.py`, a fresh Playwright pass distinct from P3's battery: full-page
+re-baselines, a close-up on the `data-first="true"` accent border marking a new requirement's first
+acceptance row (added at P2, never specifically screenshotted before), a hover on the first `.aw-map-item`
+in both variants, the open-questions chips, and a `reduced_motion="reduce"` browser-context check on
+`considered.html`. Confirmed via `getComputedStyle` (not the media-query text) that
+`--aw-dur-fast`/`--aw-dur-base` genuinely collapse to `0ms` under that emulation. The accent-border
+crop initially looked absent in a wide full-width screenshot; pixel-level `getComputedStyle`
+(`2px rgb(9,105,218)` vs. the ordinary `1px` border colour) plus a tight crop directly at the row
+boundary confirmed it does render — just subtly, which is the intended, "considered detail, not
+literal texture" register, so nothing was changed there.
+
+**A real bug found by generalizing P3's own fix, not by reading new source.** Having just fixed
+`#acceptance`/`#requirements`' id-on-`<h2>` placement in P3, this pass checked whether the same
+mistake existed elsewhere — it did, identically, on all four remaining sections:
+`<section><h2 id="summary">`, `<section><h2 id="evidence">`, `<section><h2 id="open-questions">`,
+and `<section class="aw-map"><h2 id="map">`. Confirmed with a Playwright probe
+(`page.locator("#open-questions li").count()` → `0` before the fix) that this was live-broken for
+`#open-questions` and `#map` in the sense that any CSS keyed on them as an ancestor would silently
+fail — but grepping both files' `<style>` blocks showed **no such CSS currently exists**
+(`.aw-map-list`/`.aw-map-item` are styled by plain class selectors, not `#map`-scoped ones), so
+today's rendering was unaffected. This is exactly the same landmine `#acceptance` already stepped
+on in P3, sitting unarmed in four more places — one future CSS rule away from silently going inert
+again. Fixed by moving all four ids onto their enclosing `<section>` in both files, matching the
+pattern `#tasks` and the P3-fixed `#requirements`/`#acceptance` already use. Checked anchor-neutrality
+first (grepped both files for `href="#summary"` etc. — none exist, matching P3's precedent for the
+same check). Re-verified with a small count-probe script asserting `#summary p`, `#evidence li`,
+`#open-questions li`, `#map .aw-map-item`, `#tasks li`, and `#requirements .aw-requirement` all
+resolve to their expected counts in both files (all six passed in both), then re-ran the full P3
+hover/focus-visible battery and re-screenshotted both variants in both themes at full page height —
+identical to the pre-fix renders, confirming zero visual regression from a fix whose entire value is
+foreclosing a *future* failure, not changing today's output.
+
+**Wrote `design/mocks/S5/RATIONALE.md`** — the two scoped-clause resolutions from P1/P2 (colour and
+motion tokens mirrored into the document's own `_STYLE` namespace, value-identical to the Hub's,
+since this document cannot reach `hub/ui/src/index.css` at all), all ten `RESEARCH.md` findings and
+their fixes, the P1 standalone-vs-embedded decision (kept to two files, both already exercising all
+three cascade layers), both id-scoping bugs (P3's live one and P4's latent generalization) with
+their respective evidence, what P4's second look confirmed rather than changed (the accent border,
+map-item hover, reduced-motion), and an explicit statement that nothing from `RESEARCH.md` was
+rejected under any `IDENTITY.md` clause — the only idea not built was the fourth cascade-specific
+file, a scope call rather than a rejection.
+
+**Rebuilt `design/mocks/index.html`.** Captured four fresh full-page screenshots (restrained/
+considered × dark/light, post all fixes) plus a before/after pair for the `#acceptance` bug: since
+P3's "before" state no longer exists in the working tree (already fixed and committed), reproduced
+it faithfully in a throwaway temp copy (`testbed/scratch/s5fix/before.html`, `#acceptance`'s `id`
+moved back onto the `<h2>` via `sed`, nothing else changed) purely to capture the real "before"
+render rather than describing it from memory — deleted after use. Spliced a new done "S5 — The
+rendered spec documents" section into `index.html` in the exact position the old "S5 — S8" pending
+placeholder occupied (matching every prior screen's `screen-card` / `shot-row` / `fix-block`
+structure), followed by a new "S6 — S8 and the final review-index rebuild" pending placeholder — the
+splice was done with a small Python script reading the pre/post fragments and the base64-encoded
+PNGs from disk rather than an in-tool string edit, since the file's embedded images make it too
+large to load as text in one piece. **Verified the rebuilt file actually works, not just that the
+splice completed**: opened it in Playwright, confirmed 30 `<img>` elements total with zero
+`naturalWidth === 0` (i.e. zero broken images) and no new console errors beyond the three
+pre-existing, already-documented `@fontsource` 404s, then screenshotted the S5 section, the
+fix-pair block, and the new S6 pending block and read all three — all render correctly, consistent
+with every earlier screen's entry.
+
+**Verified.** `py -3.11 -c "import json; json.load(...)"` on `STATE.json` after editing. All
+throwaway scripts and PNGs under `testbed/scratch/` deleted after use (gitignored regardless,
+confirmed via `git check-ignore -v` on the one script deliberately kept,
+`testbed/scratch/shot_s5_p4.py`, matching the precedent already set by `shot_s5.py`/`shot_s5_p3.py`).
+`git status --short` → `design/mocks/S5/{restrained,considered}.html` modified (the four-section id
+fix), `design/mocks/S5/RATIONALE.md` new, `design/mocks/index.html` modified — staged and committed.
+
+**S5 is now fully done — all four passes (P1–P4) complete and verified.**
+
+**Next:** S6 — "Screen 6 - questions and permission prompts" (`QuestionsPanel`, `AnswerForm`, and
+the permission decision card — the moments the product stops and demands the operator). P1 explore:
+read those components (confirm the permission-card's actual filename first, not yet identified this
+run), `WebSearch` for confirmation-dialog / high-stakes-decision UI patterns, check the T3 Code
+sourcemaps for anything comparable, and write `design/mocks/S6/RESEARCH.md`. No mock file this pass
+— P2 is the next firing.
