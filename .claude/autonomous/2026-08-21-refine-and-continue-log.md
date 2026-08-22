@@ -3804,3 +3804,27 @@ Logging this as a fourth consecutive no-op.
 
 With `stop_at` now under 15 minutes away, this run is at its natural end. The driver's own
 `stop_when_queue_empties`/`stop_at` guard is the correct mechanism to end it.
+
+## Iteration 57 — 2026-08-22T08:48:48+01:00 — no-op: queue confirmed still empty, ~11 min to stop_at
+
+Branch (`autonomous/2026-08-21-refine-and-continue`) and `git log` matched STATE.json exactly on
+entry (`1284ede` = HEAD, iteration 56's heartbeat-release commit; nothing to reconcile). `stop_at`
+(`2026-08-22T09:00:00+01:00`) was ~11 minutes out at start.
+
+`git log -1 -- design/mocks/` (`86de63b`, iteration 53) and `git log -1 -- hub/hub hub/ui/src`
+(`0908b68`, phase 6) show no commits since iteration 56 — nothing could have drifted.
+
+Re-ran the same cheap Playwright check on `design/mocks/index.html` from a throwaway
+`testbed/scratch/` script (deleted after use): 12 `.screen-card`s, 56 `<img>` tags, 0 broken images,
+exactly 1 `.screen-card.pending` (the `_system` card, correctly still pending), 0 `pageerror`s, 3
+`requestfailed` (the pre-existing `@fontsource` bare-specifier 404s under raw `file://`, present in
+every prior check, unrelated to any image). Identical to iterations 53-56 — no regression.
+
+C1-C6, U0a/U0b, S1-S8, and Z remain at the same honest end state left by iteration 53. `_system`
+P3/P4 remains the one open item and is not reopened without an operator steer (`D-direction` still
+open). No new work exists inside the queue; `do_not_idle` forbids inventing scope outside it.
+Logging this as a fifth consecutive no-op.
+
+With `stop_at` now under 11 minutes away, this run is at its natural end. The driver's own
+`stop_when_queue_empties`/`stop_at` guard is the correct mechanism to end it — this is very likely
+the last iteration before the driver self-unregisters past `stop_at`.
