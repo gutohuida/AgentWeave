@@ -734,6 +734,199 @@
     background: var(--surface);
     box-shadow: inset 0 1px rgba(255,255,255,0.05);
   }
+  .composer-form {
+    transition: opacity var(--dur-fast) var(--ease);
+  }
+  .composer-form[data-submitting="true"] .composer-textarea {
+    cursor: progress;
+  }
+  .composer-send-spinner {
+    animation: composer-send-spin 850ms linear infinite;
+  }
+  @keyframes composer-send-spin {
+    to { transform: rotate(360deg); }
+  }
+
+  /* The compact header reading opens into detail instead of making every number compete at
+     rest. Hover and keyboard focus share the same disclosure; the native title remains a
+     fallback for environments without hover. */
+  .context-usage-control {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    padding: 2px 4px;
+    border-radius: var(--radius-md);
+    outline: none;
+    cursor: default;
+    transition: background-color var(--dur-fast) var(--ease);
+  }
+  .context-usage-control:hover,
+  .context-usage-control:focus-visible {
+    background: var(--row-hover);
+  }
+  .context-usage-control:focus-visible {
+    box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring);
+  }
+  .context-usage-ring {
+    display: inline-flex;
+    width: 22px;
+    height: 22px;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9999px;
+  }
+  .context-usage-ring > span {
+    width: 16px;
+    height: 16px;
+    border-radius: 9999px;
+    background: var(--bg);
+  }
+  .context-usage-label {
+    overflow: hidden;
+    max-width: 148px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 11px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+  }
+  .context-usage-popover {
+    position: absolute;
+    z-index: 20;
+    top: calc(100% + 6px);
+    right: 0;
+    display: flex;
+    width: 224px;
+    pointer-events: none;
+    flex-direction: column;
+    gap: 5px;
+    padding: 12px;
+    border: 1px solid var(--border-hi);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+    color: var(--text-2);
+    box-shadow: 0 8px 24px rgb(0 0 0 / 0.18);
+    opacity: 0;
+    transform: translateY(-4px);
+    transition: opacity var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease);
+  }
+  .context-usage-control:hover .context-usage-popover,
+  .context-usage-control:focus-visible .context-usage-popover {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  .context-usage-popover-title {
+    margin-bottom: 2px;
+    color: var(--text-3);
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+  .context-usage-popover-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 11.5px;
+  }
+  .context-usage-popover-row b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .context-usage-popover-bar {
+    height: 4px;
+    overflow: hidden;
+    margin-block: 2px;
+    border-radius: 9999px;
+    background: var(--surface-3);
+  }
+  .context-usage-popover-bar > span { display: block; height: 100%; border-radius: inherit; }
+  .context-usage-popover-note {
+    padding-top: 6px;
+    border-top: 1px solid var(--border-region);
+    color: var(--text-3);
+    font-size: 10.5px;
+    line-height: 1.45;
+  }
+
+  .timeline-message-row,
+  .timeline-outbound-row {
+    border-radius: var(--radius-md);
+    transition: background-color var(--dur-fast) var(--ease);
+  }
+  .timeline-message-row {
+    margin: -4px -8px;
+    padding: 4px 8px;
+  }
+  .timeline-message-row:hover,
+  .timeline-outbound-row:hover { background: var(--row-hover); }
+  .timeline-bubble { transition: box-shadow var(--dur-fast) var(--ease); }
+  .timeline-message-row:hover .timeline-bubble,
+  .timeline-message-row.timeline-bubble:hover { box-shadow: 0 1px 3px rgb(0 0 0 / 0.14); }
+  .timeline-timestamp {
+    position: relative;
+    color: var(--text-3);
+    cursor: default;
+  }
+  .timeline-timestamp::after {
+    position: absolute;
+    z-index: 10;
+    top: calc(100% + 5px);
+    left: 50%;
+    padding: 4px 8px;
+    border: 1px solid var(--border-hi);
+    border-radius: var(--radius-sm);
+    background: var(--surface-3);
+    color: var(--text);
+    box-shadow: 0 4px 12px rgb(0 0 0 / 0.22);
+    content: attr(data-full-time);
+    font-size: 10.5px;
+    font-weight: 500;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateX(-50%) translateY(-3px);
+    transition: opacity var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease);
+    white-space: nowrap;
+  }
+  .timeline-timestamp:hover::after { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .timeline-message-row-mine .timeline-timestamp::after {
+    right: 0;
+    left: auto;
+    transform: translateY(-3px);
+  }
+  .timeline-message-row-mine .timeline-timestamp:hover::after { transform: translateY(0); }
+
+  .timeline-empty-icon,
+  .new-conversation-icon {
+    position: relative;
+    display: inline-flex;
+    width: 46px;
+    height: 46px;
+    align-self: center;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border-region);
+    border-radius: var(--radius-lg);
+    background: var(--surface-2);
+    color: var(--text-2);
+  }
+  .timeline-empty-icon::after,
+  .new-conversation-icon::after {
+    position: absolute;
+    inset: -6px;
+    border: 1px solid var(--border-region);
+    border-radius: calc(var(--radius-lg) + 6px);
+    animation: empty-state-ring 2.4s var(--ease) infinite;
+    content: '';
+  }
+  @keyframes empty-state-ring {
+    from { opacity: 0.5; transform: scale(0.9); }
+    to { opacity: 0; transform: scale(1.15); }
+  }
+  .new-conversation-agent {
+    transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease);
+  }
+  .new-conversation-agent:active { transform: translateY(1px); }
   /* Something the conversation needs answered before it can go on — a permission request or a
      question. Deliberately the composer's own shape and chrome, one step lighter, rather than a
      coloured callout: it is the same surface asking for input, not an alert interrupting it.
@@ -836,6 +1029,12 @@
   .fold-control:hover {
     background: var(--row-hover);
     color: var(--text);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .composer-send-spinner,
+    .timeline-empty-icon::after,
+    .new-conversation-icon::after { animation: none; }
   }
 
   /* react-markdown output. `:not(pre) > .md-code` targets INLINE code only — a fenced code

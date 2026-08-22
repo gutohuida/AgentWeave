@@ -60,6 +60,15 @@ function renderSurface(agent: string | null, onStarted = vi.fn()) {
   return { onStarted }
 }
 
+describe('considered new-conversation state', () => {
+  it('offers recent agents as real pressed-state controls, not decorative suggestions', () => {
+    renderSurface('claude')
+    expect(screen.getByText('Start with a recent agent, or choose another before you send.')).toBeInTheDocument()
+    expect(screen.getByTestId('new-conversation-agent-claude')).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByTestId('new-conversation-agent-codex')).toHaveAttribute('aria-pressed', 'false')
+  })
+})
+
 describe('starting a conversation', () => {
   beforeEach(() => {
     cleanup()

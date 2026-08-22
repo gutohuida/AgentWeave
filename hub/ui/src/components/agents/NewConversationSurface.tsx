@@ -132,7 +132,7 @@ export function NewConversationSurface({
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-4">
-        <div className="flex w-full max-w-[820px] flex-col gap-5" data-testid="new-conversation-surface">
+        <div className="flex w-full max-w-[820px] flex-col gap-4" data-testid="new-conversation-surface">
           <div className="flex justify-center">
             <span
               className="aw-chip"
@@ -142,6 +142,9 @@ export function NewConversationSurface({
               <Icon name="folder_open" size={13} />
               Project: {projectName ?? projectId}
             </span>
+          </div>
+          <div className="new-conversation-icon" aria-hidden="true">
+            <Icon name="chat" size={20} />
           </div>
           {/* The one line an operator reads every time they start work. It names the agent
               rather than the project, because the project is explicit immediately above and
@@ -156,6 +159,10 @@ export function NewConversationSurface({
             {agent ? `What should ${agent} work on?` : 'Who should work on this?'}
           </h1>
 
+          <p className="text-center text-[11.5px]" style={{ color: 'var(--text-3)' }}>
+            Start with a recent agent, or choose another before you send.
+          </p>
+
           <div className="flex flex-wrap justify-center gap-1.5">
             {roster.map((candidate) => {
               const selected = candidate.name === agent
@@ -163,7 +170,7 @@ export function NewConversationSurface({
                 <button
                   key={candidate.name}
                   type="button"
-                  className="row-item"
+                  className="new-conversation-agent row-item"
                   style={{ width: 'auto' }}
                   data-testid={`new-conversation-agent-${candidate.name}`}
                   data-active={selected ? 'true' : 'false'}

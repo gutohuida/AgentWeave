@@ -27,6 +27,25 @@ function renderComposer(overrides: Partial<ComposerProps> = {}) {
   return { view, onSubmit, props }
 }
 
+describe('Composer considered interaction state', () => {
+  it('exposes a stable busy state while submission is pending', async () => {
+    let finish!: () => void
+    const onSubmit = vi.fn(() => new Promise<void>((resolve) => { finish = resolve }))
+    const { view } = renderComposer({ onSubmit })
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Ship this carefully' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
+
+    const composer = view.container.querySelector('[data-slot="composer"]')
+    await waitFor(() => expect(composer).toHaveAttribute('aria-busy', 'true'))
+    expect(composer).toHaveAttribute('data-submitting', 'true')
+    expect(screen.getByRole('textbox')).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Send message' })).toHaveAttribute('data-state', 'busy')
+
+    finish()
+    await waitFor(() => expect(composer).toHaveAttribute('aria-busy', 'false'))
+  })
+})
+
 describe('Composer — bounded autosizing', () => {
   it('rests at a minimum of 3 text rows', () => {
     renderComposer()

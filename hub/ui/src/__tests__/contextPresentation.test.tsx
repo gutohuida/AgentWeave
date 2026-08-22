@@ -21,6 +21,17 @@ const measured = {
   breakdown: { input_tokens: 200, reasoning_tokens: 50 },
 }
 
+describe('considered context disclosure', () => {
+  it('makes full context-window detail keyboard reachable in the conversation header', () => {
+    render(<ContextUsageIndicator value={measured} />)
+    const control = screen.getByTestId('context-usage')
+    expect(control).toHaveAttribute('tabIndex', '0')
+    expect(control).toHaveAccessibleName(/Context window:/)
+    expect(screen.getByRole('tooltip')).toHaveTextContent('Context window')
+    expect(screen.getByRole('tooltip')).toHaveTextContent('Budget')
+  })
+})
+
 describe('canonical context presentation', () => {
   it('retains canonical fields and derives measured percentage from operands', () => {
     expect(normalizeContextUsage({ ...measured, percent: 99 })).toEqual(measured)

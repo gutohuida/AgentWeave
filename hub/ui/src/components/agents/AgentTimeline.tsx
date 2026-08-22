@@ -181,11 +181,12 @@ export function AgentTimeline({
   if (turns.length === 0 && pending.length === 0) {
     return (
       <div
-        className="flex flex-col items-center justify-center h-full text-center px-6"
+        className="timeline-empty-state flex h-full flex-col items-center justify-center px-6 text-center"
         style={{ color: 'var(--text-3)' }}
       >
-        <Icon name="chat" size={40} style={{ opacity: 0.5, marginBottom: 12 }} />
-        <p className="text-sm">No conversation yet</p>
+        <span className="timeline-empty-icon" aria-hidden="true"><Icon name="chat" size={20} /></span>
+        <p className="mt-3 text-[13px] font-semibold" style={{ color: 'var(--text)' }}>No conversation yet</p>
+        <p className="mt-1 text-[11.5px]">Write below to start this thread.</p>
       </div>
     )
   }
@@ -336,8 +337,8 @@ function FoldedTurnPill({ turn, onClick }: { turn: TimelineTurn; onClick: () => 
   return (
     <button
       onClick={onClick}
-      className="fold-control flex items-center gap-2 self-stretch px-[11px] py-[6px] rounded-lg text-[12.5px] text-left"
-      style={{ border: '1px dashed var(--border)', color: 'var(--text-3)' }}
+      className="fold-control flex items-center gap-1.5 self-center rounded-full px-2.5 py-1 text-[11px] text-left"
+      style={{ border: '1px solid var(--border-region)', background: 'var(--surface-2)', color: 'var(--text-3)' }}
     >
       <Icon name="expand_more" size={13} style={{ transform: 'rotate(-90deg)' }} />
       Turn folded · {turn.entries.length} {turn.entries.length === 1 ? 'entry' : 'entries'}
@@ -759,6 +760,12 @@ function MessageEntry({
   onWithdraw?: (entryId: string) => void
 }) {
   const time = format(hubDate(entry.timestamp), 'HH:mm')
+  const fullTime = format(hubDate(entry.timestamp), 'EEE d MMM, HH:mm:ss')
+  const timestamp = (
+    <time className="timeline-timestamp font-normal" dateTime={entry.timestamp} data-full-time={fullTime} title={fullTime}>
+      {time}
+    </time>
+  )
   const wrapperStyle: React.CSSProperties = { opacity: queued ? 0.55 : 1 }
   const queuedTag = queued && (
     <span
@@ -784,16 +791,14 @@ function MessageEntry({
     const isError = entry.output_kind === 'error'
     const colors = agentColorVars(colorByName.get(agentName))
     return (
-      <div className="flex flex-col gap-[5px]" style={wrapperStyle}>
+      <div className="timeline-message-row flex flex-col gap-[5px]" style={wrapperStyle}>
         <div className="flex items-center gap-[.4rem] text-[11.5px] font-semibold" style={{ color: 'var(--text-2)' }}>
           <span
             className="w-2 h-2 rounded-full shrink-0"
             style={{ background: isError ? 'var(--red)' : colors.accent }}
           />
           {agentName}
-          <span className="font-normal" style={{ color: 'var(--text-3)' }}>
-            {time}
-          </span>
+          {timestamp}
           {queuedTag}
           {withdraw}
         </div>
@@ -820,17 +825,15 @@ function MessageEntry({
   // bubbles, which carry their own per-agent tint.
   if (entry.kind === 'operator_input') {
     return (
-      <div className="flex flex-col items-end gap-[5px]" style={wrapperStyle}>
+      <div className="timeline-message-row timeline-message-row-mine flex flex-col items-end gap-[5px]" style={wrapperStyle}>
         <div className="flex items-center gap-[.4rem] text-[11.5px] font-semibold" style={{ color: 'var(--text-2)' }}>
           {queuedTag}
           {withdraw}
           you
-          <span className="font-normal" style={{ color: 'var(--text-3)' }}>
-            {time}
-          </span>
+          {timestamp}
         </div>
         <div
-          className="max-w-[82%] px-[13px] py-[10px] text-sm leading-[1.6] break-words"
+          className="timeline-bubble max-w-[82%] px-[13px] py-[10px] text-sm leading-[1.6] break-words"
           style={{
             borderRadius: 'var(--radius-xl, 18px)',
             border: '1px solid var(--border)',
@@ -866,7 +869,7 @@ function MessageEntry({
 
   return (
     <div
-      className="px-[13px] py-[10px] text-sm"
+      className="timeline-message-row timeline-bubble px-[13px] py-[10px] text-sm"
       style={{
         borderRadius: 'var(--radius-xl, 18px)',
         border: `1px solid ${colors.border}`,
@@ -879,9 +882,7 @@ function MessageEntry({
         <span className="font-normal" style={{ color: 'var(--text-3)' }}>
           → {agentName}
         </span>
-        <span className="font-normal" style={{ color: 'var(--text-3)' }}>
-          {time}
-        </span>
+        {timestamp}
         {queuedTag}
         {withdraw}
       </div>
@@ -924,7 +925,7 @@ function OutboundMessageEntry({
 
   return (
     <div
-      className="px-[13px] py-[10px] text-sm"
+      className="timeline-outbound-row px-[13px] py-[10px] text-sm"
       style={{
         borderRadius: 'var(--radius-xl, 18px)',
         borderLeft: `2px solid ${colors.accent}`,

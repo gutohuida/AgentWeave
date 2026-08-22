@@ -263,7 +263,12 @@ export function Composer({
   }
 
   return (
-    <div className="flex flex-col gap-2">
+    <div
+      className="composer-form flex flex-col gap-2"
+      data-slot="composer"
+      data-submitting={submitting ? 'true' : 'false'}
+      aria-busy={submitting}
+    >
       {/* Row one: the text area, full width, on its own row — text begins at the
           composer's leading edge (2026-08-04-hub-charcoal-visual-refresh). */}
       <div className="relative">
@@ -294,7 +299,7 @@ export function Composer({
           placeholder={placeholder ?? (isRunning ? `${agent} is responding…` : `Message ${agent}…`)}
           rows={COMPOSER_MIN_ROWS}
           disabled={submitting}
-          className="w-full px-2 py-2 text-xs resize-none border-0 bg-transparent disabled:opacity-50"
+          className="composer-textarea w-full resize-none border-0 bg-transparent px-2 py-2 text-xs disabled:opacity-50"
           style={{
             background: 'transparent',
             color: 'var(--text)',
@@ -360,8 +365,9 @@ export function Composer({
             aria-label="Send message"
             title={disabledReason}
             disabled={(!text.trim() && !canSubmitEmpty) || submitting || !!disabledReason}
+            data-state={submitting ? 'busy' : text.trim() || canSubmitEmpty ? 'ready' : 'idle'}
           >
-            <Icon name="send" size={18} />
+            <Icon name={submitting ? 'refresh' : 'send'} size={18} className={submitting ? 'composer-send-spinner' : undefined} />
           </Button>
         </div>
       </div>
