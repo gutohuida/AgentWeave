@@ -2475,3 +2475,65 @@ impression. Start with S7 P1 (`screen_pass_protocol.P1_explore`): read `Overview
 including its comments, `WebSearch` for dashboard/overview-screen UI/UX patterns, read the T3 Code
 sourcemaps for the closest equivalent surface, and write `design/mocks/S7/RESEARCH.md` with concrete,
 code-verified gaps. No mock this iteration — P2 is the next firing.
+
+## Iteration 33 — 2026-08-22T05:37:35+01:00 — S7 P1: research the overview screen
+
+**Branch state on entry.** `autonomous/2026-08-21-refine-and-continue` at `a8d2001` (heartbeat
+release after S6 P4). Matched STATE.json. Clean tree.
+
+**P1 — research.** Read `OverviewPage.tsx` in full, including its two deliberate-choice comments
+(the static-glow-not-`StatusDot` reasoning on `AgentHealthCard`, and the `recentEvents`
+`eslint-disable` explaining why its dependency array looks wrong but isn't) — neither is touched by
+this research, both recorded as "do not undo."
+
+Read four supporting components read for context: `AccountingPanel.tsx`, `ContextUsageIndicator.tsx`,
+`SettingsSection.tsx`/`SettingsRow.tsx` (confirms `AccountingPanel` is dressed as a full settings
+page, not an overview widget — `.settings-section` in `index.css:471-503` has no border/background
+of its own and heavy page-level padding, and is pasted directly into the overview's flat
+`space-y-6` stack), and grepped `index.css` for `.lifted-surface` (confirmed: resting-state shadow
+only, no hover/active rule, no `transition` property at all — the three Tasks/Spec/Jobs buttons
+give zero feedback today). Grepped for a shared task-status color config across `hub/ui/src` and
+found none — `OverviewPage.tsx`'s five-way status→color ternary is local to that file, and
+`TaskCard`/`TasksBoard` (S2) independently re-derive the same mapping.
+
+WebSearched two queries (dashboard/overview UI patterns; empty-state/first-run patterns) — both
+returned on-point 2026 material, sources recorded in `RESEARCH.md`.
+
+Checked the T3 Code sourcemaps for a literal overview/dashboard equivalent — T3 is a coding-agent
+chat client with no such screen, so pulled four **component-level** analogues instead from
+`index-DiDfaONg.js.map`: `ContextWindowMeter.tsx` (circular gauge, 500ms eased value transitions,
+`motion-reduce` respected, escalation-threshold color — the transferable idea is the transition +
+threshold, not the ring shape, which would compete with the status dot in AgentWeave's small card),
+`ThreadStatusIndicators.tsx` (dot+tooltip+label, validates `AgentHealthCard`'s existing shape),
+`NoActiveThreadState.tsx` (title-separate-from-description empty state, structure worth adopting),
+and `ProviderStatusBanner.tsx` — explicitly flagged as **not transferable**: its container class is
+literally named `alert-glass` (a backdrop-blur glass treatment), which IDENTITY.md clause 7 forbids
+outright. Recorded for its icon/message/dismiss layout shape only.
+
+**`design/mocks/S7/RESEARCH.md` written**, matching every prior screen's format and standard (a
+components table even though this "screen" is one file with six inline sections, "what's already
+good," external research with sources, T3 analogues, code-verified gaps, missing-feature notes,
+what P2 will build). Gaps are concrete and line-referenced, not "make it nicer" — e.g. `.15s'`
+literal string vs. `var(--dur-fast)` on `AgentHealthCard`'s hover transition, zero focus-visible
+state on a keyboard-reachable nav button, `.lifted-surface`'s complete absence of a hover rule.
+Three missing-feature notes recorded to mock-and-flag only, per the pre-authorization: icons on the
+workspace-summary buttons (`Icon.tsx` already maps `task_alt`/`schedule`), a shared task-status
+config (out of scope to implement — mocks only, and this queue item doesn't touch `hub/ui/src`
+anyway), and a populated-preview empty state.
+
+**No mock built this pass** — P1 is research only, per the protocol; P2 is the next firing.
+
+**Verified.** All research claims are grep/read-confirmed against the actual files (not assumed):
+`.lifted-surface`'s CSS, the absence of a shared task-status config, `SettingsSection`'s padding
+values, `Icon.tsx`'s `task_alt`/`schedule` entries, and the T3 sourcemap contents were each read
+directly, not recalled from memory. `git status --short` before committing showed only the new
+`design/mocks/S7/RESEARCH.md` and the two `STATE.json` edits (iteration bump, heartbeat, next_action)
+— no stray scratch files this pass since no screenshot or throwaway script was needed for pure
+research. `STATE.json` re-validated with `py -3.11 -c "import json; json.load(...)"` after editing.
+
+**Next:** S7 P2 — `screen_pass_protocol.P2_validate_and_mock`: validate this research against
+`IDENTITY.md`'s rejection test first (discard anything that fails, stating which clause), then
+build `design/mocks/S7/<variant>.html` — two or three degrees of refinement, self-contained HTML
+importing `../../../hub/ui/src/index.css`, realistic content (several agents across different
+statuses including `stalled`, a populated and an empty agent-grid variant), all interaction states,
+both themes.
