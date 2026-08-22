@@ -2792,3 +2792,70 @@ self-contained HTML importing `../../../hub/ui/src/index.css`, with realistic jo
 plain jobs and at least one loop-backed job, per `LoopBlock`'s existing shape) covering all three
 missing-feature mocks (cron translation, next-run preview, run-trend dots) plus the texture/motion
 fixes, in both light and dark themes.
+
+## Iteration 38 — 2026-08-22T06:24:59+01:00 — S8-jobs P2: validate and mock
+
+**Branch/state check on entry.** HEAD matched `STATE.json` exactly (`be270f8`, the release-heartbeat
+commit following S8-jobs P1's research at `94c15b7`). No reconciliation needed.
+
+**Validated all six RESEARCH.md findings against `IDENTITY.md`'s rejection test**, clause by clause,
+appended as a new "Validation" section to `RESEARCH.md` rather than a separate file (matches how
+prior screens folded validation into the same document). All six pass; none discarded. The
+load-bearing check: every new element (run-trend dots, loop-queue badge colours, cron translation,
+next-run preview, styled radio/checkbox/switch) draws from either the real component's own existing
+tokens or the vocabulary `_system/foundations.html`/`controls.html` already built this run — nothing
+invents a pattern outside it.
+
+**Read `_system/controls.html` closely before writing any mock CSS**, specifically to reuse its
+button (`.btn` + `.primary/.outline/.ghost/.destructive` + `.sz-*`) and control (`.ctl-check`/
+`.ctl-radio`/`.ctl-switch`) class recipes verbatim rather than re-deriving similar-but-different
+rules — this is the "does the vocabulary compose onto a different surface" check RESEARCH.md flagged
+as worth doing since Jobs is the first screen after U0a/U0b. It composed cleanly with no fighting.
+
+**Built `design/mocks/S8-jobs/restrained.html` and `considered.html`.** Both self-contained,
+importing `../../../hub/ui/src/index.css`, both themes via the same toggle pattern S7 established.
+Realistic content: a plain active job (healthy run-trend), a paused local job (one failed run in its
+trend), and a loop-backed job expanded to show `LoopBlock`'s actual shape (purpose, queue badges,
+current-task link, stop-reason handling) — read `LoopBlock`'s source directly rather than guessing
+its markup.
+
+- **restrained**: smallest fix. Hover lift + focus-visible on the card (had neither), `--accent`
+  fill on the active filter pill (was near-zero contrast), a plain-English line under the raw cron
+  chip (finding 1), a run-trend dot strip on the *collapsed* card reusing `RunHistory`'s exact
+  status→colour map (finding 3), `.btn` variant weight so Run/Pause/Archive read as different
+  emphasis without a second red (finding 4), `.ctl-radio`/`.ctl-check` replacing native controls in
+  the create-job form (finding 5), a next-run preview line (finding 2), and a card-shaped skeleton
+  replacing the spinner (finding 4).
+- **considered**: full application. Adds a 40ms-staggered card entrance respecting
+  `prefers-reduced-motion`, coloured loop-queue badges reusing `Badge.tsx`'s own
+  `pending`/`in_progress`/`approved`/`rejected` tone map verbatim (a second standalone loop-block
+  example with a different status mix — `approved`/`under_review`/`rejected`/`pending` — proves the
+  mapping composes rather than being tuned to one case), a Local badge with an icon instead of text
+  size alone (finding 6), a richer badge-shaped skeleton, and `.ctl-switch` for the boolean
+  "stop when queue empties" setting (a toggle is the right shape for that field per `controls.html`'s
+  own check/radio/switch distinction, vs. the multi-select checkbox used for the loop-section
+  disclosure elsewhere in the same form).
+
+**Verified by rendering, not by trusting the markup.** Loaded both files with Playwright at
+1040×1400, both themes, full-page screenshots. Console showed only the same 3 pre-existing font
+`net::ERR_FILE_NOT_FOUND` errors every other mock this run has shown — no new errors. `document.
+images`: 0 total (all icons are inline SVG, no `<img>` tags), so the broken-image check that matters
+for other screens doesn't apply here; confirmed no unexpected `<img>` elements exist instead of
+assuming the zero count meant something was skipped. Read all four screenshots (restrained/considered
+× dark/light) end to end: legible in both themes, loop-queue badge colours render as intended (green/
+blue/amber/red readable against the neutral card in both grounds), no layout breaks, the styled
+radio/checkbox/switch controls render with visible checked states, cron-preview and next-run-preview
+text sit as plain inline text rather than a new card pattern. Deleted the four verification PNGs
+after reading them (`design/mocks/S8-jobs/_check_*.png`) — the repo's blanket `*.png` gitignore rule
+means they were never going to be committed regardless, per `dead_ends_inherited`.
+
+`git status --short` before staging showed exactly the expected three changes: `RESEARCH.md`
+(the new Validation section), `restrained.html`, `considered.html` — no stray files. `STATE.json`
+re-validated with `py -3.11 -c "import json; json.load(...)"` after editing.
+
+**Next**: S8-jobs P3 — `screen_pass_protocol.P3_iterate`. Screenshot both variants in both themes
+(try `scripts/uishot.py` first; fall back to the direct-Playwright approach used this pass and in
+S7's P3 if its target selector doesn't match these mocks' own `.theme-toggle`), read the PNGs with
+fresh eyes, critique honestly against the rejection test, and fix whatever is actually found — the
+point of P3 is looking at the rendered result with the specific intent of finding a defect, not
+re-confirming what P2 already built.

@@ -115,3 +115,35 @@ current code end to end before touching anything, per `screen_pass_protocol`.
   identity-consistent equivalent (clause 6: at least as much information per screen).
 - The cron-to-English formatter and next-run preview, if mocked, must look like inline text using
   existing type scale — not a new "insight card" pattern foreign to the rest of the product.
+
+## Validation against `IDENTITY.md`'s rejection test (P2, before building any mock)
+
+All six findings pass; none is discarded. Checked clause by clause:
+
+1. **Palette** — every colour used (run-trend dots, loop-queue badges, cron-preview text, the
+   `--accent` active-filter fill) is an existing token or an existing `color-mix()`/`tint()` of one.
+   No new hex, no new hue. The run-trend dots and loop-queue badges specifically reuse
+   `RunHistory`'s and `Badge.tsx`'s own status→colour maps verbatim (see "what must not change").
+2. **`--blue` stays focus/selection** — the mock does not give it a new job. Next-run text already
+   uses `--blue` in the real `JobCard` (`Next: …`) and that is unchanged; nothing else adopts blue
+   as a fill.
+3. **Radius scale** — cards, chips, buttons and the form panel all derive from `--radius`/
+   `--radius-sm`/`--radius-lg`. No pill cards, no second geometry (the existing pill-shaped filter
+   tabs and cron-preset chips are `border-radius: 9999px` today, in the real component, so that is
+   not a new shape introduced by the mock).
+4. **Type** — existing family/scale only, `'JetBrains Mono'` for the cron chip exactly as today.
+5. **Icons** — lucide-style stroke icons only (clock, calendar/translation glyph, play, pause,
+   archive, chevron, check, info-circle), no third source, no icon font.
+6. **Density** — nothing removed; the run-trend dots and cron-translation line are additive single
+   lines, not a layout that costs rows. The card's total height grows slightly (one new line each
+   for trend and translation) which is the accepted cost of finding 3's genuine information gap, not
+   a density regression — no existing information moved behind a click or scroll it wasn't already.
+7. **Flat-neutral character** — no gradients as surface treatment (the skeleton sheen is a motion
+   effect over a flat fill, same pattern `_system/foundations.html` already established, not a
+   gradient surface), no glass, no drop shadows beyond the existing lift/press recipe.
+
+Clause 5 (the operator's own directive — "the same application, improved") is the one that matters
+most: every element added (trend dots, translation line, next-run preview, styled radio/checkbox/
+switch, coloured loop badges) is built from a vocabulary this run already established in `_system/
+foundations.html`/`controls.html` or from the real component's own existing tokens — nothing invents
+a new pattern outside that vocabulary.
