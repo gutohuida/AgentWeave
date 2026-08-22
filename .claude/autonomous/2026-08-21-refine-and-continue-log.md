@@ -3100,3 +3100,63 @@ or keep a small reusable click-then-shoot Playwright helper — don't reinvent t
 actually critique what's seen against `design/IDENTITY.md`'s rejection test with fresh eyes (this
 iteration's screenshot pass was verification of the layout fix, not the protocol's dedicated
 critique step) and fix whatever surfaces.
+
+## Iteration 43 — 2026-08-22T07:12:46+01:00 — S8-agents P3: iterate
+
+Verified branch/log/STATE.json all agreed before starting (`5fb1afa` = HEAD, a released-heartbeat
+commit, matches STATE.json exactly). `screen_pass_protocol.P3_iterate` for the two mocks P2 built
+(`restrained.html`, `considered.html`) — screenshot every variant in both themes, read them, and
+critique fresh against `design/IDENTITY.md`'s rejection test, since P2's own screenshot pass was
+verifying a layout bug fix, not the dedicated critique step.
+
+**Decided the `uishot.py`-vs-mock-toggle question P2's `next_action` flagged, and it surfaced a
+real bug.** Both mocks booted `data-mode="dark"` with a bare toggle (flip `dataset.mode`, no
+`aria-label`). `scripts/uishot.py`'s dark-capture path looks for a button named exactly `"Switch to
+dark mode"` — the real app's own pattern (`ProjectHeader.tsx`/`StatusBar.tsx`:
+`aria-label={mode === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}`) — and clicks it
+once; there is no light-mode-toggle path because the real app always boots light. Against a mock
+that booted dark with no matching label, `--theme dark` silently captured the (wrong) default state
+with nothing to click, and `--theme light` had no route to light at all — the tool would have
+appeared to work while actually capturing the same theme twice. Fixed by matching the real app
+exactly: both mocks now default `data-mode="light"`, and a `toggleMockTheme()` function flips
+`aria-label`/`title` between "Switch to dark mode"/"Switch to light mode" identically to
+`ProjectHeader.tsx`. Verified `py -3.11 scripts/uishot.py --theme light|dark` against both files
+*unmodified* — no per-mock Playwright workaround needed, closing the "decide once" question P2
+left open for every later screen too.
+
+Re-screenshotted all four captures (2 variants × 2 themes) after the fix and read each one.
+Fresh critique against `design/IDENTITY.md`'s rejection test, clause by clause:
+
+- **Clause 1 (tokens only)**: grepped both files for hex/`rgb()`/`rgba()` literals — two hits each,
+  both `box-shadow` black-alpha overlays (switch thumb, `.btn.outline`). Checked against
+  `hub/ui/src/index.css` and found the same idiom at lines 321/535/548 (literal
+  `rgb(0 0 0 / 0.08)`, `rgba(255,255,255,0.05)` ×2 for shadow depth) — not a violation, matches
+  existing practice for non-chromatic shadow alpha.
+- **Clause 3 (durations/easing)**: every `transition` is `--dur-fast`/`--ease`. Two apparent
+  exceptions — the staggered row-entrance `animation-delay` (30ms increments) and the `1.4s`
+  skeleton shimmer — checked against `index.css`'s only other looping/ambient animation,
+  `task-live-pulse` (`2.4s ease-in-out infinite`, itself hardcoded, not `--dur-*`). Concluded the
+  `--dur-*` scale is scoped to discrete interaction transitions, not ambient/infinite ones, so
+  these are consistent with precedent, not a gap to fix.
+- **Clause 4 (radius)**: `.ctl-switch`'s `border-radius: 9999px` traced to
+  `_system/controls.html`'s already-validated `.ctl-switch`/`.ctl-radio`/`.btn.sz-pill` (U0b) —
+  reused, not invented.
+- Clauses 2, 5, 6, 7 held on inspection: legible both themes, reads as the same app improved, same
+  or greater density, and the states-strip in both variants demonstrates resting/hover/active/
+  focus-visible/switch-on/off explicitly.
+
+No clause failures survived the critique. Wrote all of the above into `RESEARCH.md`'s new "P3 —
+iterate" section so P4 and any later screen do not re-debug the toggle question. Confirmed no new
+console/JS errors from the fix (only the same 3 pre-existing font `ERR_FILE_NOT_FOUND`s every mock
+this run carries). Deleted the throwaway screenshot PNGs and Playwright scripts from `/tmp` before
+finishing (blanket `*.png` `.gitignore`, never committable as files). `git status --short` shows
+only `RESEARCH.md` and the two mock HTML files modified — no other tree changes this pass.
+
+**Next**: S8-agents P4 — `screen_pass_protocol.P4_finish`. Second iteration on the same basis (a
+fresh look, not a re-run of this pass's checks), then write `design/mocks/S8-agents/RATIONALE.md`
+(what was researched, what changed and why, what was rejected and under which clause — including
+the corrected queue premise from P1, the `.settings-row` collision from P2, and the toggle-default
+fix from this pass) and add S8-agents to `design/mocks/index.html` with its before/after shots per
+`dead_ends_inherited`'s data-URI approach (the blanket `*.png` `.gitignore` blocks committing PNGs
+directly). This closes S8-agents (4/4 passes) and leaves S8's remaining sub-screens (logs+activity,
+command palette) per S8's own stated sub-order.

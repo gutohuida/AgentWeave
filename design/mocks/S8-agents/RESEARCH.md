@@ -174,3 +174,49 @@ fought the mock's `flex:1`, collapsing one of the two select boxes to roughly a 
 other's width. Fixed by renaming the mock's scratch classes to `.arow`/`.arow-control` etc., which
 do not collide. The lesson for future mocks: grep `hub/ui/src/index.css` for a candidate scratch
 class name before using it, since a same-named real class always applies alongside it.
+
+## P3 — iterate, and a `uishot.py`-compatibility bug fixed
+
+Both mocks defaulted to `data-mode="dark"` with a plain toggle that flipped `dataset.mode` and a
+text label, no `aria-label`. `scripts/uishot.py`'s dark capture path looks for a button named
+exactly `"Switch to dark mode"` (the real app's `ProjectHeader.tsx`/`StatusBar.tsx` pattern:
+`aria-label={mode === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}`) and clicks it
+once; it never looks for a light-mode toggle, because the real app always boots light. Against a
+mock that already booted dark with no such label, `--theme dark` silently captured the *default*
+light-toggle-less state with nothing to click, and `--theme light` had no way to reach light at
+all. Fixed by matching the real app exactly: both mocks now boot `data-mode="light"`, and the
+toggle carries a `toggleMockTheme()` handler that flips `aria-label`/`title` between "Switch to
+dark mode" and "Switch to light mode" the same way `ProjectHeader.tsx` does. Verified with
+`py -3.11 scripts/uishot.py --theme light|dark` unmodified against both files (previous iterations
+of other screens worked around this per-mock with one-off Playwright scripts instead of fixing the
+mock; this is the "decide once" the P2 note asked for — future screens should default to light and
+label the toggle this way from the start rather than reinventing a workaround).
+
+Re-screenshotted all four captures (`restrained`/`considered` × light/dark) after the fix and read
+them. Checked against `design/IDENTITY.md`'s rejection test clause by clause with fresh eyes:
+
+1. **Tokens only** — grepped both files for hex/`rgba()`/`rgb()` literals. Two hits per file, both
+   `box-shadow` alpha overlays on the switch thumb and `.btn.outline` (`rgb(0 0 0 / 0.16)`,
+   `rgb(0 0 0 / 0.3)`). Not a violation: `hub/ui/src/index.css` itself does the same thing at
+   lines 321/535/548 (`box-shadow: 0 1px 2px rgb(0 0 0 / 0.08)`, `inset 0 1px rgba(255,255,255,0.05)`
+   ×2) — literal black/white alpha for shadow depth is the app's own idiom, not a chromatic colour.
+2. **Both themes legible** — confirmed visually in all four captures; amber/red context-usage
+   thresholds read correctly on both backgrounds.
+3. **Durations/easing** — every `transition` uses `--dur-fast`/`--ease`. Two exceptions checked and
+   accepted as consistent with existing precedent rather than fixed: the staggered row-entrance
+   `animation-delay` (0.03s/0.06s/0.09s per row) and the skeleton shimmer (`1.4s`) are not
+   `--dur-*` values, but neither is the app's own only precedent for a looping/ambient animation —
+   `task-live-pulse` in `index.css` runs `2.4s ease-in-out infinite`, hardcoded. The `--dur-*` scale
+   reads as scoped to discrete interaction transitions, not ambient/infinite ones; a stagger delta
+   or a shimmer period is the same category as `task-live-pulse`, not a candidate for the scale.
+4. **Radius** — `.ctl-switch`'s `border-radius: 9999px` pill shape is copied verbatim from
+   `_system/controls.html`'s already-validated `.ctl-switch`/`.ctl-radio`/`.btn.sz-pill`, which
+   established that pattern in U0b, not a new departure.
+5. **Same application, improved** — holds; same rail shape, same settings layout, same copy.
+6. **Density** — `restrained` unchanged (single-line rows); `considered` adds a fixed 4px/row for
+   returned data, not a cost (see RESEARCH's missing-information finding).
+7. **Interactive states demonstrated** — the states-strip in both variants shows resting, hover,
+   active/focus-visible and switch on/off explicitly, not just resting.
+
+No clause failures. The only real defect found and fixed this pass was the toggle/`uishot.py`
+mismatch above — everything else held up under a second, adversarial look.
