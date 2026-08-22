@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AgentOutputLine, AgentSummary } from '@/api/agents'
@@ -464,6 +464,91 @@ describe('conversation controls — autoscroll follows scroll position', () => {
     recordedEntries = [...recordedEntries, timelineEntry('3')]
     rerender(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)
     expect(output.scrollTop).toBe(1000)
+  })
+
+  it('keeps following when the newest folded outbound message expands', () => {
+    const originalResizeObserver = globalThis.ResizeObserver
+    let resizeCallback: ResizeObserverCallback | null = null
+    class DisclosureResizeObserver {
+      constructor(callback: ResizeObserverCallback) {
+        resizeCallback = callback
+      }
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    }
+    ;(globalThis as unknown as { ResizeObserver: typeof DisclosureResizeObserver }).ResizeObserver =
+      DisclosureResizeObserver
+    recordedEntries = [
+      {
+        id: 'outbound-fold',
+        kind: 'outbound_peer',
+        participant: 'codex',
+        subject: 'One more month',
+        content: 'Name one more month you like.',
+        timestamp: '2026-08-06T00:00:01Z',
+        delivery_state: 'delivered',
+        run_id: 'run-fold',
+      },
+    ]
+    try {
+      render(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)
+      const output = screen.getByTestId('conversation-output')
+      let top = 960
+      Object.defineProperty(output, 'scrollTop', {
+        configurable: true,
+        get: () => top,
+        set: (next: number) => { top = next },
+      })
+      Object.defineProperty(output, 'clientHeight', { configurable: true, value: 40 })
+      Object.defineProperty(output, 'scrollHeight', {
+        configurable: true,
+        get: () =>
+          screen.queryByText('Name one more month you like.') === null ? 1000 : 1180,
+      })
+      fireEvent.scroll(output)
+
+      fireEvent.click(screen.getByText('One more month'))
+      // Match the browser's intermediate anchor shift before ResizeObserver reports the turn's
+      // new height. That scroll event is layout, not the operator leaving the bottom.
+      output.scrollTop = 1000
+      fireEvent.scroll(output)
+      act(() => {
+        if (!resizeCallback) throw new Error('turn ResizeObserver was not installed')
+        resizeCallback([], {} as ResizeObserver)
+      })
+
+      expect(screen.getByText('Name one more month you like.')).toBeInTheDocument()
+      expect(output.scrollTop).toBe(1180)
+      expect(screen.queryByRole('button', { name: 'Jump to newest' })).not.toBeInTheDocument()
+    } finally {
+      globalThis.ResizeObserver = originalResizeObserver
+    }
+  })
+
+  it('does not move the viewport when a folded outbound message expands while reading above', async () => {
+    recordedEntries = [
+      {
+        id: 'outbound-fold-away',
+        kind: 'outbound_peer',
+        participant: 'codex',
+        subject: 'Earlier delegation',
+        content: 'Full content from earlier in the conversation.',
+        timestamp: '2026-08-06T00:00:01Z',
+        delivery_state: 'delivered',
+        run_id: 'run-fold-away',
+      },
+    ]
+    render(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)
+    const output = screen.getByTestId('conversation-output')
+    setScrollGeometry(output, { scrollTop: 200, scrollHeight: 1000, clientHeight: 40 })
+    fireEvent.scroll(output)
+    await screen.findByRole('button', { name: 'Jump to newest' })
+
+    fireEvent.click(screen.getByText('Earlier delegation'))
+
+    expect(screen.getByText('Full content from earlier in the conversation.')).toBeInTheDocument()
+    expect(output.scrollTop).toBe(200)
   })
 
   /**

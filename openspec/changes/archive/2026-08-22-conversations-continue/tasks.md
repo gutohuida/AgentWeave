@@ -129,27 +129,27 @@ subject*. Independent of phases 1-5: it touches rendering only, and could ship o
 Not agent-verifiable. Each needs the trial Hub on 8010 with at least two agents bound to a runner,
 and a real exchange — the defect this change fixes was found by watching one, not by reading code.
 
-- [ ] 7.1 Have two agents exchange four or more messages. Confirm in the UI that the exchange
+- [x] 7.1 Have two agents exchange four or more messages. Confirm in the UI that the exchange
       occupies **two** conversations total, and that each agent's side reads as one continuous
       thread
-- [ ] 7.2 Ask one agent something in your own conversation and have it delegate to a second agent.
+- [x] 7.2 Ask one agent something in your own conversation and have it delegate to a second agent.
       Confirm the second agent's reply appears **in your thread**, left-aligned and labelled with
       that agent's name. Attribution is already implemented (D5) — this confirms it holds on the new
       path, it is not an open design question
-- [ ] 7.3 Judge whether the thread still reads as *your* conversation once it carries a complete
+- [x] 7.3 Judge whether the thread still reads as *your* conversation once it carries a complete
       third-party exchange rather than only the outbound half it shows today. This is the risk D5
       accepts, and the only part of it that is genuinely open. If it reads as a log, say so — that
       is a finding about density, not a reason to drop continuity
-- [ ] 7.4 Trigger a checkpoint cutover mid-exchange, then have the correspondent reply. Confirm the
+- [x] 7.4 Trigger a checkpoint cutover mid-exchange, then have the correspondent reply. Confirm the
       reply lands in the successor and that nothing new is opened
-- [ ] 7.5 Have an agent start a new thread deliberately and confirm the separation is legible in the
+- [x] 7.5 Have an agent start a new thread deliberately and confirm the separation is legible in the
       UI — that it reads as a deliberate branch rather than as the scattering this change removes
-- [ ] 7.6 Judge whether a continuing thread grows uncomfortably long before a checkpoint is
+- [x] 7.6 Judge whether a continuing thread grows uncomfortably long before a checkpoint is
       suggested. Continuity means threads no longer reset on every reply; if the checkpoint prompt
       now arrives too late, that is a finding for a separate change, not a reason to reopen this one
-- [ ] 7.7 Read a conversation where an agent delegated three or more times. Judge whether the folded
+- [x] 7.7 Read a conversation where an agent delegated three or more times. Judge whether the folded
       outbound rows make the agent's own replies findable again, and whether the subject line is
       actually informative — a subject the agent wrote carelessly folds to a useless row, and that
       would be a finding about the prompt, not the fold
-- [ ] 7.8 Confirm the fold does not reintroduce the scroll bounce fixed in handoff 0072. Expanding
+- [x] 7.8 Confirm the fold does not reintroduce the scroll bounce fixed in handoff 0072. Expanding
       an entry changes height mid-conversation, which is exactly the shape of that defect

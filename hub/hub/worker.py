@@ -36,7 +36,9 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import subprocess
+import tempfile
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple, Type
 
@@ -117,7 +119,13 @@ class WorkerResult:
         return self.outcome == "ok"
 
 
-def build_worker_command(*, cli: str, model: Optional[str], prompt: str) -> Optional[List[str]]:
+def build_worker_command(
+    *,
+    cli: str,
+    model: Optional[str],
+    prompt: str,
+    output_schema_path: Optional[str] = None,
+) -> Optional[List[str]]:
     """The one-shot invocation in JSON mode, or None when this CLI has no supported one.
 
     Deliberately not `runner_commands.build_command`: that builds an *agent turn*. JSON mode is
@@ -131,6 +139,9 @@ def build_worker_command(*, cli: str, model: Optional[str], prompt: str) -> Opti
         return cmd + ["-p", prompt]
     if cli == "codex":
         cmd = ["codex", "exec", "--skip-git-repo-check", "--json"]
+        cmd += ["--ephemeral", "--sandbox", "read-only"]
+        if output_schema_path:
+            cmd += ["--output-schema", output_schema_path]
         if model:
             cmd += ["--model", model]
         return cmd + [prompt]
@@ -152,6 +163,32 @@ def model_is_declared(cli: str, model: Optional[str]) -> bool:
         return True
     provider = get_provider(cli)
     return provider is not None and provider.model(model) is not None
+
+
+def strict_output_schema(output_model: Type[BaseModel]) -> Dict[str, Any]:
+    """A Pydantic schema tightened to the contract Codex structured output accepts.
+
+    Pydantic permits undeclared properties and omits defaulted fields from ``required``. The
+    Responses structured-output API deliberately accepts neither ambiguity. Requiring the
+    defaulted list fields is safe: the model must return them, while validation still accepts the
+    same values it did before.
+    """
+    schema = output_model.model_json_schema()
+
+    def tighten(node: Any) -> None:
+        if isinstance(node, dict):
+            properties = node.get("properties")
+            if isinstance(properties, dict):
+                node["additionalProperties"] = False
+                node["required"] = list(properties)
+            for value in node.values():
+                tighten(value)
+        elif isinstance(node, list):
+            for value in node:
+                tighten(value)
+
+    tighten(schema)
+    return schema
 
 
 def extract_json_object(text: str) -> Optional[Dict[str, Any]]:
@@ -400,15 +437,30 @@ async def run_worker(
     elif not model_is_declared(cli, model):
         result = WorkerResult("unknown_model", error=f"{model!r} is not a model {cli!r} declares")
     else:
-        cmd = build_worker_command(cli=cli, model=model, prompt=prompt)
+        worker_dir_context = tempfile.TemporaryDirectory(prefix="agentweave-worker-")
+        worker_dir = worker_dir_context.name
+        schema_path = None
+        if cli == "codex":
+            schema_path = os.path.join(worker_dir, "output-schema.json")
+            with open(schema_path, "w", encoding="utf-8") as schema_file:
+                json.dump(strict_output_schema(output_model), schema_file)
+        cmd = build_worker_command(
+            cli=cli,
+            model=model,
+            prompt=prompt,
+            output_schema_path=schema_path,
+        )
         if cmd is None:  # pragma: no cover — SUPPORTED_CLIS and the builder agree
             result = WorkerResult("unsupported_cli", error=f"no command for {cli!r}")
         else:
             started = asyncio.get_running_loop().time()
             async with _gate:
-                spawn = await asyncio.to_thread(_run_worker_process, cmd, cwd, timeout_seconds)
+                spawn = await asyncio.to_thread(
+                    _run_worker_process, cmd, cwd or worker_dir, timeout_seconds
+                )
             duration_ms = round((asyncio.get_running_loop().time() - started) * 1000)
             result = _interpret(spawn, cli, output_model, duration_ms)
+        worker_dir_context.cleanup()
 
     invocation_id = await _record(
         project_id=project_id,

@@ -934,6 +934,7 @@ function OutboundMessageEntry({
     >
       <button
         onClick={() => setExpanded((v) => !v)}
+        data-preserve-bottom-on-resize=""
         className="flex items-baseline gap-[.4rem] w-full min-w-0 text-left text-[11.5px] font-semibold"
         style={{ color: colors.accent }}
       >

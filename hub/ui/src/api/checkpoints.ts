@@ -21,6 +21,7 @@ export interface Checkpoint {
   runtime_overrides?: Record<string, string> | null
   citations?: Array<{ id: string; preview: string }> | null
   body?: string | null
+  generation_error?: string | null
   created_at?: string | null
 }
 

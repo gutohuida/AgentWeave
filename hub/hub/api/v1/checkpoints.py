@@ -6,6 +6,7 @@ nothing inspects it. Browsing chains, diffing predecessor against successor and 
 verdicts are a later change, and cheaper for waiting.
 """
 
+import asyncio
 from typing import List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -18,10 +19,12 @@ from ...checkpoint_cutover import CutoverRefusedError, cut_over
 from ...checkpoint_generation import generate_checkpoint, render_checkpoint
 from ...conversations import get_conversation_by_id
 from ...db.engine import get_session
-from ...db.models import Checkpoint, Project, Runner
+from ...db.models import Checkpoint, Project, Runner, WorkerInvocation
 from ...sse import sse_manager
 
 router = APIRouter(tags=["checkpoints"])
+_checkpoint_claims: set[tuple[str, str]] = set()
+_checkpoint_claims_lock = asyncio.Lock()
 
 
 class CheckpointSummary(BaseModel):
@@ -40,10 +43,11 @@ class CheckpointSummary(BaseModel):
     runtime_overrides: Optional[dict] = None
     citations: Optional[list] = None
     body: Optional[str] = None
+    generation_error: Optional[str] = None
     created_at: Optional[str] = None
 
     @classmethod
-    def of(cls, row: Checkpoint) -> "CheckpointSummary":
+    def of(cls, row: Checkpoint, *, generation_error: Optional[str] = None) -> "CheckpointSummary":
         return cls(
             id=row.id,
             conversation_id=row.conversation_id,
@@ -60,6 +64,7 @@ class CheckpointSummary(BaseModel):
             runtime_overrides=row.runtime_overrides,
             citations=row.citations,
             body=row.body,
+            generation_error=generation_error,
             created_at=row.created_at.isoformat() if row.created_at else None,
         )
 
@@ -91,7 +96,23 @@ async def list_checkpoints(
         .scalars()
         .all()
     )
-    return [CheckpointSummary.of(row) for row in rows]
+    invocation_ids = [row.worker_invocation_id for row in rows if row.worker_invocation_id]
+    errors = {}
+    if invocation_ids:
+        invocations = (
+            (
+                await session.execute(
+                    select(WorkerInvocation).where(WorkerInvocation.id.in_(invocation_ids))
+                )
+            )
+            .scalars()
+            .all()
+        )
+        errors = {invocation.id: invocation.error for invocation in invocations}
+    return [
+        CheckpointSummary.of(row, generation_error=errors.get(row.worker_invocation_id))
+        for row in rows
+    ]
 
 
 @router.get("/checkpoints/{checkpoint_id}/rendered")
@@ -142,14 +163,26 @@ async def take_checkpoint(
             ),
         )
 
-    checkpoint = await generate_checkpoint(
-        session,
-        conversation,
-        trigger="operator",
-        cli=runner.cli,
-        model=project_row.checkpoint_model or runner.model,
-        runner_id=runner.id,
-    )
+    claim = (project_id, conversation_id)
+    async with _checkpoint_claims_lock:
+        if claim in _checkpoint_claims:
+            raise HTTPException(
+                status_code=409,
+                detail="A checkpoint is already being written for this conversation.",
+            )
+        _checkpoint_claims.add(claim)
+    try:
+        checkpoint = await generate_checkpoint(
+            session,
+            conversation,
+            trigger="operator",
+            cli=runner.cli,
+            model=project_row.checkpoint_model or runner.model,
+            runner_id=runner.id,
+        )
+    finally:
+        async with _checkpoint_claims_lock:
+            _checkpoint_claims.discard(claim)
     # The warning has been answered by doing the thing it asked about. Leaving it `due` would
     # keep offering a decision the operator has already made — and leaving it `final` would keep
     # showing a warning that cannot be dismissed, about a checkpoint that now exists.
@@ -167,7 +200,15 @@ async def take_checkpoint(
             "probe_status": checkpoint.probe_status,
         },
     )
-    return CheckpointSummary.of(checkpoint)
+    invocation = (
+        await session.get(WorkerInvocation, checkpoint.worker_invocation_id)
+        if checkpoint.worker_invocation_id
+        else None
+    )
+    return CheckpointSummary.of(
+        checkpoint,
+        generation_error=invocation.error if invocation else None,
+    )
 
 
 @router.post("/conversations/{conversation_id}/dismiss-checkpoint-warning")
