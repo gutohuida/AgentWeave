@@ -588,3 +588,76 @@ real filenames — `SidebarItem` in the queue's S1 description may not be the li
 then `WebSearch` for chat/conversation UI patterns, and write `design/mocks/S1/RESEARCH.md`. Do not
 build the mock in that iteration — P2 (validate + mock) is the following one, per the established
 one-pass-per-firing rhythm from `_system`.
+
+## Iteration 9 — 2026-08-22T01:58:22+01:00 — S1 P1: explore, conversation + composer + navigation
+
+Branch/log/STATE.json all reconciled cleanly on entry — clean tree, HEAD matched the previous
+"released heartbeat" commit, no drift.
+
+**P1 — explore.** Read in full, comments included: `ConversationView.tsx` (the shell hosting the
+timeline/composer/panel — its long comment block on document-attach vs. tab-store sync was read but
+is out of scope for this screen's visual pass), `AgentTimeline.tsx` (`MessageEntry`, `WorkRow`,
+`WorkBlockDisclosure`, `OutboundMessageEntry` — the fold this loop's own C6 phase added — and the
+working-indicator gating, whose comment explains two separate operator-reported bugs it fixes),
+`Composer.tsx` plus its control row (`ComposerModelControls.tsx`, `ComposerTriggerMenu.tsx`,
+`ComposerSpecControl.tsx`), `ConversationControls.tsx` (the header's Stop/Checkpoint/Fold-all set),
+`ContextUsageIndicator.tsx`, `AgentOutputPanel.tsx`'s header/body/composer wrapper (lines 840–1010,
+to see how the pieces actually compose), `Sidebar.tsx`, `AgentTree.tsx`, and `SidebarItem.tsx`.
+Also read `buttonVariants.ts` in full specifically to check a hypothesis against the real CSS rather
+than assume it (see finding 2 below). Two `WebSearch` calls (chat/conversation UI: message grouping,
+timestamps, composer affordances; sidebar/nav treatments for a dense tool) plus a close read of the
+T3 Code sourcemaps for the directly equivalent surfaces — `MessagesTimeline.tsx`, `ChatComposer.tsx`
++ `ComposerPrimaryActions.tsx` + `ComposerBannerStack.tsx`, `ChatHeader.tsx`,
+`ContextWindowMeter.tsx`, `ThreadStatusIndicators.tsx`, `Sidebar.tsx`, `NoActiveThreadState.tsx`,
+`DraftHeroHeadline.tsx` — extracted via a small Python script reading the sourcemap's
+`sourcesContent` into `testbed/scratch/t3ref/` (gitignored, confirmed with `git check-ignore -v`
+before writing anything there) so they could be read with the `Read` tool, then deleted immediately
+after with `rm -rf` — confirmed via `git status --short` afterward that nothing tracked was left
+behind. Nothing from them is quoted at length in the tracked research doc, per IDENTITY.md's
+reference-material rule — findings are restated as structure only.
+
+Wrote `design/mocks/S1/RESEARCH.md`. Six concrete, code-verified gaps, not generic "make it nicer"
+notes:
+
+1. No copy-to-clipboard exists anywhere in `AgentTimeline.tsx`, for any message kind.
+2. **`ComposerSpecControl`'s armed/`data-active` state has zero visual effect today** — verified
+   directly rather than assumed: `buttonVariants.ts` (read in full) defines no `data-active`
+   handling in the base classes or any variant, and `index.css`'s only `data-active` rule
+   (lines 422–430) is scoped to `.row-item`, which this `Button` doesn't carry. So pressing
+   "Explore" today changes only its own label text ("Explore" → "Exploring") with no other visible
+   difference — a control whose entire job is to announce a mode change currently doesn't look
+   different when that mode is on. This is the strongest finding of the pass: a real, present-tense
+   bug in the existing UI's completeness, not a matter of taste.
+3. The composer's send button collapses "sending" and "disabled for an unrelated reason" into one
+   visual state (dimmed via `disabled:opacity-[0.64]`), no distinct busy/spinner treatment.
+4. `ContextUsageIndicator.tsx` (read in full) is a bare 4px linear bar with a native HTML `title` —
+   no rich disclosure, no breakdown, unlike T3's ring-plus-popover for the same concept.
+5. Timestamps in the timeline are bare `HH:mm` with no tooltip and no path to full precision.
+6. The empty state, folded-turn pill, and work-block `<details>` disclosure all predate U0a's
+   motion/empty-state vocabulary — and this is the screen the operator has open most, making it the
+   highest-value place in the product to apply what U0a/U0b already built.
+
+Also recorded, as importantly, what is **already good and must not be redesigned**: the per-agent
+bubble colour system, the deliberately-neutral operator bubble (the exact comment IDENTITY.md
+already cites), the `.row-item`/`.row-action` hover-reveal convention (this pass *extends* it to
+messages, it does not invent a new interaction language), the two-signal working-indicator gating,
+and the fold-nothing-automatically model. Confirmed via T3's own `Sidebar.tsx` that its row-action
+hover-reveal pattern (`opacity-0` → `group-hover`-revealed, absolutely positioned so nothing shifts)
+is structurally the *same* idiom AgentWeave's `.row-action` already implements — external research
+validated the existing direction here rather than suggesting a new one.
+
+**Verified, not assumed.** This is a research-only pass with no code or mock changes, so
+verification here was: `grep`-confirming the copy-button absence and the `data-active` claim
+against the actual source rather than trusting a skim, and `git status --short` after deleting the
+T3 scratch dump to confirm no tracked file carries any of it.
+
+**Not done this iteration, deliberately:** no mock file. `screen_pass_protocol.P1_explore` scopes
+this iteration to research and its write-up only; `P2_validate_and_mock` is the next queue firing.
+
+**Next:** S1 P2 — validate the six findings against IDENTITY.md's rejection test formally, then
+build `design/mocks/S1/<variant>.html`, 2–3 variants exploring degree of refinement, self-contained
+and importing the real tokens the same way `_system`'s mocks do. At minimum: a message row with
+hover-reveal copy + exact-timestamp tooltip, the composer's armed-pill fix (finding 2) and a
+busy-send state (finding 3), and a context-usage ring-plus-popover (finding 4) — plus at least one
+sidebar/tree row shown in both resting and hover states, per clause 7 of the rejection test.
+
