@@ -2729,3 +2729,66 @@ components including their comments, and write `design/mocks/S8-jobs/RESEARCH.md
 sub-screens under one queue id; each gets its own four-pass unit and its own mock directory
 (`S8-jobs/`, `S8-agents/`, `S8-logs/`, `S8-palette/` or similar), per the queue item's own text and
 `pre_authorised`'s "do not start a later S8 sub-screen while an earlier one has unfinished passes."
+
+## Iteration 37 — 2026-08-22T06:15:30+01:00 — S8-jobs P1: research the scheduled-jobs screen
+
+**Branch/state check on entry.** `autonomous/2026-08-21-refine-and-continue` HEAD matched
+`STATE.json` exactly (`10712f8`, the release-heartbeat commit following S7 P4's finish at `fa5aca6`).
+S7 is fully done (all four passes, `RATIONALE.md` written, index rebuilt). No reconciliation needed.
+This is the first sub-screen of queue item `S8` — jobs, then agents, then logs+activity, then the
+command palette, each its own four-pass unit per `S8`'s own text and `pre_authorised`'s "do not
+start a later S8 sub-screen while an earlier one has unfinished passes."
+
+**Read in full**: `JobsPage.tsx`, `JobCard.tsx` (including both its inline comments — the
+run-history loading-state guard against a false "No runs yet" and the error-summary-before-timestamp
+ordering fix, both live defects previously found, neither to be undone), `JobForm.tsx`, and
+`hub/ui/src/index.css` for the token set. Also re-read `design/mocks/_system/foundations.html` and
+`controls.html` (U0a/U0b) since Jobs is the first screen since those landed and is a genuinely
+different surface (a scheduling list, not a conversation or task board) — worth checking the
+vocabulary actually composes rather than only fits what it was designed against.
+
+**T3 Code sourcemaps checked and found not to apply.** Grepped all 384 `.js.map` files for
+`cron`/`CronExpression`/`scheduleJob`; the only hits were syntax-highlighter grammar files (astro,
+blade, css, java, latex, …) matching the substring incidentally — T3 Code has no scheduled-job
+surface to use as an analogue. Recorded as a gap rather than skipped silently; leaned on general
+cron-tool and CI-run-list patterns instead.
+
+**WebSearch**: cron-builder UX conventions (separate fields + live plain-English translation +
+next-fire-times preview — Inventive HQ, cron-expression-descriptor, a DEV Community guide), modern
+self-hosted cron dashboards (Cronboard, Cronmaster, Cronicle — next-run time and run-health trend
+both treated as first-class list-level information, not something requiring a click to compute), and
+GitHub Actions' workflow-run-history UI (status-coloured list is the primary scan target, detail one
+click away — validates AgentWeave's existing collapsed-card/expanded-detail shape, it's just
+under-styled at the collapsed level rather than structurally wrong).
+
+**`design/mocks/S8-jobs/RESEARCH.md` written** — six findings. Three are genuine missing-feature
+gaps per `pre_authorised` ("if a screen's research turns up a missing FEATURE... mock it and note
+it... do not implement it"): (1) the cron expression is never translated to English anywhere the
+operator sees it, before or after job creation; (2) no next-run preview shown before submit, so a
+schedule is committed blind; (3) the collapsed card carries zero run-health signal — the 5-run
+history is gated behind both an expand click and, for a job with no cached history, a network fetch.
+The other three are texture/motion/consistency gaps in the same character as every prior screen: no
+hover lift, weak active-state contrast on filter/preset chips, undifferentiated button weight
+(Run/Pause/Archive all look equally routine despite one being destructive — though Archive is
+already correctly red), a static expand chevron, uniform-grey loop-queue badges regardless of status
+word, a generic spinner instead of a card-shaped skeleton, and unstyled native radio/checkbox
+controls in `JobForm` inconsistent with `_system/controls.html`'s toggle vocabulary. Recorded what
+must NOT change under `IDENTITY.md` clause 5/6/7: no new run-status hues (the existing
+green/amber/red/text-3 mapping `RunHistory` already computes is reused verbatim for any run-trend
+indicator), no second card geometry, no chart widget for run health (a status-dot strip is the
+density-preserving equivalent), and the cron-translation/next-run-preview text must read as inline
+text in the existing type scale, not a new "insight card" pattern.
+
+**Verification for this pass**: P1 is a research/writing pass with no runtime surface to drive: verified
+by rendering `git status --short` (only the new `RESEARCH.md`, no stray files) and re-reading the
+written file end to end for internal consistency (every finding traces to a specific read file or
+cited source; every "what must not change" item cites the specific `IDENTITY.md` clause it guards).
+
+**Next**: S8-jobs P2 — validate the six findings against `IDENTITY.md`'s rejection test (expect all
+to pass; none propose a new hue, geometry, or icon source) and build
+`design/mocks/S8-jobs/<variant>.html`, two variants exploring degree of refinement (`restrained` /
+`considered`, following S7's precedent of dropping to two when three would not differ meaningfully),
+self-contained HTML importing `../../../hub/ui/src/index.css`, with realistic job content (a mix of
+plain jobs and at least one loop-backed job, per `LoopBlock`'s existing shape) covering all three
+missing-feature mocks (cron translation, next-run preview, run-trend dots) plus the texture/motion
+fixes, in both light and dark themes.
