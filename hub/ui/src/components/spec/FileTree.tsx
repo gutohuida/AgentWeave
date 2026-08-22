@@ -69,6 +69,7 @@ export function FileTree({ paths, currentPath = null, onSelect }: FileTreeProps)
             aria-expanded={!collapsed[row.path]}
             onClick={() => toggle(row.path)}
             title={row.path}
+            className={row.depth > 0 ? 'row-item panel-tree-row' : 'row-item'}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -77,13 +78,13 @@ export function FileTree({ paths, currentPath = null, onSelect }: FileTreeProps)
               padding: '7px 10px 3px',
               paddingLeft: 10 + row.depth * 14,
               border: 'none',
-              background: 'none',
               fontSize: 12,
               fontWeight: 600,
               color: 'var(--text-3)',
               textAlign: 'left',
               cursor: 'pointer',
-            }}
+              '--tree-guide-x': `${Math.max(6, 10 + (row.depth - 1) * 14)}px`,
+            } as React.CSSProperties}
           >
             <span
               style={{
@@ -94,7 +95,7 @@ export function FileTree({ paths, currentPath = null, onSelect }: FileTreeProps)
             >
               <Icon name="chevron_right" size={14} />
             </span>
-            <Icon name="folder_open" size={14} />
+            <Icon name={collapsed[row.path] ? 'folder' : 'folder_open'} size={14} />
             {row.label}
           </button>
         ) : (
@@ -106,6 +107,7 @@ export function FileTree({ paths, currentPath = null, onSelect }: FileTreeProps)
             data-active={row.path === currentPath ? 'true' : 'false'}
             onClick={() => onSelect(row.path)}
             title={row.path}
+            className="row-item panel-tree-row"
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -114,13 +116,13 @@ export function FileTree({ paths, currentPath = null, onSelect }: FileTreeProps)
               padding: '6px 10px',
               paddingLeft: 10 + row.depth * 14 + 18,
               border: 'none',
-              background: row.path === currentPath ? 'var(--surface-2)' : 'none',
               color: row.path === currentPath ? 'var(--text)' : 'var(--text-2)',
               fontSize: 13,
               textAlign: 'left',
               cursor: 'pointer',
               borderRadius: 'var(--radius-sm)',
-            }}
+              '--tree-guide-x': `${Math.max(6, 10 + (row.depth - 1) * 14)}px`,
+            } as React.CSSProperties}
           >
             <Icon
               name={fileIconFor(row.path)}

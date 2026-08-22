@@ -36,6 +36,18 @@ describe('FilesIndexTab — the files tab (task 5.1, 2026-08-18-one-shell-three-
     expect(screen.queryByTestId('files-search-result-README.md')).not.toBeInTheDocument()
   })
 
+  it('clears search with Escape and returns to the tree', async () => {
+    const user = userEvent.setup()
+    render(<FilesIndexTab paths={PATHS} isLoading={false} currentPath={null} onSelect={vi.fn()} />)
+
+    const search = screen.getByLabelText('Search files')
+    await user.type(search, 'composer')
+    await user.type(search, '{Escape}')
+
+    expect(search).toHaveValue('')
+    expect(screen.getByTestId('file-tree-file-README.md')).toBeInTheDocument()
+  })
+
   it('reports an empty workspace rather than an empty box', () => {
     /* Moved here from the browser suite on 2026-08-19. It used to assert this live, against a
      * fixture project that happened to have no files — so it broke the moment that project gained

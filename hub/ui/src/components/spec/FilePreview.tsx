@@ -29,6 +29,9 @@ import typescript from 'highlight.js/lib/languages/typescript'
 import xml from 'highlight.js/lib/languages/xml'
 import yaml from 'highlight.js/lib/languages/yaml'
 
+import { Icon } from '@/components/common/Icon'
+import { Button } from '@/components/ui/button'
+import { useCopy } from '@/hooks/useCopy'
 import { fileLanguageFor, isMarkdownPath } from './fileIcons'
 
 /* Registered explicitly, from `highlight.js/lib/core` rather than the default bundle: the full
@@ -91,6 +94,7 @@ interface FilePreviewProps {
  * anything but the file's own text.
  */
 export function FilePreview({ path, content }: FilePreviewProps) {
+  const { copied, copy } = useCopy()
   const language = fileLanguageFor(path)
   const asMarkdown = isMarkdownPath(path)
 
@@ -104,41 +108,59 @@ export function FilePreview({ path, content }: FilePreviewProps) {
     }
   }, [asMarkdown, language, content])
 
-  if (asMarkdown) {
-    return (
+  const preview = asMarkdown ? (
       <div className="markdown-message file-preview-markdown p-4" data-testid="file-preview-markdown">
         <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
           {content}
         </ReactMarkdown>
       </div>
-    )
-  }
+    ) : (() => {
+      const preStyle: React.CSSProperties = {
+        margin: 0,
+        fontSize: 12,
+        lineHeight: 1.6,
+        fontFamily: "'JetBrains Mono', monospace",
+        whiteSpace: 'pre',
+        color: 'var(--text)',
+      }
 
-  const preStyle: React.CSSProperties = {
-    margin: 0,
-    fontSize: 12,
-    lineHeight: 1.6,
-    fontFamily: "'JetBrains Mono', monospace",
-    whiteSpace: 'pre',
-    color: 'var(--text)',
-  }
+      if (highlighted === null) {
+        return (
+          <pre data-testid="file-tab-content" className="p-3" style={preStyle}>
+            {content}
+          </pre>
+        )
+      }
 
-  if (highlighted === null) {
-    return (
-      <pre data-testid="file-tab-content" className="p-3" style={preStyle}>
-        {content}
-      </pre>
-    )
-  }
+      return (
+        <pre
+          data-testid="file-tab-content"
+          data-language={language}
+          className="hljs p-3"
+          style={preStyle}
+        >
+          <code dangerouslySetInnerHTML={{ __html: highlighted }} />
+        </pre>
+      )
+    })()
 
   return (
-    <pre
-      data-testid="file-tab-content"
-      data-language={language}
-      className="hljs p-3"
-      style={preStyle}
-    >
-      <code dangerouslySetInnerHTML={{ __html: highlighted }} />
-    </pre>
+    <div className="flex h-full min-h-0 flex-col" data-testid="file-preview">
+      <div className="file-preview-header flex shrink-0 items-center gap-2 px-3 py-2">
+        <Icon name="article" size={14} style={{ color: 'var(--text-3)' }} />
+        <span className="min-w-0 flex-1 truncate font-mono text-[11px]" title={path}>{path}</span>
+        <span className="aw-chip" data-pill="true">{asMarkdown ? 'Markdown' : language ?? 'Plain text'}</span>
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          aria-label="Copy file path"
+          title={copied ? 'Copied file path' : 'Copy file path'}
+          onClick={() => { void copy(path) }}
+        >
+          <Icon name={copied ? 'check' : 'content_copy'} size={13} />
+        </Button>
+      </div>
+      <div className="min-h-0 flex-1 overflow-auto">{preview}</div>
+    </div>
   )
 }

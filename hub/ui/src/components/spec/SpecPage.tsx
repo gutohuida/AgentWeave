@@ -125,7 +125,11 @@ export function SpecPage({ document: openDocument, anchor, onOpenDocument, onOpe
             onOpenTasks={onOpenTasks}
           />
         ) : (
-          <div className="p-6" style={{ color: 'var(--text-3)', fontSize: 14 }}>Loading…</div>
+          <div className="spec-loading-card flex flex-col gap-3" aria-label="Loading specification">
+            <div className="skeleton h-6 w-2/3" />
+            <div className="skeleton h-3 w-full" />
+            <div className="skeleton h-3 w-5/6" />
+          </div>
         )}
       </div>
 

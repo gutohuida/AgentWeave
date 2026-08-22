@@ -8,15 +8,10 @@
   "started_at": "2026-08-22T14:30:00+01:00",
   "stop_at": "2026-08-22T20:00:00+01:00",
   "stop_when_queue_empties": true,
-  "iteration": 5,
-  "last_heartbeat": "2026-08-22T14:56:46+01:00",
+  "iteration": 6,
+  "last_heartbeat": "2026-08-22T15:56:54+01:00",
   "log_file": ".claude/autonomous/2026-08-22-ui-finesse-log.md",
   "queue": [
-    {
-      "id": "F5",
-      "title": "Refine the right work panel and specification experience",
-      "detail": "Apply S3 and S5 to PanelShell and its live tabs, SpecPage/SpecDocumentPanel/SpecRailNav and the server-rendered spec templates where the mock requires it. Preserve resizers, tab persistence, cross-document navigation, coverage links and iframe/content safety. Keep React source and Python-rendered document responsibilities clear. Run focused UI/Python tests, then Playwright-drive panel and spec reading flows in both themes and narrow width."
-    },
     {
       "id": "F6",
       "title": "Refine overview, questions and permission moments",
@@ -44,7 +39,7 @@
     }
   ],
   "current": null,
-  "next_action": "Apply S3 and S5 to PanelShell and its live tabs, SpecPage/SpecDocumentPanel/SpecRailNav and the server-rendered spec templates where the mock requires it. Preserve resizers, tab persistence, cross-document navigation, coverage links and iframe/content safety. Keep React source and Python-rendered document responsibilities clear. Run focused UI/Python tests, then Playwright-drive panel and spec reading flows in both themes and narrow width.",
+  "next_action": "Apply S6 and S7 considered treatments to OverviewPage, QuestionsPanel, answer forms, permission request cards, setup/unreachable/empty/loading/error states. These trust and stop points must be clear, calm and accessible. Preserve approval semantics and destructive-action hierarchy. Test keyboard and screen-reader names. Playwright-drive overview, question and permission states in both themes and narrow width; correct once.",
   "decisions_for_user": [],
   "limits": [
     "Stay on autonomous/2026-08-22-ui-finesse and push only that branch; do not merge, open a PR, release, publish or deploy.",

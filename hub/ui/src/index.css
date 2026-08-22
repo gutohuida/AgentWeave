@@ -459,6 +459,91 @@
     pointer-events: none;
   }
 
+  /* S3/S5 considered reading surfaces: quiet chrome that gains detail only on interaction. */
+  .panel-tab-chip {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    flex: none;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    padding: 2px 4px 2px 7px;
+    color: var(--text-2);
+    transition: background-color var(--dur-fast) var(--ease),
+                border-color var(--dur-fast) var(--ease),
+                color var(--dur-fast) var(--ease);
+  }
+  .panel-tab-chip:hover,
+  .panel-tab-chip:focus-within { background: var(--row-hover); color: var(--text); }
+  .panel-tab-chip[data-selected="true"] {
+    background: var(--surface-2);
+    border-color: var(--border-region);
+    color: var(--text);
+    box-shadow: inset 0 1px var(--lift-hi);
+  }
+  .panel-tab-identity,
+  .panel-tab-close { transition: opacity var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease); }
+  .panel-tab-close { position: absolute; left: 4px; opacity: 0; pointer-events: none; transform: scale(.82); }
+  .panel-tab-chip:hover .panel-tab-close,
+  .panel-tab-chip:focus-within .panel-tab-close { opacity: 1; pointer-events: auto; transform: scale(1); }
+  .panel-tab-chip:hover .panel-tab-identity,
+  .panel-tab-chip:focus-within .panel-tab-identity { opacity: 0; }
+  .panel-launcher-card:hover { transform: translateY(-1px); box-shadow: var(--shadow-rest); }
+  .panel-launcher-card:active { transform: translateY(0); }
+  .panel-search {
+    position: relative;
+    display: flex;
+    align-items: center;
+    margin: 8px 8px 3px;
+  }
+  .panel-search > svg { position: absolute; left: 9px; color: var(--text-3); pointer-events: none; }
+  .panel-search .control-field { width: 100%; height: 32px; padding: 5px 30px; font-size: 12px; }
+  .panel-search-clear { position: absolute; right: 4px; }
+  .panel-tree-row { position: relative; }
+  .panel-tree-row::before {
+    content: '';
+    position: absolute;
+    left: var(--tree-guide-x, -20px);
+    top: -7px;
+    bottom: -7px;
+    border-left: 1px solid var(--border-region);
+  }
+  .panel-switch {
+    position: relative;
+    width: 28px;
+    height: 16px;
+    flex: none;
+    border: 1px solid var(--border-hi);
+    border-radius: 9999px;
+    background: var(--surface-3);
+    transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+  }
+  .panel-switch::after {
+    content: '';
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    top: 2px;
+    left: 2px;
+    border-radius: 9999px;
+    background: var(--text-3);
+    transition: transform var(--dur-fast) var(--ease), background-color var(--dur-fast) var(--ease);
+  }
+  input:checked + .panel-switch { background: color-mix(in srgb, var(--ring) 20%, var(--surface-3)); border-color: var(--ring); }
+  input:checked + .panel-switch::after { transform: translateX(12px); background: var(--ring); }
+  input:focus-visible + .panel-switch { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring); }
+  .file-preview-header,
+  .spec-reading-header { border-bottom: 1px solid var(--border-region); background: var(--rail); }
+  .spec-reading-body { background: var(--bg); box-shadow: inset 0 1px var(--lift-hi); }
+  .spec-loading-card {
+    margin: 18px;
+    padding: 16px;
+    border: 1px solid var(--border-region);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+  }
+
   /* S2/S4 considered task surfaces: the board stays dense and neutral, while depth and motion
      make whole-card actions, nested columns, dialogs and graph lineage legible. */
   .task-card-refined {

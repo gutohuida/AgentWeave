@@ -159,7 +159,7 @@ export function SpecDocumentPanel({
           and a second horizontal line across the top read as a seam cutting the document off from
           the control that names it (operator, 2026-08-10). The header's own background is what
           separates it from the document. */}
-      <div className="flex shrink-0 items-center gap-2 px-3 py-2">
+      <div className="spec-reading-header flex shrink-0 items-center gap-2 px-3 py-2">
         {/* The breadcrumb is the way to another document: it opens the same Ctrl/Cmd+Shift+K
             search that already covers the whole inventory, rather than a second, worse copy. */}
         <button
@@ -304,10 +304,15 @@ export function SpecDocumentPanel({
         </div>
       )}
 
-      <div className="flex min-h-0 flex-1">
+      <div className="spec-reading-body flex min-h-0 flex-1">
         <div className="min-w-0 flex-1 overflow-hidden">
           {listLoading ? (
-            <div className="p-6" style={{ color: 'var(--text-3)', fontSize: 14 }}>Loading…</div>
+            <div className="spec-loading-card flex flex-col gap-3" aria-label="Loading specification">
+              <div className="skeleton h-6 w-2/3" />
+              <div className="skeleton h-3 w-full" />
+              <div className="skeleton h-3 w-5/6" />
+              <div className="skeleton mt-3 h-24 w-full" />
+            </div>
           ) : specDoc ? (
             <SpecFrame
               ref={frameRef}
@@ -322,7 +327,11 @@ export function SpecDocumentPanel({
               onRejected={handleRejected}
             />
           ) : (
-            <div className="p-6" style={{ color: 'var(--text-3)', fontSize: 14 }}>Loading spec…</div>
+            <div className="spec-loading-card flex flex-col gap-3" aria-label="Loading specification document">
+              <div className="skeleton h-6 w-2/3" />
+              <div className="skeleton h-3 w-full" />
+              <div className="skeleton h-3 w-4/5" />
+            </div>
           )}
         </div>
 
