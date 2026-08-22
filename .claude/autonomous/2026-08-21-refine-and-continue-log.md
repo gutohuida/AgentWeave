@@ -3684,3 +3684,41 @@ accurate status in the morning rather than a placeholder that has been technical
 seven hours of run time. If wall-clock runs out before either, prioritise an accurate placeholder
 over a rushed full pass — a true "not indexed yet, built at P2" note costs one edit and beats an
 incomplete P3/P4 rushed in the last few minutes.
+
+## Iteration 53 — 2026-08-22T08:29:36+01:00 — Z: true up the review index (final iteration before stop_at)
+
+`stop_at` (09:00:00+01:00) was ~30 minutes out at start. Did the queue's "AT MINIMUM" fallback for
+the one real gap iteration 52 surfaced, rather than attempting a rushed P3/P4 on `_system` with too
+little runway.
+
+**Checked the `_system` card's actual history.** `git log -- design/mocks/_system/` shows exactly
+two commits, `00daea3` (U0a) and `04be7fd` (U0b) — P1 (research) and P2 (mock) landed together in
+each, and no `RATIONALE.md` was ever written. So the index's claim that foundations.html/controls.html
+were "screenshotted and verified during U0a/U0b" was false: no Playwright pass ever ran on either
+file, unlike every numbered screen (S1-S7, S8's four sub-screens), all of which reached P4. Corrected
+the card's status text from "built, not yet indexed with shots" to "reached P2, not yet carried to
+P3/P4", and rewrote its summary to say plainly that P1+P2 exist but the screenshot-critique pass and
+RATIONALE.md do not — accuracy over a rushed pass, per next_action's explicit priority.
+
+**Trued up the rest of the index** (iteration 42's precedent: confirm, don't just append). Rendered
+`design/mocks/index.html` in Playwright headless and asserted: 12 `.screen-card` sections (7 numbered
+screens + 4 S8 sub-screens + `_system`), 56 `<img>` tags, 0 with `naturalWidth === 0` (broken), exactly
+1 `.pending` card (the `_system` one, correctly still pending). `requestfailed` events showed three
+`ERR_FILE_NOT_FOUND` hits, all `@fontsource*` bare-specifier imports inside `index.css` — expected and
+pre-existing: those only resolve through Vite's bundler, not raw `file://` access, and every mock that
+imports `../../../hub/ui/src/index.css` has the same limitation. Not a regression, nothing to fix.
+
+No implementation work was open to close cleanly in the remaining runway, and inventing scope outside
+the queue is explicitly against `do_not_idle`. This closes out the queue for this run: C1-C6 (phases
+1-6 of conversations-continue) and U0a/U0b/S1-S8/Z are all at their most-honest state on disk. The one
+open item, `_system` P3/P4, is now accurately labelled rather than silently stale, and is the correct
+place for the next run to start if UI-mock work continues.
+
+**Verify-on-resume note for the next session:** don't re-run the whole pytest/vitest/openspec suite
+from prep — re-run only what changed. `git log master..HEAD -- hub/hub hub/ui/src src tests hub/tests`
+shows the touched set is exactly conversations-continue phases 1-6 (commits `5e8167d`..`0908b68`) —
+`hub/hub` (migration 0085, `checkpoint_cutover.py`, `conversations.py`, `messages.py`,
+`mcp_server.py`) and `hub/ui/src` (`agent_chat.py`'s TS counterpart, `AgentTimeline.tsx`). Nothing
+under `src/agentweave` or `tests/` (the CLI's own suite) changed this session. All UI-mock work
+(U0a/U0b/S1-S8/Z) touched only `design/mocks/`, never `hub/ui/src` or `hub/hub` — confirm that still
+holds before trusting any prior iteration's "suite passed" claim without a fresh run.
