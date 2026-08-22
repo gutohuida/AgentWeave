@@ -8,15 +8,10 @@
   "started_at": "2026-08-22T14:30:00+01:00",
   "stop_at": "2026-08-22T20:00:00+01:00",
   "stop_when_queue_empties": true,
-  "iteration": 0,
-  "last_heartbeat": "2026-08-22T14:30:00+01:00",
+  "iteration": 1,
+  "last_heartbeat": "2026-08-22T14:36:23+01:00",
   "log_file": ".claude/autonomous/2026-08-22-ui-finesse-log.md",
   "queue": [
-    {
-      "id": "P0",
-      "title": "Prove the real Codex resume loop before product work",
-      "detail": "Read STATE.json and the newest log entry, verify branch, stop time, runner, permission posture and clean committed baseline. Do not change product code. Append a short iteration entry, set iteration to 1, remove P0 from the remaining queue, set next_action to F1 exactly as described by the next queue item, update last_heartbeat, then commit and push the state/log. This is the live preflight proving a fresh Codex process can resume durably."
-    },
     {
       "id": "F1",
       "title": "Turn the approved visual language into shipping foundations",
@@ -69,7 +64,7 @@
     }
   ],
   "current": null,
-  "next_action": "P0 live preflight only: read STATE.json and the newest log entry; verify branch, runner, permission posture, stop time and committed baseline. Do not change product code. Append a concise iteration entry, set iteration to 1, remove P0 from the remaining queue, update last_heartbeat, set next_action to the F1 detail, then commit and push the state and log using explicit paths.",
+  "next_action": "Read design/IDENTITY.md and design/mocks/_system/{RESEARCH.md,foundations.html,controls.html}. Inventory the live source tokens and shared primitives. Implement the considered vocabulary in index.css and reusable UI primitives: elevation, restrained texture, motion durations/easings, hover/press/focus/disabled/loading/selected states, button taxonomy, inputs, badges and chips. Preserve layout and semantics. Add or adjust focused tests. Run relevant Vitest and tsc. Use Playwright on a small component/live-page sample in both themes before closing.",
   "decisions_for_user": [],
   "limits": [
     "Stay on autonomous/2026-08-22-ui-finesse and push only that branch; do not merge, open a PR, release, publish or deploy.",
