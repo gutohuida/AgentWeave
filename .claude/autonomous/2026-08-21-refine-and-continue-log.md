@@ -3160,3 +3160,65 @@ fix from this pass) and add S8-agents to `design/mocks/index.html` with its befo
 `dead_ends_inherited`'s data-URI approach (the blanket `*.png` `.gitignore` blocks committing PNGs
 directly). This closes S8-agents (4/4 passes) and leaves S8's remaining sub-screens (logs+activity,
 command palette) per S8's own stated sub-order.
+
+## Iteration 44 — 2026-08-22T07:22:24+01:00 — S8-agents P4: finish
+
+Verified branch/log/STATE.json all agreed before starting (`e2e8a4c` = HEAD, S8-agents P3's commit,
+matches STATE.json exactly). `screen_pass_protocol.P4_finish` for S8-agents: a second, fresh
+iteration, then `RATIONALE.md` and the review index entry.
+
+**Method chosen deliberately: real interaction, not another screenshot read.** P2 and P3 both
+worked from static screenshots read by eye. Per S7's P4 precedent (the pass built specifically to
+catch what static review can't), this pass drove the actual pages instead:
+
+- **Real keyboard `Tab` walk**, both files — checked `document.activeElement` after each of 15
+  `Tab` presses rather than reading a `:focus-visible` CSS rule off a screenshot. Every interactive
+  element in tab order (theme toggle, expander buttons, agent rows, row-menu buttons, add-agent row,
+  settings-back, all seven settings-nav items) received the declared focus ring
+  (`box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring)`) with nothing skipped.
+- **420px narrow-viewport reflow check** (S6/S7 precedent), both files: `scrollWidth` measured
+  exactly `420` in both — no overflow. The 250px rail frame and the settings shell (built on
+  `flex`/`min-width: 0` throughout) both compress cleanly.
+- **Real mouse-hover check** on the row-menu button's opacity reveal caught a **false alarm in the
+  check itself**, not in the mock: a fast read immediately after `Locator.hover()` showed opacity
+  still `0`, which looked like a real defect at first. Traced it before "fixing" anything — a
+  `mouse.move()` to the element's centre followed by a short settle delay showed the reveal
+  completing normally (opacity ≈ 0.96–1.0). The first read was racing the `--dur-fast` CSS
+  transition, not exposing a broken `:hover` rule. Recorded in `RATIONALE.md` so a later screen's
+  P4 doesn't mistake the same timing artifact for a real bug.
+- **Toggle click, both files**: clicking `.theme-toggle` flips `data-mode` to `dark` and the
+  `aria-label` to `"Switch to light mode"` via a real click, confirming P3's fix works end to end.
+
+**No fix was needed this pass** — a legitimate "clean" P4 outcome, the same result S8-jobs's P4 got
+in the same slot, not a shortcut taken to avoid work.
+
+Wrote `design/mocks/S8-agents/RATIONALE.md`: the queue's wrong premise from P1 (`AgentsPage`
+doesn't exist, `AgentCard` is dead code), the three real research findings and which were mocked vs.
+flagged-not-built, the `.settings-row` collision from P2, the `uishot.py`/toggle-default fix from
+P3, and this pass's verification method including the false-alarm-correctly-ruled-out.
+
+**Captured screenshots and rebuilt the review index.** `py -3.11 scripts/uishot.py` now works
+unmodified against both mocks (P3's fix) — used a `pathlib.Path(...).resolve().as_uri()` file URL
+rather than a plain relative path, since Windows relative-path file URIs (`file:///c/Users/...`,
+missing the drive colon) resolve to `ERR_FILE_NOT_FOUND`. Captured all 4 combinations
+(restrained/considered × light/dark), read each PNG, confirmed clean renders in both themes with no
+truncation or illegible text. Base64-encoded and spliced a new `S8-agents` `screen-card` into
+`design/mocks/index.html`, inserted immediately before the `S8` overflow placeholder (which was
+narrowed from "S8-agents, S8-logs, S8-palette..." to just "S8-logs, S8-palette..."), following the
+exact structure `S8-jobs`'s card already established. Verified the rebuilt `index.html` with a
+throwaway Playwright check: 11 screen cards present, 48 total `<img>` elements, zero broken images
+(`naturalWidth === 0`), zero JS errors — deleted the check script after. `git status --short` showed
+only `design/mocks/index.html` (modified) and `design/mocks/S8-agents/RATIONALE.md` (new) before
+committing.
+
+**This closes S8-agents at 4/4 passes.** Per `S8`'s own stated sub-order and `pre_authorised`'s "do
+not start a later S8 sub-screen while an earlier one has unfinished passes," next is **S8-logs**
+(`LogsView`, `LogLine`, `ActivityLog`, `EventRow`) starting its own P1 research pass, then
+**S8-palette** (the command palette) after S8-logs closes 4/4.
+
+**Next**: S8-logs P1 — `screen_pass_protocol.P1_explore`. Read `LogsView.tsx`, `LogLine.tsx`,
+`ActivityLog.tsx`, `EventRow.tsx` in full including comments, `WebSearch` for log-viewer / activity-
+feed UI/UX patterns (density, filtering, colour-coding by level, timestamp treatment, monospace
+conventions), and the T3 Code sourcemaps for the closest equivalent surface. Write
+`design/mocks/S8-logs/RESEARCH.md` with findings, sources, and what is missing versus merely
+unstyled, per the same protocol every prior screen this run used.
