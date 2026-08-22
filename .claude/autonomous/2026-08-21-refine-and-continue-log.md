@@ -2595,3 +2595,47 @@ committing them as-is and P3/P4 will produce the real before/after pair for the 
 direct-Playwright approach as this pass, not `uishot.py`), Read the PNGs with a colder second look,
 critique honestly against the rejection test, and fix what's found. This pass's own review found the
 files clean, so P3 is a genuine second look, not a rerun of the same checks.
+
+## Iteration 35 — 2026-08-22T05:55:06+01:00 — S7 P3: iterate on the overview mocks (screen_pass_protocol.P3_iterate)
+
+Branch and `git log` matched STATE.json exactly on entry (HEAD `5cf3e44`, iteration 34 recorded).
+`last_heartbeat` refreshed to now early in the turn.
+
+**Rendered both variants in both themes, for real.** `uishot.py`'s dark-mode toggle click targets a
+button named "Switch to dark mode", which these mocks don't have (their toggle is `.theme-toggle`,
+per the established `data-mode` flip pattern) — same situation P2 hit, same pre-authorized fallback:
+a throwaway inline Playwright script (`design/mocks/S7/_p3_shot.py`, deleted after use) opened
+`restrained.html` and `considered.html` directly at 1280×1400, screenshotted the dark initial state,
+clicked `.theme-toggle`, screenshotted light — 4 full-page PNGs, all Read.
+
+**Colder second look, not a rerun of P2's own checks.** Went hunting specifically for what a builder
+reviewing their own work tends to miss: clipped text, control overlap, ghost/overlay collisions,
+contrast at small sizes. Cropped and 1.5–2× upscaled the two regions most likely to hide a defect —
+`considered.html`'s populated-preview empty state (a faded "claude-1" ghost card sitting underneath
+the centered "No agents connected" icon/title, gradient-masked) and the interaction-states strip
+(resting/hover/focus-visible/status-changed cells plus the pressed workspace button with its new
+icon). Neither showed overlap, clipping, or illegible text in either theme — the ghost card and the
+centered empty-state message coexist without colliding, the workspace-button icon renders crisply at
+both weights, and the status-change ring is visually distinct from the always-on pulse glow in both
+modes.
+
+**Console check repeated per-file this pass** (not reused from P2's build note): both files threw
+the same 3 `net::ERR_FILE_NOT_FOUND` on font subresources, same as every other mock in this run —
+confirmed pre-existing, not something P2 or this pass introduced.
+
+**Verdict: no fix needed.** P2's own review and this pass's colder one agree, which is the point of
+running P3 as a separate step rather than skipping straight to P4 — it's evidence the files are
+clean, not an assumption. Both HTML files are byte-identical to what P2 committed; nothing to stage
+from the review itself. Verification script and PNGs deleted after use (`Remove-Item -Recurse
+-Force`, since Bash's `rm -rf` hit a transient Windows file-lock on the just-written PNG directory —
+retried via PowerShell and it cleared).
+
+`git status --short` confirmed clean before this log/STATE.json commit — no stray scratch files from
+the verification script survived.
+
+**Next:** S7 P4 — `screen_pass_protocol.P4_finish`: a second iteration on the same basis (P3 found
+nothing to change, so P4 either finds something P3 didn't or explicitly notes P3 already converged),
+then write `design/mocks/S7/RATIONALE.md` (what was researched, what changed, why, what was rejected
+and under which clause — including the two-variant-not-three decision already recorded in P2's log
+entry) and add S7 to `design/mocks/index.html` with before/after shots, using the data-URI-inline
+approach `dead_ends_inherited` prescribes for the `*.png` gitignore problem.
