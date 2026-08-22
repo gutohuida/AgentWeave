@@ -11,7 +11,6 @@ from pathlib import Path
 
 import pytest
 
-
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SKILLS_ROOT = REPO_ROOT / ".claude" / "skills"
 SESSION_ROOT = SKILLS_ROOT / "autonomous-session"
@@ -28,7 +27,7 @@ def test_skills_declare_codex_and_shared_state_contract():
     prep = (SKILLS_ROOT / "autonomous-prep" / "SKILL.md").read_text(encoding="utf-8")
     session = (SESSION_ROOT / "SKILL.md").read_text(encoding="utf-8")
 
-    assert '`runner` — exactly `claude` or `codex`' in prep
+    assert "`runner` — exactly `claude` or `codex`" in prep
     assert "`permission_mode`" in prep
     assert '"runner": "codex"' in session
     assert '"permission_mode": "unattended-full-access"' in session
@@ -83,9 +82,7 @@ def test_iteration_dispatches_expected_agent_arguments(
     state_dir = repo / ".claude" / "autonomous"
     state_dir.mkdir(parents=True)
     subprocess.run(["git", "init", "-q", str(repo)], check=True)
-    subprocess.run(
-        ["git", "-C", str(repo), "checkout", "-q", "-b", "autonomous/test"], check=True
-    )
+    subprocess.run(["git", "-C", str(repo), "checkout", "-q", "-b", "autonomous/test"], check=True)
 
     state = {
         "branch": "autonomous/test",
@@ -147,9 +144,7 @@ def test_completed_queue_stops_before_launching_agent(tmp_path: Path):
     state_dir = repo / ".claude" / "autonomous"
     state_dir.mkdir(parents=True)
     subprocess.run(["git", "init", "-q", str(repo)], check=True)
-    subprocess.run(
-        ["git", "-C", str(repo), "checkout", "-q", "-b", "autonomous/test"], check=True
-    )
+    subprocess.run(["git", "-C", str(repo), "checkout", "-q", "-b", "autonomous/test"], check=True)
     state = {
         "branch": "autonomous/test",
         "runner": "codex",

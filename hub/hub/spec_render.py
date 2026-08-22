@@ -153,6 +153,7 @@ code, pre { background: var(--surface); border-radius: 4px; }
 code { padding: .1rem .3rem; font-size: .88em; }
 """.strip()
 
+
 def _e(value: Any) -> str:
     return escape(str(value or ""), quote=True)
 
@@ -191,7 +192,7 @@ def _requirements(payload: SpecPayload, identifiers: Dict[str, str]) -> str:
         party = f'<span class="aw-chip">{_e(requirement.party)}</span>' if requirement.party else ""
         rationale = (
             f'<p class="aw-rationale"><span class="aw-rationale-label">Why</span>'
-            f'{_e(requirement.rationale)}</p>'
+            f"{_e(requirement.rationale)}</p>"
             if requirement.rationale
             else ""
         )
@@ -308,7 +309,9 @@ def _acceptance(payload: SpecPayload, identifiers: Dict[str, str]) -> str:
         identifier = identifiers.get(criterion.requirement, criterion.requirement)
         first = criterion.requirement != previous_requirement
         previous_requirement = criterion.requirement
-        given = _e(criterion.given) if criterion.given else '<span aria-label="Not specified">—</span>'
+        given = (
+            _e(criterion.given) if criterion.given else '<span aria-label="Not specified">—</span>'
+        )
         given_class = ' class="aw-cell-empty"' if not criterion.given else ""
         rows.append(
             f'<tr data-first="{"true" if first else "false"}"><td>{_link(identifier)}</td>'
