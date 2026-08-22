@@ -2963,3 +2963,73 @@ This closes S8-jobs (4/4 passes). Per `S8`'s own sub-order and `pre_authorised`'
 later S8 sub-screen while an earlier one has unfinished passes," next is **S8-agents**
 (`AgentsPage`/`AgentCard`/`AgentSettingsPage`) P1 — a fresh research pass, following the same
 protocol U0a/U0b/S1-S7/S8-jobs all used.
+
+## Iteration 41 — 2026-08-22T06:46:53+01:00 — S8-agents P1: research
+
+`screen_pass_protocol.P1_explore` for S8-agents, the second S8 sub-screen (jobs closed 4/4 last
+iteration). Verified branch/log/STATE.json all agreed before starting (`9c3a625` = HEAD, matches
+STATE.json exactly). No reconciliation needed.
+
+**The queue item's own premise turned out to be wrong, and correcting it before mocking was the
+substance of this pass.** `next_action` named `AgentsPage`/`AgentCard`/`AgentSettingsPage`. Checked
+each:
+
+- `AgentsPage.tsx` — does not exist. `Glob` for it returns nothing; `App.tsx` never imports one.
+  AgentWeave has no standalone "all agents" grid.
+- `AgentCard.tsx` — exists but is dead code. `grep -rn "AgentCard"` across `hub/ui/src` returns only
+  its own file, `lib/agentStatusConfig.ts`'s doc comment ("Previously duplicated in 2 components
+  (AgentCard, AgentInfoTab)"), and its own test. Nothing renders it. `git log` on the file (`1c37f6f`,
+  `0cc5df7`, `534cb64`) confirms it was a real, worked-on component that got orphaned when the
+  roster moved into the `AgentTree` rail shape, and was never deleted. `AgentInfoTab`, its cited
+  sibling, is gone even further — it exists only in that one comment and a test's `describe` label.
+- `AgentSettingsPage.tsx` — real and current, rendered from `App.tsx:368` via `Sidebar.tsx`'s
+  `agentSettings` branch.
+
+So this pass (and P2 onward) targets what actually renders: **`AgentTree.tsx`** (the rail roster
+rows, embedded in `Sidebar.tsx`'s project view) and **`AgentSettingsPage.tsx`** +
+**`AgentSettingsControls.tsx`** (the settings destination and its field widgets). `AgentCard` is
+recorded as a dead-code finding for `RATIONALE.md`, not mocked as a living screen — there is nothing
+for the operator to open that would show it.
+
+**Read in full, including comments**: `AgentTree.tsx` (expand/collapse rows, agent-color dot,
+attention/running dots, `RowMenu`, `CONVERSATION_DISPLAY_CAP` capping with its documented "cheap to
+revisit" rationale), `AgentCard.tsx` (the denser card shape that never shipped to the tree — model
+badge, EXT/CANNOT COLLABORATE badges, msgs/tasks/last-seen stats row, context usage indicator),
+`AgentSettingsPage.tsx` (seven sections, two comments recording deliberate non-decisions: Isolation
+is read-only by design, and the working-directory note is a plain `<p>` not `role="alert"` because
+"no branch" stopped being a blocking error), `AgentSettingsControls.tsx` (every field is raw HTML
+with inline styles — `<select>` ×4, `<input type=number>` ×2, `<input type=checkbox>` ×4,
+`<textarea>` ×1 — none using U0b's `_system/controls.html` vocabulary, which exists specifically for
+this), `SettingsSection.tsx`, `Sidebar.tsx`'s `agentSettings` branch (a bare `nav` of seven
+`row-item` buttons, no icons), `SidebarItem.tsx` (a considered hover/active language `AgentTree`'s
+own rows do not reuse — they're hand-rolled, not `SidebarItem` instances), `RowMenu.tsx`.
+
+**External research**: WebSearch on roster/presence patterns (Setproduct, ReUI, ServiceNow Horizon —
+status dot lower-right of identity, used sparingly) and settings-nav patterns (Bricx Labs,
+onething.design — sectioned layouts hold for ≤5 categories; AgentWeave's agent settings has 7, past
+that rule of thumb). T3 Code sourcemaps, recovered from `index-DiDfaONg.js.map`:
+**`SettingsSidebarNav.tsx`** (7 sections, each with a small leading icon, plus a `/`-triggered search
+across every settings *field*, not just section titles — AgentWeave's plain 7-item text list is the
+gap this closes) and **`AgentsPanel.tsx`** (its `AgentRow` reserves a fixed 3-line grid height with
+an explicit code comment: *"Agent rows reserve three fixed lines for identity, activity, and
+metrics; changing data must never change their height"* — the clearest available precedent for how
+P2 could return model/context data to `AgentTree`'s row without it reflowing or breaking
+`CONVERSATION_DISPLAY_CAP`'s density math).
+
+**Missing-information findings** (per `pre_authorised`, recorded not built): agent identity data
+(model, message count, context usage, last-seen) exists on `AgentSummary` and is computed today only
+for the dead `AgentCard` — the live tree row shows none of it; no field-level settings search at a
+section count past the sectioned-layout comfort zone; no per-section icons in the settings nav,
+unlike T3 Code's equivalent at a comparable count.
+
+Wrote `design/mocks/S8-agents/RESEARCH.md` with all of the above, sources cited, and a P2 plan (two
+mock targets — the rail roster and three Identity/Execution/Interaction settings sections — each
+restrained/considered × light/dark). Deleted the throwaway T3 sourcemap dump file used to read
+`AgentsPanel.tsx` without an encoding crash (outside the repo, never committable regardless).
+`git status --short` shows only the new `design/mocks/S8-agents/` directory — no other tree changes
+this pass.
+
+**Next**: S8-agents P2 — `screen_pass_protocol.P2_validate_and_mock`. Validate this research against
+`design/IDENTITY.md`'s rejection test clause by clause, discard anything that fails (stating which
+clause), then build `design/mocks/S8-agents/<variant>.html` files for the two targets above, in both
+themes.
