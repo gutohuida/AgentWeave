@@ -459,6 +459,68 @@
     pointer-events: none;
   }
 
+  /* S1 considered shell: a quiet live mark, project-scoped selection ink, and nested
+     conversation branches that disclose without turning the rail into stacked cards. */
+  .rail-live-dot {
+    width: 7px;
+    height: 7px;
+    flex: none;
+    border-radius: 9999px;
+    background: var(--green);
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--green) 20%, transparent);
+  }
+  .row-selection-indicator {
+    position: absolute;
+    left: 0;
+    top: 50%;
+    width: 2px;
+    height: 0;
+    border-radius: 0 2px 2px 0;
+    background: var(--text);
+    transform: translateY(-50%);
+    transition: height var(--dur-fast) var(--ease);
+  }
+  .row-item[data-active="true"] > .row-selection-indicator { height: 16px; }
+  .rail-conversation-group {
+    margin-bottom: 4px;
+    padding-left: 8px;
+    border-left: 1px solid var(--border-region);
+    animation: rail-branch-in var(--dur-base) var(--ease);
+  }
+  @keyframes rail-branch-in {
+    from { opacity: 0; transform: translateY(-3px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .project-header { border-bottom: 1px solid var(--border-region); }
+  .project-switcher {
+    position: relative;
+    gap: 7px;
+    border-radius: var(--radius-sm);
+    padding: 2px 5px;
+    margin-left: -5px;
+    transition: background-color var(--dur-fast) var(--ease);
+  }
+  .project-switcher:hover,
+  .project-switcher:focus-within { background: var(--row-hover); }
+  .project-switcher select { cursor: pointer; }
+  .project-switcher .control-select-icon { right: 3px; }
+  .project-tabs { border-bottom: 1px solid var(--border-region); }
+  .project-tab { position: relative; }
+  .project-tab::before {
+    content: '';
+    position: absolute;
+    left: 10px;
+    right: 10px;
+    bottom: -1px;
+    height: 2px;
+    border-radius: 2px 2px 0 0;
+    background: var(--text);
+    opacity: 0;
+    transform: scaleX(0.6);
+    transition: opacity var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease);
+  }
+  .project-tab[data-active="true"]::before { opacity: 1; transform: scaleX(1); }
+
   /* Command palette (D3) — cmdk ships no styles of its own, only the `cmdk-*` data-attribute
      hooks used below, so it composes with the app's own tokens rather than a competing look. */
   .command-palette-overlay {

@@ -310,6 +310,7 @@ export default function App() {
     content = (
       <NewConversationSurface
         projectId={destination.projectId}
+        projectName={currentProject?.name ?? destination.projectId}
         agent={destination.agent}
         // Replace, not push: retargeting an unsent message is a change of mind about one
         // message, not a place the operator navigated to and might want Back out of.
@@ -576,10 +577,13 @@ export default function App() {
           <main className="flex min-w-0 flex-1 flex-col overflow-hidden" style={{ background: 'var(--bg)' }}>
             {currentProject && (
               <ProjectHeader
+                projectId={currentProject.id}
                 projectName={currentProject.name}
+                projects={projects ?? []}
                 pathDisplay={currentProject.path_display}
                 agentCount={currentProject.agents.length}
                 directoryAvailable={currentProject.directory_state === 'available'}
+                onSelectProject={(id) => navigateTo(projectDestination(id))}
                 onOpenSetup={() => setSetupOpen(true)}
               />
             )}

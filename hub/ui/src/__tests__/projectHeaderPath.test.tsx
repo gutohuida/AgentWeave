@@ -1,8 +1,31 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { ProjectHeader } from '@/components/layout/ProjectHeader'
 
 const DEEP_PATH = 'C:\\Users\\op\\projects\\suite\\service\\api\\testbed\\two-codex-agents\\workspace'
+
+it('exposes the active project as a named switcher and reports the chosen project', () => {
+  const onSelectProject = vi.fn()
+  render(
+    <ProjectHeader
+      projectId="proj-a"
+      projectName="Website"
+      projects={[
+        { id: 'proj-a', name: 'Website', path_display: 'C:\\work\\website' },
+        { id: 'proj-b', name: 'Billing', path_display: 'C:\\work\\billing' },
+      ]}
+      directoryAvailable
+      onSelectProject={onSelectProject}
+      onOpenSetup={vi.fn()}
+    />,
+  )
+
+  const switcher = screen.getByRole('combobox', { name: 'Switch project' })
+  expect(switcher).toHaveValue('proj-a')
+  expect(screen.getByText('Current project')).toBeInTheDocument()
+  fireEvent.change(switcher, { target: { value: 'proj-b' } })
+  expect(onSelectProject).toHaveBeenCalledWith('proj-b')
+})
 
 describe('ProjectHeader path — structure, not a joined string (composer/chrome refinement §5)', () => {
   it('renders a multi-segment path as multiple elements, not one text node', () => {

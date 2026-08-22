@@ -44,6 +44,7 @@ function Controlled({
   return (
     <NewConversationSurface
       projectId="proj-a"
+      projectName="Website"
       agent={agent}
       onChooseAgent={(next) => {
         setAgent(next)
@@ -83,6 +84,13 @@ describe('starting a conversation', () => {
     expect(screen.getByTestId('new-conversation-surface')).toBeInTheDocument()
     expect(screen.getByRole('textbox')).toBeInTheDocument()
     expect(screen.queryByTestId('conversation-output')).not.toBeInTheDocument()
+  })
+
+  it('keeps the target project visible beside the unsent message', () => {
+    renderSurface('claude')
+    expect(screen.getByTestId('new-conversation-project-context')).toHaveTextContent(
+      'Project: Website',
+    )
   })
 
   it('asks what the bound agent should work on, by name', () => {

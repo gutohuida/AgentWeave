@@ -178,7 +178,7 @@ export function AgentTree({
             </div>
 
             {expanded && (
-              <div className="ml-7 flex flex-col gap-0.5" data-testid={`agent-conversations-${projectId}-${agent.name}`}>
+              <div className="rail-conversation-group ml-7 flex flex-col gap-0.5" data-testid={`agent-conversations-${projectId}-${agent.name}`}>
                 {visible.map((row) =>
                   row.kind === 'loopGroup' ? (
                     <LoopFiringGroup

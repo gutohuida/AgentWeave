@@ -8,15 +8,10 @@
   "started_at": "2026-08-22T14:30:00+01:00",
   "stop_at": "2026-08-22T20:00:00+01:00",
   "stop_when_queue_empties": true,
-  "iteration": 2,
-  "last_heartbeat": "2026-08-22T14:09:32+01:00",
+  "iteration": 3,
+  "last_heartbeat": "2026-08-22T15:06:33+01:00",
   "log_file": ".claude/autonomous/2026-08-22-ui-finesse-log.md",
   "queue": [
-    {
-      "id": "F2",
-      "title": "Refine the live application shell and restore unmistakable multi-project context",
-      "detail": "Implement the considered S1 shell language across Sidebar, AgentTree, ProjectHeader and ProjectTabs, but do not copy the mock's single-project assumption. Keep or improve a visible project selector with project name and switching affordance in the normal working shell and new-conversation/composer flow. Verify two projects can be switched without blending agents, conversations, tasks or selected document. Add regression tests. Playwright-drive the selector and capture desktop/narrow plus light/dark evidence."
-    },
     {
       "id": "F3",
       "title": "Refine conversations, composer and new-conversation states",
@@ -59,7 +54,7 @@
     }
   ],
   "current": null,
-  "next_action": "Implement the considered S1 shell language across Sidebar, AgentTree, ProjectHeader and ProjectTabs, but do not copy the mock's single-project assumption. Keep or improve a visible project selector with project name and switching affordance in the normal working shell and new-conversation/composer flow. Verify two projects can be switched without blending agents, conversations, tasks or selected document. Add regression tests. Playwright-drive the selector and capture desktop/narrow plus light/dark evidence.",
+  "next_action": "Apply design/mocks/S1/considered.html to ConversationView, AgentTimeline, Composer and NewConversationSurface. Retain all existing behavior, document attachment, agent selection, pending/streaming/error states and the F2 project context. Add polish without turning messages into generic chat bubbles. Test keyboard/focus and pending states. Playwright-drive a real conversation-shaped fixture in both themes and narrow width, critique screenshots, correct once, then commit.",
   "decisions_for_user": [],
   "limits": [
     "Stay on autonomous/2026-08-22-ui-finesse and push only that branch; do not merge, open a PR, release, publish or deploy.",

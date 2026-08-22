@@ -16,7 +16,7 @@ export function ProjectTabs({ active, onSelect }: { active: ProjectTab; onSelect
     // page, so the strip read as a band laid over the screen rather than part of it (operator:
     // "it pops up in a bad way… make it the same color"). The active tab's own fill is what
     // marks position; the strip does not need to mark itself as a region.
-    <nav aria-label="Project views" className="flex h-10 shrink-0 gap-1 overflow-x-auto px-5" style={{ scrollbarWidth: 'thin' }}>
+    <nav aria-label="Project views" className="project-tabs flex h-10 shrink-0 gap-1 overflow-x-auto px-5" style={{ scrollbarWidth: 'thin' }}>
       {PROJECT_TABS.map((tab) => (
         <Button
           key={tab}
@@ -26,7 +26,7 @@ export function ProjectTabs({ active, onSelect }: { active: ProjectTab; onSelect
           data-active={active === tab ? 'true' : 'false'}
           aria-current={active === tab ? 'page' : undefined}
           onClick={() => onSelect(tab)}
-          className="row-item w-auto shrink-0 rounded-t-md px-3 text-xs font-medium"
+          className="project-tab row-item w-auto shrink-0 rounded-t-md px-3 text-xs font-medium"
         >
           {LABELS[tab]}
         </Button>
