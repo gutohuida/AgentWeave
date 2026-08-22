@@ -1432,3 +1432,74 @@ of the current live `PanelShell` (start the trial Hub from `hub/` on port 8010, 
 cleanly), `design/mocks/S3/RATIONALE.md` covering the research, what changed, what was rejected
 (third variant, under clause 5, reasoning above), and adding S3 to `design/mocks/index.html` (item Z
 rebuild) alongside S1/S2's existing entries.
+
+## Iteration 20 — 2026-08-22T03:43:37+01:00 — S3 P4: finish (right side panel)
+
+**S3 is done — 4/4 passes.** This iteration wrote `design/mocks/S3/RATIONALE.md` and rebuilt
+`design/mocks/index.html` (queue item Z) to add S3 alongside S1/S2.
+
+**`RATIONALE.md`** maps all nine `RESEARCH.md` findings to what each variant did (unused row-state
+tokens now applied; tab strip hover/tooltip/crossfading close icon plus a demonstrated-only context
+menu in `considered`; launcher cards get real states and `considered`'s live loops-running-count
+badge; a `FilePreview` header with breadcrumb/copy/language chip; search-input icon + clear;
+`LoopsIndexTab`'s checkbox swapped for U0b's real `.ctl-switch`; skeleton primitives replacing the
+bare "Loading…" paragraph; a demonstrated open/closed folder glyph flagged as a real `Icon.tsx`
+map gap out of mock scope; and a restrained-only 1px tree connecting guide). Documents the P3
+toggle-label bug fully, a "what was rejected and under which clause" section (no third variant —
+argued explicitly this time rather than left as an unexamined default, since S3's always-on-screen
+status made the question genuinely different from S1/S2's; building the context menu or
+middle-click-to-close for real; a dedicated `Tooltip` component; fixing the folder icon in source;
+a second empty-state pattern), and a "what's already good" carry-forward list.
+
+**The live-`PanelShell` before-shot from iteration 19's `next_action` was investigated and
+deliberately not captured.** Checked first: the trial Hub on 8010 was already running (PID 9596,
+started before this session, project `proj-5e960453` loaded — confirmed via a read-only Playwright
+`goto` that hit `AgentWeave Hub` / the real project overview, no state touched). But that project
+has zero agents, and `grep`-confirmed `PanelShell` only mounts inside `ConversationView`, which
+needs an active agent conversation to reach — there is no route to it with an empty roster.
+Creating a runner and an agent purely to open a panel for one screenshot was judged more mutation
+of a shared trial instance than this pass's scope justified, especially since neither S1 nor S2
+ever took a live-app-vs-mock shot either — both screens' actual `index.html` entries and
+`RATIONALE.md`s only ever compare mock-to-mock (e.g. S1's timeline-scroll fix, S2's flag-glyph
+fix). Matched that established precedent instead of the prior iteration's aspirational note; left
+the already-running Hub process exactly as found (did not start or stop it — it wasn't mine to
+stop).
+
+**`design/mocks/index.html` rebuild — verified, not assumed.**
+- Learned the exact embedding format first (`<img src="data:image/png;base64,...">` inside
+  `.shot`/`.shot-label` pairs, `.fix-pair` for before/after) by reading a de-data-URI'd copy of the
+  existing file (`awk 'length($0) < 2000'` to strip the giant base64 lines, since the file is 2.7MB
+  and exceeds the Read tool's token cap even with offset/limit) rather than guessing the shape.
+- Used the four P3 screenshots already on disk (`%TEMP%\s3shots\{restrained,considered}-{dark,light}.png`,
+  captured post-fix) for the main shot-row — did not need to re-render, since P3 already left fresh
+  correct captures.
+- Regenerated a genuine "before" (buggy) shot rather than fabricating one: checked out
+  `design/mocks/S3/{considered,restrained}.html` as they stood at commit `86ac33c` (pre-fix, the P2
+  commit) into a throwaway `design/mocks/_tmp_before_bug/` — placed at the same directory depth as
+  `S3/` so the `../../../hub/ui/src/index.css` relative import still resolved — screenshotted the
+  reproduced bug directly with Playwright (`mode=light label=dark` printed and confirmed for both
+  files), then deleted the temp directory. `git status --short` confirmed nothing from it survived.
+- Replaced the `S3 — S8` pending placeholder card with a real `done` S3 card (Python string
+  replace on the exact placeholder text, `assert old in content` before writing so a silent
+  no-op would have failed loudly) and renamed the remaining placeholder to `S4 — S8`.
+- Reloaded the rebuilt `index.html` fresh in Playwright: 5 `.screen-card`s, 18 `<img>` tags total
+  (S1: 6, S2: 6, S3: 6 — matches exactly), zero with `naturalWidth === 0` (none broken), theme
+  toggle still flips `html[data-mode]` correctly end to end. The only console errors are three
+  pre-existing `@fontsource/*` `file://` resolution failures inherited from `index.css`'s npm-style
+  imports — present for every mock under `design/mocks/`, not introduced by this change.
+- `git status --short` → only `design/mocks/index.html` (modified) and `design/mocks/S3/RATIONALE.md`
+  (new). No stray files from the before-shot regeneration.
+
+**Not done, deliberately:** no fifth S1/S2-style change to `hub/ui/src` — S3 stayed mock-only per
+`limits` (C6 is the sole exception and this isn't it). The identical theme-toggle-label bug in
+`S2/considered.html`, spotted again while confirming the fix pattern, is still not backported —
+still out of scope for a different screen's pass, now noted in two consecutive iterations' logs
+plus `RATIONALE.md` itself, worth someone deciding to just fix it directly rather than re-noting a
+third time.
+
+**Next:** S4 P1 — explore the task DAG / dependency board (`DependencyBoard`, `DependencyBoardView`).
+Read `openspec/explorations/2026-08-21-the-execution-graph-in-the-panel.md` before starting — P2
+must mock both the standalone and panel-embedded placements per `decisions_for_user` D-dag-placement,
+and this screen also carries the waived task-dependencies check 11.1 (edges go stale when a
+collapsed layer is expanded), worth reading precisely before research starts rather than discovering
+it mid-mock.
