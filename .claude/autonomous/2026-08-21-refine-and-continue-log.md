@@ -2859,3 +2859,63 @@ S7's P3 if its target selector doesn't match these mocks' own `.theme-toggle`), 
 fresh eyes, critique honestly against the rejection test, and fix whatever is actually found — the
 point of P3 is looking at the rendered result with the specific intent of finding a defect, not
 re-confirming what P2 already built.
+
+## Iteration 39 — 2026-08-22T06:30:24+01:00 — S8-jobs P3: iterate on the jobs mocks
+
+**Branch/state check on entry.** `autonomous/2026-08-21-refine-and-continue` HEAD matched
+`STATE.json` exactly (`7fe5d23`, S8-jobs P2's mock commit). No reconciliation needed.
+
+**`scripts/uishot.py` not usable as-is**, per the known dead end: its dark-mode toggle looks for a
+button named "Switch to dark mode" (the live app's control), which does not exist in these
+standalone mocks — they use their own `.theme-toggle` button that flips `document.documentElement.
+dataset.mode`. Fell back to direct Playwright, matching S7's P3 precedent: wrote a throwaway
+`design/mocks/S8-jobs/_p3_shot.py` that loads each variant's file URL and explicitly sets
+`data-mode` to `light`/`dark` (both mocks default to `data-mode="dark"` in the markup, so a
+naive "only touch it for dark" script — my first attempt — silently produced two dark screenshots
+labelled light/dark; caught this because the light screenshot's own theme-label badge read "dark",
+not by assuming the script worked).
+
+**Captured and read all four renders** (restrained × light/dark, considered × light/dark) at
+1040×1400 full-page. All four are legible, no layout breaks, no clipped or overlapping text, no
+console errors beyond the same 3 pre-existing font `ERR_FILE_NOT_FOUND` every mock this run has.
+
+**Verified the loop-queue badge colours against `Badge.tsx`'s actual `STATUS_STYLES` map**, not just
+by eye: `pending`/`assigned`/`completed` → neutral, `in_progress` → info/blue, `under_review` →
+warning/amber, `approved` → success/green, `rejected`/`revision_needed` → danger/red, anything else
+(e.g. `blocked`, which the queue badges use and which is NOT a key in `STATUS_STYLES`) falls back to
+`STATUS_STYLES.pending` per the map's own `?? STATUS_STYLES.pending` — confirmed the mock's
+`blocked: 2` badge is deliberately styled `b-neutral` (grep'd the HTML directly), i.e. it replicates
+the real fallback rather than accidentally matching it. Cross-checked the `considered` variant's
+second loop-block (`approved: 5` / `under_review: 1` / `rejected: 2` / `pending: 1`) renders
+green/amber/red/grey respectively in both themes, proving the mapping composes on a different status
+mix rather than being tuned to the first example.
+
+**Re-ran the rejection test clause by clause against all four renders**: (1) colours all resolve to
+tokens — reused `RunHistory`'s and `Badge.tsx`'s own maps verbatim, confirmed above; (2) legible in
+both themes — confirmed by reading all four; (3)/(4) durations/radii — already validated in P2 and
+unchanged; (5) reads as the same product improved — layout, copy and information match today's
+`JobsPage`/`JobCard`/`JobForm` with only the six findings' fixes layered on, no structural
+departure; (6) at least as much information per screen — strictly more (cron translation, next-run
+preview, run-trend dots are additions, nothing removed); (7) interactive states demonstrated — both
+variants carry a dedicated "Interaction States" section (resting/hover/expanded/focus-visible for
+restrained; those plus switch checked/unchecked and trend-dot hover for considered).
+
+**No defect found this pass.** Unlike S7 P3, which caught a real interaction bug, this pass's fresh
+look did not surface one — P2 this iteration was unusually careful (read `LoopBlock` and `Badge.tsx`
+source directly before mocking rather than approximating), and P3 confirmed that care held up under
+actual rendering rather than finding something it missed. Recording this as a legitimate P3 outcome
+per the protocol, not skipping the pass — the four renders were captured, read, and checked against
+both `Badge.tsx`'s source and the rejection test's seven clauses, which is the substance of the pass
+regardless of whether it turns up a fix.
+
+**Cleanup**: deleted the four verification PNGs (`_check_*.png`, blanket-gitignored, never
+committable) and the throwaway `_p3_shot.py` script after use. `git status --short` after cleanup
+showed no changes — this pass produced no commit-worthy diff since nothing needed fixing.
+
+**Next**: S8-jobs P4 — `screen_pass_protocol.P4_finish`. A second iteration pass on the same basis
+(there was nothing to iterate from P3 this time, so this becomes a final honest look rather than a
+fix-and-recheck), then write `design/mocks/S8-jobs/RATIONALE.md` (what was researched, what changed
+and why, what was rejected and under which clause — note P3 found no defect, unlike S7) and add
+S8-jobs to `design/mocks/index.html` with its variants. That finishes S8-jobs; the queue's `S8`
+sub-order moves to `S8-agents` next (`AgentsPage`/`AgentCard`/`AgentSettingsPage`), starting its own
+P1 research pass.
