@@ -1,179 +1,87 @@
 {
-  "purpose": "Overnight run of 2026-08-21/22. Two halves. FIRST: implement openspec change conversations-continue, phases 1 through 6 (phase 7 is human verification and is NOT yours). SECOND: a per-screen UI refinement pass producing standalone HTML mocks the operator reviews in the morning. The first half is the priority and the operator explicitly chose 'keep trying all night' if it stalls -- do not abandon it to reach the UI work.",
-  "branch": "autonomous/2026-08-21-refine-and-continue",
+  "purpose": "Carry the operator-approved considered mock philosophy through every currently reachable AgentWeave UI surface by 20:00 on 2026-08-22. Preserve the product's existing tone and information architecture, add finish, texture, motion, hierarchy and consistent controls, and make the whole current application feel intentionally designed. The S1 considered composer lost visible project context: restore a clear multi-project selector and prove switching projects never blends project state.",
+  "runner": "codex",
+  "permission_mode": "unattended-full-access",
+  "branch": "autonomous/2026-08-22-ui-finesse",
   "parent_branch": "master",
-  "parent_sha": "2bc7ba1",
-  "parent_note": "master at 2bc7ba1 = 'chore(autonomous): branch from the commit that carries the brief', pushed. This is a further correction on top of what this field used to say (aa12ba7, before that f1d6c08): 2bc7ba1 itself fixed parent_sha from f1d6c08 to aa12ba7 and was committed straight to master (correct -- prep runs before the branch exists), and iteration 1 cut the actual branch from 2bc7ba1, master's HEAD at that time, since that is the commit that carries both the brief and its own correction. The operator works on master. Never branch from a previous autonomous branch. In the morning the diff to read is `git log master..HEAD`.",
-  "started_at": "2026-08-21T23:10:00+01:00",
-  "stop_at": "2026-08-22T09:00:00+01:00",
+  "parent_sha": "7249ada",
+  "started_at": "2026-08-22T14:30:00+01:00",
+  "stop_at": "2026-08-22T20:00:00+01:00",
   "stop_when_queue_empties": true,
-  "iteration": 59,
-  "last_heartbeat": "2026-08-22T08:19:50+01:00",
-  "log_file": ".claude/autonomous/2026-08-21-refine-and-continue-log.md",
-  "driver": "Windows Scheduled Task 'AgentWeaveAutonomousSession' -> .claude/skills/autonomous-session/scripts/run-iteration.ps1 -> headless `claude -p`, EVERY 5 MINUTES, self-unregistering past stop_at. 5 minutes is safe and correct because the task is registered -MultipleInstances IgnoreNew (install-driver.ps1:106): a firing landing mid-iteration is dropped by the scheduler, so a short interval cannot overlap -- it only shortens the idle gap after an iteration ends. Measured on run 2 at 15 minutes: iterations ran 4-19 min, ~40% of firings were dropped, and each drop cost a full interval of idle. Session-bound drivers (ScheduleWakeup, CronCreate) are deliberately NOT used: the 2026-08-15 run asked for nine hours and got forty minutes.",
-  "operator_intent_verbatim": "Let's prepare a autonomous run for this night. I want to implement the conversation-continue and after I want the agents to do exploration and mock. [...] Each trigger will be responsible for one thing. It's a loop that will repeat the process for every screen that we have. One example: The task and cards. The cards look very plain, with no texture, no animation or fine details just a box with things written on it and the task board the same. A lot of things look very plain with no fines no attention to detail... no nice feeling. So the first run for each screen would be a explore run where the agent would search the internet for ui/ux patterns for that type of screen, nice details, animations, colors, icons, fonts, information that is lacking, hovers things like that. The second trigger will validate that information and then create a mock of that page based on what was explored and what exists and the visual identity of agentweave. The third and fourth would use playwright to iterate and improve on the mock and would save that. So I can review it in the morning.",
-  "prepared_by": "/autonomous-prep, interactive session 2026-08-21 ~22:00-23:10. Every decision below was taken WITH the operator, awake. Do not re-open them.",
-  "runway_verified_at_prep": {
-    "ui_suite": "cd hub/ui && npx vitest run -> 121 files, 1220 tests passed, 2026-08-21 22:59",
-    "playwright": "py -3.11 chromium launches headless OK. scripts/uishot.py is the screenshot harness and was written for exactly this case -- its docstring notes a headless firing cannot screenshot the way an interactive session can, and that Playwright + Read closes the loop.",
-    "websearch": "verified working from this session, returns on-point material",
-    "t3_reference": "384 sourcemaps present at C:\\Users\\huida\\AppData\\Local\\Programs\\t3code\\resources\\app.asar.unpacked\\apps\\server\\dist\\client\\assets\\*.js.map",
-    "openspec": "npx openspec validate --all --strict -> 42 passed, 0 failed",
-    "hub_suite": "NOT run at prep. Run it early in your first Hub iteration, in file chunks -- the full suite is ~7 minutes and exceeds the 600s command cap. `pytest hub/tests/ tests/` together fails collection.",
-    "trial_hub": "Port 8010 is STOPPED and its database was rebuilt fresh this evening. Project proj-5e960453 exists with 41 spec documents, 452 requirements, 9 charters, 2 runners, and ZERO agents/conversations/tasks. You do not need the Hub running for any queue item -- the mocks are standalone HTML. If you start it, start it from hub/ and never on port 8000."
-  },
+  "iteration": 0,
+  "last_heartbeat": "2026-08-22T14:30:00+01:00",
+  "log_file": ".claude/autonomous/2026-08-22-ui-finesse-log.md",
   "queue": [
     {
-      "id": "C1",
-      "title": "conversations-continue phase 1 - the line of work",
-      "detail": "openspec/changes/conversations-continue/tasks.md section 1, tasks 1.1-1.6. Add Conversation.lineage_id (indexed), migration 0085 backfilling lineage_id = id and guarded for a missing conversations table as 0033/0034 do, bump HEAD_REVISION to '0085' in hub/tests/test_migrations.py:39 AND the head assertion in hub/tests/test_project_persistence.py, set lineage_id in new_conversation. Write test_migration_0085_adds_lineage_id FIRST. design.md D3 explains why a lineage key beats a predecessor pointer -- do not substitute your own design."
+      "id": "P0",
+      "title": "Prove the real Codex resume loop before product work",
+      "detail": "Read STATE.json and the newest log entry, verify branch, stop time, runner, permission posture and clean committed baseline. Do not change product code. Append a short iteration entry, set iteration to 1, remove P0 from the remaining queue, set next_action to F1 exactly as described by the next queue item, update last_heartbeat, then commit and push the state/log. This is the live preflight proving a fresh Codex process can resume durably."
     },
     {
-      "id": "C2",
-      "title": "conversations-continue phase 2 - a cutover keeps the line of work",
-      "detail": "tasks.md section 2. Successor inherits predecessor's lineage_id in checkpoint_cutover.py alongside the existing bound_sender_* copy at lines 108-110; widen the forward lookup in peer_bound_conversation (conversations.py:172) from equality on src.id to membership of src.lineage_id. EXPECT task 2.1's sender-side test to FAIL before 2.2/2.3 and pass after -- that break is a live pre-existing defect, not a mistake you made."
+      "id": "F1",
+      "title": "Turn the approved visual language into shipping foundations",
+      "detail": "Read design/IDENTITY.md and design/mocks/_system/{RESEARCH.md,foundations.html,controls.html}. Inventory the live source tokens and shared primitives. Implement the considered vocabulary in index.css and reusable UI primitives: elevation, restrained texture, motion durations/easings, hover/press/focus/disabled/loading/selected states, button taxonomy, inputs, badges and chips. Preserve layout and semantics. Add or adjust focused tests. Run relevant Vitest and tsc. Use Playwright on a small component/live-page sample in both themes before closing."
     },
     {
-      "id": "C3",
-      "title": "conversations-continue phase 3 - a reply continues the conversation",
-      "detail": "tasks.md section 3. Add reverse resolution and wire it into messages.py BETWEEN the forward lookup and the mint. Do not reorder the forward lookup -- design.md D1 depends on forward-first so every delivery that resolves today resolves identically. Include the regression test at 3.4: three alternating messages produce two conversations, not three."
+      "id": "F2",
+      "title": "Refine the live application shell and restore unmistakable multi-project context",
+      "detail": "Implement the considered S1 shell language across Sidebar, AgentTree, ProjectHeader and ProjectTabs, but do not copy the mock's single-project assumption. Keep or improve a visible project selector with project name and switching affordance in the normal working shell and new-conversation/composer flow. Verify two projects can be switched without blending agents, conversations, tasks or selected document. Add regression tests. Playwright-drive the selector and capture desktop/narrow plus light/dark evidence."
     },
     {
-      "id": "C4",
-      "title": "conversations-continue phase 4 - starting a thread deliberately",
-      "detail": "tasks.md section 4. start_new_thread: bool = False on the message-create schema and honoured in messages.py. Refuse when combined with an explicit conversation_id."
+      "id": "F3",
+      "title": "Refine conversations, composer and new-conversation states",
+      "detail": "Apply design/mocks/S1/considered.html to ConversationView, AgentTimeline, Composer and NewConversationSurface. Retain all existing behavior, document attachment, agent selection, pending/streaming/error states and the F2 project context. Add polish without turning messages into generic chat bubbles. Test keyboard/focus and pending states. Playwright-drive a real conversation-shaped fixture in both themes and narrow width, critique screenshots, correct once, then commit."
     },
     {
-      "id": "C5",
-      "title": "conversations-continue phase 5 - the tool surface tells the truth",
-      "detail": "tasks.md section 5. Add start_new_thread to send_message in mcp_server.py and correct the conversation_id docstring, which still claims 'Leave unset to use their most recent one' (mcp_server.py:191-194) -- recency was removed when the binding contract shipped. mcp_server.py may import ONLY stdlib + fastmcp; the flag is a pass-through so nothing new is needed."
+      "id": "F4",
+      "title": "Refine task board, task detail and dependency views",
+      "detail": "Apply S2 and S4 considered treatments to TasksBoard, TaskCard, TaskDetailDrawer, DependencyBoard and DependencyBoardView. Keep the seven-column board, filters, requirement navigation, drag/transition behavior and dependency semantics. Use hierarchy, state colour and motion consistently rather than decorative noise. Test relevant interactions and Playwright-drive board/detail/dependency views in both themes and narrow width; correct visual defects before closing."
     },
     {
-      "id": "C6",
-      "title": "conversations-continue phase 6 - the outbound message folds",
-      "detail": "tasks.md section 6. Carry subject through TimelineEntry (agent_chat.py) and agentChat.ts, and fold the OUTBOUND branch of MessageEntry in AgentTimeline.tsx. WorkRow in the same file is the existing pattern -- reuse its shape. Do not fold the inbound branch. Ends with npm run build then `py -3.11 scripts/refresh_ui_bundle.py` FROM THE REPO ROOT, committing hub/ui/src and hub/hub/static/ui together."
+      "id": "F5",
+      "title": "Refine the right work panel and specification experience",
+      "detail": "Apply S3 and S5 to PanelShell and its live tabs, SpecPage/SpecDocumentPanel/SpecRailNav and the server-rendered spec templates where the mock requires it. Preserve resizers, tab persistence, cross-document navigation, coverage links and iframe/content safety. Keep React source and Python-rendered document responsibilities clear. Run focused UI/Python tests, then Playwright-drive panel and spec reading flows in both themes and narrow width."
     },
     {
-      "id": "U0a",
-      "title": "UI system pass 1 - foundations",
-      "detail": "FIRST UI ITEM. Read design/IDENTITY.md before anything. Research (WebSearch + T3 Code sourcemaps + the current components) then produce design/mocks/_system/foundations.html: the motion scale applied, an elevation scale built from the existing surface steps, and every interaction state -- hover, press, focus-visible, disabled, loading, selected, plus empty and loading patterns. The measured problem is that the system is UNDER-APPLIED, not missing: --dur-* appears in only 9 places across components against 44 ad-hoc transitions. This mock is the vocabulary every later screen inherits, so it is worth a full iteration."
+      "id": "F6",
+      "title": "Refine overview, questions and permission moments",
+      "detail": "Apply S6 and S7 considered treatments to OverviewPage, QuestionsPanel, answer forms, permission request cards, setup/unreachable/empty/loading/error states. These trust and stop points must be clear, calm and accessible. Preserve approval semantics and destructive-action hierarchy. Test keyboard and screen-reader names. Playwright-drive overview, question and permission states in both themes and narrow width; correct once."
     },
     {
-      "id": "U0b",
-      "title": "UI system pass 2 - component vocabulary",
-      "detail": "Operator asked specifically for this: 'do a deep dive on UI/UX patterns types of buttons as well, controls, color coding etc.' Produce design/mocks/_system/controls.html -- the full button taxonomy (which kinds exist, what each is for, every state), form and input controls, toggles, selects, menus, badges, chips, and a colour-coding SYSTEM using the existing semantic tokens and the 8-colour agent scale. Today this vocabulary is inconsistent; fixing that inconsistency is in scope, inventing new colours is not."
+      "id": "F7",
+      "title": "Refine jobs, activity, logs, agents and command palette",
+      "detail": "Apply the considered S8-jobs, S8-logs, S8-agents and S8-palette treatments to the actual live components named by App.tsx: JobsPage/JobCard/JobForm, ActivityLog/LogsView, AgentSettingsPage and AgentTree surfaces, CommandPalette. Do not revive dead AgentCard or legacy unreachable pages. Preserve filters, live state and actions. Fix the existing command-palette dialog title/description accessibility warning while here. Run focused tests and Playwright evidence in both themes/narrow width."
     },
     {
-      "id": "S1",
-      "title": "Screen 1 - conversation + composer + left navigation (4 passes)",
-      "detail": "THE MAIN SCREEN. ConversationView, AgentTimeline (MessageEntry, WorkRow, agent output), the composer and its control row, Sidebar/AgentTree/SidebarItem. Four passes, one per iteration: P1 explore, P2 validate + mock variants, P3 Playwright screenshot + critique + iterate, P4 second iterate + RATIONALE.md + add to the review index."
+      "id": "F8",
+      "title": "Research, mock, correct and implement every remaining reachable surface",
+      "detail": "Re-read App.tsx and navigation after F1-F7 and produce a route-to-component coverage table in the run log. For reachable surfaces not covered by the approved mocks (including environment/project management, runners, charters, instructions, accounting, quality, diagnostics and worktrees if still reachable), follow the same flow: inspect current behavior and strong primary/reference patterns, make a small standalone considered mock only when structure is genuinely new, render with Playwright, critique and correct it, then implement. Skip proven dead/legacy components and record evidence for the skip. Keep the visual language consistent rather than inventing a new one per page."
     },
     {
-      "id": "S2",
-      "title": "Screen 2 - task board + task cards (4 passes)",
-      "detail": "TasksBoard, TaskCard, TaskDetailDrawer. The operator named this as the worst offender: 'The cards look very plain, with no texture, no animation or fine details just a box with things written on it and the task board the same.' Same four passes."
+      "id": "F9",
+      "title": "Whole-product visual and interaction QA",
+      "detail": "Use Playwright against a safe test/trial surface, never port 8000 and never this repo as an AgentWeave project. Drive every reachable navigation destination at desktop and narrow widths in light and dark themes. Explicitly test project switching from the composer/shell with at least two projects, sidebar collapse/resize, panel tabs/resizing, command palette, empty/loading/error states and keyboard focus. Record screenshots or concise evidence in the log, fix every regression found, and add tests for behavioral defects."
     },
     {
-      "id": "S3",
-      "title": "Screen 3 - the right side panel (4 passes)",
-      "detail": "PanelShell and its tabs -- FileTree, FilePreview, SpecIndexTab, LoopsIndexTab, FilesIndexTab. Always on screen while working. T3 Code's RightPanelTabs.tsx / RightPanelSheet.tsx / FileBrowserPanel.tsx are the closest reference material available. Same four passes."
-    },
-    {
-      "id": "S4",
-      "title": "Screen 4 - the task DAG / dependency board (4 passes)",
-      "detail": "DependencyBoard, DependencyBoardView. Carries the waived task-dependencies check 11.1 (edges go stale when a collapsed layer is expanded) and the operator wants it eventually moved into the right panel -- see openspec/explorations/2026-08-21-the-execution-graph-in-the-panel.md. Mock it BOTH standalone and panel-embedded. Same four passes."
-    },
-    {
-      "id": "S5",
-      "title": "Screen 5 - the rendered spec documents (4 passes)",
-      "detail": "The spec HTML the product itself generates -- hub/hub/spec_render.py, not React. This is the product's actual output and what a spec-driven tool is judged on. A mock is HTML either way so the process is unchanged; note in RATIONALE.md that implementing it later touches Python templates, not components."
-    },
-    {
-      "id": "S6",
-      "title": "Screen 6 - questions and permission prompts (4 passes)",
-      "detail": "QuestionsPanel, AnswerForm, and the permission decision card. These are the moments the product STOPS and demands the operator. Rarely seen is not the same as unimportant -- if they look plain the product feels cheapest exactly when it is asking for trust."
-    },
-    {
-      "id": "S7",
-      "title": "Screen 7 - the overview screen (4 passes)",
-      "detail": "OverviewPage. The landing surface and the first impression."
-    },
-    {
-      "id": "S8",
-      "title": "Overflow screens, only if the night allows",
-      "detail": "In order: jobs (JobsPage/JobCard/JobForm), agents (AgentsPage/AgentCard/AgentSettingsPage), logs + activity, the command palette. Do NOT start one of these while an earlier screen has unfinished passes."
-    },
-    {
-      "id": "Z",
-      "title": "Build the review index",
-      "detail": "Run this whenever a screen finishes its four passes, and again as the LAST action before stop_at. design/mocks/index.html: one page linking every mock and variant, with its before/after screenshots inline and a one-line summary. This is the single artifact the operator opens in the morning -- if it does not exist, the night's work is much harder to review."
+      "id": "F10",
+      "title": "Final build, static bundle sync and review",
+      "detail": "Run the full UI suite, tsc, lint and production build. From repo root run py -3.11 scripts/refresh_ui_bundle.py and confirm hub/ui/dist matches hub/hub/static/ui as required. Run affected Hub tests for spec template changes. Inspect git diff for accidental legacy revival, unrelated changes, generated debris or missing accessibility states. Commit and push the final coherent result, set next_action null, and write a morning summary naming completed surfaces, remaining risks and Playwright evidence."
     }
   ],
-  "current": "Z",
-  "next_action": "stop_at (2026-08-22T09:00:00+01:00) has now been reached. Iteration 59 re-verified the index a seventh time (12 screen-cards, 56 imgs, 0 broken, 1 pending card) and confirmed nothing regressed since iterations 53-58 -- logged as a seventh consecutive no-op per do_not_idle. stop_when_queue_empties is true, so the driver's own guard is the correct place for this run to end; expect the task to self-unregister on or after this firing. If a firing somehow still lands: repeat the same cheap check (render design/mocks/index.html in Playwright via py -3.11, confirm card/img counts unchanged and 0 broken images) and log another no-op -- do not invent scope. Do NOT re-open _system's P3/P4 (design/mocks/_system/, P1+P2 only) without an operator steer first -- D-direction is still open. If a fresh session (this driver having ended, or a new interactive session) picks this up later and genuinely wants to continue UI-mock work, _system's P3/P4 is the correct next unit. The morning review entry point is design/mocks/index.html; the diff to read is `git log master..HEAD`.",
-  "iteration_shape": "One unit of work per firing, sized to finish inside the turn, ending pushed. Prefer a small finished thing to a large half-thing -- half a thing is what dies badly. A screen 'pass' (P1, P2, P3 or P4) is one firing. A conversations-continue phase is one firing, or two if the phase is large. Tick a tasks.md box ONLY for something you ran and saw pass. Start any Hub pytest run EARLY in the turn, not at the end -- it takes several minutes and exceeds the command cap if run whole, so run it in file chunks.",
-  "screen_pass_protocol": {
-    "P1_explore": "WebSearch for UI/UX patterns for this KIND of surface -- details, motion, states, colour coding, iconography, typography, and information that is missing rather than merely unstyled. ALSO read the T3 Code sourcemaps for the equivalent surface, and ALSO read the current AgentWeave component, including its comments: several encode why they look as they do, and undoing a deliberate decision is not an improvement. Write design/mocks/<screen>/RESEARCH.md -- findings with sources, and what specifically is missing from the current screen.",
-    "P2_validate_and_mock": "FIRST validate the research against design/IDENTITY.md's rejection test and DISCARD anything that fails, saying which clause it failed. Then build design/mocks/<screen>/<variant>.html -- self-contained HTML importing ../../../hub/ui/src/index.css so it uses the real tokens. Two or three variants exploring DEGREE of refinement (restrained / considered / expressive), never different design languages. Include realistic content, not lorem ipsum.",
-    "P3_iterate": "Screenshot every variant in BOTH themes with scripts/uishot.py, Read the PNGs, critique them honestly against the rejection test, and fix what you see. The point of this pass is that you LOOK at the result -- an unviewed mock is an unfinished mock.",
-    "P4_finish": "Second iteration on the same basis, then write design/mocks/<screen>/RATIONALE.md (what was researched, what changed, why, what was rejected and under which clause) and add the screen to design/mocks/index.html with its before/after shots."
-  },
+  "current": null,
+  "next_action": "P0 live preflight only: read STATE.json and the newest log entry; verify branch, runner, permission posture, stop time and committed baseline. Do not change product code. Append a concise iteration entry, set iteration to 1, remove P0 from the remaining queue, update last_heartbeat, set next_action to the F1 detail, then commit and push the state and log using explicit paths.",
+  "decisions_for_user": [],
   "limits": [
-    "Operator, verbatim: 'You can create variants but do not change the overall tone of the app. I want to fines things not a complete jump in design. Not going from this to material design for example.' design/IDENTITY.md makes this testable. Clause 5 of its rejection test outranks every other consideration.",
-    "The UI half produces MOCKS ONLY. Do not modify hub/ui/src for any screen item. The single exception is queue item C6, which is a specified part of conversations-continue.",
-    "Phase 7 of conversations-continue is human verification. It is NOT yours. Do not tick its boxes, do not simulate it, do not claim the change is complete.",
-    "Stay on the autonomous branch. Never commit to master. Never force-push.",
-    "Never touch port 8000 -- that is the operator's real usage. 8010 is the trial Hub.",
-    "Do not point the Hub you are editing at this repository, and do not delegate this repo's work through AgentWeave messaging or the aw-* skills.",
-    "Stage paths explicitly. Never `git add -A`.",
-    "After ANY change under hub/ui/src, run `cd hub/ui && npm run build` then `py -3.11 scripts/refresh_ui_bundle.py` FROM THE REPO ROOT, and commit hub/ui/src and hub/hub/static/ui together. Applies to C6 only.",
-    "T3 Code is DESIGN REFERENCE ONLY. Study patterns; never copy its code into AgentWeave, never commit it, never quote it at length in a tracked document.",
-    "Do not create .agentweave/ or agentweave.yml anywhere new, and do not delete the existing root .agentweave/ or spec/ -- they are the migration's, not stray output.",
-    "Never mark a task complete on the strength of a plan existing. Only verified implementation closes a task.",
-    "Every timestamp from PowerShell Get-Date -Format 'yyyy-MM-ddTHH:mm:sszzz' or Python datetime.now().astimezone(). Git Bash `date` on this machine prints UTC but labels it +0100, which lands a heartbeat an hour in the future and stalls the loop."
-  ],
-  "pre_authorised": [
-    "If a conversations-continue phase goes red, keep working it -- the operator chose 'keep trying all night' over moving to the UI work. Cost if wrong: no mocks by morning. Only move on if a phase is blocked by something genuinely outside the repo.",
-    "If the C2 sender-side test fails before its implementation lands, that is EXPECTED (a live pre-existing defect). Proceed.",
-    "Mock every screen in BOTH light and dark. IDENTITY.md requires legibility in both, and a variant that only works in dark has not been validated.",
-    "If a screen's research turns up a missing FEATURE rather than a styling gap, mock it and note it in RATIONALE.md -- the operator explicitly asked for 'information that is lacking'. Do not implement it.",
-    "If uishot.py cannot render a mock, open the HTML with Playwright directly. The mocks are static files and need no server.",
-    "If the queue runs dry before stop_at, deepen S1 and S2 with further variants rather than starting screens beyond S8. They are the surfaces the operator sees most.",
-    "Choose your own variant names if restrained/considered/expressive do not fit a given surface, but keep them degrees of the SAME language."
-  ],
-  "decisions_for_user": [
-    {
-      "id": "D-direction",
-      "raised_at": "prep",
-      "question": "The whole UI half assumes screen S1's direction is acceptable, because the loop cannot ask. Every screen after S1 inherits the vocabulary set in U0a/U0b and the interpretation set in S1. If you dislike the direction in the morning, the later screens are wrong in the same way rather than independently wrong -- which is cheaper to redo, but means one bad call propagates.",
-      "loop_should": "Proceed. Do not stall on this. It is recorded so the operator reads the mocks knowing what is shared between them.",
-      "status": "open"
-    },
-    {
-      "id": "D-dag-placement",
-      "raised_at": "prep",
-      "question": "The task DAG is wanted in the right panel eventually (exploration 2026-08-21-the-execution-graph-in-the-panel), and its edge-staleness bug is diagnosed but unfixed. Is the mock meant to show the panel-embedded future or the standalone present?",
-      "loop_should": "Mock BOTH, as pre-authorised. Let the operator choose in the morning.",
-      "status": "open"
-    },
-    {
-      "id": "D-spec-render",
-      "raised_at": "prep",
-      "question": "S5 mocks the spec documents the product generates server-side in Python. Implementing that later touches spec_render.py templates, not React components -- a different kind of change from every other screen here.",
-      "loop_should": "Mock it anyway and say so plainly in its RATIONALE.md.",
-      "status": "open"
-    }
-  ],
-  "dead_ends_inherited": [
-    "scripts/refresh_ui_bundle.py lives at the REPO ROOT, not under hub/ui. Running it from hub/ui fails with a file-not-found and leaves the bundle stale.",
-    "Port 8010 serves hub/hub/static/ui, a COMMITTED BUILD ARTEFACT. A UI source change does not appear there until npm run build + refresh_ui_bundle.py, or unless you point at the Vite dev server on 5173. Check which you captured before trusting a screenshot.",
-    "`agentweave` cannot be started from the repo root: this repo's own hub/ directory shadows the installed hub package and the spawned server dies 60 seconds later with its output sent to DEVNULL. Start from hub/.",
-    "`pytest hub/tests/ tests/` together fails collection. Run them separately, and run hub/tests/ in file chunks -- the whole suite is ~7 minutes and exceeds the 600s cap.",
-    "There is no stop_circle icon in Icon.tsx's map; `stop` exists. An unmapped icon name renders null.",
-    "The Hub writes spec/index.json with CRLF on Windows, so a reindex dirties a tracked file with pure line-ending churn. Not your bug -- see exploration 2026-08-21-the-reindex-rewrites-line-endings.md. Do not 'fix' it by committing the churn.",
-    "openspec validate reads only the FIRST PHYSICAL LINE of a requirement for its modal verb.",
-    "The repo's .gitignore has a blanket `*.png` rule (line 80) -- a mock's verification screenshots CANNOT be committed as-is. This blocks Z ('before/after screenshots inline') as written. Options for whichever iteration reaches Z: an allowed extension (e.g. .png.b64 is silly, prefer inlining as a data-URI directly in the review index HTML, which sidesteps the rule entirely since it's not a .png file on disk), or ask the operator for a scoped .gitignore exception under design/mocks/**. Do not silently `git add -f` past the rule and do not silently edit .gitignore without flagging it -- decide when Z is actually reached, not before."
-  ],
-  "do_not_idle": "If next_action is somehow already done, do not stop and do not invent work outside the queue. Take the next unfinished queue item in order, update current/next_action, and say so in the log.",
-  "heartbeat_note": "Refresh last_heartbeat to NOW early in your turn and keep it fresh while working -- it is what keeps an interactive session and this driver off each other. At the very END, after everything is pushed, set it to ~40 minutes in the past and commit that one-line change so the next firing picks up immediately instead of standing down against your own heartbeat."
+    "Stay on autonomous/2026-08-22-ui-finesse and push only that branch; do not merge, open a PR, release, publish or deploy.",
+    "Never touch port 8000. If a live Hub is needed, use the isolated trial/test environment on another port and never point AgentWeave at this source checkout.",
+    "The considered mocks and design/IDENTITY.md define the direction. Preserve the existing tone and information architecture; this is refinement, not a framework-style redesign.",
+    "A clear multi-project selector/context in the working shell and composer flow is mandatory. The UI must never imply AgentWeave has only one project.",
+    "Implement every currently reachable screen, but do not resurrect or beautify dead legacy components. Prove reachability from App.tsx/navigation before spending work on ambiguous surfaces.",
+    "For uncovered reachable structures use research -> considered mock -> Playwright render -> critique/correct -> implementation -> Playwright correction. Do not create mocks as a substitute for shipping code.",
+    "Every surface cluster requires focused automated tests, TypeScript checking and Playwright interaction/visual evidence at desktop and narrow widths in light and dark themes.",
+    "Preserve behavior, accessibility, project isolation, live-state semantics and keyboard operation. Visual polish may not weaken information density or hide controls.",
+    "After dashboard changes, production-build and refresh hub/hub/static/ui from hub/ui/dist; commit source and committed bundle together.",
+    "Do not perform destructive cleanup, edit secrets, rewrite history, use git add -A, or include unrelated files. Stage explicit paths.",
+    "At 20:00 local time stop cleanly even if the queue is incomplete; record exact continuation work rather than rushing or inventing completion."
+  ]
 }
