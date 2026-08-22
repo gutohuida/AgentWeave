@@ -1118,3 +1118,76 @@ iteration's flag-glyph legibility bug — what was rejected and under which `IDE
 the `restrained`-is-safer-at-this-density observation above), then extend
 `design/mocks/index.html` with S2's before/after shots (inline data-URIs, same approach as S1, per the
 `.gitignore` blanket `*.png` rule already noted in `dead_ends_inherited`).
+
+## Iteration 16 — 2026-08-22T03:04:28+01:00 — S2 P4: finish (RATIONALE.md + review index)
+
+Branch/log/STATE.json reconciled cleanly on entry — clean tree, HEAD matched iteration 15's commit
+(`2c222c8`, the release-heartbeat commit).
+
+**Re-screenshot pass.** Direct-Playwright (`file://`, 1500×1100, both variants, both themes, fresh
+captures — not reusing any prior iteration's PNGs) → 0 console errors beyond the pre-existing webfont
+404s, 0 leftover `${` placeholder text. Cropped and zoomed (3–5×) the finding-1 comparison table and a
+live board card's `critical` badge in both themes: the flag glyph reads clearly as a flag everywhere,
+no regression from iteration 15's fix. Also read `restrained.html` full-page in both themes again — no
+bug, confirms iteration 15's finding that its plain-dot priority treatment carries no flag-legibility
+risk in the first place. (Noted, not a mock bug: the capture script sets `data-mode` via
+`page.evaluate` rather than clicking the mock's own toggle button, so the button's static label text
+reads "dark" in the light-theme screenshots too — a screenshot-harness artefact from setting the
+attribute directly instead of driving the click handler, not a defect in the mock itself.)
+
+**Wrote `design/mocks/S2/RATIONALE.md`.** Research → changes for all ten `RESEARCH.md` findings
+(priority-badge colour-coding, hover elevation, press state, column empty states, drag-and-drop
+illustration, badge-row shape-scannability, requirement-chip weight, `TaskIntegrationNote`'s broken
+pattern, `tabular-nums`, description fade), each tied to what `restrained` vs `considered` actually
+did and cross-checked against the live file content (`grep`-confirmed `tabular-nums`, `.integration-
+note`, and `.card-desc-fade` are present at the cited line numbers before writing the summary, not
+assumed from the log). Explicitly wrote up finding 11 (the icon-mapping bug — `help_circle`,
+`alert_triangle`, `filter_alt`, `expand_less` used in the real product but absent from `Icon.tsx`'s
+map, so all four render nothing today) and the flag-glyph legibility bug as the two bugs found beyond
+`RESEARCH.md` itself. Added a "what was rejected, and under which clause" section (third variant,
+building drag-and-drop for real, a new priority hue, icon-heavy badge rows) and a judgement-call
+section stating plainly that `restrained`'s glyph-free dot is structurally safer at this card density
+than any glyph-based signal, independent of whether a specific glyph happens to render legibly — worth
+carrying into a real implementation choice, not just a stylistic preference. Closed with a "what's
+already good and was left alone" section matching `RESEARCH.md`'s own list verbatim.
+
+**Extended `design/mocks/index.html`.** The file is 1.3MB before this change (base64-embedded PNGs
+from S1), too large for the `Read` tool to load directly (1.3MB alone is ~850K tokens) — so all
+inspection and editing of it was done by `awk 'length($0) < 300'` (to see structural lines while
+skipping the giant base64 lines) and a Python script performing string-level splice-and-write on disk,
+never round-tripping the file's content through the model's own context. Captured 4 fresh full-page
+shots (`considered`/`restrained` × dark/light) plus a tight before/after crop pair for the flag-glyph
+fix — reconstructed "before" by writing iteration-14's pre-fix `considered.html` (via `git show
+3ce097d:...`) to a temporary file *inside* `design/mocks/S2/` (not a scratch dir) so its relative
+`../../../hub/ui/src/index.css` import resolved correctly and the crop showed the real styled bug, not
+an unstyled page — confirmed this mattered by first getting a broken-CSS render when the temp file was
+placed under `/tmp` instead, diagnosed, and corrected. Deleted the temp file immediately after
+capturing, confirmed via `git status --short` that only the intended two files remained modified/new.
+Base64-encoded and spliced the S2 section into `index.html` (matching S1's existing markup shape
+exactly — `screen-card`/`shot-row`/`fix-block`), and rewrote the trailing "S2 — S8, not started"
+placeholder to "S3 — S8" now that S2 is done. Rendered the whole updated file with Playwright
+afterward: 12 `<img>` elements total (S1's 6 + S2's 6), 0 broken, only the pre-existing webfont console
+errors — confirmed by screenshotting three scroll positions and reading them, not just checking the
+image count. Same blanket `*.png` `.gitignore` constraint as S1: screenshots inlined as data-URIs in
+the tracked HTML, never committed as `.png` files on disk.
+
+**Verified, not assumed.**
+- Fresh 4-capture re-screenshot + crop-and-zoom read, both variants/themes, confirming no regression.
+- `grep`-confirmed the three RATIONALE.md line-number citations (`tabular-nums`, `.integration-note`,
+  `.card-desc-fade`) directly in `considered.html` before writing them.
+- Playwright render of the updated `index.html`: 12/12 images load, 0 broken, 0 unexpected console
+  errors, three scroll positions screenshotted and read.
+- `git status --short` after cleanup → only `design/mocks/index.html` (modified) and
+  `design/mocks/S2/RATIONALE.md` (new). No stray temp file, no `.png` on disk, nothing left under
+  `C:\tmp`.
+
+**S2 — task board + task cards is now done, all four passes.** The queue moves to S3, "the right side
+panel" (`PanelShell` and its tabs — `FileTree`, `FilePreview`, `SpecIndexTab`, `LoopsIndexTab`,
+`FilesIndexTab`), always on screen while working.
+
+**Next:** S3 P1 — explore. Read `PanelShell.tsx` and each tab component in full (comments included,
+same discipline as every prior P1), then `WebSearch` for side-panel/file-tree/tabbed-panel UI patterns
+and read the T3 Code sourcemaps for the closest equivalents (`RightPanelTabs.tsx`,
+`RightPanelSheet.tsx`, `FileBrowserPanel.tsx`, already named in `STATE.json`'s S3 queue entry as the
+closest reference material). Write `design/mocks/S3/RESEARCH.md`. Do not build a mock this iteration —
+P2 is the next firing, per the established one-pass-per-firing rhythm.
