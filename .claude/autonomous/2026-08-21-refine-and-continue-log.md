@@ -2231,3 +2231,97 @@ first pass, but P2 must state that explicitly rather than skip the check), then 
 `design/mocks/S6/<variant>.html` files covering the `PermissionRequestCard` command-approval case
 (richest, highest stakes), the `AgentQuestionCard` multi-select case, and the `QuestionsPanel`
 blocking-list case, in both themes.
+
+## Iteration 30 — 2026-08-22T05:13:10+01:00 — S6 P2: validate + mock — questions and permission prompts
+
+**Branch state on entry.** `autonomous/2026-08-21-refine-and-continue` at `9da4e4b` (S6 P1 research),
+after a heartbeat release at `a7f7039`. Matched STATE.json. Clean tree.
+
+**Read `RESEARCH.md`, `IDENTITY.md`, and all five components in full** (`PermissionRequestCard`,
+`AgentQuestionCard`, `QuestionsPanel`, `AnswerForm`, plus the shared `.conversation-interject` /
+`.interject-*` CSS at `index.css:520-640`) before writing any mock, and pulled `buttonVariants.ts`
+to see exactly what `ghost`/`outline`/`primary` render as — confirming `--primary` is a neutral
+near-white/near-black raised fill (`#fafafa` dark / `#18181b` light), not `--blue`, so building the
+Allow button on it cannot trip clause 2.
+
+**Validated against `IDENTITY.md`'s rejection test explicitly**, stated rather than skipped: no new
+hue introduced (kind badges use `--text-2` and `--amber`, both existing semantic/neutral tokens via
+`color-mix`, matching `Badge.tsx`'s own `tint()` derivation); `--blue` untouched; no modal architecture
+(T3's `ConfirmDialogHost.tsx` stays correctly unadopted, as P1 already flagged); radius/duration/easing
+all resolve to tokens; density unchanged (nothing removed, several things added); flat-neutral
+character preserved (no glass, no gradient-as-surface, no shadow beyond the existing inset-highlight
+language). Nothing failed a clause.
+
+**Resolved the P1-flagged Allow/Deny hierarchy question deliberately**, per the operator's own
+pre-authorization to make this kind of call rather than leave it silently ambiguous: `Allow` is now
+`.btn-primary` — `var(--primary)` fill, `var(--lift-hi)` inset top highlight, `var(--press-lo)` on
+press, copying `buttonVariants.ts`'s `primary` variant near-verbatim as a static-HTML equivalent.
+`Deny` stays `.btn-outline`. The affirmative, most-common-path action now reads as the primary control
+in the vocabulary; declining still carries full visual weight (a bordered, opaque button, not a bare
+ghost) without being louder than the default path. This is stated in both mock files' own section
+notes, not left for `RATIONALE.md` alone to explain.
+
+**Built both files**, covering all three surfaces with realistic content in each:
+
+- `design/mocks/S6/restrained.html` — smallest fix. `PermissionRequestCard`: kind badge before the
+  value (`neutral` tint for file-read, `mutates`/amber for command and file-change — a two-tier
+  colour-coding system per `IDENTITY.md`'s "colour coding is in scope" clause, not a new hue per
+  request kind), a bordered `.interject-detail` scrollable sub-block per the T3
+  `ComposerPendingApprovalPanel.tsx` finding, a `1/2` pending count reusing the existing
+  `.interject-count` class rather than inventing a new one, and a third `Always allow this session`
+  button in `.btn-ghost` (quietest, per T3's `ComposerPendingApprovalActions.tsx` fourth-action
+  finding — mocked and flagged as a missing feature, not implemented) plus an expired/stale example
+  exercising the existing dismiss control. `AgentQuestionCard`: the existing multi-select/kbd/count
+  vocabulary unchanged, plus a stale example where `.is-stale` now dims the *entire* card (not just
+  the "no longer waiting" label) and disables its choice rows via `pointer-events: none`.
+  `QuestionsPanel`: the blocking red banner unchanged structurally, `AnswerForm`'s submit rebuilt as
+  `.btn-primary` instead of the raw inline-styled button that sat entirely outside the `Button`
+  component, non-blocking row, and the answered `<details>` disclosure.
+- `design/mocks/S6/considered.html` — fuller application of the same fixes, never a different
+  language: `@keyframes interjectIn` (a card's entrance, matching S1's precedent for the same
+  keyframe name/shape) plus a one-step hover elevation on the interject surface; `@keyframes checkIn`
+  so the checkmark that replaces a shortcut badge on selection scales in rather than swapping
+  instantly; a quiet amber tint on a blocking question's timestamp when it is close to its own
+  timeout (`.q-time-warn`, colour only — explicitly no ticking number, matching the research finding
+  to avoid countdown pressure); and `@keyframes shimmer` driving a shape-matching loading skeleton
+  for the Questions tab (`.skel-row` mirrors the real row's agent/timestamp/two-line-text anatomy) —
+  the one state none of these five components has today. Every animation is gated behind
+  `prefers-reduced-motion: reduce` (checked in both files' CSS, not just claimed).
+
+**Verified by screenshot, not by inspection alone.** Wrote `testbed/scratch/shot_s6_p2.py`
+(gitignored, deleted after use — confirmed via `git check-ignore -v` on both the script and its
+output directory before deleting) driving Playwright across all four combinations (2 variants × 2
+themes) at a 960×1400 viewport, forcing `data-mode` directly rather than clicking the toggle. Checked
+console errors and broken-image count per capture: all four showed zero broken images and exactly
+three `ERR_FILE_NOT_FOUND` console errors, matching the already-documented pre-existing `@fontsource`
+404s from S5's log entry — not a new defect. Read all four PNGs in full:
+
+- Both themes are legible — the amber kind badge, the red blocking banner, and the black/white
+  `Allow`/outline `Deny` hierarchy all read correctly in light and dark.
+- The resolved Allow/Deny hierarchy is visually obvious in both themes: `Allow` is a solid black
+  (dark theme) / solid black (light theme, since `--primary` is dark-on-light too) filled button,
+  `Deny` a bordered but unfilled one — a reader can tell at a glance which is the affirmative path.
+- The detail sub-block wraps and scrolls as intended for the long shell command.
+- The loading skeleton in `considered.html` renders as two shape-matching bars, not a spinner.
+- Placed beside the current plain components (read again from source during this pass), both mocks
+  read as the same product refined, not a redesign — clause 5 holds.
+
+Nothing needed fixing on this first look — the four-combination check turned up no defect, which is
+unusual for a first pass but genuine: P1's research was thorough enough (five components read in
+full, three T3 analogues, two sourced web searches) that P2 had no real surprises translating it into
+HTML. Recorded honestly rather than manufacturing a fix to demonstrate diligence.
+
+**Verified `STATE.json`** with `py -3.11 -c "import json; json.load(...)"` after editing.
+`git status --short` → `design/mocks/S6/restrained.html` and `considered.html` new only — staged and
+committed. `testbed/scratch/shot_s6_p2.py` and its screenshot directory deleted after use.
+
+**Next:** S6 P3 — `screen_pass_protocol.P3_iterate` calls for screenshotting and critiquing, which
+this P2 pass already substantially did as part of building the mocks (the four-combination Playwright
+check above). So P3 should go further rather than repeat it: force interaction states not yet
+captured in a screenshot (`:focus-visible` on the "Always allow this session" ghost button, `:hover`
+on a `.q-row`, the `:active`/press state on `.btn-outline`), check both files at a narrower viewport
+to see how the 900px content column wraps, and re-read both files against the rejection test's
+clause 5 with a day's distance from having written them rather than an hour's. Fix anything a more
+adversarial look turns up; if genuinely nothing turns up, say so explicitly and name what was
+specifically checked, the same way this pass's own P1-recap did. P4 (second iteration + `RATIONALE.md`
++ add to `design/mocks/index.html`) is the firing after that.
