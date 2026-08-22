@@ -3407,3 +3407,63 @@ rejected and under which clause — including the corrected two-subviews-one-tab
 P1 and the toggle-default fix from this pass) and add S8-logs to `design/mocks/index.html` with its
 before/after shots per `dead_ends_inherited`'s data-URI approach. This closes S8-logs (4/4 passes)
 and leaves only the command palette as S8's remaining sub-screen per S8's stated sub-order.
+
+## Iteration 48 — 2026-08-22T07:55:24+01:00 — S8-logs P4: finish
+
+Verified branch/log/STATE.json all agreed before starting (`6aa4f58` = HEAD, a released-heartbeat
+commit, matches STATE.json exactly). `screen_pass_protocol.P4_finish` for the two mocks P1-P3
+built (`restrained.html`, `considered.html`).
+
+**Real interaction verification** (the S8-agents precedent, not a second screenshot-reading pass):
+a Playwright keyboard-`Tab` walk over both files found 44 and 41 focusable stops respectively,
+every one carrying a visible focus ring (`box-shadow`/`outline` present) -- including the
+expandable log rows that RESEARCH.md's finding 3 identified as genuinely keyboard-unreachable in
+the real `LogLine.tsx`, confirming the mock's `role="button" tabindex="0"` fix actually works under
+real keyboard navigation, not just in markup. A 420px narrow-viewport reflow check (same width
+S6/S7/S8-agents used) measured `scrollWidth === 420` exactly on both files -- no overflow. A
+real-mouse hover check on the copy-button reveal (`opacity 0` -> `1` on `.log-row-main:hover`)
+initially read `0` before and after `hover()`, which looked like a bug; re-checking after a short
+settle showed `opacity: 1` -- the first read was a sampling artefact (polling a CSS-transitioned
+property synchronously, before the `--dur-fast` transition had advanced a frame), not a real
+defect. Recorded in `RATIONALE.md` so a future pass doesn't waste time rediscovering that a
+same-tick read of a transitioning property understates it. No defect survived P4 -- a legitimate
+"clean" outcome, same as S8-agents' P4 in the same slot.
+
+Wrote `design/mocks/S8-logs/RATIONALE.md`: the two-subviews-one-tab correction, all eight findings
+from P1's research and how each was fixed or explicitly deferred (log-volume overview, keyboard-
+unreachable expandable rows, `EventRow`'s missing `info` chip/copy affordance, zero chip motion, no
+skeleton state, duplicated `color-mix()` vs. shared `tint()`), the per-category-colour rejection
+(clause 1, before reaching a mock), the P3 toggle-default fix (third screen running on the now-
+standard recipe), and the P4 verification detail above.
+
+Generated four screenshots via `scripts/uishot.py` (both variants x both themes, run through it
+directly since the light-default+labelled-toggle fix from P3 makes the real tool work against a
+standalone mock -- no per-file Playwright workaround needed) -- confirmed `uishot.py`'s Windows
+relative `--out` path lands under `C:\tmp\`, not the shell's `/tmp`, on this machine; read all four
+fresh (not reused from P3) and confirmed both mocks read as intended, both themes legible, no
+defects. Inlined all four as base64 data-URIs directly into `design/mocks/index.html`'s S8-logs
+section (`dead_ends_inherited`'s documented approach -- sidesteps the blanket `*.png` `.gitignore`
+entirely since it's not a `.png` file on disk) via a Python script operating on the file directly,
+avoiding pasting megabyte-scale base64 through the edit tool. Replaced the old "S8-logs,
+S8-palette and the final review-index rebuild" pending placeholder with a completed S8-logs
+section plus a new pending placeholder scoped to just "S8-palette" (the one sub-screen actually
+still remaining). Verified post-edit: `<section>`/`</section>` counts balanced (12/12), and a
+Playwright load of the rebuilt `index.html` found all 12 screen-cards present in the right order,
+52 `<img>` tags total, zero broken (`naturalWidth === 0`), zero page errors. `git status --short`
+showed only `design/mocks/index.html` (modified) and `design/mocks/S8-logs/RATIONALE.md`
+(untracked) before staging -- no PNGs, no other tree changes. Deleted all six generated PNGs (four
+final captures plus the two ad hoc debug ones from the interaction-check scripts) and the temporary
+Python check scripts under `/tmp` after use.
+
+**This closes S8-logs at 4/4.** Per `S8`'s stated sub-order, only the command palette remains as
+S8's last sub-screen.
+
+**Next**: S8-palette P1 -- `screen_pass_protocol.P1_explore` for the command palette (its
+component is not yet identified by name in the queue; find it in `hub/ui/src` first -- likely a
+`CommandPalette`-style component reachable via a keyboard shortcut -- then research command-palette
+UI/UX patterns externally, read the T3 Code sourcemap equivalent if one exists, and read the
+current component including comments). Once S8-palette closes at 4/4, run queue item `Z` (rebuild
+the review index in full, not just append) as the next `current`, per `S8`'s "Overflow screens" note
+and `Z`'s own instruction to run "again as the LAST action before `stop_at`" -- check `stop_at`
+(`2026-08-22T09:00:00+01:00`) against wall-clock time at that point, since the runway is close to
+its end after S8-palette's four passes.
