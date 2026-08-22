@@ -62,6 +62,10 @@ describe('ProjectHeader path — structure, not a joined string (composer/chrome
     // one <p> with the agent count and path both inside it.
     expect(agentLine.textContent).not.toContain('project')
     expect(pathSegment.closest('p')?.textContent).not.toContain('agent')
+    // Four stacked information lines need more than the narrow 64px header. The desktop
+    // breakpoint is deliberately 80px so "Current project" cannot be flex-centred above the
+    // viewport when the path row is present.
+    expect(screen.getByText('Current project').closest('header')).toHaveClass('sm:h-20')
   })
 
   it('elides a deep path in the middle and keeps its head and tail, with the full path on hover', () => {

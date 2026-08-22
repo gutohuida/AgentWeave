@@ -25,6 +25,7 @@ const NEUTRAL = tone('var(--text-2)')
 // In-progress/info needs attention but is not terminal. Amber carries that
 // meaning; blue remains reserved for focus and selection.
 const INFO = tone('var(--amber)')
+const PROGRESS = tone('var(--blue)')
 const WARNING = tone('var(--amber)')
 const SUCCESS = tone('var(--green)')
 const DANGER = tone('var(--red)')
@@ -32,7 +33,7 @@ const DANGER = tone('var(--red)')
 const STATUS_STYLES: Record<string, { bg: string; border: string; color: string }> = {
   pending:         NEUTRAL,
   assigned:        NEUTRAL,
-  in_progress:     INFO,
+  in_progress:     PROGRESS,
   under_review:    WARNING,
   completed:       NEUTRAL,
   approved:        SUCCESS,

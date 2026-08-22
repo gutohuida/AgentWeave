@@ -51,6 +51,7 @@ export function EventRow({ event, actorName, actorColorIndex }: EventRowProps) {
   const severity   = event.severity ?? 'info'
   const borderClr  = SEVERITY_BORDER[severity]
   const chip       = SEVERITY_CHIP[severity]
+  const summary    = summaryForEvent(event.type, event.data as Record<string, unknown>)
 
   return (
     <div
@@ -77,9 +78,9 @@ export function EventRow({ event, actorName, actorColorIndex }: EventRowProps) {
           </span>
         )}
         <span className="text-[13px] font-medium" style={{ color: 'var(--text)' }}>{event.type}</span>
-        <span className="ml-2 text-xs" style={{ color: 'var(--text-3)' }}>
-          {summaryForEvent(event.type, event.data as Record<string, unknown>)}
-        </span>
+        {summary && summary !== event.type && (
+          <span className="ml-2 text-xs" style={{ color: 'var(--text-3)' }}>{summary}</span>
+        )}
       </div>
 
       {/* Severity chip */}

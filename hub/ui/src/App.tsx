@@ -503,12 +503,13 @@ export default function App() {
             }}
           />
         )}
-        {/* The Spec screen lays out its own two panes edge to edge, so it opts out of
-            `workspace-content`'s centred 1180px column and page padding — those are for a page of
-            content, and this is a workspace. */}
+        {/* Spec and Tasks are workspaces, not reading pages. Both need the whole available width:
+            Spec for its two panes, Tasks for seven deliberately persistent lifecycle columns.
+            Putting the board in `workspace-content`'s centred 1180px column made each card narrow
+            before the board had even reached the viewport edge. */}
         <div
           className={
-            destination.tab === 'spec'
+            destination.tab === 'spec' || destination.tab === 'tasks'
               ? 'min-h-0 flex-1 overflow-hidden'
               : 'workspace-content min-h-0 flex-1 overflow-auto'
           }

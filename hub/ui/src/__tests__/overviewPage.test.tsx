@@ -16,7 +16,7 @@ vi.mock('@/api/questions', () => ({ useQuestions: () => ({ data: [] }) }))
 vi.mock('@/api/tasks', () => ({ useTasks: () => ({ data: [] }) }))
 vi.mock('@/api/status', () => ({ useStatus: () => ({ data: { project_name: 'AgentWeave' } }) }))
 vi.mock('@/hooks/useSSE', () => ({ getBufferedEvents: () => [] }))
-vi.mock('@/components/accounting/AccountingPanel', () => ({ AccountingPanel: () => null }))
+vi.mock('@/components/overview/OverviewBudgetSummary', () => ({ OverviewBudgetSummary: () => null }))
 
 describe('Gap 6 — OverviewPage agent health grid', () => {
   it('colors a stalled agent the same amber as waiting, not the same gray as idle', () => {

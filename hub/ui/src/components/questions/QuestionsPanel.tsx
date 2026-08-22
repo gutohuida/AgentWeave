@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import { formatDistanceToNow } from 'date-fns'
 import { Icon } from '@/components/common/Icon'
 import { useQuestions, type Question } from '@/api/questions'
@@ -17,18 +18,27 @@ function QuestionRow({ question, blocking = false }: { question: Question; block
         </time>
       </div>
       <p id={labelId} className="text-sm leading-6" style={{ color: 'var(--text)' }}>{question.question}</p>
-      <AnswerForm questionId={question.id} agent={question.from_agent} labelledBy={labelId} />
+      <AnswerForm question={question} labelledBy={labelId} />
     </article>
   )
 }
 
 export function QuestionsPanel() {
+  const pageRef = useRef<HTMLDivElement>(null)
   const { data: unanswered, isLoading } = useQuestions(false)
   const { data: answered } = useQuestions(true)
 
+  // The overview's Answer button can sit below the fold. Browser automation and keyboard users
+  // both scroll it into view before activating it; this panel then replaces the overview inside
+  // the same scroll container. Reset that inherited position so the destination starts with its
+  // heading and the highest-stakes blocking question instead of halfway through an answer form.
+  useEffect(() => {
+    pageRef.current?.closest('.workspace-content')?.scrollTo({ top: 0 })
+  }, [])
+
   if (isLoading) {
     return (
-      <div className="questions-page space-y-3 p-5" aria-label="Loading questions">
+      <div ref={pageRef} className="questions-page space-y-3 p-5" aria-label="Loading questions">
         {[0, 1].map((item) => (
           <div key={item} className="question-row p-4" aria-hidden="true">
             <div className="trust-state-skeleton w-24" />
@@ -45,7 +55,7 @@ export function QuestionsPanel() {
   const nonBlocking = unanswered?.filter((question) => !question.blocking) ?? []
 
   return (
-    <div className="questions-page space-y-5 p-5">
+    <div ref={pageRef} className="questions-page space-y-5 p-5">
       <header>
         <h1 className="text-lg font-semibold" style={{ color: 'var(--text)' }}>Questions</h1>
         <p className="mt-1 text-xs" style={{ color: 'var(--text-3)' }}>Decisions waiting for an operator answer.</p>

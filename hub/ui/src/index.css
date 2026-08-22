@@ -570,8 +570,8 @@
   .task-card-refined:hover {
     transform: translateY(-1px);
     border-color: var(--border-hi) !important;
-    background: var(--surface-3) !important;
-    box-shadow: 0 5px 14px rgb(0 0 0 / 0.16), inset 0 1px var(--lift-hi);
+    background: color-mix(in srgb, var(--surface-3) 58%, var(--surface-2)) !important;
+    box-shadow: 0 4px 14px rgb(0 0 0 / 0.15), inset 0 1px var(--lift-hi);
   }
   .task-card-refined:active { transform: translateY(0); box-shadow: inset 0 1px var(--press-lo); }
   .task-card-refined:focus-within { border-color: var(--border-hi) !important; }
@@ -580,6 +580,13 @@
     box-shadow: 0 0 0 2px color-mix(in srgb, var(--ring) 35%, transparent);
   }
   .task-card-refined.lineage-dim { opacity: 0.32; }
+  .task-card-refined[draggable="true"] { cursor: grab; }
+  .task-card-refined[draggable="true"]:active { cursor: grabbing; }
+  .task-card-refined[data-dragging="true"] {
+    opacity: 0.5;
+    transform: rotate(1deg) scale(0.985);
+    box-shadow: 0 10px 24px rgb(0 0 0 / 0.18), inset 0 1px var(--lift-hi);
+  }
   .lineage-active > .task-card-refined {
     border-color: var(--ring) !important;
     box-shadow: 0 0 0 2px color-mix(in srgb, var(--ring) 35%, transparent);
@@ -587,11 +594,82 @@
   .lineage-dim > .task-card-refined { opacity: 0.32; }
 
   .task-board-column {
-    border: 1px solid var(--border-region);
-    border-radius: var(--radius-lg);
-    background: var(--rail);
-    padding: 0 6px 6px;
-    box-shadow: inset 0 1px var(--lift-hi);
+    align-self: start;
+    border-radius: var(--radius-md);
+    outline: 1px dashed transparent;
+    outline-offset: 4px;
+    transition: background-color var(--dur-fast) var(--ease), outline-color var(--dur-fast) var(--ease);
+  }
+  .task-board-column[data-drop-state="available"] {
+    background: color-mix(in srgb, var(--blue) 3%, transparent);
+    outline-color: color-mix(in srgb, var(--blue) 22%, transparent);
+  }
+  .task-board-column[data-drop-state="active"] {
+    background: color-mix(in srgb, var(--blue) 8%, transparent);
+    outline-color: color-mix(in srgb, var(--blue) 62%, transparent);
+  }
+  .task-board-column[data-drop-state="unavailable"] { opacity: 0.62; }
+  .task-board-shell { background: var(--bg); }
+  .task-board-filter {
+    padding: 10px 14px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .task-board-move-refusal {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    color: var(--amber);
+    background: color-mix(in srgb, var(--amber) 9%, var(--surface));
+    border-bottom: 1px solid color-mix(in srgb, var(--amber) 25%, var(--border));
+    font-size: 12px;
+  }
+  .task-board-move-refusal span { flex: 1; }
+  .task-board-move-refusal button { color: inherit; padding: 3px; border-radius: var(--radius-sm); }
+  .task-filter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid var(--border);
+    border-radius: 9999px;
+    background: transparent;
+    color: var(--text-2);
+    padding: 3px 11px;
+    font-size: 11px;
+    font-weight: 500;
+    transition: background-color var(--dur-fast) var(--ease),
+                border-color var(--dur-fast) var(--ease),
+                color var(--dur-fast) var(--ease);
+  }
+  .task-filter-chip:hover { background: var(--row-hover); }
+  .task-filter-chip[data-active="true"] {
+    border-color: var(--border-hi);
+    background: var(--row-active);
+    color: var(--text);
+  }
+  .task-filter-dot { width: 6px; height: 6px; border-radius: 9999px; }
+  .task-board-grid { align-items: start; min-width: 1306px; width: 100%; }
+  .task-column-header { background: var(--bg); }
+  .task-column-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .task-column-count {
+    border-radius: 9999px;
+    padding: 1px 7px;
+    font-size: 10px;
+    font-weight: 700;
+  }
+  .task-card-body { padding: 11px 12px 10px; }
+  .task-card-title { font-size: 13px; font-weight: 500; line-height: 1.35; }
+  .task-card-description { font-size: 11.5px; line-height: 1.5; }
+  .task-card-refined .aw-chip {
+    gap: 4px;
+    border-radius: 9999px;
+    padding: 1px 7px;
+    font-size: 10px;
   }
   .task-column-empty {
     min-height: 58px;
@@ -697,6 +775,12 @@
   .project-switcher:focus-within { background: var(--row-hover); }
   .project-switcher select { cursor: pointer; }
   .project-switcher .control-select-icon { right: 3px; }
+  .project-header > div:first-child { overflow: hidden; }
+  .project-switcher { min-width: 0; }
+  .project-switcher select {
+    max-width: min(42vw, 320px);
+    text-overflow: ellipsis;
+  }
   .project-tabs { border-bottom: 1px solid var(--border-region); }
   .project-tab { position: relative; }
   .project-tab::before {
@@ -1370,17 +1454,34 @@
     letter-spacing: 0.08em;
     text-transform: uppercase;
   }
-  .overview-accounting .settings-section {
+  .overview-budget-summary {
     padding: 16px 18px 18px;
     border: 1px solid var(--border-region);
     border-radius: var(--radius-lg);
     background: var(--surface);
     box-shadow: inset 0 1px var(--lift-hi);
   }
-  .overview-accounting .settings-section-heading,
-  .overview-accounting .settings-section-rows { width: 100%; }
-  .overview-accounting .settings-section-heading { padding-bottom: 12px; }
-  .overview-accounting .settings-row { min-height: 62px; padding: 12px 0; }
+  .overview-budget-row {
+    display: flex;
+    min-width: 0;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 8px 0;
+    border-top: 1px solid var(--border-region);
+    color: var(--text-2);
+    font-size: 12px;
+  }
+  .overview-budget-summary > .overview-budget-row:first-of-type { margin-top: 10px; }
+  .overview-budget-row > span { min-width: 0; }
+  .overview-budget-row > strong {
+    min-width: 0;
+    color: var(--text);
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    overflow-wrap: anywhere;
+  }
   .overview-agent-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));

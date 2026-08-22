@@ -7,7 +7,7 @@ import { useStatus } from '@/api/status'
 import { getBufferedEvents } from '@/hooks/useSSE'
 import { QuestionInterruptCard } from '@/components/questions/QuestionInterruptCard'
 import { ContextUsageIndicator } from '@/components/context/ContextUsageIndicator'
-import { AccountingPanel } from '@/components/accounting/AccountingPanel'
+import { OverviewBudgetSummary } from './OverviewBudgetSummary'
 import { Icon } from '@/components/common/Icon'
 import { getStatusConfig } from '@/lib/agentStatusConfig'
 import { hubDate } from '@/lib/hubTime'
@@ -107,7 +107,7 @@ export function OverviewPage({ onNavigate }: OverviewPageProps) {
           {agentCount} agent{agentCount !== 1 ? 's' : ''} · {taskCount} task{taskCount !== 1 ? 's' : ''}
           {status?.project_name ? ` · ${status.project_name}` : ''}
         </p>
-        <div className="overview-accounting mt-5"><AccountingPanel /></div>
+        <div className="mt-5"><OverviewBudgetSummary /></div>
       </section>
 
       <section className="overview-group" aria-labelledby="overview-attention">

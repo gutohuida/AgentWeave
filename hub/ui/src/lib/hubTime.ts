@@ -20,6 +20,6 @@
  * `datetime-local` input, and `LogsView`'s `dataUpdatedAt` is React Query's own epoch milliseconds.
  * Neither is a timestamp the Hub serialised, so neither is this function's business.
  */
-export function hubDate(value: string): Date {
+export function hubDate(value: string | number): Date {
   return new Date(value)
 }

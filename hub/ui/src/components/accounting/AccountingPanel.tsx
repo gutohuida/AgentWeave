@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/common/Icon'
 import { SettingsRow, SettingsSection } from '@/components/environment/SettingsSection'
 import { BudgetExhaustionNotice } from './BudgetExhaustionNotice'
+import { accountingDisplayLabel } from './accountingDisplay'
 
 function formatTokens(value: number | null): string {
   return value === null ? 'Unavailable' : `${value.toLocaleString()} tokens`
@@ -14,24 +15,7 @@ function PreferredDisplay() {
   const { data } = useAccounting()
   if (!data) return null
   const display = data.preferred_display
-  if (display.kind === 'allowance') {
-    return (
-      <div>
-        <span>Rate-limit allowance</span>
-        <code className="ml-2" style={{ color: 'var(--text-3)', fontSize: 11 }}>
-          {JSON.stringify(display.allowance)}
-        </code>
-      </div>
-    )
-  }
-  if (display.kind === 'api_equivalent') {
-    return (
-      <span>
-        ${(display.usd_micros / 1_000_000).toFixed(4)} API-equivalent estimate
-      </span>
-    )
-  }
-  return <span>{display.label}</span>
+  return <span>{accountingDisplayLabel(display)}</span>
 }
 
 export function AccountingPanel() {

@@ -43,4 +43,32 @@ describe('QuestionsPanel trust surface', () => {
     expect(screen.getByLabelText('Loading questions')).toBeInTheDocument()
     expect(document.querySelectorAll('.question-row')).toHaveLength(2)
   })
+
+  it('starts at the top when navigation replaces a scrolled overview', () => {
+    const workspace = document.createElement('div')
+    workspace.className = 'workspace-content'
+    workspace.scrollTo = vi.fn()
+    document.body.appendChild(workspace)
+
+    render(<QuestionsPanel />, { container: workspace })
+
+    expect(workspace.scrollTo).toHaveBeenCalledWith({ top: 0 })
+  })
+
+  it('renders structured choices and submits their labels without forcing a text answer', () => {
+    pending[0].options = [
+      { label: 'Incremental', description: 'Apply the smallest safe migration first.' },
+      { label: 'Full rebuild', description: 'Recreate the schema in one operation.' },
+    ]
+    render(<QuestionsPanel />)
+
+    fireEvent.click(screen.getByRole('button', { name: /Incremental/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Submit answer to codex-1' }))
+
+    expect(answer).toHaveBeenCalledWith(
+      { id: 'question-1', answer: 'Incremental', labels: ['Incremental'] },
+      expect.objectContaining({ onSuccess: expect.any(Function) }),
+    )
+    delete pending[0].options
+  })
 })

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type DragEventHandler } from 'react'
 import { formatDistanceToNow } from 'date-fns'
 import { Icon } from '@/components/common/Icon'
 import { readableApiError } from '@/api/client'
@@ -22,6 +22,14 @@ interface TaskCardProps {
    *  `TaskDetailDrawer` for all of that. The board owns which task is open (one drawer, not one
    *  per card), so this only reports the click. */
   onOpen: () => void
+  /** The Kanban board opts cards into native drag-and-drop. Other task surfaces reuse this card
+   * without accidentally becoming draggable. */
+  draggable?: boolean
+  isDragging?: boolean
+  onDragStart?: DragEventHandler<HTMLDivElement>
+  onDragEnd?: DragEventHandler<HTMLDivElement>
+  onMoveByKeyboard?: (direction: 'left' | 'right') => void
+  moveInstructionsId?: string
 }
 
 const AGENT_STATUS_STYLES: Record<string, { color: string; bg: string; border: string }> = {
@@ -59,7 +67,18 @@ function agentStatusTitle(task: Task): string {
   return details.join(' · ')
 }
 
-export function TaskCard({ task, assigneeColorIndex, onOpenRequirement, onOpen }: TaskCardProps) {
+export function TaskCard({
+  task,
+  assigneeColorIndex,
+  onOpenRequirement,
+  onOpen,
+  draggable = false,
+  isDragging = false,
+  onDragStart,
+  onDragEnd,
+  onMoveByKeyboard,
+  moveInstructionsId,
+}: TaskCardProps) {
   const [startWorkRefusal, setStartWorkRefusal] = useState<string | null>(null)
   const startWork = useStartWorkOnTask()
   const { data: agents } = useAgents()
@@ -96,8 +115,13 @@ export function TaskCard({ task, assigneeColorIndex, onOpenRequirement, onOpen }
 
   return (
     <div
+      data-task-id={task.id}
+      data-dragging={isDragging ? 'true' : 'false'}
       data-testid={isLive ? `task-live-${task.id}` : undefined}
       className={['task-card-refined', isLive && !reduceMotion ? 'task-live-pulse' : ''].filter(Boolean).join(' ')}
+      draggable={draggable}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
       style={{
         background: 'var(--surface-2)',
         border: `1px solid ${isBlocked ? `color-mix(in srgb, ${blockedAccent} 45%, transparent)` : 'var(--border)'}`,
@@ -112,13 +136,20 @@ export function TaskCard({ task, assigneeColorIndex, onOpenRequirement, onOpen }
           (status transitions, description, requirements-as-written, the divergence policy)
           lives in `TaskDetailDrawer`, opened by clicking anywhere on the card. */}
       <div
-        className="p-3 cursor-pointer"
+        data-slot="button"
+        className="task-card-body cursor-pointer"
         role="button"
         tabIndex={0}
         aria-label={`Open ${task.title}`}
+        aria-describedby={moveInstructionsId}
         onClick={onOpen}
         onKeyDown={(event) => {
           if (event.target !== event.currentTarget) return
+          if (event.ctrlKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
+            event.preventDefault()
+            onMoveByKeyboard?.(event.key === 'ArrowLeft' ? 'left' : 'right')
+            return
+          }
           if (event.key === 'Enter' || event.key === ' ') {
             event.preventDefault()
             onOpen()
@@ -127,13 +158,13 @@ export function TaskCard({ task, assigneeColorIndex, onOpenRequirement, onOpen }
       >
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium" style={{ color: 'var(--text)' }}>
+            <p className="task-card-title" style={{ color: 'var(--text)' }}>
               {task.title}
             </p>
 
             {/* Compact description. Always clamped — the full text is a drawer click away. */}
             {task.description && (
-              <p className="text-xs mt-1 line-clamp-2" style={{ color: 'var(--text-3)' }}>
+              <p className="task-card-description mt-1 line-clamp-1" style={{ color: 'var(--text-3)' }}>
                 {task.description}
               </p>
             )}

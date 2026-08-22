@@ -19,11 +19,12 @@ describe('considered shared controls', () => {
     expect(screen.getByRole('option', { name: 'Codex' })).toBeInTheDocument()
   })
 
-  it('uses the shared chip geometry and keeps blue out of status colour', () => {
-    render(<><Badge pill>category</Badge><StatusBadge status="in_progress" /></>)
+  it('uses shared chip geometry and separates active progress from review by colour', () => {
+    render(<><Badge pill>category</Badge><StatusBadge status="in_progress" /><StatusBadge status="under_review" /></>)
 
     expect(screen.getByText('category')).toHaveClass('aw-chip')
     expect(screen.getByText('category')).toHaveAttribute('data-pill', 'true')
-    expect(screen.getByText('in progress')).toHaveStyle({ color: 'var(--amber)' })
+    expect(screen.getByText('in progress')).toHaveStyle({ color: 'var(--blue)' })
+    expect(screen.getByText('under review')).toHaveStyle({ color: 'var(--amber)' })
   })
 })

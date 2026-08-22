@@ -1,11 +1,21 @@
 export function summaryForEvent(type: string, data: Record<string, unknown>): string {
   switch (type) {
     // Hub-side events
-    case 'message_created': return `${data.from} → ${data.to}${data.subject ? `: "${data.subject}"` : ''}`
+    case 'message_created': {
+      const route = data.from && data.to ? `${data.from} → ${data.to}` : ''
+      const subject = data.subject ? `"${data.subject}"` : ''
+      return [route, subject].filter(Boolean).join(': ')
+    }
     case 'message_read': return `msg ${data.id} read`
     case 'task_created': return `"${data.title}" assigned to ${data.assignee ?? 'unassigned'}`
-    case 'task_updated': return `${data.id} → ${data.status}`
-    case 'question_asked': return `from ${data.from_agent}${data.blocking ? ' (blocking)' : ''}: ${String(data.question ?? '').slice(0, 80)}`
+    case 'task_updated': {
+      const task = data.title ?? data.id ?? data.task_id
+      return `${task ? `${task} → ` : ''}${data.status ?? 'updated'}`
+    }
+    case 'question_asked': {
+      const source = data.from_agent ? `from ${data.from_agent}${data.blocking ? ' (blocking)' : ''}: ` : ''
+      return `${source}${String(data.question ?? 'waiting for an operator answer').slice(0, 80)}`
+    }
     case 'question_answered': return `question ${data.id} answered`
     case 'agent_heartbeat': return `${data.agent} [${data.status}]${data.message ? ` — ${data.message}` : ''}`
     // Both of these carry the only detail worth reading in a field the default branch does not

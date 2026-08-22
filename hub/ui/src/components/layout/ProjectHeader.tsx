@@ -35,7 +35,7 @@ export function ProjectHeader({
   const pathSegments = pathDisplay ? elidePathSegments(pathDisplay) : []
 
   return (
-    <header className="project-header flex h-16 shrink-0 items-center gap-3 px-5" style={{ background: 'var(--bg)' }}>
+    <header className="project-header flex h-16 shrink-0 items-center gap-3 px-5 sm:h-20" style={{ background: 'var(--bg)' }}>
       <div className="min-w-0 flex-1">
         <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-[0.08em]" style={{ color: 'var(--text-3)' }}>
           Current project
