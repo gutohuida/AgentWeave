@@ -1503,3 +1503,73 @@ must mock both the standalone and panel-embedded placements per `decisions_for_u
 and this screen also carries the waived task-dependencies check 11.1 (edges go stale when a
 collapsed layer is expanded), worth reading precisely before research starts rather than discovering
 it mid-mock.
+
+## Iteration 21 — 2026-08-22T03:51:50+01:00 — S4 P1: explore (task DAG / dependency board)
+
+**S4 queue item started.** Read `openspec/explorations/2026-08-21-the-execution-graph-in-the-panel.md`
+first, as `next_action` required, before opening any code.
+
+**What was read, in full:** `DependencyBoard.tsx`, `dependencyBoardLayout.ts`,
+`DependencyBoardView.tsx`, `hub/ui/src/store/panelTabsStore.ts`. Not re-read from scratch:
+`TaskCard.tsx` — S2's `RESEARCH.md` already covers it in depth and it renders unchanged inside this
+screen, so S4's card treatment should match S2's chosen direction rather than diverge into a third
+style.
+
+**A second staleness cause, beyond the one the exploration doc names.** The doc diagnoses cause 1
+precisely (the `layoutKey` not encoding which layers are collapsed, so `useEdgeLines`'s layout
+effect never re-runs on expand). Reading `useEdgeLines` further turned up an earlier problem in the
+same mechanism: while a layer is *collapsed*, its `TaskCard`s are unmounted entirely
+(`{expanded && (...)}`), so any edge touching a task inside it hits the exact same
+`if (!fromEl || !toEl) continue` guard written for genuine off-board references — the edge doesn't
+just go wrong on expand, it **silently doesn't exist at all while collapsed**, with nothing on the
+"2 done" toggle indicating a hidden connection runs through it. Read as very likely a large share of
+"the links should not be static." Recorded as a *demonstrated variant*, not a source fix — this
+screen stays mock-only per `limits`.
+
+**Panel-embedding is a proposal, not existing machinery — confirmed, not assumed.**
+`panelTabsStore.ts`'s `IndexTabId` is a closed `'specs' | 'files' | 'loops'` literal type; there is
+no `tasks`/`dag` member today. `design/mocks/S4/RESEARCH.md` says this plainly rather than mocking a
+panel tab as if it already shipped, per `decisions_for_user` D-dag-placement (mock both placements,
+let the operator choose).
+
+**External research** (four sources, each mapped to a concrete finding, not general reading):
+GitHub Actions' run graph (icon-left status + colour, dependency lines) validates extending S2's
+already-chosen icon+colour idiom to DAG nodes rather than inventing a fourth vocabulary; Airflow's
+graph view validates that a stall-reason sentence (already computed by `layerStallSummary`, just
+unstyled) is the highest-value thing on this screen; React Flow's edge-type docs recommend
+step/smoothstep (orthogonal) routing over raw diagonal lines for exactly this kind of technical
+diagram, and document an `animated` edge property that maps directly onto `assignee_status ===
+'running'` (`TaskCard.tsx:94`'s own `isLive` condition, no new data) — real motion tied to real
+state, inside the existing motion scale and `prefers-reduced-motion` discipline, rather than the
+fully static rendering the operator called out; general DAG-at-scale practice (minimaps, pan/zoom)
+was considered and **rejected** for boards this small (confirmed by reading `groupByDepth`'s output
+shape — a handful of layers, few tasks each) — noted explicitly so a later pass doesn't reintroduce
+it as an assumed best practice it isn't for this data size.
+
+**Ten concrete findings recorded** in `design/mocks/S4/RESEARCH.md` (edges visually inert with no
+arrowhead/direction/weight-by-state; collapsed layers drop edges silently; no lineage-on-hover
+despite that being the operator's own stated want — *"to access the lineage fast"*; off-board
+references float with zero connecting line to what names them; the collapse toggle carries only a
+count; the document picker bar is undifferentiated pills with no icon and no visual proportion for
+outstanding/total; the structure hint sentence has no visual anchor; no panel-embedded form exists;
+the layer stall-summary sentence — the one piece of real synthesis on this screen — gets the least
+visual weight of anything on it; loading states are bare text while the zero-tasks case already uses
+`EmptyState`). A "what's already good" list keeps the three-way stall classification, longest-path
+layering, the partly-finished-layer-never-collapses rule, off-board refs being named not hidden,
+`EmptyState` on zero-tasks, and the picker's document-first/no-document-last sort off the table for
+redesign.
+
+**Verified.** `python -c "import json; json.load(...)"` on `STATE.json` after editing. Grepped
+`TaskCard.tsx` directly to correct an early draft claim that `isLive` was a field on `Task` — it
+is a computed local (`task.assignee_status === 'running'`) — fixed before finishing, not left as a
+plausible-sounding inaccuracy. `git status --short` → only `design/mocks/S4/RESEARCH.md` (new) plus
+the usual `.claude/autonomous/` state churn.
+
+**Not done this iteration, deliberately:** no mock HTML yet — that's P2. No source change anywhere
+(mock-only screen, same as S1–S3).
+
+**Next:** S4 P2 — validate every finding against `IDENTITY.md`'s rejection test, then build
+`design/mocks/S4/<variant>.html`, mocking BOTH a standalone page and a panel-embedded layout per
+variant (narrower column, layers likely need to stack), two or three variants, realistic multi-layer
+content (a collapsed terminal layer, an off-board reference, a `gated_on_rejected` card, a
+live/running card), both themes. Reuse S2's `TaskCard` treatment rather than a third card style.
