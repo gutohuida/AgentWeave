@@ -459,6 +459,102 @@
     pointer-events: none;
   }
 
+  /* S2/S4 considered task surfaces: the board stays dense and neutral, while depth and motion
+     make whole-card actions, nested columns, dialogs and graph lineage legible. */
+  .task-card-refined {
+    position: relative;
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.08), inset 0 1px var(--lift-hi);
+    transition: transform var(--dur-base) var(--ease),
+                box-shadow var(--dur-base) var(--ease),
+                border-color var(--dur-fast) var(--ease),
+                background-color var(--dur-fast) var(--ease),
+                opacity var(--dur-base) var(--ease);
+  }
+  .task-card-refined:hover {
+    transform: translateY(-1px);
+    border-color: var(--border-hi) !important;
+    background: var(--surface-3) !important;
+    box-shadow: 0 5px 14px rgb(0 0 0 / 0.16), inset 0 1px var(--lift-hi);
+  }
+  .task-card-refined:active { transform: translateY(0); box-shadow: inset 0 1px var(--press-lo); }
+  .task-card-refined:focus-within { border-color: var(--border-hi) !important; }
+  .task-card-refined.lineage-active {
+    border-color: var(--ring) !important;
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--ring) 35%, transparent);
+  }
+  .task-card-refined.lineage-dim { opacity: 0.32; }
+  .lineage-active > .task-card-refined {
+    border-color: var(--ring) !important;
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--ring) 35%, transparent);
+  }
+  .lineage-dim > .task-card-refined { opacity: 0.32; }
+
+  .task-board-column {
+    border: 1px solid var(--border-region);
+    border-radius: var(--radius-lg);
+    background: var(--rail);
+    padding: 0 6px 6px;
+    box-shadow: inset 0 1px var(--lift-hi);
+  }
+  .task-column-empty {
+    min-height: 58px;
+    display: grid;
+    place-items: center;
+    border: 1px dashed var(--border);
+    border-radius: var(--radius-md);
+    color: var(--text-3);
+    font-size: 10px;
+  }
+  .task-detail-dialog { animation: task-dialog-in var(--dur-base) var(--ease); }
+  .task-detail-facts {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface-2);
+    box-shadow: inset 0 1px var(--lift-hi);
+  }
+  .task-integration-note {
+    padding: 6px 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--surface-3);
+  }
+  @keyframes task-dialog-in {
+    from { opacity: 0; transform: translateY(6px) scale(0.99); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  .dependency-structure-hint,
+  .dependency-stall-summary {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--surface-2);
+  }
+  .dependency-layer-toggle {
+    border-radius: var(--radius-sm);
+    padding: 3px 6px;
+    transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+  }
+  .dependency-layer-toggle:hover { background: var(--row-hover); color: var(--text) !important; }
+  .dependency-edge {
+    fill: none;
+    stroke-width: 1.5;
+    transition: opacity var(--dur-base) var(--ease), stroke-width var(--dur-fast) var(--ease);
+  }
+  .dependency-edge-normal { stroke: var(--border-hi); }
+  .dependency-edge-gated { stroke: color-mix(in srgb, var(--amber) 60%, var(--border-hi)); }
+  .dependency-edge-rejected { stroke: color-mix(in srgb, var(--red) 65%, var(--border-hi)); }
+  .dependency-edge-live {
+    stroke: var(--green);
+    stroke-dasharray: 5 4;
+    animation: dependency-dash-flow 900ms linear infinite;
+  }
+  .dependency-edge.lineage-active { stroke: var(--ring); stroke-width: 2.25; }
+  .dependency-edge.lineage-dim { opacity: 0.18; }
+  @keyframes dependency-dash-flow { to { stroke-dashoffset: -18; } }
+
   /* S1 considered shell: a quiet live mark, project-scoped selection ink, and nested
      conversation branches that disclose without turning the rail into stacked cards. */
   .rail-live-dot {

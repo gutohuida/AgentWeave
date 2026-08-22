@@ -18,7 +18,7 @@ const STATUSES_IN_PROGRESS = ['in_progress', 'blocked']
 const COLUMNS = [
   { key: 'pending',         label: 'Pending',        accentColor: null as string | null, statuses: ['pending'] },
   { key: 'assigned',        label: 'Assigned',       accentColor: null as string | null, statuses: ['assigned'] },
-  { key: 'in_progress',     label: 'In Progress',    accentColor: 'var(--blue)',         statuses: STATUSES_IN_PROGRESS },
+  { key: 'in_progress',     label: 'In Progress',    accentColor: 'var(--amber)',        statuses: STATUSES_IN_PROGRESS },
   { key: 'under_review',    label: 'Under Review',   accentColor: 'var(--amber)',        statuses: ['under_review'] },
   { key: 'completed',       label: 'Completed',      accentColor: null as string | null, statuses: ['completed'] },
   { key: 'approved',        label: 'Approved',       accentColor: 'var(--green)',        statuses: ['approved'] },
@@ -68,7 +68,17 @@ export function TasksBoard({ onOpenRequirement }: TasksBoardProps = {}) {
   }, [tasks])
 
   if (isLoading) {
-    return <div className="p-6" style={{ color: 'var(--text-3)' }}>Loading tasks…</div>
+    return (
+      <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-2 p-3" aria-label="Loading tasks">
+        {COLUMNS.map((column) => (
+          <div key={column.key} className="task-board-column p-2 space-y-2">
+            <div className="skeleton h-3 w-20" />
+            <div className="skeleton h-24 w-full" />
+            <div className="skeleton h-16 w-full" />
+          </div>
+        ))}
+      </div>
+    )
   }
 
   if (!tasks || tasks.length === 0) {
@@ -162,7 +172,7 @@ export function TasksBoard({ onOpenRequirement }: TasksBoardProps = {}) {
               // No `overflow-hidden` here: it makes this column the scrollport for `sticky`
               // below, so the header would pin to a box that never scrolls and travel away with
               // the cards — which is exactly the reported symptom.
-              <div key={key} className="flex flex-col gap-2 min-w-0">
+              <div key={key} className="task-board-column flex flex-col gap-2 min-w-0">
                 {/* Column header. Sticky because the whole grid scrolls as one — without this the
                     headers leave with the content and a long column becomes a list of cards whose
                     status you can no longer see. Operator, 2026-08-10: "when I scroll down I lose
@@ -173,7 +183,7 @@ export function TasksBoard({ onOpenRequirement }: TasksBoardProps = {}) {
                   // The grid's own 12px padding scrolls with the content, so the header pins at
                   // -12 to sit flush with the viewport edge and pads that back to cover cards
                   // passing underneath.
-                  style={{ top: -12, background: 'var(--bg)', paddingTop: 12, paddingBottom: 6 }}
+                  style={{ top: -12, background: 'var(--rail)', paddingTop: 12, paddingBottom: 6 }}
                 >
                   <span
                     className="text-xs font-medium uppercase tracking-wider"
@@ -194,6 +204,11 @@ export function TasksBoard({ onOpenRequirement }: TasksBoardProps = {}) {
                 {/* No scroll of its own: the grid already scrolls, and a nested scrollport both
                     traps the wheel and gives `sticky` above the wrong container to stick to. */}
                 <div className="space-y-2">
+                  {col.length === 0 && (
+                    <div className="task-column-empty" aria-label={`${label} has no tasks`}>
+                      No tasks
+                    </div>
+                  )}
                   {col.map((task) => (
                     <TaskCard
                       key={task.id}

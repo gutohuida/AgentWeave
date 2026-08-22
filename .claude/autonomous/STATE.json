@@ -8,15 +8,10 @@
   "started_at": "2026-08-22T14:30:00+01:00",
   "stop_at": "2026-08-22T20:00:00+01:00",
   "stop_when_queue_empties": true,
-  "iteration": 4,
-  "last_heartbeat": "2026-08-22T14:41:26+01:00",
+  "iteration": 5,
+  "last_heartbeat": "2026-08-22T15:35:43+01:00",
   "log_file": ".claude/autonomous/2026-08-22-ui-finesse-log.md",
   "queue": [
-    {
-      "id": "F4",
-      "title": "Refine task board, task detail and dependency views",
-      "detail": "Apply S2 and S4 considered treatments to TasksBoard, TaskCard, TaskDetailDrawer, DependencyBoard and DependencyBoardView. Keep the seven-column board, filters, requirement navigation, drag/transition behavior and dependency semantics. Use hierarchy, state colour and motion consistently rather than decorative noise. Test relevant interactions and Playwright-drive board/detail/dependency views in both themes and narrow width; correct visual defects before closing."
-    },
     {
       "id": "F5",
       "title": "Refine the right work panel and specification experience",
@@ -49,7 +44,7 @@
     }
   ],
   "current": null,
-  "next_action": "Apply S2 and S4 considered treatments to TasksBoard, TaskCard, TaskDetailDrawer, DependencyBoard and DependencyBoardView. Keep the seven-column board, filters, requirement navigation, drag/transition behavior and dependency semantics. Use hierarchy, state colour and motion consistently rather than decorative noise. Test relevant interactions and Playwright-drive board/detail/dependency views in both themes and narrow width; correct visual defects before closing.",
+  "next_action": "Apply S3 and S5 to PanelShell and its live tabs, SpecPage/SpecDocumentPanel/SpecRailNav and the server-rendered spec templates where the mock requires it. Preserve resizers, tab persistence, cross-document navigation, coverage links and iframe/content safety. Keep React source and Python-rendered document responsibilities clear. Run focused UI/Python tests, then Playwright-drive panel and spec reading flows in both themes and narrow width.",
   "decisions_for_user": [],
   "limits": [
     "Stay on autonomous/2026-08-22-ui-finesse and push only that branch; do not merge, open a PR, release, publish or deploy.",

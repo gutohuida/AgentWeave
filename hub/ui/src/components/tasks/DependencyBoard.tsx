@@ -40,6 +40,8 @@ function layerStallSummary(tasks: Task[]): string | null {
 
 interface EdgeLine {
   id: string
+  fromTaskId: string
+  toTaskId: string
   x1: number
   y1: number
   x2: number
@@ -78,6 +80,8 @@ function useEdgeLines(
         const toRect = toEl.getBoundingClientRect()
         next.push({
           id: `${edge.depends_on_task_id}->${edge.task_id}`,
+          fromTaskId: edge.depends_on_task_id,
+          toTaskId: edge.task_id,
           x1: fromRect.left + fromRect.width / 2 - containerRect.left + container.scrollLeft,
           y1: fromRect.bottom - containerRect.top + container.scrollTop,
           x2: toRect.left + toRect.width / 2 - containerRect.left + container.scrollLeft,
@@ -133,6 +137,7 @@ export function DependencyBoard({ specDocumentId, onOpenRequirement, onSelectBoa
     [agents],
   )
   const [openTaskId, setOpenTaskId] = useState<string | null>(null)
+  const [hoveredTaskId, setHoveredTaskId] = useState<string | null>(null)
   // Task 8.6: a layer whose every task is terminal (approved/rejected) collapses to one row by
   // default, expandable — but a layer with even one unfinished task never collapses, since that is
   // the shape D9 rejects ("a partly finished layer" must stay legible). Keyed by depth rather than
@@ -143,8 +148,8 @@ export function DependencyBoard({ specDocumentId, onOpenRequirement, onSelectBoa
   const containerRef = useRef<HTMLDivElement | null>(null)
   const cardRefsRef = useRef<Map<string, HTMLDivElement>>(new Map())
 
-  const tasks = board?.tasks ?? []
-  const edges = board?.edges ?? []
+  const tasks = useMemo(() => board?.tasks ?? [], [board?.tasks])
+  const edges = useMemo(() => board?.edges ?? [], [board?.edges])
 
   const layers = useMemo(() => {
     const depth = assignDepths(tasks, edges)
@@ -154,8 +159,33 @@ export function DependencyBoard({ specDocumentId, onOpenRequirement, onSelectBoa
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tasks.map((t) => t.id).join(','), edges.map((e) => `${e.task_id}:${e.depends_on_task_id}`).join(',')])
 
-  const layoutKey = layers.map((l) => `${l.depth}:${l.tasks.map((t) => t.id).join(',')}`).join('|')
+  const layoutKey = `${layers.map((l) => `${l.depth}:${l.tasks.map((t) => t.id).join(',')}`).join('|')}|${JSON.stringify(expandedOverride)}`
   const lines = useEdgeLines(containerRef, cardRefsRef.current, edges, layoutKey)
+
+  const lineageIds = useMemo(() => {
+    if (!hoveredTaskId) return null
+    const incoming = new Map<string, string[]>()
+    const outgoing = new Map<string, string[]>()
+    for (const edge of edges) {
+      incoming.set(edge.task_id, [...(incoming.get(edge.task_id) ?? []), edge.depends_on_task_id])
+      outgoing.set(edge.depends_on_task_id, [...(outgoing.get(edge.depends_on_task_id) ?? []), edge.task_id])
+    }
+    const related = new Set([hoveredTaskId])
+    const visit = (start: string, graph: Map<string, string[]>) => {
+      const queue = [start]
+      while (queue.length) {
+        const current = queue.shift()!
+        for (const next of graph.get(current) ?? []) {
+          if (related.has(next)) continue
+          related.add(next)
+          queue.push(next)
+        }
+      }
+    }
+    visit(hoveredTaskId, incoming)
+    visit(hoveredTaskId, outgoing)
+    return related
+  }, [edges, hoveredTaskId])
 
   // Task 8.7: every off-board reference this board's own tasks name — no layer of their own
   // (they are not on this board to lay out), drawn once above everything else instead. Cheap
@@ -166,7 +196,19 @@ export function DependencyBoard({ specDocumentId, onOpenRequirement, onSelectBoa
   const openTask = tasks.find((t) => t.id === openTaskId) ?? null
 
   if (isLoading) {
-    return <div className="p-6" style={{ color: 'var(--text-3)' }}>Loading tasks…</div>
+    return (
+      <div className="space-y-6 p-4" aria-label="Loading dependency tasks">
+        {[0, 1, 2].map((layer) => (
+          <div key={layer} className="space-y-2">
+            <div className="skeleton h-3 w-36" />
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="skeleton h-24" />
+              <div className="skeleton h-24" />
+            </div>
+          </div>
+        ))}
+      </div>
+    )
   }
 
   if (tasks.length === 0) {
@@ -193,16 +235,32 @@ export function DependencyBoard({ specDocumentId, onOpenRequirement, onSelectBoa
           className="absolute inset-0"
           style={{ width: '100%', height: '100%', pointerEvents: 'none' }}
         >
+          <defs>
+            <marker id="dependency-arrow" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+              <path d="M0,0 L7,3.5 L0,7 Z" fill="var(--border-hi)" />
+            </marker>
+          </defs>
           {lines.map((line) => (
-            <line
+            <path
               key={line.id}
               data-testid="dependency-board-edge"
-              x1={line.x1}
-              y1={line.y1}
-              x2={line.x2}
-              y2={line.y2}
-              stroke="var(--border-hi)"
-              strokeWidth={1.5}
+              d={`M ${line.x1} ${line.y1} V ${(line.y1 + line.y2) / 2} H ${line.x2} V ${line.y2}`}
+              markerEnd="url(#dependency-arrow)"
+              className={[
+                'dependency-edge',
+                tasks.find((task) => task.id === line.fromTaskId)?.assignee_status === 'running'
+                  ? 'dependency-edge-live'
+                  : tasks.find((task) => task.id === line.toTaskId)?.dependency_state === 'gated_on_rejected'
+                    ? 'dependency-edge-rejected'
+                    : tasks.find((task) => task.id === line.toTaskId)?.dependency_state === 'gated'
+                      ? 'dependency-edge-gated'
+                      : 'dependency-edge-normal',
+                lineageIds
+                  ? lineageIds.has(line.fromTaskId) && lineageIds.has(line.toTaskId)
+                    ? 'lineage-active'
+                    : 'lineage-dim'
+                  : '',
+              ].filter(Boolean).join(' ')}
             />
           ))}
         </svg>
@@ -255,9 +313,10 @@ export function DependencyBoard({ specDocumentId, onOpenRequirement, onSelectBoa
                 {stallSummary && (
                   <p
                     data-testid={`dependency-board-layer-${layer.depth}-stall-summary`}
-                    className="text-xs mb-2"
+                    className="dependency-stall-summary text-xs mb-2 px-2 py-1.5"
                     style={{ color: 'var(--text-3)' }}
                   >
+                    <Icon name="warning" size={13} style={{ color: 'var(--amber)', marginTop: 1 }} />
                     Layer {layer.depth} is {stallSummary}.
                   </p>
                 )}
@@ -272,11 +331,16 @@ export function DependencyBoard({ specDocumentId, onOpenRequirement, onSelectBoa
                     onClick={() =>
                       setExpandedOverride((prev) => ({ ...prev, [layer.depth]: !expanded }))
                     }
-                    className="flex items-center gap-1 mb-2 text-xs font-medium"
+                    className="dependency-layer-toggle flex items-center gap-1 mb-2 text-xs font-medium"
                     style={{ color: 'var(--text-3)' }}
                   >
                     <Icon name={expanded ? 'expand_more' : 'chevron_right'} size={14} />
                     {layer.tasks.length} done
+                    {!expanded && (
+                      <span style={{ color: 'var(--text-3)' }}>
+                        · {edges.filter((edge) => layer.tasks.some((task) => task.id === edge.task_id || task.id === edge.depends_on_task_id)).length} links hidden
+                      </span>
+                    )}
                   </button>
                 )}
                 {expanded && (
@@ -287,6 +351,9 @@ export function DependencyBoard({ specDocumentId, onOpenRequirement, onSelectBoa
                     {layer.tasks.map((task) => (
                       <div
                         key={task.id}
+                        onMouseEnter={() => setHoveredTaskId(task.id)}
+                        onMouseLeave={() => setHoveredTaskId(null)}
+                        className={lineageIds ? (lineageIds.has(task.id) ? 'lineage-active' : 'lineage-dim') : undefined}
                         ref={(el) => {
                           if (el) cardRefsRef.current.set(task.id, el)
                           else cardRefsRef.current.delete(task.id)

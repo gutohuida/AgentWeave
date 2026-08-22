@@ -223,7 +223,7 @@ describe('DependencyBoard', () => {
     expect(screen.getByTestId('task-open-a')).toBeInTheDocument()
   })
 
-  it('draws one line per edge whose two ends are both on the board', async () => {
+  it('draws a directed orthogonal path per edge whose two ends are both on the board', async () => {
     vi.resetModules()
     renderBoard(
       [makeTask({ id: 'a', title: 'Root task' }), makeTask({ id: 'b', title: 'Middle task' })],
@@ -241,7 +241,36 @@ describe('DependencyBoard', () => {
       </QueryClientProvider>,
     )
 
-    expect(screen.getAllByTestId('dependency-board-edge')).toHaveLength(1)
+    const drawn = screen.getAllByTestId('dependency-board-edge')
+    expect(drawn).toHaveLength(1)
+    expect(drawn[0].tagName).toBe('path')
+    expect(drawn[0]).toHaveAttribute('marker-end', 'url(#dependency-arrow)')
+    expect(drawn[0].getAttribute('d')).toMatch(/^M .* V .* H .* V /)
+  })
+
+  it('highlights the hovered task lineage and dims unrelated work', async () => {
+    vi.resetModules()
+    renderBoard(
+      [
+        makeTask({ id: 'a', title: 'Root task' }),
+        makeTask({ id: 'b', title: 'Leaf task' }),
+        makeTask({ id: 'c', title: 'Disconnected task' }),
+      ],
+      [{ task_id: 'b', depends_on_task_id: 'a' }],
+    )
+    const { DependencyBoard: Board } = await import('@/components/tasks/DependencyBoard')
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={client}>
+        <Board specDocumentId="spdoc-1" />
+      </QueryClientProvider>,
+    )
+
+    fireEvent.mouseEnter(screen.getByText('Leaf task'))
+    expect(screen.getByText('Root task').closest('.lineage-active')).not.toBeNull()
+    expect(screen.getByText('Leaf task').closest('.lineage-active')).not.toBeNull()
+    expect(screen.getByText('Disconnected task').closest('.lineage-dim')).not.toBeNull()
+    expect(screen.getByTestId('dependency-board-edge')).toHaveClass('lineage-active')
   })
 
   it('shows an empty state when the board has no tasks', async () => {

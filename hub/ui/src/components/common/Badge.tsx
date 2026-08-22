@@ -1,5 +1,6 @@
 import { tint } from '@/lib/colorTint'
 import type { BadgeVariant } from './badgeVariants'
+import { Icon } from './Icon'
 
 interface BadgeProps {
   children: React.ReactNode
@@ -37,6 +38,13 @@ const STATUS_STYLES: Record<string, { bg: string; border: string; color: string 
   approved:        SUCCESS,
   rejected:        DANGER,
   revision_needed: DANGER,
+}
+
+const PRIORITY_STYLES: Record<string, { bg: string; border: string; color: string }> = {
+  low: NEUTRAL,
+  medium: NEUTRAL,
+  high: WARNING,
+  critical: DANGER,
 }
 
 const VARIANT_STYLES: Record<string, { bg: string; border: string; color: string }> = {
@@ -79,6 +87,29 @@ export function StatusBadge({ status, pill }: { status: string; pill?: boolean }
       }}
     >
       {status.replace(/_/g, ' ')}
+    </span>
+  )
+}
+
+/** Priority is a different vocabulary from lifecycle status. Keeping its own map prevents every
+ * priority from falling through StatusBadge's neutral pending fallback. The flag makes high-impact
+ * priority scannable by shape as well as colour. */
+export function PriorityBadge({ priority }: { priority: string }) {
+  const s = PRIORITY_STYLES[priority] ?? NEUTRAL
+  const flagged = priority === 'high' || priority === 'critical'
+  return (
+    <span
+      className="aw-chip"
+      data-testid={`priority-badge-${priority}`}
+      style={{
+        background: s.bg,
+        border: `1px solid ${s.border}`,
+        color: s.color,
+        textTransform: 'capitalize',
+      }}
+    >
+      {flagged && <Icon name="flag" size={11} />}
+      {priority.replace(/_/g, ' ')}
     </span>
   )
 }
