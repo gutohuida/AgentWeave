@@ -512,6 +512,10 @@
     const html = document.documentElement
     html.dataset.mode = html.dataset.mode === 'dark' ? 'light' : 'dark'
   })
+  // AgentOutputPanel.tsx always lands scrollTop at the newest entry (scrollTop = scrollHeight
+  // in the simple case) -- without this, the static frame's own overflow boundary clips the
+  // last message mid-line, which the real, always-scrolled app never shows.
+  document.querySelectorAll('.timeline').forEach((el) => { el.scrollTop = el.scrollHeight })
 </script>
 </body>
 </html>

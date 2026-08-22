@@ -799,3 +799,77 @@ which clause, including the popover-crowding judgement call above) and add S1 to
 `design/mocks/index.html` with before/after shots — noting `dead_ends_inherited`'s point about the
 blanket `*.png` `.gitignore` rule: inline the shots as data-URIs in the index HTML itself rather
 than committing PNG files.
+
+## Iteration 12 — 2026-08-22T02:23:21+01:00 — S1 P4: finish (second iterate, RATIONALE.md, review index)
+
+Branch/log/STATE.json reconciled cleanly on entry — clean tree, HEAD matched iteration 11's commit
+(`e7109b3`).
+
+**Second iterate pass.** Re-screenshot both variants, both themes, via the same direct-Playwright
+approach as P3 (`uishot.py` still doesn't fit a static mock's own `.theme-toggle` handler). Zero
+console errors, same pre-existing webfont 404 as every prior pass.
+
+**Found a second real bug, this one in both variants, by reading the renders rather than the
+source.** Cropped the boundary between the last timeline message and the composer and saw the
+reviewer's reply bubble cut off mid-second-line, with what looked like a hard clip line straight
+through the text — in *both* `restrained.html` and `considered.html`, both themes. Traced the
+cause by reading `.timeline`'s CSS (`flex: 1; overflow-y: auto`) and finding neither file's
+`<script>` block ever scrolled it — the browser default is to render from the top of a scrollable
+region, so with more message content than the fixed 660px `.frame` height, the *last* message sits
+partially below the container's own overflow boundary and gets cut, not hidden. Checked whether
+this is a demo-only artefact or something the real product actually guards against:
+`AgentOutputPanel.tsx:254-286` does, deliberately — its own comment explains that a direct
+`scrollTop` assignment (not `scrollIntoView`/`rAF`) is required so following a conversation doesn't
+depend on the window currently painting, and the simple-case fallback is `el.scrollTop =
+el.scrollHeight`. Neither mock had any equivalent. **Fixed** in both files' existing `<script>`
+block: `document.querySelectorAll('.timeline').forEach((el) => { el.scrollTop = el.scrollHeight
+})`, with a comment citing the real component's behaviour so a future reader knows this isn't
+arbitrary. Re-screenshotted and cropped the same region before/after — the last message and the
+"builder is working" indicator now render fully above the composer, both variants, both themes.
+
+**The two questions carried from P3 needed no further work this pass** — both already resolved by
+inspection in iteration 11 (popover overlap is standard transient behaviour, not fixed; the
+restrained/considered degree difference reads clearly) — re-confirmed only incidentally by the
+fresh screenshots, nothing new to add.
+
+**Wrote `design/mocks/S1/RATIONALE.md`** — research → changes for all six RESEARCH.md findings,
+what was rejected and under which IDENTITY.md clause (a third "expressive" variant, rejected under
+clause 5/7 for having no new finding to justify it; T3's glass banner-stack surface, rejected under
+clause 7's no-glass rule; any new hue, checked against clause 2 each pass), and both P3/P4
+judgement calls including this iteration's scroll-clip fix with its before/after evidence.
+
+**Built `design/mocks/index.html`** — did not exist yet; this is its first entry (the `Z` queue item
+rebuilds it in full later, but `P4_finish`'s own instruction is to add the finishing screen here as
+it lands, so an incremental index was started rather than left for `Z` alone). Assembled entirely
+via a Python script in `testbed/scratch/` (gitignored, deleted after use) rather than through the
+editing tool directly, specifically to avoid pushing ~1.3MB of base64 image text through the
+conversation itself — the script read four full-page screenshots (both variants, both themes,
+resized to 760px wide) and the scroll-fix before/after crop pair, base64-encoded them, and wrote
+the final HTML with them inlined as `data:image/png;base64,...` sources, sidestepping the repo's
+blanket `*.png` `.gitignore` rule exactly as `dead_ends_inherited` flagged for whoever reached this
+point. Two placeholder sections added below S1's for `_system` (built, not yet indexed with shots)
+and S2–S8 (not started), so the index reads honestly about what it does and doesn't yet cover.
+Verified by opening the finished `index.html` itself with Playwright (1280×1000, full-page,
+`file://`) and reading the screenshot: zero console errors, all six embedded images decode and
+render, the before/after fix pair is legible at the chosen size, and the pending sections are
+visually distinct (dimmed, "not yet indexed" / "not started" badges) from the done one.
+
+**Verified, not assumed.**
+- Direct-Playwright capture of both S1 variants after the scroll fix, both themes → 0 console
+  errors; cropped before/after comparison confirmed the clip is gone in all four combinations.
+- `npx openspec validate conversations-continue --strict` → valid (unrelated to this iteration's
+  changes, re-checked as routine hygiene since this branch also carries that change).
+- `git status --short` after cleanup → only the intended four paths changed
+  (`.claude/autonomous/STATE.json`, `design/mocks/S1/{considered,restrained}.html` modified;
+  `design/mocks/S1/RATIONALE.md`, `design/mocks/index.html` new). No scratch files, no stray `.png`.
+- Playwright read of the finished `design/mocks/index.html` itself, both as a rendered screenshot
+  and by checking `page.on('console'/'pageerror')` — confirms the data-URI approach actually works
+  in a real browser, not just that the file was written.
+
+**S1 is now complete — all four passes verified across three iterations (9, 10, 11, 12).**
+
+**Next:** S2 — "Screen 2: task board + task cards," the operator's explicitly named worst offender.
+Begin with P1 (explore only): read `TasksBoard.tsx`, `TaskCard.tsx`, `TaskDetailDrawer.tsx` in
+full, `WebSearch` for kanban/task-card UI patterns, read the T3 Code sourcemaps for the closest
+equivalent surfaces, and write `design/mocks/S2/RESEARCH.md`. No mock this iteration — same
+one-pass-per-firing rhythm as every screen so far.
