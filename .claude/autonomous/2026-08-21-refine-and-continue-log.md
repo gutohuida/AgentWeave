@@ -1813,3 +1813,100 @@ UI patterns, and the T3 Code sourcemaps for anything comparable. Per `decisions_
 D-spec-render, note plainly in `RATIONALE.md` (written at P4) that implementing this one later
 touches Python templates, not React components — a different kind of change from every other
 screen in the queue. Write `design/mocks/S5/RESEARCH.md`.
+
+## Iteration 25 — 2026-08-22T04:27:58+01:00 — S5 P1: explore (rendered spec documents)
+
+**Verified branch/state on entry.** `git branch --show-current` = `autonomous/2026-08-21-refine-and-continue`,
+`git log --oneline -3` matched STATE.json exactly (heartbeat-release `5f02844` topmost, S4 P4
+`25c0b81` beneath it). Working tree clean. No reconciliation needed.
+
+**What P1 requires per `screen_pass_protocol`:** WebSearch for patterns for this KIND of surface,
+read the T3 Code sourcemaps for the equivalent, read the current component (with its comments) end
+to end, write `design/mocks/S5/RESEARCH.md` naming what's missing and its sources.
+
+**Read in full:** `hub/hub/spec_render.py` (533 lines including every comment — the module's own
+notes on anchor-stability and "no navigation script here, the shell owns it" were treated as
+binding design constraints, not decoration); `SpecFrame.tsx` and `hubTheme.ts` (the sandboxed-iframe
+host and its neutral-only theme override, including the prior incident recorded in `hubTheme.ts`'s
+own comments — a re-grounded surface once inverted every lifted block because only the background
+moved and not the rest of the ramp); `SpecDocumentPanel.tsx` (the chrome around the iframe —
+breadcrumb, phase bar, coverage bar, proposals panel, a 200px outline sidebar built from
+`toc-ready` postMessage anchors — confirmed this is a separate, already-styled React surface and
+out of S5's scope per the queue item's own framing, but its shell decisions constrain the mock:
+no sticky TOC or anchor-click interceptor inside the document itself, since the shell already owns
+both).
+
+**Read a real generated document, not a toy example.** `spec/capabilities/task-lifecycle-governance
+/spec.html` (1204 lines, 32 requirements, a 110-row acceptance-criteria table) — chosen deliberately
+for density. Two findings only a real document could surface: 108 of 110 acceptance rows have an
+empty "Given" cell (confirmed against the document's own `Limits` section, which names this as a
+known translation gap), yet the rendered table gives that column full, unconditional width on every
+row; and rationale prose regularly outweighs the requirement statement it explains (FR-21's
+rationale is roughly triple the length of FR-21 itself) while both render as a plain `<p>`,
+differing only by a muted colour.
+
+**Read the legacy convention as reference only, not as a contract.** `.agents/skills/aw-spec-apply
+/html-spec-conventions.md` describes a different, agent-authored `spec.html` predating the Hub-owned
+flow — per `CLAUDE.md` the `aw-*` skills are product source to implement, not a workflow to run, so
+this was read the same way `IDENTITY.md` treats T3 Code: design reference, not something to run or
+treat as current. Two things in it still transfer: its MUST/SHOULD/MAY badges are filled pills
+(background + colour) rather than coloured text — a legitimate steal *within* `spec_render.py`'s own
+existing tokens — while its sticky TOC and live task-progress bar are superseded (the shell owns TOC;
+`SpecPayload.tasks` carries no status field today, so a progress bar would have to invent data the
+payload doesn't have — flagged as a missing-feature note per the pre-authorised instruction, not
+mocked as a fake state).
+
+**T3 Code has no comparable surface.** Grepped all 384 sourcemaps under
+`app.asar.unpacked/apps/server/dist/client/assets` for anything resembling a document/spec/plan
+viewer (`TableOfContents`, `DocViewer`, `PlanView`, `SpecView`, `Requirement`, `Markdown`,
+`ReactMarkdown`, `prose-`) — the only hit across all 384 was a Shiki syntax-highlighting grammar
+file, not a component. T3 Code is chat-first and has no document-authority screen at all, unlike
+every other screen in this queue — recorded plainly in `RESEARCH.md` rather than papering over the
+gap with an invented comparison, and external WebSearch research carries correspondingly more
+weight this pass.
+
+**External research, three searches, all cited with URLs in `RESEARCH.md`:** API-reference-docs
+scannability/hierarchy practice (Speakeasy, Stoplight — "walls of text with buried important
+information" is this document's literal failure mode once the one 3px border is the only
+differentiation between 32 requirement blocks); long-document reading UX (NN/g — a scroll-progress
+indicator answers "how much is left" where the shell's own outline sidebar only answers "where am
+I," and only at section granularity, not inside a 32-item Requirements section); badge/status-pill
+design (Eleken — filled pill beats colour-on-text for at-a-glance scanning, the same "icon/fill +
+colour" idiom S2 and S4 already invoked for cards and DAG nodes).
+
+**Resolved a genuine tension with `IDENTITY.md` clause 1 before P2 needs it.** Clause 1 requires
+"every colour resolves to an existing token in `hub/ui/src/index.css`" — read literally that cannot
+apply here: `spec_render.py`'s `_STYLE` is a deliberately separate, self-contained token namespace
+(the document renders standalone outside any Hub), and `hubTheme.ts`'s own comment states its four
+semantic hues are "not the Hub's to recolour." Wrote the resolution directly into `RESEARCH.md`:
+clause 1 is scoped for this screen to mean every colour resolves to a token **already declared in
+`spec_render.py`'s own `_STYLE` block**, not the Hub's — same rule (no invented hue, no arbitrary
+hex), applied to this screen's actual, different vocabulary — so P2 applies it consistently rather
+than improvising a call mid-mock.
+
+**`design/mocks/S5/RESEARCH.md` written** (187 lines) — what was read, the clause-1 resolution, three
+cited external sources, ten specific missing-detail findings (modal-tone weight, inverted
+rationale/statement hierarchy, the wasted Given column, no local sense of progress inside a long
+section, no copy-anchor affordance despite anchor-stability being a real guarantee, bare task list,
+undifferentiated corpus-map children, a duplicate/inconsistent in-frame vs. shell breadcrumb, bare
+loading text, and the observation that the meta-chips/summary row is already the best-styled part
+of the document while everything below regresses), and what must not be redesigned (the three-layer
+theme cascade and `hubTheme.ts`'s neutral-only override — a tested, previously-bug-fixed contract;
+the phase/rigor/modal colour *assignments* themselves, only their weight is the gap; anchor
+stability; the deliberate absence of in-document navigation script).
+
+**One self-caught error.** First write of `RESEARCH.md` left a stray `2.` numbered-list marker
+inside what should have been an unordered "already good" list (a copy-paste artefact from drafting).
+Caught rereading the file immediately after writing it, fixed with a targeted `Edit`, confirmed by
+rereading the corrected section.
+
+**Verified.** `py -3.11 -c "import json; json.load(...)"` on `STATE.json` after editing.
+`git status --short` → only the new `design/mocks/S5/` directory (containing `RESEARCH.md`).
+
+**Next:** S5 P2 — validate every `RESEARCH.md` finding against `IDENTITY.md`'s rejection test
+(clause 1 applied as scoped above: the document's own `_STYLE` tokens, not the Hub's), then build
+`design/mocks/S5/<variant>.html` (two or three degrees of refinement) using the real
+`task-lifecycle-governance` document's density as realistic content, in both themes. Decide
+explicitly at P2 whether to also demonstrate the standalone (non-Hub-embedded, OS-preference-driven)
+theme path alongside the Hub-embedded one that `hubTheme.ts` produces, per `RESEARCH.md`'s closing
+note — this screen is a real standalone artefact in a way no other screen in the queue is.
