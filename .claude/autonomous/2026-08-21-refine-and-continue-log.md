@@ -661,3 +661,73 @@ hover-reveal copy + exact-timestamp tooltip, the composer's armed-pill fix (find
 busy-send state (finding 3), and a context-usage ring-plus-popover (finding 4) — plus at least one
 sidebar/tree row shown in both resting and hover states, per clause 7 of the rejection test.
 
+
+## Iteration 10 — 2026-08-22T02:10:51+01:00 — S1 P2: validate + mock, conversation/composer/navigation
+
+Branch/log/STATE.json reconciled cleanly on entry — clean tree, HEAD matched iteration 9's commit.
+
+**Validate.** Re-checked all six RESEARCH.md findings against IDENTITY.md's rejection test line by
+line before building anything. All six pass: none touches the palette (clause 1), none introduces
+--blue outside focus/selection (clause 2 — the spec control's armed fix uses --surface-3/--border-hi,
+the same recipe `.row-item[data-active]` already uses; the "considered" live-dot and empty-state
+motion cue reuse --green, "something is live," never a new hue), none touches the radius scale
+(clause 3/4), no new icon source (clause 5), nothing that costs density (clause 6), and every
+control is shown in more than its resting state (clause 7). Nothing was discarded.
+
+**Build.** Two variants, not three — "restrained" and "considered," degrees of the same language
+rather than a third distinct one; RESEARCH.md's six findings don't carry enough range to make an
+"expressive" reading meaningfully different from "considered" without inventing decoration for its
+own sake, which clause 7's "texture means considered detail, not literal texture" rules out anyway.
+Read `Composer.tsx`, `ConversationControls.tsx`, `ContextUsageIndicator.tsx`, `AgentTimeline.tsx`
+(`MessageEntry`/`OutboundMessageEntry` in full, again, for exact markup), `ComposerSpecControl.tsx`,
+`ComposerModelControls.tsx` (`ControlPill`'s popover shape — reused rather than reinvented for the
+context-usage disclosure), `SidebarItem.tsx`, and `agentColors.ts` (`--agent-N`/`-tint`/`-border`)
+before writing any markup, so the mock's structure and class-level behaviour matches the real
+components rather than an impression of them.
+
+`design/mocks/S1/restrained.html` — the smallest fix per finding: hover-revealed copy button on
+every message row reusing the product's own `.row-action` idiom; timestamps carry a native `title`
+with full date/time; the spec control's armed state gets the `.row-item[data-active]` treatment
+(filled `--surface-3` pill, `--border-hi`) so pressing "Explore" now visibly differs from resting;
+the send button has four real states (idle/ready/busy-spinner/disabled) instead of one dimmed icon;
+context usage is a compact ring instead of a bare 4px bar; work-call and outbound-message disclosure
+now animate open/closed on `--dur-base`/`--ease` instead of jumping. Also a first pass at the empty
+state (bordered icon tile, a second line) since RESEARCH.md flagged it as the highest-value idle
+surface.
+
+`design/mocks/S1/considered.html` — same six fixes taken further: the context ring gains a full
+`ControlPill`-shaped popover (used/budget/turns/auto-compact note) instead of the bare `title`; the
+timestamp gets a matching tooltip bubble; message rows highlight and lift slightly on hover; the
+conversation header's title becomes an actionable trigger with a hover-revealed rename chevron
+(T3's `ChatHeader` idiom, confirmed compatible with clause 7 since it costs nothing at rest); the
+armed spec pill carries a quiet `--green` live-dot; and the empty state adds a reduced-motion-gated
+expanding-ring cue plus a one-press quick-start row against the two agents already in the tree —
+recorded in RESEARCH.md as a missing *feature*, not merely unstyled, and mocked per the
+pre-authorised note rather than left out. Both variants keep both messages folding (outbound) /
+never folding (inbound) exactly as `AgentTimeline.tsx`'s own comment specifies, keep the two-signal
+working indicator, and keep the operator bubble neutral — nothing in P1's "must not redesign" list
+was touched.
+
+**Verified, not assumed.** Both files opened headless via `py -3.11` + Playwright at `file://`,
+both themes, full-page screenshots, read as PNGs (not merely rendered-and-trusted). No console
+errors beyond the pre-existing `net::ERR_FILE_NOT_FOUND` for a webfont these standalone mocks don't
+carry (present in `_system`'s mocks too — not a regression). Confirmed in both themes: `--blue`/
+`--ring` appears only on the composer's focus ring, agent bubble tints are legible, the popover
+states (pinned open via `data-force="hover"` for the static capture, same convention as `_system`)
+render their full content without clipping against the frame edge, and the empty-state quick-start
+chips use the same agent-colour dots the sidebar tree does rather than a new swatch shape.
+Screenshots deleted after reading, not committed — blanket `*.png` `.gitignore` rule, same as every
+prior pass.
+
+**Not done this iteration, deliberately:** no critique-and-fix cycle. `screen_pass_protocol.P2` is
+build-and-lightly-verify; the honest look-and-fix pass against the rejection test is P3, the next
+firing, using `scripts/uishot.py` or the same direct-Playwright approach if that script assumes the
+live app's own toggle rather than a static file.
+
+**Next:** S1 P3 — screenshot both variants in both themes (four captures), read them, critique
+honestly against IDENTITY.md's rejection test, and fix what's found. In particular check: whether
+the pinned-open context popover in the "live composition" panel visually crowds the operator bubble
+above it (noticed but not fixed this iteration, since forcing states for a demo differs from what
+the popover does on a real hover in the real app), whether the considered variant's motion reads as
+too busy once several loops are visible together, and whether "restrained" is restrained enough
+relative to "considered" to earn being called a lesser degree rather than an unfinished one.
