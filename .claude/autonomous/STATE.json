@@ -8,8 +8,8 @@
   "started_at": "2026-08-22T14:30:00+01:00",
   "stop_at": "2026-08-22T20:00:00+01:00",
   "stop_when_queue_empties": true,
-  "iteration": 10,
-  "last_heartbeat": "2026-08-22T16:49:10+01:00",
+  "iteration": 11,
+  "last_heartbeat": "2026-08-22T20:00:30+01:00",
   "log_file": ".claude/autonomous/2026-08-22-ui-finesse-log.md",
   "queue": [
     {
@@ -20,7 +20,9 @@
   ],
   "current": null,
   "next_action": "Run the full UI suite, tsc, lint and production build. From repo root run py -3.11 scripts/refresh_ui_bundle.py and confirm hub/ui/dist matches hub/hub/static/ui as required. Run affected Hub tests for spec template changes. Inspect git diff for accidental legacy revival, unrelated changes, generated debris or missing accessibility states. Commit and push the final coherent result, set next_action null, and write a morning summary naming completed surfaces, remaining risks and Playwright evidence.",
-  "decisions_for_user": [],
+  "decisions_for_user": [
+    "Extend the autonomous window so F10 can run, or leave the final verification and cherry-pick decision for an attended session?"
+  ],
   "limits": [
     "Stay on autonomous/2026-08-22-ui-finesse and push only that branch; do not merge, open a PR, release, publish or deploy.",
     "Never touch port 8000. If a live Hub is needed, use the isolated trial/test environment on another port and never point AgentWeave at this source checkout.",
