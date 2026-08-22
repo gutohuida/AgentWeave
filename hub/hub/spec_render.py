@@ -39,6 +39,7 @@ _STYLE = """
   --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d8dee4;
   --aw-accent: #0969da; --aw-warn: #9a6700; --aw-ok: #1a7f37;
   --surface-2: #eaeef2; --surface: #f6f8fa;
+  --aw-dur-fast: 150ms; --aw-dur-base: 250ms; --aw-ease: cubic-bezier(0.16, 1, 0.3, 1);
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -58,6 +59,9 @@ _STYLE = """
   --surface-2: #21262d; --surface: #161b22;
 }
 * { box-sizing: border-box; }
+@media (prefers-reduced-motion: reduce) {
+  :root { --aw-dur-fast: 0ms; --aw-dur-base: 0ms; }
+}
 body {
   margin: 0; padding: 2rem 2.5rem 4rem; background: var(--bg); color: var(--fg);
   font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
@@ -72,24 +76,31 @@ li { margin: .25rem 0; }
 a { color: var(--aw-accent); }
 .aw-meta { color: var(--muted); font-size: .85rem; margin: 0 0 1.5rem; }
 .aw-nav { font-size: .85rem; margin: 0 0 1.5rem; }
-.aw-nav a { margin-right: .6rem; }
+.aw-nav a + a::before { content: "›"; color: var(--muted); margin: 0 .6rem; }
 .aw-map-list { list-style: none; margin: .5rem 0; padding-left: 0; }
 .aw-map-list .aw-map-list { padding-left: 1.25rem; margin-top: .5rem; }
-.aw-map-item { margin: .75rem 0; }
+.aw-map-item { margin: 0; padding: .75rem .35rem; border-bottom: 1px solid var(--border);
+               transition: background var(--aw-dur-fast) var(--aw-ease); }
+.aw-map-item:hover { background: var(--surface); }
+.aw-map-item:last-child { border-bottom: 0; }
 .aw-map-item > p { margin: .2rem 0; }
 .aw-chip { display: inline-block; padding: .1rem .5rem; border-radius: 999px;
            background: var(--surface-2); font-size: .78rem; margin-right: .4rem; }
-.aw-requirement { border-left: 3px solid var(--border); padding: .1rem 0 .1rem .9rem;
-                  margin: 1.1rem 0; }
+.aw-requirement { border: 1px solid var(--border); border-left: 3px solid var(--border);
+                  border-radius: 6px; padding: .8rem .9rem; margin: .75rem 0;
+                  transition: background var(--aw-dur-fast) var(--aw-ease),
+                              border-color var(--aw-dur-fast) var(--aw-ease); }
+.aw-requirement:hover { background: var(--surface); }
 .aw-requirement-must { border-left-color: var(--aw-accent); }
 .aw-requirement-should { border-left-color: var(--aw-warn); }
 .aw-requirement-may { border-left-color: var(--border); }
 .aw-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8rem;
          color: var(--muted); }
-.aw-modal { font-weight: 600; }
-.aw-modal-must { color: var(--aw-accent); }
-.aw-modal-should { color: var(--aw-warn); }
-.aw-modal-may { color: var(--fg); font-weight: 400; }
+.aw-modal { display: inline-block; padding: .05rem .42rem; border-radius: 999px; font-size: .75rem;
+            font-weight: 650; letter-spacing: .02em; }
+.aw-modal-must { color: var(--aw-accent); background: color-mix(in srgb, var(--aw-accent) 12%, var(--bg)); }
+.aw-modal-should { color: var(--aw-warn); background: color-mix(in srgb, var(--aw-warn) 12%, var(--bg)); }
+.aw-modal-may { color: var(--fg); background: var(--surface-2); font-weight: 500; }
 .aw-chip-rigor-gate { color: var(--aw-accent); border: 1px solid var(--aw-accent); }
 .aw-chip-rigor-contract { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
 /* Phase is a lifecycle, and the question it answers is "can I rely on this?". `approved` and a
@@ -110,16 +121,34 @@ a { color: var(--aw-accent); }
 /* The first screenful was entirely monochrome, so the document read as texty however the
    requirements below were coloured. This puts the same modal scheme where the eye lands first,
    carrying counts rather than decoration. */
-.aw-summary { margin: 0 0 1.5rem; font-size: .9rem; color: var(--muted); }
+.aw-summary { margin: 0 0 1.5rem; padding: .65rem .8rem; border: 1px solid var(--border);
+              border-radius: 6px; background: var(--surface); font-size: .9rem; color: var(--muted); }
 .aw-summary .aw-count { font-weight: 600; }
 .aw-summary-sep { color: var(--border); margin: 0 .45rem; }
-.aw-rationale { color: var(--muted); font-size: .9rem; }
+.aw-position { float: right; color: var(--muted); font-size: .72rem; text-transform: uppercase;
+               letter-spacing: .05em; }
+.aw-anchor-copy { margin-left: .35rem; padding: .1rem .3rem; border: 1px solid transparent;
+                  border-radius: 4px; background: transparent; color: var(--muted); cursor: pointer; }
+.aw-anchor-copy:hover { border-color: var(--border); color: var(--aw-accent); }
+.aw-anchor-copy:focus-visible, a:focus-visible { outline: 2px solid var(--aw-accent); outline-offset: 2px; }
+.aw-rationale { margin-top: .7rem; padding-left: .7rem; border-left: 2px solid var(--border);
+                color: var(--muted); font-size: .9rem; }
+.aw-rationale-label { display: block; margin-bottom: .15rem; font-size: .68rem; font-weight: 650;
+                      letter-spacing: .08em; text-transform: uppercase; }
 .aw-refs { font-size: .82rem; color: var(--muted); }
 .aw-note { color: var(--muted); font-style: italic; }
 .aw-empty { color: var(--muted); }
 table { border-collapse: collapse; margin: .75rem 0; width: 100%; }
 th, td { border: 1px solid var(--border); padding: .4rem .6rem; text-align: left;
          vertical-align: top; font-size: .92rem; }
+tbody tr { transition: background var(--aw-dur-fast) var(--aw-ease); }
+tbody tr:hover { background: var(--surface); }
+tbody tr[data-first="true"] td { border-top: 2px solid var(--aw-accent); }
+.aw-cell-empty { color: var(--muted); text-align: center; }
+.aw-task-list { list-style: none; padding-left: 0; }
+.aw-task { margin: .5rem 0; padding: .65rem .75rem; border: 1px solid var(--border);
+           border-radius: 6px; background: var(--surface); }
+.aw-task .aw-refs { display: flex; flex-wrap: wrap; gap: .3rem; margin-top: .35rem; }
 code, pre { background: var(--surface); border-radius: 4px; }
 code { padding: .1rem .3rem; font-size: .88em; }
 """.strip()
@@ -137,7 +166,7 @@ def _paragraphs(text: str) -> str:
 def _section(title: str, anchor: str, body: str) -> str:
     if not body:
         return ""
-    return f'<section><h2 id="{anchor}">{_e(title)}</h2>{body}</section>'
+    return f'<section id="{anchor}"><h2>{_e(title)}</h2>{body}</section>'
 
 
 def _list(items: List[str], empty: str = "") -> str:
@@ -156,18 +185,23 @@ def _requirements(payload: SpecPayload, identifiers: Dict[str, str]) -> str:
     if not payload.requirements:
         return '<p class="aw-empty">No requirements yet.</p>'
     parts: List[str] = []
-    for requirement in payload.requirements:
+    total = len(payload.requirements)
+    for index, requirement in enumerate(payload.requirements, start=1):
         identifier = identifiers.get(requirement.key, "")
         tone = _MODAL_TONE.get(requirement.modal, "may")
         party = f'<span class="aw-chip">{_e(requirement.party)}</span>' if requirement.party else ""
         rationale = (
-            f'<p class="aw-rationale">{_e(requirement.rationale)}</p>'
+            f'<p class="aw-rationale"><span class="aw-rationale-label">Why</span>'
+            f"{_e(requirement.rationale)}</p>"
             if requirement.rationale
             else ""
         )
         parts.append(
             f'<div class="aw-requirement aw-requirement-{tone}" id="{_e(identifier)}">'
-            f'<span class="aw-id">{_e(identifier)}</span> {party}'
+            f'<span class="aw-id">{_e(identifier)}</span>'
+            f'<a class="aw-anchor-copy" href="#{_e(identifier)}" '
+            f'aria-label="Link to {_e(identifier)}" title="Link to #{_e(identifier)}">#</a> {party}'
+            f'<span class="aw-position">Requirement {index} of {total}</span>'
             f'<p><span class="aw-modal aw-modal-{tone}">{_e(requirement.modal)}</span> '
             f"{_e(requirement.statement)}</p>{rationale}</div>"
         )
@@ -265,13 +299,23 @@ def _acceptance(payload: SpecPayload, identifiers: Dict[str, str]) -> str:
         key=lambda criterion: position.get(criterion.requirement, len(position)),
     )
     rows = [
-        "<table><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th>"
+        '<table><colgroup><col style="width:13%"><col style="width:12%">'
+        '<col style="width:32%"><col style="width:43%"></colgroup>'
+        "<thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th>"
         "</tr></thead><tbody>"
     ]
+    previous_requirement: Optional[str] = None
     for criterion in ordered:
         identifier = identifiers.get(criterion.requirement, criterion.requirement)
+        first = criterion.requirement != previous_requirement
+        previous_requirement = criterion.requirement
+        given = (
+            _e(criterion.given) if criterion.given else '<span aria-label="Not specified">—</span>'
+        )
+        given_class = ' class="aw-cell-empty"' if not criterion.given else ""
         rows.append(
-            f"<tr><td>{_link(identifier)}</td><td>{_e(criterion.given)}</td>"
+            f'<tr data-first="{"true" if first else "false"}"><td>{_link(identifier)}</td>'
+            f"<td{given_class}>{given}</td>"
             f"<td>{_e(criterion.when)}</td><td>{_e(criterion.then)}</td></tr>"
         )
     rows.append("</tbody></table>")
@@ -284,15 +328,15 @@ def _tasks(payload: SpecPayload, identifiers: Dict[str, str]) -> str:
     items: List[str] = []
     for task in payload.tasks:
         refs = ", ".join(_link(identifiers.get(key, key)) for key in task.requirements)
-        satisfies = f'<span class="aw-refs"> — satisfies {refs}</span>' if refs else ""
+        satisfies = f'<span class="aw-refs"><span>satisfies</span> {refs}</span>' if refs else ""
         # The title is what a board will show, so a reader of the document should see the same name
         # they will later see on the board. Without one the description carries the item, as before.
         if task.title.strip():
             body = f"<strong>{_e(task.title.strip())}</strong> — {_e(task.description)}"
         else:
             body = _e(task.description)
-        items.append(f"<li>{body}{satisfies}</li>")
-    return "<ul>" + "".join(items) + "</ul>"
+        items.append(f'<li class="aw-task">{body}{satisfies}</li>')
+    return '<ul class="aw-task-list">' + "".join(items) + "</ul>"
 
 
 def _algorithms(payload: SpecPayload) -> str:

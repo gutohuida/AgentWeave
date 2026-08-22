@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Install a Windows Scheduled Task that drives an autonomous session with headless `claude -p`.
+    Install a Windows Scheduled Task that drives an autonomous Claude or Codex session.
 
 .DESCRIPTION
     This is the only local driver that survives the interactive session ending.
@@ -10,7 +10,7 @@
     machine had not slept and had not rebooted; the session simply stopped existing, taking every
     scheduled wakeup with it.
 
-    A Scheduled Task does not care. Each firing is a brand new `claude -p` process that reads
+    A Scheduled Task does not care. Each firing is a brand new agent process that reads
     .claude/autonomous/STATE.json, performs one iteration, commits, pushes, and exits. Nothing is
     held in memory between iterations, which is exactly what makes it survivable.
 
@@ -37,6 +37,14 @@
 .PARAMETER TaskName
     Scheduled Task name. Also used to find and remove it again.
 
+.PARAMETER Runner
+    Agent CLI to invoke. `auto` reads STATE.json.runner and falls back to `claude` for legacy state.
+
+.PARAMETER PermissionMode
+    Permission posture. `auto` reads STATE.json.permission_mode and falls back to
+    `unattended-full-access` for legacy state. Overnight runs must never select a posture that can
+    ask the absent operator a question.
+
 .EXAMPLE
     powershell -File install-driver.ps1 -EveryMinutes 5 -UntilHHmm "10:00"
 
@@ -49,21 +57,67 @@ param(
   [string] $Repo = (Resolve-Path (Join-Path $PSScriptRoot "..\..\..\..")).Path,
   [int]    $EveryMinutes = 5,
   [string] $UntilHHmm = "10:00",
-  [string] $TaskName = "AgentWeaveAutonomousSession"
+  [string] $TaskName = "AgentWeaveAutonomousSession",
+  [ValidateSet("auto", "claude", "codex")]
+  [string] $Runner = "auto",
+  [ValidateSet("auto", "unattended-full-access", "workspace-contained")]
+  [string] $PermissionMode = "auto"
 )
 
 $ErrorActionPreference = "Stop"
-
-$claude = (Get-Command claude -ErrorAction SilentlyContinue).Source
-if (-not $claude) { throw "claude CLI not found on PATH; the driver has nothing to invoke." }
 
 $stateFile = Join-Path $Repo ".claude\autonomous\STATE.json"
 if (-not (Test-Path $stateFile)) {
   throw "No $stateFile. Run the autonomous-session skill first -- the driver resumes a session, it does not start one."
 }
 
-$runner = Join-Path $PSScriptRoot "run-iteration.ps1"
-if (-not (Test-Path $runner)) { throw "Missing $runner" }
+try { $state = Get-Content $stateFile -Raw | ConvertFrom-Json } catch {
+  throw "STATE.json is not valid JSON: $($_.Exception.Message)"
+}
+
+$stateRunner = if ($state.runner) { ([string]$state.runner).ToLowerInvariant() } else { "claude" }
+$statePermissionMode = if ($state.permission_mode) { ([string]$state.permission_mode).ToLowerInvariant() } else { "unattended-full-access" }
+
+$resolvedRunner = if ($Runner -eq "auto") { $stateRunner } else { $Runner }
+$resolvedPermissionMode = if ($PermissionMode -eq "auto") { $statePermissionMode } else { $PermissionMode }
+
+if ($resolvedRunner -notin @("claude", "codex")) {
+  throw "STATE.json runner '$resolvedRunner' is unsupported; expected claude or codex."
+}
+if ($resolvedPermissionMode -notin @("unattended-full-access", "workspace-contained")) {
+  throw "STATE.json permission_mode '$resolvedPermissionMode' is unsupported."
+}
+if ($Runner -ne "auto" -and $state.runner -and $resolvedRunner -ne $stateRunner) {
+  throw "-Runner $Runner contradicts STATE.json runner '$stateRunner'. Update the state during prep instead of overriding it at arm time."
+}
+if ($PermissionMode -ne "auto" -and $state.permission_mode -and $resolvedPermissionMode -ne $statePermissionMode) {
+  throw "-PermissionMode $PermissionMode contradicts STATE.json permission_mode '$statePermissionMode'."
+}
+if ($resolvedRunner -eq "claude" -and $resolvedPermissionMode -ne "unattended-full-access") {
+  throw "Claude workspace-contained mode is not implemented; use unattended-full-access or select Codex."
+}
+
+$agentCommand = Get-Command $resolvedRunner -ErrorAction SilentlyContinue
+if (-not $agentCommand) { throw "$resolvedRunner CLI not found on PATH; the driver has nothing to invoke." }
+$agentExecutable = $agentCommand.Source
+
+if ($EveryMinutes -lt 1) { throw "EveryMinutes must be at least 1." }
+
+$insideWorkTree = (& git -C $Repo rev-parse --is-inside-work-tree 2>$null)
+if ($LASTEXITCODE -ne 0 -or $insideWorkTree -ne "true") {
+  throw "$Repo is not a Git working tree."
+}
+$currentBranch = (& git -C $Repo branch --show-current).Trim()
+if ($LASTEXITCODE -ne 0 -or -not $currentBranch) { throw "Could not resolve the current Git branch." }
+if ($state.branch -and $currentBranch -ne [string]$state.branch) {
+  throw "Current branch '$currentBranch' does not match STATE.json branch '$($state.branch)'."
+}
+if ($currentBranch -notlike "autonomous/*") {
+  throw "Refusing to arm on '$currentBranch'; autonomous runs require a disposable autonomous/* branch."
+}
+
+$iterationScript = Join-Path $PSScriptRoot "run-iteration.ps1"
+if (-not (Test-Path $iterationScript)) { throw "Missing $iterationScript" }
 
 # Resolve the wall-clock stop time to an absolute instant here, where "now" is known. A time that
 # has already passed today means the operator meant tomorrow -- which is the overnight case, and
@@ -79,13 +133,19 @@ $gitignore = Join-Path $Repo ".gitignore"
 $ignoreLine = ".claude/autonomous/driver.log"
 if (-not (Test-Path $gitignore) -or -not (Select-String -Path $gitignore -SimpleMatch $ignoreLine -Quiet)) {
   Add-Content -Path $gitignore -Value $ignoreLine -Encoding ascii
-  Write-Output "Added '$ignoreLine' to .gitignore (the driver writes it mid-commit)."
+  throw "Added '$ignoreLine' to .gitignore. Commit it, then run the installer again so the first firing starts clean."
+}
+
+$dirty = @(& git -C $Repo status --short)
+if ($LASTEXITCODE -ne 0) { throw "Could not inspect the Git working tree." }
+if ($dirty.Count -gt 0) {
+  throw "Refusing to arm with a dirty tree:`n$($dirty -join [Environment]::NewLine)"
 }
 
 # -NoProfile so a slow or interactive profile cannot wedge an unattended firing.
 $action = New-ScheduledTaskAction `
   -Execute "powershell.exe" `
-  -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$runner`" -Repo `"$Repo`" -StopAt `"$stopArg`"" `
+  -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$iterationScript`" -Repo `"$Repo`" -StopAt `"$stopArg`" -TaskName `"$TaskName`" -Runner `"$resolvedRunner`" -PermissionMode `"$resolvedPermissionMode`" -AgentExecutable `"$agentExecutable`"" `
   -WorkingDirectory $Repo
 
 $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) `
@@ -109,11 +169,12 @@ $settings = New-ScheduledTaskSettingsSet `
 Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
 
 Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings `
-  -Description "One autonomous-session iteration per firing, via headless claude -p. Self-unregisters past $stopArg." | Out-Null
+  -Description "One autonomous-session iteration per firing, via headless $resolvedRunner. Self-unregisters past $stopArg." | Out-Null
 
 Write-Output "Installed '$TaskName': every $EveryMinutes min, stopping at $stopArg."
 Write-Output "  repo:   $Repo"
-Write-Output "  claude: $claude"
+Write-Output "  runner: $resolvedRunner ($agentExecutable)"
+Write-Output "  mode:   $resolvedPermissionMode"
 Write-Output "  log:    $Repo\.claude\autonomous\driver.log"
 Write-Output ""
 Write-Output "Remove with: Unregister-ScheduledTask -TaskName '$TaskName' -Confirm:`$false"

@@ -38,33 +38,30 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     if (this.props.fallback) return this.props.fallback(error, this.reset)
 
     return (
-      <div
-        className="flex h-screen flex-col items-center justify-center gap-4 p-8 text-center"
-        style={{ background: 'var(--bg)', color: 'var(--text)' }}
-        role="alert"
-      >
+      <div className="flex h-screen items-center justify-center p-8" style={{ background: 'var(--bg)', color: 'var(--text)' }} role="alert">
+        <div className="trust-state">
         <div
-          className="flex items-center justify-center rounded-full"
-          style={{ width: 64, height: 64, background: 'color-mix(in srgb, var(--red) 15%, transparent)' }}
+          className="trust-state-icon is-error"
         >
-          <Icon name="error_outline" size={32} style={{ color: 'var(--red)' }} />
+          <Icon name="error_outline" size={24} />
         </div>
-        <h1 className="text-lg font-medium">Something went wrong</h1>
-        <p className="max-w-md text-sm" style={{ color: 'var(--text-3)' }}>
+        <h1 className="text-lg font-semibold">Something went wrong</h1>
+        <p className="mx-auto mt-2 max-w-md text-sm" style={{ color: 'var(--text-3)' }}>
           The dashboard hit an unexpected error and could not recover automatically.
           The details have been written to the browser console.
         </p>
         {error.message && (
           <pre
-            className="max-w-2xl overflow-auto rounded-lg p-3 text-left text-xs"
-            style={{ background: 'var(--surface)', color: 'var(--red)' }}
+            className="mx-auto mt-4 max-w-full whitespace-pre-wrap break-words rounded-[var(--radius-lg)] border p-3 text-left text-xs"
+            style={{ background: 'var(--surface-2)', borderColor: 'var(--border)', color: 'var(--red)' }}
           >
             {error.message}
           </pre>
         )}
-        <Button variant="primary" size="md" onClick={this.reset}>
+        <Button className="mt-4" variant="primary" size="md" onClick={this.reset}>
           Try again
         </Button>
+        </div>
       </div>
     )
   }

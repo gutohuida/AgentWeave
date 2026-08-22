@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useInstructions, useSaveInstructions } from '@/api/instructions'
 import { Button } from '@/components/ui/button'
+import { Textarea } from '@/components/ui/input'
+import { Icon } from '@/components/common/Icon'
 import { SettingsSection } from '@/components/environment/SettingsSection'
 
 export function InstructionsPage() {
@@ -33,7 +35,7 @@ export function InstructionsPage() {
       description="These rules are prepended to every agent's role guide at session start."
       actions={(
         <div className="flex items-center gap-3">
-          {saved && <span style={{ fontSize: 12, color: 'var(--green)' }}>Saved</span>}
+          {saved && <span role="status" className="flex items-center gap-1 text-xs" style={{ color: 'var(--green)' }}><Icon name="check" size={13} />Saved</span>}
           <Button variant="primary" size="sm" onClick={handleSave} disabled={saveMutation.isPending}>
             {saveMutation.isPending ? 'Saving...' : 'Save'}
           </Button>
@@ -41,25 +43,25 @@ export function InstructionsPage() {
       )}
     >
       {isLoading ? (
-        <div style={{ color: 'var(--text-3)', fontSize: 14 }}>Loading...</div>
+        <div aria-label="Loading instructions" className="space-y-3 py-4">
+          <div className="skeleton h-[400px] w-full" />
+          <div className="skeleton h-12 w-full" />
+        </div>
       ) : (
         <div className="py-4">
-          <textarea
+          <Textarea
+            aria-label="Project instructions"
             value={content}
             onChange={(e) => setContent(e.target.value)}
             placeholder="Enter project-wide instructions here..."
-            className="w-full resize-none rounded-md p-4 font-mono text-sm"
+            className="min-h-[400px] w-full resize-y p-4 font-mono text-sm leading-relaxed"
             style={{
               background: 'var(--surface)',
-              color: 'var(--text)',
-              border: '1px solid var(--border)',
-              minHeight: 400,
-              lineHeight: 1.6,
             }}
             spellCheck={false}
           />
           <div
-            className="mt-4 px-4 py-3 rounded-md"
+            className="mt-4 flex items-start gap-2 rounded-md px-4 py-3"
             style={{
               background: 'var(--surface-2)',
               border: '1px solid var(--border)',
@@ -67,8 +69,8 @@ export function InstructionsPage() {
               fontSize: 12,
             }}
           >
-            <strong style={{ color: 'var(--text-2)' }}>Note:</strong> Changes take effect
-            when agents start a new session. Running sessions are not affected.
+            <Icon name="info" size={15} className="mt-0.5 shrink-0" />
+            <span><strong style={{ color: 'var(--text-2)' }}>Session boundary.</strong> Changes take effect when agents start a new session. Running sessions are not affected.</span>
           </div>
         </div>
       )}

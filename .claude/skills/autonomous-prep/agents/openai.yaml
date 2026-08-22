@@ -1,0 +1,4 @@
+interface:
+  display_name: "Prepare Autonomous Run"
+  short_description: "Prepare a durable unattended agent run"
+  default_prompt: "Use $autonomous-prep to prepare a safe, executable overnight development run."

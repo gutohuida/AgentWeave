@@ -1,0 +1,4 @@
+interface:
+  display_name: "Run Autonomous Session"
+  short_description: "Run durable unattended development loops"
+  default_prompt: "Use $autonomous-session to run the prepared development queue unattended."

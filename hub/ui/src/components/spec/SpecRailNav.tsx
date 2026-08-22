@@ -43,11 +43,17 @@ export function SpecRailNav({ projectName, currentPath, onSelect, onBack }: Spec
         <Icon name="arrow_left" size={15} />
         {projectName}
       </Button>
-      <div className="mb-3 px-2">
-        <div className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Specification</div>
-        <div className="truncate text-[11px]" style={{ color: 'var(--text-3)' }}>
-          {inventory.nodes.length} document{inventory.nodes.length === 1 ? '' : 's'}
+      <div className="mb-3 flex items-center gap-2 px-2">
+        <span className="flex h-7 w-7 items-center justify-center rounded-[var(--radius-md)]" style={{ background: 'var(--surface-2)', color: 'var(--text-2)' }}>
+          <Icon name="article" size={15} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Specification</div>
+          <div className="truncate text-[11px]" style={{ color: 'var(--text-3)' }}>Document authority</div>
         </div>
+        <span className="aw-chip" data-pill="true" aria-label={`${inventory.nodes.length} documents`}>
+          {inventory.nodes.length}
+        </span>
       </div>
       <nav
         aria-label="Specification documents"

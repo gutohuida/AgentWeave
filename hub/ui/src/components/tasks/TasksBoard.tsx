@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from 'react'
-import { useTasks } from '@/api/tasks'
+import { useAllowedTransitions, useTasks, useUpdateTask, type Task } from '@/api/tasks'
+import { readableApiError } from '@/api/client'
 import { TaskCard } from './TaskCard'
 import { TaskDetailDrawer } from './TaskDetailDrawer'
 import { EmptyState } from '@/components/common/EmptyState'
@@ -36,8 +37,10 @@ export function TasksBoard({ onOpenRequirement }: TasksBoardProps = {}) {
   // Only the board's own default (unscoped) view retires an archived document's completed work —
   // an explicit scope (a coverage-bar or document-tasks-link click) must never hide anything it
   // named, so the exclusion switches off the instant a filter is active.
-  const { data: tasks, isLoading } = useTasks({ excludeArchivedCompleted: activeTaskIds === null })
+  const { data: tasks, isLoading, isError } = useTasks({ excludeArchivedCompleted: activeTaskIds === null })
   const { data: agents = [] } = useAgents()
+  const { data: allowed } = useAllowedTransitions()
+  const updateTask = useUpdateTask()
   const colorsByAgent = useMemo(
     () => new Map(agents.map((agent) => [agent.name, agent.color_index])),
     [agents],
@@ -48,6 +51,10 @@ export function TasksBoard({ onOpenRequirement }: TasksBoardProps = {}) {
   // it always reads the freshest copy of the task from `useTasks()` rather than a snapshot taken
   // when it was opened.
   const [openTaskId, setOpenTaskId] = useState<string | null>(null)
+  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null)
+  const [dragOverColumn, setDragOverColumn] = useState<string | null>(null)
+  const [moveMessage, setMoveMessage] = useState<string>('')
+  const [moveRefusal, setMoveRefusal] = useState<string | null>(null)
   const clearActiveTaskIds = useTaskFilterStore((state) => state.clearActiveTaskIds)
   const pendingOpenTaskId = useTaskFilterStore((state) => state.pendingOpenTaskId)
   const clearPendingOpenTaskId = useTaskFilterStore((state) => state.clearPendingOpenTaskId)
@@ -60,15 +67,75 @@ export function TasksBoard({ onOpenRequirement }: TasksBoardProps = {}) {
     clearPendingOpenTaskId()
   }, [pendingOpenTaskId, clearPendingOpenTaskId])
 
-  const assignees = useMemo(() => {
-    if (!tasks) return []
-    const names = new Set<string>()
-    tasks.forEach((t) => { if (t.assignee) names.add(t.assignee) })
-    return Array.from(names).sort()
-  }, [tasks])
+  // This is a project-agent filter, not a summary of whichever assignees happen to occur in the
+  // current result set. Deriving it from tasks made the whole control disappear on exactly the
+  // common board state where work has been decomposed but not assigned yet.
+  const assignees = useMemo(
+    () => agents.map((agent) => agent.name).sort((a, b) => a.localeCompare(b)),
+    [agents],
+  )
+
+  const draggedTask = tasks?.find((task) => task.id === draggedTaskId) ?? null
+  const transitions = allowed?.transitions ?? {}
+  const canMoveTo = (task: Task | null, status: string) =>
+    Boolean(task && transitions[task.status]?.includes(status))
+
+  const moveTask = (task: Task, status: string) => {
+    if (!canMoveTo(task, status) || updateTask.isPending) return
+    setMoveRefusal(null)
+    updateTask.mutate(
+      { id: task.id, status },
+      {
+        onSuccess: () => setMoveMessage(`${task.title} moved to ${status.replace(/_/g, ' ')}.`),
+        onError: (error: unknown) =>
+          setMoveRefusal(readableApiError(error, `The Hub could not move ${task.title}.`)),
+      },
+    )
+  }
+
+  const moveByKeyboard = (task: Task, direction: 'left' | 'right') => {
+    const currentIndex = COLUMNS.findIndex((column) => column.statuses.includes(task.status))
+    if (currentIndex < 0) return
+    const step = direction === 'left' ? -1 : 1
+    for (let index = currentIndex + step; index >= 0 && index < COLUMNS.length; index += step) {
+      const destination = COLUMNS[index].key
+      if (canMoveTo(task, destination)) {
+        moveTask(task, destination)
+        return
+      }
+    }
+    setMoveMessage(`No allowed status is available to the ${direction} of ${task.title}.`)
+  }
+
+  const finishDragging = () => {
+    setDraggedTaskId(null)
+    setDragOverColumn(null)
+  }
 
   if (isLoading) {
-    return <div className="p-6" style={{ color: 'var(--text-3)' }}>Loading tasks…</div>
+    return (
+      <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-2 p-3" aria-label="Loading tasks">
+        {COLUMNS.map((column) => (
+          <div key={column.key} className="task-board-column p-2 space-y-2">
+            <div className="skeleton h-3 w-20" />
+            <div className="skeleton h-24 w-full" />
+            <div className="skeleton h-16 w-full" />
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  if (isError) {
+    return (
+      <div className="p-6" role="alert">
+        <EmptyState
+          icon="error_outline"
+          title="Could not load tasks"
+          description="The task board could not reach the Hub. Try again once the connection recovers."
+        />
+      </div>
+    )
   }
 
   if (!tasks || tasks.length === 0) {
@@ -83,7 +150,21 @@ export function TasksBoard({ onOpenRequirement }: TasksBoardProps = {}) {
   const openTask = tasks.find((t) => t.id === openTaskId) ?? null
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div className="task-board-shell flex flex-col h-full overflow-hidden">
+      <p id="task-board-move-instructions" className="sr-only">
+        Drag this task to an allowed status column. With the card focused, press Control and Left
+        Arrow or Control and Right Arrow to move it to the nearest allowed status.
+      </p>
+      <p className="sr-only" aria-live="polite">{moveMessage}</p>
+      {moveRefusal && (
+        <div className="task-board-move-refusal shrink-0" role="alert">
+          <Icon name="warning" size={14} />
+          <span>{moveRefusal}</span>
+          <button type="button" aria-label="Dismiss task move error" onClick={() => setMoveRefusal(null)}>
+            <Icon name="close" size={14} />
+          </button>
+        </div>
+      )}
       {/* Set from outside the board — a coverage row's task-count link. Shown above the assignee
           filter chips because it is the reason the operator is looking at a narrowed board at
           all, not one more filter among equals. */}
@@ -109,26 +190,27 @@ export function TasksBoard({ onOpenRequirement }: TasksBoardProps = {}) {
         </div>
       )}
 
-      {/* Filter chips */}
+      {/* Project-agent filter. Kept visible even when every current task is unassigned: that is
+          when the control explains the available ownership vocabulary instead of vanishing. */}
       {assignees.length > 0 && (
-        <div className="shrink-0 flex items-center gap-2 px-4 py-2 flex-wrap" style={{ borderBottom: '1px solid var(--border)' }}>
+        <div className="task-board-filter shrink-0 flex items-center gap-2 flex-wrap" role="group" aria-label="Filter tasks by agent">
           <button
+            data-slot="button"
             onClick={() => setActiveFilter(null)}
             data-active={activeFilter === null ? 'true' : 'false'}
-            className="row-item w-auto rounded-full px-2.5 py-0.5 text-[11px]"
-            style={{ border: `1px solid ${activeFilter === null ? 'var(--border-hi)' : 'var(--border)'}` }}
+            className="task-filter-chip"
           >
             All
           </button>
           {assignees.map((name) => (
             <button
+              data-slot="button"
               key={name}
               onClick={() => setActiveFilter(name)}
               data-active={activeFilter === name ? 'true' : 'false'}
-              className="row-item w-auto rounded-full px-2.5 py-0.5 text-[11px]"
-              style={{ border: `1px solid ${activeFilter === name ? 'var(--border-hi)' : 'var(--border)'}` }}
+              className="task-filter-chip"
             >
-              <span className="mr-1 inline-block h-1.5 w-1.5 rounded-full" style={{ background: agentColorVars(colorsByAgent.get(name)).accent }} />
+              <span className="task-filter-dot" style={{ background: agentColorVars(colorsByAgent.get(name)).accent }} />
               {name}
             </button>
           ))}
@@ -136,13 +218,13 @@ export function TasksBoard({ onOpenRequirement }: TasksBoardProps = {}) {
       )}
 
       {/* Kanban */}
-      <div className="flex-1 overflow-auto p-3">
+      <div className="task-board-scroll flex-1 overflow-auto p-3">
         <div
+          className="task-board-grid"
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(7, minmax(160px, 1fr))',
-            gap: 8,
-            minWidth: 0,
+            gridTemplateColumns: 'repeat(7, minmax(178px, 1fr))',
+            gap: 10,
           }}
         >
           {COLUMNS.map(({ key, label, accentColor, statuses }) => {
@@ -162,27 +244,56 @@ export function TasksBoard({ onOpenRequirement }: TasksBoardProps = {}) {
               // No `overflow-hidden` here: it makes this column the scrollport for `sticky`
               // below, so the header would pin to a box that never scrolls and travel away with
               // the cards — which is exactly the reported symptom.
-              <div key={key} className="flex flex-col gap-2 min-w-0">
+              <div
+                key={key}
+                className="task-board-column flex flex-col gap-2 min-w-0"
+                data-status={key}
+                data-drop-state={
+                  !draggedTask
+                    ? 'idle'
+                    : dragOverColumn === key && canMoveTo(draggedTask, key)
+                      ? 'active'
+                      : canMoveTo(draggedTask, key)
+                        ? 'available'
+                        : 'unavailable'
+                }
+                onDragEnter={(event) => {
+                  if (!canMoveTo(draggedTask, key)) return
+                  event.preventDefault()
+                  setDragOverColumn(key)
+                }}
+                onDragOver={(event) => {
+                  if (!canMoveTo(draggedTask, key)) return
+                  event.preventDefault()
+                  event.dataTransfer.dropEffect = 'move'
+                  if (dragOverColumn !== key) setDragOverColumn(key)
+                }}
+                onDrop={(event) => {
+                  event.preventDefault()
+                  if (draggedTask && canMoveTo(draggedTask, key)) moveTask(draggedTask, key)
+                  finishDragging()
+                }}
+              >
                 {/* Column header. Sticky because the whole grid scrolls as one — without this the
                     headers leave with the content and a long column becomes a list of cards whose
                     status you can no longer see. Operator, 2026-08-10: "when I scroll down I lose
                     what each column means." Opaque background so cards pass behind rather than
                     through, and a negative top offset absorbs the grid's own padding. */}
                 <div
-                  className="sticky z-10 flex items-center justify-between px-0.5"
+                  className="task-column-header sticky z-10 flex items-center justify-between px-0.5"
                   // The grid's own 12px padding scrolls with the content, so the header pins at
                   // -12 to sit flush with the viewport edge and pads that back to cover cards
                   // passing underneath.
-                  style={{ top: -12, background: 'var(--bg)', paddingTop: 12, paddingBottom: 6 }}
+                  style={{ top: -12, paddingTop: 12, paddingBottom: 6 }}
                 >
                   <span
-                    className="text-xs font-medium uppercase tracking-wider"
+                    className="task-column-label"
                     style={{ color: accentColor ?? 'var(--text-3)' }}
                   >
                     {label}
                   </span>
                   <span
-                    className="text-[10px] font-semibold rounded-full px-2 py-0.5"
+                    className="task-column-count"
                     style={{
                       background: accentColor ? `${accentColor}20` : 'var(--surface-3)',
                       color: accentColor ?? 'var(--text-2)',
@@ -194,6 +305,11 @@ export function TasksBoard({ onOpenRequirement }: TasksBoardProps = {}) {
                 {/* No scroll of its own: the grid already scrolls, and a nested scrollport both
                     traps the wheel and gives `sticky` above the wrong container to stick to. */}
                 <div className="space-y-2">
+                  {col.length === 0 && (
+                    <div className="task-column-empty" aria-label={`${label} has no tasks`}>
+                      No tasks
+                    </div>
+                  )}
                   {col.map((task) => (
                     <TaskCard
                       key={task.id}
@@ -201,6 +317,18 @@ export function TasksBoard({ onOpenRequirement }: TasksBoardProps = {}) {
                       assigneeColorIndex={colorsByAgent.get(task.assignee ?? '')}
                       onOpenRequirement={onOpenRequirement}
                       onOpen={() => setOpenTaskId(task.id)}
+                      draggable
+                      isDragging={draggedTaskId === task.id}
+                      moveInstructionsId="task-board-move-instructions"
+                      onMoveByKeyboard={(direction) => moveByKeyboard(task, direction)}
+                      onDragStart={(event) => {
+                        event.dataTransfer.effectAllowed = 'move'
+                        event.dataTransfer.setData('text/plain', task.id)
+                        setDraggedTaskId(task.id)
+                        setDragOverColumn(null)
+                        setMoveRefusal(null)
+                      }}
+                      onDragEnd={finishDragging}
                     />
                   ))}
                 </div>
@@ -246,6 +374,18 @@ export function TasksBoard({ onOpenRequirement }: TasksBoardProps = {}) {
                       assigneeColorIndex={colorsByAgent.get(task.assignee ?? '')}
                       onOpenRequirement={onOpenRequirement}
                       onOpen={() => setOpenTaskId(task.id)}
+                      draggable
+                      isDragging={draggedTaskId === task.id}
+                      moveInstructionsId="task-board-move-instructions"
+                      onMoveByKeyboard={(direction) => moveByKeyboard(task, direction)}
+                      onDragStart={(event) => {
+                        event.dataTransfer.effectAllowed = 'move'
+                        event.dataTransfer.setData('text/plain', task.id)
+                        setDraggedTaskId(task.id)
+                        setDragOverColumn(null)
+                        setMoveRefusal(null)
+                      }}
+                      onDragEnd={finishDragging}
                     />
                   ))}
               </div>

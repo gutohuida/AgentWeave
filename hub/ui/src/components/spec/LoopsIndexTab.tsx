@@ -77,13 +77,17 @@ export function LoopsIndexTab({
             checked={includeArchived}
             onChange={(e) => onToggleIncludeArchived(e.target.checked)}
             data-testid="loops-index-include-archived"
+            className="sr-only"
           />
+          <span className="panel-switch" aria-hidden="true" />
           Show archived
         </label>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-1.5" data-testid="loops-index-results">
         {isLoading ? (
-          <p style={{ padding: 10, fontSize: 12, color: 'var(--text-3)' }}>Loading…</p>
+          <div className="flex flex-col gap-2 p-2" aria-label="Loading loops">
+            {[82, 67, 75].map((width) => <div key={width} className="skeleton h-16" style={{ width: `${width}%` }} />)}
+          </div>
         ) : loops.length === 0 ? (
           <p style={{ padding: 10, fontSize: 12, color: 'var(--text-3)' }}>
             {includeArchived ? 'No loops yet.' : 'No loops yet. Archived loops are hidden — check "Show archived".'}
@@ -98,10 +102,10 @@ export function LoopsIndexTab({
                 type="button"
                 data-testid={`loops-index-row-${loop.id}`}
                 onClick={() => onSelect(loop.id)}
-                className="flex w-full flex-col gap-1 rounded-[var(--radius-sm)] px-2.5 py-2 text-left"
+                data-active={selected ? 'true' : 'false'}
+                className="row-item !items-stretch flex-col gap-1 px-2.5 py-2"
                 style={{
                   border: 'none',
-                  background: selected ? 'var(--surface-2)' : 'transparent',
                   cursor: 'pointer',
                 }}
               >

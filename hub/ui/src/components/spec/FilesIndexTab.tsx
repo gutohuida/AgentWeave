@@ -1,4 +1,6 @@
 import { useMemo, useState } from 'react'
+import { Icon } from '@/components/common/Icon'
+import { Button } from '@/components/ui/button'
 import { FileTree } from './FileTree'
 
 interface FilesIndexTabProps {
@@ -32,24 +34,27 @@ export function FilesIndexTab({ paths, isLoading, currentPath, onSelect }: Files
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col" data-testid="files-index-tab">
-      <input
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        placeholder="Search files by path"
-        aria-label="Search files"
-        className="shrink-0"
-        style={{
-          padding: '12px 14px',
-          border: 'none',
-          background: 'transparent',
-          color: 'var(--text)',
-          fontSize: 13,
-          outline: 'none',
-        }}
-      />
+      <div className="panel-search shrink-0">
+        <Icon name="search" size={14} />
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Escape') setQuery('') }}
+          placeholder="Search files by path"
+          aria-label="Search files"
+          className="control-field"
+        />
+        {query && (
+          <Button className="panel-search-clear" variant="ghost" size="icon-xs" onClick={() => setQuery('')} aria-label="Clear file search">
+            <Icon name="close" size={13} />
+          </Button>
+        )}
+      </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-1.5" data-testid="files-index-results">
         {isLoading ? (
-          <p style={{ padding: 10, fontSize: 12, color: 'var(--text-3)' }}>Loading…</p>
+          <div className="flex flex-col gap-2 p-2" aria-label="Loading files">
+            {[72, 84, 61, 78].map((width) => <div key={width} className="skeleton h-7" style={{ width: `${width}%` }} />)}
+          </div>
         ) : typed ? (
           matches.length === 0 ? (
             <p style={{ padding: 10, fontSize: 12, color: 'var(--text-3)' }}>No matching files.</p>
@@ -60,13 +65,14 @@ export function FilesIndexTab({ paths, isLoading, currentPath, onSelect }: Files
                 type="button"
                 data-testid={`files-search-result-${path}`}
                 onClick={() => onSelect(path)}
+                data-active={path === currentPath ? 'true' : 'false'}
+                className="row-item"
                 style={{
                   display: 'flex',
                   alignItems: 'center',
                   width: '100%',
                   padding: '6px 10px',
                   border: 'none',
-                  background: path === currentPath ? 'var(--surface-2)' : 'none',
                   color: path === currentPath ? 'var(--text)' : 'var(--text-2)',
                   fontSize: 12,
                   textAlign: 'left',

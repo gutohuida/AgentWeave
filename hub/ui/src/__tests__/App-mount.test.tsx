@@ -32,6 +32,11 @@ vi.mock('@/api/projects', () => ({
         { id: 'agent-claude', name: 'claude', color_index: 2, status: 'idle', last_seen: null },
         { id: 'agent-codex', name: 'codex', color_index: 4, status: 'idle', last_seen: null },
       ],
+    }, {
+      id: 'proj-other', name: 'Client work', working_directory: 'C:/work/client',
+      path_display: 'C:/work/client', directory_state: 'available', last_opened_at: null,
+      last_seen_at: null, hop_budget: 20, turn_delivery_cap: 20, agent_budget: 10,
+      token_budget: null, allow_agent_jobs: true, agents: [],
     }],
     isLoading: false,
   }),
@@ -194,6 +199,27 @@ describe('phase 5 App.tsx: rail-only navigation, tabs own project content', () =
     render(withQueryClient(<App />))
     fireEvent.click(screen.getByTestId('project-tab-tasks'))
     expect(window.location.search).toContain('tab=tasks')
+  })
+
+  it('switches projects from the persistent header and drops scoped destination state', () => {
+    window.history.pushState(
+      null,
+      '',
+      '?project=proj-test&agent=claude&conversation=conv-1&document=spec%2Fspec.html',
+    )
+    render(withQueryClient(<App />))
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Switch project' }), {
+      target: { value: 'proj-other' },
+    })
+
+    expect(window.location.search).toContain('project=proj-other')
+    expect(window.location.search).toContain('tab=overview')
+    expect(window.location.search).not.toContain('agent=')
+    expect(window.location.search).not.toContain('conversation=')
+    expect(window.location.search).not.toContain('document=')
+    expect(useConfigStore.getState().selectedProjectId).toBe('proj-other')
+    expect(screen.getByRole('combobox', { name: 'Switch project' })).toHaveValue('proj-other')
   })
 
   it('offers the Spec tab as a place to focus on the specification', () => {

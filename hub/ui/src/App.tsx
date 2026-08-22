@@ -36,6 +36,7 @@ import { useTasks } from '@/api/tasks'
 import { TasksBoard } from '@/components/tasks/TasksBoard'
 import { DependencyBoardView } from '@/components/tasks/DependencyBoardView'
 import { Button } from '@/components/ui/button'
+import { Icon } from '@/components/common/Icon'
 import { useSSE } from '@/hooks/useSSE'
 import { useWorkspaceNavigation } from '@/hooks/useWorkspaceNavigation'
 import {
@@ -55,6 +56,33 @@ import { useProjectConversations } from '@/api/agentChat'
 import { useConfigStore } from '@/store/configStore'
 import { useTaskFilterStore } from '@/store/taskFilterStore'
 import { CheckpointStatusBanner } from '@/components/checkpoints/CheckpointStatusBanner'
+
+export function HubConnectionState({ state, onRetry }: { state: 'pending' | 'unreachable'; onRetry?: () => void }) {
+  const pending = state === 'pending'
+  return (
+    <div className="flex h-screen items-center justify-center" style={{ background: 'var(--bg)' }} role={pending ? 'status' : undefined} aria-label={pending ? 'Connecting to the Hub' : undefined}>
+      <div className="trust-state" role={pending ? undefined : 'alert'}>
+        <span className={`trust-state-icon${pending ? '' : ' is-error'}`}><Icon name={pending ? 'sync' : 'error_outline'} size={22} /></span>
+        <h1 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>{pending ? 'Connecting to the Hub' : "Can't reach the Hub"}</h1>
+        {pending ? (
+          <div className="mx-auto mt-4 max-w-52 space-y-2" aria-hidden="true">
+            <div className="trust-state-skeleton w-full" />
+            <div className="trust-state-skeleton mx-auto w-2/3" />
+          </div>
+        ) : (
+          <>
+            <p className="mx-auto mt-2 text-xs" style={{ maxWidth: 320, color: 'var(--text-3)' }}>
+              The dashboard couldn&apos;t connect to the Hub server. Make sure it&apos;s running, then retry.
+            </p>
+            <Button variant="primary" size="md" onClick={onRetry} className="mt-4">
+              <Icon name="refresh" size={15} /> Retry
+            </Button>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
 
 const SIDEBAR_WIDTH_KEY = 'aw.sidebarWidth'
 const SIDEBAR_COLLAPSED_KEY = 'aw.sidebarCollapsed'
@@ -188,32 +216,11 @@ export default function App() {
   useSSE()
 
   if (bootstrapState === 'pending') {
-    return (
-      <div className="flex h-screen items-center justify-center" style={{ background: 'var(--bg)' }}>
-        <div className="text-sm opacity-70">Connecting…</div>
-      </div>
-    )
+    return <HubConnectionState state="pending" />
   }
 
   if (bootstrapState === 'unreachable') {
-    return (
-      <div className="flex h-screen items-center justify-center" style={{ background: 'var(--bg)' }}>
-        <div className="flex flex-col items-center gap-3 text-center">
-          <div className="text-sm" style={{ color: 'var(--text)' }}>Can&apos;t reach the Hub</div>
-          <div className="text-xs opacity-70" style={{ maxWidth: 320 }}>
-            The dashboard couldn&apos;t connect to the Hub server. Make sure it&apos;s running, then retry.
-          </div>
-          <Button
-            variant="primary"
-            size="md"
-            onClick={() => useConfigStore.getState().bootstrap()}
-            className="mt-1"
-          >
-            Retry
-          </Button>
-        </div>
-      </div>
-    )
+    return <HubConnectionState state="unreachable" onRetry={() => useConfigStore.getState().bootstrap()} />
   }
 
   const activePage: SidebarPage | 'overview' | null = destination.kind === 'project'
@@ -310,6 +317,7 @@ export default function App() {
     content = (
       <NewConversationSurface
         projectId={destination.projectId}
+        projectName={currentProject?.name ?? destination.projectId}
         agent={destination.agent}
         // Replace, not push: retargeting an unsent message is a change of mind about one
         // message, not a place the operator navigated to and might want Back out of.
@@ -442,19 +450,27 @@ export default function App() {
     } else if (destination.tab === 'activity') {
       projectContent = (
         <div className="flex h-full flex-col">
-          <div className="flex gap-1 px-4 pt-3">
+          <div className="px-4 pt-3">
+            <div
+              className="inline-flex gap-1 rounded-lg p-1"
+              role="group"
+              aria-label="Activity view"
+              style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}
+            >
             {(['activity', 'logs'] as const).map((view) => (
               <button
                 key={view}
                 type="button"
                 data-testid={`activity-subview-${view}`}
                 onClick={() => setActivitySubview(view)}
-                className="px-3 py-1.5 text-xs capitalize"
+                data-active={activitySubview === view ? 'true' : 'false'}
+                className="row-item w-auto rounded-md px-3 py-1.5 text-xs capitalize"
                 aria-pressed={activitySubview === view}
               >
                 {view}
               </button>
             ))}
+            </div>
           </div>
           <div className="min-h-0 flex-1 overflow-auto">
             {activitySubview === 'activity' ? <ActivityLog /> : <LogsView />}
@@ -487,12 +503,13 @@ export default function App() {
             }}
           />
         )}
-        {/* The Spec screen lays out its own two panes edge to edge, so it opts out of
-            `workspace-content`'s centred 1180px column and page padding — those are for a page of
-            content, and this is a workspace. */}
+        {/* Spec and Tasks are workspaces, not reading pages. Both need the whole available width:
+            Spec for its two panes, Tasks for seven deliberately persistent lifecycle columns.
+            Putting the board in `workspace-content`'s centred 1180px column made each card narrow
+            before the board had even reached the viewport edge. */}
         <div
           className={
-            destination.tab === 'spec'
+            destination.tab === 'spec' || destination.tab === 'tasks'
               ? 'min-h-0 flex-1 overflow-hidden'
               : 'workspace-content min-h-0 flex-1 overflow-auto'
           }
@@ -576,10 +593,13 @@ export default function App() {
           <main className="flex min-w-0 flex-1 flex-col overflow-hidden" style={{ background: 'var(--bg)' }}>
             {currentProject && (
               <ProjectHeader
+                projectId={currentProject.id}
                 projectName={currentProject.name}
+                projects={projects ?? []}
                 pathDisplay={currentProject.path_display}
                 agentCount={currentProject.agents.length}
                 directoryAvailable={currentProject.directory_state === 'available'}
+                onSelectProject={(id) => navigateTo(projectDestination(id))}
                 onOpenSetup={() => setSetupOpen(true)}
               />
             )}

@@ -287,6 +287,30 @@ def test_the_document_carries_no_navigation_script_of_its_own():
     assert "addEventListener" not in html
 
 
+def test_long_document_scan_cues_are_semantic_and_native():
+    payload = _payload(
+        requirements=[
+            _requirement("alpha", rationale="Because operators need a reason."),
+            _requirement("beta", modal="SHOULD"),
+        ],
+        acceptance_criteria=[
+            {"key": "c1", "requirement": "alpha", "given": "", "when": "w", "then": "t"},
+            {"key": "c2", "requirement": "alpha", "given": "g", "when": "w2", "then": "t2"},
+        ],
+        tasks=[{"key": "t1", "title": "Do it", "description": "desc", "requirements": ["alpha"]}],
+    )
+    html = _render(payload, {"alpha": "FR-1", "beta": "FR-2"})
+
+    assert 'href="#FR-1" aria-label="Link to FR-1"' in html
+    assert "Requirement 1 of 2" in html
+    assert '<span class="aw-rationale-label">Why</span>' in html
+    assert '<col style="width:12%">' in html
+    assert 'class="aw-cell-empty"' in html
+    assert html.count('<tr data-first="true">') == 1
+    assert html.count('<tr data-first="false">') == 1
+    assert '<ul class="aw-task-list"><li class="aw-task">' in html
+
+
 # ---------------------------------------------------------------------------
 # Reading the document, rather than parsing it
 #
@@ -550,7 +574,9 @@ def _rich_payload():
 # the shared stylesheet; in §3, when `.aw-map*` did the same (_STYLE is embedded in every document
 # regardless of whether this document's own `corpus` uses it — the existing pattern for every other
 # CSS rule here, e.g. `.aw-chip-rigor-contract` is present even in documents whose rigor is not
-# `contract`); by `task-dependencies` §1.1-1.5, which added `Task.depends_on` and `Task.from_` to
+# `contract`); by the 2026-08-22 considered-reading pass, which deliberately changed the shared
+# document presentation and semantic markup while keeping `corpus=None` free of corpus regions;
+# by `task-dependencies` §1.1-1.5, which added `Task.depends_on` and `Task.from_` to
 # `spec_payload`; and again by `task-dependencies` §1.6-1.8, which added `Task.reviewer`. None of
 # these are a rendering change at all: `render_document` embeds the stored payload verbatim, so a
 # payload that grows fields grows the embedded JSON. The measured delta each time was exactly the
@@ -564,7 +590,7 @@ def _rich_payload():
 # output against the previous commit and confirm the delta is confined to a deliberate stylesheet
 # or payload change: a digest that moves with no `corpus` argument passed, no stylesheet edit and
 # no payload field added means the None-branch stopped being a no-op, which is a real regression.
-_BASELINE_DIGEST = "5fc304c110a998d40818048991279c817d192a7e63f2a0044134f3aa83c5a307"
+_BASELINE_DIGEST = "1f033e3e23016eb5cb29c490a86e2c3f6625313b37121ad2a5fbe2cb651aa49a"
 
 
 def test_omitting_corpus_reproduces_the_pre_change_output_byte_for_byte():

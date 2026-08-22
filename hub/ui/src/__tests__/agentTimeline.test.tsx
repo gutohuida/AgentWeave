@@ -66,6 +66,9 @@ describe('AgentTimeline', () => {
     )
     expect(screen.getByText('codex')).toBeInTheDocument()
     expect(screen.getByText('hi from codex')).toBeInTheDocument()
+    const timestamp = document.querySelector('time')
+    expect(timestamp).toHaveAttribute('title', expect.stringMatching(/Sun 2 Aug, \d\d:\d\d:00/))
+    expect(timestamp).toHaveAttribute('dateTime', '2026-08-02T00:00:00Z')
   })
 
   it('labels an outbound peer message with the recipient name, on the subject agent\'s side', () => {

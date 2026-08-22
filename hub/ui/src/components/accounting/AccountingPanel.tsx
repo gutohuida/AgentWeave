@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react'
 import { useAccounting, useUpdateTokenBudget } from '@/api/accounting'
 import { readableApiError } from '@/api/client'
 import { Button } from '@/components/ui/button'
+import { Icon } from '@/components/common/Icon'
 import { SettingsRow, SettingsSection } from '@/components/environment/SettingsSection'
 import { BudgetExhaustionNotice } from './BudgetExhaustionNotice'
+import { accountingDisplayLabel } from './accountingDisplay'
 
 function formatTokens(value: number | null): string {
   return value === null ? 'Unavailable' : `${value.toLocaleString()} tokens`
@@ -13,24 +15,7 @@ function PreferredDisplay() {
   const { data } = useAccounting()
   if (!data) return null
   const display = data.preferred_display
-  if (display.kind === 'allowance') {
-    return (
-      <div>
-        <span>Rate-limit allowance</span>
-        <code className="ml-2" style={{ color: 'var(--text-3)', fontSize: 11 }}>
-          {JSON.stringify(display.allowance)}
-        </code>
-      </div>
-    )
-  }
-  if (display.kind === 'api_equivalent') {
-    return (
-      <span>
-        ${(display.usd_micros / 1_000_000).toFixed(4)} API-equivalent estimate
-      </span>
-    )
-  }
-  return <span>{display.label}</span>
+  return <span>{accountingDisplayLabel(display)}</span>
 }
 
 export function AccountingPanel() {
@@ -46,7 +31,17 @@ export function AccountingPanel() {
     setBudgetInput(data?.budget.limit_tokens?.toString() ?? '')
   }, [data?.budget.limit_tokens])
 
-  if (isLoading || !data) return null
+  if (isLoading || !data) {
+    return (
+      <SettingsSection title="Budgets" description="Token usage for this project and its agents, and the limit that pauses autonomous turns.">
+        <div aria-label="Loading budgets" className="space-y-3 py-4">
+          <div className="skeleton h-7 w-44" />
+          <div className="skeleton h-4 w-64" />
+          <div className="skeleton h-20 w-full" />
+        </div>
+      </SettingsSection>
+    )
+  }
 
   const applyBudget = () => {
     const value = Number(budgetInput)
@@ -77,7 +72,8 @@ export function AccountingPanel() {
   return (
     <SettingsSection title="Budgets" description="Token usage for this project and its agents, and the limit that pauses autonomous turns.">
       <div className="py-4">
-        <div style={{ fontSize: 20, fontWeight: 600 }}>{formatTokens(data.project.total_tokens)}</div>
+        <div className="elevation-resting rounded-lg p-4">
+        <div className="flex items-center gap-2 text-xl font-semibold tabular-nums"><Icon name="bar_chart" size={18} style={{ color: 'var(--text-3)' }} />{formatTokens(data.project.total_tokens)}</div>
         <div style={{ color: 'var(--text-3)', fontSize: 11, marginTop: 2 }}>
           {data.project.measured_turns} measured · {data.project.unavailable_turns} usage unavailable
         </div>
@@ -94,13 +90,8 @@ export function AccountingPanel() {
             {data.agents.map((agent) => (
               <span
                 key={agent.agent}
-                style={{
-                  border: '1px solid var(--border)',
-                  borderRadius: 9999,
-                  padding: '3px 8px',
-                  fontSize: 11,
-                  color: 'var(--text-2)',
-                }}
+                className="aw-chip tabular-nums"
+                style={{ background: 'var(--surface-2)', color: 'var(--text-2)' }}
               >
                 {agent.agent}: {formatTokens(agent.total_tokens)}
                 {agent.unavailable_turns > 0 ? ` · ${agent.unavailable_turns} unavailable` : ''}
@@ -108,6 +99,7 @@ export function AccountingPanel() {
             ))}
           </div>
         )}
+        </div>
       </div>
 
       <SettingsRow label="Project token budget" description="An optional project-wide token allowance that pauses autonomous turns once exhausted; leave blank for no limit.">
@@ -124,8 +116,7 @@ export function AccountingPanel() {
             }}
             aria-invalid={inputError ? true : undefined}
             placeholder="Disabled"
-            className="block w-32 rounded px-2 py-1.5 text-xs"
-            style={{ background: 'var(--surface-1)', border: '1px solid var(--border)', color: 'var(--text)' }}
+            className="control-field block w-32 px-2 py-1.5 text-xs tabular-nums"
           />
           <Button variant="primary" size="sm" onClick={applyBudget} disabled={updateBudget.isPending}>Apply</Button>
           <Button

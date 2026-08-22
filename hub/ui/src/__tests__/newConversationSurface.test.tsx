@@ -44,6 +44,7 @@ function Controlled({
   return (
     <NewConversationSurface
       projectId="proj-a"
+      projectName="Website"
       agent={agent}
       onChooseAgent={(next) => {
         setAgent(next)
@@ -58,6 +59,15 @@ function renderSurface(agent: string | null, onStarted = vi.fn()) {
   render(<Controlled agent={agent} onStarted={onStarted} />)
   return { onStarted }
 }
+
+describe('considered new-conversation state', () => {
+  it('offers recent agents as real pressed-state controls, not decorative suggestions', () => {
+    renderSurface('claude')
+    expect(screen.getByText('Start with a recent agent, or choose another before you send.')).toBeInTheDocument()
+    expect(screen.getByTestId('new-conversation-agent-claude')).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByTestId('new-conversation-agent-codex')).toHaveAttribute('aria-pressed', 'false')
+  })
+})
 
 describe('starting a conversation', () => {
   beforeEach(() => {
@@ -83,6 +93,13 @@ describe('starting a conversation', () => {
     expect(screen.getByTestId('new-conversation-surface')).toBeInTheDocument()
     expect(screen.getByRole('textbox')).toBeInTheDocument()
     expect(screen.queryByTestId('conversation-output')).not.toBeInTheDocument()
+  })
+
+  it('keeps the target project visible beside the unsent message', () => {
+    renderSurface('claude')
+    expect(screen.getByTestId('new-conversation-project-context')).toHaveTextContent(
+      'Project: Website',
+    )
   })
 
   it('asks what the bound agent should work on, by name', () => {

@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { useConfigStore } from '@/store/configStore'
 import type { SSEEvent } from '@/hooks/useSSE'
+import { getJson } from '@/api/client'
 
 // Capture the callback that ActivityLog registers with useSSE. We mock the
 // useSSE module so we can call the callback synchronously from the test —
@@ -49,6 +50,7 @@ function fakeEvent(type: string, data: Record<string, unknown> = {}): SSEEvent {
 describe('M19 — ActivityLog uses a ref to read the latest paused value', () => {
   beforeEach(() => {
     capturedCallback.current = null
+    vi.mocked(getJson).mockResolvedValue([])
     useConfigStore.setState({
       apiKey: 'aw_live_TESTKEY',
       hubUrl: 'http://hub.test',
@@ -98,5 +100,26 @@ describe('M19 — ActivityLog uses a ref to read the latest paused value', () =>
     await waitFor(() =>
       expect(screen.getAllByText('message_created').length).toBeGreaterThanOrEqual(2)
     )
+  })
+
+  it('discards an old project history response after the selected project changes', async () => {
+    const resolvers = new Map<string, (events: SSEEvent[]) => void>()
+    vi.mocked(getJson).mockImplementation((url) => new Promise((resolve) => {
+      resolvers.set(url, resolve as (events: SSEEvent[]) => void)
+    }))
+    render(withQueryClient(<ActivityLog />))
+    await waitFor(() => expect(resolvers.has('/api/v1/projects/proj-test/events/history?limit=200')).toBe(true))
+
+    act(() => useConfigStore.setState({ selectedProjectId: 'proj-next' }))
+    await waitFor(() => expect(resolvers.has('/api/v1/projects/proj-next/events/history?limit=200')).toBe(true))
+
+    await act(async () => {
+      resolvers.get('/api/v1/projects/proj-test/events/history?limit=200')?.([
+        { type: 'stale_project_event', data: { project_id: 'proj-test' }, timestamp: new Date().toISOString() },
+      ])
+      resolvers.get('/api/v1/projects/proj-next/events/history?limit=200')?.([])
+      await Promise.resolve()
+    })
+    expect(screen.queryByText('stale_project_event')).not.toBeInTheDocument()
   })
 })

@@ -33,6 +33,9 @@ describe('FilePreview — a file shown the way its type deserves', () => {
     expect(container.querySelectorAll('.hljs-number').length).toBeGreaterThan(0)
     // and the text is still intact, not mangled by the highlighter
     expect(pre.textContent).toContain('const answer = 42')
+    expect(screen.getByTitle('src/app.ts')).toHaveTextContent('src/app.ts')
+    expect(screen.getByText('typescript')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Copy file path' })).toBeInTheDocument()
   })
 
   it('highlights a Dockerfile, which has no extension to go on', () => {

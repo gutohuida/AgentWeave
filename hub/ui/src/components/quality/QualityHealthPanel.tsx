@@ -8,11 +8,11 @@ import { hubDate } from '@/lib/hubTime'
 function SettingBadge({ label, value }: { label: string; value: string }) {
   return (
     <span
-      className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px]"
+      className="aw-chip"
       style={{ background: 'var(--surface-3)', color: 'var(--text-3)' }}
     >
       <span style={{ opacity: 0.6 }}>{label}</span>
-      <span style={{ color: 'var(--blue)', fontWeight: 600 }}>{value}</span>
+      <span style={{ color: 'var(--text-2)', fontWeight: 600 }}>{value}</span>
     </span>
   )
 }
@@ -32,7 +32,10 @@ export function QualityHealthPanel() {
   if (syncLoading) {
     return (
       <SettingsSection title="Quality" description={description}>
-        <div className="py-6 text-sm" style={{ color: 'var(--text-3)' }}>Loading…</div>
+        <div aria-label="Loading quality settings" className="space-y-3 py-4">
+          <div className="skeleton h-20 w-full" />
+          <div className="skeleton h-28 w-full" />
+        </div>
       </SettingsSection>
     )
   }
@@ -61,7 +64,7 @@ export function QualityHealthPanel() {
     <div className="py-4 flex flex-col gap-5 overflow-auto">
       {/* Active settings */}
       <div
-        className="rounded-xl p-4 flex flex-col gap-3"
+        className="elevation-resting rounded-xl p-4 flex flex-col gap-3"
         style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
       >
         <span className="text-xs font-medium uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>
@@ -79,7 +82,7 @@ export function QualityHealthPanel() {
 
       {/* Under review */}
       <div
-        className="rounded-xl p-4 flex flex-col gap-3"
+        className="elevation-resting rounded-xl p-4 flex flex-col gap-3"
         style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
       >
         <div className="flex items-center justify-between">

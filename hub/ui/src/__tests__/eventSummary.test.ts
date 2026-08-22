@@ -3,6 +3,10 @@ import { describe, it, expect } from 'vitest'
 import { summaryForEvent } from '@/lib/eventSummary'
 
 describe('summaryForEvent', () => {
+  it('never prints undefined when compact task and question events omit optional identity fields', () => {
+    expect(summaryForEvent('task_updated', { status: 'in_progress' })).toBe('in_progress')
+    expect(summaryForEvent('question_asked', { question: 'Ready to approve?' })).toBe('Ready to approve?')
+  })
   // `task_created` was listed twice — once under the Hub-side events and again under the
   // CLI-pushed ones. A `switch` takes the first match, so the second clause was unreachable and
   // its wording never rendered anywhere. esbuild warned on every single build; nothing failed,

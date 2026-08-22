@@ -4,18 +4,24 @@ import { useConfigStore } from '@/store/configStore'
 import { elidePathSegments } from '@/lib/pathDisplay'
 
 interface ProjectHeaderProps {
+  projectId?: string
   projectName: string
+  projects?: Array<{ id: string; name: string; path_display?: string | null }>
   pathDisplay?: string | null
   agentCount?: number
   directoryAvailable: boolean
+  onSelectProject?: (projectId: string) => void
   onOpenSetup: () => void
 }
 
 export function ProjectHeader({
+  projectId,
   projectName,
+  projects = [],
   pathDisplay,
   agentCount = 0,
   directoryAvailable,
+  onSelectProject,
   onOpenSetup,
 }: ProjectHeaderProps) {
   const { mode, setMode } = useConfigStore()
@@ -29,12 +35,37 @@ export function ProjectHeader({
   const pathSegments = pathDisplay ? elidePathSegments(pathDisplay) : []
 
   return (
-    <header className="flex h-14 shrink-0 items-center gap-3 px-5" style={{ background: 'var(--bg)' }}>
+    <header className="project-header flex h-16 shrink-0 items-center gap-3 px-5 sm:h-20" style={{ background: 'var(--bg)' }}>
       <div className="min-w-0 flex-1">
-        <h1 className="truncate text-sm font-semibold" style={{ color: 'var(--text)' }}>{projectName}</h1>
+        <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-[0.08em]" style={{ color: 'var(--text-3)' }}>
+          Current project
+        </div>
+        {projectId && projects.length > 0 && onSelectProject ? (
+          <label className="project-switcher control-select-wrap inline-flex max-w-full items-center" data-testid="project-switcher">
+            <Icon name="folder_open" size={14} />
+            <span className="sr-only">Switch project</span>
+            <select
+              aria-label="Switch project"
+              data-testid="project-switcher-select"
+              value={projectId}
+              onChange={(event) => onSelectProject(event.target.value)}
+              className="min-w-0 appearance-none bg-transparent pr-5 text-sm font-semibold outline-none"
+              style={{ color: 'var(--text)' }}
+            >
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.name}
+                </option>
+              ))}
+            </select>
+            <Icon name="expand_more" size={13} className="control-select-icon" />
+          </label>
+        ) : (
+          <h1 className="truncate text-sm font-semibold" style={{ color: 'var(--text)' }}>{projectName}</h1>
+        )}
         {directoryAvailable ? (
           <>
-            <p className="truncate text-[11px]" style={{ color: 'var(--text-3)' }}>
+            <p className="mt-0.5 truncate text-[11px]" style={{ color: 'var(--text-3)' }}>
               {agentCount} agent{agentCount === 1 ? '' : 's'}
             </p>
             {/* Structure, not a joined string (composer/chrome refinement §5): each segment
@@ -45,7 +76,7 @@ export function ProjectHeader({
                 that navigates nowhere should not look interactive). */}
             {pathSegments.length > 0 && (
               <p
-                className="flex min-w-0 items-center overflow-hidden text-[11px]"
+                className="hidden min-w-0 items-center overflow-hidden text-[11px] sm:flex"
                 title={pathDisplay ?? undefined}
                 style={{ color: 'var(--text-3)' }}
               >

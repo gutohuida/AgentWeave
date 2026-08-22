@@ -111,6 +111,23 @@ describe('accounting presentation', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
+  it('turns a runner allowance payload into readable operator language instead of raw JSON', () => {
+    snapshot.preferred_display = {
+      kind: 'allowance',
+      label: 'Rate-limit allowance',
+      allowance: {
+        status: 'rejected',
+        rateLimitType: 'seven_day',
+        resetsAt: 1_788_000_000,
+        overageDisabledReason: 'out_of_credits',
+      },
+    }
+    render(<AccountingPanel />)
+
+    expect(screen.getByText(/Weekly allowance exhausted/)).toBeInTheDocument()
+    expect(screen.queryByText(/\{"status"/)).not.toBeInTheDocument()
+  })
+
   it('updates or disables the project token budget', () => {
     render(<AccountingPanel />)
     const input = screen.getByLabelText('Project token budget')

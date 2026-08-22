@@ -79,14 +79,9 @@ export function JobForm({ onSubmit, onCancel, isPending }: JobFormProps) {
   }
 
   const inputStyle: React.CSSProperties = {
-    background: 'var(--surface-2)',
-    border: '1px solid var(--border)',
-    borderRadius: 'var(--radius-sm)',
-    color: 'var(--text)',
     padding: '8px 12px',
     width: '100%',
     fontSize: 13,
-    outline: 'none',
   }
 
   return (
@@ -96,16 +91,17 @@ export function JobForm({ onSubmit, onCancel, isPending }: JobFormProps) {
       onClick={onCancel}
     >
       <div
-        className="w-full max-w-lg max-h-[90vh] overflow-y-auto p-6"
+        className="elevation-overlay w-full max-w-lg max-h-[90vh] overflow-y-auto p-6"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="create-job-title"
         style={{
-          background: 'var(--surface)',
           borderRadius: 'var(--radius-lg)',
-          border: '1px solid var(--border)',
         }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-lg font-normal" style={{ color: 'var(--text)' }}>
+          <h2 id="create-job-title" className="text-lg font-normal" style={{ color: 'var(--text)' }}>
             Create New Job
           </h2>
           <Button variant="ghost" size="icon-xs" onClick={onCancel} className="rounded-full" aria-label="Close">
@@ -124,6 +120,7 @@ export function JobForm({ onSubmit, onCancel, isPending }: JobFormProps) {
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g., Daily Standup Report"
+              className="control-field"
               style={inputStyle}
               disabled={isPending}
             />
@@ -134,19 +131,13 @@ export function JobForm({ onSubmit, onCancel, isPending }: JobFormProps) {
             <label className="block mb-1.5 text-[11px] font-medium" style={{ color: 'var(--text-3)' }}>
               Target Agent
             </label>
-            <select
-              value={agent}
-              onChange={(e) => setAgent(e.target.value)}
-              style={inputStyle}
-              disabled={isPending}
-            >
-              <option value="">Select an agent…</option>
-              {agents?.map((a) => (
-                <option key={a.name} value={a.name}>
-                  @{a.name}
-                </option>
-              ))}
-            </select>
+            <div className="control-select-wrap">
+              <select className="control-field" value={agent} onChange={(e) => setAgent(e.target.value)} style={inputStyle} disabled={isPending}>
+                <option value="">Select an agent…</option>
+                {agents?.map((a) => <option key={a.name} value={a.name}>@{a.name}</option>)}
+              </select>
+              <Icon name="expand_more" size={15} className="control-select-icon" />
+            </div>
           </div>
 
           {/* Message */}
@@ -159,7 +150,7 @@ export function JobForm({ onSubmit, onCancel, isPending }: JobFormProps) {
               onChange={(e) => setMessage(e.target.value)}
               placeholder="The message to send to the agent when this job runs…"
               rows={3}
-              className="h-24 resize-none"
+              className="control-field h-24 resize-none"
               style={inputStyle}
               disabled={isPending}
             />
@@ -175,7 +166,7 @@ export function JobForm({ onSubmit, onCancel, isPending }: JobFormProps) {
               value={cron}
               onChange={(e) => setCron(e.target.value)}
               placeholder="0 9 * * *"
-              className="font-mono"
+              className="control-field font-mono"
               style={{ ...inputStyle, fontFamily: "'JetBrains Mono', monospace" }}
               disabled={isPending}
             />
@@ -186,7 +177,7 @@ export function JobForm({ onSubmit, onCancel, isPending }: JobFormProps) {
                   type="button"
                   onClick={() => setCron(example.value)}
                   data-active={cron === example.value ? 'true' : 'false'}
-                  className="row-item w-auto rounded-sm px-2.5 py-0.5 text-[11px] font-medium"
+                  className="row-item aw-chip w-auto px-2.5 py-0.5 text-[11px] font-medium"
                   style={{ border: '1px solid var(--border)' }}
                 >
                   {example.label}
@@ -201,7 +192,7 @@ export function JobForm({ onSubmit, onCancel, isPending }: JobFormProps) {
               Session Mode
             </label>
             <div className="flex gap-3">
-              <label className="flex items-center gap-2 cursor-pointer">
+              <label className="flex items-center gap-2 cursor-pointer rounded-md px-2 py-1.5" style={{ background: sessionMode === 'new' ? 'var(--row-selected)' : undefined }}>
                 <input
                   type="radio"
                   name="sessionMode"
@@ -209,12 +200,13 @@ export function JobForm({ onSubmit, onCancel, isPending }: JobFormProps) {
                   checked={sessionMode === 'new'}
                   onChange={() => setSessionMode('new')}
                   disabled={isPending}
+                  className="control-choice"
                 />
                 <span className="text-xs" style={{ color: 'var(--text)' }}>
                   New session each run
                 </span>
               </label>
-              <label className="flex items-center gap-2 cursor-pointer">
+              <label className="flex items-center gap-2 cursor-pointer rounded-md px-2 py-1.5" style={{ background: sessionMode === 'resume' ? 'var(--row-selected)' : undefined }}>
                 <input
                   type="radio"
                   name="sessionMode"
@@ -222,6 +214,7 @@ export function JobForm({ onSubmit, onCancel, isPending }: JobFormProps) {
                   checked={sessionMode === 'resume'}
                   onChange={() => setSessionMode('resume')}
                   disabled={isPending}
+                  className="control-choice"
                 />
                 <span className="text-xs" style={{ color: 'var(--text)' }}>
                   Resume last session
@@ -231,7 +224,7 @@ export function JobForm({ onSubmit, onCancel, isPending }: JobFormProps) {
           </div>
 
           {/* Loop section — collapsed by default */}
-          <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+          <div className="rounded-lg p-3" style={{ border: '1px solid var(--border)', background: loopEnabled ? 'var(--surface-2)' : undefined }}>
             <button
               type="button"
               onClick={() => setLoopEnabled(!loopEnabled)}
@@ -239,7 +232,7 @@ export function JobForm({ onSubmit, onCancel, isPending }: JobFormProps) {
               style={{ color: 'var(--text-3)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
               aria-expanded={loopEnabled}
             >
-              <Icon name={loopEnabled ? 'expand_less' : 'expand_more'} size={16} />
+              <span style={{ display: 'flex', transform: loopEnabled ? 'rotate(180deg)' : undefined, transition: 'transform var(--dur-fast) var(--ease)' }}><Icon name="expand_more" size={16} /></span>
               Make this a loop
             </button>
 
@@ -254,7 +247,7 @@ export function JobForm({ onSubmit, onCancel, isPending }: JobFormProps) {
                     onChange={(e) => setPurpose(e.target.value)}
                     placeholder="What is this loop for?"
                     rows={2}
-                    className="resize-none"
+                    className="control-field resize-none"
                     style={inputStyle}
                     disabled={isPending}
                   />
@@ -268,6 +261,7 @@ export function JobForm({ onSubmit, onCancel, isPending }: JobFormProps) {
                     type="datetime-local"
                     value={stopAt}
                     onChange={(e) => setStopAt(e.target.value)}
+                    className="control-field"
                     style={inputStyle}
                     disabled={isPending}
                   />
@@ -279,6 +273,7 @@ export function JobForm({ onSubmit, onCancel, isPending }: JobFormProps) {
                     checked={stopWhenQueueEmpties}
                     onChange={(e) => setStopWhenQueueEmpties(e.target.checked)}
                     disabled={isPending}
+                    className="control-choice"
                   />
                   <span className="text-xs" style={{ color: 'var(--text)' }}>
                     Stop when the queue is empty

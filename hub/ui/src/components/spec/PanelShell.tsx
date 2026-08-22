@@ -135,11 +135,8 @@ export function PanelShell({ projectId, availableTabs, describeTab, renderTabCon
           return (
             <div
               key={tab.id}
-              className="flex shrink-0 items-center gap-1 rounded-t-[var(--radius-sm)] px-1.5 py-1"
-              style={{
-                background: selected ? 'var(--surface-2)' : 'transparent',
-                color: selected ? 'var(--text-1)' : 'var(--text-2)',
-              }}
+              className="panel-tab-chip"
+              data-selected={selected ? 'true' : 'false'}
             >
               <button
                 type="button"
@@ -152,10 +149,11 @@ export function PanelShell({ projectId, availableTabs, describeTab, renderTabCon
                 data-testid={`panel-tab-${tab.id}`}
                 className="flex min-w-0 items-center gap-1.5 border-0 bg-transparent"
                 style={{ fontSize: 13, cursor: 'pointer', padding: '2px 2px' }}
+                title={descriptor.label}
                 onClick={() => activateTab(projectId, tab.id)}
                 onKeyDown={(event) => handleStripKeyDown(event, index)}
               >
-                <Icon name={descriptor.icon} size={14} />
+                <span className="panel-tab-identity inline-flex"><Icon name={descriptor.icon} size={14} /></span>
                 <span className="max-w-[140px] truncate">{descriptor.label}</span>
               </button>
               <button
@@ -163,7 +161,7 @@ export function PanelShell({ projectId, availableTabs, describeTab, renderTabCon
                 aria-label={`Close ${descriptor.label}`}
                 title={`Close ${descriptor.label}`}
                 data-testid={`panel-tab-close-${tab.id}`}
-                className="flex border-0 bg-transparent"
+                className="panel-tab-close flex border-0 bg-transparent"
                 style={{ cursor: 'pointer', color: 'var(--text-3)', padding: 2 }}
                 onClick={(event) => {
                   // The tab's own onClick would otherwise fire too, activating a tab this same
@@ -217,7 +215,7 @@ export function PanelShell({ projectId, availableTabs, describeTab, renderTabCon
                   type="button"
                   data-testid={`panel-launch-${descriptor.id}`}
                   onClick={() => openTab(projectId, descriptor.id)}
-                  className="flex flex-col items-start gap-1.5 rounded-[var(--radius-md)] p-3 text-left"
+                  className="interactive-card panel-launcher-card flex flex-col items-start gap-1.5 rounded-[var(--radius-md)] p-3 text-left"
                   style={{
                     background: 'var(--surface-2)',
                     border: '1px solid var(--border)',

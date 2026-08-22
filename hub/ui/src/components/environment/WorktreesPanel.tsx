@@ -1,4 +1,5 @@
 import { SettingsSection } from '@/components/environment/SettingsSection'
+import { EmptyState } from '@/components/common/EmptyState'
 
 export function WorktreesPanel() {
   return (
@@ -6,8 +7,12 @@ export function WorktreesPanel() {
       title="Worktrees"
       description="Isolated agent worktrees and conflicts are managed from this project workspace."
     >
-      <div className="py-6 text-xs" style={{ color: 'var(--text-3)' }}>
-        No worktree activity yet.
+      <div className="py-4">
+        <EmptyState
+          icon="file_vcs"
+          title="No worktree activity"
+          description="Isolated workspaces appear here when an agent starts work that needs its own checkout."
+        />
       </div>
     </SettingsSection>
   )

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useTaskBoards } from '@/api/tasks'
 import { EmptyState } from '@/components/common/EmptyState'
+import { Icon } from '@/components/common/Icon'
 import { DependencyBoard } from './DependencyBoard'
 
 interface DependencyBoardViewProps {
@@ -37,7 +38,19 @@ export function DependencyBoardView({ onOpenRequirement }: DependencyBoardViewPr
       : 'Dependencies are set in the document — edit its depends_on field to change them.'
 
   if (isLoading) {
-    return <div className="p-6" style={{ color: 'var(--text-3)' }}>Loading boards…</div>
+    return (
+      <div className="p-3 space-y-4" aria-label="Loading dependency boards">
+        <div className="flex gap-2">
+          <div className="skeleton h-8 w-44" />
+          <div className="skeleton h-8 w-32" />
+        </div>
+        <div className="skeleton h-9 w-full" />
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="skeleton h-28" />
+          <div className="skeleton h-28" />
+        </div>
+      </div>
+    )
   }
 
   if (boards.length === 0) {
@@ -76,6 +89,7 @@ export function DependencyBoardView({ onOpenRequirement }: DependencyBoardViewPr
                 color: isSelected ? 'var(--text)' : 'var(--text-2)',
               }}
             >
+              <Icon name={board.spec_document_id === null ? 'file_type' : 'description'} size={13} />
               {label}
               {/* Outstanding-over-total: design D9's "choosing a board and seeing what remains
                   are one act", so the count rides on the picker itself, not a separate fetch
@@ -83,15 +97,33 @@ export function DependencyBoardView({ onOpenRequirement }: DependencyBoardViewPr
               <span style={{ color: 'var(--text-3)', fontVariantNumeric: 'tabular-nums' }}>
                 {board.outstanding}/{board.total}
               </span>
+              {board.total > 0 && (
+                <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+                  <circle cx="9" cy="9" r="7" fill="none" stroke="var(--border)" strokeWidth="2" />
+                  <circle
+                    cx="9"
+                    cy="9"
+                    r="7"
+                    fill="none"
+                    stroke="var(--text-2)"
+                    strokeWidth="2"
+                    pathLength="100"
+                    strokeDasharray={`${Math.max(0, 100 - (board.outstanding / board.total) * 100)} 100`}
+                    strokeLinecap="round"
+                    transform="rotate(-90 9 9)"
+                  />
+                </svg>
+              )}
             </button>
           )
         })}
       </div>
       <p
         data-testid="dependency-board-structure-hint"
-        className="px-3 pt-2 text-xs"
+        className="dependency-structure-hint mx-3 mt-2 px-2 py-1.5 text-xs"
         style={{ color: 'var(--text-3)' }}
       >
+        <Icon name="info" size={13} style={{ marginTop: 1 }} />
         {structureHint}
       </p>
       <div className="flex-1 overflow-hidden">

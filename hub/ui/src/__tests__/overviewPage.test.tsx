@@ -16,7 +16,7 @@ vi.mock('@/api/questions', () => ({ useQuestions: () => ({ data: [] }) }))
 vi.mock('@/api/tasks', () => ({ useTasks: () => ({ data: [] }) }))
 vi.mock('@/api/status', () => ({ useStatus: () => ({ data: { project_name: 'AgentWeave' } }) }))
 vi.mock('@/hooks/useSSE', () => ({ getBufferedEvents: () => [] }))
-vi.mock('@/components/accounting/AccountingPanel', () => ({ AccountingPanel: () => null }))
+vi.mock('@/components/overview/OverviewBudgetSummary', () => ({ OverviewBudgetSummary: () => null }))
 
 describe('Gap 6 — OverviewPage agent health grid', () => {
   it('colors a stalled agent the same amber as waiting, not the same gray as idle', () => {
@@ -51,5 +51,11 @@ describe('Gap 6 — OverviewPage agent health grid', () => {
 
     expect(dotFor('claude-running').style.boxShadow).toContain('var(--green)')
     expect(dotFor('claude-stalled').style.boxShadow).toBe('')
+  })
+
+  it('gives each agent card a status-bearing accessible name', () => {
+    render(<OverviewPage onNavigate={vi.fn()} />)
+    expect(document.querySelector('button[aria-label="Open claude-stalled, Stalled"]')).not.toBeNull()
+    expect(document.querySelector('button[aria-label="Open claude-running, Running"]')).not.toBeNull()
   })
 })

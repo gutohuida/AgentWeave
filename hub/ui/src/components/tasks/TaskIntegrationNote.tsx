@@ -44,13 +44,14 @@ export function TaskIntegrationNote({ taskId, status }: { taskId: string; status
   )
 
   return (
-    <div className="mt-2 space-y-1" data-testid={`task-integrations-${taskId}`}>
+    <div className="task-integration-note mt-2 space-y-1" data-testid={`task-integrations-${taskId}`}>
       {rows.map((row) => {
         const merged = row.outcome === 'merged'
         const failed = row.outcome === 'failed'
         const color = merged ? 'var(--green)' : failed ? 'var(--red)' : 'var(--text-muted)'
         return (
-          <p key={row.id} className="text-[11px]" style={{ color }}>
+          <p key={row.id} className="text-[11px] flex items-start gap-1.5" style={{ color }}>
+            <span aria-hidden="true">{merged ? '✓' : failed ? '!' : '–'}</span>
             {merged ? (
               <>
                 Merged <code>{(row.commit_sha ?? '').slice(0, 8)}</code> into{' '}

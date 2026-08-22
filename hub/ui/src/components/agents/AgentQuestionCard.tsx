@@ -70,7 +70,7 @@ export function AgentQuestionCard({
   const nobodyWaiting = question.asker_waiting === false
 
   return (
-    <div className="conversation-interject" data-testid={`agent-question-${question.id}`}>
+    <div className={`conversation-interject${nobodyWaiting ? ' is-stale' : ''}`} data-testid={`agent-question-${question.id}`}>
       <div className="flex items-center gap-2" style={{ marginBottom: 6 }}>
         <span className="interject-eyebrow">{question.header || `${agent} is asking`}</span>
         {/* Position within this batch, not a count of everything outstanding. The old counter
@@ -134,7 +134,7 @@ export function AgentQuestionCard({
                 )}
               </span>
               {isSelected ? (
-                <Icon name="check" size={14} className="shrink-0" />
+                <Icon name="check" size={14} className="interject-choice-check shrink-0" />
               ) : shortcut !== null ? (
                 <kbd className="interject-kbd">{shortcut}</kbd>
               ) : null}

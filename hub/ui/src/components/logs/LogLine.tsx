@@ -60,6 +60,10 @@ export function LogLine({ entry }: LogLineProps) {
     copy(JSON.stringify({ ...entry, data: entry.data }, null, 2))
   }
 
+  function toggleExpanded() {
+    if (hasData) setExpanded((value) => !value)
+  }
+
   return (
     <div
       className="group font-mono text-xs"
@@ -71,13 +75,22 @@ export function LogLine({ entry }: LogLineProps) {
       <div
         className="flex items-center gap-2 px-2 py-[3px] select-none transition-colors cursor-pointer"
         style={{ color: 'var(--text)' }}
-        onClick={() => hasData && setExpanded(!expanded)}
+        onClick={toggleExpanded}
+        onKeyDown={(event) => {
+          if (!hasData || (event.key !== 'Enter' && event.key !== ' ')) return
+          event.preventDefault()
+          toggleExpanded()
+        }}
+        role={hasData ? 'button' : undefined}
+        tabIndex={hasData ? 0 : undefined}
+        aria-expanded={hasData ? expanded : undefined}
+        aria-label={hasData ? `${expanded ? 'Collapse' : 'Expand'} ${entry.event_type} log entry` : undefined}
         onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--accent)' }}
         onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
       >
         <span className="w-3 shrink-0" style={{ color: 'var(--text-3)', opacity: 0.6 }}>
           {hasData && (
-            <Icon name={expanded ? 'expand_more' : 'chevron_right'} size={14} />
+            <span style={{ display: 'flex', transform: expanded ? 'rotate(90deg)' : undefined, transition: 'transform var(--dur-fast) var(--ease)' }}><Icon name="chevron_right" size={14} /></span>
           )}
         </span>
         <span className="shrink-0 w-[156px]" style={{ color: 'var(--text-3)', opacity: 0.7 }}>{ts}</span>
@@ -98,7 +111,7 @@ export function LogLine({ entry }: LogLineProps) {
         </span>
         <button
           onClick={handleCopy}
-          className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity p-0.5"
+          className="shrink-0 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity p-0.5"
           style={{ color: 'var(--text-3)' }}
           title="Copy entry"
         >

@@ -72,6 +72,15 @@ const AGENT_SECTION_LABELS: Record<AgentSettingsSection, string> = {
   access: 'Access',
   workspace: 'Workspace',
 }
+const AGENT_SECTION_ICONS: Record<AgentSettingsSection, string> = {
+  identity: 'badge',
+  execution: 'terminal',
+  charter: 'description',
+  interaction: 'forum',
+  context: 'memory',
+  access: 'lock',
+  workspace: 'folder_open',
+}
 const SECTION_LABELS: Record<EnvironmentSection, string> = {
   quality: 'Quality',
   instructions: 'Instructions',
@@ -81,6 +90,16 @@ const SECTION_LABELS: Record<EnvironmentSection, string> = {
   diagnostics: 'Diagnostics',
   budgets: 'Budgets',
   settings: 'Settings',
+}
+const SECTION_ICONS: Record<EnvironmentSection, string> = {
+  quality: 'verified_user',
+  instructions: 'description',
+  runners: 'terminal',
+  charters: 'menu_book',
+  worktrees: 'file_vcs',
+  diagnostics: 'monitoring',
+  budgets: 'bar_chart',
+  settings: 'settings',
 }
 
 function loadFlags(key: string): Record<string, boolean> {
@@ -181,14 +200,14 @@ export function Sidebar({
         width: compact ? SIDEBAR_COMPACT_WIDTH : width,
         background: 'var(--rail)',
         borderRight: '1px solid var(--border-region)',
-        padding: compact ? '14px 4px' : '16px 12px',
+        padding: compact ? '10px 4px' : '10px 8px',
       }}
     >
       <div
-        className={compact ? 'mb-3 flex flex-col items-center gap-1' : 'mb-5 flex items-center gap-2 px-2'}
-        style={{ fontSize: 13, fontWeight: 700 }}
+        className={compact ? 'mb-3 flex flex-col items-center gap-1' : 'mb-3 flex items-center gap-2 px-1.5 py-1'}
+        style={{ fontSize: 13, fontWeight: 600 }}
       >
-        <span className="inline-flex h-6 w-6 items-center justify-center rounded-md text-[11px]" style={{ background: 'var(--primary)', color: 'var(--primary-foreground)' }}>AW</span>
+        <span className="rail-live-dot" aria-hidden="true" />
         {!compact && <span className="flex-1">AgentWeave</span>}
         {onCompactChange && (
           <Button
@@ -253,6 +272,7 @@ export function Sidebar({
                   onOpenAgentSettings?.(agentSettings.projectId, agentSettings.agent, section)
                 }
               >
+                <Icon name={AGENT_SECTION_ICONS[section]} size={14} />
                 {AGENT_SECTION_LABELS[section]}
               </button>
             ))}
@@ -286,6 +306,7 @@ export function Sidebar({
                 aria-current={configuration.environmentSection === section ? 'page' : undefined}
                 onClick={() => onOpenEnvironment?.(configuration.projectId, section)}
               >
+                <Icon name={SECTION_ICONS[section]} size={14} />
                 {SECTION_LABELS[section]}
               </button>
             ))}
@@ -333,6 +354,7 @@ export function Sidebar({
                       onClick={() => onOpenProject(project.id)}
                       className="row-item min-w-0 flex-1"
                     >
+                      <span className="row-selection-indicator" aria-hidden="true" />
                       <span className="min-w-0 flex-1">
                         <span className="block truncate">{project.name}</span>
                         {duplicateName && <span className="block truncate text-[11px]" style={{ color: 'var(--text-3)' }}>{project.path_display ?? 'Directory unavailable'}</span>}

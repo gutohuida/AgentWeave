@@ -11,6 +11,10 @@ import { Composer } from './Composer'
 
 interface NewConversationSurfaceProps {
   projectId: string
+  /** Visible project context for the unsent message. The persistent header also exposes the
+   * switcher, but the composer repeats the scope at the decision point so a message cannot look
+   * detached from the project it will mutate. */
+  projectName?: string
   /** Who the first message goes to. Pre-selected when the operator started from an agent's row
    *  menu, null when they started from the recency view — but a *default*, never a binding: the
    *  roster below stays live either way. */
@@ -39,6 +43,7 @@ interface NewConversationSurfaceProps {
  */
 export function NewConversationSurface({
   projectId,
+  projectName,
   agent,
   onChooseAgent,
   onStarted,
@@ -127,9 +132,22 @@ export function NewConversationSurface({
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-4">
-        <div className="flex w-full max-w-[820px] flex-col gap-5" data-testid="new-conversation-surface">
+        <div className="flex w-full max-w-[820px] flex-col gap-4" data-testid="new-conversation-surface">
+          <div className="flex justify-center">
+            <span
+              className="aw-chip"
+              data-testid="new-conversation-project-context"
+              style={{ background: 'var(--surface-2)', borderColor: 'var(--border)', color: 'var(--text-2)' }}
+            >
+              <Icon name="folder_open" size={13} />
+              Project: {projectName ?? projectId}
+            </span>
+          </div>
+          <div className="new-conversation-icon" aria-hidden="true">
+            <Icon name="chat" size={20} />
+          </div>
           {/* The one line an operator reads every time they start work. It names the agent
-              rather than the project, because the project is already in the header above and
+              rather than the project, because the project is explicit immediately above and
               the agent is the thing this product has that a chat app does not. Unbound, the
               question changes to the one that actually has to be answered first — the line is
               the instruction, not decoration above one. */}
@@ -141,6 +159,10 @@ export function NewConversationSurface({
             {agent ? `What should ${agent} work on?` : 'Who should work on this?'}
           </h1>
 
+          <p className="text-center text-[11.5px]" style={{ color: 'var(--text-3)' }}>
+            Start with a recent agent, or choose another before you send.
+          </p>
+
           <div className="flex flex-wrap justify-center gap-1.5">
             {roster.map((candidate) => {
               const selected = candidate.name === agent
@@ -148,7 +170,7 @@ export function NewConversationSurface({
                 <button
                   key={candidate.name}
                   type="button"
-                  className="row-item"
+                  className="new-conversation-agent row-item"
                   style={{ width: 'auto' }}
                   data-testid={`new-conversation-agent-${candidate.name}`}
                   data-active={selected ? 'true' : 'false'}

@@ -37,6 +37,18 @@ function describe(request: PermissionRequest): string {
   return 'no details given — the provider sent none'
 }
 
+function requestKind(request: PermissionRequest): { label: string; impact: 'neutral' | 'mutates' } {
+  const input = request.tool_input ?? {}
+  const tool = request.tool_name.toLowerCase()
+  if (typeof input.command === 'string') return { label: 'Command', impact: 'mutates' }
+  const hasPath = [input.file_path, input.path, input.notebook_path].some((value) => typeof value === 'string' && value)
+  if (hasPath && (tool.includes('read') || tool.includes('view'))) return { label: 'File read', impact: 'neutral' }
+  if (hasPath || 'grantRoot' in input || tool.includes('edit') || tool.includes('write') || tool.includes('change')) {
+    return { label: 'File change', impact: 'mutates' }
+  }
+  return { label: 'Tool request', impact: 'neutral' }
+}
+
 export function PermissionRequestCard({ requests, agent }: PermissionRequestCardProps) {
   const decide = useDecidePermissionRequest()
   const dismiss = useDismissPermissionRequest()
@@ -49,8 +61,9 @@ export function PermissionRequestCard({ requests, agent }: PermissionRequestCard
 
   return (
     <div className="flex flex-col gap-2" data-testid="permission-requests">
-      {open.map((request) => {
+      {open.map((request, index) => {
         const expired = request.status === 'expired'
+        const kind = requestKind(request)
         // The residual race: the run gave up between this render and the click. The 409 says
         // what happened, and is worth more than a generic failure — an operator who is not told
         // reads it as the app being broken.
@@ -63,12 +76,14 @@ export function PermissionRequestCard({ requests, agent }: PermissionRequestCard
           <div
             key={request.id}
             data-testid={`permission-request-${request.id}`}
-            className="conversation-interject"
+            className={`conversation-interject${expired ? ' is-stale' : ''}`}
           >
             <div className="flex items-center gap-2" style={{ marginBottom: 4 }}>
+              <span className="permission-kind" data-impact={kind.impact}>{kind.label}</span>
               <p className="interject-eyebrow">
                 {agent} wants to use {request.tool_name}
               </p>
+              {open.length > 1 && <span className="interject-count ml-auto">{index + 1}/{open.length}</span>}
               {expired && (
                 <span
                   data-testid={`permission-expired-${request.id}`}
@@ -88,33 +103,29 @@ export function PermissionRequestCard({ requests, agent }: PermissionRequestCard
                   data-testid={`permission-dismiss-${request.id}`}
                   disabled={dismiss.isPending}
                   onClick={() => dismiss.mutate({ id: request.id })}
-                  className="ml-auto shrink-0 p-0.5 rounded"
+                  className={`${open.length > 1 ? '' : 'ml-auto'} shrink-0 rounded p-0.5`}
                   style={{ color: 'var(--text-3)', background: 'transparent', border: 'none' }}
                 >
                   <Icon name="x" size={14} />
                 </button>
               )}
             </div>
-            <p
-              style={{
-                fontSize: 12,
-                color: expired ? 'var(--text-3)' : 'var(--text)',
-                marginBottom: 10,
-                fontFamily: 'var(--font-mono)',
-                wordBreak: 'break-all',
-              }}
+            <code
+              className={`permission-detail${expired ? ' is-stale' : ''}`}
+              aria-label={`${kind.label}: ${describe(request)}`}
             >
               {describe(request)}
-            </p>
+            </code>
             {expired ? (
               <p style={{ fontSize: 11, color: 'var(--text-3)' }}>
                 The agent stopped waiting and was refused. Give yourself longer to answer by
                 raising this agent's permission timeout.
               </p>
             ) : (
-              <div className="flex items-center gap-2">
+              <div className="permission-actions">
                 <Button
                   size="sm"
+                  variant="primary"
                   data-testid={`permission-allow-${request.id}`}
                   disabled={decide.isPending}
                   onClick={() => decide.mutate({ id: request.id, allow: true })}
@@ -130,7 +141,7 @@ export function PermissionRequestCard({ requests, agent }: PermissionRequestCard
                 >
                   Deny
                 </Button>
-                <span style={{ fontSize: 11, color: 'var(--text-3)' }}>
+                <span className="permission-waiting">
                   The agent is waiting, and will be refused if nobody answers.
                 </span>
               </div>

@@ -65,10 +65,16 @@ export function JobsPage({ onOpenTasks }: JobsPageProps) {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="flex items-center gap-3">
-          <Icon name="sync" size={24} className="animate-spin" style={{ color: 'var(--text-3)' }} />
-          <span className="text-sm" style={{ color: 'var(--text-3)' }}>Loading jobs…</span>
+      <div className="p-4" aria-label="Loading jobs">
+        <div className="grid max-w-3xl gap-3">
+          {[0, 1, 2].map((item) => (
+            <div key={item} className="elevation-resting rounded-xl p-4" aria-hidden="true">
+              <div className="skeleton h-4 w-2/5" />
+              <div className="skeleton mt-3 h-3 w-1/4" />
+              <div className="skeleton mt-3 h-6 w-1/3" />
+              <div className="mt-4 flex gap-2"><div className="skeleton h-7 w-16" /><div className="skeleton h-7 w-20" /></div>
+            </div>
+          ))}
         </div>
       </div>
     )
@@ -109,7 +115,8 @@ export function JobsPage({ onOpenTasks }: JobsPageProps) {
             key={f}
             onClick={() => setFilter(f)}
             data-active={filter === f ? 'true' : 'false'}
-            className="row-item w-auto rounded-full px-3 py-1.5 text-[11px] font-medium capitalize"
+            className="row-item aw-chip w-auto px-3 py-1.5 text-[11px] font-medium capitalize"
+            data-pill="true"
           >
             {f}
             {f !== 'all' && jobs && (

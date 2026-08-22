@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Icon } from '@/components/common/Icon'
+import { Button } from '@/components/ui/button'
 import { searchDocuments, type SpecInventory, type SpecNode } from './specNavigation'
 import { SpecTree } from './SpecTree'
 
@@ -23,7 +24,6 @@ const rowStyle: React.CSSProperties = {
   width: '100%',
   padding: '6px 10px',
   border: 'none',
-  background: 'none',
   color: 'var(--text-2)',
   fontSize: 12,
   textAlign: 'left',
@@ -83,26 +83,28 @@ export function SpecDocumentBrowser({
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col" data-testid="spec-document-browser">
-      <input
-        autoFocus={autoFocus}
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        placeholder="Search by title, path, or change name — or browse below"
-        aria-label="Search documents"
-        className="shrink-0"
-        style={{
-          padding: '12px 14px',
-          border: 'none',
-          background: 'transparent',
-          color: 'var(--text)',
-          fontSize: 13,
-          outline: 'none',
-        }}
-      />
+      <div className="panel-search shrink-0">
+        <Icon name="search" size={14} />
+        <input
+          autoFocus={autoFocus}
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Escape') setQuery('') }}
+          placeholder="Search by title, path, or change name — or browse below"
+          aria-label="Search documents"
+          className="control-field"
+        />
+        {query && (
+          <Button className="panel-search-clear" variant="ghost" size="icon-xs" onClick={() => setQuery('')} aria-label="Clear document search">
+            <Icon name="close" size={13} />
+          </Button>
+        )}
+      </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-1.5" data-testid="spec-picker-results">
         {startExploration && (browsing || empty) && (
           <button
             type="button"
+            className="row-item"
             style={{ ...rowStyle, color: 'var(--text)' }}
             data-testid="spec-picker-start-exploration"
             onClick={startExploration}
@@ -123,7 +125,7 @@ export function SpecDocumentBrowser({
             )}
 
             {results.current.map((node) => (
-              <button key={node.path} type="button" style={rowStyle} onClick={() => onSelect(node)}>
+              <button key={node.path} type="button" className="row-item" style={rowStyle} onClick={() => onSelect(node)}>
                 <span className="truncate">{node.title}</span>
                 <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--text-3)' }}>
                   {node.path}
@@ -138,6 +140,7 @@ export function SpecDocumentBrowser({
                   <button
                     key={node.path}
                     type="button"
+                    className="row-item"
                     style={{ ...rowStyle, opacity: 0.65 }}
                     onClick={() => onSelect(node)}
                   >
@@ -158,6 +161,7 @@ export function SpecDocumentBrowser({
                   <button
                     key={node.path}
                     type="button"
+                    className="row-item"
                     disabled
                     style={{ ...rowStyle, cursor: 'not-allowed', opacity: 0.55 }}
                   >

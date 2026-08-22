@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { formatDistanceToNow } from 'date-fns'
 import { Icon } from '@/components/common/Icon'
-import { StatusBadge } from '@/components/common/Badge'
+import { PriorityBadge, StatusBadge } from '@/components/common/Badge'
 import { readableApiError } from '@/api/client'
 import {
   DIVERGENCE_POLICY_LABELS,
@@ -153,6 +153,7 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
         aria-modal="true"
         aria-labelledby={`task-drawer-title-${task.id}`}
         data-testid={`task-drawer-${task.id}`}
+        className="task-detail-dialog"
         style={{
           // Wide enough for a description to have a line length worth reading, and capped so it
           // never becomes the full screen. Height follows content up to the viewport, so a short
@@ -162,9 +163,9 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
           display: 'flex',
           flexDirection: 'column',
           background: 'var(--surface)',
-          border: '1px solid var(--border)',
+          border: '1px solid var(--border-hi)',
           borderRadius: 'var(--radius-content, 10px)',
-          boxShadow: '0 16px 48px rgba(0,0,0,0.28)',
+          boxShadow: '0 16px 48px rgba(0,0,0,0.28), inset 0 1px var(--lift-hi)',
           // Deliberately no `overflow: hidden` here, however tempting for the rounded corners:
           // `design.md` D8 requires the body to be the only scrolling element, and a test pins
           // it. Clipping the panel is a cosmetic want; clipping the ticket is a defect.
@@ -210,7 +211,7 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
             opening a ticket lost information rather than gaining it — exactly backwards for the
             surface with the most room. */}
         <div
-          className="grid gap-x-6 gap-y-4 pb-1"
+          className="task-detail-facts grid gap-x-6 gap-y-4 p-3"
           style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}
         >
           <Field label="Status">
@@ -254,7 +255,7 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
           </Field>
 
           <Field label="Priority">
-            <StatusBadge status={task.priority} />
+            <PriorityBadge priority={task.priority} />
           </Field>
 
           <Field label="Assignee">

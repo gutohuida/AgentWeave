@@ -4,6 +4,7 @@ import { summaryForEvent } from '@/lib/eventSummary'
 import { agentColorVars } from '@/lib/agentColors'
 import { tint } from '@/lib/colorTint'
 import { hubDate } from '@/lib/hubTime'
+import { useCopy } from '@/hooks/useCopy'
 
 interface EventRowProps {
   event: {
@@ -34,6 +35,7 @@ function containerForType(type: string): { bg: string; color: string } {
 const SEVERITY_CHIP: Record<string, { bg: string; color: string }> = {
   error: { bg: tint('var(--red)'), color: 'var(--red)' },
   warn:  { bg: tint('var(--amber)'), color: 'var(--amber)' },
+  info:  { bg: 'var(--surface-3)', color: 'var(--text-2)' },
   debug: { bg: 'var(--surface-3)', color: 'var(--text-3)' },
 }
 
@@ -43,15 +45,17 @@ const SEVERITY_BORDER: Record<string, string> = {
 }
 
 export function EventRow({ event, actorName, actorColorIndex }: EventRowProps) {
+  const { copied, copy } = useCopy()
   const iconName   = iconForType(event.type)
   const container  = containerForType(event.type)
   const severity   = event.severity ?? 'info'
   const borderClr  = SEVERITY_BORDER[severity]
   const chip       = SEVERITY_CHIP[severity]
+  const summary    = summaryForEvent(event.type, event.data as Record<string, unknown>)
 
   return (
     <div
-      className="flex items-start gap-3 py-2.5 border-b last:border-b-0"
+      className="group flex items-start gap-3 py-2.5 border-b last:border-b-0"
       style={{
         borderBottomColor: 'var(--border)',
         ...(borderClr ? { borderLeft: `2px solid ${borderClr}`, paddingLeft: 10 } : {}),
@@ -74,9 +78,9 @@ export function EventRow({ event, actorName, actorColorIndex }: EventRowProps) {
           </span>
         )}
         <span className="text-[13px] font-medium" style={{ color: 'var(--text)' }}>{event.type}</span>
-        <span className="ml-2 text-xs" style={{ color: 'var(--text-3)' }}>
-          {summaryForEvent(event.type, event.data as Record<string, unknown>)}
-        </span>
+        {summary && summary !== event.type && (
+          <span className="ml-2 text-xs" style={{ color: 'var(--text-3)' }}>{summary}</span>
+        )}
       </div>
 
       {/* Severity chip */}
@@ -88,6 +92,16 @@ export function EventRow({ event, actorName, actorColorIndex }: EventRowProps) {
           {severity}
         </span>
       )}
+
+      <button
+        type="button"
+        className="shrink-0 p-1 opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100"
+        onClick={() => copy(JSON.stringify(event, null, 2))}
+        aria-label="Copy activity entry"
+        title="Copy activity entry"
+      >
+        <Icon name={copied ? 'check' : 'content_copy'} size={13} style={{ color: copied ? 'var(--green)' : 'var(--text-3)' }} />
+      </button>
 
       {/* Timestamp */}
       <span className="text-[11px] shrink-0" style={{ color: 'var(--text-3)', opacity: 0.6 }}>
