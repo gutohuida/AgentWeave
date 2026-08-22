@@ -3467,3 +3467,53 @@ the review index in full, not just append) as the next `current`, per `S8`'s "Ov
 and `Z`'s own instruction to run "again as the LAST action before `stop_at`" -- check `stop_at`
 (`2026-08-22T09:00:00+01:00`) against wall-clock time at that point, since the runway is close to
 its end after S8-palette's four passes.
+
+## Iteration 49 — 2026-08-22T08:01:38+01:00 — S8-palette P1: explore
+
+Verified branch/log/STATE.json all agreed before starting (`2fada2f` = HEAD, a released-heartbeat
+commit, matches STATE.json exactly). `screen_pass_protocol.P1_explore` for the command palette,
+S8's last sub-screen.
+
+Found the component: `hub/ui/src/components/palette/CommandPalette.tsx`, opened by `Cmd+K`/
+`Ctrl+K`, a thin wrapper around `cmdk`'s `Command.Dialog` styled minimally in `index.css:324-372`.
+Four flat groups (Agents, Tasks, Spec documents, Conversations), each row a single icon + label
+line with no secondary content, no keyboard-hint footer, no match highlighting, no open/close
+transition, and a selection state that is a flat, untransitioned background swap. Read the
+component's own comments carefully (per protocol) — the conversation-search-text truncation is a
+documented, deliberate fix for a real ranking bug, not an oversight, and stays untouched.
+
+WebSearched command-palette UI/UX patterns broadly (Mobbin, uxpatterns.dev, Destiner's notes,
+techinterview.org): footer keyboard hints, match highlighting, recent-items-when-empty, and
+palette-discoverability hints all came up as recurring, well-established patterns.
+
+**Found a genuine T3 Code equivalent this time** — earlier screens in this run mostly found
+tangential or no matches; this one hit `CommandPaletteContent.tsx` and `CommandPaletteResults.tsx`
+directly in `index-DiDfaONg.js.map`'s `sourcesContent`, T3 Code's own command palette, not adapted
+from a generic library example. Extracted (paraphrased only, per the reference-only rule): a
+persistent `Kbd`/`KbdGroup` footer (↑↓ Navigate / Enter \<action\> / Backspace Back / Esc Close),
+`<mark>`-based match highlighting on the matched substring, two-line rows with a coloured
+"You:"/"Agent:" thread-match snippet when relevant, trailing timestamp/shortcut-badge/chevron
+content used consistently rather than left empty, dimmed non-focusable rendering for disabled
+items, and a selection style that deliberately strips cmdk's own `data-highlighted`/`data-selected`
+classes so hover and keyboard-selection styling can't fight each other.
+
+Wrote `design/mocks/S8-palette/RESEARCH.md`: eight concrete gaps in the current component, the
+external and T3 findings, and — before building anything — an explicit pass of each candidate
+change against `IDENTITY.md`'s rejection test. Two calls worth recording: colour-coding the Agents
+group using the existing 8-colour `--agent-*` scale is ruled IN SCOPE (each row uses that agent's
+*own* already-assigned colour — reuse of an existing identity system, not new colour meaning); a
+"recent items" section is flagged as a genuine missing FEATURE per the loop's
+`pre_authorised` allowance, to be mocked and noted in `RATIONALE.md`, not treated as an obligatory
+styling fix. Caught and fixed two stray copy-paste artefact lines (`provider_session_id`, a bare
+`a`) left over from assembling the doc, on a self-review pass before committing — `git status
+--short` showed only the new `design/mocks/S8-palette/` directory afterward.
+
+**Next**: S8-palette P2 — `screen_pass_protocol.P2_validate_and_mock`. Build 2-3 variant HTMLs
+(footer hints + highlighting alone / + agent colour + secondary row lines / + recent-items feature
+note as a fourth degree) with realistic content, importing `../../../hub/ui/src/index.css`, per
+`RESEARCH.md`'s closing "Next (P2)" section. Runway is short — roughly 55 minutes to `stop_at`
+(`2026-08-22T09:00:00+01:00`) as this iteration closes. If P2 lands with little time left, it is
+fine to leave S8-palette mid-pass for the next firing to continue; do not jump ahead to queue item
+`Z` (review-index rebuild) until S8-palette actually closes at 4/4 or `stop_at` arrives, whichever
+comes first — `Z`'s own instruction to run "again as the LAST action before `stop_at`" means a
+partial S8-palette is still better left for one more iteration than abandoned early for `Z`.
