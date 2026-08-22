@@ -436,3 +436,83 @@ elevation scale from the existing surface steps, and every interaction state (ho
 focus-visible, disabled, loading, selected, empty). This is a mock only — the UI-half limit applies
 from here on: do not touch `hub/ui/src` for any further queue item unless it is later explicitly
 part of `conversations-continue` (it is not; that change is done).
+
+## Iteration 7 — 2026-08-22T01:36:27+01:00 — U0a: UI system pass 1, foundations
+
+First UI-half iteration. Branch/log/STATE.json all reconciled cleanly on entry — no drift to fix.
+
+Read `design/IDENTITY.md` in full (not yet read this run) before anything else, per its own
+instruction. Its rejection test — especially clause 5, "the same application, improved" — governed
+every choice below.
+
+**P1 — explore.** Read the current product rather than guessing: `hub/ui/src/index.css` (all 124
+tokens), `buttonVariants.ts` (the raised/ghost/outline/destructive states and the
+lit-from-above/inverts-under-press pattern), `TaskCard.tsx` (its manual hover-border handling and
+the `task-live-pulse` reduced-motion pattern — the one already-shipped considered animation in the
+product), and `EmptyState.tsx` (confirmed IDENTITY.md's "plainest thing in the product" claim: icon
+circle + title + optional description, no motion, no variation by cause). `grep -r skeleton
+hub/ui/src` → zero matches — no skeleton pattern exists anywhere today. Two `WebSearch` calls
+(elevation/dark-UI surface layering; motion duration/easing/state best practices) plus a third
+(skeleton vs spinner, empty-state patterns) confirmed the existing token scale already brackets
+current best practice correctly (150/250/500ms durations, expo-out easing, lighter-surface-not-shadow
+elevation) — nothing needed inventing, only naming and applying. Spot-checked the T3 sourcemaps at
+the path in STATE.json for "skeleton" (3 files matched) but the actionable takeaway was the same one
+the general research gave, so nothing further was read closely or quoted, matching IDENTITY.md's
+"structure transfers and implementation does not." Wrote `design/mocks/_system/RESEARCH.md` — six
+concrete gaps found (elevation isn't a named scale, focus-visible weight is inconsistent, disabled
+has one idiom used in two places, loading has zero shape-matched patterns, selected/active/hover
+collapse outside `.row-item`, empty states don't vary by cause), each validated against the
+rejection test's fixed constraints before being carried into the mock.
+
+**P2 — validate + mock.** Built `design/mocks/_system/foundations.html`, self-contained,
+`<link>`-importing `../../../hub/ui/src/index.css` so every colour is a real token (verified: the
+`@tailwind` directives are simply unrecognised at-rules a browser skips, the `@layer base` custom
+property declarations parse and apply natively, and the `@fontsource` imports 404 harmlessly to the
+declared system-font fallback — so the tokens resolve without a build step). Covers: a four-tier
+elevation scale named from the existing `--bg → --rail → --surface → --surface-2 → --surface-3`
+steps plus `--lift-hi`/`--press-lo`; the three durations demoed with a hover-triggered fill so the
+*feel* of each is visible, not just its number; every button variant (primary/ghost/outline/
+destructive) in rest/hover/press/focus-visible/disabled, forced via `data-force` attributes so every
+state renders without a live pointer (screenshots capture all of them at once); a row and a card
+generalised from `.row-item` and `TaskCard`'s own patterns in rest/hover/press/selected/live/
+disabled; an input in rest/hover/focus/error/disabled; three skeleton shapes (task card, roster row,
+message body) using a `color-mix` shimmer sweep gated behind `prefers-reduced-motion`, reusing
+`task-live-pulse`'s existing reduced-motion pattern rather than inventing a new one; and three empty
+states sharing `EmptyState.tsx`'s exact icon-circle-plus-text shape but varying the cause (nothing
+exists yet / filter matched nothing / still loading, which is a skeleton, not this component at
+all). Empty-state icons are hand-written lucide-style inline SVGs (ListChecks, Search — matching the
+`Icon.tsx` names `task_alt`/`search` already used for this purpose elsewhere), not emoji — caught
+and fixed a clause-5 violation before it shipped (emoji is a third icon source).
+
+**Verified, not assumed.** No test suite applies to a static mock, so verification was
+`py -3.11` + Playwright opening the file directly (`file://` URL — the dead-ends note says
+`uishot.py` expects the live app's own dark-mode toggle button and won't drive a standalone mock),
+screenshotting both themes at full-page height, and reading both PNGs. Both render legibly: no new
+hue anywhere, `--blue`/`--ring` appears only on focus rings and the two intentionally-blue "selected"
+swatches, radii are visibly one scale, no glass/gradient/shadow-as-decoration, and side by side with
+the current app the elevation/button/row swatches read as the same application's own components
+named and demonstrated — not a redesign. Screenshots were verification-only, not committed: the
+repo's `.gitignore` has a blanket `*.png` rule (line 80), so the PNGs were deleted after reading
+rather than force-added against that rule. **This is a real problem for the Z queue item**, which
+wants "before/after screenshots inline" in the eventual review index — under the current
+`.gitignore`, a screenshot cannot be committed at all. Flagging as a finding rather than silently
+force-adding (`git add -f`) or silently deciding to change `.gitignore` myself: recorded in
+STATE.json's `dead_ends_inherited` for whichever iteration reaches Z to solve (an allowed extension,
+inlining as a data URI in the HTML itself, or an operator decision to carve a `.gitignore` exception
+for `design/mocks/**`).
+
+**Not done this iteration, deliberately:** a formal P3/P4 iterate-and-critique pass and a
+`RATIONALE.md` — U0a's `next_action` scoped this iteration to "P1_explore + P2_validate_and_mock
+shape," and the screenshot-and-read above already served as verification, not the numbered screens'
+separate iterate pass. If a later iteration wants to deepen `foundations.html`, treat it as
+available inventory rather than a hard requirement — U0b is next in the queue either way.
+
+**Next:** U0b — "UI system pass 2 - component vocabulary." Produce
+`design/mocks/_system/controls.html`: the full button taxonomy already read in `buttonVariants.ts`
+(sizes xs/sm/md/lg/icon/icon-sm/icon-xs/pill, not just the four variants foundations.html covered),
+form/input controls, toggles, selects, menus, badges/chips, and a colour-coding system using the
+semantic tokens (`--green`/`--amber`/`--red`/`--purple`) and the 8-colour agent scale
+(`--agent-1..8` with their `-tint`/`-border` derivations) consistently — today inconsistent per
+IDENTITY.md, and fixing that inconsistency is explicitly in scope; inventing a ninth colour is not.
+Read `RowMenu.tsx`, `Badge.tsx`, and wherever selects/toggles currently live before mocking them —
+same "read the current comments first" discipline as this iteration.
