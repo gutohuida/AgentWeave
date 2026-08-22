@@ -444,6 +444,12 @@ class Conversation(Base):
         String(64), nullable=True, index=True
     )
     bound_sender_agent: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # The line of work this conversation belongs to. Set to the conversation's own id at
+    # creation; a checkpoint cutover successor inherits its predecessor's value instead of
+    # minting a new one. Delivery keys on this rather than on `id` so a cutover — which replaces
+    # the id — does not sever a bound conversation from the correspondents already reaching it
+    # (design.md D3, conversations-continue). Same shape as `checkpoints.lineage_id`.
+    lineage_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     # The task this thread is about, and the durable half of the run→task binding.
     #
     # Without it only the *first* run of a conversation was ever bound: starting work from a board

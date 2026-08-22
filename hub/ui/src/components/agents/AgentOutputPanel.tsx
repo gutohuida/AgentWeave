@@ -25,12 +25,16 @@ import {
   continueConversation,
   cutOver,
   dismissCheckpointWarning,
-  takeCheckpoint,
   useCheckpoints,
 } from '@/api/checkpoints'
 import { ApiError } from '@/api/client'
 import { useAccounting, useConversationAccounting } from '@/api/accounting'
 import { useConfigStore } from '@/store/configStore'
+import {
+  checkpointOperationKey,
+  useCheckpointOperationStore,
+  writeCheckpoint,
+} from '@/store/checkpointOperationStore'
 import { AgentTimeline } from './AgentTimeline'
 import { BannerStack, type ConversationBanner } from './BannerStack'
 import { Composer } from './Composer'
@@ -151,6 +155,10 @@ export function AgentOutputPanel({
   /** Height of the blank tail below the newest turn. See the layout effect below. */
   const [tailSpacer, setTailSpacer] = useState(0)
   const [autoscroll, setAutoscroll] = useState(true)
+  /** A disclosure clicked while following can resize twice: its own body appears, then the tail
+   * spacer shrinks to compensate. Scroll events between those layouts are not operator intent. */
+  const preserveFollowingResizeRef = useRef(false)
+  const [disclosureResizeSignal, setDisclosureResizeSignal] = useState(0)
   /** The `agent:conversation` this pane has already landed on, so it lands once and not again
    *  every time a streaming response re-measures the tail. */
   const landedOnRef = useRef<string | null>(null)
@@ -253,8 +261,18 @@ export function AgentOutputPanel({
   function handleScroll() {
     const el = containerRef.current
     if (!el) return
+    if (preserveFollowingResizeRef.current) return
     const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40
     setAutoscroll(atBottom)
+  }
+
+  function handleTimelineClickCapture(event: React.MouseEvent<HTMLDivElement>) {
+    const target = event.target
+    if (!(target instanceof Element) || !target.closest('[data-preserve-bottom-on-resize]')) return
+    const el = containerRef.current
+    if (!el) return
+    preserveFollowingResizeRef.current =
+      el.scrollHeight - el.scrollTop - el.clientHeight < 40
   }
 
   /** Move the viewport to the newest entry.
@@ -377,7 +395,14 @@ export function AgentOutputPanel({
     const turns = el.querySelectorAll<HTMLElement>('[data-turn-boundary]')
     const newest = turns[turns.length - 1]
     if (!newest) return
-    const observer = new ResizeObserver(() => measureTail())
+    const observer = new ResizeObserver(() => {
+      measureTail()
+      // Force a parent layout pass even when the calculated spacer happens to be unchanged. The
+      // disclosure still changed the scroll height and needs its bottom anchor restored.
+      if (preserveFollowingResizeRef.current) {
+        setDisclosureResizeSignal((signal) => signal + 1)
+      }
+    })
     observer.observe(newest)
     return () => observer.disconnect()
   }, [timelineEntries.length, isRunning, measureTail])
@@ -390,8 +415,17 @@ export function AgentOutputPanel({
   // to the working"). It matters on the way out too: the indicator is replaced by a shorter
   // "Worked for Xs" line, and the view should settle on the newest content either way.
   useLayoutEffect(() => {
-    if (autoscroll) scrollToNewest()
-  }, [timelineEntries.length, isRunning, autoscroll, tailSpacer, scrollToNewest])
+    const preservingDisclosure = preserveFollowingResizeRef.current
+    if (autoscroll || preservingDisclosure) scrollToNewest()
+    if (preservingDisclosure) preserveFollowingResizeRef.current = false
+  }, [
+    timelineEntries.length,
+    isRunning,
+    autoscroll,
+    tailSpacer,
+    disclosureResizeSignal,
+    scrollToNewest,
+  ])
 
   // Always the current `scrollToNewest`, reachable without making its identity a dependency.
   // That identity changes with `tailSpacer`, which changes on every measurement of a streaming
@@ -717,20 +751,15 @@ export function AgentOutputPanel({
     setHandoffState('preparing')
     setSessionNotice('Writing checkpoint…')
     try {
-      const checkpoint = await takeCheckpoint(projectId, currentConversationId)
-      if (checkpoint.status !== 'ready') {
-        // "unwritten" means the envelope is there but generation produced no usable body, and
-        // "failed" means its claims disagreed with the database. Neither is something to hand a
-        // successor, and saying so beats a green tick over an empty record.
+      const result = await writeCheckpoint(projectId, currentConversationId)
+      if (!result) {
         setHandoffState('idle')
-        setSessionNotice(
-          checkpoint.status === 'failed'
-            ? 'Checkpoint failed its own checks — nothing was cut over'
-            : 'Checkpoint has no written summary — nothing was cut over',
-        )
+        const operation = useCheckpointOperationStore.getState().operations[
+          checkpointOperationKey(projectId, currentConversationId)
+        ]
+        setSessionNotice(operation?.message ?? 'Checkpoint request failed')
         return
       }
-      const result = await cutOver(projectId, checkpoint.id)
       setHandoffState('idle')
       moveTo(result.successor_conversation_id)
       setSessionNotice('Checkpoint written — continuing in a new conversation')
@@ -948,6 +977,7 @@ export function AgentOutputPanel({
       <div
         ref={containerRef}
         onScroll={handleScroll}
+        onClickCapture={handleTimelineClickCapture}
         data-testid="conversation-output"
         className="flex-1 overflow-y-auto py-[22px]"
         style={{ background: 'var(--bg)' }}

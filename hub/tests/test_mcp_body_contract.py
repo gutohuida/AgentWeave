@@ -123,6 +123,22 @@ def test_send_message_naming_a_conversation_is_accepted(routes, capture):
     _assert_body_is_accepted(routes, capture)
 
 
+def test_send_message_starting_a_new_thread_is_accepted(routes, capture):
+    """`start_new_thread` widened `AgentMessageCreate` the same way `conversation_id` once did
+    — sent unconditionally, so an agent route that had not learned the key would 422 every
+    send, not just the ones that set it."""
+    from hub.mcp_server import send_message
+
+    send_message(
+        to_agent="codex-2",
+        subject="Handover",
+        content="Please pick this up.",
+        start_new_thread=True,
+    )
+    assert capture["body"]["start_new_thread"] is True
+    _assert_body_is_accepted(routes, capture)
+
+
 def _create_task(**kwargs: Any) -> None:
     from hub.mcp_server import create_task
 

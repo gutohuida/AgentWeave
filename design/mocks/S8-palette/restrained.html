@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en" data-mode="light">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AgentWeave — Command palette (restrained)</title>
+<link rel="stylesheet" href="../../../hub/ui/src/index.css" />
+<style>
+  /* ══════════════════════════════════════════════════════════════
+     Mock only. Every colour/radius/duration/easing below resolves to
+     an existing token in hub/ui/src/index.css. This variant is the
+     SMALLEST change that fixes RESEARCH.md's findings 1-4: a
+     keyboard-hint footer, a real open/close transition, <mark>-based
+     match highlighting, and a hover state that visually differs from
+     keyboard selection instead of sharing one flat background. Row
+     anatomy, grouping and copy are otherwise exactly today's
+     CommandPalette — one icon, one label line, four groups. See
+     considered.html for the fuller pass (agent colour, secondary row
+     lines, trailing content, recent-items feature note).
+     ══════════════════════════════════════════════════════════════ */
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { min-height: 100vh; padding-bottom: 80px; }
+
+  .doc { width: min(100%, 1080px); margin-inline: auto; padding: 32px 28px 0; }
+
+  .doc-header {
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 24px;
+    padding-bottom: 28px; border-bottom: 1px solid var(--border-region); margin-bottom: 32px;
+  }
+  .doc-title { font-size: 22px; font-weight: 600; letter-spacing: -0.01em; }
+  .doc-subtitle { margin-top: 6px; font-size: 13px; color: var(--text-2); max-width: 780px; line-height: 1.55; }
+  .theme-toggle {
+    flex: none; display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px;
+    border-radius: var(--radius-lg); border: 1px solid var(--border); background: var(--surface-2);
+    color: var(--text); font-size: 12px; font-weight: 500; cursor: pointer;
+    transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+  }
+  .theme-toggle:hover { background: var(--surface-3); border-color: var(--border-hi); }
+  .theme-toggle:focus-visible { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring); outline: none; }
+
+  section.mock-section { margin-bottom: 44px; }
+  .section-eyebrow { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); margin-bottom: 6px; }
+  .section-title { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+  .section-note { font-size: 12.5px; color: var(--text-2); line-height: 1.6; max-width: 860px; margin-bottom: 18px; }
+  .section-note code { background: var(--surface-2); border-radius: var(--radius-sm); padding: 1px 5px; font-size: 11.5px; }
+
+  svg.ic { width: 1em; height: 1em; }
+
+  /* ─── Stage — a dark scrim backdrop so the palette reads as an overlay, not a page section ─── */
+  .stage { background: var(--scrim); border-radius: var(--radius-xl); padding: 48px 24px; display: flex; justify-content: center; }
+  .stage-narrow { max-width: 620px; margin: 0 auto; }
+
+  /* ─── Palette — reuses .command-palette/.lifted-surface + cmdk-* attribute hooks from
+         index.css verbatim, positioned statically instead of fixed so it sits in document flow ─── */
+  .command-palette.static-demo {
+    position: static; left: auto; top: auto; transform: none; width: min(560px, 100%);
+    animation: palette-in var(--dur-base) var(--ease);
+  }
+  @keyframes palette-in {
+    from { opacity: 0; transform: scale(0.97) translateY(-4px); }
+    to { opacity: 1; transform: none; }
+  }
+  @media (prefers-reduced-motion: reduce) { .command-palette.static-demo { animation: none; } }
+
+  /* Finding 3 — match highlighting. Weight + colour-strength carry the emphasis (T3 Code
+     pattern), no highlighter background, so it composes with selection/hover without a colour
+     clash. */
+  .command-palette [cmdk-item] mark {
+    background: transparent; color: var(--text); font-weight: 600;
+  }
+
+  /* Finding 4 — hover now visually distinct from keyboard selection: hover gets the shared
+     --row-hover wash (same recipe every other list row in the product uses), selection keeps
+     --surface-2 plus a left accent bar so the two never read as the same state. Both now
+     transition instead of snapping. */
+  .command-palette [cmdk-item] {
+    border-left: 2px solid transparent;
+    transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+  }
+  .command-palette [cmdk-item]:hover:not([data-selected="true"]) { background: var(--row-hover); }
+  .command-palette [cmdk-item][data-selected="true"] {
+    background: var(--surface-2); border-left-color: var(--ring);
+  }
+  .command-palette [cmdk-item]:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--ring); }
+
+  /* Finding 1 — persistent keyboard-hint footer, T3 Code pattern (Kbd/KbdGroup chips). */
+  .palette-footer {
+    display: flex; align-items: center; gap: 16px; padding: 8px 12px;
+    border-top: 1px solid var(--border); background: var(--surface-2);
+  }
+  .kbd-hint { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-3); }
+  .kbd-key {
+    display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px;
+    padding: 0 5px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface-3);
+    color: var(--text-2); font-size: 10.5px; font-family: 'JetBrains Mono', monospace; line-height: 1;
+  }
+
+  .states-strip { display: flex; gap: 22px; flex-wrap: wrap; margin-top: 6px; }
+  .state-cell { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+  .state-cell-label { font-size: 10.5px; color: var(--text-3); font-family: 'JetBrains Mono', monospace; }
+
+  .legend { max-width: 1000px; margin: 48px auto 0; padding: 16px 18px; border-top: 1px solid var(--border-region); font-size: 11.5px; color: var(--text-3); line-height: 1.7; }
+</style>
+</head>
+<body>
+<div class="doc">
+  <div class="doc-header">
+    <div>
+      <div class="doc-title">Command palette — restrained</div>
+      <div class="doc-subtitle">
+        <code>Cmd+K</code>/<code>Ctrl+K</code> (<code>CommandPalette.tsx</code>, D3). The smallest
+        change that fixes RESEARCH.md's findings 1-4 — a keyboard-hint footer, an open/close
+        transition, <code>&lt;mark&gt;</code>-based match highlighting, and a hover state distinct
+        from keyboard selection. Grouping (Agents / Tasks / Spec documents / Conversations), one
+        icon + one label per row, and the conversation search-text truncation are unchanged.
+      </div>
+    </div>
+    <button class="theme-toggle" onclick="toggleMockTheme()" aria-label="Switch to dark mode" title="Switch to dark mode">
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+      <span id="theme-label">light</span>
+    </button>
+  </div>
+
+  <!-- ══════════════════ Open state, mid-search ══════════════════ -->
+  <section class="mock-section">
+    <div class="section-eyebrow">Findings 1, 3, 4</div>
+    <div class="section-title">Footer hints, match highlighting, hover vs. selection</div>
+    <div class="section-note">
+      Typing <code>"spec"</code>: every group narrows and the matched substring is bold-highlighted
+      in place (no highlighter colour — weight and foreground strength only, per T3 Code's pattern).
+      The second row is keyboard-selected (background + left accent bar); the fourth is
+      mouse-hovered (background wash only) — the two are now visually distinguishable, where today
+      both would render identically. A footer names every key the surface responds to.
+    </div>
+    <div class="stage">
+      <div class="stage-narrow">
+        <div class="command-palette lifted-surface static-demo">
+          <input cmdk-input value="spec" readonly />
+          <div cmdk-list>
+            <div cmdk-group-heading>Spec documents</div>
+            <div cmdk-item data-selected="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="var(--text-3)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              <span>Conversation lineage and cutover — <mark>spec</mark></span>
+            </div>
+            <div cmdk-item>
+              <svg viewBox="0 0 24 24" fill="none" stroke="var(--text-3)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              <span>Command palette refinement — <mark>spec</mark></span>
+            </div>
+            <div cmdk-group-heading>Tasks</div>
+            <div cmdk-item class="row-hover-demo">
+              <svg viewBox="0 0 24 24" fill="none" stroke="var(--text-3)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><circle cx="12" cy="12" r="10"/><polyline points="9 12 12 15 16 10"/></svg>
+              <span>C5 — the tool surface tells the truth (<mark>spec</mark> doc)</span>
+            </div>
+            <div cmdk-group-heading>Conversations</div>
+            <div cmdk-item>
+              <svg viewBox="0 0 24 24" fill="none" stroke="var(--text-3)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+              <span>codex-1 — reviewing the widened <mark>spec</mark> for peer_bound_conversation…</span>
+            </div>
+          </div>
+          <div class="palette-footer">
+            <span class="kbd-hint"><span class="kbd-key">↑</span><span class="kbd-key">↓</span>Navigate</span>
+            <span class="kbd-hint"><span class="kbd-key">↵</span>Open</span>
+            <span class="kbd-hint"><span class="kbd-key">Esc</span>Close</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script>document.currentScript.previousElementSibling.querySelector('.row-hover-demo').style.background = 'var(--row-hover)';</script>
+  </section>
+
+  <!-- ══════════════════ Empty state ══════════════════ -->
+  <section class="mock-section">
+    <div class="section-eyebrow">Finding 8</div>
+    <div class="section-title">Empty state names what's searchable, not a dead end</div>
+    <div class="section-note">
+      Today: a single centred "No matches." line. Restrained fix — one added line naming the four
+      searchable domains, still text-only, no new icon or illustration.
+    </div>
+    <div class="stage">
+      <div class="stage-narrow">
+        <div class="command-palette lifted-surface static-demo" style="animation:none;">
+          <input cmdk-input value="xyz123" readonly />
+          <div cmdk-list>
+            <div cmdk-empty style="display:flex; flex-direction:column; gap:4px;">
+              <span>No matches for "xyz123".</span>
+              <span style="color:var(--text-3); opacity:0.8;">Try an agent, task, document or conversation name.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════ Interaction states ══════════════════ -->
+  <section class="mock-section">
+    <div class="section-eyebrow">Interaction states</div>
+    <div class="section-title">Resting, hover, selected, focus-visible</div>
+    <div class="section-note">Demonstrated, not just resting — clause 7 of the rejection test.</div>
+    <div class="states-strip">
+      <div class="state-cell">
+        <div class="command-palette lifted-surface" style="position:static; width:260px;">
+          <div cmdk-list style="padding:4px;">
+            <div cmdk-item><svg viewBox="0 0 24 24" fill="none" stroke="var(--text-3)" stroke-width="2" width="14" height="14"><circle cx="12" cy="12" r="10"/></svg><span>Resting row</span></div>
+          </div>
+        </div>
+        <span class="state-cell-label">rest</span>
+      </div>
+      <div class="state-cell">
+        <div class="command-palette lifted-surface" style="position:static; width:260px;">
+          <div cmdk-list style="padding:4px;">
+            <div cmdk-item style="background:var(--row-hover);"><svg viewBox="0 0 24 24" fill="none" stroke="var(--text-3)" stroke-width="2" width="14" height="14"><circle cx="12" cy="12" r="10"/></svg><span>Hovered row</span></div>
+          </div>
+        </div>
+        <span class="state-cell-label">hover</span>
+      </div>
+      <div class="state-cell">
+        <div class="command-palette lifted-surface" style="position:static; width:260px;">
+          <div cmdk-list style="padding:4px;">
+            <div cmdk-item data-selected="true"><svg viewBox="0 0 24 24" fill="none" stroke="var(--text-3)" stroke-width="2" width="14" height="14"><circle cx="12" cy="12" r="10"/></svg><span>Selected row</span></div>
+          </div>
+        </div>
+        <span class="state-cell-label">keyboard-selected</span>
+      </div>
+      <div class="state-cell">
+        <div class="command-palette lifted-surface" style="position:static; width:260px;">
+          <div cmdk-list style="padding:4px;">
+            <div cmdk-item style="box-shadow: inset 0 0 0 2px var(--ring);" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="var(--text-3)" stroke-width="2" width="14" height="14"><circle cx="12" cy="12" r="10"/></svg><span>Focused row</span></div>
+          </div>
+        </div>
+        <span class="state-cell-label">focus-visible</span>
+      </div>
+    </div>
+  </section>
+
+  <div class="legend">
+    Rejection test: every colour resolves to a token in <code>hub/ui/src/index.css</code> ·
+    <code>--ring</code> is the same focus/selection accent used everywhere else, not a new hue ·
+    both themes via the toggle above · durations are <code>--dur-fast</code>/<code>--dur-base</code>
+    only, easing is <code>--ease</code> only · radii unchanged (inherits
+    <code>.lifted-surface</code>/<code>--radius-md</code>) · resting, hover, selected and
+    focus-visible all shown · same four groups and same information per row as today, plus the
+    footer and empty-state line — no row lost.
+  </div>
+</div>
+<script>
+  function toggleMockTheme() {
+    var next = document.documentElement.dataset.mode === 'dark' ? 'light' : 'dark';
+    document.documentElement.dataset.mode = next;
+    var label = next === 'dark' ? 'Switch to light mode' : 'Switch to dark mode';
+    document.getElementById('theme-label').textContent = next;
+    var btn = document.querySelector('.theme-toggle');
+    btn.setAttribute('aria-label', label);
+    btn.setAttribute('title', label);
+  }
+</script>
+</body>
+</html>

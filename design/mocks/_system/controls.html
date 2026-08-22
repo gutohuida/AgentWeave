@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="en" data-mode="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AgentWeave — Controls (button taxonomy · form controls · colour coding)</title>
+<link rel="stylesheet" href="../../../hub/ui/src/index.css" />
+<style>
+  /* ══════════════════════════════════════════════════════════════
+     Mock-only layout. Every colour/radius/duration below resolves to
+     an existing token from hub/ui/src/index.css — nothing here is a
+     literal hex, a new radius, or a new duration/easing. See
+     design/mocks/_system/RESEARCH.md, "U0b research" section, for
+     sourcing and for what's argued rather than merely applied.
+     ══════════════════════════════════════════════════════════════ */
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { min-height: 100vh; padding-bottom: 80px; }
+
+  .doc { width: min(100%, 1180px); margin-inline: auto; padding: 32px 28px 0; }
+
+  .doc-header {
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 24px;
+    padding-bottom: 28px; border-bottom: 1px solid var(--border-region); margin-bottom: 36px;
+  }
+  .doc-title { font-size: 22px; font-weight: 600; letter-spacing: -0.01em; }
+  .doc-subtitle { margin-top: 6px; font-size: 13px; color: var(--text-2); max-width: 680px; line-height: 1.55; }
+  .doc-meta { margin-top: 10px; font-size: 11px; color: var(--text-3); }
+
+  .theme-toggle {
+    flex: none; display: inline-flex; align-items: center; gap: 6px;
+    height: 32px; padding: 0 12px; border-radius: var(--radius-lg);
+    border: 1px solid var(--border); background: var(--surface-2); color: var(--text);
+    font-size: 12px; font-weight: 500; cursor: pointer;
+    transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+  }
+  .theme-toggle:hover { background: var(--surface-3); border-color: var(--border-hi); }
+  .theme-toggle:focus-visible { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring); outline: none; }
+
+  section.system-section { margin-bottom: 52px; }
+  .section-eyebrow { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); margin-bottom: 6px; }
+  .section-title { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+  .section-note { font-size: 12.5px; color: var(--text-2); line-height: 1.6; max-width: 800px; margin-bottom: 22px; }
+  .section-note code { background: var(--surface-2); border-radius: var(--radius-sm); padding: 1px 5px; font-size: 11.5px; }
+
+  /* ─── Buttons (shared primitive — mirrors buttonVariants.ts's base + variant classes) ─── */
+  .btn {
+    position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    border-radius: var(--radius-lg); border: 1px solid transparent;
+    font-weight: 500; cursor: pointer; outline: none; white-space: nowrap;
+    transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease),
+                box-shadow var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease), opacity var(--dur-fast) var(--ease);
+  }
+  .btn svg { width: 14px; height: 14px; opacity: 0.8; pointer-events: none; }
+
+  .btn.primary { background: var(--primary); color: var(--primary-foreground); border-color: var(--primary); box-shadow: inset 0 1px 0 var(--lift-hi), 0 1px 3px rgb(0 0 0 / 0.24); }
+  .btn.primary:hover, .btn.primary[data-force="hover"] { background: var(--primary-hover); }
+  .btn.primary[data-force="press"] { background: var(--primary-active); box-shadow: inset 0 1px 0 var(--press-lo); }
+  .btn.primary[data-force="focus"] { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring); }
+  .btn.primary[data-force="disabled"] { opacity: 0.64; pointer-events: none; box-shadow: none; }
+
+  .btn.outline { background: var(--surface-2); color: var(--text); border-color: var(--border); box-shadow: 0 1px 2px rgb(0 0 0 / 0.16); }
+  .btn.outline:hover, .btn.outline[data-force="hover"] { border-color: var(--border-hi); background: var(--surface-3); }
+  .btn.outline[data-force="press"] { box-shadow: inset 0 1px 0 var(--press-lo); }
+  .btn.outline[data-force="focus"] { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring); }
+  .btn.outline[data-force="disabled"] { opacity: 0.64; pointer-events: none; }
+
+  .btn.ghost { background: transparent; color: var(--text); }
+  .btn.ghost:hover, .btn.ghost[data-force="hover"] { background: var(--accent); }
+  .btn.ghost[data-force="press"] { background: var(--accent); box-shadow: inset 0 1px 0 var(--press-lo); }
+  .btn.ghost[data-force="focus"] { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring); }
+  .btn.ghost[data-force="disabled"] { opacity: 0.64; pointer-events: none; }
+
+  .btn.destructive { background: var(--error-cont); color: var(--on-error-cont); border-color: color-mix(in oklab, var(--destructive) 50%, transparent); }
+  .btn.destructive:hover, .btn.destructive[data-force="hover"] { background: color-mix(in oklab, var(--destructive) 20%, transparent); border-color: color-mix(in oklab, var(--destructive) 75%, transparent); }
+  .btn.destructive[data-force="press"] { box-shadow: inset 0 1px 0 var(--press-lo); }
+  .btn.destructive[data-force="focus"] { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring); }
+  .btn.destructive[data-force="disabled"] { opacity: 0.64; pointer-events: none; }
+
+  /* Size scale — matches buttonVariants.ts's size variant exactly (height/radius/padding/text). */
+  .btn.sz-xs  { height: 28px; gap: 4px;  border-radius: var(--radius-sm); padding: 0 calc(0.5rem - 1px);   font-size: 12px; }
+  .btn.sz-sm  { height: 32px; gap: 6px;  border-radius: var(--radius-md); padding: 0 calc(0.625rem - 1px); font-size: 13px; }
+  .btn.sz-md  { height: 36px; gap: 8px;  border-radius: var(--radius-lg); padding: 0 calc(0.75rem - 1px);  font-size: 13px; }
+  .btn.sz-lg  { height: 40px; gap: 8px;  border-radius: var(--radius-lg); padding: 0 calc(0.875rem - 1px); font-size: 14px; }
+  .btn.sz-icon    { width: 36px; height: 36px; padding: 0; border-radius: var(--radius-lg); }
+  .btn.sz-icon-sm { width: 32px; height: 32px; padding: 0; border-radius: var(--radius-md); }
+  .btn.sz-icon-xs { width: 28px; height: 28px; padding: 0; border-radius: var(--radius-sm); }
+  .btn.sz-pill    { height: 32px; gap: 4px; padding: 0 10px; font-size: 12px; border-radius: 9999px; }
+
+  .taxonomy-table { display: grid; grid-template-columns: 90px repeat(4, 1fr); gap: 10px 14px; align-items: center; }
+  .taxonomy-head { font-size: 10.5px; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.05em; padding-bottom: 6px; border-bottom: 1px solid var(--border-region); margin-bottom: 4px; }
+  .taxonomy-row-label { font-size: 11.5px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+  .taxonomy-cell { display: flex; align-items: center; }
+
+  .variant-legend { display: flex; flex-wrap: wrap; gap: 18px; margin-bottom: 20px; }
+  .variant-legend-item { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-2); }
+  .variant-legend-item b { color: var(--text); font-weight: 600; }
+
+  /* Button states grid — five states × four variants, one representative size. */
+  .state-grid { display: grid; grid-template-columns: 90px repeat(5, 1fr); gap: 14px; align-items: center; margin-bottom: 10px; }
+  .state-grid-head { font-size: 10.5px; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.05em; padding-bottom: 8px; border-bottom: 1px solid var(--border-region); margin-bottom: 8px; }
+  .state-row-label { font-size: 12px; font-weight: 600; color: var(--text); }
+
+  /* ─── Form controls ─────────────────────────────────────────── */
+  .form-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; }
+  .form-field { display: flex; flex-direction: column; gap: 6px; }
+  .form-label { font-size: 11.5px; font-weight: 500; color: var(--text-2); }
+  .form-help { font-size: 11px; color: var(--text-3); line-height: 1.5; }
+  .form-help.err { color: var(--red); }
+
+  .ctl-input, .ctl-select, .ctl-textarea {
+    width: 100%; height: 36px; padding: 0 10px; border-radius: var(--radius-md);
+    border: 1px solid var(--border); background: var(--surface-2); color: var(--text);
+    font-size: 13px; outline: none;
+    transition: border-color var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease);
+  }
+  .ctl-textarea { height: auto; padding: 8px 10px; min-height: 72px; resize: vertical; font-family: inherit; line-height: 1.5; }
+  .ctl-input::placeholder, .ctl-textarea::placeholder { color: var(--text-3); }
+  .ctl-input:hover, .ctl-textarea:hover, .ctl-select:hover,
+  .ctl-input[data-force="hover"], .ctl-select[data-force="hover"] { border-color: var(--border-hi); }
+  .ctl-input:focus, .ctl-textarea:focus, .ctl-select:focus,
+  .ctl-input[data-force="focus"], .ctl-select[data-force="focus"] { border-color: var(--border-hi); box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring); }
+  .ctl-input[data-force="disabled"], .ctl-select[data-force="disabled"], .ctl-textarea[data-force="disabled"] { opacity: 0.5; pointer-events: none; }
+  .ctl-input[data-force="error"] { border-color: color-mix(in oklab, var(--destructive) 60%, transparent); box-shadow: 0 0 0 1px color-mix(in oklab, var(--destructive) 35%, transparent); }
+
+  /* Native <select>, themed to match .ctl-input exactly, with a lucide chevron replacing the
+     UA arrow (appearance:none) — one more icon-only affordance, not a second icon source. */
+  .ctl-select { appearance: none; -webkit-appearance: none; cursor: pointer; padding-right: 32px;
+    background-image: none; }
+  .select-wrap { position: relative; }
+  .select-chevron { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); width: 14px; height: 14px; color: var(--text-3); pointer-events: none; transition: transform var(--dur-fast) var(--ease); }
+  .select-wrap:focus-within .select-chevron { color: var(--text-2); }
+
+  /* Checkbox / radio — same 1px-border-in-layout rule as buttonVariants, so gaining the
+     checked fill never shifts the control's box. */
+  .ctl-check-row, .ctl-radio-row { display: flex; align-items: center; gap: 9px; }
+  .ctl-check, .ctl-radio {
+    width: 17px; height: 17px; flex: none; border: 1px solid var(--border-hi);
+    background: var(--surface-2); display: inline-flex; align-items: center; justify-content: center;
+    color: var(--bg); cursor: pointer;
+    transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease);
+  }
+  .ctl-check { border-radius: var(--radius-sm); }
+  .ctl-radio { border-radius: 9999px; }
+  .ctl-check svg, .ctl-radio-dot { opacity: 0; transition: opacity var(--dur-fast) var(--ease); }
+  .ctl-check svg { width: 12px; height: 12px; stroke-width: 3; }
+  .ctl-radio-dot { width: 7px; height: 7px; border-radius: 9999px; background: var(--bg); }
+  .ctl-check:hover, .ctl-radio:hover, .ctl-check[data-force="hover"], .ctl-radio[data-force="hover"] { border-color: var(--text-3); }
+  .ctl-check[data-force="focus"], .ctl-radio[data-force="focus"] { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring); }
+  /* `data-checked` is independent of `data-force` (interaction state) so a checkbox can be
+     checked AND disabled at once — the two axes compose instead of one overwriting the other. */
+  .ctl-check[data-checked], .ctl-radio[data-checked] { background: var(--ring); border-color: var(--ring); }
+  .ctl-check[data-checked] svg, .ctl-radio[data-checked] .ctl-radio-dot { opacity: 1; }
+  .ctl-check[data-force="disabled"], .ctl-radio[data-force="disabled"] { opacity: 0.5; pointer-events: none; }
+  .ctl-check-label, .ctl-radio-label { font-size: 12.5px; color: var(--text); }
+  .ctl-check-label.dim, .ctl-radio-label.dim { color: var(--text-3); }
+
+  /* Toggle/switch — the one genuinely new shape in this mock (none exists in the product
+     today). Track and thumb both derive from existing surface/border tokens; the checked
+     fill is --ring/--blue under the same "selection" reading as the checkbox above. */
+  .ctl-switch { position: relative; width: 34px; height: 20px; flex: none; border-radius: 9999px;
+    border: 1px solid var(--border-hi); background: var(--surface-3); cursor: pointer;
+    transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease); }
+  .ctl-switch-thumb { position: absolute; top: 1px; left: 1px; width: 16px; height: 16px; border-radius: 9999px;
+    background: var(--text-2); box-shadow: 0 1px 2px rgb(0 0 0 / 0.3);
+    transition: transform var(--dur-fast) var(--ease), background-color var(--dur-fast) var(--ease); }
+  .ctl-switch[data-force="hover"] { border-color: var(--text-3); }
+  .ctl-switch[data-force="focus"] { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring); }
+  .ctl-switch[data-checked] { background: var(--ring); border-color: var(--ring); }
+  .ctl-switch[data-checked] .ctl-switch-thumb { transform: translateX(14px); background: var(--primary-foreground); }
+  .ctl-switch[data-force="disabled"] { opacity: 0.5; pointer-events: none; }
+
+  /* ─── Menu (RowMenu.tsx, restated as static markup) ─────────── */
+  .menu-demo-wrap { display: flex; gap: 40px; align-items: flex-start; }
+  .menu-trigger { width: 28px; height: 28px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface-2); color: var(--text-2); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+  .menu-trigger svg { width: 15px; height: 15px; }
+  .menu-panel { width: 220px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 4px; box-shadow: 0 8px 24px rgba(0,0,0,0.18); }
+  .menu-item { display: flex; flex-direction: column; gap: 2px; width: 100%; padding: 7px 10px; border-radius: var(--radius-sm); font-size: 12.5px; color: var(--text-2); cursor: pointer; transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease); }
+  .menu-item span.label { color: var(--text); }
+  .menu-item:hover, .menu-item[data-force="hover"] { background: var(--row-hover); }
+  .menu-item[data-force="disabled"] { opacity: 0.5; pointer-events: none; }
+  .menu-item .reason { font-size: 11px; color: var(--text-3); }
+  .menu-item.danger span.label { color: var(--red); }
+  .menu-sep { height: 1px; background: var(--border-region); margin: 4px 2px; }
+
+  /* ─── Badges / chips ─────────────────────────────────────────── */
+  .chip-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .chip { display: inline-flex; align-items: center; gap: 5px; border-radius: var(--radius-sm); padding: 2px 8px; font-size: 11px; font-weight: 500; line-height: 1.4; border: 1px solid transparent; }
+  .chip.pill { border-radius: 9999px; padding: 1px 8px; }
+
+  .agent-chip-row { display: flex; flex-wrap: wrap; gap: 8px; }
+  .agent-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px 3px 3px; border-radius: 9999px; font-size: 11.5px; font-weight: 500; color: var(--text); }
+  .agent-chip .swatch { width: 18px; height: 18px; border-radius: 9999px; flex: none; }
+
+  /* ─── Colour-coding rules table ──────────────────────────────── */
+  .rules-table { display: grid; grid-template-columns: 130px 1fr 1fr; gap: 0; border: 1px solid var(--border-region); border-radius: var(--radius-xl); overflow: hidden; }
+  .rules-table > div { padding: 12px 14px; font-size: 12px; line-height: 1.55; border-bottom: 1px solid var(--border-region); }
+  .rules-table > div:nth-child(3n+1) { background: var(--rail); }
+  .rules-head { font-size: 10.5px; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.05em; background: var(--rail); }
+  .rules-swatch { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; color: var(--text); }
+  .rules-swatch .dot { width: 9px; height: 9px; border-radius: 9999px; }
+  .rules-do { color: var(--text-2); }
+  .rules-dont { color: var(--text-3); }
+  .rules-dont b { color: var(--red); font-weight: 600; }
+
+  .legend { font-size: 11px; color: var(--text-3); margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border-region); }
+</style>
+</head>
+<body>
+<div class="doc">
+
+  <div class="doc-header">
+    <div>
+      <div class="doc-title">Controls — button taxonomy · form controls · colour coding</div>
+      <div class="doc-subtitle">
+        U0b. Builds on <code>foundations.html</code>'s vocabulary (elevation, motion, states) to
+        cover the control surface itself: every button size × variant, the form controls that have
+        no themed treatment anywhere today, the existing menu pattern restated, and an explicit
+        colour-coding system using only the semantic tokens and the agent scale. See
+        <code>design/mocks/_system/RESEARCH.md</code>, "U0b research", for sourcing and for one
+        deliberate departure — this mock does not carry forward <code>Badge.tsx</code>'s use of
+        <code>--blue</code> for "in progress," which IDENTITY.md's clause 2 reserves for focus and
+        selection only.
+      </div>
+      <div class="doc-meta">design/mocks/_system/controls.html · rendered against real tokens</div>
+    </div>
+    <button class="theme-toggle" onclick="document.documentElement.dataset.mode = document.documentElement.dataset.mode === 'dark' ? 'light' : 'dark'">
+      <span>◐</span><span id="theme-label">toggle theme</span>
+    </button>
+  </div>
+
+  <!-- ═══════════════════════ BUTTON TAXONOMY ═══════════════════════ -->
+  <section class="system-section">
+    <div class="section-eyebrow">Buttons — taxonomy</div>
+    <div class="section-title">Four variants, eight sizes — the existing scale, shown in full</div>
+    <div class="section-note">
+      <code>buttonVariants.ts</code> already defines this exactly: <b>primary</b> (filled, lit from
+      above, one per view — the single action a screen wants taken), <b>outline</b> (bounded,
+      unfilled — the "secondary" role), <b>ghost</b> (blends in until touched — the "tertiary"
+      role), <b>destructive</b> (danger-coloured, same shape rules). External convention converges
+      on exactly this four-way split, so nothing here adds a fifth variant — the gap is only that
+      most of the app never reaches for it (9 motion-token sites against 44 ad-hoc transitions, per
+      <code>foundations.html</code>). <code>xs/sm/md/lg</code> are text sizes; <code>icon/icon-sm/
+      icon-xs</code> are square; <code>pill</code> is content-sized with no built-in radius, used by
+      the composer's rounded triggers.
+    </div>
+    <div class="variant-legend">
+      <div class="variant-legend-item"><b>primary</b> — the one action the screen wants taken</div>
+      <div class="variant-legend-item"><b>outline</b> — a common alternative, bounded</div>
+      <div class="variant-legend-item"><b>ghost</b> — least emphasis, blends into the layout</div>
+      <div class="variant-legend-item"><b>destructive</b> — danger-coloured, kept spaced from constructive actions</div>
+    </div>
+    <div class="taxonomy-table">
+      <div></div>
+      <div class="taxonomy-head">primary</div>
+      <div class="taxonomy-head">outline</div>
+      <div class="taxonomy-head">ghost</div>
+      <div class="taxonomy-head">destructive</div>
+
+      <div class="taxonomy-row-label">xs · 28px</div>
+      <div class="taxonomy-cell"><button class="btn primary sz-xs">Save</button></div>
+      <div class="taxonomy-cell"><button class="btn outline sz-xs">Cancel</button></div>
+      <div class="taxonomy-cell"><button class="btn ghost sz-xs">Skip</button></div>
+      <div class="taxonomy-cell"><button class="btn destructive sz-xs">Delete</button></div>
+
+      <div class="taxonomy-row-label">sm · 32px</div>
+      <div class="taxonomy-cell"><button class="btn primary sz-sm">Save</button></div>
+      <div class="taxonomy-cell"><button class="btn outline sz-sm">Cancel</button></div>
+      <div class="taxonomy-cell"><button class="btn ghost sz-sm">Skip</button></div>
+      <div class="taxonomy-cell"><button class="btn destructive sz-sm">Delete</button></div>
+
+      <div class="taxonomy-row-label">md · 36px</div>
+      <div class="taxonomy-cell"><button class="btn primary sz-md">Save changes</button></div>
+      <div class="taxonomy-cell"><button class="btn outline sz-md">Cancel</button></div>
+      <div class="taxonomy-cell"><button class="btn ghost sz-md">Skip for now</button></div>
+      <div class="taxonomy-cell"><button class="btn destructive sz-md">Delete task</button></div>
+
+      <div class="taxonomy-row-label">lg · 40px</div>
+      <div class="taxonomy-cell"><button class="btn primary sz-lg">Create agent</button></div>
+      <div class="taxonomy-cell"><button class="btn outline sz-lg">Cancel</button></div>
+      <div class="taxonomy-cell"><button class="btn ghost sz-lg">Not now</button></div>
+      <div class="taxonomy-cell"><button class="btn destructive sz-lg">Remove agent</button></div>
+
+      <div class="taxonomy-row-label">icon · 36px</div>
+      <div class="taxonomy-cell"><button class="btn primary sz-icon" aria-label="Send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg></button></div>
+      <div class="taxonomy-cell"><button class="btn outline sz-icon" aria-label="Settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button></div>
+      <div class="taxonomy-cell"><button class="btn ghost sz-icon" aria-label="More"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button></div>
+      <div class="taxonomy-cell"><button class="btn destructive sz-icon" aria-label="Delete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button></div>
+
+      <div class="taxonomy-row-label">icon-sm · 32px</div>
+      <div class="taxonomy-cell"><button class="btn primary sz-icon-sm" aria-label="Confirm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></button></div>
+      <div class="taxonomy-cell"><button class="btn outline sz-icon-sm" aria-label="Edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button></div>
+      <div class="taxonomy-cell"><button class="btn ghost sz-icon-sm" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
+      <div class="taxonomy-cell"><button class="btn destructive sz-icon-sm" aria-label="Withdraw"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
+
+      <div class="taxonomy-row-label">icon-xs · 28px</div>
+      <div class="taxonomy-cell"><button class="btn primary sz-icon-xs" aria-label="Add"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button></div>
+      <div class="taxonomy-cell"><button class="btn outline sz-icon-xs" aria-label="Expand"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></button></div>
+      <div class="taxonomy-cell"><button class="btn ghost sz-icon-xs" aria-label="Actions"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button></div>
+      <div class="taxonomy-cell"><button class="btn destructive sz-icon-xs" aria-label="Remove"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
+
+      <div class="taxonomy-row-label">pill · 32px</div>
+      <div class="taxonomy-cell"><button class="btn primary sz-pill">Live</button></div>
+      <div class="taxonomy-cell"><button class="btn outline sz-pill">claude · sonnet-5</button></div>
+      <div class="taxonomy-cell"><button class="btn ghost sz-pill">effort: high</button></div>
+      <div class="taxonomy-cell"><button class="btn destructive sz-pill">Ask me</button></div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════ BUTTON STATES ═══════════════════════ -->
+  <section class="system-section">
+    <div class="section-eyebrow">Buttons — states</div>
+    <div class="section-title">Five states per variant, forced via <code>data-force</code> so every one renders at once</div>
+    <div class="section-note">
+      State treatment does not vary by size, only the size does — so this shows all five states
+      once per variant at <code>md</code>, rather than repeating the same recipe across all eight
+      sizes above. <b>focus-visible</b> is the identical two-layer ring
+      (<code>0 0 0 2px var(--bg), 0 0 0 4px var(--ring)</code>) every focusable control in this
+      document uses — one ring recipe, everywhere.
+    </div>
+    <div class="state-grid">
+      <div></div>
+      <div class="state-grid-head">rest</div>
+      <div class="state-grid-head">hover</div>
+      <div class="state-grid-head">press</div>
+      <div class="state-grid-head">focus-visible</div>
+      <div class="state-grid-head">disabled</div>
+
+      <div class="state-row-label">primary</div>
+      <div><button class="btn primary sz-md">Save</button></div>
+      <div><button class="btn primary sz-md" data-force="hover">Save</button></div>
+      <div><button class="btn primary sz-md" data-force="press">Save</button></div>
+      <div><button class="btn primary sz-md" data-force="focus">Save</button></div>
+      <div><button class="btn primary sz-md" data-force="disabled" disabled>Save</button></div>
+
+      <div class="state-row-label">outline</div>
+      <div><button class="btn outline sz-md">Cancel</button></div>
+      <div><button class="btn outline sz-md" data-force="hover">Cancel</button></div>
+      <div><button class="btn outline sz-md" data-force="press">Cancel</button></div>
+      <div><button class="btn outline sz-md" data-force="focus">Cancel</button></div>
+      <div><button class="btn outline sz-md" data-force="disabled" disabled>Cancel</button></div>
+
+      <div class="state-row-label">ghost</div>
+      <div><button class="btn ghost sz-md">Skip</button></div>
+      <div><button class="btn ghost sz-md" data-force="hover">Skip</button></div>
+      <div><button class="btn ghost sz-md" data-force="press">Skip</button></div>
+      <div><button class="btn ghost sz-md" data-force="focus">Skip</button></div>
+      <div><button class="btn ghost sz-md" data-force="disabled" disabled>Skip</button></div>
+
+      <div class="state-row-label">destructive</div>
+      <div><button class="btn destructive sz-md">Delete</button></div>
+      <div><button class="btn destructive sz-md" data-force="hover">Delete</button></div>
+      <div><button class="btn destructive sz-md" data-force="press">Delete</button></div>
+      <div><button class="btn destructive sz-md" data-force="focus">Delete</button></div>
+      <div><button class="btn destructive sz-md" data-force="disabled" disabled>Delete</button></div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════ FORM CONTROLS ═══════════════════════ -->
+  <section class="system-section">
+    <div class="section-eyebrow">Form controls</div>
+    <div class="section-title">No custom checkbox, radio, toggle or styled select exists today — all four built from the same border/hover/focus recipe</div>
+    <div class="section-note">
+      Every instance in the codebase today (<code>AgentSettingsControls.tsx</code>,
+      <code>JobForm.tsx</code>, <code>ProjectSettingsPanel.tsx</code>) is the bare UA control. These
+      reuse the exact border/background/focus-ring recipe <code>foundations.html</code> already
+      established for text inputs, rather than inventing a second visual language for form controls.
+    </div>
+    <div class="form-grid" style="margin-bottom: 28px;">
+      <div class="form-field">
+        <label class="form-label">Text input</label>
+        <input class="ctl-input" placeholder="Agent name" value="reviewer-1" />
+        <div class="form-help">Rest / hover / focus below.</div>
+      </div>
+      <div class="form-field">
+        <label class="form-label">Text input — error</label>
+        <input class="ctl-input" data-force="error" value="re" />
+        <div class="form-help err">Name must be at least 3 characters.</div>
+      </div>
+      <div class="form-field">
+        <label class="form-label">Text input — disabled</label>
+        <input class="ctl-input" data-force="disabled" value="Locked while running" disabled />
+        <div class="form-help">Disabled while a run is in progress.</div>
+      </div>
+    </div>
+    <div class="form-grid" style="margin-bottom: 28px;">
+      <div class="form-field">
+        <label class="form-label">Select</label>
+        <div class="select-wrap">
+          <select class="ctl-select">
+            <option>claude · sonnet-5</option>
+            <option>claude · opus-5</option>
+            <option>codex · gpt-5.1-codex</option>
+          </select>
+          <svg class="select-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+        <div class="form-help">Chevron replaces the UA arrow via <code>appearance: none</code> — no new icon source.</div>
+      </div>
+      <div class="form-field">
+        <label class="form-label">Select — focus</label>
+        <div class="select-wrap">
+          <select class="ctl-select" data-force="focus">
+            <option>manual — ask me</option>
+            <option>edit files</option>
+            <option>full access</option>
+          </select>
+          <svg class="select-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+      </div>
+      <div class="form-field">
+        <label class="form-label">Textarea</label>
+        <textarea class="ctl-textarea" placeholder="Describe the task...">Investigate the flaky test in test_spec_index.py and report findings.</textarea>
+      </div>
+    </div>
+    <div class="form-grid">
+      <div class="form-field">
+        <label class="form-label">Checkbox</label>
+        <div class="ctl-check-row"><span class="ctl-check" data-checked><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span><span class="ctl-check-label">Allow agent jobs</span></div>
+        <div class="ctl-check-row"><span class="ctl-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span><span class="ctl-check-label">Continue automatically</span></div>
+        <div class="ctl-check-row"><span class="ctl-check" data-force="hover"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span><span class="ctl-check-label">Hover</span></div>
+        <div class="ctl-check-row"><span class="ctl-check" data-force="focus"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span><span class="ctl-check-label">Focus-visible</span></div>
+        <div class="ctl-check-row"><span class="ctl-check" data-force="disabled" data-checked><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span><span class="ctl-check-label dim">Disabled, checked</span></div>
+      </div>
+      <div class="form-field">
+        <label class="form-label">Radio</label>
+        <div class="ctl-radio-row"><span class="ctl-radio" data-checked><span class="ctl-radio-dot"></span></span><span class="ctl-radio-label">Restrained</span></div>
+        <div class="ctl-radio-row"><span class="ctl-radio"><span class="ctl-radio-dot"></span></span><span class="ctl-radio-label">Considered</span></div>
+        <div class="ctl-radio-row"><span class="ctl-radio" data-force="hover"><span class="ctl-radio-dot"></span></span><span class="ctl-radio-label">Hover</span></div>
+        <div class="ctl-radio-row"><span class="ctl-radio" data-force="focus"><span class="ctl-radio-dot"></span></span><span class="ctl-radio-label">Focus-visible</span></div>
+        <div class="ctl-radio-row"><span class="ctl-radio" data-force="disabled"><span class="ctl-radio-dot"></span></span><span class="ctl-radio-label dim">Disabled</span></div>
+      </div>
+      <div class="form-field">
+        <label class="form-label">Toggle / switch — new shape, none exists today</label>
+        <div class="ctl-check-row"><span class="ctl-switch" data-checked><span class="ctl-switch-thumb"></span></span><span class="ctl-check-label">Ask me before edits</span></div>
+        <div class="ctl-check-row"><span class="ctl-switch"><span class="ctl-switch-thumb"></span></span><span class="ctl-check-label">Off</span></div>
+        <div class="ctl-check-row"><span class="ctl-switch" data-force="hover"><span class="ctl-switch-thumb"></span></span><span class="ctl-check-label">Hover</span></div>
+        <div class="ctl-check-row"><span class="ctl-switch" data-force="focus"><span class="ctl-switch-thumb"></span></span><span class="ctl-check-label">Focus-visible</span></div>
+        <div class="ctl-check-row"><span class="ctl-switch" data-force="disabled" data-checked><span class="ctl-switch-thumb"></span></span><span class="ctl-check-label dim">Disabled, on</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════ MENU ═══════════════════════ -->
+  <section class="system-section">
+    <div class="section-eyebrow">Menu</div>
+    <div class="section-title"><code>RowMenu.tsx</code>'s existing pattern, restated as static markup</div>
+    <div class="section-note">
+      Already correct and unchanged: the three-dot trigger sits in layout at rest, revealed by hover
+      or keyboard focus (never right-click — the operator's own 2026-08-08 instruction, preserved in
+      the component's comment), and a disabled item states its reason under the label rather than
+      disappearing, so the menu's shape never changes between rows.
+    </div>
+    <div class="menu-demo-wrap">
+      <div>
+        <div class="menu-trigger" style="margin-bottom: 10px;" aria-label="Actions"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></div>
+        <div class="menu-panel">
+          <div class="menu-item" data-force="hover"><span class="label">Rename conversation</span></div>
+          <div class="menu-item"><span class="label">Duplicate</span></div>
+          <div class="menu-item" data-force="disabled"><span class="label">Archive</span><span class="reason">Already archived</span></div>
+          <div class="menu-sep"></div>
+          <div class="menu-item danger"><span class="label">Delete conversation</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════ BADGES / CHIPS ═══════════════════════ -->
+  <section class="system-section">
+    <div class="section-eyebrow">Badges &amp; chips</div>
+    <div class="section-title">Status, category and agent identity — three families, never mixed</div>
+    <div class="section-note">
+      <code>Badge.tsx</code>'s <code>tone()</code> already derives <code>bg</code>/<code>border</code>
+      from one token via <code>color-mix</code>, so a status's text and container can never drift
+      apart — kept exactly. What changes is which token each family is allowed to reach for: status
+      answers <b>how did this go</b>, the purple category chip answers <b>what kind of thing is
+      this</b>, and the agent chip answers <b>whose is this</b> — see the rules table below.
+    </div>
+    <div class="chip-row" style="margin-bottom: 14px;">
+      <span class="chip" style="background: color-mix(in oklab, var(--green) 10%, transparent); border-color: color-mix(in oklab, var(--green) 20%, transparent); color: var(--green);">approved</span>
+      <span class="chip" style="background: color-mix(in oklab, var(--amber) 10%, transparent); border-color: color-mix(in oklab, var(--amber) 20%, transparent); color: var(--amber);">under review</span>
+      <span class="chip" style="background: color-mix(in oklab, var(--red) 10%, transparent); border-color: color-mix(in oklab, var(--red) 20%, transparent); color: var(--red);">rejected</span>
+      <span class="chip" style="background: color-mix(in oklab, var(--text-2) 10%, transparent); border-color: color-mix(in oklab, var(--text-2) 20%, transparent); color: var(--text-2);">pending</span>
+    </div>
+    <div class="chip-row" style="margin-bottom: 14px;">
+      <span class="chip pill" style="background: color-mix(in oklab, var(--purple) 10%, transparent); border-color: color-mix(in oklab, var(--purple) 20%, transparent); color: var(--purple);">task event</span>
+      <span class="chip pill" style="background: color-mix(in oklab, var(--purple) 10%, transparent); border-color: color-mix(in oklab, var(--purple) 20%, transparent); color: var(--purple);">markdown</span>
+      <span class="chip pill" style="background: color-mix(in oklab, var(--purple) 10%, transparent); border-color: color-mix(in oklab, var(--purple) 20%, transparent); color: var(--purple);">webhook</span>
+    </div>
+    <div class="agent-chip-row">
+      <span class="agent-chip" style="background: var(--agent-1-tint); border: 1px solid var(--agent-1-border);"><span class="swatch" style="background: var(--agent-1);"></span>reviewer-1</span>
+      <span class="agent-chip" style="background: var(--agent-2-tint); border: 1px solid var(--agent-2-border);"><span class="swatch" style="background: var(--agent-2);"></span>builder</span>
+      <span class="agent-chip" style="background: var(--agent-5-tint); border: 1px solid var(--agent-5-border);"><span class="swatch" style="background: var(--agent-5);"></span>planner</span>
+      <span class="agent-chip" style="background: var(--agent-6-tint); border: 1px solid var(--agent-6-border);"><span class="swatch" style="background: var(--agent-6);"></span>qa-runner</span>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════ COLOUR-CODING SYSTEM ═══════════════════════ -->
+  <section class="system-section">
+    <div class="section-eyebrow">Colour coding — the rules</div>
+    <div class="section-title">Four questions, four colour families, none of them shared</div>
+    <div class="section-note">
+      This is the fix for the inconsistency IDENTITY.md names directly: today, colour is applied ad
+      hoc per component rather than by rule. The table states the rule so the next component built
+      does not have to re-derive it. <code>--blue</code> is deliberately absent from this table — it
+      answers a fifth question ("is this focused or selected right now") that never overlaps with
+      the four below, which is exactly why <code>Badge.tsx</code>'s current use of it for
+      "in progress" is flagged as the one thing this mock does not carry forward.
+    </div>
+    <div class="rules-table">
+      <div class="rules-head">Token</div>
+      <div class="rules-head">Answers</div>
+      <div class="rules-head">Never</div>
+
+      <div class="rules-swatch"><span class="dot" style="background: var(--green);"></span>--green</div>
+      <div class="rules-do">A positive terminal state: approved, completed successfully, a check that passed.</div>
+      <div class="rules-dont">A category, a brand mark, or "in progress" — <b>green means done, not doing.</b></div>
+
+      <div class="rules-swatch"><span class="dot" style="background: var(--amber);"></span>--amber</div>
+      <div class="rules-do">Needs attention without being wrong yet: under review, a warning, an in-progress state that could still fail.</div>
+      <div class="rules-dont">A default/neutral state — most rows stay neutral text, not amber.</div>
+
+      <div class="rules-swatch"><span class="dot" style="background: var(--red);"></span>--red</div>
+      <div class="rules-do">A negative terminal state or a destructive action: rejected, revision needed, delete.</div>
+      <div class="rules-dont">Anything reversible or merely cautionary — that's amber's job.</div>
+
+      <div class="rules-swatch"><span class="dot" style="background: var(--purple);"></span>--purple</div>
+      <div class="rules-do">Category, never state: a task-kind event, a file type, a message's subject category.</div>
+      <div class="rules-dont">Success or failure of anything — purple never answers "how did this go."</div>
+
+      <div class="rules-swatch"><span class="dot" style="background: var(--agent-2);"></span>--agent-1..8</div>
+      <div class="rules-do">Whose: an agent's identity, wherever that agent appears — always paired with the name, never colour alone.</div>
+      <div class="rules-dont">Reused for status or category — an agent's colour says who, nothing else.</div>
+
+      <div class="rules-swatch"><span class="dot" style="background: var(--ring); box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px var(--ring);"></span>--blue / --ring</div>
+      <div class="rules-do">Focus and selection only: a focus-visible ring, a selected row's accent, a checked control's fill.</div>
+      <div class="rules-dont">A status colour, a brand fill, or a fifth category — <code>Badge.tsx</code>'s current "in progress = blue" is the one place this rule is broken today, not reproduced here.</div>
+    </div>
+  </section>
+
+  <div class="legend">
+    Rejection test: every colour above resolves to a token in <code>hub/ui/src/index.css</code> ·
+    both themes checked · durations are <code>--dur-fast</code> only (all states here are direct
+    feedback) · radii derive from <code>--radius</code> · states shown, not just rest · control
+    heights match the existing button size scale (28/32/36/40px), nothing grew.
+  </div>
+
+</div>
+<script>
+  document.querySelector('.theme-toggle').addEventListener('click', () => {
+    const label = document.getElementById('theme-label')
+    label.textContent = document.documentElement.dataset.mode === 'dark' ? 'dark' : 'light'
+  })
+</script>
+</body>
+</html>

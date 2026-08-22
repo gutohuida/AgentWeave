@@ -666,3 +666,171 @@ describe('AgentTimeline — WorkRow edit diff view (Q7 D2 section 3)', () => {
     expect(screen.queryByText('Called MultiEdit')).not.toBeInTheDocument()
   })
 })
+
+describe('AgentTimeline — the outbound message folds (conversations-continue phase 6)', () => {
+  it('renders an outbound entry folded — the subject shows, the body does not, until expanded', () => {
+    render(
+      <AgentTimeline
+        agent={agent}
+        entries={[
+          entry({
+            id: 'fold-1',
+            kind: 'outbound_peer',
+            participant: 'codex',
+            subject: 'Investigate the flaky test',
+            content: 'Here is the full body of the delegation, much longer than the subject line.',
+            run_id: 'run-1',
+          }),
+        ]}
+        roster={[agent, peer]}
+        timelineEvents={[]}
+        isRunning={false}
+      />,
+    )
+    expect(screen.getByText('Investigate the flaky test')).toBeInTheDocument()
+    expect(
+      screen.queryByText('Here is the full body of the delegation, much longer than the subject line.'),
+    ).not.toBeInTheDocument()
+  })
+
+  it('folds two messages to the same recipient to different lines when their subjects differ', () => {
+    render(
+      <AgentTimeline
+        agent={agent}
+        entries={[
+          entry({
+            id: 'fold-2a',
+            kind: 'outbound_peer',
+            participant: 'codex',
+            subject: 'First delegation',
+            content: 'body one',
+            run_id: 'run-1',
+          }),
+          entry({
+            id: 'fold-2b',
+            kind: 'outbound_peer',
+            participant: 'codex',
+            subject: 'Second delegation',
+            content: 'body two',
+            run_id: 'run-2',
+          }),
+        ]}
+        roster={[agent, peer]}
+        timelineEvents={[]}
+        isRunning={false}
+      />,
+    )
+    expect(screen.getByText('First delegation')).toBeInTheDocument()
+    expect(screen.getByText('Second delegation')).toBeInTheDocument()
+  })
+
+  it('expands a folded outbound entry to show its content on click', () => {
+    render(
+      <AgentTimeline
+        agent={agent}
+        entries={[
+          entry({
+            id: 'fold-3',
+            kind: 'outbound_peer',
+            participant: 'codex',
+            subject: 'Investigate the flaky test',
+            content: 'the full body appears only once expanded',
+            run_id: 'run-1',
+          }),
+        ]}
+        roster={[agent, peer]}
+        timelineEvents={[]}
+        isRunning={false}
+      />,
+    )
+    expect(screen.queryByText('the full body appears only once expanded')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByText('Investigate the flaky test'))
+    expect(screen.getByText('the full body appears only once expanded')).toBeInTheDocument()
+  })
+
+  it('keeps a folded outbound entry expanded as later entries are appended', () => {
+    const first = entry({
+      id: 'fold-4',
+      kind: 'outbound_peer',
+      participant: 'codex',
+      subject: 'Investigate the flaky test',
+      content: 'stays visible after append',
+      run_id: 'run-1',
+    })
+    const { rerender } = render(
+      <AgentTimeline
+        agent={agent}
+        entries={[first]}
+        roster={[agent, peer]}
+        timelineEvents={[]}
+        isRunning={false}
+      />,
+    )
+    fireEvent.click(screen.getByText('Investigate the flaky test'))
+    expect(screen.getByText('stays visible after append')).toBeInTheDocument()
+
+    rerender(
+      <AgentTimeline
+        agent={agent}
+        entries={[
+          first,
+          entry({
+            id: 'fold-4-later',
+            kind: 'agent_output',
+            content: 'a later turn',
+            run_id: 'run-2',
+          }),
+        ]}
+        roster={[agent, peer]}
+        timelineEvents={[]}
+        isRunning={false}
+      />,
+    )
+    expect(screen.getByText('stays visible after append')).toBeInTheDocument()
+  })
+
+  it('leaves an inbound peer message unaffected — never folded, regardless of length', () => {
+    render(
+      <AgentTimeline
+        agent={agent}
+        entries={[
+          entry({
+            id: 'fold-5',
+            kind: 'inbound_peer',
+            participant: 'codex',
+            content: 'a long inbound message that must render in full, not folded behind a subject line',
+            run_id: 'run-1',
+          }),
+        ]}
+        roster={[agent, peer]}
+        timelineEvents={[]}
+        isRunning={false}
+      />,
+    )
+    expect(
+      screen.getByText('a long inbound message that must render in full, not folded behind a subject line'),
+    ).toBeInTheDocument()
+  })
+
+  it('folds an outbound entry with no subject to a readable line from its content', () => {
+    render(
+      <AgentTimeline
+        agent={agent}
+        entries={[
+          entry({
+            id: 'fold-6',
+            kind: 'outbound_peer',
+            participant: 'codex',
+            content: 'first line of an older row\nsecond line stays hidden until expanded',
+            run_id: 'run-1',
+          }),
+        ]}
+        roster={[agent, peer]}
+        timelineEvents={[]}
+        isRunning={false}
+      />,
+    )
+    expect(screen.getByText('first line of an older row')).toBeInTheDocument()
+    expect(screen.queryByText('second line stays hidden until expanded')).not.toBeInTheDocument()
+  })
+})

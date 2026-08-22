@@ -54,6 +54,7 @@ import { AgentSettingsPage } from '@/components/agents/AgentSettingsPage'
 import { useProjectConversations } from '@/api/agentChat'
 import { useConfigStore } from '@/store/configStore'
 import { useTaskFilterStore } from '@/store/taskFilterStore'
+import { CheckpointStatusBanner } from '@/components/checkpoints/CheckpointStatusBanner'
 
 const SIDEBAR_WIDTH_KEY = 'aw.sidebarWidth'
 const SIDEBAR_COLLAPSED_KEY = 'aw.sidebarCollapsed'
@@ -625,6 +626,7 @@ export default function App() {
           navigateTo(projectDestination(currentProjectId, 'tasks'))
         }}
       />
+      <CheckpointStatusBanner />
     </div>
   )
 }

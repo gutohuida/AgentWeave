@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="en" data-mode="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AgentWeave — Scheduled Jobs (considered)</title>
+<link rel="stylesheet" href="../../../hub/ui/src/index.css" />
+<style>
+  /* ══════════════════════════════════════════════════════════════
+     Mock only. Every colour/radius/duration/easing below resolves to
+     an existing token in hub/ui/src/index.css. Builds on restrained.html:
+     everything there, plus a staggered card entrance (respecting
+     prefers-reduced-motion), coloured loop-queue badges reusing
+     Badge.tsx's OWN status→tone map verbatim (today every queue badge
+     is flat secondary/grey regardless of status word), a richer
+     card-shaped skeleton with badge-shaped placeholders, a Local badge
+     with an icon (not just smaller text), and micro-lift on every
+     button, not just the card. Same six findings, fuller application.
+     ══════════════════════════════════════════════════════════════ */
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { min-height: 100vh; padding-bottom: 80px; }
+
+  .doc { width: min(100%, 1040px); margin-inline: auto; padding: 32px 28px 0; }
+
+  .doc-header {
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 24px;
+    padding-bottom: 28px; border-bottom: 1px solid var(--border-region); margin-bottom: 32px;
+  }
+  .doc-title { font-size: 22px; font-weight: 600; letter-spacing: -0.01em; }
+  .doc-subtitle { margin-top: 6px; font-size: 13px; color: var(--text-2); max-width: 760px; line-height: 1.55; }
+  .theme-toggle {
+    flex: none; display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px;
+    border-radius: var(--radius-lg); border: 1px solid var(--border); background: var(--surface-2);
+    color: var(--text); font-size: 12px; font-weight: 500; cursor: pointer;
+    transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+  }
+  .theme-toggle:hover { background: var(--surface-3); border-color: var(--border-hi); }
+  .theme-toggle:focus-visible { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring); outline: none; }
+
+  section.mock-section { margin-bottom: 44px; }
+  .section-eyebrow { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); margin-bottom: 6px; }
+  .section-title { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+  .section-note { font-size: 12.5px; color: var(--text-2); line-height: 1.6; max-width: 820px; margin-bottom: 18px; }
+  .section-note code { background: var(--surface-2); border-radius: var(--radius-sm); padding: 1px 5px; font-size: 11.5px; }
+
+  svg.ic { width: 1em; height: 1em; }
+
+  .btn {
+    position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    border-radius: var(--radius-lg); border: 1px solid transparent;
+    font-weight: 500; cursor: pointer; outline: none; white-space: nowrap;
+    transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease),
+                box-shadow var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease),
+                opacity var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease);
+  }
+  .btn svg { width: 14px; height: 14px; opacity: 0.8; pointer-events: none; }
+  .btn:active { transform: translateY(1px); }
+  .btn.primary { background: var(--primary); color: var(--primary-foreground); border-color: var(--primary); box-shadow: inset 0 1px 0 var(--lift-hi), 0 1px 3px rgb(0 0 0 / 0.24); }
+  .btn.primary:hover { background: var(--primary-hover); box-shadow: inset 0 1px 0 var(--lift-hi), 0 2px 6px rgb(0 0 0 / 0.28); }
+  .btn.primary:active { background: var(--primary-active); box-shadow: inset 0 1px 0 var(--press-lo); }
+  .btn.primary:focus-visible { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring); }
+  .btn.outline { background: var(--surface-2); color: var(--text); border-color: var(--border); box-shadow: 0 1px 2px rgb(0 0 0 / 0.16); }
+  .btn.outline:hover { border-color: var(--border-hi); background: var(--surface-3); }
+  .btn.outline:active { box-shadow: inset 0 1px 0 var(--press-lo); }
+  .btn.outline:focus-visible { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring); }
+  .btn.outline[disabled] { opacity: 0.5; pointer-events: none; transform: none; }
+  .btn.ghost { background: transparent; color: var(--text); }
+  .btn.ghost:hover { background: var(--accent); }
+  .btn.destructive { background: transparent; color: var(--red); border-color: var(--border); }
+  .btn.destructive:hover { background: color-mix(in oklab, var(--destructive) 14%, transparent); border-color: color-mix(in oklab, var(--destructive) 45%, transparent); }
+  .btn.sz-xs  { height: 28px; gap: 4px;  border-radius: var(--radius-sm); padding: 0 calc(0.5rem - 1px);   font-size: 12px; }
+  .btn.sz-md  { height: 36px; gap: 8px;  border-radius: var(--radius-lg); padding: 0 calc(0.75rem - 1px);  font-size: 13px; }
+  .btn.sz-icon-xs { width: 28px; height: 28px; padding: 0; border-radius: var(--radius-sm); }
+
+  .jobs-frame { background: var(--bg); border: 1px solid var(--border-region); border-radius: var(--radius-lg); max-width: 940px; overflow: hidden; }
+  .jobs-topbar { display: flex; align-items: center; justify-content: space-between; padding: 16px; border-bottom: 1px solid var(--border); }
+  .jobs-title { font-size: 15px; font-weight: 500; color: var(--text); margin: 0; }
+  .jobs-sub { font-size: 11.5px; color: var(--text-3); margin: 2px 0 0; }
+
+  .jobs-filters { display: flex; align-items: center; gap: 4px; padding: 8px 16px; border-bottom: 1px solid var(--border); }
+  .filter-pill {
+    display: inline-flex; align-items: center; gap: 4px; height: 26px; padding: 0 12px; border-radius: 9999px;
+    font-size: 11px; font-weight: 500; text-transform: capitalize; color: var(--text-2); background: transparent;
+    border: 1px solid transparent; cursor: pointer;
+    transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+  }
+  .filter-pill:hover { background: var(--row-hover); }
+  .filter-pill:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring); }
+  .filter-pill[data-active="true"] { background: var(--accent); border-color: var(--border-hi); color: var(--text); }
+  .filter-pill .count { opacity: 0.65; }
+
+  .jobs-list { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; }
+
+  @keyframes card-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+  .job-card {
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius);
+    overflow: hidden; animation: card-in var(--dur-base) var(--ease) both;
+    transition: border-color var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease);
+  }
+  .job-card:nth-child(1) { animation-delay: 0ms; }
+  .job-card:nth-child(2) { animation-delay: 40ms; }
+  .job-card:nth-child(3) { animation-delay: 80ms; }
+  .job-card:hover { border-color: var(--border-hi); box-shadow: 0 3px 10px rgb(0 0 0 / 0.2), inset 0 1px var(--lift-hi); transform: translateY(-1px); }
+  @media (prefers-reduced-motion: reduce) { .job-card { animation: none; } .job-card:hover { transform: none; } }
+  .job-card-body { padding: 14px; }
+  .job-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .job-name-row { display: flex; align-items: center; gap: 6px; }
+  .job-name { font-size: 13px; font-weight: 500; color: var(--text); }
+  .job-agent { font-size: 11.5px; color: var(--text-3); margin: 3px 0 0; }
+  .local-badge { display: inline-flex; align-items: center; gap: 3px; font-size: 10px; font-weight: 500; padding: 1px 6px 1px 5px; border-radius: var(--radius-sm); background: color-mix(in oklab, var(--text-2) 10%, transparent); border: 1px solid color-mix(in oklab, var(--text-2) 20%, transparent); color: var(--text-2); }
+  .local-badge svg { width: 10px; height: 10px; }
+
+  .job-expand-btn {
+    flex: none; width: 28px; height: 28px; border-radius: 9999px; border: none; background: transparent;
+    color: var(--text-3); display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+    transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+  }
+  .job-expand-btn:hover { background: var(--row-hover); color: var(--text); }
+  .job-expand-btn svg { transition: transform var(--dur-fast) var(--ease); }
+  .job-expand-btn[data-open="true"] svg { transform: rotate(180deg); }
+
+  .job-cron-row { display: flex; align-items: center; gap: 6px; margin-top: 10px; }
+  .job-cron-chip { font-family: 'JetBrains Mono', monospace; font-size: 11.5px; padding: 1px 7px; border-radius: var(--radius-sm); background: var(--surface-3); color: var(--text); }
+  .job-cron-plain { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text-3); margin: 4px 0 0 20px; }
+  .job-cron-plain svg { width: 11px; height: 11px; opacity: 0.7; }
+
+  .job-badges { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; }
+  .badge { display: inline-flex; align-items: center; border-radius: var(--radius-sm); padding: 2px 8px; font-size: 11px; font-weight: 500; line-height: 1.4; }
+  .badge.b-success { background: color-mix(in oklab, var(--green) 10%, transparent); border: 1px solid color-mix(in oklab, var(--green) 20%, transparent); color: var(--green); }
+  .badge.b-neutral { background: color-mix(in oklab, var(--text-2) 10%, transparent); border: 1px solid color-mix(in oklab, var(--text-2) 20%, transparent); color: var(--text-2); }
+  .badge.b-info { background: color-mix(in oklab, var(--blue) 10%, transparent); border: 1px solid color-mix(in oklab, var(--blue) 20%, transparent); color: var(--blue); }
+  .badge.b-warn { background: color-mix(in oklab, var(--amber) 10%, transparent); border: 1px solid color-mix(in oklab, var(--amber) 20%, transparent); color: var(--amber); }
+  .badge.b-danger { background: color-mix(in oklab, var(--red) 10%, transparent); border: 1px solid color-mix(in oklab, var(--red) 20%, transparent); color: var(--red); }
+
+  .trend-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+  .trend-label { font-size: 10.5px; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.04em; }
+  .trend-dots { display: flex; align-items: center; gap: 4px; }
+  .trend-dot { width: 7px; height: 7px; border-radius: 9999px; flex: none; transition: transform var(--dur-fast) var(--ease); }
+  .trend-dots:hover .trend-dot { transform: scale(1.15); }
+
+  .job-run-row { display: flex; flex-direction: column; gap: 2px; margin-top: 8px; }
+  .job-run-next { font-size: 11px; color: var(--blue); }
+  .job-run-last { font-size: 11px; color: var(--text-3); opacity: 0.7; }
+
+  .job-actions { display: flex; align-items: center; gap: 6px; margin-top: 12px; }
+
+  .job-expanded { border-top: 1px solid var(--border); padding: 14px; display: flex; flex-direction: column; gap: 14px; animation: card-in var(--dur-fast) var(--ease) both; }
+  @media (prefers-reduced-motion: reduce) { .job-expanded { animation: none; } }
+  .job-field-label { font-size: 10.5px; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; }
+  .job-message { font-size: 12px; color: var(--text); background: var(--surface-3); border-radius: var(--radius); padding: 10px 12px; white-space: pre-wrap; }
+
+  .run-row { display: flex; align-items: center; gap: 10px; padding: 7px 9px; border-radius: var(--radius-sm); background: var(--surface-3); transition: background-color var(--dur-fast) var(--ease); }
+  .run-row:hover { background: var(--row-hover); }
+  .run-row + .run-row { margin-top: 5px; }
+  .run-icon { width: 15px; height: 15px; flex: none; }
+  .run-trigger { font-size: 11px; color: var(--text); }
+  .run-error { flex: 1; min-width: 0; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .run-time { font-size: 11px; color: var(--text-3); flex: none; }
+
+  .loop-block { border-top: 1px dashed var(--border); padding-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+  .loop-head { display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 500; color: var(--text-2); }
+  .loop-purpose { font-size: 12px; color: var(--text); }
+  .loop-queue { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .loop-current { font-size: 11px; color: var(--blue); background: none; border: none; padding: 2px 0; cursor: pointer; text-align: left; border-bottom: 1px solid transparent; transition: border-color var(--dur-fast) var(--ease); }
+  .loop-current:hover { border-color: var(--blue); }
+
+  .ids-row { border-top: 1px solid var(--border); padding-top: 10px; display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text-3); }
+
+  /* Richer skeleton — badge-shaped placeholders too, not just three text lines */
+  .job-skel { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; }
+  .skel-line { height: 9px; border-radius: 4px; background: var(--surface-3); position: relative; overflow: hidden; }
+  .skel-line + .skel-line { margin-top: 8px; }
+  .skel-chips { display: flex; gap: 6px; margin-top: 10px; }
+  .skel-chip { height: 17px; width: 54px; border-radius: var(--radius-sm); background: var(--surface-3); position: relative; overflow: hidden; }
+  .skel-line::after, .skel-chip::after { content: ''; position: absolute; inset: 0; transform: translateX(-100%); background: linear-gradient(90deg, transparent, var(--row-hover), transparent); animation: skel-sheen 1.4s var(--ease) infinite; }
+  @keyframes skel-sheen { to { transform: translateX(100%); } }
+  @media (prefers-reduced-motion: reduce) { .skel-line::after, .skel-chip::after { animation: none; } }
+
+  .jobs-empty { padding: 40px 24px; text-align: center; }
+  .jobs-empty svg { width: 28px; height: 28px; color: var(--text-3); margin-bottom: 10px; }
+  .jobs-empty-title { font-size: 13px; font-weight: 600; color: var(--text); margin: 0 0 4px; }
+  .jobs-empty-detail { font-size: 12px; color: var(--text-3); margin: 0 0 14px; }
+
+  .jobs-footer { display: flex; align-items: center; justify-content: space-between; padding: 9px 16px; font-size: 11px; color: var(--text-3); border-top: 1px solid var(--border); }
+
+  .form-panel { max-width: 520px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px; }
+  .form-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+  .form-label { font-size: 11px; font-weight: 500; color: var(--text-3); }
+  .ctl-input { width: 100%; height: 34px; padding: 0 10px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-size: 13px; outline: none; transition: border-color var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease); }
+  .ctl-input:focus { border-color: var(--border-hi); box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring); }
+  .ctl-input.mono { font-family: 'JetBrains Mono', monospace; }
+  .cron-preview { display: flex; align-items: center; gap: 6px; margin-top: 7px; font-size: 11.5px; color: var(--text-2); padding: 6px 9px; border-radius: var(--radius-sm); background: var(--surface-2); border: 1px solid var(--border-region); }
+  .cron-preview svg { width: 13px; height: 13px; color: var(--text-3); flex: none; }
+  .next-run-preview { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 11px; color: var(--text-3); }
+  .next-run-preview svg { width: 12px; height: 12px; opacity: 0.7; }
+  .cron-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .cron-chip { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 3px 9px; font-size: 11px; font-weight: 500; color: var(--text-2); background: transparent; cursor: pointer; transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease); }
+  .cron-chip:hover { background: var(--row-hover); }
+  .cron-chip[data-active="true"] { background: var(--accent); border-color: var(--border-hi); color: var(--text); }
+
+  .ctl-check-row, .ctl-radio-row { display: flex; align-items: center; gap: 9px; }
+  .ctl-check, .ctl-radio { width: 16px; height: 16px; flex: none; border: 1px solid var(--border-hi); background: var(--surface-2); display: inline-flex; align-items: center; justify-content: center; color: var(--bg); cursor: pointer; transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease); }
+  .ctl-check { border-radius: var(--radius-sm); }
+  .ctl-radio { border-radius: 9999px; }
+  .ctl-check svg, .ctl-radio-dot { opacity: 0; transition: opacity var(--dur-fast) var(--ease); }
+  .ctl-check svg { width: 11px; height: 11px; stroke-width: 3; }
+  .ctl-radio-dot { width: 6px; height: 6px; border-radius: 9999px; background: var(--bg); }
+  .ctl-check[data-checked], .ctl-radio[data-checked] { background: var(--ring); border-color: var(--ring); }
+  .ctl-check[data-checked] svg, .ctl-radio[data-checked] .ctl-radio-dot { opacity: 1; }
+  .ctl-radio-label, .ctl-check-label { font-size: 12px; color: var(--text); }
+  .ctl-switch { position: relative; width: 32px; height: 19px; flex: none; border-radius: 9999px; border: 1px solid var(--border-hi); background: var(--surface-3); cursor: pointer; transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease); }
+  .ctl-switch-thumb { position: absolute; top: 1px; left: 1px; width: 15px; height: 15px; border-radius: 9999px; background: var(--text-2); box-shadow: 0 1px 2px rgb(0 0 0 / 0.3); transition: transform var(--dur-fast) var(--ease), background-color var(--dur-fast) var(--ease); }
+  .ctl-switch[data-checked] { background: var(--ring); border-color: var(--ring); }
+  .ctl-switch[data-checked] .ctl-switch-thumb { transform: translateX(13px); background: var(--primary-foreground); }
+
+  .states-strip { display: flex; gap: 22px; flex-wrap: wrap; margin-top: 6px; }
+  .state-cell { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+  .state-cell-label { font-size: 10.5px; color: var(--text-3); font-family: var(--font-mono, monospace); }
+
+  .legend { max-width: 940px; margin: 48px auto 0; padding: 16px 18px; border-top: 1px solid var(--border-region); font-size: 11.5px; color: var(--text-3); line-height: 1.7; }
+</style>
+</head>
+<body>
+<div class="doc">
+  <div class="doc-header">
+    <div>
+      <div class="doc-title">Scheduled Jobs — considered</div>
+      <div class="doc-subtitle">
+        Full application of states, motion and rhythm on top of restrained.html: staggered card
+        entrance, coloured loop-queue badges reusing <code>Badge.tsx</code>'s own status→tone map,
+        a richer badge-shaped skeleton, and micro-lift/press on every button.
+      </div>
+    </div>
+    <button class="theme-toggle" onclick="document.documentElement.dataset.mode = document.documentElement.dataset.mode === 'dark' ? 'light' : 'dark'; document.getElementById('theme-label').textContent = document.documentElement.dataset.mode">
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+      <span id="theme-label">dark</span>
+    </button>
+  </div>
+
+  <section class="mock-section">
+    <div class="section-eyebrow">JobsPage — populated</div>
+    <div class="section-title">Staggered list, coloured loop-queue badges, richer skeleton</div>
+    <div class="section-note">
+      Same structure as restrained.html, taken further: cards fade/lift in with a 40ms stagger
+      (respecting <code>prefers-reduced-motion</code>), the loop's queue badges are coloured per
+      status word using <code>Badge.tsx</code>'s own <code>in_progress</code>=info/
+      <code>approved</code>=success/<code>rejected</code>=danger map — today every one of them
+      renders flat grey regardless of word (finding 4) — and the Local badge carries a small icon
+      instead of relying on text size alone (finding 6).
+    </div>
+
+    <div class="jobs-frame">
+      <div class="jobs-topbar">
+        <div>
+          <p class="jobs-title">Scheduled Jobs</p>
+          <p class="jobs-sub">Recurring tasks that trigger agents automatically</p>
+        </div>
+        <button class="btn primary sz-md">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          New Job
+        </button>
+      </div>
+
+      <div class="jobs-filters">
+        <button class="filter-pill" data-active="true">All</button>
+        <button class="filter-pill">Active <span class="count">3</span></button>
+        <button class="filter-pill">Paused <span class="count">1</span></button>
+      </div>
+
+      <div class="jobs-list">
+        <div class="job-card">
+          <div class="job-card-body">
+            <div class="job-card-head">
+              <div>
+                <div class="job-name-row">
+                  <span class="job-name">Daily Standup Report</span>
+                </div>
+                <p class="job-agent">@claude-1</p>
+                <div class="job-cron-row">
+                  <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text-3);width:13px;height:13px;"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 13.5"/></svg>
+                  <code class="job-cron-chip">0 9 * * 1-5</code>
+                </div>
+                <p class="job-cron-plain">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                  Weekdays at 9:00 AM
+                </p>
+              </div>
+              <button class="job-expand-btn" aria-label="Expand job details">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+              </button>
+            </div>
+
+            <div class="job-badges">
+              <span class="badge b-success">Active</span>
+              <span class="badge b-neutral">new</span>
+              <span class="badge b-neutral">42 runs</span>
+            </div>
+
+            <div class="trend-row">
+              <span class="trend-label">Last 5</span>
+              <div class="trend-dots" title="4 completed, 1 skipped">
+                <span class="trend-dot" style="background:var(--green)"></span>
+                <span class="trend-dot" style="background:var(--green)"></span>
+                <span class="trend-dot" style="background:var(--green)"></span>
+                <span class="trend-dot" style="background:var(--amber)"></span>
+                <span class="trend-dot" style="background:var(--green)"></span>
+              </div>
+            </div>
+
+            <div class="job-run-row">
+              <span class="job-run-next">Next: in 14 hours</span>
+              <span class="job-run-last">Last: 10 hours ago</span>
+            </div>
+
+            <div class="job-actions">
+              <button class="btn outline sz-xs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>Run</button>
+              <button class="btn ghost sz-xs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>Pause</button>
+              <button class="btn destructive sz-icon-xs" aria-label="Archive" title="Archive"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg></button>
+            </div>
+          </div>
+        </div>
+
+        <div class="job-card">
+          <div class="job-card-body">
+            <div class="job-card-head">
+              <div>
+                <div class="job-name-row">
+                  <span class="job-name">Weekly Digest</span>
+                  <span class="local-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="14" width="20" height="8" rx="2"/><rect x="2" y="2" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>Local</span>
+                </div>
+                <p class="job-agent">@codex-2</p>
+                <div class="job-cron-row">
+                  <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text-3);width:13px;height:13px;"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 13.5"/></svg>
+                  <code class="job-cron-chip">0 0 * * 0</code>
+                </div>
+                <p class="job-cron-plain">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                  Weekly on Sunday at midnight
+                </p>
+              </div>
+              <button class="job-expand-btn" aria-label="Expand job details">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+              </button>
+            </div>
+
+            <div class="job-badges">
+              <span class="badge b-neutral">Paused</span>
+              <span class="badge b-neutral">resume</span>
+              <span class="badge b-neutral">9 runs</span>
+            </div>
+
+            <div class="trend-row">
+              <span class="trend-label">Last 5</span>
+              <div class="trend-dots" title="1 failed, 4 completed">
+                <span class="trend-dot" style="background:var(--red)"></span>
+                <span class="trend-dot" style="background:var(--green)"></span>
+                <span class="trend-dot" style="background:var(--green)"></span>
+                <span class="trend-dot" style="background:var(--green)"></span>
+                <span class="trend-dot" style="background:var(--green)"></span>
+              </div>
+            </div>
+
+            <div class="job-run-row">
+              <span class="job-run-last">Last: 6 days ago</span>
+            </div>
+
+            <div class="job-actions">
+              <button class="btn outline sz-xs" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>Run</button>
+              <button class="btn ghost sz-xs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>Resume</button>
+              <button class="btn destructive sz-icon-xs" aria-label="Archive" title="Archive"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg></button>
+            </div>
+          </div>
+        </div>
+
+        <div class="job-card">
+          <div class="job-card-body">
+            <div class="job-card-head">
+              <div>
+                <div class="job-name-row">
+                  <span class="job-name">Nightly Refinement Loop</span>
+                </div>
+                <p class="job-agent">@claude-3</p>
+                <div class="job-cron-row">
+                  <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text-3);width:13px;height:13px;"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 13.5"/></svg>
+                  <code class="job-cron-chip">0 23 * * *</code>
+                </div>
+                <p class="job-cron-plain">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                  Daily at 11:00 PM
+                </p>
+              </div>
+              <button class="job-expand-btn" data-open="true" aria-label="Collapse job details">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+              </button>
+            </div>
+
+            <div class="job-badges">
+              <span class="badge b-success">Active</span>
+              <span class="badge b-neutral">resume</span>
+              <span class="badge b-neutral">6 runs</span>
+            </div>
+
+            <div class="trend-row">
+              <span class="trend-label">Last 5</span>
+              <div class="trend-dots" title="5 completed">
+                <span class="trend-dot" style="background:var(--green)"></span>
+                <span class="trend-dot" style="background:var(--green)"></span>
+                <span class="trend-dot" style="background:var(--green)"></span>
+                <span class="trend-dot" style="background:var(--green)"></span>
+                <span class="trend-dot" style="background:var(--green)"></span>
+              </div>
+            </div>
+
+            <div class="job-run-row">
+              <span class="job-run-next">Next: in 6 hours</span>
+              <span class="job-run-last">Last: 18 hours ago</span>
+            </div>
+
+            <div class="job-actions">
+              <button class="btn outline sz-xs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>Run</button>
+              <button class="btn ghost sz-xs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>Pause</button>
+              <button class="btn destructive sz-icon-xs" aria-label="Archive" title="Archive"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg></button>
+            </div>
+          </div>
+
+          <div class="job-expanded">
+            <div>
+              <p class="job-field-label">Message</p>
+              <p class="job-message">Run the S8-jobs screen pass: explore, validate, mock, iterate. Continue from the queue's next_action.</p>
+            </div>
+
+            <div>
+              <p class="job-field-label">Recent Runs</p>
+              <div class="run-row">
+                <svg class="ic run-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--green)"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                <span class="run-trigger">scheduled</span>
+                <span class="run-time" style="margin-left:auto;">18 hours ago</span>
+              </div>
+              <div class="run-row">
+                <svg class="ic run-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--amber)"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+                <span class="run-trigger">scheduled</span>
+                <span class="run-error" style="color:var(--amber)" title="Rate limited by upstream cron trigger">Rate limited by upstream cron trigger</span>
+                <span class="run-time">1 day ago</span>
+              </div>
+              <div class="run-row">
+                <svg class="ic run-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--green)"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                <span class="run-trigger">manual</span>
+                <span class="run-time" style="margin-left:auto;">2 days ago</span>
+              </div>
+            </div>
+
+            <div class="loop-block">
+              <div class="loop-head">
+                <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--blue);width:13px;height:13px;"><path d="M18.178 8c5.096 0 5.096 8 0 8-5.095 0-7.133-8-12.229-8-5.096 0-5.096 8 0 8 5.096 0 7.133-8 12.229-8z"/></svg>
+                Loop
+                <span class="badge b-success">Active</span>
+              </div>
+              <p class="loop-purpose">Refine every screen for texture, motion and missing information.</p>
+              <div class="loop-queue">
+                <span style="font-size:11px;color:var(--text-3);">Queue: 6</span>
+                <span class="badge b-neutral">pending: 3</span>
+                <span class="badge b-info">in_progress: 1</span>
+                <span class="badge b-neutral">blocked: 2</span>
+              </div>
+              <button class="loop-current">S8-jobs P2 — validate and mock (in_progress)</button>
+            </div>
+
+            <div class="ids-row">
+              <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+              job-8f2c1a
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="jobs-footer">
+        <div style="display:flex;gap:16px;">
+          <span>Total: 4</span>
+          <span style="color:var(--green)">Active: 3</span>
+          <span style="opacity:0.6">Paused: 1</span>
+        </div>
+        <span>Jobs fire based on server time</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="mock-section">
+    <div class="section-eyebrow">A second loop-backed job — mixed queue statuses</div>
+    <div class="section-title">Loop-queue badge colour reused across a different status mix</div>
+    <div class="section-note">
+      Proves the colour rule composes rather than being tuned to one example: <code>approved</code>
+      reads success-green, <code>rejected</code> reads danger-red, both from
+      <code>Badge.tsx</code>'s existing map — nothing new added to it.
+    </div>
+    <div class="job-card" style="max-width:460px; animation:none;">
+      <div class="job-expanded" style="border-top:none;">
+        <div class="loop-block" style="border-top:none; padding-top:0;">
+          <div class="loop-head">
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--blue);width:13px;height:13px;"><path d="M18.178 8c5.096 0 5.096 8 0 8-5.095 0-7.133-8-12.229-8-5.096 0-5.096 8 0 8 5.096 0 7.133-8 12.229-8z"/></svg>
+            Loop
+            <span class="badge b-neutral">Stopped</span>
+          </div>
+          <div class="loop-queue">
+            <span style="font-size:11px;color:var(--text-3);">Queue: 9</span>
+            <span class="badge b-success">approved: 5</span>
+            <span class="badge b-warn">under_review: 1</span>
+            <span class="badge b-danger">rejected: 2</span>
+            <span class="badge b-neutral">pending: 1</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="mock-section">
+    <div class="section-eyebrow">JobForm — create</div>
+    <div class="section-title">Cron field with live translation, next-run preview, styled controls incl. switch</div>
+    <div class="section-note">
+      Same fixes as restrained, plus the "Stop when queue empties" checkbox promoted to the
+      <code>.ctl-switch</code> toggle shape <code>_system/controls.html</code> defined for exactly
+      this kind of on/off setting (vs. the multi-select <code>.ctl-check</code> used for the loop
+      section disclosure elsewhere).
+    </div>
+    <div class="form-panel">
+      <div class="form-field">
+        <label class="form-label">Schedule (Cron Expression)</label>
+        <input class="ctl-input mono" value="0 9 * * 1-5" readonly />
+        <div class="cron-preview">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          Weekdays at 9:00 AM
+        </div>
+        <p class="next-run-preview">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 13.5"/></svg>
+          Next 3 runs: tomorrow 9:00 AM · Thu 9:00 AM · Fri 9:00 AM (server time)
+        </p>
+        <div class="cron-chips">
+          <button class="cron-chip" data-active="true">Daily at 9am</button>
+          <button class="cron-chip">Weekdays at 9am</button>
+          <button class="cron-chip">Every 6 hours</button>
+          <button class="cron-chip">Weekly (Sundays)</button>
+          <button class="cron-chip">Monthly (1st)</button>
+        </div>
+      </div>
+
+      <div class="form-field">
+        <label class="form-label">Session Mode</label>
+        <div style="display:flex;gap:18px;">
+          <div class="ctl-radio-row"><span class="ctl-radio" data-checked><span class="ctl-radio-dot"></span></span><span class="ctl-radio-label">New session each run</span></div>
+          <div class="ctl-radio-row"><span class="ctl-radio"><span class="ctl-radio-dot"></span></span><span class="ctl-radio-label">Resume last session</span></div>
+        </div>
+      </div>
+
+      <div class="form-field" style="margin-bottom:0;">
+        <div class="ctl-check-row">
+          <span class="ctl-switch" data-checked><span class="ctl-switch-thumb"></span></span>
+          <span class="ctl-check-label">Stop when the queue is empty</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="mock-section">
+    <div class="section-eyebrow">First run</div>
+    <div class="section-title">Empty and loading states</div>
+    <div class="section-note">
+      Skeleton now shapes the badge row too, so the loading state previews the card's actual density
+      rather than just its text lines.
+    </div>
+    <div style="display:flex; gap:16px; flex-wrap:wrap;">
+      <div style="flex:1; min-width:340px;">
+        <div class="state-cell-label" style="margin-bottom:8px;">empty — no jobs yet</div>
+        <div class="jobs-frame" style="max-width:420px;">
+          <div class="jobs-empty">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin:0 auto 10px;"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 13.5"/></svg>
+            <p class="jobs-empty-title">No jobs yet</p>
+            <p class="jobs-empty-detail">Create scheduled jobs to automatically trigger agents on a cron schedule.</p>
+            <button class="btn primary sz-xs" style="margin:0 auto;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Create First Job
+            </button>
+          </div>
+        </div>
+      </div>
+      <div style="flex:1; min-width:340px;">
+        <div class="state-cell-label" style="margin-bottom:8px;">loading — badge row shaped too</div>
+        <div style="display:flex; flex-direction:column; gap:10px; max-width:420px;">
+          <div class="job-skel">
+            <div class="skel-line" style="width:55%;"></div>
+            <div class="skel-line" style="width:30%;"></div>
+            <div class="skel-line" style="width:70%;"></div>
+            <div class="skel-chips"><div class="skel-chip"></div><div class="skel-chip" style="width:40px;"></div><div class="skel-chip" style="width:60px;"></div></div>
+          </div>
+          <div class="job-skel">
+            <div class="skel-line" style="width:45%;"></div>
+            <div class="skel-line" style="width:25%;"></div>
+            <div class="skel-line" style="width:60%;"></div>
+            <div class="skel-chips"><div class="skel-chip"></div><div class="skel-chip" style="width:40px;"></div><div class="skel-chip" style="width:60px;"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="mock-section">
+    <div class="section-eyebrow">Interaction states</div>
+    <div class="section-title">Card, filter pill, switch, trend dots</div>
+    <div class="section-note">Demonstrated, not just resting — clause 7 of the rejection test.</div>
+    <div class="states-strip">
+      <div class="state-cell">
+        <div class="job-card" style="width:200px; animation:none;"><div class="job-card-body" style="padding:10px;"><span class="job-name">Daily Standup</span></div></div>
+        <span class="state-cell-label">resting</span>
+      </div>
+      <div class="state-cell">
+        <div class="job-card" style="width:200px; animation:none; border-color:var(--border-hi); box-shadow: 0 3px 10px rgb(0 0 0 / 0.2), inset 0 1px var(--lift-hi); transform: translateY(-1px);"><div class="job-card-body" style="padding:10px;"><span class="job-name">Daily Standup</span></div></div>
+        <span class="state-cell-label">hover — lift + shadow</span>
+      </div>
+      <div class="state-cell">
+        <span class="ctl-switch" data-checked><span class="ctl-switch-thumb"></span></span>
+        <span class="state-cell-label">switch — checked</span>
+      </div>
+      <div class="state-cell">
+        <span class="ctl-switch"><span class="ctl-switch-thumb"></span></span>
+        <span class="state-cell-label">switch — unchecked</span>
+      </div>
+      <div class="state-cell">
+        <div class="trend-dots" style="transform:scale(1.15);" title="hover">
+          <span class="trend-dot" style="background:var(--green)"></span>
+          <span class="trend-dot" style="background:var(--green)"></span>
+          <span class="trend-dot" style="background:var(--red)"></span>
+        </div>
+        <span class="state-cell-label">trend dots — hover</span>
+      </div>
+      <div class="state-cell">
+        <button class="btn outline sz-xs" style="outline:none; box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring);">Run</button>
+        <span class="state-cell-label">focus-visible</span>
+      </div>
+    </div>
+  </section>
+
+  <div class="legend">
+    Rejection test: every colour resolves to a token in <code>hub/ui/src/index.css</code> · both
+    themes via the toggle above · durations are <code>--dur-fast</code>/<code>--dur-base</code> only,
+    easing is <code>--ease</code> only, motion respects <code>prefers-reduced-motion</code> · radii
+    derive from <code>--radius</code> · resting, hover, press and focus-visible all shown · loop-queue
+    badge colours reuse <code>Badge.tsx</code>'s existing status→tone map verbatim, no new hue · same
+    information as <code>JobsPage</code>/<code>JobCard</code>/<code>JobForm</code> today, plus the
+    three missing-feature additions RESEARCH.md named — noted for implementation later, not shipped
+    by this mock.
+  </div>
+</div>
+</body>
+</html>

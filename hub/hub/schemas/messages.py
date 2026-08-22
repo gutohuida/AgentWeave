@@ -22,6 +22,11 @@ class MessageCreate(BaseModel):
     # field. Naming an archived conversation is refused rather than redirected: where a message
     # lands is the sender's decision, not something the Hub quietly makes for it.
     conversation_id: Optional[str] = Field(default=None, max_length=64)
+    # D4: an explicit request for a fresh thread, bypassing the sender's usual binding. The new
+    # conversation becomes the bound one for later messages with no extra state, since the
+    # existing "newest binding wins" forward lookup already prefers it. Refused in combination
+    # with conversation_id — naming a thread and asking for a new one are contradictory.
+    start_new_thread: bool = Field(default=False)
 
     model_config = {"populate_by_name": True, "extra": "forbid"}
 

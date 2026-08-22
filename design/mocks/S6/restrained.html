@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en" data-mode="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AgentWeave — Questions &amp; permissions (restrained)</title>
+<link rel="stylesheet" href="../../../hub/ui/src/index.css" />
+<style>
+  /* ══════════════════════════════════════════════════════════════
+     Mock only. Every colour/radius/duration/easing below resolves to
+     an existing token in hub/ui/src/index.css. This variant is the
+     SMALLEST change that fixes RESEARCH.md's findings across all
+     three surfaces — see considered.html for the fuller application
+     of the same fixes (more motion, an elapsed-time cue, a loading
+     skeleton).
+     ══════════════════════════════════════════════════════════════ */
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { min-height: 100vh; padding-bottom: 80px; }
+
+  .doc { width: min(100%, 900px); margin-inline: auto; padding: 32px 28px 0; }
+
+  .doc-header {
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 24px;
+    padding-bottom: 28px; border-bottom: 1px solid var(--border-region); margin-bottom: 32px;
+  }
+  .doc-title { font-size: 22px; font-weight: 600; letter-spacing: -0.01em; }
+  .doc-subtitle { margin-top: 6px; font-size: 13px; color: var(--text-2); max-width: 720px; line-height: 1.55; }
+  .doc-meta { margin-top: 10px; font-size: 11px; color: var(--text-3); }
+  .theme-toggle {
+    flex: none; display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px;
+    border-radius: var(--radius-lg); border: 1px solid var(--border); background: var(--surface-2);
+    color: var(--text); font-size: 12px; font-weight: 500; cursor: pointer;
+    transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+  }
+  .theme-toggle:hover { background: var(--surface-3); border-color: var(--border-hi); }
+  .theme-toggle:focus-visible { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring); outline: none; }
+
+  section.mock-section { margin-bottom: 44px; }
+  .section-eyebrow { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); margin-bottom: 6px; }
+  .section-title { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+  .section-note { font-size: 12.5px; color: var(--text-2); line-height: 1.6; max-width: 780px; margin-bottom: 18px; }
+  .section-note code { background: var(--surface-2); border-radius: var(--radius-sm); padding: 1px 5px; font-size: 11.5px; }
+
+  svg.ic { width: 1em; height: 1em; }
+
+  /* ─────────── Permission request kind badge — colour CODING, not decoration ───────────
+     Two tiers only, matching Badge.tsx's own tone() derivation (tint 10/20 off a semantic
+     token): reads (file-read) are informational-neutral; anything that changes state
+     (command, file-change) is amber, the same "this asks for something" register the
+     product already uses for under_review/high-priority. No new hue, no third tier. */
+  .kind-badge {
+    display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; font-weight: 500;
+    padding: 1px 7px; border-radius: var(--radius-sm); flex: none;
+  }
+  .kind-badge.neutral { background: color-mix(in srgb, var(--text-2) 10%, transparent); border: 1px solid color-mix(in srgb, var(--text-2) 20%, transparent); color: var(--text-2); }
+  .kind-badge.mutates { background: color-mix(in srgb, var(--amber) 10%, transparent); border: 1px solid color-mix(in srgb, var(--amber) 20%, transparent); color: var(--amber); }
+
+  /* ─────────── Detail sub-block — T3 finding: a bordered, scrollable surface distinct
+     from the surrounding card, instead of a bare paragraph the command just breaks across. ─────────── */
+  .interject-detail {
+    margin-top: 8px; margin-bottom: 10px;
+    padding: 8px 10px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-size: 12px;
+    color: var(--text);
+    max-height: 92px;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+  .interject-detail.expired { color: var(--text-3); }
+
+  /* ─────────── Allow / Deny hierarchy — resolved, not left ambiguous ───────────
+     RESEARCH.md flagged that Allow (no variant → ghost, the quietest control in the
+     vocabulary) was visually subordinate to Deny (outline, bordered). Resolved here:
+     Allow is the raised `primary` variant (var(--primary) — near-white/near-black,
+     NOT --blue, so this stays within clause 2), Deny stays `outline`. The affirmative,
+     most-common-path action reads as primary; declining still has full visual weight,
+     it is simply not louder than the default path. */
+  .btn-primary, .btn-outline, .btn-ghost {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    height: 30px; padding: 0 13px; border-radius: var(--radius-md);
+    font-size: 12.5px; font-weight: 500; cursor: pointer; border: 1px solid transparent;
+    transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease);
+  }
+  .btn-primary {
+    background: var(--primary); color: var(--primary-foreground); border-color: var(--primary);
+    box-shadow: inset 0 1px 0 var(--lift-hi), 0 1px 3px rgb(0 0 0 / 0.24);
+  }
+  .btn-primary:hover { background: var(--primary-hover); }
+  .btn-primary:active, .btn-primary[data-force="press"] { background: var(--primary-active); box-shadow: inset 0 1px 0 var(--press-lo); }
+  .btn-outline { background: var(--surface-2); color: var(--text); border-color: var(--border); box-shadow: 0 1px 2px rgb(0 0 0 / 0.16); }
+  .btn-outline:hover { border-color: var(--border-hi); background: var(--surface-3); }
+  .btn-ghost { background: transparent; color: var(--text-2); }
+  .btn-ghost:hover { background: var(--accent); color: var(--text); }
+  .btn-primary:focus-visible, .btn-outline:focus-visible, .btn-ghost:focus-visible {
+    outline: none; box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring);
+  }
+  .btn-primary:disabled, .btn-outline:disabled, .btn-ghost:disabled { opacity: 0.64; cursor: not-allowed; pointer-events: none; }
+
+  .interject-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .interject-waiting { font-size: 11px; color: var(--text-3); }
+
+  /* Missing feature #1, mocked and flagged (T3's fourth action, "Always allow this
+     session") — deliberately the quietest control here so it does not compete with
+     Allow/Deny, and separated by a hair of margin rather than a divider rule. */
+  .btn-scope { margin-left: 2px; }
+
+  .states-strip { display: flex; gap: 22px; flex-wrap: wrap; margin-top: 6px; }
+  .state-cell { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+  .state-cell-label { font-size: 10.5px; color: var(--text-3); font-family: var(--font-mono, monospace); }
+
+  /* ─────────── AgentQuestionCard — stale ("no longer waiting") dimming ───────────
+     Today the stale label is text-only; the rest of the card is exactly as prominent
+     as a live one. The smallest fix: the whole card recedes a step. */
+  .conversation-interject.is-stale { opacity: 0.68; }
+  .conversation-interject.is-stale .interject-choice { pointer-events: none; }
+
+  /* ─────────── QuestionsPanel — blocking banner + rows, given real button vocabulary ─────────── */
+  .q-panel { background: var(--bg); border: 1px solid var(--border-region); border-radius: var(--radius-xl); padding: 16px; }
+  .q-blocking {
+    border-radius: var(--radius-lg); padding: 14px;
+    background: color-mix(in srgb, var(--red) 6%, transparent);
+    border: 1px solid color-mix(in srgb, var(--red) 20%, transparent);
+  }
+  .q-blocking-head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; color: var(--red); font-size: 13px; font-weight: 500; }
+  .q-row { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 12px 14px; }
+  .q-row + .q-row { margin-top: 10px; }
+  .q-row-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+  .q-agent { font-size: 13px; font-weight: 500; }
+  .q-agent.blocking { color: var(--red); }
+  .q-time { font-size: 11px; color: var(--text-3); }
+  .q-text { font-size: 13px; color: var(--text); line-height: 1.5; }
+
+  .q-answer-form { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+  .q-textarea {
+    width: 100%; resize: none; font-size: 13px; padding: 8px 12px; min-height: 64px;
+    background: var(--surface-3); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    color: var(--text); font-family: inherit;
+    transition: border-color var(--dur-fast) var(--ease);
+  }
+  .q-textarea:focus-visible, .q-textarea:focus { outline: none; border-color: var(--border-hi); box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring); }
+
+  .q-nonblocking-title { font-size: 13px; font-weight: 500; margin: 18px 0 10px; color: var(--text); }
+  .q-answered summary { cursor: pointer; font-size: 12.5px; font-weight: 500; color: var(--text-3); display: flex; align-items: center; gap: 4px; list-style: none; }
+  .q-answered summary::-webkit-details-marker { display: none; }
+  .q-answered[open] summary svg { transform: rotate(-90deg); }
+  .q-answered summary svg { transition: transform var(--dur-fast) var(--ease); }
+  .q-answered-row { background: var(--surface-2); border-radius: var(--radius-md); padding: 10px 12px; opacity: 0.65; margin-top: 8px; }
+  .q-answered-row + .q-answered-row { margin-top: 8px; }
+
+  .legend { margin-top: 40px; padding-top: 20px; border-top: 1px solid var(--border-region); font-size: 11px; color: var(--text-3); line-height: 1.7; }
+</style>
+</head>
+<body>
+<div class="doc">
+  <div class="doc-header">
+    <div>
+      <div class="doc-title">Questions &amp; permissions — restrained</div>
+      <div class="doc-subtitle">
+        The three surfaces where an agent stops the conversation and waits: <code>PermissionRequestCard</code>,
+        <code>AgentQuestionCard</code>, and the <code>QuestionsPanel</code> tab. Smallest change that closes
+        RESEARCH.md's gaps — request-kind labelling, a bordered detail block, a resolved Allow/Deny hierarchy,
+        and the AnswerForm submit brought into the real button vocabulary.
+      </div>
+      <div class="doc-meta">S6 · P2 · variant 1 of 2 — see considered.html for fuller motion, an elapsed-time cue, and a loading skeleton</div>
+    </div>
+    <button class="theme-toggle" onclick="document.documentElement.dataset.mode = document.documentElement.dataset.mode === 'dark' ? 'light' : 'dark'; document.getElementById('theme-label').textContent = document.documentElement.dataset.mode">
+      <span id="theme-label">dark</span> · toggle theme
+    </button>
+  </div>
+
+  <!-- ══════════════════ Section 1 — PermissionRequestCard ══════════════════ -->
+  <section class="mock-section">
+    <div class="section-eyebrow">Highest stakes</div>
+    <div class="section-title">Permission request — command approval</div>
+    <div class="section-note">
+      Sits inline above the composer, same shape as the composer surface one step lighter (unchanged).
+      Added: a kind badge before the value, a bordered scrollable detail block, a pending count, and a
+      deliberately resolved Allow/Deny hierarchy — Allow is now the raised <code>primary</code> control
+      (a neutral near-white/near-black fill, not <code>--blue</code>), Deny stays <code>outline</code>.
+    </div>
+
+    <div class="conversation-interject" data-testid="permission-request-mock">
+      <div class="flex items-center gap-2" style="margin-bottom: 4px;">
+        <span class="kind-badge mutates">Command</span>
+        <p class="interject-eyebrow" style="margin: 0;">codex-1 wants to use Bash</p>
+        <span class="interject-count" style="margin-left: auto;">1/2</span>
+      </div>
+      <div class="interject-detail">rm -rf node_modules && npm install --production && npm run build -- --mode production --analyze-bundle</div>
+      <div class="interject-actions">
+        <button class="btn-primary">Allow</button>
+        <button class="btn-outline">Deny</button>
+        <button class="btn-ghost btn-scope" title="Approve every command like this for the rest of the session — a scoped grant, not a blanket one.">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 4 6v6c0 5 3.5 8.5 8 10 4.5-1.5 8-5 8-10V6l-8-4Z"/><path d="m9 12 2 2 4-4"/></svg>
+          Always allow this session
+        </button>
+        <span class="interject-waiting">The agent is waiting, and will be refused if nobody answers.</span>
+      </div>
+    </div>
+
+    <div style="height: 12px;"></div>
+
+    <div class="conversation-interject is-stale" data-testid="permission-request-expired-mock">
+      <div class="flex items-center gap-2" style="margin-bottom: 4px;">
+        <span class="kind-badge mutates">File change</span>
+        <p class="interject-eyebrow" style="margin: 0;">claude-2 wants to use Edit</p>
+        <span style="font-size: 10px; color: var(--text-3); margin-left: 4px;">no longer waiting</span>
+        <button class="ml-auto shrink-0 p-0.5 rounded" style="color: var(--text-3); background: transparent; border: none; cursor: pointer;" aria-label="Dismiss this expired request">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="interject-detail expired">hub/ui/src/components/agents/PermissionRequestCard.tsx</div>
+      <p style="font-size: 11px; color: var(--text-3); margin: 0;">
+        The agent stopped waiting and was refused. Give yourself longer to answer by raising this agent's permission timeout.
+      </p>
+    </div>
+
+    <div style="height: 20px;"></div>
+    <div class="section-eyebrow">Interaction states</div>
+    <div class="states-strip">
+      <div class="state-cell">
+        <button class="btn-primary">Allow</button>
+        <span class="state-cell-label">resting — primary</span>
+      </div>
+      <div class="state-cell">
+        <button class="btn-primary" data-force="press">Allow</button>
+        <span class="state-cell-label">pressed — inset press-lo</span>
+      </div>
+      <div class="state-cell">
+        <button class="btn-primary" disabled>Allow</button>
+        <span class="state-cell-label">disabled — decision in flight</span>
+      </div>
+      <div class="state-cell">
+        <button class="btn-outline" disabled>Deny</button>
+        <span class="state-cell-label">disabled — decision in flight</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════ Section 2 — AgentQuestionCard, multi-select ══════════════════ -->
+  <section class="mock-section">
+    <div class="section-eyebrow">Structured, in-conversation</div>
+    <div class="section-title">Agent question — multi-select</div>
+    <div class="section-note">
+      Unchanged structurally — the option-row hover/selected/kbd vocabulary was already ahead of the rest
+      of the product (RESEARCH.md). The one gap: a stale ("no longer waiting") question was exactly as
+      visually prominent as a live one. Fixed by dimming the whole card, not just its label.
+    </div>
+
+    <div class="conversation-interject" data-testid="agent-question-mock">
+      <div class="flex items-center gap-2" style="margin-bottom: 6px;">
+        <span class="interject-eyebrow">codex-1 is asking</span>
+        <span class="interject-count">2/3</span>
+      </div>
+      <p style="font-size: 13px; color: var(--text); margin: 0;">Which environments should the migration run against before it's considered safe to merge?</p>
+      <p style="font-size: 11px; color: var(--text-2); margin-top: 2px;">Select one or more options.</p>
+      <div class="flex flex-col gap-1.5" style="margin-top: 10px;">
+        <button type="button" class="interject-choice" data-selected="true">
+          <span class="interject-choice-body"><span class="interject-choice-label">staging</span><span class="interject-choice-desc">already provisioned, safe to run against</span></span>
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><path d="M20 6 9 17l-5-5"/></svg>
+        </button>
+        <button type="button" class="interject-choice" data-selected="true">
+          <span class="interject-choice-body"><span class="interject-choice-label">local dev</span></span>
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><path d="M20 6 9 17l-5-5"/></svg>
+        </button>
+        <button type="button" class="interject-choice">
+          <span class="interject-choice-body"><span class="interject-choice-label">production</span><span class="interject-choice-desc">requires a change window</span></span>
+          <kbd class="interject-kbd">3</kbd>
+        </button>
+      </div>
+      <p style="font-size: 11px; color: var(--text-3); margin-top: 8px;">Pick what applies, then send. Or write your own answer below. Then 1 more.</p>
+    </div>
+
+    <div style="height: 12px;"></div>
+
+    <div class="conversation-interject is-stale" data-testid="agent-question-stale-mock">
+      <div class="flex items-center gap-2" style="margin-bottom: 6px;">
+        <span class="interject-eyebrow">claude-1 is asking</span>
+        <span style="font-size: 10px; color: var(--text-3);">no longer waiting</span>
+      </div>
+      <p style="font-size: 13px; color: var(--text); margin: 0;">Should the retry backoff be linear or exponential?</p>
+      <div class="flex flex-col gap-1.5" style="margin-top: 10px;">
+        <button type="button" class="interject-choice"><span class="interject-choice-body"><span class="interject-choice-label">Linear</span></span><kbd class="interject-kbd">1</kbd></button>
+        <button type="button" class="interject-choice"><span class="interject-choice-body"><span class="interject-choice-label">Exponential</span></span><kbd class="interject-kbd">2</kbd></button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════ Section 3 — QuestionsPanel, blocking list ══════════════════ -->
+  <section class="mock-section">
+    <div class="section-eyebrow">Full list, can outlive the run</div>
+    <div class="section-title">Questions tab — blocking list</div>
+    <div class="section-note">
+      <code>AnswerForm</code>'s submit button was raw inline styles entirely outside the <code>Button</code>
+      component — no raised state, no focus ring. Rebuilt here in the same <code>primary</code> vocabulary as
+      the permission card's Allow, so the two surfaces read as one product rather than two eras of it.
+    </div>
+
+    <div class="q-panel">
+      <div class="q-blocking">
+        <div class="q-blocking-head">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><path d="M12 9v4M12 17h.01"/></svg>
+          Blocking — Agents are waiting for your answer
+        </div>
+        <div class="q-row">
+          <div class="q-row-head">
+            <span class="q-agent blocking">claude-2</span>
+            <span class="q-time">requested 4m ago</span>
+          </div>
+          <p class="q-text">The staging DB migration failed halfway — roll back the applied statements, or continue forward and patch the remainder by hand?</p>
+          <form class="q-answer-form">
+            <textarea class="q-textarea" placeholder="Type your answer…">Roll back, then re-run from a clean state.</textarea>
+            <div>
+              <button class="btn-primary" type="submit">Submit answer</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <div class="q-nonblocking-title">Unanswered</div>
+      <div class="q-row">
+        <div class="q-row-head">
+          <span class="q-agent">codex-1</span>
+          <span class="q-time">18m ago</span>
+        </div>
+        <p class="q-text">Should the changelog entry credit the migration or the feature it enables?</p>
+        <form class="q-answer-form">
+          <textarea class="q-textarea" placeholder="Type your answer…"></textarea>
+          <div><button class="btn-primary" type="submit" disabled>Submit answer</button></div>
+        </form>
+      </div>
+
+      <details class="q-answered" style="margin-top: 18px;">
+        <summary>
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><path d="m6 9 6 6 6-6"/></svg>
+          Answered (2)
+        </summary>
+        <div class="q-answered-row">
+          <div class="flex items-center gap-2" style="margin-bottom: 4px;">
+            <span class="q-agent" style="font-size: 13px;">claude-1</span>
+          </div>
+          <p style="font-size: 12px; color: var(--text); margin: 0;">Keep the CLI's exit code non-zero on a partial failure?</p>
+          <p style="font-size: 12px; color: var(--text-3); margin-top: 4px;">→ Yes — partial success should still fail the pipeline.</p>
+        </div>
+      </details>
+    </div>
+  </section>
+
+  <div class="legend">
+    Rejection test: every colour above resolves to a token in <code>hub/ui/src/index.css</code> · both
+    themes checked · durations are <code>--dur-fast</code> only in this variant, easing is <code>--ease</code>
+    only · radii derive from <code>--radius</code> · states shown (resting/press/disabled/stale), not just
+    rest · same information as today, plus the kind badge, detail block, count and scope grant this variant
+    adds — nothing removed.
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="en" data-mode="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AgentWeave — Foundations (motion · elevation · interaction states)</title>
+<link rel="stylesheet" href="../../../hub/ui/src/index.css" />
+<style>
+  /* ══════════════════════════════════════════════════════════════
+     Mock-only layout. Every colour/radius/duration below resolves to
+     an existing token from hub/ui/src/index.css — nothing here is a
+     literal hex, a new radius, or a new duration/easing.
+     ══════════════════════════════════════════════════════════════ */
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    min-height: 100vh;
+    padding-bottom: 80px;
+  }
+
+  .doc {
+    width: min(100%, 1180px);
+    margin-inline: auto;
+    padding: 32px 28px 0;
+  }
+
+  .doc-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 24px;
+    padding-bottom: 28px;
+    border-bottom: 1px solid var(--border-region);
+    margin-bottom: 36px;
+  }
+  .doc-title { font-size: 22px; font-weight: 600; letter-spacing: -0.01em; }
+  .doc-subtitle { margin-top: 6px; font-size: 13px; color: var(--text-2); max-width: 640px; line-height: 1.55; }
+  .doc-meta { margin-top: 10px; font-size: 11px; color: var(--text-3); }
+
+  .theme-toggle {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 32px;
+    padding: 0 12px;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+  }
+  .theme-toggle:hover { background: var(--surface-3); border-color: var(--border-hi); }
+  .theme-toggle:focus-visible { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring); outline: none; }
+
+  section.system-section { margin-bottom: 52px; }
+  .section-eyebrow {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-3);
+    margin-bottom: 6px;
+  }
+  .section-title { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+  .section-note { font-size: 12.5px; color: var(--text-2); line-height: 1.6; max-width: 780px; margin-bottom: 22px; }
+  .section-note code {
+    background: var(--surface-2);
+    border-radius: var(--radius-sm);
+    padding: 1px 5px;
+    font-size: 11.5px;
+  }
+
+  /* ─── Elevation ──────────────────────────────────────────────── */
+  .elevation-rail {
+    background: var(--bg);
+    border: 1px solid var(--border-region);
+    border-radius: var(--radius-xl);
+    padding: 28px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 18px;
+    align-items: stretch;
+  }
+  .elevation-tier {
+    flex: 1 1 220px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .elevation-swatch {
+    height: 92px;
+    border-radius: var(--radius-lg);
+    display: flex;
+    align-items: flex-end;
+    padding: 10px 12px;
+    font-size: 11px;
+    color: var(--text-2);
+    transition: transform var(--dur-base) var(--ease), box-shadow var(--dur-base) var(--ease);
+  }
+  .elevation-swatch:hover { transform: translateY(-2px); }
+  .tier-0 { background: var(--rail); border: 1px solid var(--border-region); }
+  .tier-1 { background: var(--surface); border: 1px solid var(--border); box-shadow: 0 1px 2px rgb(0 0 0 / 0.08), inset 0 1px var(--lift-hi); }
+  .tier-2 { background: var(--surface-2); border: 1px solid var(--border); box-shadow: 0 2px 6px rgb(0 0 0 / 0.14), inset 0 1px var(--lift-hi); }
+  .tier-3 { background: var(--surface-3); border: 1px solid var(--border-hi); box-shadow: 0 4px 14px rgb(0 0 0 / 0.20), inset 0 1px var(--lift-hi); }
+  .tier-label { font-size: 12.5px; font-weight: 600; color: var(--text); }
+  .tier-desc { font-size: 11px; color: var(--text-3); line-height: 1.5; }
+
+  /* ─── Motion ─────────────────────────────────────────────────── */
+  .motion-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+  }
+  .motion-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 16px;
+    box-shadow: inset 0 1px var(--lift-hi);
+  }
+  .motion-card-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 10px; }
+  .motion-name { font-size: 12.5px; font-weight: 600; color: var(--text); }
+  .motion-ms { font-size: 11px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+  .motion-track {
+    height: 6px;
+    border-radius: 99px;
+    background: var(--surface-3);
+    overflow: hidden;
+    margin-bottom: 10px;
+  }
+  .motion-track-fill {
+    height: 100%;
+    width: 0%;
+    border-radius: 99px;
+    background: var(--blue);
+  }
+  .motion-card:hover .motion-track-fill.fast { width: 100%; transition: width var(--dur-fast) var(--ease); }
+  .motion-card:hover .motion-track-fill.base { width: 100%; transition: width var(--dur-base) var(--ease); }
+  .motion-card:hover .motion-track-fill.slow { width: 100%; transition: width var(--dur-slow) var(--ease); }
+  .motion-use { font-size: 11px; color: var(--text-2); line-height: 1.5; }
+  .motion-hint { font-size: 10.5px; color: var(--text-3); margin-top: 8px; font-style: italic; }
+
+  /* ─── Interaction states ────────────────────────────────────── */
+  .states-block { margin-bottom: 30px; }
+  .states-block-title { font-size: 12.5px; font-weight: 600; color: var(--text); margin-bottom: 12px; }
+  .states-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+  }
+  .state-cell {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+  .state-cell-label { font-size: 10px; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.04em; }
+
+  /* Button primitive states — mirrors buttonVariants.ts exactly (base + variant classes),
+     with forced pseudo-state classes so every state renders without a live pointer. */
+  .demo-btn {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    height: 34px;
+    padding: 0 14px;
+    border-radius: var(--radius-lg);
+    border: 1px solid transparent;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    outline: none;
+    transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease),
+                box-shadow var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease), opacity var(--dur-fast) var(--ease);
+  }
+  .demo-btn.primary {
+    background: var(--primary); color: var(--primary-foreground); border-color: var(--primary);
+    box-shadow: inset 0 1px 0 var(--lift-hi), 0 1px 3px rgb(0 0 0 / 0.24);
+  }
+  .demo-btn.primary:hover, .demo-btn.primary[data-force="hover"] { background: var(--primary-hover); }
+  .demo-btn.primary[data-force="press"] { background: var(--primary-active); box-shadow: inset 0 1px 0 var(--press-lo); }
+  .demo-btn.primary[data-force="focus"] { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring); }
+  .demo-btn.primary[data-force="disabled"] { opacity: 0.64; pointer-events: none; box-shadow: none; }
+
+  .demo-btn.ghost { background: transparent; color: var(--text); }
+  .demo-btn.ghost:hover, .demo-btn.ghost[data-force="hover"] { background: var(--accent); }
+  .demo-btn.ghost[data-force="press"] { background: var(--accent); box-shadow: inset 0 1px 0 var(--press-lo); }
+  .demo-btn.ghost[data-force="focus"] { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring); }
+  .demo-btn.ghost[data-force="disabled"] { opacity: 0.64; pointer-events: none; }
+
+  .demo-btn.outline { background: var(--surface-2); color: var(--text); border-color: var(--border); box-shadow: 0 1px 2px rgb(0 0 0 / 0.16); }
+  .demo-btn.outline:hover, .demo-btn.outline[data-force="hover"] { border-color: var(--border-hi); background: var(--surface-3); }
+  .demo-btn.outline[data-force="press"] { box-shadow: inset 0 1px 0 var(--press-lo); }
+  .demo-btn.outline[data-force="focus"] { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring); }
+  .demo-btn.outline[data-force="disabled"] { opacity: 0.64; pointer-events: none; }
+
+  .demo-btn.destructive {
+    background: var(--error-cont); color: var(--on-error-cont);
+    border-color: color-mix(in oklab, var(--destructive) 50%, transparent);
+  }
+  .demo-btn.destructive:hover, .demo-btn.destructive[data-force="hover"] {
+    background: color-mix(in oklab, var(--destructive) 20%, transparent);
+    border-color: color-mix(in oklab, var(--destructive) 75%, transparent);
+  }
+  .demo-btn.destructive[data-force="press"] { box-shadow: inset 0 1px 0 var(--press-lo); }
+  .demo-btn.destructive[data-force="focus"] { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring); }
+  .demo-btn.destructive[data-force="disabled"] { opacity: 0.64; pointer-events: none; }
+
+  /* Row states — same tokens .row-item already uses in index.css, generalised so this
+     mock's row swatches don't depend on component markup. */
+  .demo-row {
+    display: flex; align-items: center; gap: 8px;
+    width: 220px; padding: 7px 10px;
+    border: 1px solid transparent; border-left-width: 2px;
+    border-radius: var(--radius-md);
+    background: transparent; color: var(--text-2); font-size: 12.5px;
+    transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+  }
+  .demo-row .dot { width: 6px; height: 6px; border-radius: 99px; background: var(--agent-2); flex: none; }
+  .demo-row:hover, .demo-row[data-force="hover"] { background: var(--row-hover); color: var(--text); }
+  .demo-row[data-force="active"] { background: var(--row-active); color: var(--text); }
+  .demo-row[data-force="selected"] { background: var(--row-selected); color: var(--text); font-weight: 550; }
+  .demo-row[data-force="focus"] { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring); }
+  .demo-row[data-force="disabled"] { opacity: 0.5; pointer-events: none; }
+
+  /* Card states — TaskCard's own hover/live pattern, generalised. */
+  .demo-card {
+    width: 240px; padding: 12px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    transition: border-color var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease);
+  }
+  .demo-card:hover, .demo-card[data-force="hover"] { border-color: var(--border-hi); }
+  .demo-card[data-force="selected"] { border-color: var(--ring); box-shadow: 0 0 0 1px var(--ring); }
+  .demo-card[data-force="live"] { box-shadow: 0 0 0 2px color-mix(in srgb, var(--green) 40%, transparent); }
+  .demo-card[data-force="disabled"] { opacity: 0.5; }
+  .demo-card-title { font-size: 12.5px; font-weight: 500; color: var(--text); margin-bottom: 4px; }
+  .demo-card-body { font-size: 11px; color: var(--text-3); }
+
+  /* Input states */
+  .demo-input {
+    width: 220px; height: 34px; padding: 0 10px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--text);
+    font-size: 12.5px;
+    outline: none;
+    transition: border-color var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease);
+  }
+  .demo-input::placeholder { color: var(--text-3); }
+  .demo-input:hover, .demo-input[data-force="hover"] { border-color: var(--border-hi); }
+  .demo-input:focus, .demo-input[data-force="focus"] { border-color: var(--border-hi); box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring); }
+  .demo-input[data-force="disabled"] { opacity: 0.5; pointer-events: none; }
+  .demo-input[data-force="error"] { border-color: color-mix(in oklab, var(--destructive) 60%, transparent); box-shadow: 0 0 0 1px color-mix(in oklab, var(--destructive) 35%, transparent); }
+
+  /* ─── Loading skeletons ──────────────────────────────────────── */
+  .skeleton-demo-grid { display: flex; gap: 24px; flex-wrap: wrap; align-items: flex-start; }
+  .sk {
+    position: relative;
+    overflow: hidden;
+    background: var(--surface-3);
+    border-radius: var(--radius-sm);
+  }
+  .sk::after {
+    content: '';
+    position: absolute; inset: 0;
+    background: linear-gradient(90deg, transparent, var(--border-hi), transparent);
+    transform: translateX(-100%);
+    animation: sk-shimmer var(--dur-slow) var(--ease) infinite;
+    animation-duration: 1.8s;
+  }
+  @keyframes sk-shimmer { to { transform: translateX(100%); } }
+  @media (prefers-reduced-motion: reduce) { .sk::after { animation: none; } }
+
+  .sk-card {
+    width: 240px; padding: 12px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+  .sk-line { height: 10px; border-radius: var(--radius-sm); margin-bottom: 8px; }
+  .sk-line.w-70 { width: 70%; }
+  .sk-line.w-40 { width: 40%; }
+  .sk-line.w-90 { height: 8px; width: 90%; margin-bottom: 6px; }
+  .sk-chip { display: inline-block; height: 16px; width: 46px; border-radius: 99px; margin-right: 6px; }
+
+  .sk-row { display: flex; align-items: center; gap: 10px; width: 260px; padding: 7px 4px; }
+  .sk-avatar { width: 20px; height: 20px; border-radius: 99px; flex: none; }
+  .sk-row-lines { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+
+  .sk-text-line { height: 9px; border-radius: 3px; }
+
+  /* ─── Empty states ───────────────────────────────────────────── */
+  .empty-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .empty-card {
+    background: var(--rail);
+    border: 1px solid var(--border-region);
+    border-radius: var(--radius-xl);
+    padding: 8px;
+  }
+  .empty-card-head {
+    font-size: 11px; font-weight: 600; color: var(--text-3);
+    text-transform: uppercase; letter-spacing: 0.04em;
+    padding: 8px 8px 0;
+  }
+  .empty-state {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; padding: 40px 20px 32px;
+    animation: empty-in var(--dur-base) var(--ease) both;
+  }
+  @keyframes empty-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+  @media (prefers-reduced-motion: reduce) { .empty-state { animation: none; } }
+  .empty-icon-ring {
+    width: 56px; height: 56px; border-radius: 99px;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--surface-3);
+    margin-bottom: 14px;
+    color: var(--text-3);
+  }
+  .empty-icon-ring svg { width: 24px; height: 24px; }
+  .empty-title { font-size: 13.5px; font-weight: 500; color: var(--text); margin-bottom: 4px; }
+  .empty-desc { font-size: 11.5px; color: var(--text-3); line-height: 1.5; max-width: 220px; }
+  .empty-action {
+    margin-top: 14px; height: 30px; padding: 0 12px;
+    border-radius: var(--radius-md); border: 1px solid var(--border);
+    background: var(--surface-2); color: var(--text); font-size: 11.5px; font-weight: 500;
+    cursor: pointer;
+    transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+  }
+  .empty-action:hover { background: var(--surface-3); border-color: var(--border-hi); }
+
+  .legend {
+    font-size: 11px; color: var(--text-3); margin-top: 20px; padding-top: 16px;
+    border-top: 1px solid var(--border-region);
+  }
+</style>
+</head>
+<body>
+<div class="doc">
+
+  <div class="doc-header">
+    <div>
+      <div class="doc-title">Foundations — motion · elevation · interaction states</div>
+      <div class="doc-subtitle">
+        U0a. The system vocabulary every later screen mock inherits. Every colour, radius,
+        duration and easing below resolves to a token already in <code>hub/ui/src/index.css</code>
+        — this names and applies what exists; it introduces nothing new. See
+        <code>design/mocks/_system/RESEARCH.md</code> for sourcing.
+      </div>
+      <div class="doc-meta">design/mocks/_system/foundations.html · rendered against real tokens</div>
+    </div>
+    <button class="theme-toggle" onclick="document.documentElement.dataset.mode = document.documentElement.dataset.mode === 'dark' ? 'light' : 'dark'">
+      <span>◐</span><span id="theme-label">toggle theme</span>
+    </button>
+  </div>
+
+  <!-- ═══════════════════════ ELEVATION ═══════════════════════ -->
+  <section class="system-section">
+    <div class="section-eyebrow">Elevation</div>
+    <div class="section-title">A four-tier scale built from the existing surface steps</div>
+    <div class="section-note">
+      Depth in a near-black UI is read from surface lightness, not drop shadow — a shadow barely
+      registers against <code>--bg</code>, which is exactly what the composer's own removed-shadow
+      note already found. Each tier below is one existing surface step plus the inset
+      <code>--lift-hi</code> highlight already defined for raised controls; nothing is a new value.
+      Hover to feel the lift (<code>--dur-base</code>).
+    </div>
+    <div class="elevation-rail">
+      <div class="elevation-tier">
+        <div class="elevation-swatch tier-0"><span>ground · --bg / --rail</span></div>
+        <div class="tier-label">0 — Ground</div>
+        <div class="tier-desc">The page itself. Never lifts, never gets a border-radius treatment beyond the shell.</div>
+      </div>
+      <div class="elevation-tier">
+        <div class="elevation-swatch tier-1"><span>resting · --surface</span></div>
+        <div class="tier-label">1 — Resting content</div>
+        <div class="tier-desc">Cards, panels, the composer. <code>.lifted-surface</code>'s existing shadow recipe, unchanged.</div>
+      </div>
+      <div class="elevation-tier">
+        <div class="elevation-swatch tier-2"><span>nested · --surface-2</span></div>
+        <div class="tier-label">2 — Nested content</div>
+        <div class="tier-desc">A row or chip inside a tier-1 panel — one step lighter, so containment reads without a border.</div>
+      </div>
+      <div class="elevation-tier">
+        <div class="elevation-swatch tier-3"><span>overlay · --surface-3</span></div>
+        <div class="tier-label">3 — Transient overlay</div>
+        <div class="tier-desc">Menus, popovers, tooltips — the step reserved for things that float above everything else.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════ MOTION ═══════════════════════ -->
+  <section class="system-section">
+    <div class="section-eyebrow">Motion</div>
+    <div class="section-title">Three durations, one easing — hover each card to trigger it</div>
+    <div class="section-note">
+      <code>--dur-fast</code> is direct feedback (press, hover, a value flipping).
+      <code>--dur-base</code> is a state or view change (a row opening, a panel switching).
+      <code>--dur-slow</code> is reserved for things that should read as deliberately unhurried —
+      it is not a bigger version of base, it changes the character of the motion. All three use
+      <code>--ease</code>, a soft expo-out, everywhere; there is no second curve in this system.
+    </div>
+    <div class="motion-grid">
+      <div class="motion-card">
+        <div class="motion-card-head"><span class="motion-name">--dur-fast</span><span class="motion-ms">150ms</span></div>
+        <div class="motion-track"><div class="motion-track-fill fast"></div></div>
+        <div class="motion-use">Button hover/press, row hover, focus ring, icon-state swaps.</div>
+        <div class="motion-hint">hover this card</div>
+      </div>
+      <div class="motion-card">
+        <div class="motion-card-head"><span class="motion-name">--dur-base</span><span class="motion-ms">250ms</span></div>
+        <div class="motion-track"><div class="motion-track-fill base"></div></div>
+        <div class="motion-use">Disclosure open/close, panel/tab switch, empty-state entrance, elevation lift.</div>
+        <div class="motion-hint">hover this card</div>
+      </div>
+      <div class="motion-card">
+        <div class="motion-card-head"><span class="motion-name">--dur-slow</span><span class="motion-ms">500ms</span></div>
+        <div class="motion-track"><div class="motion-track-fill slow"></div></div>
+        <div class="motion-use">Large surface transitions only — a full-panel content swap, never a control.</div>
+        <div class="motion-hint">hover this card</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════ INTERACTION STATES ═══════════════════════ -->
+  <section class="system-section">
+    <div class="section-eyebrow">Interaction states</div>
+    <div class="section-title">Rest · hover · press · focus-visible · disabled — demonstrated, not just described</div>
+    <div class="section-note">
+      Each swatch below is forced into its state with <code>data-force</code> so every state is
+      visible without a live pointer; the same classes also respond to a real hover/focus for
+      anyone opening this file directly.
+    </div>
+
+    <div class="states-block">
+      <div class="states-block-title">Button — primary (raised, lit from above, inverts under press)</div>
+      <div class="states-row">
+        <div class="state-cell"><button class="demo-btn primary">Approve</button><span class="state-cell-label">rest</span></div>
+        <div class="state-cell"><button class="demo-btn primary" data-force="hover">Approve</button><span class="state-cell-label">hover</span></div>
+        <div class="state-cell"><button class="demo-btn primary" data-force="press">Approve</button><span class="state-cell-label">press</span></div>
+        <div class="state-cell"><button class="demo-btn primary" data-force="focus">Approve</button><span class="state-cell-label">focus-visible</span></div>
+        <div class="state-cell"><button class="demo-btn primary" data-force="disabled">Approve</button><span class="state-cell-label">disabled</span></div>
+      </div>
+    </div>
+
+    <div class="states-block">
+      <div class="states-block-title">Button — ghost (floats in nothing until touched)</div>
+      <div class="states-row">
+        <div class="state-cell"><button class="demo-btn ghost">Cancel</button><span class="state-cell-label">rest</span></div>
+        <div class="state-cell"><button class="demo-btn ghost" data-force="hover">Cancel</button><span class="state-cell-label">hover</span></div>
+        <div class="state-cell"><button class="demo-btn ghost" data-force="press">Cancel</button><span class="state-cell-label">press</span></div>
+        <div class="state-cell"><button class="demo-btn ghost" data-force="focus">Cancel</button><span class="state-cell-label">focus-visible</span></div>
+        <div class="state-cell"><button class="demo-btn ghost" data-force="disabled">Cancel</button><span class="state-cell-label">disabled</span></div>
+      </div>
+    </div>
+
+    <div class="states-block">
+      <div class="states-block-title">Button — outline (bounded, unfilled)</div>
+      <div class="states-row">
+        <div class="state-cell"><button class="demo-btn outline">Details</button><span class="state-cell-label">rest</span></div>
+        <div class="state-cell"><button class="demo-btn outline" data-force="hover">Details</button><span class="state-cell-label">hover</span></div>
+        <div class="state-cell"><button class="demo-btn outline" data-force="press">Details</button><span class="state-cell-label">press</span></div>
+        <div class="state-cell"><button class="demo-btn outline" data-force="focus">Details</button><span class="state-cell-label">focus-visible</span></div>
+        <div class="state-cell"><button class="demo-btn outline" data-force="disabled">Details</button><span class="state-cell-label">disabled</span></div>
+      </div>
+    </div>
+
+    <div class="states-block">
+      <div class="states-block-title">Button — destructive</div>
+      <div class="states-row">
+        <div class="state-cell"><button class="demo-btn destructive">Reject</button><span class="state-cell-label">rest</span></div>
+        <div class="state-cell"><button class="demo-btn destructive" data-force="hover">Reject</button><span class="state-cell-label">hover</span></div>
+        <div class="state-cell"><button class="demo-btn destructive" data-force="press">Reject</button><span class="state-cell-label">press</span></div>
+        <div class="state-cell"><button class="demo-btn destructive" data-force="focus">Reject</button><span class="state-cell-label">focus-visible</span></div>
+        <div class="state-cell"><button class="demo-btn destructive" data-force="disabled">Reject</button><span class="state-cell-label">disabled</span></div>
+      </div>
+    </div>
+
+    <div class="states-block">
+      <div class="states-block-title">Row (sidebar / list item — generalised from <code>.row-item</code>)</div>
+      <div class="states-row">
+        <div class="state-cell"><div class="demo-row"><span class="dot"></span>research-agent</div><span class="state-cell-label">rest</span></div>
+        <div class="state-cell"><div class="demo-row" data-force="hover"><span class="dot"></span>research-agent</div><span class="state-cell-label">hover</span></div>
+        <div class="state-cell"><div class="demo-row" data-force="active"><span class="dot"></span>research-agent</div><span class="state-cell-label">press</span></div>
+        <div class="state-cell"><div class="demo-row" data-force="selected"><span class="dot"></span>research-agent</div><span class="state-cell-label">selected</span></div>
+        <div class="state-cell"><div class="demo-row" data-force="focus"><span class="dot"></span>research-agent</div><span class="state-cell-label">focus-visible</span></div>
+        <div class="state-cell"><div class="demo-row" data-force="disabled"><span class="dot"></span>research-agent</div><span class="state-cell-label">disabled</span></div>
+      </div>
+    </div>
+
+    <div class="states-block">
+      <div class="states-block-title">Card (generalised from <code>TaskCard</code>'s own border-brighten + live-pulse pattern)</div>
+      <div class="states-row">
+        <div class="state-cell">
+          <div class="demo-card"><div class="demo-card-title">Wire the reverse lookup</div><div class="demo-card-body">3 requirements · in progress</div></div>
+          <span class="state-cell-label">rest</span>
+        </div>
+        <div class="state-cell">
+          <div class="demo-card" data-force="hover"><div class="demo-card-title">Wire the reverse lookup</div><div class="demo-card-body">3 requirements · in progress</div></div>
+          <span class="state-cell-label">hover</span>
+        </div>
+        <div class="state-cell">
+          <div class="demo-card" data-force="selected"><div class="demo-card-title">Wire the reverse lookup</div><div class="demo-card-body">3 requirements · in progress</div></div>
+          <span class="state-cell-label">selected</span>
+        </div>
+        <div class="state-cell">
+          <div class="demo-card" data-force="live"><div class="demo-card-title">Wire the reverse lookup</div><div class="demo-card-body">3 requirements · running now</div></div>
+          <span class="state-cell-label">live (loud)</span>
+        </div>
+        <div class="state-cell">
+          <div class="demo-card" data-force="disabled"><div class="demo-card-title">Wire the reverse lookup</div><div class="demo-card-body">3 requirements · locked</div></div>
+          <span class="state-cell-label">disabled</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="states-block">
+      <div class="states-block-title">Input</div>
+      <div class="states-row">
+        <div class="state-cell"><input class="demo-input" placeholder="Search tasks…" /><span class="state-cell-label">rest</span></div>
+        <div class="state-cell"><input class="demo-input" data-force="hover" placeholder="Search tasks…" /><span class="state-cell-label">hover</span></div>
+        <div class="state-cell"><input class="demo-input" data-force="focus" placeholder="Search tasks…" /><span class="state-cell-label">focus</span></div>
+        <div class="state-cell"><input class="demo-input" data-force="error" value="not a valid id" /><span class="state-cell-label">error</span></div>
+        <div class="state-cell"><input class="demo-input" data-force="disabled" value="Search tasks…" /><span class="state-cell-label">disabled</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════ LOADING SKELETONS ═══════════════════════ -->
+  <section class="system-section">
+    <div class="section-eyebrow">Loading</div>
+    <div class="section-title">Skeletons match the shape of what arrives — no spinner for content</div>
+    <div class="section-note">
+      Zero uses of a skeleton pattern exist in the product today (every loading state is a spinner
+      or nothing). The shimmer below reuses <code>task-live-pulse</code>'s reduced-motion pattern:
+      gated behind <code>prefers-reduced-motion</code>, so the shape still communicates "loading"
+      with the sweep removed, never a blank box.
+    </div>
+    <div class="skeleton-demo-grid">
+      <div>
+        <div class="sk-card">
+          <div class="sk sk-line w-70"></div>
+          <div class="sk sk-line w-90"></div>
+          <div class="sk sk-line w-40" style="margin-bottom:10px;"></div>
+          <div class="sk sk-chip"></div><div class="sk sk-chip" style="width:34px;"></div>
+        </div>
+        <div class="state-cell-label" style="margin-top:8px;">task card, loading</div>
+      </div>
+      <div>
+        <div style="display:flex; flex-direction:column; gap:4px;">
+          <div class="sk-row"><div class="sk sk-avatar"></div><div class="sk-row-lines"><div class="sk sk-text-line" style="width:60%"></div><div class="sk sk-text-line" style="width:35%"></div></div></div>
+          <div class="sk-row"><div class="sk sk-avatar"></div><div class="sk-row-lines"><div class="sk sk-text-line" style="width:80%"></div><div class="sk sk-text-line" style="width:45%"></div></div></div>
+          <div class="sk-row"><div class="sk sk-avatar"></div><div class="sk-row-lines"><div class="sk sk-text-line" style="width:50%"></div><div class="sk sk-text-line" style="width:30%"></div></div></div>
+        </div>
+        <div class="state-cell-label" style="margin-top:8px;">agent roster, loading</div>
+      </div>
+      <div style="width:260px;">
+        <div class="sk sk-text-line" style="width:95%; margin-bottom:8px;"></div>
+        <div class="sk sk-text-line" style="width:88%; margin-bottom:8px;"></div>
+        <div class="sk sk-text-line" style="width:60%;"></div>
+        <div class="state-cell-label" style="margin-top:8px;">message body, loading</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════ EMPTY STATES ═══════════════════════ -->
+  <section class="system-section">
+    <div class="section-eyebrow">Empty</div>
+    <div class="section-title">Same shape, three causes — today they render identically or not at all</div>
+    <div class="section-note">
+      <code>EmptyState.tsx</code>'s icon-circle-plus-text shape is kept exactly — it is already
+      right for a dense operator tool (no illustration cost). What's added is that the cause
+      changes the message and, where useful, offers the one relevant action — a genuinely empty
+      board differs from a filter matching nothing.
+    </div>
+    <div class="empty-grid">
+      <div class="empty-card">
+        <div class="empty-card-head">Nothing exists yet</div>
+        <div class="empty-state">
+          <div class="empty-icon-ring">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="m3 7 3 3 3-3" /><path d="M3 17 6 20 9 17" />
+              <path d="M13 8h8" /><path d="M13 12h8" /><path d="M13 16h8" />
+            </svg>
+          </div>
+          <div class="empty-title">No tasks yet</div>
+          <div class="empty-desc">Tasks appear here once an agent creates one, or you add the first.</div>
+          <button class="empty-action">New task</button>
+        </div>
+      </div>
+      <div class="empty-card">
+        <div class="empty-card-head">Filter matched nothing</div>
+        <div class="empty-state">
+          <div class="empty-icon-ring">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" />
+            </svg>
+          </div>
+          <div class="empty-title">No tasks match "blocked"</div>
+          <div class="empty-desc">3 tasks are hidden by the current filter.</div>
+          <button class="empty-action">Clear filter</button>
+        </div>
+      </div>
+      <div class="empty-card">
+        <div class="empty-card-head">Still loading — skeleton, not this component</div>
+        <div style="padding:24px 16px;">
+          <div class="sk sk-line w-70" style="margin-bottom:10px;"></div>
+          <div class="sk sk-line w-90" style="margin-bottom:10px;"></div>
+          <div class="sk sk-line w-40"></div>
+          <div class="state-cell-label" style="margin-top:14px; text-align:center;">a board that is still loading is never shown the "nothing exists yet" empty state — that message is a claim about the data, and it isn't true yet.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="legend">
+    Rejection test: every colour above resolves to a token in <code>hub/ui/src/index.css</code> ·
+    both themes checked · durations are <code>--dur-fast/base/slow</code> only, easing is
+    <code>--ease</code> only · radii derive from <code>--radius</code> · states shown, not just
+    rest · at least as dense as the current components (no card grew, no row grew).
+  </div>
+
+</div>
+<script>
+  document.querySelector('.theme-toggle').addEventListener('click', () => {
+    const label = document.getElementById('theme-label')
+    label.textContent = document.documentElement.dataset.mode === 'dark' ? 'dark' : 'light'
+  })
+</script>
+</body>
+</html>

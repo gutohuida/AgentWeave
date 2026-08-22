@@ -28,6 +28,7 @@ from hub.worker import (
     parse_claude_envelope,
     parse_codex_envelope,
     run_worker,
+    strict_output_schema,
 )
 
 PROJECT = "proj-test"
@@ -78,12 +79,28 @@ def test_the_claude_command_asks_for_json_and_is_not_an_agent_turn():
 
 
 def test_the_codex_command_asks_for_jsonl_and_passes_the_prompt_positionally():
-    cmd = build_worker_command(cli="codex", model="gpt-5.6-sol", prompt="hi")
+    cmd = build_worker_command(
+        cli="codex",
+        model="gpt-5.6-sol",
+        prompt="hi",
+        output_schema_path="C:/tmp/checkpoint-schema.json",
+    )
     assert cmd[:4] == ["codex", "exec", "--skip-git-repo-check", "--json"]
     assert cmd[-1] == "hi"
+    assert "--ephemeral" in cmd
+    assert [cmd[cmd.index("--sandbox") + 1], cmd[cmd.index("--output-schema") + 1]] == [
+        "read-only",
+        "C:/tmp/checkpoint-schema.json",
+    ]
     # `-p` is `--profile` for codex, not the prompt. Passing it here would silently look for a
     # config profile named after the entire prompt.
     assert "-p" not in cmd
+
+
+def test_codex_output_schema_is_strict_at_every_object():
+    schema = strict_output_schema(Answer)
+    assert schema["additionalProperties"] is False
+    assert schema["required"] == ["objective", "state", "confidence"]
 
 
 def test_an_unsupported_cli_gets_no_guessed_invocation():
@@ -277,6 +294,28 @@ async def test_a_good_answer_is_parsed_validated_and_recorded(app, monkeypatch):
     assert row.cost_usd_micros == 15330
     assert row.error is None
     assert result.invocation_id == row.id
+
+
+@pytest.mark.asyncio
+async def test_codex_worker_enforces_the_output_schema_outside_the_project(app, monkeypatch):
+    seen = {}
+
+    def fake_run(cmd, **kwargs):
+        seen["cmd"] = cmd
+        seen["cwd"] = kwargs["cwd"]
+        schema_path = cmd[cmd.index("--output-schema") + 1]
+        with open(schema_path, encoding="utf-8") as schema_file:
+            seen["schema"] = schema_file.read()
+        return subprocess.CompletedProcess(cmd, 0, stdout=CODEX_STDOUT, stderr="")
+
+    monkeypatch.setattr("hub.worker.resolve_executable", lambda cmd: cmd)
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    result = await _run(cli="codex", model="gpt-5.6-sol")
+
+    assert result.ok
+    assert "agentweave-worker-" in seen["cwd"]
+    assert '"objective"' in seen["schema"]
+    assert "--ephemeral" in seen["cmd"]
 
 
 @pytest.mark.asyncio

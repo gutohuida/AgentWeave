@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Dict, Iterable, List, Optional
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .db.models import (
@@ -97,12 +97,16 @@ def new_conversation(*, project_id: str, agent: str, origin: str) -> Conversatio
     if origin not in CONVERSATION_ORIGINS:
         raise ValueError(f"origin must be one of {CONVERSATION_ORIGINS}, got {origin!r}")
     now = datetime.now(timezone.utc)
+    conversation_id = f"conv-{short_id()}"
     return Conversation(
-        id=f"conv-{short_id()}",
+        id=conversation_id,
         project_id=project_id,
         agent=agent,
         lifecycle="open",
         origin=origin,
+        # Its own lineage until a checkpoint cutover says otherwise
+        # (`checkpoint_cutover.py`, conversations-continue phase 2).
+        lineage_id=conversation_id,
         created_at=now,
         updated_at=now,
     )
@@ -186,6 +190,13 @@ async def peer_bound_conversation(
 
     Filters on `open` and takes the newest: a binding whose thread the operator archived resolves
     to the successor bound to the same sender, not to the archived one.
+
+    Matched on the sender's *lineage*, not its bare id: a cutover mints the sender a new
+    conversation id, and without this widening every message sent from a successor would fail to
+    find the thread already bound to its predecessor and mint a second one. The bare-id equality
+    stays alongside it — a sender conversation id with no `Conversation` row of its own (the Hub
+    and the scheduler pass identifiers that were never rows to begin with) has no lineage to look
+    up, so the literal match is what still finds it.
     """
     conditions = [
         Conversation.project_id == project_id,
@@ -193,7 +204,18 @@ async def peer_bound_conversation(
         Conversation.lifecycle == "open",
     ]
     if sender_conversation_id:
-        conditions.append(Conversation.bound_sender_conversation_id == sender_conversation_id)
+        sender_lineage = (
+            select(Conversation.lineage_id)
+            .where(Conversation.id == sender_conversation_id)
+            .scalar_subquery()
+        )
+        lineage_siblings = select(Conversation.id).where(Conversation.lineage_id == sender_lineage)
+        conditions.append(
+            or_(
+                Conversation.bound_sender_conversation_id == sender_conversation_id,
+                Conversation.bound_sender_conversation_id.in_(lineage_siblings),
+            )
+        )
     else:
         # Both halves matter: without the NULL check a senderless message could resolve onto a
         # thread bound to one of that sender's conversations, which is a different binding.
@@ -201,6 +223,54 @@ async def peer_bound_conversation(
         conditions.append(Conversation.bound_sender_conversation_id.is_(None))
     result = await db.execute(
         select(Conversation).where(*conditions).order_by(Conversation.sequence.desc()).limit(1)
+    )
+    return result.scalar_one_or_none()
+
+
+async def reply_bound_conversation(
+    db: AsyncSession,
+    *,
+    project_id: str,
+    recipient: str,
+    sender_conversation_id: Optional[str],
+) -> Optional[Conversation]:
+    """The conversation a reply continues, resolved by reading the sender's own binding backwards.
+
+    design.md D2: `peer_bound_conversation` answers "which of the recipient's threads is bound to
+    *my* line of work" — a question that only has an answer once someone has replied to the sender
+    before. The first reply in an exchange finds nothing there, because the binding was written in
+    the other direction when the sender's thread was minted. This answers the question the data can
+    actually answer: "what did my own thread's binding point at, and is that the recipient?"
+
+    Succeeds only when the sender's conversation names a `bound_sender_conversation_id` that is
+    itself owned by the recipient — so a message to a *third* agent never continues an unrelated
+    thread, and a named conversation owned by neither address in this exchange is not treated as a
+    reply target. Resolves to the newest **open** conversation in that named conversation's lineage
+    (D3), not the named conversation itself, so a cutover on the recipient's side does not strand a
+    reply on an archived predecessor.
+
+    Called strictly after `peer_bound_conversation` and only on its miss (D1) — reverse resolution
+    can only fire where the forward lookup would otherwise have minted, so every delivery that
+    resolves today resolves identically.
+    """
+    if not sender_conversation_id:
+        return None
+    src = await get_conversation_by_id(db, sender_conversation_id)
+    if src is None or not src.bound_sender_conversation_id:
+        return None
+    named = await get_conversation_by_id(db, src.bound_sender_conversation_id)
+    if named is None or named.project_id != project_id or named.agent != recipient:
+        return None
+    result = await db.execute(
+        select(Conversation)
+        .where(
+            Conversation.project_id == project_id,
+            Conversation.agent == recipient,
+            Conversation.lineage_id == named.lineage_id,
+            Conversation.lifecycle == "open",
+        )
+        .order_by(Conversation.sequence.desc())
+        .limit(1)
     )
     return result.scalar_one_or_none()
 

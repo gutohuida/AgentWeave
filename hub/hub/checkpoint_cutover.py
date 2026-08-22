@@ -107,6 +107,9 @@ async def cut_over(
     # reaching the same conversation across a cutover.
     successor.bound_sender_conversation_id = predecessor.bound_sender_conversation_id
     successor.bound_sender_agent = predecessor.bound_sender_agent
+    # Same line of work under a new id -- sending FROM the successor must still reach a
+    # thread bound to any conversation in this lineage, not just to the predecessor's id.
+    successor.lineage_id = predecessor.lineage_id
     db.add(successor)
 
     entry = new_entry(

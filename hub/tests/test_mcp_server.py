@@ -89,10 +89,27 @@ def test_send_message_payload_contains_no_identity_or_run(hub):
         "content": "Content",
         "type": "message",
         "task_id": None,
-        # Where the message goes is the sender's choice; unset means the recipient's most
-        # recent conversation. It is routing, not identity — which is what this test guards.
+        # Where the message goes is the sender's choice; unset means the thread already bound
+        # between sender and recipient, or a fresh one if none is bound. It is routing, not
+        # identity — which is what this test guards.
         "conversation_id": None,
+        "start_new_thread": False,
     }
+
+
+def test_send_message_docstring_does_not_claim_recency_and_declares_start_new_thread():
+    """Recency delivery was removed when the binding contract shipped; the tool's own
+    documentation must not keep teaching agents the old model."""
+    from hub.mcp_server import send_message
+
+    doc = send_message.__doc__ or ""
+    assert "most recent" not in doc.lower()
+    assert "recent" not in doc.lower()
+    assert "start_new_thread" in doc
+    import inspect
+
+    default = inspect.signature(send_message).parameters["start_new_thread"].default
+    assert default is False
 
 
 def test_effect_refuses_unbound_run_credential(hub, monkeypatch):

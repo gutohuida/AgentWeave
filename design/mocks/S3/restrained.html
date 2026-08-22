@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en" data-mode="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AgentWeave — Right panel (restrained)</title>
+<link rel="stylesheet" href="../../../hub/ui/src/index.css" />
+<style>
+  /* ══════════════════════════════════════════════════════════════
+     Mock only. Every colour/radius/duration/easing below resolves to
+     an existing token in hub/ui/src/index.css. This variant is the
+     SMALLEST change that fixes RESEARCH.md's findings — apply the
+     tokens that already exist, add nothing new. See considered.html
+     for the fuller application including the missing affordances.
+     ══════════════════════════════════════════════════════════════ */
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { min-height: 100vh; padding-bottom: 80px; }
+
+  .doc { width: min(100%, 1360px); margin-inline: auto; padding: 32px 28px 0; }
+
+  .doc-header {
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 24px;
+    padding-bottom: 28px; border-bottom: 1px solid var(--border-region); margin-bottom: 32px;
+  }
+  .doc-title { font-size: 22px; font-weight: 600; letter-spacing: -0.01em; }
+  .doc-subtitle { margin-top: 6px; font-size: 13px; color: var(--text-2); max-width: 760px; line-height: 1.55; }
+  .doc-meta { margin-top: 10px; font-size: 11px; color: var(--text-3); }
+  .theme-toggle {
+    flex: none; display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px;
+    border-radius: var(--radius-lg); border: 1px solid var(--border); background: var(--surface-2);
+    color: var(--text); font-size: 12px; font-weight: 500; cursor: pointer;
+    transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+  }
+  .theme-toggle:hover { background: var(--surface-3); border-color: var(--border-hi); }
+  .theme-toggle:focus-visible { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring); outline: none; }
+
+  section.mock-section { margin-bottom: 44px; }
+  .section-eyebrow { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); margin-bottom: 6px; }
+  .section-title { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+  .section-note { font-size: 12.5px; color: var(--text-2); line-height: 1.6; max-width: 860px; margin-bottom: 18px; }
+  .section-note code { background: var(--surface-2); border-radius: var(--radius-sm); padding: 1px 5px; font-size: 11.5px; }
+
+  .ic { display: inline-flex; flex: none; }
+  .ic svg { display: block; }
+
+  /* ═══════════════════════ Panel chrome ═══════════════════════ */
+  .panel-frame {
+    background: var(--bg); border: 1px solid var(--border-region); border-radius: var(--radius-xl);
+    display: flex; flex-direction: column; height: 520px; overflow: hidden;
+  }
+  /* Finding 2, smallest fix: the strip keeps its current squared tab shape and both icons — only
+     a real hover background is added. No pill geometry, no crossfade, no context menu. */
+  .panel-strip { display: flex; align-items: center; gap: 2px; overflow-x: auto; padding: 6px 6px 0; border-bottom: 1px solid var(--border); flex: none; }
+  .tab {
+    display: flex; align-items: center; gap: 6px; flex: none; padding: 5px 7px; border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+    font-size: 12.5px; color: var(--text-2); cursor: pointer; transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+  }
+  .tab:hover { background: var(--row-hover); }
+  .tab[data-active="true"] { background: var(--surface-2); color: var(--text); }
+  .tab-label { max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tab-close { display: inline-flex; flex: none; width: 14px; height: 14px; color: var(--text-3); border-radius: var(--radius-sm); transition: color var(--dur-fast) var(--ease), background-color var(--dur-fast) var(--ease); padding: 1px; }
+  .tab-close:hover { color: var(--text); background: var(--row-hover); }
+  .tab-add { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 24px; height: 24px; border-radius: var(--radius-sm); color: var(--text-3); cursor: pointer; transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease); }
+  .tab-add:hover { background: var(--row-hover); color: var(--text); }
+  .panel-body { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; }
+
+  /* Finding 1, smallest fix: apply the existing row tokens exactly, no elevation, no new radius. */
+  .row {
+    display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 10px; border: none;
+    background: none; color: var(--text-2); font-size: 13px; text-align: left; cursor: pointer;
+    transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+  }
+  .row:hover, .row[data-force="hover"] { background: var(--row-hover); color: var(--text); }
+  .row:active, .row[data-force="press"] { background: var(--row-active); }
+  .row[data-active="true"], .row[data-force="selected"] { background: var(--row-selected); color: var(--text); }
+  .row-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+  .row-dir { font-size: 12px; font-weight: 600; color: var(--text-3); }
+  .row-chevron { transition: transform var(--dur-fast) var(--ease); flex: none; }
+  .row-chevron[data-open="true"] { transform: rotate(90deg); }
+
+  /* Finding 5, smallest fix: an icon and a placeholder — no clear button, no Escape UI shown. */
+  .search-wrap { position: relative; margin: 8px 10px; flex: none; }
+  .search-input {
+    width: 100%; height: 28px; padding: 0 10px 0 28px; border-radius: var(--radius-md);
+    border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-size: 12.5px;
+    transition: border-color var(--dur-fast) var(--ease);
+  }
+  .search-input::placeholder { color: var(--text-3); }
+  .search-input:focus-visible { outline: none; border-color: var(--ring); }
+  .search-icon { position: absolute; left: 8px; top: 50%; transform: translateY(-50%); color: var(--text-3); pointer-events: none; }
+
+  /* Finding 3, smallest fix: a real CSS hover + press on the existing card, no lift, no badge. */
+  .launcher-hint { text-align: center; font-size: 13px; color: var(--text-3); margin-bottom: 16px; }
+  .launcher-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; width: 100%; max-width: 420px; margin: 0 auto; }
+  .launcher-card {
+    display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 12px;
+    border-radius: var(--radius-md); background: var(--surface-2); border: 1px solid var(--border);
+    color: var(--text); cursor: pointer; text-align: left;
+    transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+  }
+  .launcher-card:hover, .launcher-card[data-force="hover"] { background: var(--surface-3); border-color: var(--border-hi); }
+  .launcher-card:active, .launcher-card[data-force="press"] { background: color-mix(in srgb, var(--surface-2) 88%, var(--press-lo)); }
+  .launcher-card:focus-visible, .launcher-card[data-force="focus"] { outline: none; box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring); }
+  .launcher-title { font-size: 13px; font-weight: 500; }
+  .launcher-desc { font-size: 12px; color: var(--text-3); line-height: 1.4; }
+
+  /* Finding 4, smallest fix: the path, once, in a plain header row — no copy button. */
+  .preview-header { display: flex; align-items: center; padding: 8px 10px; border-bottom: 1px solid var(--border); flex: none; font-size: 12px; color: var(--text-3); }
+  .code-pane { flex: 1; overflow: auto; padding: 10px 12px; font-family: ui-monospace, "SF Mono", monospace; font-size: 12px; line-height: 1.65; color: var(--text-2); }
+  .code-pane .ln { color: var(--text-3); display: inline-block; width: 26px; text-align: right; margin-right: 12px; user-select: none; }
+  .code-pane .com { color: var(--text-3); font-style: italic; }
+
+  /* Finding 6, smallest fix: keep the native checkbox, just align and size it with the label. */
+  .toolbar-row { display: flex; align-items: center; justify-content: space-between; padding: 4px 10px 8px; flex: none; }
+  .check-row { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-2); }
+  .check-row input { accent-color: var(--ring); width: 13px; height: 13px; }
+
+  /* Finding 7, smallest fix: three grey lines instead of "Loading…" text — no shimmer animation. */
+  .sk { background: var(--surface-2); border-radius: var(--radius-sm); }
+  .sk-row { display: flex; align-items: center; gap: 8px; padding: 6px 10px; }
+  .sk-icon { width: 14px; height: 14px; flex: none; }
+  .sk-line { height: 10px; flex: 1; }
+
+  .loop-row { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; transition: background-color var(--dur-fast) var(--ease); }
+  .loop-row:hover, .loop-row[data-force="hover"] { background: var(--row-hover); }
+  .loop-top { display: flex; align-items: center; gap: 8px; }
+  .loop-name { font-size: 13px; font-weight: 500; color: var(--text); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .loop-meta { font-size: 11px; color: var(--text-3); }
+  .badge { display: inline-flex; align-items: center; gap: 4px; border-radius: 9999px; padding: 1px 7px; font-size: 10px; font-weight: 500; }
+  .b-success { background: color-mix(in srgb, var(--green) 10%, transparent); border: 1px solid color-mix(in srgb, var(--green) 20%, transparent); color: var(--green); }
+  .b-warning { background: color-mix(in srgb, var(--amber) 10%, transparent); border: 1px solid color-mix(in srgb, var(--amber) 20%, transparent); color: var(--amber); }
+  .status-dot { width: 5px; height: 5px; border-radius: 9999px; background: currentColor; }
+
+  .frame-pair { display: flex; gap: 18px; align-items: flex-start; flex-wrap: wrap; }
+  .frame-col { flex: 1 1 380px; max-width: 420px; }
+  .frame-col-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-3); margin-bottom: 8px; }
+
+  .states-strip { display: grid; grid-template-columns: repeat(4, minmax(180px, 1fr)); gap: 14px; }
+  .state-cell { display: flex; flex-direction: column; gap: 6px; }
+  .state-cell-label { font-size: 11px; color: var(--text-3); text-align: center; }
+
+  .legend { margin-top: 8px; padding: 14px 16px; border-radius: var(--radius-lg); background: var(--surface); border: 1px solid var(--border-region); font-size: 11.5px; color: var(--text-3); line-height: 1.7; }
+  .legend code { background: var(--surface-2); border-radius: var(--radius-sm); padding: 1px 5px; font-size: 11px; }
+</style>
+</head>
+<body>
+<div class="doc">
+  <div class="doc-header">
+    <div>
+      <div class="doc-title">Right side panel — restrained</div>
+      <div class="doc-subtitle">
+        The smallest change that fixes <code>design/mocks/S3/RESEARCH.md</code>'s plainness:
+        apply the row/hover/press/selected tokens that already exist in
+        <code>hub/ui/src/index.css</code> to every row and card, add a search icon and a preview
+        path line, and leave the structure — tab shape, both icons per tab, the native checkbox —
+        exactly as it is today. No context menu, no crossfade, no live-count badge, no shimmer.
+        See <code>considered.html</code> for the fuller pass.
+      </div>
+      <div class="doc-meta">Variant 1 of 2 · degree: restrained · S3 P2</div>
+    </div>
+    <button class="theme-toggle" onclick="document.documentElement.dataset.mode = document.documentElement.dataset.mode === 'dark' ? 'light' : 'dark'">
+      <span id="theme-label">dark</span> · toggle theme
+    </button>
+  </div>
+
+  <!-- ══════════════════ Row states ══════════════════ -->
+  <section class="mock-section">
+    <div class="section-eyebrow">Finding 1</div>
+    <div class="section-title">Rows get the tokens that already exist, nothing else</div>
+    <div class="section-note">
+      <code>--row-hover</code> / <code>--row-active</code> / <code>--row-selected</code>, applied as
+      a flat background swap — no lift, no shadow, no border change.
+    </div>
+    <div class="states-strip">
+      <div class="state-cell">
+        <button class="row"><span class="ic" style="width:14px;height:14px;color:var(--agent-2);">${'{'}FILE_ICON{'}'}</span><span class="row-name">agent_chat.py</span></button>
+        <div class="state-cell-label">rest</div>
+      </div>
+      <div class="state-cell">
+        <button class="row" data-force="hover"><span class="ic" style="width:14px;height:14px;color:var(--agent-2);">${'{'}FILE_ICON{'}'}</span><span class="row-name">agent_chat.py</span></button>
+        <div class="state-cell-label">hover</div>
+      </div>
+      <div class="state-cell">
+        <button class="row" data-force="press"><span class="ic" style="width:14px;height:14px;color:var(--agent-2);">${'{'}FILE_ICON{'}'}</span><span class="row-name">agent_chat.py</span></button>
+        <div class="state-cell-label">press</div>
+      </div>
+      <div class="state-cell">
+        <button class="row" data-force="selected"><span class="ic" style="width:14px;height:14px;color:var(--agent-2);">${'{'}FILE_ICON{'}'}</span><span class="row-name">agent_chat.py</span></button>
+        <div class="state-cell-label">selected</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════ Launcher cards ══════════════════ -->
+  <section class="mock-section">
+    <div class="section-eyebrow">Finding 3</div>
+    <div class="section-title">Launcher cards, a real CSS hover and press — same shape, same copy</div>
+    <div class="launcher-hint">Open a panel</div>
+    <div class="launcher-grid">
+      <div class="launcher-card" data-force="hover">
+        <span class="ic" style="width:18px;height:18px;">${'{'}DOC_ICON{'}'}</span>
+        <span class="launcher-title">Specs</span>
+        <span class="launcher-desc">Browse and read specification documents</span>
+      </div>
+      <div class="launcher-card">
+        <span class="ic" style="width:18px;height:18px;">${'{'}LOOP_ICON{'}'}</span>
+        <span class="launcher-title">Loops</span>
+        <span class="launcher-desc">What is running, and what it has queued</span>
+      </div>
+      <div class="launcher-card" data-force="press">
+        <span class="ic" style="width:18px;height:18px;">${'{'}FOLDER_O{'}'}</span>
+        <span class="launcher-title">Files</span>
+        <span class="launcher-desc">Browse this project's workspace files</span>
+      </div>
+      <div class="launcher-card" data-force="focus">
+        <span class="ic" style="width:18px;height:18px;">${'{'}LOOP_ICON{'}'}</span>
+        <span class="launcher-title">Loops</span>
+        <span class="launcher-desc">What is running, and what it has queued</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════ Composite ══════════════════ -->
+  <section class="mock-section">
+    <div class="section-eyebrow">Findings 2, 4, 5 — tab strip, preview header, search icon</div>
+    <div class="section-title">The panel, assembled</div>
+    <div class="frame-pair">
+      <div class="frame-col">
+        <div class="frame-col-label">Files — tab hover, search icon, tree states</div>
+        <div class="panel-frame">
+          <div class="panel-strip">
+            <div class="tab" data-active="true"><span class="ic" style="width:14px;height:14px;">${'{'}FOLDER_O{'}'}</span><span class="tab-label">Files</span><span class="tab-close">${'{'}CLOSE{'}'}</span></div>
+            <div class="tab" data-force="hover"><span class="ic" style="width:14px;height:14px;">${'{'}LOOP_ICON{'}'}</span><span class="tab-label">Loops</span><span class="tab-close">${'{'}CLOSE{'}'}</span></div>
+            <div class="tab-add">${'{'}ADD{'}'}</div>
+          </div>
+          <div class="panel-body">
+            <div class="search-wrap">
+              <span class="ic search-icon" style="width:14px;height:14px;">${'{'}SEARCH{'}'}</span>
+              <input class="search-input" placeholder="Search files…" />
+            </div>
+            <div style="flex:1; overflow:auto; padding-bottom:6px;">
+              <div class="row row-dir"><span class="row-chevron ic" data-open="true" style="width:12px;height:12px;">${'{'}CHEVRON_R{'}'}</span><span class="ic" style="width:14px;height:14px;">${'{'}FOLDER_O{'}'}</span><span class="row-name">hub/hub</span></div>
+              <button class="row" style="padding-left:34px;" data-force="hover"><span class="ic" style="width:14px;height:14px;color:var(--agent-2);">${'{'}FILE_ICON{'}'}</span><span class="row-name">agent_chat.py</span></button>
+              <button class="row" data-active="true" style="padding-left:34px;"><span class="ic" style="width:14px;height:14px;color:var(--agent-6);">${'{'}FILE_ICON{'}'}</span><span class="row-name">checkpoint_cutover.py</span></button>
+              <button class="row" style="padding-left:34px;"><span class="ic" style="width:14px;height:14px;color:var(--agent-6);">${'{'}FILE_ICON{'}'}</span><span class="row-name">conversations.py</span></button>
+              <div class="row row-dir"><span class="row-chevron ic" style="width:12px;height:12px;">${'{'}CHEVRON_R{'}'}</span><span class="ic" style="width:14px;height:14px;">${'{'}FOLDER_O{'}'}</span><span class="row-name">hub/tests</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="frame-col">
+        <div class="frame-col-label">File preview — path, once, above the content</div>
+        <div class="panel-frame">
+          <div class="panel-strip">
+            <div class="tab" data-active="true"><span class="ic" style="width:14px;height:14px;">${'{'}FILE_ICON{'}'}</span><span class="tab-label">checkpoint_cutover.py</span><span class="tab-close">${'{'}CLOSE{'}'}</span></div>
+          </div>
+          <div class="preview-header">hub/hub/checkpoint_cutover.py</div>
+          <div class="code-pane">
+<div><span class="ln">108</span>successor.bound_sender_kind = predecessor.bound_sender_kind</div>
+<div><span class="ln">109</span>successor.bound_sender_id = predecessor.bound_sender_id</div>
+<div><span class="ln">110</span>successor.lineage_id = predecessor.lineage_id  <span class="com"># inherits</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════ Loops toolbar + loading ══════════════════ -->
+  <section class="mock-section">
+    <div class="section-eyebrow">Findings 6 &amp; 7</div>
+    <div class="section-title">Native checkbox, aligned — and three grey lines instead of "Loading…"</div>
+    <div class="frame-pair">
+      <div class="frame-col">
+        <div class="frame-col-label">Loaded</div>
+        <div class="panel-frame" style="height:220px;">
+          <div class="toolbar-row">
+            <span style="font-size:12px; color:var(--text-3);">3 running</span>
+            <label class="check-row"><input type="checkbox" />Show archived</label>
+          </div>
+          <div style="flex:1; overflow:auto; padding:0 4px 6px;">
+            <div class="loop-row" data-force="hover">
+              <div class="loop-top"><span class="loop-name">conversations-continue phase 6</span><span class="badge b-success"><span class="status-dot"></span>running</span></div>
+              <div class="loop-meta">@builder · queue 2</div>
+            </div>
+            <div class="loop-row">
+              <div class="loop-top"><span class="loop-name">Migration 0085 — lineage backfill</span><span class="badge b-warning"><span class="status-dot"></span>1 open question</span></div>
+              <div class="loop-meta">@builder · queue 1</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="frame-col">
+        <div class="frame-col-label">Loading</div>
+        <div class="panel-frame" style="height:220px;">
+          <div class="toolbar-row"><span class="sk sk-line" style="max-width:70px;"></span></div>
+          <div style="flex:1; padding-top:4px;">
+            <div class="sk-row"><span class="sk sk-icon"></span><span class="sk sk-line" style="max-width:60%;"></span></div>
+            <div class="sk-row"><span class="sk sk-icon"></span><span class="sk sk-line" style="max-width:45%;"></span></div>
+            <div class="sk-row"><span class="sk sk-icon"></span><span class="sk sk-line" style="max-width:70%;"></span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="legend">
+    Rejection test: every colour above resolves to a token in <code>hub/ui/src/index.css</code> ·
+    both themes checked · durations are <code>--dur-fast/base/slow</code> only, easing is
+    <code>--ease</code> only · radii derive from <code>--radius</code> · states shown, not just
+    rest · same three index tabs, same tab shape, same checkbox control as today — the smallest
+    change that stops the panel from feeling inert.
+  </div>
+</div>
+<script>
+  const ICONS = {
+    FOLDER_O: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg>',
+    FILE_ICON: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2Z"/><path d="M14 2v6h6"/></svg>',
+    DOC_ICON: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2Z"/><path d="M14 2v6h6M9 13h6M9 17h6"/></svg>',
+    LOOP_ICON: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>',
+    CHEVRON_R: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%"><path d="m9 6 6 6-6 6"/></svg>',
+    CLOSE: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%"><path d="M18 6 6 18M6 6l12 12"/></svg>',
+    ADD: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M12 5v14M5 12h14"/></svg>',
+    SEARCH: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>',
+  }
+  document.body.innerHTML = document.body.innerHTML.replace(/\$\{'\{'\}(\w+)\{'\}'\}/g, (m, name) => ICONS[name] ?? '')
+  document.querySelector('.theme-toggle').addEventListener('click', () => {
+    document.getElementById('theme-label').textContent = document.documentElement.dataset.mode === 'dark' ? 'dark' : 'light'
+  })
+</script>
+</body>
+</html>
