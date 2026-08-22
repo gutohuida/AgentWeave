@@ -1657,6 +1657,7 @@
       width: 100% !important;
       height: auto !important;
       max-height: 38vh;
+      overflow-y: auto;
       border-right: 0 !important;
       border-bottom: 1px solid var(--border-region);
     }

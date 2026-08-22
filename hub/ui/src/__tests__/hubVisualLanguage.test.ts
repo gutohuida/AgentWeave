@@ -81,6 +81,14 @@ describe('Hub UI mock alignment contracts', () => {
     expect(cssSource).toContain('@media (max-width: 760px)')
   })
 
+  it('contains the narrow navigation inside its allotted shell height', () => {
+    const narrowShell = cssSource.slice(
+      cssSource.indexOf('@media (max-width: 760px)'),
+      cssSource.indexOf('@media (pointer: coarse)'),
+    )
+    expect(narrowShell).toMatch(/\.workspace-rail\s*\{[^}]*max-height:\s*38vh;[^}]*overflow-y:\s*auto;/s)
+  })
+
   it('adopts the Button primitive in the shell and conversation controls rather than hand-rolled buttons', () => {
     // A `<button` opening tag carrying its own `style={…}` attribute is exactly the pattern the
     // Button primitive replaces — every control in these files should either render <Button> or,

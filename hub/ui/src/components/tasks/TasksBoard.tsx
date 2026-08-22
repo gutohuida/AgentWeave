@@ -36,7 +36,7 @@ export function TasksBoard({ onOpenRequirement }: TasksBoardProps = {}) {
   // Only the board's own default (unscoped) view retires an archived document's completed work —
   // an explicit scope (a coverage-bar or document-tasks-link click) must never hide anything it
   // named, so the exclusion switches off the instant a filter is active.
-  const { data: tasks, isLoading } = useTasks({ excludeArchivedCompleted: activeTaskIds === null })
+  const { data: tasks, isLoading, isError } = useTasks({ excludeArchivedCompleted: activeTaskIds === null })
   const { data: agents = [] } = useAgents()
   const colorsByAgent = useMemo(
     () => new Map(agents.map((agent) => [agent.name, agent.color_index])),
@@ -77,6 +77,18 @@ export function TasksBoard({ onOpenRequirement }: TasksBoardProps = {}) {
             <div className="skeleton h-16 w-full" />
           </div>
         ))}
+      </div>
+    )
+  }
+
+  if (isError) {
+    return (
+      <div className="p-6" role="alert">
+        <EmptyState
+          icon="error_outline"
+          title="Could not load tasks"
+          description="The task board could not reach the Hub. Try again once the connection recovers."
+        />
       </div>
     )
   }

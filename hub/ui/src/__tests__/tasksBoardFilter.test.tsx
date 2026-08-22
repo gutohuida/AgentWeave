@@ -33,6 +33,7 @@ vi.mock('@/api/tasks', async (importOriginal) => {
         ? TASKS.filter((t) => !(t.id === ARCHIVED_TERMINAL_TASK_ID))
         : TASKS,
       isLoading: false,
+      isError: tasksError,
     }),
     useAllowedTransitions: () => ({ data: { actor_kind: 'operator', transitions: {} } }),
     useUpdateTask: () => ({ mutate: vi.fn() }),
@@ -57,6 +58,7 @@ function makeTask(overrides: Partial<Task> = {}): Task {
 }
 
 const ARCHIVED_TERMINAL_TASK_ID = 'task-4'
+let tasksError = false
 
 const TASKS: Task[] = [
   makeTask({ id: 'task-1', title: 'Settle the account', status: 'in_progress' }),
@@ -79,12 +81,21 @@ function renderBoard() {
 }
 
 beforeEach(() => {
+  tasksError = false
   useTaskFilterStore.setState({ activeTaskIds: null })
 })
 
 afterEach(cleanup)
 
 describe('the board can be filtered from outside itself', () => {
+  it('distinguishes a failed task request from a project with no tasks', () => {
+    tasksError = true
+    renderBoard()
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Could not load tasks')
+    expect(screen.queryByText('No tasks yet')).not.toBeInTheDocument()
+  })
+
   it('shows every task when nothing set a filter', () => {
     renderBoard()
     expect(screen.getByText('Settle the account')).toBeInTheDocument()

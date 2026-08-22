@@ -8,15 +8,10 @@
   "started_at": "2026-08-22T14:30:00+01:00",
   "stop_at": "2026-08-22T20:00:00+01:00",
   "stop_when_queue_empties": true,
-  "iteration": 9,
-  "last_heartbeat": "2026-08-22T16:25:53+01:00",
+  "iteration": 10,
+  "last_heartbeat": "2026-08-22T17:28:30+01:00",
   "log_file": ".claude/autonomous/2026-08-22-ui-finesse-log.md",
   "queue": [
-    {
-      "id": "F9",
-      "title": "Whole-product visual and interaction QA",
-      "detail": "Use Playwright against a safe test/trial surface, never port 8000 and never this repo as an AgentWeave project. Drive every reachable navigation destination at desktop and narrow widths in light and dark themes. Explicitly test project switching from the composer/shell with at least two projects, sidebar collapse/resize, panel tabs/resizing, command palette, empty/loading/error states and keyboard focus. Record screenshots or concise evidence in the log, fix every regression found, and add tests for behavioral defects."
-    },
     {
       "id": "F10",
       "title": "Final build, static bundle sync and review",
@@ -24,7 +19,7 @@
     }
   ],
   "current": null,
-  "next_action": "Use Playwright against a safe test/trial surface, never port 8000 and never this repo as an AgentWeave project. Drive every reachable navigation destination at desktop and narrow widths in light and dark themes. Explicitly test project switching from the composer/shell with at least two projects, sidebar collapse/resize, panel tabs/resizing, command palette, empty/loading/error states and keyboard focus. Record screenshots or concise evidence in the log, fix every regression found, and add tests for behavioral defects.",
+  "next_action": "Run the full UI suite, tsc, lint and production build. From repo root run py -3.11 scripts/refresh_ui_bundle.py and confirm hub/ui/dist matches hub/hub/static/ui as required. Run affected Hub tests for spec template changes. Inspect git diff for accidental legacy revival, unrelated changes, generated debris or missing accessibility states. Commit and push the final coherent result, set next_action null, and write a morning summary naming completed surfaces, remaining risks and Playwright evidence.",
   "decisions_for_user": [],
   "limits": [
     "Stay on autonomous/2026-08-22-ui-finesse and push only that branch; do not merge, open a PR, release, publish or deploy.",
