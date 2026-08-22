@@ -3756,3 +3756,28 @@ work if UI-mock work continues, per `do_not_idle`'s note not to re-open it witho
 first, since `D-direction` is still open. `stop_when_queue_empties` is `true` and the queue is in fact
 empty of actionable work — the driver's own `stop_at` guard (past which it self-unregisters) is the
 correct place for this run to end.
+
+## Iteration 55 — 2026-08-22T08:38:54+01:00 — no-op: queue confirmed still empty, ~21 min to stop_at
+
+Branch (`autonomous/2026-08-21-refine-and-continue`) and `git log` matched STATE.json exactly on
+entry (`1cbb9e3` = HEAD, iteration 54's heartbeat-release commit; nothing to reconcile). `stop_at`
+(`2026-08-22T09:00:00+01:00`) was ~21 minutes out at start.
+
+`git log -1 -- design/mocks/` (`86de63b`, iteration 53) and `git log -1 -- hub/hub hub/ui/src`
+(`0908b68`, phase 6) show no commits since iteration 54's checks — nothing could have drifted.
+
+**Re-ran the same cheap Playwright check** on `design/mocks/index.html` from `testbed/scratch`-style
+throwaway script (written to `/tmp`, deleted after use): 12 `.screen-card`s, 56 `<img>` tags, 0 with
+`naturalWidth === 0` (broken), exactly 1 `.screen-card.pending` (the `_system` card, correctly still
+pending per iteration 53's correction), 0 `pageerror`s, 3 `requestfailed` (the pre-existing
+`@fontsource` bare-specifier 404s under raw `file://`, unrelated to any image, present in every prior
+check). Identical to iteration 54's result — no regression.
+
+C1-C6, U0a/U0b, S1-S8, and Z remain at the same honest end state iterations 53-54 left them. `_system`
+P3/P4 remains the one open item and, per `do_not_idle`, is not reopened without an operator steer
+(`D-direction` still open). No new work exists inside the queue; inventing scope outside it is
+explicitly forbidden. Logging this as a third consecutive no-op.
+
+With `stop_at` now under 20 minutes away and three consecutive no-ops confirming the same empty
+queue, this run is at its natural end. The driver's own `stop_when_queue_empties`/`stop_at` guard
+is the correct mechanism to end it — no action needed from inside the loop to hasten that.
