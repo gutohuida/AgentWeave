@@ -107,21 +107,21 @@ resolved*.
 Covers `agent-conversation-workspace` — *An outbound peer message renders folded, showing its
 subject*. Independent of phases 1-5: it touches rendering only, and could ship on its own.
 
-- [ ] 6.1 Add tests for all five scenarios: an outbound entry renders folded; two messages to the
+- [x] 6.1 Add tests for all five scenarios: an outbound entry renders folded; two messages to the
       same recipient with different subjects fold to different lines; expanding shows the content;
       an expanded message stays expanded as entries are appended; an inbound message is unaffected
-- [ ] 6.2 Add `subject` to `TimelineEntry` in `hub/hub/api/v1/agent_chat.py:59-78` and stop
+- [x] 6.2 Add `subject` to `TimelineEntry` in `hub/hub/api/v1/agent_chat.py:59-78` and stop
       discarding it in `_message_to_timeline` (line 203-208), which today passes only `id`, `kind`,
       `content`, `timestamp` and `participant`
-- [ ] 6.3 Add `subject` to the `TimelineEntry` type in `hub/ui/src/api/agentChat.ts`
-- [ ] 6.4 Fold the outbound branch of `MessageEntry`
+- [x] 6.3 Add `subject` to the `TimelineEntry` type in `hub/ui/src/api/agentChat.ts`
+- [x] 6.4 Fold the outbound branch of `MessageEntry`
       (`hub/ui/src/components/agents/AgentTimeline.tsx:849-895`). `WorkRow` in the same file is the
       pattern — a header row, an inline truncated detail, `useState` for expansion. Reuse its shape
       rather than inventing a second one; do **not** fold the inbound branch
-- [ ] 6.5 Confirm a message with no subject still folds to something readable — subject is required
+- [x] 6.5 Confirm a message with no subject still folds to something readable — subject is required
       by `send_message`, but the column is nullable and older rows predate it
-- [ ] 6.6 Run `cd hub/ui && npx vitest run`, `npm run lint`, `npx tsc --noEmit`
-- [ ] 6.7 `cd hub/ui && npm run build`, then `py -3.11 scripts/refresh_ui_bundle.py` from the repo
+- [x] 6.6 Run `cd hub/ui && npx vitest run`, `npm run lint`, `npx tsc --noEmit`
+- [x] 6.7 `cd hub/ui && npm run build`, then `py -3.11 scripts/refresh_ui_bundle.py` from the repo
       root, and commit `hub/ui/src` and `hub/hub/static/ui` together
 
 ## 7. Human verification

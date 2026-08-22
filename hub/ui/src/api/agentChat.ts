@@ -26,6 +26,9 @@ export interface TimelineEntry {
   delivery_state: 'delivered' | 'queued'
   /** The *other* agent's name — set for inbound_peer/outbound_peer only. */
   participant?: string | null
+  /** outbound_peer only. Nullable — required by `send_message` going forward, but the column
+   *  predates that requirement, so an older row has none. */
+  subject?: string | null
   /** agent_output only. */
   output_kind?: AgentOutputKind | null
   payload?: Record<string, unknown> | null

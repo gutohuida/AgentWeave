@@ -360,3 +360,79 @@ yet reread this iteration — read it first). This is the only queue item permit
 `hub/ui/src`; ends with `cd hub/ui && npm run build` then `py -3.11 scripts/refresh_ui_bundle.py`
 FROM THE REPO ROOT, committing `hub/ui/src` and `hub/hub/static/ui` together. Likely two iterations
 given the UI build step.
+
+## Iteration 6 — 2026-08-22T01:24:39+01:00 — C6: the outbound message folds
+
+Implemented `conversations-continue` tasks.md section 6, all seven boxes, in one iteration —
+smaller than the two-iteration estimate since design.md carried no separate rationale for phase 6
+beyond tasks.md itself (checked: no "phase 6" heading, no fold-specific D-entry; D5 only touches
+attribution, already implemented).
+
+- `hub/hub/api/v1/agent_chat.py`: added `subject: Optional[str] = None` to `TimelineEntry`
+  (nullable — `send_message` requires it going forward per phase 4/5, but the column predates that
+  and older rows have none) and set it from `msg.subject` in `_message_to_timeline`, which
+  previously discarded it.
+- `hub/ui/src/api/agentChat.ts`: added the matching `subject?: string | null` field to the
+  `TimelineEntry` interface.
+- `hub/ui/src/components/agents/AgentTimeline.tsx`: split `MessageEntry`'s shared peer-traffic
+  render into two paths. Inbound is untouched — still the same always-open bubble. Outbound routes
+  to a new `OutboundMessageEntry`, following `WorkRow`'s shape exactly as directed: a clickable
+  header row (agent name → recipient, an inline truncated preview, the timestamp) plus `useState`
+  for expansion, body rendered below only when open. Preview text is `entry.subject` when present,
+  else the first line of `entry.content`, else the literal `'Message'` — task 6.5's readable
+  fallback for the nullable column. `queuedTag`/`withdraw` are still threaded through defensively
+  (outside the toggle button, not nested inside it — button-in-button is invalid HTML) even though
+  checking `groupIntoTurns` confirmed `outbound_peer` entries are never queued in practice: they're
+  always `delivered` per `_message_to_timeline`'s default, so that combination cannot occur today.
+- `hub/ui/src/__tests__/agentTimeline.test.tsx`: added a new describe block covering all five
+  task-6.1 scenarios (folds by default with the subject showing and the body hidden; two same-
+  recipient messages with different subjects produce two distinct visible lines; clicking expands
+  to reveal the content; an expanded entry survives a rerender that appends a later turn — checked
+  first that turn-level folding is never automatic on append, only by hand, so this wasn't
+  incidentally testing the wrong mechanism; an inbound message renders its full content
+  unconditionally) plus a sixth for the no-subject fallback (task 6.5). Left the pre-existing
+  outbound test (line 71) unmodified — its single-line, no-subject content happens to equal its
+  own fold preview, so it remains a valid (if incidental) assertion that folding didn't break it.
+- `hub/tests/test_agent_chat.py`: added `subject` as an optional keyword to the `_add_outbound_message`
+  test helper (previously had no way to set it) and two new tests — `subject` recorded correctly
+  when set, and defaults to `None` (not a `KeyError`/missing key) when omitted, covering the
+  nullable-column case from the API side.
+
+**Verified, not assumed.**
+- `pytest tests/test_agent_chat.py -q` → 12 passed (10 pre-existing + 2 new).
+- `cd hub/ui && npx vitest run src/__tests__/agentTimeline.test.tsx` → 34 passed (28 pre-existing +
+  6 new).
+- Full UI suite: `npx vitest run` → 121 files, 1226 passed (1220 from prep's runway check + 6 new;
+  the two "Error: boom" stack traces in stderr are `ErrorBoundary.test.tsx` intentionally throwing
+  to test the boundary, not a failure — file-level result confirms pass).
+- `npm run lint` → clean. `npx tsc --noEmit` → clean, no output.
+- `py -3.11 -m ruff check` and `black --check` on both touched Python files → clean.
+- **Full `hub/tests/` suite, chunked** (`ls tests/*.py | split -n l/3`, three ~59-file chunks, run
+  from `hub/` per the dead-end note about root-relative paths): chunk 1 — 752 passed, 1 skipped, 1
+  xpassed (265s). Chunk 2 — 1023 passed, 9 skipped (350s), no flake this split. Chunk 3 — 1 failure,
+  `test_spec_index.py::test_a_changed_acceptance_criterion_is_a_rewording` (an FR revision-ordering
+  assertion — nothing in this phase touches spec indexing or FR revisions); reran that file alone →
+  17 passed, confirming it as the same class of pre-existing order/state flakiness this log has
+  already attributed to other tests on other chunk splits across iterations 4 and 5, not this
+  phase's bug. Otherwise 979 passed, 2 skipped (239s). Total passed across the chunked run: 2754;
+  with the isolated-clean flake counted, 2755 — exactly 2753 (iteration 5's total) + 2 (this
+  phase's new `test_agent_chat.py` tests). Zero failures attributable to this change.
+- `npx openspec validate conversations-continue --strict` → valid.
+- `npm run build` → clean (2695 modules, one pre-existing >500kB chunk-size advisory, not new).
+  `py -3.11 scripts/refresh_ui_bundle.py` → refreshed `hub/hub/static/ui` and recorded the build
+  stamp.
+
+Ticked `tasks.md` boxes 6.1–6.7 — all seven ran and passed as described above.
+
+**`conversations-continue` phases 1–6 of 7 are now complete and verified.** Phase 7 (human
+verification, 7.1–7.8) remains explicitly out of scope for this loop — it needs a live trial Hub
+with two real agents exchanging messages, which only the operator can drive and judge. Do not tick
+its boxes or claim the change is done; phases 1–6 are done, the change is not.
+
+**Next:** the queue moves to the second half of the night — U0a, "UI system pass 1 - foundations".
+Read `design/IDENTITY.md` first (not yet read this run). Research via WebSearch and the T3 Code
+sourcemaps, then produce `design/mocks/_system/foundations.html`: the motion scale applied, an
+elevation scale from the existing surface steps, and every interaction state (hover, press,
+focus-visible, disabled, loading, selected, empty). This is a mock only — the UI-half limit applies
+from here on: do not touch `hub/ui/src` for any further queue item unless it is later explicitly
+part of `conversations-continue` (it is not; that change is done).

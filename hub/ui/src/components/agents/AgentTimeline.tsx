@@ -844,46 +844,41 @@ function MessageEntry({
     )
   }
 
-  // Peer traffic, both directions.
-  const isInbound = entry.kind === 'inbound_peer'
+  // Outbound peer traffic folds — see OutboundMessageEntry. Inbound stays a full, always-open
+  // bubble: it is the reply the operator is reading this thread for, not the agent's own
+  // delegating chatter (design.md phase 6).
+  if (entry.kind === 'outbound_peer') {
+    return (
+      <OutboundMessageEntry
+        entry={entry}
+        agentName={agentName}
+        colorByName={colorByName}
+        time={time}
+        wrapperStyle={wrapperStyle}
+        queuedTag={queuedTag}
+        withdraw={withdraw}
+      />
+    )
+  }
+
   const colors = agentColorVars(colorByName.get(entry.participant || ''))
   const { name } = participantLabel(entry, agentName)
 
   return (
     <div
       className="px-[13px] py-[10px] text-sm"
-      style={
-        isInbound
-          ? {
-              borderRadius: 'var(--radius-xl, 18px)',
-              border: `1px solid ${colors.border}`,
-              background: colors.tint,
-              ...wrapperStyle,
-            }
-          : {
-              borderRadius: 'var(--radius-xl, 18px)',
-              borderLeft: `2px solid ${colors.accent}`,
-              background: 'transparent',
-              ...wrapperStyle,
-            }
-      }
+      style={{
+        borderRadius: 'var(--radius-xl, 18px)',
+        border: `1px solid ${colors.border}`,
+        background: colors.tint,
+        ...wrapperStyle,
+      }}
     >
       <div className="flex items-center gap-[.4rem] mb-[5px] text-[11.5px] font-semibold" style={{ color: colors.accent }}>
-        {isInbound ? (
-          <>
-            {name}
-            <span className="font-normal" style={{ color: 'var(--text-3)' }}>
-              → {agentName}
-            </span>
-          </>
-        ) : (
-          <>
-            {agentName}
-            <span className="font-normal" style={{ color: 'var(--text-3)' }}>
-              → {name}
-            </span>
-          </>
-        )}
+        {name}
+        <span className="font-normal" style={{ color: 'var(--text-3)' }}>
+          → {agentName}
+        </span>
         <span className="font-normal" style={{ color: 'var(--text-3)' }}>
           {time}
         </span>
@@ -893,6 +888,79 @@ function MessageEntry({
       <div className="break-words" style={{ color: 'var(--text)' }}>
         <MarkdownMessage content={entry.content} />
       </div>
+    </div>
+  )
+}
+
+/** An outbound peer message, folded — header row plus an inline truncated preview, `useState`
+ * for expansion. Same shape as `WorkRow`: a delegation the agent sent is closer to a tool call
+ * than to a reply the operator wants to read inline, and unfolded it was most of why a thread
+ * with several delegations read as noise rather than conversation.
+ *
+ * `subject` is the preview when present; `send_message` requires it going forward, but the
+ * column is nullable and predates that requirement, so an older row falls back to the first
+ * line of its content (task 6.5) rather than showing nothing. */
+function OutboundMessageEntry({
+  entry,
+  agentName,
+  colorByName,
+  time,
+  wrapperStyle,
+  queuedTag,
+  withdraw,
+}: {
+  entry: TimelineEntry
+  agentName: string
+  colorByName: ColorLookup
+  time: string
+  wrapperStyle: React.CSSProperties
+  queuedTag: React.ReactNode
+  withdraw: React.ReactNode
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const colors = agentColorVars(colorByName.get(entry.participant || ''))
+  const { name } = participantLabel(entry, agentName)
+  const preview = entry.subject?.trim() || entry.content.split('\n')[0]?.trim() || 'Message'
+
+  return (
+    <div
+      className="px-[13px] py-[10px] text-sm"
+      style={{
+        borderRadius: 'var(--radius-xl, 18px)',
+        borderLeft: `2px solid ${colors.accent}`,
+        background: 'transparent',
+        ...wrapperStyle,
+      }}
+    >
+      <button
+        onClick={() => setExpanded((v) => !v)}
+        className="flex items-baseline gap-[.4rem] w-full min-w-0 text-left text-[11.5px] font-semibold"
+        style={{ color: colors.accent }}
+      >
+        <span className="flex-shrink-0">{agentName}</span>
+        <span className="font-normal flex-shrink-0" style={{ color: 'var(--text-3)' }}>
+          → {name}
+        </span>
+        {!expanded && (
+          <span className="truncate min-w-0 flex-1 font-normal" style={{ color: 'var(--text-3)' }}>
+            {preview}
+          </span>
+        )}
+        <span className="ml-auto flex-shrink-0 font-normal" style={{ color: 'var(--text-3)' }}>
+          {time}
+        </span>
+      </button>
+      {(queuedTag || withdraw) && (
+        <div className="flex items-center gap-[.4rem] mt-1">
+          {queuedTag}
+          {withdraw}
+        </div>
+      )}
+      {expanded && (
+        <div className="break-words mt-[6px]" style={{ color: 'var(--text)' }}>
+          <MarkdownMessage content={entry.content} />
+        </div>
+      )}
     </div>
   )
 }

@@ -158,6 +158,7 @@ async def _add_outbound_message(
     content: str,
     session_id: str | None,
     timestamp: datetime | None = None,
+    subject: str | None = None,
 ) -> None:
     async with async_session_factory() as session:
         if session_id and await get_conversation_by_id(session, session_id) is None:
@@ -177,6 +178,7 @@ async def _add_outbound_message(
                 sender=sender,
                 recipient=recipient,
                 content=content,
+                subject=subject,
                 type="message",
                 session_id=session_id,
                 conversation_id=session_id,
@@ -349,6 +351,48 @@ async def test_outbound_peer_message_placed_by_its_own_session_id(app, auth_head
         f"/api/v1/projects/proj-test/agent/{agent}/chat/sess-other", headers=auth_headers
     )
     assert other_resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_outbound_peer_message_carries_subject(app, auth_headers):
+    project_id = await _project_id(app, auth_headers)
+    agent = "agent_t5b"
+    await _add_outbound_message(
+        project_id,
+        msg_id="msg-t5b",
+        sender=agent,
+        recipient="other_agent",
+        content="the full body of the delegation",
+        session_id="sess-t5b",
+        subject="Investigate the flaky test",
+    )
+
+    resp = await app.get(
+        f"/api/v1/projects/proj-test/agent/{agent}/chat/sess-t5b", headers=auth_headers
+    )
+    entry = _by_id(resp.json()["entries"], "msg-t5b")
+    assert entry["subject"] == "Investigate the flaky test"
+
+
+@pytest.mark.asyncio
+async def test_outbound_peer_message_subject_defaults_to_none(app, auth_headers):
+    """`subject` predates being required by `send_message` — an older row has none."""
+    project_id = await _project_id(app, auth_headers)
+    agent = "agent_t5c"
+    await _add_outbound_message(
+        project_id,
+        msg_id="msg-t5c",
+        sender=agent,
+        recipient="other_agent",
+        content="delegating with no subject",
+        session_id="sess-t5c",
+    )
+
+    resp = await app.get(
+        f"/api/v1/projects/proj-test/agent/{agent}/chat/sess-t5c", headers=auth_headers
+    )
+    entry = _by_id(resp.json()["entries"], "msg-t5c")
+    assert entry["subject"] is None
 
 
 # ---------------------------------------------------------------------------

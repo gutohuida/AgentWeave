@@ -65,6 +65,9 @@ class TimelineEntry(BaseModel):
     delivery_state: Literal["delivered", "queued"] = "delivered"
     # The *other* agent's name — set for inbound_peer/outbound_peer only.
     participant: Optional[str] = None
+    # outbound_peer only. Nullable — `subject` is required by `send_message` going forward, but
+    # the column predates that requirement, so an older row has none.
+    subject: Optional[str] = None
     # agent_output only.
     output_kind: Optional[
         Literal["text", "thinking", "tool_use", "tool_result", "status", "diagnostic", "error"]
@@ -207,6 +210,7 @@ def _message_to_timeline(msg: Message) -> TimelineEntry:
         content=msg.content,
         timestamp=msg.timestamp,
         participant=msg.recipient,
+        subject=msg.subject,
     )
 
 
