@@ -2412,3 +2412,66 @@ assuming S6 is the only screen missing from the index, check whether `design/moc
 at all and which of S1–S5 it already covers — Z's own instruction is to rebuild the index whenever a
 screen finishes its four passes, so if it was never started, P4 needs to true up the whole index, not
 just append S6.
+
+## Iteration 32 — 2026-08-22T05:31:09+01:00 — S6 P4: finish, RATIONALE.md, true up the review index
+
+**Branch state on entry.** `autonomous/2026-08-21-refine-and-continue` at `09cb909` (heartbeat
+release after S6 P3). Matched STATE.json. Clean tree.
+
+**P4 — second iteration.** P3 found no defect in either mock file, only the pre-existing
+`--font-mono` bug in the real, shipped `PermissionRequestCard.tsx` (out of scope for a mocks-only
+queue item). Per that pass's own instruction, this iteration had nothing new to change in
+`restrained.html`/`considered.html` — confirmed rather than assumed by rereading both files in full
+once more against clause 5 with distance. No mock edit was made.
+
+**`design/mocks/S6/RATIONALE.md` written.** Follows the established shape (`S1`–`S5`'s RATIONALE.md
+files): what P1 researched (six findings, three of them missing features rather than styling gaps),
+what P2 built and why (the accidental Allow/Deny hierarchy resolved deliberately, a request-kind
+label + bordered detail sub-block modelled on T3's `ComposerPendingApprovalPanel` but restated in
+AgentWeave's own tokens, a pending-count indicator for parity with `AgentQuestionCard`, `AnswerForm`'s
+submit button rebuilt onto the real `Button` vocabulary, and a motion pass gated on
+`prefers-reduced-motion`), what was rejected (nothing — stated honestly, all six findings cleared the
+rejection test cleanly at P2, matching S5's own precedent for an honest "nothing rejected" pass
+rather than inventing one), the P3 adversarial-iterate recap (the resolved focus-ring test-timing
+false alarm, `restrained.html`'s deliberate no-hover-on-`.q-row` confirmed intentional not an
+oversight), and the `--font-mono` finding recorded in full with its small real-fix suggestion for
+later, outside this queue.
+
+**Trued up `design/mocks/index.html`, not just appended to.** Checked first, per the prior
+iteration's own instruction, whether S1–S5 were already present before assuming S6 was the only gap
+— they were: five `screen-status done` sections plus `_system`, confirmed by grepping every
+`screen-title` in the file. Only S6 was missing, still carrying the single leftover
+`pending`-placeholder section titled "S6 — S8 and the final review-index rebuild" from whenever that
+placeholder was first written. Replaced it with a real S6 section matching the S1–S5 pattern exactly:
+summary paragraph (the accidental-hierarchy finding stated as the lead, since it's the strongest one),
+four links (`restrained.html`, `considered.html`, `RESEARCH.md`, `RATIONALE.md`), and two `shot-row`s
+of screenshots. Generated the four screenshots fresh via a throwaway Playwright script
+(`testbed/scratch/shot_s6_index.py`, gitignored, confirmed via `git check-ignore -v` before writing,
+deleted after use) — both variants × both themes, 960×1400 full-page, matching every prior screen's
+capture convention — base64-encoded and inlined directly as `data:image/png;base64,...` `<img>` tags
+in the index, never written as tracked `.png` files, per the blanket `*.png` `.gitignore` rule already
+recorded in `dead_ends_inherited`. Read two of the four PNGs before embedding (`considered-dark`,
+`restrained-light`) to confirm they render correctly and legibly, not just that the script exited
+zero. Replaced the old placeholder's trailing "S6 — S8" title with a correctly retitled "S7 — S8 and
+the final review-index rebuild" pending section, since S6 is no longer part of what's left open.
+
+**Verified, not assumed.** A `testbed/scratch` Python script did the block-replace via an exact
+`old_block in text` + `count(old_block) == 1` assertion (no manual edit of an 8.9MB file), so the
+substitution either matched exactly once or the script raised — it ran clean. `grep -c
+"screen-title\">"` on the rebuilt index → 8 (7 screen sections + `_system`, `S7` counted), confirming
+no section was duplicated or lost. Loaded the rebuilt `index.html` directly in Playwright
+(`file://`), scrolled to the S6 section, and screenshotted it: renders correctly, both thumbnails
+visible and legible at a glance, all four links present, status badge reads "4/4 PASSES DONE",
+console showed only the three already-documented pre-existing `@fontsource` 404s (not new). All
+scratch scripts and screenshot directories deleted after use — `git status --short` after cleanup
+showed only `design/mocks/index.html` (modified) and `design/mocks/S6/RATIONALE.md` (new), both
+intentional.
+
+**`S6 is now fully done — all four passes (P1–P4) complete and verified, and reflected in the review
+index.**
+
+**Next:** S7 — "the overview screen (4 passes)," `OverviewPage`, the landing surface and first
+impression. Start with S7 P1 (`screen_pass_protocol.P1_explore`): read `OverviewPage.tsx` in full
+including its comments, `WebSearch` for dashboard/overview-screen UI/UX patterns, read the T3 Code
+sourcemaps for the closest equivalent surface, and write `design/mocks/S7/RESEARCH.md` with concrete,
+code-verified gaps. No mock this iteration — P2 is the next firing.
