@@ -2919,3 +2919,47 @@ and why, what was rejected and under which clause — note P3 found no defect, u
 S8-jobs to `design/mocks/index.html` with its variants. That finishes S8-jobs; the queue's `S8`
 sub-order moves to `S8-agents` next (`AgentsPage`/`AgentCard`/`AgentSettingsPage`), starting its own
 P1 research pass.
+
+## Iteration 40 — 2026-08-22T06:37:57+01:00 — S8-jobs P4: finish
+
+`screen_pass_protocol.P4_finish` for S8-jobs. P3 (iteration 39) had already found no defect, so
+this pass had nothing to iterate from — treated as a final honest check rather than fix-and-recheck,
+per the plan recorded in iteration 39's own `next_action`.
+
+**Real-interaction checks, not another look at the same screenshots.** Following S7's P4 precedent
+(a real narrow-viewport + keyboard pass caught a genuine bug static screenshots missed), ran the same
+two checks against both `restrained.html` and `considered.html`:
+
+- **420px reflow**: measured `document.documentElement.scrollWidth` directly via Playwright at both
+  1040px and 420px. Both files came back exactly `== viewport width` at both sizes — no overflow,
+  unlike S7 at this exact width.
+- **Real keyboard `Tab` walk**: read `document.activeElement`'s computed `box-shadow` after each of
+  15 `Tab` presses. First attempt produced a false alarm — `.btn.ghost`/`.btn.destructive` (the
+  Pause/Resume and Archive actions) appeared to have a fully transparent focus ring, which would
+  have been a real accessibility defect. Re-ran with a 250ms settle delay after each press (the first
+  script sampled mid-transition, catching the resting shadow and incoming ring blended together) —
+  corrected reading shows the identical ring on every tabbable element in both files. Traced the
+  actual mechanism rather than assuming: both mock files define `:focus-visible` explicitly for only
+  four selectors, but both `<link>` the real `hub/ui/src/index.css`, which carries a global
+  `button:not([data-slot="button"]):focus-visible` rule (`index.css:287-288`) that every real
+  `<button>` element inherits for free. Confirmed, not assumed. No real defect — the false alarm was
+  a timing bug in my own check script, caught before being recorded as a finding.
+
+**No fix needed.** Wrote `design/mocks/S8-jobs/RATIONALE.md` (research summary, all six findings
+validated against every rejection-test clause with none rejected, the two-variant decision, P3's
+Badge.tsx cross-check, and P4's two real-interaction checks including the false-alarm-caught-and-
+corrected detail). Captured all four renders (restrained/considered x dark/light) at 1040px full-page
+via a throwaway Playwright script, base64-encoded them, and inserted a new `S8-jobs` `screen-card`
+section into `design/mocks/index.html` (replacing the old generic "S8 and the final review-index
+rebuild" placeholder, which now only covers the remaining S8 sub-screens) via a Python script rather
+than the Edit tool, since the base64 payload is too large to push through a diff-based edit. Verified
+the insertion by loading `index.html` itself in Playwright afterward: the new section renders, all
+four thumbnails are legible, no console errors beyond the same 3 pre-existing font
+`ERR_FILE_NOT_FOUND`s every mock this run carries, no horizontal overflow at 1200px. Deleted the
+throwaway capture/verify scripts and PNGs after use (blanket `*.png` `.gitignore`, never committable
+as files).
+
+This closes S8-jobs (4/4 passes). Per `S8`'s own sub-order and `pre_authorised`'s "do not start a
+later S8 sub-screen while an earlier one has unfinished passes," next is **S8-agents**
+(`AgentsPage`/`AgentCard`/`AgentSettingsPage`) P1 — a fresh research pass, following the same
+protocol U0a/U0b/S1-S7/S8-jobs all used.
