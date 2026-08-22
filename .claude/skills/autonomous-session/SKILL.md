@@ -1,6 +1,6 @@
 ---
 name: autonomous-session
-description: Run a long unattended work session on an isolated branch, surviving the session deaths that kill naive loops. Asks what to work on up front (including "you choose"), commits and pushes every iteration, and keeps durable state on disk so any later session resumes exactly where the last one stopped. Use when the user says "work on this overnight", "keep working while I'm away", "work autonomously", "run until 10am", "do something crazy while I sleep", or asks to set up a recurring self-directed work loop. Reads the STATE.json that /autonomous-prep writes — run that first when the operator is still awake. Also pairs with /handoff and /resume.
+description: Run a long unattended Claude or Codex development session on an isolated branch, surviving interactive-session death by launching fresh headless processes from a Windows Scheduled Task. Commit and push every iteration and keep durable state on disk so later firings resume exactly where the last stopped. Use when the user says "work on this overnight", "keep working while I'm away", "work autonomously", "run Codex until 10am", "do something crazy while I sleep", "autonomous run", or asks for a recurring self-directed development loop. Read the STATE.json that autonomous-prep writes; run prep first while the operator is awake. Pair with handoff and resume for context cutovers.
 ---
 
 Work unattended for a long stretch, on a branch nobody else is standing on, in a way that survives
@@ -34,12 +34,25 @@ So there are two rules, and everything below follows from them:
 | `ScheduleWakeup` (`/loop` dynamic) | **No** | Yes | You are present, or a short run |
 | `CronCreate` (`/loop N m`) | **No** | Yes | Same |
 | Cloud schedule (`/schedule`) | Yes | **No** | Work needing no local Hub, CLI or repo |
-| **OS scheduled task running `claude -p`** | **Yes** | **Yes** | **Genuine unattended overnight work** |
+| **OS scheduled task running the selected CLI** | **Yes** | **Yes** | **Genuine unattended overnight work** |
 
 For anything that drives a **local** Hub, local `codex`/`claude` runtimes, or the local checkout,
-the cloud is not an option — it cannot reach them. The only durable local driver is an OS task
-invoking headless `claude -p`, where each invocation is a **fresh process** that reads the state
-file and performs exactly one iteration. See `scripts/` in this skill directory.
+the cloud is not an option — it cannot reach them. The durable local driver is an OS task invoking
+headless `claude -p` or `codex exec`, where each invocation is a **fresh process** that reads the
+state file and performs exactly one iteration. See `scripts/` in this skill directory.
+
+For a genuine unattended run, no permission path may wait for the operator:
+
+- Claude uses `--permission-mode bypassPermissions`.
+- Codex uses `exec --ephemeral --dangerously-bypass-approvals-and-sandbox` when STATE.json records
+  `unattended-full-access`.
+- Codex `workspace-contained` uses `--ask-for-approval never --sandbox workspace-write`. It never
+  prompts, but a prohibited operation fails. Do not choose it for work that needs capabilities the
+  sandbox cannot provide.
+
+Full bypass is intentionally dangerous. The autonomous branch makes Git history disposable; it
+does not isolate credentials, services or the rest of the machine. Record the operator's acceptance
+of that posture during prep.
 
 **Say which driver you are using and what it costs, before starting.** If the user is going to bed
 and you arm a session-bound loop, tell them plainly that it will probably not survive the night —
@@ -47,21 +60,21 @@ do not let them find out in the morning.
 
 ## Step 1 — Ask what to work on
 
-This step is the second half of a pair. `/autonomous-prep` is the first half, and it does this job
+This step is the second half of a pair. `autonomous-prep` is the first half, and it does this job
 properly — with the operator awake.
 
 **If `.claude/autonomous/STATE.json` already exists and is current, skip this step.**
-`/autonomous-prep` writes one: an ordered queue, an executable `next_action`, quoted limits, and the
+`autonomous-prep` writes one: an ordered queue, an executable `next_action`, quoted limits, and the
 decisions it could not settle. Re-asking would discard work already done with the operator awake.
 Read it, confirm the queue still matches what they want in one line, and go to Step 3.
 
-**If there is no `STATE.json` and the operator is present, run `/autonomous-prep` first** and come
+**If there is no `STATE.json` and the operator is present, run `autonomous-prep` first** and come
 back. It hunts the stalls this step cannot: unmade decisions, a missing spec the run would write
 badly and then implement, a stale Hub, a queue too vague for a stranger to execute. Every one of
 those has cost a real iteration here. The fallback below exists for the case where prep is not an
 option — a headless start, or an operator already gone — not as an equal alternative.
 
-Otherwise, **ask before proposing.** Use `AskUserQuestion` with the work options *and* an explicit
+Otherwise, **ask before proposing.** Offer the work options *and* an explicit
 "you choose" option, because the user may genuinely not want to decide — but that has to be their
 choice, not your assumption.
 
@@ -146,6 +159,8 @@ rewritten at the end of every iteration:
 ```json
 {
   "branch": "autonomous/2026-08-15-loop9-findings",
+  "runner": "codex",
+  "permission_mode": "unattended-full-access",
   "parent_branch": "hub-native-experience",
   "parent_sha": "3ac9808",
   "started_at": "2026-08-15T00:40:00+01:00",
@@ -191,7 +206,7 @@ If an iteration ends without a commit, it was too big. Split it. The overnight r
 
 ## Step 5 — When context fills
 
-Run `/handoff`, commit it, and let the next iteration `/resume` from it. The state file and the
+Run the `handoff` skill, commit it, and let the next iteration use `resume`. The state file and the
 handoff do different jobs: the handoff carries *understanding*, the state file carries *position*.
 Keep both.
 
@@ -241,9 +256,9 @@ evidence, and the user needs to know which is which.
 ## Reference — this repository
 
 - Work belongs on an autonomous branch; the parent branch is the user's to merge into.
-- Project instructions in `CLAUDE.md` still apply in full — in particular: never create
-  `.agentweave/`, `agentweave.yml` or `spec/` at the repository root; use `openspec/`, never the
-  `aw-*` skills; stage paths explicitly.
+- Project instructions in `AGENTS.md` and `CLAUDE.md` still apply in full. Read both through the
+  repository's normal instruction chain; use neither old autonomous logs nor this skill to override
+  their current staged-dogfooding rules. Stage paths explicitly.
 - Test projects live **outside** the repository.
 - Start the Hub detached so it outlives the session:
   ```

@@ -1,12 +1,12 @@
 ---
 name: autonomous-prep
-description: The first half of an unattended run — prepare it before /autonomous-session starts it. Reads the recent handoffs, the openspec state and the working tree to work out where the project actually is, interviews the operator about intent, then finds the things that would stall the run — unmade decisions, missing specs or explorations, an unready environment, a queue too vague to execute — and produces them up front. Ends by seeding STATE.json, which /autonomous-session reads instead of asking again. Use when the user says "prepare for a loop", "get ready to run overnight", "loop prep", "prep the autonomous session", "what do we need before we start", or before invoking /autonomous-session on anything substantial. Unrelated to /e2e-loop, which drives the product's own loop by hand.
+description: Prepare a durable unattended Claude or Codex development run before autonomous-session starts it. Read recent handoffs, project plans and the working tree; interview the operator about intent, runner, permissions and limits; remove decisions, missing artifacts and environment problems that would stall an overnight run; then seed STATE.json for fresh headless processes. Use when the user says "prepare for a loop", "get ready to run overnight", "loop prep", "prep the autonomous session", "prepare Codex to work while I sleep", or before invoking autonomous-session on substantial work. Unrelated to e2e-loop, which drives the product's own loop by hand.
 ---
 
 Work out what would stall the unattended run, and remove it before the run starts.
 
-This is one half of a pair. `/autonomous-prep` runs while the operator is awake and can answer
-questions; `/autonomous-session` runs unattended, possibly from a fresh headless process hours
+This is one half of a pair. `autonomous-prep` runs while the operator is awake and can answer
+questions; `autonomous-session` runs unattended, possibly from a fresh headless process hours
 later, and reads the `STATE.json` this skill writes. They are separate skills because they run at
 separate times — not because they are separate concerns.
 
@@ -46,6 +46,16 @@ If they have already said, use it. Do not re-ask.
 
 - **How long, and stop when?** A two-hour loop and an overnight loop want different queue depths.
 - **Is anything off limits** beyond the usual — a branch, a file, a service, a cost ceiling?
+
+Also settle the execution posture while the operator is present:
+
+- **Runner:** `claude` or `codex`. Do not infer this from the agent performing prep; the operator
+  may prepare with one and run overnight with the other.
+- **Permission mode:** use `unattended-full-access` for genuine overnight development that may need
+  arbitrary commands. It maps to Claude's `bypassPermissions` or Codex's
+  `--dangerously-bypass-approvals-and-sandbox`. Explain that branch isolation protects Git history,
+  not the machine. Use `workspace-contained` only for Codex work known to fit inside its sandbox;
+  it never asks for approval, but blocked commands fail instead of escalating.
 
 ## Step 2 — Now read, and work out where the project actually is
 
@@ -135,6 +145,9 @@ Every field earns its place:
   branch, or it works against a world the operator will not recognise. It is also the answer to the
   morning's first question, "what is this a diff against".
 - `queue` — ordered, each item executable, each with an id.
+- `runner` — exactly `claude` or `codex`; the Scheduled Task dispatches from this value.
+- `permission_mode` — `unattended-full-access` or `workspace-contained`. Never leave a real
+  overnight run able to ask for approval.
 - `current` and `next_action` — the first item, written for a stranger.
 - `limits` — the constraints, quoted.
 - `decisions_for_user` — **start it populated** with anything Step 3.1 could not settle. An empty
@@ -153,7 +166,7 @@ anyway.
 
 ## Step 5 — Hand off to the loop
 
-`/autonomous-session` takes it from here — it will read this `STATE.json` rather than asking again.
+`autonomous-session` takes it from here — it will read this `STATE.json` rather than asking again.
 If the run is genuinely unattended, install the durable driver; a session-bound loop will not
 survive the night, which is measured, not theoretical.
 
@@ -178,5 +191,5 @@ could have resolved in thirty seconds while awake.
   think it is running.
 - `pytest hub/tests/` is about seven minutes and exceeds the 600s command cap — run it in file
   chunks. `pytest hub/tests/ tests/` together fails collection.
-- Never create `.agentweave/`, `agentweave.yml` or `spec/` at the repository root; test projects
-  live outside the repo.
+- Follow the current root `AGENTS.md` and `CLAUDE.md`; their staged dogfooding rules supersede older
+  autonomous logs. Test projects live in `testbed/` or outside the repo as those files direct.

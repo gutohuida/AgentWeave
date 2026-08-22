@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    One autonomous-session iteration, as a fresh headless `claude -p` process.
+    One autonomous-session iteration, as a fresh headless Claude or Codex process.
 
 .DESCRIPTION
     Invoked by the Scheduled Task installed by install-driver.ps1. Holds nothing between firings --
@@ -20,6 +20,11 @@ param(
   # overnight case, the one this whole driver exists for.
   [Parameter(Mandatory = $true)][string] $StopAt,
   [string] $TaskName = "AgentWeaveAutonomousSession",
+  [ValidateSet("claude", "codex")]
+  [string] $Runner = "claude",
+  [ValidateSet("unattended-full-access", "workspace-contained")]
+  [string] $PermissionMode = "unattended-full-access",
+  [string] $AgentExecutable = "",
   # How recently STATE.json must have been touched for this firing to conclude a live session is
   # already doing the work and stand down. The driver is often installed as a *backup* to an
   # interactive session rather than instead of one; without this, both write to the same branch and
@@ -29,6 +34,16 @@ param(
 
 $ErrorActionPreference = "Stop"
 $logFile = Join-Path $Repo ".claude\autonomous\driver.log"
+
+if (-not $AgentExecutable) {
+  $agentCommand = Get-Command $Runner -ErrorAction SilentlyContinue
+  if (-not $agentCommand) { throw "$Runner CLI not found on PATH." }
+  $AgentExecutable = $agentCommand.Source
+}
+if (-not (Test-Path $AgentExecutable)) { throw "Agent executable not found: $AgentExecutable" }
+if ($Runner -eq "claude" -and $PermissionMode -ne "unattended-full-access") {
+  throw "Claude workspace-contained mode is not implemented."
+}
 
 # UTF-8 without a BOM. `Add-Content -Encoding utf8` on Windows PowerShell 5.1 writes one, and it
 # lands at the head of the file where it is invisible in an editor and shows up as a stray glyph
@@ -52,6 +67,35 @@ if ((Get-Date) -ge $stopAtInstant) {
 $stateFile = Join-Path $Repo ".claude\autonomous\STATE.json"
 if (-not (Test-Path $stateFile)) {
   Write-Log "No STATE.json - nothing to resume. Stopping."
+  try { Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction Stop } catch {}
+  exit 0
+}
+
+try { $state = Get-Content $stateFile -Raw | ConvertFrom-Json } catch {
+  Write-Log "STATE.json did not parse - refusing to launch an unattended agent."
+  exit 2
+}
+$stateRunner = if ($state.runner) { ([string]$state.runner).ToLowerInvariant() } else { "claude" }
+$statePermissionMode = if ($state.permission_mode) { ([string]$state.permission_mode).ToLowerInvariant() } else { "unattended-full-access" }
+if ($stateRunner -ne $Runner -or $statePermissionMode -ne $PermissionMode) {
+  Write-Log "Driver settings ($Runner/$PermissionMode) disagree with STATE.json ($stateRunner/$statePermissionMode). Stopping."
+  exit 2
+}
+$currentBranch = (& git -C $Repo branch --show-current).Trim()
+if ($LASTEXITCODE -ne 0 -or -not $currentBranch) {
+  Write-Log "Could not resolve the current Git branch. Stopping."
+  exit 2
+}
+if ($state.branch -and $currentBranch -ne [string]$state.branch) {
+  Write-Log "Current branch '$currentBranch' does not match STATE.json branch '$($state.branch)'. Stopping."
+  exit 2
+}
+
+# A completed queue must stop before spending another model invocation. The prior firing owns the
+# atomic transition to next_action=null; MultipleInstances=IgnoreNew guarantees we cannot observe
+# its half-written state while it is still running.
+if (-not $state.next_action) {
+  Write-Log "STATE.json has no next_action - queue complete. Unregistering '$TaskName'."
   try { Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction Stop } catch {}
   exit 0
 }
@@ -107,13 +151,31 @@ genuinely the user's, add it to decisions_for_user rather than guessing.
 '@
 
 Set-Location $Repo
-Write-Log "--- iteration start ---"
+Write-Log "--- iteration start ($Runner, $PermissionMode) ---"
 
-# --permission-mode bypassPermissions: nobody is present to answer a prompt, and a firing that
-# blocks on one silently consumes its whole window. The branch isolation is what makes this
-# acceptable; do not use this driver on a branch that matters.
-& claude -p $prompt --permission-mode bypassPermissions 2>&1 | ForEach-Object { Write-Log $_ }
-$code = $LASTEXITCODE
+# Nobody is present to answer a prompt. The full-access modes below are deliberately explicit:
+# branch isolation protects Git history, but it is not a machine sandbox. Use this driver only
+# after prep has established the limits and the operator has accepted that posture.
+# Native CLIs legitimately write progress to stderr. Windows PowerShell wraps those lines as
+# NativeCommandError records; with ErrorActionPreference=Stop, the first one aborts the wrapper.
+# Keep strict handling for the driver itself, but allow the child process to stream both channels
+# and use its exit code as the authority.
+$previousErrorActionPreference = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
+try {
+  if ($Runner -eq "claude") {
+    & $AgentExecutable -p $prompt --permission-mode bypassPermissions 2>&1 | ForEach-Object { Write-Log $_ }
+  } elseif ($PermissionMode -eq "unattended-full-access") {
+    # Pipe the prompt and close stdin explicitly. A Scheduled Task has no interactive stdin, and
+    # Codex otherwise waits to see whether inherited stdin contains an additional input block.
+    $prompt | & $AgentExecutable exec --ephemeral --color never --cd $Repo --dangerously-bypass-approvals-and-sandbox - 2>&1 | ForEach-Object { Write-Log $_ }
+  } else {
+    $prompt | & $AgentExecutable --ask-for-approval never exec --ephemeral --color never --cd $Repo --sandbox workspace-write - 2>&1 | ForEach-Object { Write-Log $_ }
+  }
+  $code = $LASTEXITCODE
+} finally {
+  $ErrorActionPreference = $previousErrorActionPreference
+}
 
 Write-Log "--- iteration end (exit $code) ---"
 exit $code
