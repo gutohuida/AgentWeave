@@ -1654,3 +1654,78 @@ No source change anywhere (mock-only screen, same as S1–S3). No `RATIONALE.md`
 themes, this time including a live hover test on `considered.html` to confirm the lineage highlight
 actually differentiates dim vs. active rather than just existing in the code, critique honestly
 against the rejection test, and fix what's found.
+
+## Iteration 23 — 2026-08-22T04:10:15+01:00 — S4 P3: iterate (task DAG / dependency board)
+
+**Verified branch/state on entry.** `git branch --show-current` = `autonomous/2026-08-21-refine-and-continue`,
+`git log --oneline -15` matched STATE.json's account of iteration 22 exactly (S4 P2 commit
+`e11a0eb` topmost real commit, heartbeat release `376e58d` after it). No reconciliation needed.
+
+**What P3 requires per `screen_pass_protocol`:** screenshot every variant in both themes, read the
+PNGs, critique honestly against the rejection test, fix what's found. Did exactly that, not more.
+
+**Method.** `scripts/uishot.py` looks for the Hub app's "Switch to dark mode" button per
+`dead_ends_inherited`, which these standalone mocks don't have, so used Playwright directly against
+`file://` URLs — the same fallback S3's P3 iteration used. Wrote a throwaway script at
+`testbed/scratch/s4p3/verify.py` (deleted after use; `testbed/scratch/` is gitignored regardless)
+that for each of {restrained, considered} × {dark, light}: loads the mock, records the baseline edge
+count and hidden-link label with layer0 collapsed, clicks the layer0 toggle, re-records both, and
+screenshots. For `considered.html` specifically it additionally hovers the live card (`sa-t1a`,
+"Successor inherits predecessor's lineage_id"), counts elements carrying `.lineage-active` /
+`.lineage-dim` / `.edge-lineage-active` / `.edge-dim`, screenshots the hover state, clears the hover,
+re-collapses layer0, and checks whether the ghost-stub markers actually resolve
+(`svg.querySelector('marker#sa-arrow-ghost')`).
+
+**Findings, checked against the rejection test:**
+
+1. **`restrained.html` — correct, no changes.** Edge count 4 → 7 on expanding layer0 (exactly the 3
+   previously-hidden edges), hidden-count label clears to empty on expand. Arrowheads and the
+   grey/amber/red/green colour-by-meaning read clearly in both themes — read all four screenshots
+   directly, not just the counts. The diagonal-line crossing between layer0→layer1 (visible in the
+   dark-expanded screenshot, "Add lineage_id"→"Widen forward lookup" crossing "Write test"→"Successor
+   inherits") is inherent to straight-line routing on a real DAG, not a bug — it's exactly what
+   `considered.html`'s orthogonal routing exists to fix, and `restrained.html`'s own subtitle says so
+   ("No new routing... see considered.html for those").
+
+2. **`considered.html` — hover-to-highlight lineage genuinely works, not just present in the DOM.**
+   Hovering `t1a` produced exactly the expected chain: ancestors `t0a`, `t0b` (both parents of `t1a`),
+   descendants `t2b` (child via `t1a→t2b`) and `t3a` (child of `t2b`) — 5 cards plus the layer0 toggle
+   (highlighted because two of its hidden children, `t0a`/`t0b`, are in the chain) = 6 elements with
+   `.lineage-active`; the remaining `t0c`, `t1b`, `t2a` = 3 with `.lineage-dim`. Edge counts matched:
+   4 `.edge-lineage-active`, 3 `.edge-dim`. Read the hover screenshots in both themes directly — the
+   `--ring` outline on active cards and the 32%-opacity dim on the rest are clearly distinguishable
+   against both the near-black and the light surface, confirming clause 2 (reuses an existing
+   selection token) and clause 1 (legible in both themes) actually hold, not just in theory.
+
+3. **Real bug found and fixed: ghost-stub arrowheads were invisible.** `considered.html`'s
+   `drawBoard()` emits ghost paths with `marker-end="url(#${prefix}-arrow-ghost)"` (for both the
+   standalone `sa-` and panel-embedded `pe-` boards) but neither `<svg><defs>` block ever defined a
+   `<marker id="sa-arrow-ghost">` / `id="pe-arrow-ghost"` — only `normal`, `gated`, `rejected`, `live`,
+   and `lineage` markers exist. A missing marker reference fails silently in the browser (no console
+   error, no visible warning), so the dashed ghost stubs beneath the collapsed layer0 toggle rendered
+   with no arrowhead — a real, user-visible regression from what `RESEARCH.md`'s finding 2 promised
+   ("a faint ghost stub... instead of nothing"). Confirmed programmatically
+   (`svg.querySelector('marker#sa-arrow-ghost')` → `false`) before fixing. Fixed by adding the two
+   missing `<marker>` elements (one per board prefix, matching the existing five markers' exact
+   shape/size/`orient="auto"` and using the `.arrowhead-ghost` class the CSS already defined but never
+   referenced from a marker). Re-ran the verification script: `ghost_marker_defined` now `True`,
+   `ghost_paths` still 3, all other edge/hover counts unchanged (proving the fix touched nothing else),
+   and re-read the collapsed-ghost screenshot directly — the small triangular arrowhead is now visible
+   at the end of each dashed ghost stub in both themes.
+
+**Not a bug, checked and dismissed:** the mock's own inherited console errors are the three
+pre-existing `@fontsource` `file://` 404s already documented in `dead_ends_inherited`, present on
+every mock under `design/mocks/` — not introduced by S4 and not actionable here.
+
+**Verified.** `py -3.11 -c "import json; json.load(...)"` on `STATE.json` after editing. Playwright
+script re-run after the fix confirmed all counts identical to before except `ghost_marker_defined`.
+Read all screenshots produced (restrained × 2 themes expanded; considered × 2 themes expanded, hover,
+and collapsed-ghost) directly rather than trusting the programmatic counts alone. `git status --short`
+→ only `design/mocks/S4/considered.html` modified (the two `<marker>` insertions); verification script
+and its PNGs deleted after use. No source under `hub/ui/src` touched (mock-only screen, unaffected by
+the C6 exception).
+
+**Next:** S4 P4 — a second iteration pass (re-look for anything else), then `RATIONALE.md` and add S4
+to `design/mocks/index.html`. Remember the `*.png` gitignore blanket rule when building the index —
+inline screenshots as data-URIs in the HTML itself rather than trying to commit loose PNGs, as
+`dead_ends_inherited` already flags for whichever iteration reaches queue item `Z`.
