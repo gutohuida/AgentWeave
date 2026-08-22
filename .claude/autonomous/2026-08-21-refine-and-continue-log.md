@@ -2161,3 +2161,73 @@ read those components (confirm the permission-card's actual filename first, not 
 run), `WebSearch` for confirmation-dialog / high-stakes-decision UI patterns, check the T3 Code
 sourcemaps for anything comparable, and write `design/mocks/S6/RESEARCH.md`. No mock file this pass
 — P2 is the next firing.
+
+## Iteration 29 — 2026-08-22T05:06:14+01:00 — S6 P1: explore — questions and permission prompts
+
+**Branch state on entry.** `autonomous/2026-08-21-refine-and-continue` at `632bf7b` (release
+heartbeat for next firing), matching STATE.json. Clean tree.
+
+**Identified the actual surface first**, since STATE.json flagged the permission card's filename
+as unconfirmed. Grepped the tree: five components across three surfaces, not one screen —
+`QuestionsPanel`/`AnswerForm` (`components/questions/`, a dedicated app tab reached via
+`App.tsx:373`, page id `questions`), `QuestionInterruptCard` (`components/questions/`, an
+overview-page banner at `OverviewPage.tsx:177`), and `AgentQuestionCard` / `PermissionRequestCard`
+(`components/agents/`, inline in the live conversation above the composer). The last two already
+share `.conversation-interject` / `.interject-*` CSS (`index.css:541-624`) — a real existing family,
+not something to invent. Confirmed S1 (conversation + composer, already done) never touched these
+by grepping `design/mocks/S1/*.md` for "interject" and the four component names — zero hits, so
+this is genuinely new ground.
+
+**Read all five components in full**, including their comments — `AgentQuestionCard`'s
+`nobodyWaiting` / batched-answer reasoning (lines 67-70, 150-166) is a deliberate prior UX decision,
+not a styling gap, and its number-key-selects-but-does-not-submit design already independently
+matches a research finding below before that research was read.
+
+**WebSearch** (two queries, sources recorded in `RESEARCH.md`): permission/approval UI for AI
+agents in 2026 (context-rich requests decide faster; avoid preselection, countdown pressure, and
+shortcuts on irreversible actions; reversibility × impact classification), and chat structured-quick-
+reply / keyboard-shortcut patterns (structured choices to open a turn, free text once the
+conversation has direction — matches `AgentQuestionCard`'s own copy).
+
+**T3 Code sourcemaps** — grepped `index-DiDfaONg.js.map`'s `sources` list (not a blind text grep,
+which false-positived on syntax-highlighting language packs like `cobol`/`bsl` containing
+"approve"-adjacent substrings) for permission/approval/confirm/question, found three direct
+analogues, and pulled `sourcesContent` for each: `ConfirmDialogHost.tsx` (modal confirm — a
+different architecture than AgentWeave's inline card, correctly not adopted),
+`ComposerPendingApprovalPanel.tsx`, and `ComposerPendingApprovalActions.tsx`. The panel is the
+closest analogue to `PermissionRequestCard` and surfaced three concrete gaps: it categorizes the
+request into a kind (command / file-read / file-change) with a label *before* the value, where
+AgentWeave's `describe()` returns one bare string with no category; it renders the detail in a
+visually distinct bordered sub-block with `max-h-40 overflow-auto`, where AgentWeave's version is a
+plain paragraph that just breaks ugly on a long command; and it shows a `1/{pendingCount}` count
+that `AgentQuestionCard` already has (`interject-count`) but `PermissionRequestCard` does not. The
+actions file surfaced a real missing **feature**: four actions (Cancel turn / Decline / *Always
+allow this session* / Approve once) against AgentWeave's two (Allow / Deny) — flagged per the
+pre-authorization to mock what research turns up and note it in `RATIONALE.md`, not implement it.
+
+**A hierarchy question worth flagging rather than silently fixing**: `PermissionRequestCard`'s
+`Allow` button carries no `variant` prop, which defaults to `ghost` (transparent, borderless at
+rest) per `buttonVariants.ts`'s `defaultVariants`; `Deny` is `variant="outline"` (bordered). The
+affirmative action on the single highest-consequence decision in the product is visually the
+quietest button in the vocabulary, and Deny outranks it. Recorded as an open question for P2 rather
+than assumed to be a bug — restrained hierarchy that avoids nudging toward the riskier action is a
+legitimate reading too.
+
+**Wrote `design/mocks/S6/RESEARCH.md`** — the five-component/three-surface map, what's already good
+and must not be undone, both search results with sources, the three T3 findings with concrete
+gaps against AgentWeave's current code, a full gap list per component (including `QuestionsPanel`/
+`AnswerForm`'s `AnswerForm` submit button being raw inline styles entirely outside the `Button`
+component, so it gets none of the raised/quiet/focus-ring vocabulary the rest of the product now
+has), the three missing-feature items to mock and flag, and what P2 will build.
+
+**No mock file this pass** — P1 is research only, per `screen_pass_protocol`.
+
+**Verified.** `py -3.11 -c "import json; json.load(open('.claude/autonomous/STATE.json'))"` after
+editing. `git status --short` → `design/mocks/S6/RESEARCH.md` new only — staged and committed.
+
+**Next:** S6 P2 — validate `RESEARCH.md` against `IDENTITY.md`'s rejection test (nothing in it
+proposes a new hue, a modal architecture change, or anything else that reads as a clause failure on
+first pass, but P2 must state that explicitly rather than skip the check), then build two or three
+`design/mocks/S6/<variant>.html` files covering the `PermissionRequestCard` command-approval case
+(richest, highest stakes), the `AgentQuestionCard` multi-select case, and the `QuestionsPanel`
+blocking-list case, in both themes.
