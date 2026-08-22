@@ -516,3 +516,75 @@ semantic tokens (`--green`/`--amber`/`--red`/`--purple`) and the 8-colour agent 
 IDENTITY.md, and fixing that inconsistency is explicitly in scope; inventing a ninth colour is not.
 Read `RowMenu.tsx`, `Badge.tsx`, and wherever selects/toggles currently live before mocking them —
 same "read the current comments first" discipline as this iteration.
+
+## Iteration 8 — 2026-08-22T01:49:57+01:00 — U0b: UI system pass 2, component vocabulary
+
+Branch/log/STATE.json all reconciled cleanly on entry — clean tree, HEAD matched the "released
+heartbeat" commit, no drift.
+
+**P1 — explore.** Read `buttonVariants.ts` in full again for the sizes `foundations.html` had not
+covered (`xs/sm/md/lg/icon/icon-sm/icon-xs/pill` — it only demoed the four variants at one size),
+`RowMenu.tsx` (the existing menu pattern and its 2026-08-08 operator quote on why it's hover/focus,
+never right-click), `Badge.tsx`/`StatusBadge` (the `tone()` derivation and the status/variant
+colour tables), and every native `<select>`/`<input type=checkbox>` call site
+(`AgentSettingsControls.tsx`, `JobForm.tsx`, `ProjectSettingsPanel.tsx`) — confirmed all are the
+bare UA control with only background/border/radius on the box; `grep -rn "role=\"switch\""
+hub/ui/src` → zero matches, no toggle/switch component exists anywhere. Two `WebSearch` calls
+(button taxonomy/hierarchy conventions; semantic colour-coding systems) confirmed the existing
+four-variant taxonomy (`primary`/`outline`/`ghost`/`destructive`) already matches the mainstream
+primary/secondary/tertiary/destructive split under different names — nothing needed inventing, only
+naming and completing the size matrix. Also found, by reading rather than assuming: `Badge.tsx`'s
+`INFO = tone('var(--blue)')` colours `in_progress` with `--blue`, which IDENTITY.md's clause 2
+reserves for focus/selection only — an existing inconsistency between shipped code and the
+identity doc, not something to fix (source is out of scope) but something not to carry forward into
+the new colour-coding system. Confirmed `--purple` is already used as a category (not status) colour
+at every existing site — `EventRow.tsx`, `LogLine.tsx`, `MessageCard.tsx`, every entry in
+`fileIcons.ts`. Appended a "U0b research" section to `design/mocks/_system/RESEARCH.md` with all of
+the above, sources, and the validated-against-rejection-test argument for the one new visual
+element (a checkbox/toggle checked-fill using `--ring`/`--blue`, defended as "selection" under
+clause 2, not a new brand or status role).
+
+**P2 — validate + mock.** Built `design/mocks/_system/controls.html`. Covers: the full 4×8
+button taxonomy grid (every variant at every size, matching `buttonVariants.ts`'s exact
+height/radius/padding per size); a 4-variant × 5-state grid (rest/hover/press/focus-visible/
+disabled) at one representative size, since state treatment doesn't vary by size — repeating it
+across all eight would have been redundant, not more thorough; text input/textarea/select in
+rest/hover/focus/error/disabled, with the select's UA arrow replaced by a lucide-style chevron via
+`appearance: none` (no new icon source — same `Icon`-style inline SVG convention as everywhere
+else in this mock series); a checkbox, radio, and toggle/switch (the toggle is the one genuinely
+new shape — nothing like it exists in the product today) each in checked/unchecked/hover/focus/
+disabled; `RowMenu.tsx`'s pattern restated as static markup (trigger, item, disabled-with-reason,
+separator, danger item); three badge/chip families (status pills reusing `StatusBadge`'s tone
+recipe, `--purple` category chips, and 8-colour agent identity chips with their `-tint`/`-border`
+derivations); and a colour-coding rules table — one row per token family (`--green`/`--amber`/
+`--red`/`--purple`/`--agent-1..8`/`--blue`), each with an explicit "answers" and "never" column,
+closing with `--blue`'s row stating plainly that `Badge.tsx`'s current "in progress = blue" breaks
+this rule today and is not reproduced here.
+
+**Verified, not assumed — and caught a real bug.** `py -3.11` + Playwright, `file://` URL (same
+reasoning as U0a: `uishot.py` expects the live app's own toggle), both themes, full-page
+screenshots, read as PNGs. First render: the "disabled, checked" checkbox and "disabled, on" switch
+cells rendered as merely disabled — no checked fill, no visible checkmark/thumb position — because
+both were driven by the same `data-force` attribute and `data-force="disabled"` silently overrode
+the checked look. Root cause: `data-force` was being used for two unrelated axes (interaction state
+vs. checked state) that need to compose, not exclude each other. Fixed by splitting into an
+independent `data-checked` attribute, applied it consistently across checkbox/radio/switch markup
+and CSS, re-screenshotted, and confirmed both combinations now render correctly in both themes.
+Final screenshots pass the rejection test: no new hue anywhere, `--blue`/`--ring` appears only on
+focus rings and the two checked-control fills (selection, per clause 2 — never a button fill or a
+status colour), one radius scale, no glass/gradient/shadow-as-decoration, and beside the current
+components everything reads as the same application's own vocabulary, named and completed rather
+than redesigned. Also removed one piece of dead CSS (`​.chip .dot`, written then never used in the
+final markup) before shipping. Screenshots deleted after reading — not committed, per the blanket
+`*.png` `.gitignore` rule already flagged in `dead_ends_inherited` for whoever reaches the Z queue
+item.
+
+**Next:** S1, "Screen 1 - conversation + composer + left navigation," the main screen and the first
+of the four-pass numbered screens. This iteration's `next_action` scopes the very next firing to
+P1 (explore) only: read `ConversationView.tsx`, `AgentTimeline.tsx` (including the `OutboundMessageEntry`
+this loop's own C6 phase added, and the blue-tinted-bubble-removal comment IDENTITY.md already
+cites by name), `Composer.tsx` + its control row, and the actual sidebar/nav components (confirm
+real filenames — `SidebarItem` in the queue's S1 description may not be the literal component name),
+then `WebSearch` for chat/conversation UI patterns, and write `design/mocks/S1/RESEARCH.md`. Do not
+build the mock in that iteration — P2 (validate + mock) is the following one, per the established
+one-pass-per-firing rhythm from `_system`.

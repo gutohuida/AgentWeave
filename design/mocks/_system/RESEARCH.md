@@ -127,3 +127,80 @@ and no glass/gradient/skeuomorphism — the skeleton shimmer is a `color-mix` sw
 existing `--surface-3`/`--border-hi`, not a gradient surface treatment. Nothing here reads as a
 different product; it is the existing five-surface, three-duration, one-easing system, named and
 applied to the states IDENTITY.md lists as free.
+
+## U0b research — button taxonomy, form controls, colour coding
+
+Read first: `buttonVariants.ts` in full (its own comments on the three control rules — permanent
+transparent border, padding subtracting border thickness, raised-lit-from-above/inverts-under-press
+— already state the taxonomy's mechanics precisely), `RowMenu.tsx` (the existing menu pattern —
+Radix `DropdownMenu`, opened by a persistent-on-hover three-dot trigger, never right-click, per an
+explicit 2026-08-08 operator quote preserved in its comment), `Badge.tsx`/`StatusBadge` (status and
+variant colour tables, `tone()` deriving `bg`/`border` from one token via `tint()` so text and
+container can never drift apart), and every `<select>`/`<input type=checkbox>` call site
+(`AgentSettingsControls.tsx`, `JobForm.tsx`, `ProjectSettingsPanel.tsx`) — all native, unstyled
+beyond a background/border/radius on the `<select>` box itself; the checkbox is the bare UA
+control with no themed replacement anywhere, and no toggle/switch component exists in the codebase
+at all (`grep -rn "role=\"switch\"" hub/ui/src` — zero matches).
+
+**What the current product's button taxonomy already is, precisely.** Four variants —
+`primary` (filled, lit-from-above, one per view), `outline` (bounded, unfilled, the "secondary"
+role under a different name), `ghost` (blends in until touched, the "tertiary" role), `destructive`
+(danger-coloured, same shape rules as the other three) — cross eight sizes: `xs/sm/md/lg` (text
+buttons, 28–40px tall) and `icon/icon-sm/icon-xs` (square, 28–36px) plus `pill` (content-sized, no
+built-in radius so a rounded-full caller does not have to fight specificity). `controls.html`
+demonstrates the full 4×8 matrix once, then each variant's five states (rest/hover/press/
+focus-visible/disabled) once at a representative size — repeating five states across all eight
+sizes would be redundant since the state *treatment* does not vary by size, only the size does.
+
+**External research confirms the existing four-variant taxonomy already matches convention.**
+Design-system guidance converges on primary (single, filled, the one action a screen wants taken) /
+secondary (outlined, common but not primary) / tertiary (least emphasis, blends into the layout) /
+destructive (danger-coloured, kept away from constructive actions, spaced or dividing rather than
+adjacent) — exactly `primary`/`outline`/`ghost`/`destructive` under AgentWeave's own naming. Nothing
+here calls for a fifth variant; the gap is that only 9 sites reference the motion tokens the
+variants already define, matching U0a's finding, not a missing variant.
+[Button hierarchy (primary/secondary/tertiary)](https://subux.pro/guides/article/button-hierarchy-primary-secondary-tertiary) ·
+[Design System Breakdown: Button](https://clipcontent.substack.com/p/design-system-breakdown-button-22-11-08)
+
+**Colour coding: semantic tokens are functional labels, not decoration**, and the mainstream
+guidance is to keep the set small (success/warning/danger/info) and apply it by *meaning*, never by
+preference — exactly what `StatusBadge`'s `STATUS_STYLES` table already does for task status. The
+one place today's code departs from IDENTITY.md's own rule: `Badge.tsx`'s `INFO = tone('var(--blue)')`
+colours `in_progress` with `--blue`, and IDENTITY.md clause 2 reserves `--blue` for focus and
+selection only. This mock does not carry that choice forward — `controls.html`'s colour-coding
+system uses only `--green`/`--amber`/`--red`/`--purple` for status/category and keeps `--blue` out
+of the status vocabulary entirely, matching the identity rather than the one existing outlier.
+Flagging it here rather than fixing `Badge.tsx` itself, which is source, not a mock, and outside
+this iteration's scope.
+[Semantic Colors in UI/UX Design](https://medium.com/@zaimasri92/semantic-colors-in-ui-ux-design-a-beginners-guide-to-functional-color-systems-cc51cf79ac5a) ·
+[Designing Semantic Color Systems for UI Clarity](https://uxdictionary.io/article/designing-semantic-color-systems-for-ui-clarity)
+
+**`--purple` is already a category colour, not a status one**, confirmed across every existing call
+site: task-kind events (`EventRow.tsx`, `LogLine.tsx`), the message-card category chip
+(`MessageCard.tsx`), and every file-type icon in `fileIcons.ts` (markdown/xml/html/css/images all
+render `--purple` regardless of whether anything succeeded or failed). `controls.html`'s
+colour-coding rules keep this distinction explicit: green/amber/red answer "how did this go",
+purple answers "what kind of thing is this" — the two questions never share a colour, and the
+8-colour `--agent-1..8` scale answers a third question ("whose is this") that also never borrows
+from the other two.
+
+**Form controls.** No custom checkbox, radio, toggle/switch, or styled `<select>` exists anywhere in
+the codebase today — every instance is the bare UA control, which is why they were not already
+covered by U0a (that pass generalised existing patterns; these have no existing pattern to
+generalise). `controls.html` builds all four from the same primitives U0a already established: the
+`.demo-input`-style border/background/focus-ring recipe for text/select boxes, `--row-hover`-style
+neutral fills for hover, and (new, argued below) `--blue` for a checkbox/toggle's *checked* fill —
+defensible under clause 2 as literally "selection," the same justification `--ring`/`--blue` already
+carries for a selected row or focused control, and nowhere used as a status or brand colour.
+[Semantic Colors in UI/UX Design](https://medium.com/@zaimasri92/semantic-colors-in-ui-ux-design-a-beginners-guide-to-functional-color-systems-cc51cf79ac5a)
+
+## Validated against the rejection test (U0b)
+
+Same eight constraints as U0a, rechecked for this pass's specific additions: the checkbox/toggle
+checked-fill use of `--blue` is selection, not a new brand or status role, so clause 2 holds: colour
+coding uses only `--green`/`--amber`/`--red`/`--purple` plus the existing `--agent-1..8` scale, no
+ninth colour introduced; every control's radius derives from `--radius-sm/md/lg`; every duration is
+`--dur-fast` (all control state changes are direct feedback, never `--base`/`--slow`); the styled
+`<select>`'s chevron is an inline `Icon`-style SVG, not a new icon source; density is preserved —
+control heights match the existing `buttonVariants` size scale (28/32/36/40px) rather than growing
+to accommodate the new visual treatment.
