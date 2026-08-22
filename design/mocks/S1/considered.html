@@ -125,6 +125,10 @@
      not just the native browser title restrained keeps. */
   .msg-time-pop { position: absolute; left: 50%; top: calc(100% + 5px); transform: translateX(-50%) translateY(-3px); white-space: nowrap; padding: 4px 8px; border-radius: var(--radius-sm); background: var(--surface-3); border: 1px solid var(--border-hi); color: var(--text); font-size: 10.5px; font-weight: 500; box-shadow: 0 4px 12px rgba(0,0,0,0.22); opacity: 0; pointer-events: none; transition: opacity var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease); z-index: 10; }
   .msg-time-wrap:hover .msg-time-pop, .msg-time-wrap[data-force="hover"] .msg-time-pop { opacity: 1; transform: translateX(-50%) translateY(0); }
+  /* P3 fix: the operator's own row right-aligns, so a centred popover ran past the frame's
+     right edge and got clipped by .frame's overflow:hidden. Anchor from the right instead. */
+  .msg-row.mine .msg-time-pop { left: auto; right: 0; transform: translateY(-3px); }
+  .msg-row.mine .msg-time-wrap:hover .msg-time-pop, .msg-row.mine .msg-time-wrap[data-force="hover"] .msg-time-pop { transform: translateY(0); }
   .msg-copy { opacity: 0; width: 20px; height: 20px; border-radius: var(--radius-sm); display: inline-flex; align-items: center; justify-content: center; color: var(--text-3); background: transparent; border: none; cursor: pointer; transition: opacity var(--dur-fast) var(--ease), background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease); }
   .msg-copy svg { width: 12px; height: 12px; }
   .msg-row:hover .msg-copy { opacity: 1; }

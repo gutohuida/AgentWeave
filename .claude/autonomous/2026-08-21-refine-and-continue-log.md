@@ -731,3 +731,71 @@ above it (noticed but not fixed this iteration, since forcing states for a demo 
 the popover does on a real hover in the real app), whether the considered variant's motion reads as
 too busy once several loops are visible together, and whether "restrained" is restrained enough
 relative to "considered" to earn being called a lesser degree rather than an unfinished one.
+
+## Iteration 11 — 2026-08-22T02:13:51+01:00 — S1 P3: iterate on the conversation/composer/navigation mocks
+
+Branch/log/STATE.json reconciled cleanly on entry — clean tree, HEAD matched iteration 10's commit
+(`6c0c36c`).
+
+**Captured.** `scripts/uishot.py` assumes the live app's own "Switch to dark mode" button role,
+which these static mocks don't have (they flip `document.documentElement.dataset.mode` via a
+`.theme-toggle` click handler instead) — per iteration 10's note, used a direct-Playwright script
+instead: both variants, both themes, 1440×1000 viewport, full-page PNGs, console errors captured.
+No console errors beyond the pre-existing `net::ERR_FILE_NOT_FOUND` for a webfont the standalone
+mocks don't carry (same as every prior pass, not a regression). Read all four PNGs.
+
+**Found, by looking.** Two real defects in `considered.html`, invisible from source review alone:
+
+1. **Confirmed the concern iteration 10 flagged and left open.** The context-usage popover
+   (`.ctx-pop`, `right: 0; top: calc(100% + 6px); z-index: 20`) drops straight down from the header
+   and, at the "live composition" panel's actual scroll position, lands squarely over the
+   operator's own message bubble ("Add a `start_new_thread` flag to..." — cropped to unreadable in
+   the screenshot). Traced this against how real popovers/dropdown menus behave (GitHub's
+   notification panel, VS Code hover cards, any header dropdown) — transient content-covering on
+   hover is the standard, accepted pattern for exactly this kind of control, and it disappears the
+   instant the pointer leaves; the reason it looks alarming here is that the demo force-pins it
+   open (`data-force="hover"`) for the static capture, which is a demo artefact, not a live-usage
+   one. Concluded: **no structural fix**, recorded as a reasoned judgement call rather than left
+   ambiguous. If this becomes a real component later, the same tradeoff applies to `ControlPill`'s
+   existing popovers, which already overlay content the same way.
+2. **A genuine, unambiguous bug**, not a judgement call: the operator's own message-timestamp
+   tooltip (`.msg-time-pop`, centred via `left: 50%; transform: translateX(-50%)`) sits under a
+   right-aligned row near the frame's right edge, so the centred tooltip ran past `.frame`'s
+   `overflow: hidden` boundary and was clipped mid-text ("Fri 22 Aug, 00:4" — cut). Confirmed via a
+   cropped screenshot of just `.frame`'s top 220px in both the diagnosis and the fix. **Fixed**:
+   added a `.msg-row.mine .msg-time-pop` override (right-anchored, no centring transform) scoped to
+   only the operator's own row — every other message row is left-aligned with room to spare, so
+   the generic centred rule stays correct for them. Re-captured and re-cropped after the fix: full
+   tooltip text ("Fri 22 Aug, 00:41:07") now renders entirely inside the frame, both themes.
+   `restrained.html` was never at risk — it uses the native `title` attribute throughout, which the
+   browser itself keeps on-screen.
+
+**The other two questions iteration 10 asked to re-examine, resolved by inspection:**
+- *Is "considered" too busy once several motion loops are visible together?* Checked every
+  `@keyframes` in the file: `slideIn` (sidebar group entrance) plays once, not a loop;
+  `dotPulse`/`spin`/`ringOut` only ever render inside the isolated "Interaction states" reference
+  grid, whose entire purpose is showing every state side by side — not a claim about the live
+  screen. In the live-composition panel itself, the only continuous loop visible is one subtle
+  `livePulse` green dot on the armed spec-control pill (1.6s opacity pulse). Not busy — no change
+  needed.
+- *Is "restrained" restrained enough relative to "considered"?* Read both full-page screenshots
+  side by side: restrained has no custom popover (native `title` only), no lift-on-hover, no
+  live-dot, no header-title hover chevron, no empty-state motion — considered has all five. That is
+  a clear, legible difference in degree, not two copies of the same file. No change needed.
+
+**Verified.** Re-ran the capture script after the edit: 0 console errors, both variants, both
+themes; the fixed tooltip and the untouched popover overlay both confirmed by reading the
+resulting PNGs (not assumed from the diff). Screenshots deleted after reading (temp dir outside
+the repo this time — `/tmp/s1shots`, nothing to `.gitignore` or clean up in-tree).
+
+**Not done this iteration, deliberately:** this is P3's *first* iterate pass; `screen_pass_protocol`
+allows a second one in P4 before `RATIONALE.md` and the review-index entry. Only `considered.html`
+changed — `restrained.html` had no defect to fix.
+
+**Next:** S1 P4 — a second iterate pass (re-screenshot both variants/themes once more after this
+fix, confirm no regression, look once more for anything missed), then write
+`design/mocks/S1/RATIONALE.md` (what was researched → what changed → what was rejected and under
+which clause, including the popover-crowding judgement call above) and add S1 to
+`design/mocks/index.html` with before/after shots — noting `dead_ends_inherited`'s point about the
+blanket `*.png` `.gitignore` rule: inline the shots as data-URIs in the index HTML itself rather
+than committing PNG files.
