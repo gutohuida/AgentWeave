@@ -1573,3 +1573,84 @@ the usual `.claude/autonomous/` state churn.
 variant (narrower column, layers likely need to stack), two or three variants, realistic multi-layer
 content (a collapsed terminal layer, an off-board reference, a `gated_on_rejected` card, a
 live/running card), both themes. Reuse S2's `TaskCard` treatment rather than a third card style.
+
+## Iteration 22 — 2026-08-22T04:02:42+01:00 — S4 P2: validate + mock (task DAG / dependency board)
+
+**S4 P2 done.** Validated `design/mocks/S4/RESEARCH.md`'s findings against `design/IDENTITY.md`'s
+rejection test (none discarded — every finding was a colour/motion/state/hierarchy gap, nothing
+proposed a new hue, radius, or icon source) and built two variants, each containing **both** a
+standalone form and a panel-embedded form, per `pre_authorised` and `decisions_for_user`
+D-dag-placement.
+
+**Card treatment reused verbatim.** Both files copy S2's `TaskCard` CSS classes (`task-card`,
+`card-body`, `badge`, `b-success/info/danger/agent`, `chip-req`) rather than inventing a third card
+style, per `next_action`.
+
+**The edges are genuinely live, not illustrated.** Rather than hand-placing SVG coordinates, both
+files run the same technique `DependencyBoard.tsx`'s `useEdgeLines` already uses:
+`getBoundingClientRect` on each card after layout, redrawn on window resize and on every
+collapse-toggle click. Verified this actually works with a throwaway Playwright script (not
+committed — `.claude/autonomous/scratch/` is gitignored and the script plus its screenshots were
+deleted after use): `restrained.html` shows 8 visible cross-board edges with layer 0 collapsed,
+rising to 11 after clicking the toggle to expand it — exactly the 3 edges that were hidden behind
+the collapsed layer, not a stale count. `considered.html` shows 8 real + 6 ghost-stub edges
+throughout (3 hidden edges × 2 boards, each rendering a faint dashed stub instead of nothing), with
+the ghosts swapping for real edges on expand and the total staying at 14 — confirming the ghost
+mechanism and the real mechanism are counting the same edges, not double-drawing or dropping any.
+
+**Content is realistic and answers every queue-required element in one graph:** a fully-terminal
+collapsed layer 0 (3 approved tasks), a rejected task (`t1b`, "Widen forward lookup") whose rejection
+propagates as a red edge into a `gated_on_rejected` card (`t2a`, "Reverse resolution wiring", which
+also carries the off-board `REQ-118` reference connected by a real dashed line down to it — finding 4
+fixed, not just described), a live/running card (`t1a`, green ring, green animated edge into its
+gated successor), and the layer stall-summary sentences rendered with real visual weight (finding
+9) instead of bare text.
+
+**`restrained.html`** (smallest fix): straight lines (unchanged routing), an arrowhead
+(`marker-end`), and colour that means something — grey default, amber when the edge's target is
+gated, red when the source was rejected, green + animated dash when the source is live — plus a
+hidden-link count appended to the "3 done" toggle text ("· 3 links hidden"). No hover interaction,
+no ghost lines, no rerouting.
+
+**`considered.html`** (fuller application): orthogonal step-routed edges per React Flow's
+recommendation for technical diagrams (recorded in `RESEARCH.md`'s external research), the ghost
+stub described above, and real hover-to-highlight lineage — mouseenter on any card computes its full
+ancestor/descendant chain via a plain adjacency map, applies `--ring` (the same token every existing
+selection state already uses, so clause 2 stays true) to the chain and dims everything else to 32%
+opacity, including highlighting the collapsed layer-0 toggle when an ancestor is hidden inside it.
+This directly answers the exploration doc's own stated want, quoted in `RESEARCH.md`: *"to access the
+lineage fast."*
+
+**A real bug found and fixed before finishing, not just described.** Screenshotting both variants in
+both themes (Playwright directly, not `scripts/uishot.py` — that script looks for the Hub app's
+"Switch to dark mode" button, which these standalone mocks don't have; per `dead_ends_inherited`
+this is the expected fallback) turned up the collapse chevron rendering enormous — its SVG has
+`width="100%" height="100%"` (matching every other icon substitution in this file's `ICONS` map) but
+the wrapping `.layer-chevron` span had no explicit size, so it expanded to fill whatever space was
+available instead of sitting at icon size next to the "3 done" label. Fixed in both files: `.layer-chevron`
+now has an explicit `width: 14px; height: 14px` and `flex: none`, matching the convention every other
+`.ic`-class icon usage in these mocks already follows. Re-screenshotted after the fix and confirmed
+correct in both themes.
+
+**Verified.** `python -c "import json; json.load(...)"` on `STATE.json` after editing. Playwright
+script confirmed, per variant per theme: edge counts before/after toggle (see above), zero console
+errors beyond the three pre-existing `@fontsource` `file://` resolution failures inherited from
+`index.css` (present on every mock under `design/mocks/`, not introduced here). Read all four
+resulting screenshots (restrained/considered × dark/light) directly — both variants legible in both
+themes, edge colours (grey/amber/red/green) distinguishable against both the near-black and the light
+surface, chevron fix confirmed correct at normal icon size, panel-embedded single-column stacking
+renders cards full-width with edges correctly degenerating to straight vertical lines (expected, since
+x1 equals x2 in a single-column layout — not a bug). `git status --short` → only the two new
+`design/mocks/S4/*.html` files plus the usual `.claude/autonomous/` state churn; the verification
+script and its PNGs were deleted after use and were gitignored regardless.
+
+**Not done this iteration, deliberately:** lineage-hover highlighting was only spot-checked by
+reading the JS logic and confirming the DOM structure it depends on (`data-node` attributes, the
+`PARENTS` adjacency map) is correctly wired — not clicked/hovered live via Playwright in this pass.
+P3 should do that explicitly (`page.hover(...)` then screenshot) rather than trust the static read.
+No source change anywhere (mock-only screen, same as S1–S3). No `RATIONALE.md` yet — that's P4.
+
+**Next:** S4 P3 — screenshot every variant (both standalone and panel-embedded regions) in both
+themes, this time including a live hover test on `considered.html` to confirm the lineage highlight
+actually differentiates dim vs. active rather than just existing in the code, critique honestly
+against the rejection test, and fix what's found.
