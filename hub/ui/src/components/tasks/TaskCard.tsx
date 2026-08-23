@@ -26,6 +26,9 @@ interface TaskCardProps {
    * without accidentally becoming draggable. */
   draggable?: boolean
   isDragging?: boolean
+  /** The board marks the card whose drawer is open. Without it the open card was unmarked on the
+   *  board, which is the fourth state the design demonstrated and the only one not wired up. */
+  isSelected?: boolean
   onDragStart?: DragEventHandler<HTMLDivElement>
   onDragEnd?: DragEventHandler<HTMLDivElement>
   onMoveByKeyboard?: (direction: 'left' | 'right') => void
@@ -74,6 +77,7 @@ export function TaskCard({
   onOpen,
   draggable = false,
   isDragging = false,
+  isSelected = false,
   onDragStart,
   onDragEnd,
   onMoveByKeyboard,
@@ -117,6 +121,7 @@ export function TaskCard({
     <div
       data-task-id={task.id}
       data-dragging={isDragging ? 'true' : 'false'}
+      data-selected={isSelected ? 'true' : undefined}
       data-testid={isLive ? `task-live-${task.id}` : undefined}
       className={['task-card-refined', isLive && !reduceMotion ? 'task-live-pulse' : ''].filter(Boolean).join(' ')}
       draggable={draggable}

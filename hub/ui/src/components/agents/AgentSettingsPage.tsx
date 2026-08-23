@@ -74,7 +74,7 @@ function SectionContent({ agent, section }: { agent: AgentSummary; section: Agen
   switch (section) {
     case 'identity':
       return (
-        <SettingsSection title="Identity" description="What this agent is called, and whether it is in use.">
+        <SettingsSection scope="Agent configuration" title="Identity" description="What this agent is called, and whether it is in use.">
           <SettingsRow
             label="Name"
             description="How this agent is addressed — by you, and by its peers when they send it a message."
@@ -102,7 +102,7 @@ function SectionContent({ agent, section }: { agent: AgentSummary; section: Agen
 
     case 'execution':
       return (
-        <SettingsSection
+        <SettingsSection scope="Agent configuration"
           title="Execution"
           description="What this agent runs as when you give it a turn."
         >
@@ -123,7 +123,7 @@ function SectionContent({ agent, section }: { agent: AgentSummary; section: Agen
 
     case 'charter':
       return (
-        <SettingsSection
+        <SettingsSection scope="Agent configuration"
           title="Charter"
           description="The behaviour contract this agent works under."
         >
@@ -138,7 +138,7 @@ function SectionContent({ agent, section }: { agent: AgentSummary; section: Agen
 
     case 'interaction':
       return (
-        <SettingsSection
+        <SettingsSection scope="Agent configuration"
           title="Interaction"
           description="How long this agent holds its turn open for you before giving up and carrying on."
         >
@@ -161,7 +161,7 @@ function SectionContent({ agent, section }: { agent: AgentSummary; section: Agen
 
     case 'context':
       return (
-        <SettingsSection
+        <SettingsSection scope="Agent configuration"
           title="Context"
           description="How this agent's context window is managed across a session boundary."
         >
@@ -176,7 +176,7 @@ function SectionContent({ agent, section }: { agent: AgentSummary; section: Agen
 
     case 'access':
       return (
-        <SettingsSection
+        <SettingsSection scope="Agent configuration"
           title="Access"
           description="What this agent may read of other agents' work, and what it may decide about it."
         >
@@ -197,7 +197,7 @@ function SectionContent({ agent, section }: { agent: AgentSummary; section: Agen
 
     case 'workspace':
       return (
-        <SettingsSection
+        <SettingsSection scope="Agent configuration"
           title="Workspace"
           description="Where this agent does its work on disk."
         >

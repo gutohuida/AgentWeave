@@ -1,4 +1,5 @@
 import { useRetryTaskIntegration, useTaskIntegrations, type TaskIntegration } from '@/api/tasks'
+import { Icon } from '@/components/common/Icon'
 
 /** The exact wording the Hub records when no merge target has been chosen. */
 const NO_MAIN_BRANCH = 'no main branch set'
@@ -48,10 +49,14 @@ export function TaskIntegrationNote({ taskId, status }: { taskId: string; status
       {rows.map((row) => {
         const merged = row.outcome === 'merged'
         const failed = row.outcome === 'failed'
-        const color = merged ? 'var(--green)' : failed ? 'var(--red)' : 'var(--text-muted)'
+        // `--text-3`, not `--text-muted` — that token is defined nowhere, so the declaration was
+        // invalid and the skipped outcome inherited full-strength body text, rendering *louder*
+        // than merged and failed. The one outcome meaning "nothing happened" was the most emphatic.
+        const color = merged ? 'var(--green)' : failed ? 'var(--red)' : 'var(--text-3)'
+        const glyph = merged ? 'check_circle' : failed ? 'error' : 'remove_circle'
         return (
           <p key={row.id} className="text-[11px] flex items-start gap-1.5" style={{ color }}>
-            <span aria-hidden="true">{merged ? '✓' : failed ? '!' : '–'}</span>
+            <Icon name={glyph} size={12} className="mt-px shrink-0" aria-hidden="true" />
             {merged ? (
               <>
                 Merged <code>{(row.commit_sha ?? '').slice(0, 8)}</code> into{' '}

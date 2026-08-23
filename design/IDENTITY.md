@@ -50,8 +50,23 @@ needs a new visual language; it needs the existing one applied consistently and 
 ## Fixed — a mock that changes any of these is rejected
 
 1. **The palette.** No new hues. No changing existing token values. Both themes stay in parity.
-2. **`--blue` stays focus/selection.** It does not become a brand colour, a button fill, or an
-   accent wash.
+2. **`--blue` stays focus/selection, plus exactly one status.** It does not become a brand colour,
+   a button fill, or an accent wash.
+
+   **Amended 2026-08-23, by the operator.** The one permitted status use is the **`in_progress`
+   task status** — its badge, its board column accent, and its Overview chip. Nothing else.
+
+   Why the carve-out: the remaining semantic colours are all spoken for — amber is `under_review`,
+   green is `approved`, red is `rejected`/`revision_needed` — so `in_progress` could only be
+   folded into one of them or dropped to neutral, and both lose a distinction the seven-column
+   board exists to show. This was discovered the hard way: the rule was enforced, then reverted a
+   week later precisely because amber made `in_progress` and `under_review` indistinguishable, and
+   the guard test was inverted to assert the violation rather than the rule. Writing the exception
+   down is what stops that cycle repeating.
+
+   The mapping lives in exactly one module, `hub/ui/src/lib/taskStatusColors.ts`. A second copy of
+   a status→colour mapping anywhere else is the defect this clause now guards against — three
+   copies had already drifted apart before this was written.
 3. **The radius scale.** Derive from `--radius`; do not introduce a second geometry (no pill
    buttons beside 10px cards, no sharp corners as a "style").
 4. **Type.** The existing family and scale. No display faces, no new weights as decoration.

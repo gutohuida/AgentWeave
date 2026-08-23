@@ -501,7 +501,13 @@
   .panel-tab-chip:focus-within .panel-tab-close { opacity: 1; pointer-events: auto; transform: scale(1); }
   .panel-tab-chip:hover .panel-tab-identity,
   .panel-tab-chip:focus-within .panel-tab-identity { opacity: 0; }
-  .panel-launcher-card:hover { transform: translateY(-1px); box-shadow: var(--shadow-rest); }
+  /* `--shadow-rest` was never defined, so this whole declaration was invalid and the launcher card
+     lifted 1px with no elevation at all. Spelled out from the same recipe `.elevation-resting`
+     uses, which is what the mock specified. */
+  .panel-launcher-card:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgb(0 0 0 / 0.20), inset 0 1px 0 var(--lift-hi);
+  }
   .panel-launcher-card:active { transform: translateY(0); }
   .panel-search {
     position: relative;
@@ -573,8 +579,27 @@
     background: color-mix(in srgb, var(--surface-3) 58%, var(--surface-2)) !important;
     box-shadow: 0 4px 14px rgb(0 0 0 / 0.15), inset 0 1px var(--lift-hi);
   }
-  .task-card-refined:active { transform: translateY(0); box-shadow: inset 0 1px var(--press-lo); }
-  .task-card-refined:focus-within { border-color: var(--border-hi) !important; }
+  .task-card-refined:active {
+    transform: translateY(0);
+    /* Press needs a ground shift, not only a 1px move — the !important hover background was
+       winning through the press, so mousedown and hover looked identical. */
+    background: color-mix(in srgb, var(--surface-2) 82%, var(--press-lo)) !important;
+    box-shadow: inset 0 1px var(--press-lo);
+  }
+  /* Focus is the board's keyboard state, not a second hover. `Ctrl+Left`/`Ctrl+Right` moves the
+     *focused* card, and this used to be the same `--border-hi` as :hover — so the card you were
+     about to move was indistinguishable from the one under the pointer. The card body carries
+     data-slot="button", which the global focus rule at the top of this file deliberately excludes,
+     so it needs its ring stated here. */
+  .task-card-refined:focus-within {
+    border-color: var(--ring) !important;
+    box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring);
+  }
+  /* The one open card is marked on the board, the fourth state the mock demonstrated. */
+  .task-card-refined[data-selected="true"] {
+    border-color: var(--ring) !important;
+    background: var(--row-selected) !important;
+  }
   .task-card-refined.lineage-active {
     border-color: var(--ring) !important;
     box-shadow: 0 0 0 2px color-mix(in srgb, var(--ring) 35%, transparent);
@@ -642,6 +667,12 @@
                 color var(--dur-fast) var(--ease);
   }
   .task-filter-chip:hover { background: var(--row-hover); }
+  /* Also excluded from the global focus rule by data-slot="button" — stated here so the filter row
+     is keyboard-navigable. Same two-layer ring as every other focusable control. */
+  .task-filter-chip:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring);
+  }
   .task-filter-chip[data-active="true"] {
     border-color: var(--border-hi);
     background: var(--row-active);
@@ -1550,10 +1581,22 @@
     color: var(--text-2);
   }
   .trust-state-icon.is-error { color: var(--red); background: color-mix(in srgb, var(--red) 9%, var(--surface-2)); }
+  /* One skeleton vocabulary, not two. This used to be a flat `--surface-3` bar with no shimmer,
+     sitting on the same screens as `.skeleton` — a static grey bar reads as an empty row rather
+     than as loading. It now composes with `.skeleton` and only sets its own height. */
   .trust-state-skeleton {
     height: 8px;
     border-radius: var(--radius-sm);
     background: var(--surface-3);
+    position: relative;
+    overflow: hidden;
+  }
+  .trust-state-skeleton::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, var(--border-hi), transparent);
+    animation: skeleton-shimmer 1.8s var(--ease) infinite;
   }
   .setup-dialog { animation: setup-dialog-in var(--dur-base) var(--ease); }
   @keyframes setup-dialog-in {

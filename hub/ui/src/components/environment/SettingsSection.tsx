@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { Icon } from '@/components/common/Icon'
 
 const SECTION_ICONS: Record<string, string> = {
+  // Project-scoped sections
   Quality: 'verified_user',
   Instructions: 'description',
   Runners: 'terminal',
@@ -10,18 +11,33 @@ const SECTION_ICONS: Record<string, string> = {
   Diagnostics: 'monitoring',
   Budgets: 'bar_chart',
   Settings: 'settings',
+  // Agent-scoped sections. Without these all seven fell through to the generic gear, in the same
+  // pass that gave the rail nav seven distinct glyphs for the very same sections.
+  Identity: 'badge',
+  Execution: 'terminal',
+  Charter: 'menu_book',
+  Interaction: 'forum',
+  Context: 'data_usage',
+  Access: 'lock',
+  Workspace: 'folder',
 }
 
+/** The eyebrow above the section title. `scope` exists because this component is shared between the
+ *  project settings pages and the per-agent settings pages, and it used to hardcode "Project
+ *  configuration" for both — announcing per-agent runner bindings, charter bindings and timeouts as
+ *  project scope, which is the one axis the Hub's domain model turns on. */
 export function SettingsSection({
   title,
   description,
   children,
   actions,
+  scope = 'Project configuration',
 }: {
   title: string
   description: string
   children: ReactNode
   actions?: ReactNode
+  scope?: string
 }) {
   const headingId = `settings-${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
   return (
@@ -33,7 +49,7 @@ export function SettingsSection({
           </span>
           <div className="min-w-0">
             <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.12em]" style={{ color: 'var(--text-3)' }}>
-              Project configuration
+              {scope}
             </div>
             <h2 id={headingId} className="text-base font-semibold" style={{ color: 'var(--text)' }}>{title}</h2>
             <p className="mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: 'var(--text-3)' }}>{description}</p>

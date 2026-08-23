@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { Badge, StatusBadge } from '@/components/common/Badge'
 import { Input, Select, Textarea } from '@/components/ui/input'
+import { taskStatusTone } from '@/lib/taskStatusColors'
 
 describe('considered shared controls', () => {
   it('gives every field the same stateful control recipe without replacing native semantics', () => {
@@ -24,7 +25,25 @@ describe('considered shared controls', () => {
 
     expect(screen.getByText('category')).toHaveClass('aw-chip')
     expect(screen.getByText('category')).toHaveAttribute('data-pill', 'true')
+    // `--blue` on `in_progress` is the one status use IDENTITY.md clause 2 permits, and only here.
     expect(screen.getByText('in progress')).toHaveStyle({ color: 'var(--blue)' })
     expect(screen.getByText('under review')).toHaveStyle({ color: 'var(--amber)' })
+  })
+
+  it('draws every task status colour from the one shared map', () => {
+    // The board, the Overview and StatusBadge each used to carry their own copy of this mapping,
+    // and they had drifted: `in_progress` was blue on the board and amber on the Overview, where
+    // it also collided with `under_review`. Any new copy should fail this test by diverging.
+    expect(taskStatusTone('in_progress')).toBe('var(--blue)')
+    expect(taskStatusTone('under_review')).toBe('var(--amber)')
+    expect(taskStatusTone('approved')).toBe('var(--green)')
+    expect(taskStatusTone('rejected')).toBe('var(--red)')
+    expect(taskStatusTone('revision_needed')).toBe('var(--red)')
+    // Deliberately neutral — these three are not asking the operator for anything.
+    expect(taskStatusTone('pending')).toBeNull()
+    expect(taskStatusTone('assigned')).toBeNull()
+    expect(taskStatusTone('completed')).toBeNull()
+    // An unknown status must not fall through to a hue.
+    expect(taskStatusTone('nonsense')).toBeNull()
   })
 })

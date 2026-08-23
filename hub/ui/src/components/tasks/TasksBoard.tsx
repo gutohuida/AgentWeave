@@ -7,6 +7,8 @@ import { EmptyState } from '@/components/common/EmptyState'
 import { Icon } from '@/components/common/Icon'
 import { useAgents } from '@/api/agents'
 import { agentColorVars } from '@/lib/agentColors'
+import { tint } from '@/lib/colorTint'
+import { taskStatusTone } from '@/lib/taskStatusColors'
 import { useTaskFilterStore } from '@/store/taskFilterStore'
 
 // `blocked` has no column of its own, deliberately. It is not a separate stage of work — it is
@@ -16,14 +18,16 @@ import { useTaskFilterStore } from '@/store/taskFilterStore'
 // In Progress (`2026-08-10-blocked-and-conversation-binding`, R3).
 const STATUSES_IN_PROGRESS = ['in_progress', 'blocked']
 
+// Column accents come from `taskStatusColors`, not a second copy of the mapping — see that module
+// for why (the board and the Overview had already drifted apart on `in_progress`).
 const COLUMNS = [
-  { key: 'pending',         label: 'Pending',        accentColor: null as string | null, statuses: ['pending'] },
-  { key: 'assigned',        label: 'Assigned',       accentColor: null as string | null, statuses: ['assigned'] },
-  { key: 'in_progress',     label: 'In Progress',    accentColor: 'var(--blue)',         statuses: STATUSES_IN_PROGRESS },
-  { key: 'under_review',    label: 'Under Review',   accentColor: 'var(--amber)',        statuses: ['under_review'] },
-  { key: 'completed',       label: 'Completed',      accentColor: null as string | null, statuses: ['completed'] },
-  { key: 'approved',        label: 'Approved',       accentColor: 'var(--green)',        statuses: ['approved'] },
-  { key: 'revision_needed', label: 'Needs Revision', accentColor: 'var(--red)',          statuses: ['revision_needed'] },
+  { key: 'pending',         label: 'Pending',        accentColor: taskStatusTone('pending'),         statuses: ['pending'] },
+  { key: 'assigned',        label: 'Assigned',       accentColor: taskStatusTone('assigned'),        statuses: ['assigned'] },
+  { key: 'in_progress',     label: 'In Progress',    accentColor: taskStatusTone('in_progress'),     statuses: STATUSES_IN_PROGRESS },
+  { key: 'under_review',    label: 'Under Review',   accentColor: taskStatusTone('under_review'),    statuses: ['under_review'] },
+  { key: 'completed',       label: 'Completed',      accentColor: taskStatusTone('completed'),       statuses: ['completed'] },
+  { key: 'approved',        label: 'Approved',       accentColor: taskStatusTone('approved'),        statuses: ['approved'] },
+  { key: 'revision_needed', label: 'Needs Revision', accentColor: taskStatusTone('revision_needed'), statuses: ['revision_needed'] },
 ]
 
 interface TasksBoardProps {
@@ -295,7 +299,11 @@ export function TasksBoard({ onOpenRequirement }: TasksBoardProps = {}) {
                   <span
                     className="task-column-count"
                     style={{
-                      background: accentColor ? `${accentColor}20` : 'var(--surface-3)',
+                      // color-mix, not a `${token}20` suffix: a custom property cannot carry a
+                      // concatenated alpha channel — `var(--blue)20` is not a colour, so the whole
+                      // declaration was being dropped and the four accented columns rendered their
+                      // count with no background at all while the two neutral ones kept theirs.
+                      background: accentColor ? tint(accentColor, 18) : 'var(--surface-3)',
                       color: accentColor ?? 'var(--text-2)',
                     }}
                   >
@@ -319,6 +327,7 @@ export function TasksBoard({ onOpenRequirement }: TasksBoardProps = {}) {
                       onOpen={() => setOpenTaskId(task.id)}
                       draggable
                       isDragging={draggedTaskId === task.id}
+                      isSelected={openTaskId === task.id}
                       moveInstructionsId="task-board-move-instructions"
                       onMoveByKeyboard={(direction) => moveByKeyboard(task, direction)}
                       onDragStart={(event) => {
@@ -376,6 +385,7 @@ export function TasksBoard({ onOpenRequirement }: TasksBoardProps = {}) {
                       onOpen={() => setOpenTaskId(task.id)}
                       draggable
                       isDragging={draggedTaskId === task.id}
+                      isSelected={openTaskId === task.id}
                       moveInstructionsId="task-board-move-instructions"
                       onMoveByKeyboard={(direction) => moveByKeyboard(task, direction)}
                       onDragStart={(event) => {
