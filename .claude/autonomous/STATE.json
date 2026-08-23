@@ -1,39 +1,63 @@
 {
-  "purpose": "Carry the operator-approved considered mock philosophy through every currently reachable AgentWeave UI surface by 20:00 on 2026-08-22. Preserve the product's existing tone and information architecture, add finish, texture, motion, hierarchy and consistent controls, and make the whole current application feel intentionally designed. The S1 considered composer lost visible project context: restore a clear multi-project selector and prove switching projects never blends project state.",
-  "runner": "codex",
+  "purpose": "Fix the mechanical findings from the 2026-08-23 stress-test drive (scripts/drive/FINDINGS.md). Fifteen corrections across the Hub API, the scheduler and the dashboard, each with a regression test. The two architectural changes from that drive — 2026-08-23-a-reviewer-can-see-the-work and 2026-08-23-the-hop-budget-is-a-real-bound — are specified and validated but deliberately NOT in this queue; they are for an attended session with the operator, who is awake from 08:00.",
+  "runner": "claude",
+  "model": "claude-sonnet-5",
   "permission_mode": "unattended-full-access",
-  "branch": "autonomous/2026-08-22-ui-finesse",
-  "parent_branch": "master",
-  "parent_sha": "7249ada",
-  "started_at": "2026-08-22T14:30:00+01:00",
-  "stop_at": "2026-08-22T20:00:00+01:00",
+  "branch": "autonomous/2026-08-24-stress-test-remediation",
+  "parent_branch": "fix/2026-08-23-design-audit-remediation",
+  "parent_sha": "17e33eba3527b3d7732b9c3608c0eaab8af9cd85",
+  "started_at": "2026-08-24T08:00:00+01:00",
+  "stop_at": "2026-08-24T12:00:00+01:00",
   "stop_when_queue_empties": true,
-  "iteration": 11,
-  "last_heartbeat": "2026-08-22T19:21:15+01:00",
-  "log_file": ".claude/autonomous/2026-08-22-ui-finesse-log.md",
+  "iteration": 0,
+  "log_file": ".claude/autonomous/2026-08-24-stress-test-remediation-log.md",
   "queue": [
     {
-      "id": "F10",
-      "title": "Final build, static bundle sync and review",
-      "detail": "Run the full UI suite, tsc, lint and production build. From repo root run py -3.11 scripts/refresh_ui_bundle.py and confirm hub/ui/dist matches hub/hub/static/ui as required. Run affected Hub tests for spec template changes. Inspect git diff for accidental legacy revival, unrelated changes, generated debris or missing accessibility states. Commit and push the final coherent result, set next_action null, and write a morning summary naming completed surfaces, remaining risks and Playwright evidence."
+      "id": "Q1",
+      "title": "Backend papercuts — no UI files",
+      "detail": "Six independent corrections, all Python, all with a regression test each. (F4) hub/hub/api/v1/projects.py: on POST /projects/open of a git repository, adopt the branch that GET /projects/{id}/main-branch-suggestion already computes, instead of leaving main_branch null — integration silently skips without it. (F8) hub/hub/requirement_evidence.py: the refusal for an unknown evidence decision must name the permitted values ('accepted', 'rejected') the way model_catalog's permission_mode refusal names its four, and the route must return 422 not 403 — a malformed enum is a validation error, and an agent reading the status code concludes it lacks permission and stops retrying. (F7) same module: refuse or flag a second piece of evidence for the same requirement, task and commit; note the existing `digest` column is NOT a duplicate detector, it pins the requirement's wording at production time. (F16) hub/hub/api/v1/tasks.py: TaskResponse must echo loop_id; POST /tasks accepts it and returns null, so a caller cannot confirm the task joined the loop. (S2) hub/hub/utils.py: widen short_id() from 8 hex characters to 12 — columns are already String(64) so NO migration is needed and existing ids keep working; this moves the birthday bound from ~77k rows to ~800M on event_logs and agent_outputs, the two tables nothing prunes. (F6/F18) hub/hub/run_task_binding.py: bind_run_to_task must set task.assignee the way the loop's claim already does at scheduler.py:979 — today a task moved to in_progress by a direct trigger shows no assignee and reports assignee_status 'idle' about a running agent.",
+      "verify": "py -3.11 -m pytest hub/tests/ -q"
+    },
+    {
+      "id": "Q2",
+      "title": "Scheduler honesty — F11, F13, and the cron refusal",
+      "detail": "(F11) hub/hub/scheduler.py: _do_fire_job increments job.run_count and stamps job.last_run at lines ~796-797, BEFORE every skip branch, so both describe 'the scheduler considered this job' rather than 'this job ran'. Measured: run_count 9 for 4 real firings. Move the increment below the skip branches so only a firing that reaches a queued entry counts. JobRun rows already carry an honest status and must not change. (F13) hub/hub/api/v1/jobs.py: PATCH {enabled:true} on a loop whose ending_state is set returns 200 and leaves a contradictory state (enabled true, stopped_at set, ending_state 'completed'), then the next firing re-stops it a minute later and the operator's action is silently undone. Refuse it with a message saying what to do instead — give the loop work, or create a new one. (F1, backend half) hub/hub/scheduler.py: refuse a cron expression that restricts BOTH day-of-month and day-of-week at job creation and update, naming the ambiguity and suggesting two jobs. Measured: '0 0 15 * 5' is stored with next_run 2026-08-28 and actually fires 2027-05-15, because APScheduler's CronTrigger ANDs the two fields while croniter ORs them — see openspec/changes/2026-08-23-the-hop-budget-is-a-real-bound for the house style of such a refusal, and note hub/ui/src/lib/cron.ts's describeCron already declines this shape in prose.",
+      "verify": "py -3.11 -m pytest hub/tests/test_scheduler.py hub/tests/test_jobs.py hub/tests/test_jobs_crud.py -q"
+    },
+    {
+      "id": "Q3",
+      "title": "Dashboard truth — all UI source changes, no bundle rebuild yet",
+      "detail": "Make every change under hub/ui/src in this one item so the committed bundle is rebuilt exactly once, in Q4. (F17) The rail reads agent.last_seen at AgentTree.tsx:163-167, and last_seen is populated ONLY from a heartbeat row (api/v1/agents.py:537), which only a self-registered agent posts — so every Hub-managed agent reads 'No activity yet' forever, including one that just did nine runs. Derive it from the agent's most recent run or output instead; no migration, the data exists in runs.started_at and agent_outputs.timestamp. (F19) TaskCard.tsx renders neither prerequisites nor dependents, though GET /tasks already returns a populated prerequisites array with each prerequisite's status — so a gated task looks like any ordinary pending card. Mark it. (F9) Add an inline note (NOT a dialog) on the approve control stating which commit will be merged into which branch: approving runs task_integration and cherry-picks the accepted evidence's commit into the main branch, which is a write the operator is not currently warned about. (F14) A task whose run is blocked on an unanswered ask_user still reads in_progress with blocked_reason null, because block_task_for_question is called only from run_divergence.evaluate_run_end — surface 'waiting on you' on the card without changing the status. (F2) JobForm.tsx:193 and JobsPage.tsx:182 both say 'server time'; the scheduler is pinned to UTC (scheduler.py:626, :683) and cron.ts computes in UTC deliberately. Change the word to UTC. On this machine local time is UTC+1 today, so the label is wrong by an hour. (F1, UI half) Align cron.ts and the JobCard/JobForm previews with whatever the Q2 refusal leaves legal, so the card and the form can no longer give two different next-run answers.",
+      "verify": "cd hub/ui && npm run lint && npx tsc --noEmit && npx vitest run"
+    },
+    {
+      "id": "Q4",
+      "title": "Bundle, full verification, and the morning summary",
+      "detail": "cd hub/ui && npm run build, then from the repo root py -3.11 scripts/refresh_ui_bundle.py. IMPORTANT: git's CRLF normalisation on commit invalidates the stamp, so commit first and then rebuild and re-stamp AFTER that commit, or /health reports ui_stale on a clean tree — this cost the previous session a cycle. Then: py -3.11 -m pytest hub/tests/ -q (expect 2758+ passed, 84 skipped, 1 xpassed, ~9 minutes); cd hub/ui && npx vitest run; uvx ruff@0.15.22 check src/ hub/ tests/; uvx black@26.5.1 --check src/ hub/hub/ hub/tests/ tests/; npx openspec validate --changes --strict. Read the full diff for accidental legacy revival, generated debris and unrelated files. Then write the morning summary at the log_file path: what landed per finding id, what did not and why, and anything that surprised you.",
+      "verify": "py -3.11 -m pytest hub/tests/ -q"
     }
   ],
   "current": null,
-  "next_action": "Run the full UI suite, tsc, lint and production build. From repo root run py -3.11 scripts/refresh_ui_bundle.py and confirm hub/ui/dist matches hub/hub/static/ui as required. Run affected Hub tests for spec template changes. Inspect git diff for accidental legacy revival, unrelated changes, generated debris or missing accessibility states. Commit and push the final coherent result, set next_action null, and write a morning summary naming completed surfaces, remaining risks and Playwright evidence.",
+  "next_action": "Cut branch autonomous/2026-08-24-stress-test-remediation from fix/2026-08-23-design-audit-remediation at 17e33eba3527b3d7732b9c3608c0eaab8af9cd85. Then start queue item Q1. Read scripts/drive/FINDINGS.md first — every finding in the queue is described there with the request and the row or log that proves it, which is the fastest way to understand what is actually broken. Commit once per queue item with the finding ids in the message.",
   "decisions_for_user": [
-    "Extend the autonomous window so F10 can run, or leave the final verification and cherry-pick decision for an attended session?"
+    "The two specified changes are NOT in this queue and are waiting for you: openspec/changes/2026-08-23-a-reviewer-can-see-the-work (F10, unblocks the in-flight loop-becomes-a-flow, which ships a reviewer that cannot read code without it) and openspec/changes/2026-08-23-the-hop-budget-is-a-real-bound (F5). Both validate. Read them before deciding when to implement.",
+    "Posture is still undecided: may an AGENT take under_review -> approved, and therefore write to your main branch, or is approval always yours? Deferred deliberately — decide it after seeing a reviewer work with F10 fixed.",
+    "The per-task review policy you proposed on 2026-08-23 — the specification declaring, per task, who may approve it and which model is enough for it — is a later change of its own and is not yet written up.",
+    "F12 (a loop firing every minute while its finished work waits for review) is deliberately held out of this queue: loop-becomes-a-flow fixes its root cause by making `completed` claimable by a different agent, and papering over it now would be work thrown away.",
+    "F3 (contact_mode still defaults to 'watchdog-spawn') and F20 (an unknown deep link falls back to Overview) were judged not worth fixing. Say so if you disagree."
   ],
   "limits": [
-    "Stay on autonomous/2026-08-22-ui-finesse and push only that branch; do not merge, open a PR, release, publish or deploy.",
-    "Never touch port 8000. If a live Hub is needed, use the isolated trial/test environment on another port and never point AgentWeave at this source checkout.",
-    "The considered mocks and design/IDENTITY.md define the direction. Preserve the existing tone and information architecture; this is refinement, not a framework-style redesign.",
-    "A clear multi-project selector/context in the working shell and composer flow is mandatory. The UI must never imply AgentWeave has only one project.",
-    "Implement every currently reachable screen, but do not resurrect or beautify dead legacy components. Prove reachability from App.tsx/navigation before spending work on ambiguous surfaces.",
-    "For uncovered reachable structures use research -> considered mock -> Playwright render -> critique/correct -> implementation -> Playwright correction. Do not create mocks as a substitute for shipping code.",
-    "Every surface cluster requires focused automated tests, TypeScript checking and Playwright interaction/visual evidence at desktop and narrow widths in light and dark themes.",
-    "Preserve behavior, accessibility, project isolation, live-state semantics and keyboard operation. Visual polish may not weaken information density or hide controls.",
-    "After dashboard changes, production-build and refresh hub/hub/static/ui from hub/ui/dist; commit source and committed bundle together.",
-    "Do not perform destructive cleanup, edit secrets, rewrite history, use git add -A, or include unrelated files. Stage explicit paths.",
-    "At 20:00 local time stop cleanly even if the queue is incomplete; record exact continuation work rather than rushing or inventing completion."
+    "Run the Hub test suite with `py -3.11 -m pytest hub/tests/ -q`. NEVER bare `python` — in this shell it resolves to C:\\Users\\huida\\AppData\\Local\\hermes\\hermes-agent\\venv\\Scripts\\python.exe, which HAS pytest so it looks legitimate, but produces three false failures in test_pty_runner.py on a completely green tree. Measured 2026-08-23: bare python gave 3 failed / 2755 passed; py -3.11 gave 2758 passed / 84 skipped on the same commit.",
+    "Stay on autonomous/2026-08-24-stress-test-remediation. Do not merge, do not open a PR, do not release or publish. Push that branch only.",
+    "Never touch port 8000 — that is the operator's real usage. Port 8010 is the trial Hub and is safe to drive; it currently serves the ledger-stress fixture (proj-18e5d4e0) used by scripts/drive/.",
+    "Do not point a Hub you are editing at this source checkout. Every Hub code change restarts the process and kills runs in flight.",
+    "Do not implement anything from the two openspec changes dated 2026-08-23. They are for an attended session. Implementing them unattended is the specific thing this queue was scoped to avoid.",
+    "Do not recreate deleted subsystems: watchdog.py, messaging.py, runner.py, transport/local.py, transport/git.py, or the role subsystem.",
+    "hub/hub/static/ui is a committed build artefact. After npm run build run py -3.11 scripts/refresh_ui_bundle.py, and commit hub/ui/src and hub/hub/static/ui together.",
+    "Icons come from lucide via the Icon wrapper, plus simple-icons brand marks reached as brand:<key>. Never add a third icon source and never an icon font. Never `import * from 'simple-icons'`.",
+    "design/IDENTITY.md is the binding visual contract. Read it before any UI change. --blue is focus/selection plus exactly one status (in_progress) and nothing else.",
+    "Stage explicit paths. Never `git add -A`. Never commit kimichanges.md or kimiwork.md.",
+    "Never mark a task complete because a plan for it exists. Only verified implementation closes a task.",
+    "At 12:00 local time stop cleanly even if the queue is incomplete. Record the exact continuation work rather than rushing or inventing completion."
   ]
 }
