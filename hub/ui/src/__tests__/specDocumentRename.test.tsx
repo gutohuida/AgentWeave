@@ -15,6 +15,8 @@ type SseHandler = (event: { type: string; data: unknown }) => void
 let handlers: SseHandler[] = []
 
 vi.mock('@/hooks/useSSE', () => ({
+  // The rail's live dot reads this; a whole-module mock has to carry it or Sidebar throws.
+  useSSEConnectionState: () => 'open',
   useSSE: (handler: SseHandler) => {
     handlers.push(handler)
   },

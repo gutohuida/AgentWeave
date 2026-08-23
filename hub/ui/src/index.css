@@ -706,15 +706,6 @@
     padding: 1px 7px;
     font-size: 10px;
   }
-  .task-column-empty {
-    min-height: 58px;
-    display: grid;
-    place-items: center;
-    border: 1px dashed var(--border);
-    border-radius: var(--radius-md);
-    color: var(--text-3);
-    font-size: 10px;
-  }
   .task-detail-dialog { animation: task-dialog-in var(--dur-base) var(--ease); }
   .task-detail-facts {
     border: 1px solid var(--border);
@@ -765,28 +756,39 @@
   .dependency-edge.lineage-dim { opacity: 0.18; }
   @keyframes dependency-dash-flow { to { stroke-dashoffset: -18; } }
 
-  /* S1 considered shell: a quiet live mark, project-scoped selection ink, and nested
-     conversation branches that disclose without turning the rail into stacked cards. */
+
+  /* S1 considered shell: nested conversation branches that disclose without turning
+     the rail into stacked cards, and one live mark that actually reports something. */
+
+  /* The dot beside the wordmark reports the Hub stream, and only that.
+     It used to be a bare `background: var(--green)` rendered unconditionally and bound to
+     nothing — a permanently-"live" mark, which is decorative semantic colour and the exact
+     thing IDENTITY.md reserves green/amber/red against. `Sidebar.tsx` now feeds it
+     `useSSEConnectionState()`, so `currentColor` carries the state and one rule draws the
+     dot and its halo for all four.
+
+     `closed` stays neutral rather than red on purpose: not configured yet, or nothing
+     subscribed, is not a fault. `reconnecting` widens the halo instead of pulsing — an
+     ambient loop would need a duration outside the `--dur-fast|base|slow` scale
+     (IDENTITY.md clause 3), and this corner is the only place a dropped stream shows now
+     that `StatusBar` is no longer rendered anywhere. */
   .rail-live-dot {
     width: 7px;
     height: 7px;
     flex: none;
     border-radius: 9999px;
-    background: var(--green);
-    box-shadow: 0 0 0 3px color-mix(in oklab, var(--green) 20%, transparent);
+    color: var(--text-3);
+    background: currentColor;
+    box-shadow: 0 0 0 3px color-mix(in oklab, currentColor 20%, transparent);
+    transition: color var(--dur-fast) var(--ease),
+                box-shadow var(--dur-fast) var(--ease);
   }
-  .row-selection-indicator {
-    position: absolute;
-    left: 0;
-    top: 50%;
-    width: 2px;
-    height: 0;
-    border-radius: 0 2px 2px 0;
-    background: var(--text);
-    transform: translateY(-50%);
-    transition: height var(--dur-fast) var(--ease);
+  .rail-live-dot[data-state="open"] { color: var(--green); }
+  .rail-live-dot[data-state="connecting"] { color: var(--amber); }
+  .rail-live-dot[data-state="reconnecting"] {
+    color: var(--red);
+    box-shadow: 0 0 0 4px color-mix(in oklab, currentColor 24%, transparent);
   }
-  .row-item[data-active="true"] > .row-selection-indicator { height: 16px; }
   .rail-conversation-group {
     margin-bottom: 4px;
     padding-left: 8px;
@@ -972,18 +974,54 @@
   .row-item:active {
     background: var(--row-active);
   }
-  /* Marked, not filled: the open row is identified by heavier label text and a brighter
-     colour, not a resting background fill — the fill is reserved for hover/press alone
-     (2026-08-04-hub-charcoal-visual-refresh).
 
-     The leading accent bar (`border-left-color: var(--rail-marker)`) is REMOVED for now at the
-     operator's request, 2026-08-19, to see how selection reads without it. The 2px transparent
-     left edge above is deliberately kept reserved, so restoring the bar is a one-line change and
-     nothing shifts either way. `--rail-marker` itself is left defined in the palette for the same
-     reason. */
+  /* Marked, not filled — with one exception, stated below.
+     The open row is identified by heavier label text and a brighter colour rather than a
+     resting background fill (2026-08-04-hub-charcoal-visual-refresh), and the leading accent
+     bar (`border-left-color: var(--rail-marker)`) stays REMOVED at the operator's request,
+     2026-08-19. Both decisions stand. The 2px transparent left edge above and `--rail-marker`
+     itself are still kept defined, so restoring the bar remains a one-line change if the
+     operator ever asks for it back.
+
+     What changed on 2026-08-23. Both rules were written for a flat list, and the rail is now
+     three levels deep — project → agent → conversation. Applied uniformly they mark all three
+     identically, so the outermost, least specific thing reads exactly as loudly as the thread
+     the operator is actually reading. It had got worse than that: a leading indicator had been
+     reintroduced on project rows *only*, which inverted the hierarchy outright and contradicted
+     the 2026-08-19 decision recorded in this very comment. That element is deleted.
+
+     The fix is a ladder built from what is already here, not a new device: weight alone at the
+     project, weight and colour at the agent, and at the leaf — the one row that is the actual
+     destination — the single place `--row-selected` is spent in navigation. The fill is still
+     never the *default* selected treatment: flat lists (environment sections, agent settings,
+     the spec tree) carry no `data-depth` and keep the 2026-08-04 rule below exactly as written.
+     `data-depth` is set by Sidebar.tsx, AgentTree.tsx and ConversationRow.tsx. */
   .row-item[data-active="true"] {
     color: var(--text);
     font-weight: 550;
+  }
+  /* Level 1 — the project. Quieter than the flat-list default, not louder: which project is
+     current is already stated by the whole subtree hanging open beneath it, so the row itself
+     only has to confirm it. Weight, no colour change. */
+  .row-item[data-active="true"][data-depth="project"] {
+    color: var(--text-2);
+  }
+  /* Level 2 — the agent. The flat-list default: weight and colour, no fill. Restated rather
+     than inherited so the three-step ladder is readable in one block. */
+  .row-item[data-active="true"][data-depth="agent"] {
+    color: var(--text);
+    font-weight: 550;
+  }
+  /* Level 3 — the conversation, the thing being read. The only row in navigation that carries
+     a resting fill, and the reason `--row-selected` exists at all; it was defined with
+     `--row-hover`/`--row-active` as a deliberate three-step ladder ("the three states never
+     collapse onto each other") and then used essentially nowhere. Hover and press still win by
+     source order from the two rules immediately below, so the row keeps responding to the
+     pointer instead of freezing at its selected fill. */
+  .row-item[data-active="true"][data-depth="conversation"] {
+    color: var(--text);
+    font-weight: 600;
+    background: var(--row-selected);
   }
   .row-item[data-active="true"]:hover {
     background: var(--row-hover);
@@ -1029,6 +1067,74 @@
     background: var(--row-active);
     color: var(--text);
   }
+
+  /* A conversation row's relative age — `2m`, `1h`, `3d`.
+     Recency is the only ordering cue a rail of similarly-named threads has: five rows all
+     labelled "New conversation" are otherwise indistinguishable, and the recency view was
+     sorting by a fact it never showed. `tabular-nums` so the column does not jitter between
+     "2m" and "11m".
+
+     Hidden on `.row-group:hover`, not `.row-item:hover`, so it disappears on the same seam
+     that reveals `.row-action` above — both change together even while the pointer has left the
+     row to reach the menu. Note this is NOT the layout argument the S1 mock made for it:
+     `.row-action` already reserves its box at rest here, so nothing would shift either way. It
+     is that two right-aligned marks in the same 40px, one of them being aimed at, is one too
+     many. Opacity rather than `display`, so the row's own geometry never moves. */
+  .row-meta {
+    flex: none;
+    font-size: 10px;
+    color: var(--text-3);
+    font-variant-numeric: tabular-nums;
+    transition: opacity var(--dur-fast) var(--ease);
+  }
+  .row-group:hover .row-meta,
+  .row-group:focus-within .row-meta {
+    opacity: 0;
+  }
+
+  /* The rail's empty slot — an expanded agent with no threads, or a project with none at all.
+     It was a bare `<span>No conversations yet</span>`: the plainest thing in the product, in the
+     one spot where the operator has nothing to click and most needs telling what to do. Dressed
+     at rail scale rather than with the page-level `EmptyState` component, whose 52px tile and
+     `py-12` would not fit a 252px rail — same three parts (mark, sentence, one action), sized for
+     here. The action is a real `Button variant="ghost"`, not a fourth button idiom.
+
+     Density is unaffected: this replaces a line of text in a branch where there are no rows to
+     lose. */
+  .rail-empty {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 2px 0 4px;
+    padding: 10px;
+    border: 1px solid var(--border-region);
+    border-radius: var(--radius-md);
+    background: var(--surface-2);
+  }
+  .rail-empty-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .rail-empty-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    flex: none;
+    border: 1px solid var(--border-region);
+    border-radius: var(--radius-sm);
+    background: var(--surface-3);
+    color: var(--text-3);
+  }
+  .rail-empty-title {
+    min-width: 0;
+    font-size: 12px;
+    line-height: 1.35;
+    color: var(--text-2);
+  }
+
 
   .settings-section {
     width: 100%;
@@ -1458,7 +1564,6 @@
   .permission-detail:hover { border-color: var(--border-hi); }
   .permission-detail.is-stale { color: var(--text-3); }
   .permission-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-  .permission-waiting { font-size: 11px; color: var(--text-3); }
 
   .questions-page {
     border: 1px solid var(--border-region);
@@ -1861,4 +1966,526 @@
   .task-live-pulse {
     animation: task-live-pulse 2.4s ease-in-out infinite;
   }
+
+  /* ══════════════════════════════════════════════════════════════════════════════════════════
+     S2 / S3 / S4 `considered` remediation — approved design work that shipped as `restrained`,
+     or not at all. Everything below resolves to an existing token; no new hue, no second radius
+     geometry, no motion outside `--dur-*` / `--ease`.
+     ══════════════════════════════════════════════════════════════════════════════════════════ */
+
+  /* ─── S2 finding 4: per-column empty states ──────────────────────────────────────────────
+     REPLACES the existing `.task-column-empty` block (the `restrained` treatment: a dashed box
+     containing the literal string "No tasks"). A seven-column board routinely shows several of
+     these at once, so it is the most-repeated element on the screen and the one place a bare
+     string costs the most. The icon tile is sized down from `EmptyState`'s own 52px circle so a
+     column reads as a smaller instance of the same pattern rather than a second one. */
+  .task-column-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 58px;
+    padding: 22px 8px;
+    text-align: center;
+    border: 1px dashed var(--border);
+    border-radius: var(--radius-lg);
+    color: var(--text-3);
+    transition: border-color var(--dur-base) var(--ease);
+  }
+  /* The column is a drop target, and its empty state is the largest thing in it — so the dashed
+     edge is what an operator dragging a card actually aims at. It brightens with the column. */
+  .task-board-column[data-drop-state="available"] .task-column-empty,
+  .task-board-column[data-drop-state="active"] .task-column-empty {
+    border-color: var(--border-hi);
+  }
+  .task-column-empty-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 9999px;
+    background: var(--surface-2);
+    color: var(--text-3);
+  }
+  .task-column-empty-title {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-2);
+  }
+  .task-column-empty-desc {
+    font-size: 10.5px;
+    line-height: 1.4;
+    color: var(--text-3);
+  }
+
+  /* ─── S2 finding 10: the description keeps its second line, and gains the fade ────────────
+     Clamping from two lines to one was a density regression (IDENTITY clause 6). The fade is the
+     "more exists" affordance the clamp never had: it must resolve to whatever the card's own
+     background currently is, so the target colour is a variable the card's states re-declare
+     rather than a colour repeated in three places that can drift apart. */
+  .task-card-refined { --task-card-fade-to: var(--surface-2); }
+  .task-card-refined:hover { --task-card-fade-to: color-mix(in srgb, var(--surface-3) 58%, var(--surface-2)); }
+  /* Selected last, matching the order the `background` rules above it already resolve in. Its real
+     ground is `--row-selected`, a near-transparent text tint, so `--surface-2` is the closest
+     opaque stand-in — over 14px of gradient the difference is not visible, and a literal colour
+     here would be the only hardcoded one on the card. */
+  .task-card-refined[data-selected="true"] { --task-card-fade-to: var(--surface-2); }
+  .task-card-desc-wrap {
+    position: relative;
+    margin-top: 4px;
+  }
+  .task-card-desc-fade {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 14px;
+    background: linear-gradient(to bottom, transparent, var(--task-card-fade-to) 85%);
+    pointer-events: none;
+    transition: background-image var(--dur-fast) var(--ease);
+  }
+
+  /* ─── S2 finding 7: a requirement chip is a link, an informational badge is not ───────────
+     These read identically at rest until the pointer found one of them. The chip keeps the
+     heavier `--border-hi` edge and reaches for `--ring` on hover — it goes somewhere. The
+     informational badge loses its border and background entirely: the fact stays, the chrome
+     that made it look actionable does not. */
+  .task-chip-req {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    border-radius: 9999px;
+    padding: 1px 7px;
+    border: 1px solid var(--border-hi);
+    background: var(--surface-3);
+    color: var(--text-2);
+    font-size: 10px;
+    font-weight: 500;
+    transition: border-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+  }
+  .task-chip-req:hover:not(:disabled) {
+    border-color: var(--ring);
+    color: var(--text);
+  }
+  .task-chip-req.rejected {
+    background: color-mix(in srgb, var(--red) 12%, transparent);
+    border-color: color-mix(in srgb, var(--red) 30%, transparent);
+    color: var(--red);
+  }
+  .task-chip-req.rejected:hover:not(:disabled) {
+    border-color: var(--red);
+    color: var(--red);
+  }
+  .task-chip-info {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 2px;
+    color: var(--text-3);
+    font-size: 10px;
+    font-style: italic;
+  }
+
+  /* ─── S4 finding 5: the lineage trace says it exists ──────────────────────────────────────
+     Zero-opacity at rest, so it costs no resting density; revealed by the same hover that
+     performs the trace, so the first pointer crossing answers "was that a feature?". */
+  .task-card-lineage-hint {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 6px;
+    color: var(--text-3);
+    font-size: 10px;
+    opacity: 0;
+    transition: opacity var(--dur-fast) var(--ease);
+  }
+  .task-card-refined:hover .task-card-lineage-hint,
+  .task-card-refined:focus-within .task-card-lineage-hint {
+    opacity: 1;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .task-card-lineage-hint { transition: none; }
+  }
+
+  /* ─── S4 finding 2: the collapsed-layer ghost stub ────────────────────────────────────────
+     A folded layer unmounts its cards, so its edges had no endpoint and simply vanished — the
+     links stopped making sense rather than merely getting shorter. The stub runs from the layer's
+     collapse toggle to whichever end is still on screen. Deliberately the faintest line on the
+     board and never coloured: its far end's state is exactly what is not visible, so claiming a
+     semantic colour for it would assert something the operator cannot check. */
+  .dependency-edge-ghost {
+    stroke: var(--border);
+    stroke-width: 1.25;
+    stroke-dasharray: 2 4;
+    opacity: 0.55;
+  }
+
+  /* ─── S3 finding 3: the Loops launcher carries its own count ──────────────────────────────
+     `.panel-launcher-card` had no positioning context of its own; the badge needs one. */
+  .panel-launcher-card { position: relative; }
+  .panel-launcher-badge {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 5px;
+    border-radius: 9999px;
+    background: color-mix(in srgb, var(--green) 18%, transparent);
+    color: var(--green);
+    font-size: 10px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* S6 `considered` — the timeout urgency cue and the honest question row.
+     Both are colour and wording only. `design/mocks/S6/RESEARCH.md`'s approval-UX finding is that
+     countdown pressure makes a decision worse, and the permission card already states its expiry
+     as a consequence sentence rather than a timer, so nothing here ticks either.
+     Size and alignment stay on the element as utilities, as `.question-row` already does with
+     `p-4`; this class carries only what the state changes. */
+  .question-time {
+    color: var(--text-3);
+    transition: color var(--dur-base) var(--ease);
+  }
+  /* Amber once most of the asking agent's own `question_timeout_seconds` has gone. Amber and not
+     red because the run is not failing — it is about to stop waiting and carry on without an
+     answer, the same distinction the permission card draws between "waiting" and "refused". The
+     transition above is what keeps the change from reading as a repaint when a poll lands. */
+  .question-time.is-urgent { color: var(--amber); }
+
+  /* The asking run has ended, so nothing receives an answer to this any more. Dimmed to the same
+     0.68 `.conversation-interject.is-stale` uses, so a dead question reads identically wherever it
+     is shown rather than growing a second vocabulary on the list surface. */
+  .question-row.is-stale { opacity: 0.68; }
+  /* Hover promotes a row the operator can still act usefully on. A stale one stays where it is;
+     lifting it would offer an affordance that no longer leads anywhere. */
+  .question-row.is-stale:hover {
+    border-color: var(--border);
+    background: var(--surface-2);
+  }
+
+  /* The poll dropped but the last list is still on screen. Amber, not red: nothing failed for the
+     operator to act on — what is on screen is simply older than it looks, which is the same
+     "worth knowing, not broken" register `QuestionInterruptCard` already uses amber for. */
+  .questions-stale-banner {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 8px 10px;
+    border: 1px solid color-mix(in srgb, var(--amber) 25%, var(--border));
+    border-radius: var(--radius-lg);
+    background: color-mix(in srgb, var(--amber) 6%, var(--surface-2));
+    color: var(--text-2);
+    font-size: 11px;
+    line-height: 1.5;
+  }
+  .questions-stale-banner svg {
+    flex-shrink: 0;
+    margin-top: 1px;
+    color: var(--amber);
+  }
+
+  /* The waiting sentence carries a clock, per `design/mocks/S6/considered.html`. The icon is what
+     makes it read as a deadline rather than as a caption; it inherits `--text-3` through
+     `currentColor`, so the line stays one colour. Replaces the previous one-line rule. */
+  .permission-waiting {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    color: var(--text-3);
+  }
+  .permission-waiting svg { flex-shrink: 0; }
+
+/* ─── Scheduled jobs ────────────────────────────────────────────
+   Three additions from design/mocks/S8-jobs/considered.html, all of
+   them information the operator previously had to compute by eye:
+   what a cron string means, when it will next fire, and whether the
+   job has been healthy. Nothing here introduces a colour, radius or
+   duration that is not already a token — the trend dots take their
+   fill inline from `runStatusColor` in JobCard.tsx, which is the
+   same map the expanded run list reads. */
+
+/* JobCard: the cron chip's translation, indented under it so the two
+   read as one block rather than two facts. Absent entirely when
+   `describeCron` declines the expression. */
+.job-cron-plain {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 4px 0 0 20px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+.job-cron-plain svg {
+  flex: none;
+  opacity: 0.7;
+}
+
+/* JobCard: last-five-firings trend strip. Colour is the whole signal,
+   so the dots are deliberately larger than a border and spaced enough
+   to be counted at a glance without costing a row. */
+.trend-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+.trend-label {
+  font-size: 10.5px;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.trend-dots {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.trend-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 9999px;
+  transition: transform var(--dur-fast) var(--ease);
+}
+/* Hovering the strip grows every dot together, not the one under the
+   cursor: the answer being offered is the run of five, and picking one
+   out would invite reading it as a target. */
+.trend-dots:hover .trend-dot {
+  transform: scale(1.15);
+}
+@media (prefers-reduced-motion: reduce) {
+  .trend-dot {
+    transition: none;
+  }
+  .trend-dots:hover .trend-dot {
+    transform: none;
+  }
+}
+
+/* JobForm: the cron field's live translation. Boxed rather than plain
+   text because it sits between the input and the preset chips and
+   would otherwise read as a caption for the chips. */
+.cron-preview {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 7px;
+  padding: 6px 9px;
+  border: 1px solid var(--border-region);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  font-size: 11.5px;
+  color: var(--text-2);
+}
+.cron-preview svg {
+  flex: none;
+  color: var(--text-3);
+}
+
+/* JobForm: the instants themselves, kept as inline text one step
+   quieter than the translation above it — it is corroboration, not a
+   second claim. */
+.next-run-preview {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+.next-run-preview svg {
+  flex: none;
+  opacity: 0.7;
+}
+
+  /* ------------------------------------------------------------------------------------------
+     S8-logs — the log console and activity feed (design/mocks/S8-logs/considered.html).
+
+     MERGE NOTE: these rules must land AFTER the baseline control block (the
+     `button:not([data-slot="button"])…` rules near the top of the components layer). Two of them
+     deliberately mirror that block's `:not()` chain so they win the specificity tie by source
+     order rather than by !important — see the comments at each.
+
+     Class names used by the components:
+       .log-volume, .log-volume-label, .log-volume-bars, .log-volume-bar, .log-volume-note,
+       .log-volume-peak   → LogsView.tsx (the volume strip)
+       .log-row-main      → LogLine.tsx  (the clickable row)
+       .feed-card         → EventRow.tsx (one activity-feed row)
+       .activity-chip     → ActivityLog.tsx (severity filters + the Pause button)
+       .is-new / @keyframes row-arrive → LogLine.tsx and EventRow.tsx, both
+     ------------------------------------------------------------------------------------------ */
+
+  /* The one at-a-glance signal on this screen. A 500-entry window rendered as a pure list cannot
+     answer "did something spike five minutes ago" without scrolling, so the strip buys that answer
+     with a single thin row — the only vertical space this pass spends, against IDENTITY.md's
+     density clause and named there as an accepted cost. Flat bars from --surface-3, no chart
+     library, no gradient: the same idiom as the row fills. */
+  .log-volume {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 14px 14px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+  }
+  .log-volume-label {
+    flex: none;
+    font-size: 10.5px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--text-3);
+  }
+  .log-volume-bars {
+    position: relative;
+    display: flex;
+    flex: 1;
+    align-items: flex-end;
+    gap: 2px;
+    height: 22px;
+  }
+  /* Bars grow from the baseline, so the hover lift reads as the bar getting taller rather than
+     the whole strip moving. Colour is set per bar in TS: a bucket takes the worst severity in it,
+     mixed into --surface-3 rather than replacing it. */
+  .log-volume-bar {
+    flex: 1;
+    min-width: 2px;
+    border-radius: 1px 1px 0 0;
+    background: var(--surface-3);
+    transform-origin: bottom;
+    transition: opacity var(--dur-fast) var(--ease),
+                transform var(--dur-fast) var(--ease);
+  }
+  .log-volume-bar:hover {
+    opacity: 0.8;
+    transform: scaleY(1.05);
+  }
+  .log-volume-note {
+    flex: none;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text-3);
+  }
+  /* The peak callout names the number the strip's shape only implies. Centred on its bucket and
+     pointer-transparent, so it can never take a hover the bar underneath it was owed. */
+  .log-volume-peak {
+    position: absolute;
+    bottom: 26px;
+    padding: 2px 6px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+    color: var(--red);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    white-space: nowrap;
+    transform: translateX(-50%);
+    pointer-events: none;
+  }
+  .log-volume-peak::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    margin-left: -4px;
+    border: 4px solid transparent;
+    border-top-color: var(--border);
+  }
+
+  /* One log row. Hover was set by an inline mouse handler until 2026-08-23, which meant a keyboard
+     user reaching the row got a focus ring and no fill — the handler could not fire for them. The
+     `:not()` chain mirrors the baseline [role=button] rule above so this row (which carries
+     role="button" when it has JSON to expand) takes the shared --row-hover the other row surfaces
+     use, instead of the baseline's --accent. */
+  .log-row-main {
+    transition: background-color var(--dur-fast) var(--ease);
+  }
+  .log-row-main:not([data-slot="button"]):not(.row-item):not(.row-action):hover,
+  .log-row-main:not([data-slot="button"]):not(.row-item):not(.row-action):focus-visible {
+    background: var(--row-hover);
+  }
+  /* Inset, not the usual two-layer outer ring: a full-width row in a dense table has no gutter to
+     draw an outer ring into, and an outer ring on one row would overlap its neighbours. */
+  .log-row-main:not([data-slot="button"]):not(.row-item):not(.row-action):focus-visible {
+    outline: none;
+    box-shadow: inset 0 0 0 2px var(--ring);
+  }
+
+  /* New-arrival flash — what makes this variant `considered` rather than `restrained`. A tint
+     fading to transparent over --dur-slow, never a hard colour cut. --blue here is the transient
+     "this is the one that just moved" cue, the same role it plays for focus and selection, and is
+     never left as a resting fill: the class comes back off the row when the animation ends.
+     Deliberately no fill-mode — a retained `both` would pin `background: transparent` above the
+     :hover rule and leave a finished row un-hoverable. */
+  .log-row-main.is-new,
+  .feed-card.is-new {
+    animation: row-arrive var(--dur-slow) var(--ease);
+  }
+  @keyframes row-arrive {
+    from { background: color-mix(in srgb, var(--blue) 12%, transparent); }
+    to   { background: transparent; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .log-row-main.is-new,
+    .feed-card.is-new {
+      animation: none;
+    }
+  }
+
+  /* The activity feed's severity filters and its Pause button. These carried an inline style
+     object until 2026-08-23; because `background: transparent` was inline it beat the global
+     [role=button] hover rule, and all six controls were dead to the pointer. The same object also
+     hardcoded `0.15s` (the literal --dur-fast, but not the token, so a change to the scale would
+     have missed this file) and an `8px` radius (the literal --radius-md). Both are tokens now.
+     The `:not()` chain mirrors the baseline rule above, for the same reason .log-row-main's does. */
+  .activity-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 32px;
+    padding: 0 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--text-3);
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+    text-transform: capitalize;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background-color var(--dur-fast) var(--ease),
+                border-color var(--dur-fast) var(--ease),
+                color var(--dur-fast) var(--ease);
+  }
+  /* The active chip's colours are per-severity data, so they arrive from TS as custom properties
+     rather than as an inline background — which is what lets the hover rule below paint over an
+     active chip at all. */
+  .activity-chip[data-active="true"] {
+    border-color: transparent;
+    background: var(--chip-bg, var(--surface-3));
+    color: var(--chip-fg, var(--text));
+  }
+  .activity-chip:not([data-slot="button"]):not(.row-item):not(.row-action):hover {
+    background: var(--row-hover);
+    color: var(--text-2);
+  }
+  .activity-chip[data-active="true"]:not([data-slot="button"]):not(.row-item):not(.row-action):hover {
+    background: color-mix(in srgb, var(--text) 6%, var(--chip-bg, var(--surface-3)));
+    color: var(--chip-fg, var(--text));
+  }
+  /* Same chain again: press has to out-rank the hover rule above, not just the baseline. */
+  .activity-chip:not([data-slot="button"]):not(.row-item):not(.row-action):active {
+    background: var(--row-active);
+  }
+
 }

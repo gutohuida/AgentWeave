@@ -56,6 +56,10 @@ export function ContextUsageIndicator({
       data-context-severity={context.severity}
       title={context.detail}
       className="mt-1.5"
+      // A bar and a text label are different heights, so a row of agent cards rendered ragged
+      // wherever one agent had a measured context and its neighbour only an estimate. Reserving
+      // the taller of the two keeps the grid on one baseline whichever way each card resolves.
+      style={{ minHeight: 14 }}
     >
       {context.showBar && (
         <div
@@ -64,8 +68,14 @@ export function ContextUsageIndicator({
           style={{ height: 2, background: 'var(--surface-3)' }}
         >
           <div
-            className="h-full rounded-full transition-all duration-500"
-            style={{ width: `${context.percent}%`, background: context.color }}
+            className="h-full rounded-full"
+            style={{
+              width: `${context.percent}%`,
+              background: context.color,
+              // The motion scale, not Tailwind's default easing — this was the last ad-hoc
+              // `transition-all duration-500` on the surfaces this pass covered.
+              transition: 'width var(--dur-slow) var(--ease), background var(--dur-base) var(--ease)',
+            }}
           />
         </div>
       )}

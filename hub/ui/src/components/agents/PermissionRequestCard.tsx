@@ -141,7 +141,12 @@ export function PermissionRequestCard({ requests, agent }: PermissionRequestCard
                 >
                   Deny
                 </Button>
+                {/* The clock is what makes this read as a deadline rather than as a caption.
+                    Still no countdown behind it — the sentence states the consequence, which is
+                    the decision `RESEARCH.md` reached about not putting an operator under a
+                    ticking number on the highest-stakes control in the product. */}
                 <span className="permission-waiting">
+                  <Icon name="schedule" size={12} />
                   The agent is waiting, and will be refused if nobody answers.
                 </span>
               </div>

@@ -8,6 +8,8 @@ import { SPEC_BRIDGE_CHANNEL, SPEC_BRIDGE_VERSION } from '@/components/spec/spec
 import type { AgentSummary } from '@/api/agents'
 
 vi.mock('@/hooks/useSSE', () => ({
+  // The rail's live dot reads this; a whole-module mock has to carry it or Sidebar throws.
+  useSSEConnectionState: () => 'open',
   useSSE: () => {},
   onSseReconnect: () => () => {},
   getBufferedEvents: () => [],

@@ -226,8 +226,11 @@ describe('the requirement chip row (F4)', () => {
 
     const rejectedChip = screen.getByTestId('task-requirement-chip-task-1-FR-1')
     const okChip = screen.getByTestId('task-requirement-chip-task-1-FR-2')
-    expect(rejectedChip.style.color).toBe('var(--red)')
-    expect(okChip.style.color).not.toBe('var(--red)')
+    // The rejected tone is a modifier on the shared chip class now, not an inline colour — the
+    // chip gained a resting border and a hover state that only a stylesheet can carry.
+    expect(rejectedChip).toHaveClass('task-chip-req', 'rejected')
+    expect(okChip).toHaveClass('task-chip-req')
+    expect(okChip).not.toHaveClass('rejected')
   })
 
   it('clicking a chip resolves the document from document_id and navigates with the anchor', async () => {

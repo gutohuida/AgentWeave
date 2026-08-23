@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useAnswerQuestion, type Question } from '@/api/questions'
+import { readableApiError } from '@/api/client'
 import { Icon } from '@/components/common/Icon'
 import { Button } from '@/components/ui/button'
 
@@ -12,10 +13,14 @@ interface AnswerFormProps {
 export function AnswerForm({ question, labelledBy, onAnswered }: AnswerFormProps) {
   const [answer, setAnswer] = useState('')
   const [selected, setSelected] = useState<string[]>([])
-  const { mutate, isPending } = useAnswerQuestion()
+  const { mutate, isPending, isError, error, reset } = useAnswerQuestion()
   const options = question.options ?? []
 
+  // A failure clears itself the moment the operator touches the form again: the message describes
+  // the attempt they just made, and leaving it standing over an edited answer would have it
+  // describing something else.
   function toggleOption(label: string) {
+    reset()
     setAnswer('')
     setSelected((current) => {
       if (!question.multi_select) return current.includes(label) ? [] : [label]
@@ -77,6 +82,7 @@ export function AnswerForm({ question, labelledBy, onAnswered }: AnswerFormProps
       <textarea
         value={answer}
         onChange={(event) => {
+          reset()
           setAnswer(event.target.value)
           if (event.target.value) setSelected([])
         }}
@@ -95,6 +101,16 @@ export function AnswerForm({ question, labelledBy, onAnswered }: AnswerFormProps
       >
         {isPending ? 'Submitting…' : 'Submit answer'}
       </Button>
+      {/* An answer that never left is the worst thing this form can be silent about: the agent is
+          still blocked, and a form that cleared nothing and said nothing reads as one that simply
+          did not register the click. Same shape as `PermissionRequestCard`'s 409 line — the Hub's
+          own sentence where it sent one, a plain fallback where it did not. */}
+      {isError && (
+        <p role="alert" data-testid={`answer-error-${question.id}`} className="text-[11px]" style={{ color: 'var(--red)' }}>
+          {readableApiError(error, 'The answer did not reach the Hub.')} Nothing was sent — your
+          answer is still here, so you can try again.
+        </p>
+      )}
     </form>
   )
 }

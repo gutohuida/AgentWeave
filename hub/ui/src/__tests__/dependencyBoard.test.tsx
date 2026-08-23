@@ -244,7 +244,8 @@ describe('DependencyBoard', () => {
     const drawn = screen.getAllByTestId('dependency-board-edge')
     expect(drawn).toHaveLength(1)
     expect(drawn[0].tagName).toBe('path')
-    expect(drawn[0]).toHaveAttribute('marker-end', 'url(#dependency-arrow)')
+    // One marker per edge class, not one shared grey head — see `markerIdFor`.
+    expect(drawn[0]).toHaveAttribute('marker-end', 'url(#dependency-arrow-normal)')
     expect(drawn[0].getAttribute('d')).toMatch(/^M .* V .* H .* V /)
   })
 
@@ -485,6 +486,138 @@ describe('DependencyBoard', () => {
       )
 
       expect(screen.queryByTestId('dependency-board-layer-0-stall-summary')).not.toBeInTheDocument()
+    })
+  })
+
+  // S4 `considered` remediation: the approved mock's edge treatment, which shipped as the
+  // `restrained` variant (one grey arrowhead, a bare hidden-link count, no lineage affordance).
+  describe('S4 — the edge colour coding reaches the arrowhead', () => {
+    it('gives each edge class its own marker rather than one shared grey head', async () => {
+      vi.resetModules()
+      renderBoard(
+        [
+          // Deliberately non-terminal, so layer 0 stays open and its edges are real, not ghosts.
+          makeTask({ id: 'a', title: 'Live prerequisite', status: 'in_progress' }),
+          makeTask({ id: 'b', title: 'Blocked by a rejection', dependency_state: 'gated_on_rejected' }),
+          makeTask({ id: 'c', title: 'Merely gated', dependency_state: 'gated' }),
+        ],
+        [
+          { task_id: 'b', depends_on_task_id: 'a' },
+          { task_id: 'c', depends_on_task_id: 'a' },
+        ],
+      )
+      const { DependencyBoard: Board } = await import('@/components/tasks/DependencyBoard')
+      const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      render(
+        <QueryClientProvider client={client}>
+          <Board specDocumentId="spdoc-1" />
+        </QueryClientProvider>,
+      )
+
+      const drawn = screen.getAllByTestId('dependency-board-edge')
+      const markers = drawn.map((path) => path.getAttribute('marker-end'))
+      expect(markers).toContain('url(#dependency-arrow-rejected)')
+      expect(markers).toContain('url(#dependency-arrow-gated)')
+      // Every referenced marker is actually defined — a dangling `marker-end` renders no head at
+      // all, which is worse than the grey one this replaces.
+      for (const marker of markers) {
+        const id = marker!.slice('url(#'.length, -1)
+        expect(document.getElementById(id)).not.toBeNull()
+      }
+    })
+
+    it('switches the arrowhead to the lineage marker while a trace is highlighted', async () => {
+      vi.resetModules()
+      renderBoard(
+        [makeTask({ id: 'a', title: 'Root task' }), makeTask({ id: 'b', title: 'Leaf task' })],
+        [{ task_id: 'b', depends_on_task_id: 'a' }],
+      )
+      const { DependencyBoard: Board } = await import('@/components/tasks/DependencyBoard')
+      const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      render(
+        <QueryClientProvider client={client}>
+          <Board specDocumentId="spdoc-1" />
+        </QueryClientProvider>,
+      )
+
+      const edge = screen.getByTestId('dependency-board-edge')
+      expect(edge).toHaveAttribute('marker-end', 'url(#dependency-arrow-normal)')
+      fireEvent.mouseEnter(screen.getByText('Leaf task'))
+      expect(edge).toHaveAttribute('marker-end', 'url(#dependency-arrow-lineage)')
+    })
+
+    it('draws a ghost stub for a link a collapsed layer is hiding, not just a count', async () => {
+      vi.resetModules()
+      renderBoard(
+        [
+          // Layer 0 is entirely terminal, so it folds by default (task 8.6) and takes its card —
+          // and therefore its edge's upper endpoint — off the board.
+          makeTask({ id: 'a', title: 'Done prerequisite', status: 'approved' }),
+          makeTask({ id: 'b', title: 'Still going', status: 'in_progress' }),
+        ],
+        [{ task_id: 'b', depends_on_task_id: 'a' }],
+      )
+      const { DependencyBoard: Board } = await import('@/components/tasks/DependencyBoard')
+      const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      render(
+        <QueryClientProvider client={client}>
+          <Board specDocumentId="spdoc-1" />
+        </QueryClientProvider>,
+      )
+
+      expect(screen.queryByText('Done prerequisite')).not.toBeInTheDocument()
+      // The count still reports it, and the stub now shows where it went.
+      expect(screen.getByTestId('dependency-board-layer-0-toggle')).toHaveTextContent('1 link hidden')
+      const ghost = screen.getByTestId('dependency-board-ghost-edge')
+      expect(ghost).toHaveClass('dependency-edge-ghost')
+      expect(ghost).toHaveAttribute('marker-end', 'url(#dependency-arrow-ghost)')
+      // A ghost is never claimed by a lineage trace — its far end is not on screen.
+      expect(ghost).not.toHaveClass('lineage-active')
+
+      // Expanding restores the real edge and retires the stub.
+      fireEvent.click(screen.getByTestId('dependency-board-layer-0-toggle'))
+      expect(screen.queryByTestId('dependency-board-ghost-edge')).not.toBeInTheDocument()
+      expect(screen.getByTestId('dependency-board-edge')).toBeInTheDocument()
+    })
+
+    it('tells the operator the lineage trace exists, but only on a card that has one', async () => {
+      vi.resetModules()
+      renderBoard(
+        [
+          makeTask({ id: 'a', title: 'Root task' }),
+          makeTask({ id: 'b', title: 'Leaf task' }),
+          makeTask({ id: 'c', title: 'Disconnected task' }),
+        ],
+        [{ task_id: 'b', depends_on_task_id: 'a' }],
+      )
+      const { DependencyBoard: Board } = await import('@/components/tasks/DependencyBoard')
+      const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      render(
+        <QueryClientProvider client={client}>
+          <Board specDocumentId="spdoc-1" />
+        </QueryClientProvider>,
+      )
+
+      expect(screen.getByTestId('task-lineage-hint-a')).toHaveTextContent('hover to trace lineage')
+      expect(screen.getByTestId('task-lineage-hint-b')).toBeInTheDocument()
+      expect(screen.queryByTestId('task-lineage-hint-c')).not.toBeInTheDocument()
+    })
+
+    it('marks a rejected card as the cause the red edges point at', async () => {
+      vi.resetModules()
+      renderBoard([makeTask({ id: 'a', title: 'Rejected task', status: 'rejected' })], [])
+      const { DependencyBoard: Board } = await import('@/components/tasks/DependencyBoard')
+      const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      render(
+        <QueryClientProvider client={client}>
+          <Board specDocumentId="spdoc-1" />
+        </QueryClientProvider>,
+      )
+
+      // A single-task layer of terminal work folds by default; open it to see the card.
+      fireEvent.click(screen.getByTestId('dependency-board-layer-0-toggle'))
+      const card = screen.getByTestId('task-open-a').closest('.task-card-refined') as HTMLElement
+      expect(card.style.border).toContain('var(--red)')
     })
   })
 })

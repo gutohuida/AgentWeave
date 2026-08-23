@@ -15,6 +15,8 @@ interface LogLineProps {
     agent?: string
     data?: Record<string, unknown>
   }
+  /** True only for the render that follows this row's arrival — see LogsView's arrival tracking. */
+  isNew?: boolean
 }
 
 const SEVERITY_CHIP: Record<string, { bg: string; color: string }> = {
@@ -43,7 +45,7 @@ const EVENT_TYPE_COLOR: Record<string, string> = {
   watchdog_agent_exit:   'var(--amber)',
 }
 
-export function LogLine({ entry }: LogLineProps) {
+export function LogLine({ entry, isNew = false }: LogLineProps) {
   const [expanded, setExpanded] = useState(false)
   const { copied, copy } = useCopy()
 
@@ -73,7 +75,9 @@ export function LogLine({ entry }: LogLineProps) {
       }}
     >
       <div
-        className="flex items-center gap-2 px-2 py-[3px] select-none transition-colors cursor-pointer"
+        // Hover and focus live in CSS (`.log-row-main`), not in a mouse handler: the handler this
+        // replaced could not fire for a keyboard user, so a focused row got a ring and no fill.
+        className={`log-row-main flex items-center gap-2 px-2 py-[3px] select-none cursor-pointer${isNew ? ' is-new' : ''}`}
         style={{ color: 'var(--text)' }}
         onClick={toggleExpanded}
         onKeyDown={(event) => {
@@ -85,8 +89,6 @@ export function LogLine({ entry }: LogLineProps) {
         tabIndex={hasData ? 0 : undefined}
         aria-expanded={hasData ? expanded : undefined}
         aria-label={hasData ? `${expanded ? 'Collapse' : 'Expand'} ${entry.event_type} log entry` : undefined}
-        onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--accent)' }}
-        onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
       >
         <span className="w-3 shrink-0" style={{ color: 'var(--text-3)', opacity: 0.6 }}>
           {hasData && (
@@ -115,7 +117,9 @@ export function LogLine({ entry }: LogLineProps) {
           style={{ color: 'var(--text-3)' }}
           title="Copy entry"
         >
-          <Icon name={copied ? 'check' : 'content_copy'} size={14} style={{ color: copied ? 'var(--blue)' : undefined }} />
+          {/* Green, matching EventRow's identical confirmation: --blue is focus/selection, and a
+              copy succeeding is a state, not a selection. */}
+          <Icon name={copied ? 'check' : 'content_copy'} size={14} style={{ color: copied ? 'var(--green)' : undefined }} />
         </button>
       </div>
 

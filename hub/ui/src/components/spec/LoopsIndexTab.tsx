@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { Icon } from '@/components/common/Icon'
 import { Badge } from '@/components/common/Badge'
 import type { LoopSummary } from '@/api/loops'
+import { endingBucket } from './loopCounts'
 
 interface LoopsIndexTabProps {
   loops: LoopSummary[]
@@ -10,17 +11,6 @@ interface LoopsIndexTabProps {
   onToggleIncludeArchived: (next: boolean) => void
   currentLoopId: string | null
   onSelect: (loopId: string) => void
-}
-
-type EndingBucket = 'running' | 'completed' | 'stopped'
-
-/** B5.3: counts by *ending state*, never by matching `stop_reason` text — `ending_state` is the
- *  one value design D17 says is authoritative for what happened to a loop. `null` means still
- *  running; nothing here re-derives that from the presence/absence of a `stop_reason` string. */
-function endingBucket(loop: LoopSummary): EndingBucket {
-  if (loop.ending_state === 'completed') return 'completed'
-  if (loop.ending_state === 'stopped') return 'stopped'
-  return 'running'
 }
 
 function summarizeCounts(loops: LoopSummary[]): string {

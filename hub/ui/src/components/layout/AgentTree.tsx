@@ -146,6 +146,9 @@ export function AgentTree({
                 type="button"
                 data-testid={`rail-agent-${projectId}-${agent.name}`}
                 data-active={active ? 'true' : 'false'}
+                /* Level 2 of the rail's selection ladder — weight and colour, no fill. See the
+                 * `.row-item[data-active]` block in index.css for the whole scale. */
+                data-depth="agent"
                 onClick={() => onOpenAgent(projectId, agent.name)}
                 className="row-item min-w-0 flex-1"
               >
@@ -245,14 +248,36 @@ export function AgentTree({
                       testId={`rail-archived-${conversation.id}`}
                     />
                   ))}
+                {/* An expanded agent with nothing under it. This was a bare line of grey text
+                    in the one branch where the operator has nothing to click — the same pass
+                    that dressed the empty states on the pages skipped the rail. Dressed at rail
+                    scale rather than with the page-level `EmptyState`, whose 52px tile and
+                    `py-12` do not fit 252px of width, and carrying the single action reachable
+                    from this spot: a new conversation with *this* agent, which the row menu
+                    above otherwise hides two clicks deep. */}
                 {conversations.length === 0 && (
-                  <span
-                    className="px-2 py-1 text-[12px]"
+                  <div
+                    className="rail-empty"
                     data-testid={`no-conversations-${projectId}-${agent.name}`}
-                    style={{ color: 'var(--text-3)' }}
                   >
-                    No conversations yet
-                  </span>
+                    <div className="rail-empty-head">
+                      <span className="rail-empty-icon" aria-hidden="true">
+                        <Icon name="forum" size={14} />
+                      </span>
+                      <span className="rail-empty-title">No conversations yet</span>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="w-full justify-start"
+                      data-testid={`agent-new-conversation-${projectId}-${agent.name}`}
+                      aria-label={`Start a conversation with ${agent.name}`}
+                      onClick={() => onNewConversation?.(projectId, agent.name)}
+                    >
+                      <Icon name="add" size={14} />
+                      New conversation
+                    </Button>
+                  </div>
                 )}
               </div>
             )}

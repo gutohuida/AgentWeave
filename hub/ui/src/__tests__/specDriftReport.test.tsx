@@ -19,6 +19,8 @@ import type { AgentSummary } from '@/api/agents'
  */
 
 vi.mock('@/hooks/useSSE', () => ({
+  // The rail's live dot reads this; a whole-module mock has to carry it or Sidebar throws.
+  useSSEConnectionState: () => 'open',
   useSSE: () => {},
   onSseReconnect: () => () => {},
   getBufferedEvents: () => [],

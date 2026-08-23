@@ -6,6 +6,7 @@ import { EmptyState } from '@/components/common/EmptyState'
 import { getJson } from '@/api/client'
 import { useConfigStore } from '@/store/configStore'
 import { useAgents } from '@/api/agents'
+import { tint } from '@/lib/colorTint'
 
 interface SSEEvent {
   type: string
@@ -30,32 +31,29 @@ const MAX_EVENTS = 200
 const SEVERITY_FILTERS = ['all', 'error', 'warn', 'info', 'debug'] as const
 type SeverityFilter = (typeof SEVERITY_FILTERS)[number]
 
+// Via the shared tint() helper rather than a second hand-written color-mix(): same computed
+// colour, one implementation, and it follows the token across the light/dark ramp.
 const FILTER_ACTIVE_STYLE: Record<SeverityFilter, { bg: string; color: string }> = {
   all:   { bg: 'var(--surface-3)', color: 'var(--text)' },
-  error: { bg: 'color-mix(in srgb, var(--red) 15%, transparent)', color: 'var(--red)' },
-  warn:  { bg: 'color-mix(in srgb, var(--amber) 15%, transparent)', color: 'var(--amber)' },
+  error: { bg: tint('var(--red)', 15), color: 'var(--red)' },
+  warn:  { bg: tint('var(--amber)', 15), color: 'var(--amber)' },
   info:  { bg: 'var(--surface-3)', color: 'var(--text)' },
   debug: { bg: 'var(--surface-3)', color: 'var(--text-2)' },
 }
 
-const chipBase = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: '4px',
-  height: '32px',
-  borderRadius: '8px',
-  padding: '0 12px',
-  fontSize: '12px',
-  fontWeight: 500,
-  letterSpacing: '0.5px',
-  border: '1px solid var(--border)',
-  background: 'transparent',
-  color: 'var(--text-3)',
-  transition: 'background-color 0.15s, border-color 0.15s, color 0.15s',
-  cursor: 'pointer',
-  whiteSpace: 'nowrap',
-  textTransform: 'capitalize',
-} as React.CSSProperties
+// The chip's geometry, motion and interaction states live in `.activity-chip` (index.css). The
+// inline object this replaced set `background: 'transparent'`, which — being inline — beat the
+// global [role=button] hover rule and left every chip and the Pause button dead to the pointer.
+// Only the active chip's *colours* stay in TS, because they are per-severity data; they are handed
+// to CSS as custom properties so the hover rule can still paint over them.
+function activeChipVars(filter: SeverityFilter): React.CSSProperties {
+  const { bg, color } = FILTER_ACTIVE_STYLE[filter]
+  return { '--chip-bg': bg, '--chip-fg': color } as React.CSSProperties
+}
+
+// Matches --dur-slow, the arrival flash's duration; the class has to come back off the row so a
+// re-render never replays it.
+const ARRIVAL_FLASH_MS = 500
 
 export function ActivityLog() {
   const counterRef = useRef(0)
@@ -77,12 +75,40 @@ export function ActivityLog() {
   }, [paused])
   const [severityFilter, setSeverityFilter] = useState<SeverityFilter>('all')
   const [loadingHistory, setLoadingHistory] = useState(false)
-  const bottomRef = useRef<HTMLDivElement>(null)
+  const tailRef = useRef<HTMLDivElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
+  const [atTail, setAtTail] = useState(true)
+
+  // Arrival is read off the SSE callback, the only path an event can genuinely *arrive* on: the
+  // history fetch backfills rows that already happened, and flashing 200 of those on tab open
+  // would say nothing. The flag is dropped again after the animation so a re-render cannot replay
+  // it and a re-mount cannot resurrect it.
+  const [arrivedIds, setArrivedIds] = useState<ReadonlySet<number>>(() => new Set())
+  const flashTimersRef = useRef<number[]>([])
+
+  function markArrived(localId: number) {
+    setArrivedIds((prev) => new Set([...prev, localId]))
+    flashTimersRef.current.push(window.setTimeout(() => {
+      setArrivedIds((prev) => {
+        const next = new Set(prev)
+        next.delete(localId)
+        return next
+      })
+    }, ARRIVAL_FLASH_MS))
+  }
+
+  useEffect(() => () => {
+    flashTimersRef.current.forEach((timer) => window.clearTimeout(timer))
+    flashTimersRef.current = []
+  }, [])
 
   useEffect(() => {
     if (!isConfigured || !projectId) return
     let cancelled = false
     setEvents([])
+    // Emptying the list resets the container's scrollTop without firing a scroll event, so the
+    // follow flag has to be reset by hand or the new project opens already detached from its tail.
+    setAtTail(true)
     setLoadingHistory(true)
     getJson<SSEEvent[]>(`/api/v1/projects/${projectId}/events/history?limit=200`)
       .then((history) => {
@@ -111,15 +137,28 @@ export function ActivityLog() {
     if (pausedRef.current) return
     const d = (event.data ?? {}) as { project_id?: string }
     if (d.project_id !== projectId) return
-    setEvents((prev) => {
-      const next = [...prev, { ...event, localId: counterRef.current++ }]
-      return next.slice(-MAX_EVENTS)
-    })
+    // The id is minted outside the updater: React may invoke an updater twice, and a doubled
+    // counter would break the arrival flag's pairing with the row it belongs to.
+    const localId = counterRef.current++
+    setEvents((prev) => [...prev, { ...event, localId }].slice(-MAX_EVENTS))
+    markArrived(localId)
   })
 
+  // This feed renders newest-first, so the tail it must follow is the TOP of the list. The anchor
+  // used to sit after the map — below 200 buffered events — so every arrival scrolled the operator
+  // away from the thing that had just arrived. Following only while the operator is already at the
+  // tail is LogsView's rule, for the same reason: scrolling back through history must not be
+  // yanked out from under them.
   useEffect(() => {
-    if (!paused) bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [events, paused])
+    if (paused || !atTail) return
+    tailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  }, [events, paused, atTail])
+
+  function handleScroll() {
+    const el = listRef.current
+    if (!el) return
+    setAtTail(el.scrollTop < 40)
+  }
 
   const visibleEvents = severityFilter === 'all'
     ? events
@@ -132,7 +171,7 @@ export function ActivityLog() {
         <h2 className="text-sm font-medium" style={{ color: 'var(--text)' }}>Live Activity</h2>
         <button
           onClick={() => setPaused((p) => !p)}
-          style={chipBase}
+          className="activity-chip"
         >
           <Icon name={paused ? 'play_arrow' : 'pause'} size={16} />
           {paused ? 'Resume' : 'Pause'}
@@ -143,12 +182,14 @@ export function ActivityLog() {
       <div className="flex items-center gap-1.5 flex-wrap">
         {SEVERITY_FILTERS.map((s) => {
           const active = severityFilter === s
-          const style  = active ? FILTER_ACTIVE_STYLE[s] : undefined
           return (
             <button
               key={s}
               onClick={() => setSeverityFilter(s)}
-              style={active ? { ...chipBase, background: style!.bg, color: style!.color, borderColor: 'transparent' } : chipBase}
+              className="activity-chip"
+              data-active={active ? 'true' : 'false'}
+              aria-pressed={active}
+              style={active ? activeChipVars(s) : undefined}
             >
               {active && <Icon name="check" size={14} />}
               {s}
@@ -159,6 +200,8 @@ export function ActivityLog() {
 
       {/* Event list */}
       <div
+        ref={listRef}
+        onScroll={handleScroll}
         className="flex-1 overflow-y-auto rounded-xl p-3"
         style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
       >
@@ -175,18 +218,32 @@ export function ActivityLog() {
           <EmptyState icon="monitoring" title="Waiting for events…" description="SSE events will stream here in real time." />
         ) : (
           <>
+            <div ref={tailRef} data-testid="activity-tail-anchor" />
             {[...visibleEvents].reverse().map((event) => (
               <EventRow
                 key={event.localId}
                 event={event}
                 actorName={eventActor(event.data)}
                 actorColorIndex={colorsByAgent.get(eventActor(event.data) ?? '')}
+                isNew={arrivedIds.has(event.localId)}
               />
             ))}
-            <div ref={bottomRef} />
           </>
         )}
       </div>
+
+      {/* Jump to latest — the same nudge LogsView offers once the operator has scrolled off the
+          tail, pointing the other way because the tail here is the top. */}
+      {!paused && !atTail && (
+        <button
+          onClick={() => { setAtTail(true); tailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }) }}
+          className="shrink-0 self-center flex items-center gap-1 text-xs font-medium"
+          style={{ color: 'var(--blue)' }}
+        >
+          <Icon name="arrow_upward" size={14} />
+          Jump to latest
+        </button>
+      )}
     </div>
   )
 }

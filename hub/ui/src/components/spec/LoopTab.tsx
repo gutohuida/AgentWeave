@@ -151,9 +151,14 @@ export function LoopTab({ loopId, onClose }: LoopTabProps) {
   const { data: loop, isLoading, isError } = useLoop(loopId)
 
   if (isLoading) {
+    // Shape-matched, like the index tabs already are: a heading line, then the step rows this
+    // panel is about to fill in. The two detail tabs were the last places still saying "Loading…".
     return (
-      <div className="p-4" data-testid="loop-tab" style={{ fontSize: 12, color: 'var(--text-3)' }}>
-        Loading…
+      <div className="space-y-2 p-4" data-testid="loop-tab" aria-label="Loading loop">
+        <div className="skeleton h-3 w-1/2" />
+        <div className="skeleton h-9 w-full" />
+        <div className="skeleton h-9 w-full" />
+        <div className="skeleton h-9 w-5/6" />
       </div>
     )
   }

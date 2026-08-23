@@ -5,6 +5,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useConfigStore } from '@/store/configStore'
 
 vi.mock('@/hooks/useSSE', () => ({
+  // The rail's live dot reads this; a whole-module mock has to carry it or Sidebar throws.
+  useSSEConnectionState: () => 'open',
   useSSE: () => {},
   getBufferedEvents: () => [],
   cancelReconnect: () => {},

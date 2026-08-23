@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { format } from 'date-fns'
 import { Icon } from '@/components/common/Icon'
+import { hubDate } from '@/lib/hubTime'
 import { useLogAgents, useLogs } from '@/api/logs'
 import { Button } from '@/components/ui/button'
 import { LogLine } from './LogLine'
@@ -33,6 +35,80 @@ function eventCategory(eventType: string, data?: Record<string, unknown>): Categ
   return 'other'
 }
 
+// The volume strip: 20 buckets over half an hour, derived from the entries already on screen
+// rather than a second API call. With a 500-entry window rendered as a pure list, "did something
+// spike five minutes ago" is otherwise unanswerable without scrolling — the one at-a-glance signal
+// this screen has, and the only row of vertical space the design pass spends.
+const VOLUME_BUCKETS   = 20
+const VOLUME_WINDOW_MS = 30 * 60 * 1000
+const VOLUME_BUCKET_MS = VOLUME_WINDOW_MS / VOLUME_BUCKETS
+
+// A bucket takes the colour of the worst severity in it, mixed into --surface-3 rather than
+// replacing it: the strip reads as one flat shape whose spikes are tinted, not as a chart with
+// coloured series.
+const VOLUME_BAR_ERROR = 'color-mix(in srgb, var(--red) 60%, var(--surface-3))'
+const VOLUME_BAR_WARN  = 'color-mix(in srgb, var(--amber) 55%, var(--surface-3))'
+
+// A single entry is not a spike. The callout only appears once a bucket holds enough to be worth
+// the operator's eye, so a near-idle strip stays quiet.
+const VOLUME_PEAK_MIN = 2
+
+interface VolumeBucket {
+  total: number
+  error: number
+  warn:  number
+}
+
+interface VolumeStrip {
+  buckets:   VolumeBucket[]
+  max:       number
+  peakIndex: number
+  peakRate:  number
+  note:      string
+}
+
+function buildVolumeStrip(entries: { timestamp: string; severity?: string }[]): VolumeStrip | null {
+  if (entries.length === 0) return null
+
+  const now    = Date.now()
+  const newest = entries.reduce((max, e) => Math.max(max, hubDate(e.timestamp).getTime()), 0)
+  // Anchor on the newest entry when the feed has gone quiet. A wall-clock window would render an
+  // empty strip for an idle project, which says nothing; anchored, the last half hour of actual
+  // activity still answers the question — and the note below says which window it is, so the
+  // reading is never a guess.
+  const end   = newest > now - VOLUME_BUCKET_MS ? now : newest
+  const start = end - VOLUME_WINDOW_MS
+
+  const buckets: VolumeBucket[] = Array.from({ length: VOLUME_BUCKETS }, () => ({ total: 0, error: 0, warn: 0 }))
+  for (const entry of entries) {
+    const at = hubDate(entry.timestamp).getTime()
+    if (at < start || at > end) continue
+    const bucket = buckets[Math.min(VOLUME_BUCKETS - 1, Math.floor((at - start) / VOLUME_BUCKET_MS))]
+    bucket.total += 1
+    if (entry.severity === 'error') bucket.error += 1
+    else if (entry.severity === 'warn') bucket.warn += 1
+  }
+
+  const max = buckets.reduce((hi, b) => Math.max(hi, b.total), 0)
+  if (max === 0) return null
+
+  const peakIndex = buckets.findIndex((b) => b.total === max)
+  return {
+    buckets,
+    max,
+    peakIndex,
+    // Buckets are 90s wide, so the raw count is not a rate. Normalising to entries/minute is what
+    // makes the number comparable to anything else the operator knows.
+    peakRate: Math.max(1, Math.round(max / (VOLUME_BUCKET_MS / 60_000))),
+    note: end === now ? 'last 30m' : `30m to ${format(new Date(end), 'HH:mm')}`,
+  }
+}
+
+// Long enough for the arrival flash to finish (--dur-slow). Kept as a number because the class has
+// to come back off the row: a row left flagged as new would re-flash the next time a filter change
+// re-mounts it.
+const ARRIVAL_FLASH_MS = 500
+
 export function LogsView() {
   const [search,      setSearch]      = useState('')
   const [severity,    setSeverity]    = useState<Severity>('all')
@@ -64,6 +140,39 @@ export function LogsView() {
       return false
     })
   }, [entries, search, category])
+
+  const volume = useMemo(() => buildVolumeStrip(filtered), [filtered])
+
+  // "New" means arrived, not rendered. The first payload seeds the seen-set silently — opening the
+  // tab must not flash 500 rows — and an id, once seen, never counts as new again, so a filter
+  // change that re-mounts old rows does not replay their arrival.
+  const seenIdsRef = useRef<Set<string> | null>(null)
+  const flashTimersRef = useRef<number[]>([])
+  const [arrivedIds, setArrivedIds] = useState<ReadonlySet<string>>(() => new Set())
+
+  useEffect(() => {
+    const seen = seenIdsRef.current
+    if (seen === null) {
+      seenIdsRef.current = new Set(entries.map((e) => e.id))
+      return
+    }
+    const fresh = entries.filter((e) => !seen.has(e.id)).map((e) => e.id)
+    if (fresh.length === 0) return
+    fresh.forEach((id) => seen.add(id))
+    setArrivedIds((prev) => new Set([...prev, ...fresh]))
+    flashTimersRef.current.push(window.setTimeout(() => {
+      setArrivedIds((prev) => {
+        const next = new Set(prev)
+        fresh.forEach((id) => next.delete(id))
+        return next
+      })
+    }, ARRIVAL_FLASH_MS))
+  }, [entries])
+
+  useEffect(() => () => {
+    flashTimersRef.current.forEach((timer) => window.clearTimeout(timer))
+    flashTimersRef.current = []
+  }, [])
 
   useEffect(() => {
     if (live && autoScroll) bottomRef.current?.scrollIntoView({ behavior: 'instant' })
@@ -200,6 +309,41 @@ export function LogsView() {
         </div>
       </div>
 
+      {/* Volume strip — hidden while loading and when nothing is in the window, so it never
+          occupies a row it has nothing to say in. */}
+      {!isLoading && volume && (
+        <div
+          className="log-volume shrink-0"
+          role="img"
+          aria-label={`Log volume, ${volume.note}, peak ${volume.peakRate} entries per minute`}
+        >
+          <span className="log-volume-label">Volume</span>
+          <div className="log-volume-bars">
+            {volume.peakIndex >= 0 && volume.max >= VOLUME_PEAK_MIN && (
+              <span
+                className="log-volume-peak"
+                style={{ left: `${((volume.peakIndex + 0.5) / VOLUME_BUCKETS) * 100}%` }}
+              >
+                {volume.peakRate}/min
+              </span>
+            )}
+            {volume.buckets.map((bucket, index) => (
+              <span
+                key={index}
+                className="log-volume-bar"
+                // An empty bucket keeps a stub rather than vanishing: the baseline is what makes
+                // the strip read as a timeline instead of a scatter of bars.
+                style={{
+                  height: `${bucket.total === 0 ? 6 : Math.max(10, Math.round((bucket.total / volume.max) * 100))}%`,
+                  background: bucket.error > 0 ? VOLUME_BAR_ERROR : bucket.warn > 0 ? VOLUME_BAR_WARN : 'var(--surface-3)',
+                }}
+              />
+            ))}
+          </div>
+          <span className="log-volume-note">{volume.note}</span>
+        </div>
+      )}
+
       {/* Log body */}
       <div
         ref={bodyRef}
@@ -232,7 +376,7 @@ export function LogsView() {
               <span className="flex-1">MESSAGE</span>
             </div>
             {filtered.map((entry) => (
-              <LogLine key={entry.id} entry={entry} />
+              <LogLine key={entry.id} entry={entry} isNew={arrivedIds.has(entry.id)} />
             ))}
             <div ref={bottomRef} />
           </>

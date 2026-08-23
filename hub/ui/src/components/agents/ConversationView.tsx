@@ -16,6 +16,7 @@ import { FileTab } from '@/components/spec/FileTab'
 import { FilesIndexTab } from '@/components/spec/FilesIndexTab'
 import { LoopTab } from '@/components/spec/LoopTab'
 import { LoopsIndexTab } from '@/components/spec/LoopsIndexTab'
+import { runningLoopCount } from '@/components/spec/loopCounts'
 import { PanelShell, type PanelTabDescriptor } from '@/components/spec/PanelShell'
 import { SpecDocumentPanel } from '@/components/spec/SpecDocumentPanel'
 import { SpecDocumentPicker } from '@/components/spec/SpecDocumentPicker'
@@ -293,9 +294,11 @@ export function ConversationView({
     () => [
       { id: 'specs', label: 'Specs', icon: 'menu_book' },
       { id: 'files', label: 'Files', icon: 'folder_open' },
-      { id: 'loops', label: 'Loops', icon: 'sync' },
+      // The shell's launcher badge. Counted here rather than in the shell because the loops are
+      // already fetched here and the shell deliberately knows nothing about what a tab contains.
+      { id: 'loops', label: 'Loops', icon: 'sync', count: runningLoopCount(allLoops) },
     ],
-    [],
+    [allLoops],
   )
   const describePanelTab = useCallback(
     (id: TabId): PanelTabDescriptor => {

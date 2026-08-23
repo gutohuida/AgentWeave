@@ -29,6 +29,11 @@ interface TaskCardProps {
   /** The board marks the card whose drawer is open. Without it the open card was unmarked on the
    *  board, which is the fourth state the design demonstrated and the only one not wired up. */
   isSelected?: boolean
+  /** S4 finding 5: the dependency board highlights a card's whole lineage on hover, and nothing on
+   *  screen said so — the operator's stated primary want, discoverable only by accident. The hint
+   *  belongs to that board alone, so it is opt-in: the Kanban board has no lineage to trace, and a
+   *  DAG card with no edges has none either. */
+  showLineageHint?: boolean
   onDragStart?: DragEventHandler<HTMLDivElement>
   onDragEnd?: DragEventHandler<HTMLDivElement>
   onMoveByKeyboard?: (direction: 'left' | 'right') => void
@@ -78,6 +83,7 @@ export function TaskCard({
   draggable = false,
   isDragging = false,
   isSelected = false,
+  showLineageHint = false,
   onDragStart,
   onDragEnd,
   onMoveByKeyboard,
@@ -107,6 +113,13 @@ export function TaskCard({
   const isBlocked = task.status === 'blocked'
   const blockedAccent = 'var(--purple)'
 
+  // A rejected card is the *cause* of every `gated_on_rejected` card downstream of it, and on the
+  // dependency board the red edges pointed at a card that looked like any other. Stated on the card
+  // itself rather than only on that board: a rejected task reads the same wherever it is drawn, and
+  // one rule beats a board-specific special case. Cannot collide with `isBlocked` — status is a
+  // single value, so a card is never both.
+  const isRejected = task.status === 'rejected'
+
   /* D12: a slow pulsing green hue around a card whose task has a run executing *right now* —
    * a fact the status badge cannot carry, since a task can read `in_progress` with nothing
    * actually running (that disagreement is `has_open_divergence`, above). `assignee_status`
@@ -129,7 +142,13 @@ export function TaskCard({
       onDragEnd={onDragEnd}
       style={{
         background: 'var(--surface-2)',
-        border: `1px solid ${isBlocked ? `color-mix(in srgb, ${blockedAccent} 45%, transparent)` : 'var(--border)'}`,
+        border: `1px solid ${
+          isBlocked
+            ? `color-mix(in srgb, ${blockedAccent} 45%, transparent)`
+            : isRejected
+              ? 'color-mix(in srgb, var(--red) 40%, transparent)'
+              : 'var(--border)'
+        }`,
         borderRadius: 'var(--radius)',
         overflow: 'hidden',
         // The static hue itself — present whether or not the animation class above is, so
@@ -167,11 +186,19 @@ export function TaskCard({
               {task.title}
             </p>
 
-            {/* Compact description. Always clamped — the full text is a drawer click away. */}
+            {/* Compact description. Two lines, not one: this is an information-dense operator tool
+                and clamping harder is a density regression, not a refinement (IDENTITY clause 6).
+                The fade is what the clamp was missing — a resting affordance saying more text
+                exists, rather than a sentence that simply stops mid-word. It brightens on hover
+                because the card's own background does; both target colours are `--task-card-fade-to`
+                so the gradient can never disagree with the surface it sits on. */}
             {task.description && (
-              <p className="task-card-description mt-1 line-clamp-1" style={{ color: 'var(--text-3)' }}>
-                {task.description}
-              </p>
+              <div className="task-card-desc-wrap">
+                <p className="task-card-description line-clamp-2" style={{ color: 'var(--text-3)' }}>
+                  {task.description}
+                </p>
+                <span className="task-card-desc-fade" aria-hidden="true" />
+              </div>
             )}
           </div>
 
@@ -243,17 +270,12 @@ export function TaskCard({
                   onClick={() => {
                     if (clickable) onOpenRequirement!(chip.documentPath!, chip.anchor)
                   }}
-                  className="text-[10px] px-1.5 py-0.5 rounded-full font-medium"
-                  style={{
-                    background: chip.rejected
-                      ? 'color-mix(in srgb, var(--red) 12%, transparent)'
-                      : 'var(--surface-3)',
-                    border: `1px solid ${
-                      chip.rejected ? 'color-mix(in srgb, var(--red) 30%, transparent)' : 'var(--border)'
-                    }`,
-                    color: chip.rejected ? 'var(--red)' : 'var(--text-2)',
-                    cursor: clickable ? 'pointer' : 'default',
-                  }}
+                  // The border is `--border-hi`, not `--border`: a requirement chip is a link into
+                  // the specification, and at rest it used to be indistinguishable from the purely
+                  // informational badges beside it. The heavier edge plus a hover that reaches for
+                  // `--ring` says "this goes somewhere" without a second colour.
+                  className={['task-chip-req', chip.rejected ? 'rejected' : ''].filter(Boolean).join(' ')}
+                  style={{ cursor: clickable ? 'pointer' : 'default' }}
                 >
                   {chip.identifier}
                 </button>
@@ -399,22 +421,12 @@ export function TaskCard({
               {assigneeStatus.replace(/_/g, ' ')}
             </span>
           )}
+          {/* Purely informational, so it is drawn as text rather than as a chip: everything else in
+              this row is a state you can act on or navigate to, and giving provenance the same
+              bordered pill taught the eye that all pills are alike. Flat, italic, `--text-3` — the
+              fact is still there, at the weight it is worth. */}
           {task.assigner && task.assigner !== task.assignee && (
-            <span
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                background: 'var(--surface-3)',
-                border: '1px solid var(--border)',
-                borderRadius: 9999,
-                padding: '1px 6px',
-                fontSize: 10,
-                fontWeight: 500,
-                color: 'var(--text-2)',
-              }}
-            >
-              from: {task.assigner}
-            </span>
+            <span className="task-chip-info">from: {task.assigner}</span>
           )}
         </div>
 
@@ -442,6 +454,16 @@ export function TaskCard({
 
         {/* Approval merges, so an approved card owes an answer about where the work went. */}
         <TaskIntegrationNote taskId={task.id} status={task.status} />
+
+        {/* Hidden at rest, revealed by the same hover that performs the trace — so it costs no
+            resting density (IDENTITY clause 6) and still answers "was that highlight a feature?"
+            the first time a pointer crosses a card. */}
+        {showLineageHint && (
+          <p className="task-card-lineage-hint" data-testid={`task-lineage-hint-${task.id}`}>
+            <Icon name="link" size={11} />
+            hover to trace lineage
+          </p>
+        )}
       </div>
     </div>
   )

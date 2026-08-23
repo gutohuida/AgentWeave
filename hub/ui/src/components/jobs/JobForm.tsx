@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Icon } from '@/components/common/Icon'
 import { useAgents } from '@/api/agents'
 import { Button } from '@/components/ui/button'
 import { JobCreate } from '@/api/jobs'
+import { describeCron, formatNextRun, nextRuns } from '@/lib/cron'
 
 interface JobFormProps {
   onSubmit: (job: JobCreate) => void
@@ -35,6 +36,15 @@ export function JobForm({ onSubmit, onCancel, isPending }: JobFormProps) {
   const [purpose, setPurpose] = useState('')
   const [stopAt, setStopAt] = useState('')
   const [stopWhenQueueEmpties, setStopWhenQueueEmpties] = useState(false)
+
+  // What the operator is about to commit, said twice over: once as a sentence, once as the actual
+  // instants. Both are `null`/empty for an expression that cannot be read exactly, so a schedule
+  // this product does not understand shows nothing rather than a reassuring guess.
+  const cronPlain = describeCron(cron)
+  const upcoming = useMemo(() => {
+    const from = new Date()
+    return nextRuns(cron, from, 3).map((run) => formatNextRun(run, from))
+  }, [cron])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -170,6 +180,19 @@ export function JobForm({ onSubmit, onCancel, isPending }: JobFormProps) {
               style={{ ...inputStyle, fontFamily: "'JetBrains Mono', monospace" }}
               disabled={isPending}
             />
+            {cronPlain && (
+              <p className="cron-preview" data-testid="cron-preview">
+                <Icon name="chat" size={13} />
+                {cronPlain}
+              </p>
+            )}
+            {upcoming.length > 0 && (
+              <p className="next-run-preview" data-testid="next-run-preview">
+                <Icon name="schedule" size={12} />
+                Next {upcoming.length} run{upcoming.length === 1 ? '' : 's'}:{' '}
+                {upcoming.join(' · ')} (server time)
+              </p>
+            )}
             <div className="flex flex-wrap gap-2 mt-2">
               {CRON_EXAMPLES.map((example) => (
                 <button

@@ -7,6 +7,8 @@ import { useConfigStore } from '@/store/configStore'
 // Stub useSSE so it doesn't try to connect. The module is mocked globally for
 // the test file — we just need to confirm the App's tree wiring is right.
 vi.mock('@/hooks/useSSE', () => ({
+  // The rail's live dot reads this; a whole-module mock has to carry it or Sidebar throws.
+  useSSEConnectionState: () => 'open',
   useSSE: () => {},
   getBufferedEvents: () => [],
   cancelReconnect: () => {},

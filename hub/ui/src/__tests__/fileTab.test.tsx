@@ -18,7 +18,12 @@ describe('FileTab — the files tab detail kind (tasks 5.3-5.4, 2026-08-18-one-s
     mockedUseWorkspaceFile.mockReturnValue({ data: undefined, isLoading: true, error: null } as never)
     render(<FileTab path="src/a.ts" onClose={vi.fn()} />)
 
-    expect(screen.getByText('Loading…')).toBeInTheDocument()
+    // A shape-matched skeleton, not the word "Loading…" — the index tabs already worked this way
+    // and the two detail tabs were the last places still saying it in prose.
+    expect(screen.getByLabelText('Loading file')).toBeInTheDocument()
+    // Still closable while the read is in flight: the header only renders inside `FilePreview`,
+    // which this branch does not reach, so the tab draws its own strip here.
+    expect(screen.getByTestId('file-tab-close')).toBeInTheDocument()
   })
 
   it('renders text content', () => {
