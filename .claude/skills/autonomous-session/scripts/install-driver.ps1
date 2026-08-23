@@ -45,8 +45,17 @@
     `unattended-full-access` for legacy state. Overnight runs must never select a posture that can
     ask the absent operator a question.
 
+.PARAMETER StartAtHHmm
+    Wall-clock time of the first firing, HH:mm. A time that has already passed today means
+    tomorrow, so arming at night for a morning start does the obvious thing. Omit to start a
+    minute from now, which is the attended case.
+
 .EXAMPLE
     powershell -File install-driver.ps1 -EveryMinutes 5 -UntilHHmm "10:00"
+
+.EXAMPLE
+    # Armed at night, works through the morning
+    powershell -File install-driver.ps1 -StartAtHHmm "08:00" -UntilHHmm "12:00"
 
 .EXAMPLE
     # Remove it
@@ -57,6 +66,7 @@ param(
   [string] $Repo = (Resolve-Path (Join-Path $PSScriptRoot "..\..\..\..")).Path,
   [int]    $EveryMinutes = 5,
   [string] $UntilHHmm = "10:00",
+  [string] $StartAtHHmm = "",
   [string] $TaskName = "AgentWeaveAutonomousSession",
   [ValidateSet("auto", "claude", "codex")]
   [string] $Runner = "auto",
@@ -148,7 +158,21 @@ $action = New-ScheduledTaskAction `
   -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$iterationScript`" -Repo `"$Repo`" -StopAt `"$stopArg`" -TaskName `"$TaskName`" -Runner `"$resolvedRunner`" -PermissionMode `"$resolvedPermissionMode`" -AgentExecutable `"$agentExecutable`"" `
   -WorkingDirectory $Repo
 
-$trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) `
+# Same "already passed today means tomorrow" rule the stop time uses, for the same reason: an
+# operator arming at 22:00 for an 08:00 start means the morning, and a trigger resolved against
+# today's date would be in the past and fire immediately -- which for an unattended run is the
+# difference between working while they sleep and working while they are still deciding.
+if ($StartAtHHmm) {
+  $startInstant = [datetime]::ParseExact($StartAtHHmm, "HH:mm", [System.Globalization.CultureInfo]::InvariantCulture)
+  if ($startInstant -le (Get-Date)) { $startInstant = $startInstant.AddDays(1) }
+  if ($startInstant -ge $stopInstant) {
+    throw "Start $($startInstant.ToString('yyyy-MM-dd HH:mm')) is not before stop $($stopInstant.ToString('yyyy-MM-dd HH:mm')); the run would have no window."
+  }
+} else {
+  $startInstant = (Get-Date).AddMinutes(1)
+}
+
+$trigger = New-ScheduledTaskTrigger -Once -At $startInstant `
   -RepetitionInterval (New-TimeSpan -Minutes $EveryMinutes)
 
 # WakeToRun: the machine staying awake is the one precondition the driver cannot supply itself.
@@ -171,7 +195,7 @@ Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction Silent
 Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings `
   -Description "One autonomous-session iteration per firing, via headless $resolvedRunner. Self-unregisters past $stopArg." | Out-Null
 
-Write-Output "Installed '$TaskName': every $EveryMinutes min, stopping at $stopArg."
+Write-Output "Installed '$TaskName': first firing $($startInstant.ToString('yyyy-MM-dd HH:mm')), every $EveryMinutes min, stopping at $stopArg."
 Write-Output "  repo:   $Repo"
 Write-Output "  runner: $resolvedRunner ($agentExecutable)"
 Write-Output "  mode:   $resolvedPermissionMode"
