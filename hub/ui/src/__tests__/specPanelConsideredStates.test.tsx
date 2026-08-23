@@ -35,13 +35,18 @@ describe('S3 — the Loops launcher reports what is running', () => {
   it('counts only loops that are running and not archived', () => {
     expect(
       runningLoopCount([
-        makeLoop({ id: 'a' }),
-        makeLoop({ id: 'b' }),
+        // `firing_active` is what makes these two running. Having no `ending_state` is not
+        // enough — a loop that has never fired has no ending state either, and counting those
+        // put a green "running" badge on a project whose only loop was paused.
+        makeLoop({ id: 'a', firing_active: true }),
+        makeLoop({ id: 'b', firing_active: true }),
         makeLoop({ id: 'c', ending_state: 'completed' }),
         makeLoop({ id: 'd', ending_state: 'stopped' }),
         // Archiving is a governance act on a loop that has stopped; counting one as running
         // would be a contradiction the badge cannot explain.
         makeLoop({ id: 'e', archived_at: '2026-08-20T00:00:00Z' }),
+        // Never fired, job paused — idle, not running.
+        makeLoop({ id: 'f', firing_active: false }),
       ]),
     ).toBe(2)
   })

@@ -55,12 +55,28 @@ describe('LoopsIndexTab — the governance glance (task B5.1)', () => {
     renderIndex([
       loop({ id: 'l1', ending_state: 'completed' }),
       loop({ id: 'l2', ending_state: 'stopped', stop_reason: 'operator stopped it' }),
-      loop({ id: 'l3', ending_state: null }),
+      loop({ id: 'l3', ending_state: null, firing_active: true }),
     ])
 
     const summary = screen.getByTestId('loops-index-summary')
     expect(summary).toHaveTextContent('1 complete')
     expect(summary).toHaveTextContent('1 stopped early')
     expect(summary).toHaveTextContent('1 running')
+  })
+
+  it('does not call a loop running just because it has never ended', () => {
+    // `ending_state: null` covers two different situations — firing right now, and never having
+    // fired at all. A loop whose job is paused reported itself as running, which is the one thing
+    // a status badge must not do. `firing_active` is the live fact that separates them.
+    renderIndex([
+      loop({ id: 'l1', ending_state: null, firing_active: false }),
+      loop({ id: 'l2', ending_state: null, firing_active: true }),
+    ])
+
+    const summary = screen.getByTestId('loops-index-summary')
+    expect(summary).toHaveTextContent('1 running')
+    expect(summary).toHaveTextContent('1 idle')
+    expect(screen.getByText('Idle')).toBeInTheDocument()
+    expect(screen.getByText('Running')).toBeInTheDocument()
   })
 })

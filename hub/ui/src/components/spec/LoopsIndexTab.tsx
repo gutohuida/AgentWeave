@@ -14,12 +14,13 @@ interface LoopsIndexTabProps {
 }
 
 function summarizeCounts(loops: LoopSummary[]): string {
-  const counts = { running: 0, completed: 0, stopped: 0 }
+  const counts = { running: 0, idle: 0, completed: 0, stopped: 0 }
   for (const loop of loops) counts[endingBucket(loop)] += 1
   const parts: string[] = []
   if (counts.completed > 0) parts.push(`${counts.completed} complete`)
   if (counts.stopped > 0) parts.push(`${counts.stopped} stopped early`)
   if (counts.running > 0) parts.push(`${counts.running} running`)
+  if (counts.idle > 0) parts.push(`${counts.idle} idle`)
   return parts.length > 0 ? parts.join(' · ') : 'No loops'
 }
 
@@ -27,7 +28,11 @@ function EndingBadge({ loop }: { loop: LoopSummary }) {
   const bucket = endingBucket(loop)
   if (bucket === 'completed') return <Badge variant="success">Complete</Badge>
   if (bucket === 'stopped') return <Badge variant="warning">Stopped early</Badge>
-  return <Badge variant="info">Running</Badge>
+  // "Running" is claimed only while a firing is actually in progress. A loop between firings —
+  // or one whose job is paused and has never fired at all — is idle, and saying otherwise made
+  // the panel report work that was not happening.
+  if (bucket === 'running') return <Badge variant="info">Running</Badge>
+  return <Badge variant="secondary">Idle</Badge>
 }
 
 /**

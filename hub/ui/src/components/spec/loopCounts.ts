@@ -1,14 +1,24 @@
 import type { LoopSummary } from '@/api/loops'
 
-export type EndingBucket = 'running' | 'completed' | 'stopped'
+export type EndingBucket = 'running' | 'idle' | 'completed' | 'stopped'
 
 /** B5.3: counts by *ending state*, never by matching `stop_reason` text — `ending_state` is the
- *  one value design D17 says is authoritative for what happened to a loop. `null` means still
- *  running; nothing here re-derives that from the presence/absence of a `stop_reason` string. */
+ *  one value design D17 says is authoritative for what happened to a loop. Nothing here re-derives
+ *  that from the presence/absence of a `stop_reason` string.
+ *
+ *  `ending_state === null` means the loop has never *ended*, which is not the same as running: a
+ *  loop whose job is paused, or which has simply not reached its next firing, has no ending state
+ *  either. Treating null as "running" reported a paused loop that had never fired once as running.
+ *  `firing_active` is the live fact — computed Hub-side from a `JobRun` in progress with a running
+ *  `Run` (`loops.py`, task A4.4) — and is what separates the two.
+ *
+ *  Known limitation, stated rather than guessed at: `idle` cannot yet distinguish "paused" from
+ *  "waiting for its next firing", because `LoopSummary` does not carry the parent job's `enabled`.
+ *  Adding it there is what would let this say which. */
 export function endingBucket(loop: LoopSummary): EndingBucket {
   if (loop.ending_state === 'completed') return 'completed'
   if (loop.ending_state === 'stopped') return 'stopped'
-  return 'running'
+  return loop.firing_active ? 'running' : 'idle'
 }
 
 /** How many loops are running right now. Its own module rather than an export from
