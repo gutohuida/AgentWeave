@@ -6,8 +6,8 @@
   "branch": "autonomous/2026-08-24-stress-test-remediation",
   "parent_branch": "fix/2026-08-23-design-audit-remediation",
   "parent_sha": "969b7b91dc3a5c5143a7a382dd88f19e883738d5",
-  "started_at": "2026-08-24T08:00:00+01:00",
-  "stop_at": "2026-08-24T12:00:00+01:00",
+  "started_at": "2026-08-23T23:58:00+01:00",
+  "stop_at": "2026-08-24T08:00:00+01:00",
   "stop_when_queue_empties": true,
   "iteration": 0,
   "log_file": ".claude/autonomous/2026-08-24-stress-test-remediation-log.md",
@@ -58,6 +58,6 @@
     "design/IDENTITY.md is the binding visual contract. Read it before any UI change. --blue is focus and selection plus exactly one status (in_progress) and nothing else.",
     "Stage explicit paths. Never use git add -A. Never commit kimichanges.md or kimiwork.md.",
     "Never mark a task complete because a plan for it exists. Only verified implementation closes a task.",
-    "At 12:00 local time stop cleanly even if the queue is incomplete. Record the exact continuation work rather than rushing or inventing completion."
+    "At 08:00 local time stop cleanly even if the queue is incomplete. The operator gets up then and will read the log first, so a truthful account of where you stopped is worth more than a rushed final item. Record the exact continuation work rather than inventing completion."
   ]
 }
