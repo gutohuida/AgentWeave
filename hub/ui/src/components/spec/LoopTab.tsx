@@ -4,6 +4,7 @@ import { Badge } from '@/components/common/Badge'
 import { Button } from '@/components/ui/button'
 import { useLoop, type LoopSummary } from '@/api/loops'
 import { hubDate } from '@/lib/hubTime'
+import { endingBucket } from './loopCounts'
 
 interface LoopTabProps {
   loopId: string
@@ -123,10 +124,25 @@ function PendingEdit({ loop }: { loop: LoopSummary }) {
   )
 }
 
-function EndingSummary({ endingState, stopReason }: { endingState?: string | null; stopReason?: string | null }) {
-  if (endingState === 'completed') return <Badge variant="success">Complete</Badge>
-  if (endingState === 'stopped') return <Badge variant="warning">Stopped early{stopReason ? `: ${stopReason}` : ''}</Badge>
-  return <Badge variant="info">Running</Badge>
+/** The loop's state, from the one shared helper rather than a second reading of `ending_state`.
+ *
+ *  This used to fall through to "Running" whenever `ending_state` was null, which is true of a loop
+ *  that has never fired as well as one firing right now — so a paused loop reported itself as
+ *  running. It was also redundant in the one case it got right: the animated "Running now" pill
+ *  rendered immediately beside it already says that, with motion. So `running` renders nothing
+ *  here and lets that pill carry it. */
+function EndingSummary({ loop }: { loop: LoopSummary }) {
+  const bucket = endingBucket(loop)
+  if (bucket === 'completed') return <Badge variant="success">Complete</Badge>
+  if (bucket === 'stopped') {
+    return (
+      <Badge variant="warning">
+        Stopped early{loop.stop_reason ? `: ${loop.stop_reason}` : ''}
+      </Badge>
+    )
+  }
+  if (bucket === 'running') return null
+  return <Badge variant="secondary">Idle</Badge>
 }
 
 /**
@@ -189,7 +205,7 @@ export function LoopTab({ loopId, onClose }: LoopTabProps) {
       </div>
 
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
-        <EndingSummary endingState={loop.ending_state} stopReason={loop.stop_reason} />
+        <EndingSummary loop={loop} />
         {loop.archived_at && <Badge variant="secondary">Archived</Badge>}
         {loop.firing_active && (
           <span data-testid="loop-tab-firing-active">

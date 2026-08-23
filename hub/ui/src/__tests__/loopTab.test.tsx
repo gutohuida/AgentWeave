@@ -58,7 +58,10 @@ describe('LoopTab — the active-now indicator (task B6.2/B6.3, 2026-08-18-a-loo
     expect(indicator.querySelector('.animate-pulse')).not.toBeNull()
   })
 
-  it('shows the indicator alongside an ending-state badge — firing_active and history are independent facts', () => {
+  it('lets the live pill carry "running" rather than claiming it as an ending state too', () => {
+    // `ending_state: null` is the *absence* of an ending, not an ending called "running". The
+    // header used to render a "Running" badge for it, which both duplicated the animated pill
+    // beside it and — the actual defect — labelled a loop that had never fired as running.
     mockedUseLoop.mockReturnValue({
       data: baseLoop({ firing_active: true, ending_state: null }),
       isLoading: false,
@@ -66,7 +69,21 @@ describe('LoopTab — the active-now indicator (task B6.2/B6.3, 2026-08-18-a-loo
     } as never)
     render(<LoopTab loopId="loop-1" onClose={vi.fn()} />)
 
-    expect(screen.getByText('Running')).toBeInTheDocument()
     expect(screen.getByTestId('loop-tab-firing-active')).toBeInTheDocument()
+    expect(screen.queryByText('Idle')).not.toBeInTheDocument()
+  })
+
+  it('reads Idle for a loop that has neither ended nor started firing', () => {
+    // The case the operator hit: a paused job whose loop had never fired once, reported as
+    // running on both the index and this tab.
+    mockedUseLoop.mockReturnValue({
+      data: baseLoop({ firing_active: false, ending_state: null }),
+      isLoading: false,
+      isError: false,
+    } as never)
+    render(<LoopTab loopId="loop-1" onClose={vi.fn()} />)
+
+    expect(screen.getByText('Idle')).toBeInTheDocument()
+    expect(screen.queryByTestId('loop-tab-firing-active')).not.toBeInTheDocument()
   })
 })
