@@ -221,7 +221,59 @@ and fastmcp.
 
 ---
 
-## 6. What this does not solve
+## 6. The refusal has to teach — and exactly one thing it must not teach
+
+A capability that only refuses makes agents worse. A model that receives a bare refusal retries the
+same call in three different phrasings, then works around it, then reports success it did not have.
+So the grant has to be legible to the agent holding it, in three places.
+
+**This is not a new idea in this codebase.** `api/v1/agents.py:1262` already injects a briefing block
+into turn context when `can_accept_evidence` is set — the agent is told, in prose, that it may decide
+evidence. The loop below is that behaviour generalised from one boolean to the set.
+
+1. **Ambient.** The resolved set rendered into turn context at session start. This is the
+   highest-value part and it is not about refusals at all: an agent that knows it does not hold
+   `job.schedule` never plans around a loop it cannot create.
+2. **Reactive.** The refusal names the capability, states that retrying will not help, and names
+   `ask_user` as the way to ask for it. The first clause stops the retry loop; the second routes the
+   agent into the escalation path that already exists rather than dead-ending.
+3. **On demand.** A `my_capabilities` tool. Ungated, always — an agent that needed a capability to
+   discover its capabilities could never understand its first refusal.
+
+### The constraint this collides with
+
+`checkpoint_access.py:119,145` deliberately makes a denied recall **indistinguishable from
+not-found** — both return *"No recorded observation by that id is available to you."* That is a
+considered property: a distinguishable refusal confirms the observation exists, which leaks another
+agent's activity to an agent that may not read it.
+
+A naive implementation of the loop above would flatten that and quietly undo it. So the rule:
+
+> **An agent may learn what it may do. It may never learn what exists.**
+
+Capability disclosure is about **verbs**, never **objects**. *"You do not hold
+`observation.recall`"* is a fact about the agent and is disclosed. *"Observation `obs-4c1` exists but
+is denied to you"* is a fact about the world and is not.
+
+In practice: refusals are loud and named, **except** where the capability gates a lookup by
+identifier — `observation.recall` and `checkpoint.read` — where the existing indistinguishable
+refusal wins and the capability is disclosed only ambiently, never in the response to a specific id.
+
+### The operator's loop is the same recording
+
+At `contract` rigor the ungranted-but-allowed call is already being written (§5). That list is what
+tells an operator *"`builder` called `job.schedule` 14 times this week — grant it, or promote to
+`gate`?"* One record, two audiences: it is what makes promotion a decision on evidence rather than on
+fear, which is the same argument `requirement_gate` makes for its own `reported` list.
+
+> **For the operator:** should `my_capabilities` be a tool, or should the ambient briefing be
+> considered sufficient? A tool is one more thing on a surface that has 23 already, and the
+> reachability audit
+> (`2026-08-21-audit-the-tool-surface-for-reachability.md`) is parked partly over that count.
+
+---
+
+## 7. What this does not solve
 
 Being explicit, because the adjacent problem is the more interesting one and this document does not
 reach it.
@@ -250,7 +302,7 @@ the next reader will follow them.)
 
 ---
 
-## 7. If exactly one thing is taken from this
+## 8. If exactly one thing is taken from this
 
 §4. The `reviewer` field is either a promise the runtime should keep or a field that should not
 exist, it is decidable in an afternoon, and it does not depend on anything else in this document
