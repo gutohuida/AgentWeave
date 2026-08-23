@@ -306,9 +306,19 @@ def test_long_document_scan_cues_are_semantic_and_native():
     assert '<span class="aw-rationale-label">Why</span>' in html
     assert '<col style="width:12%">' in html
     assert 'class="aw-cell-empty"' in html
-    assert html.count('<tr data-first="true">') == 1
-    assert html.count('<tr data-first="false">') == 1
+    assert html.count('<tr data-first="true"') == 1
+    assert html.count('<tr data-first="false"') == 1
+    # Grouping is carried by an alternating band per requirement, not only by the first-row cue.
+    # Both criteria here belong to `alpha`, so they share one band.
+    # `">` restricts these to the row markup — the stylesheet also contains the two selectors.
+    assert html.count('data-group="even">') == 2
+    assert 'data-group="odd">' not in html
     assert '<ul class="aw-task-list"><li class="aw-task">' in html
+    # `satisfies` refs are chips, not a comma-joined string inside a flex container — the joins
+    # became their own anonymous flex items and the separators floated free.
+    assert '<a class="aw-chip-ref" href="#FR-1">FR-1</a>' in html
+    assert '<span class="aw-refs-label">satisfies</span>' in html
+    assert ", " not in html[html.index('class="aw-refs"') : html.index("</ul>")]
 
 
 # ---------------------------------------------------------------------------
@@ -590,7 +600,13 @@ def _rich_payload():
 # output against the previous commit and confirm the delta is confined to a deliberate stylesheet
 # or payload change: a digest that moves with no `corpus` argument passed, no stylesheet edit and
 # no payload field added means the None-branch stopped being a no-op, which is a real regression.
-_BASELINE_DIGEST = "1f033e3e23016eb5cb29c490a86e2c3f6625313b37121ad2a5fbe2cb651aa49a"
+# Recaptured 2026-08-23 following the protocol above: the rendered output was diffed against the
+# previous commit and the delta was confined to a deliberate stylesheet change (acceptance-table
+# banding restored and the first-row cue returned to a quiet left edge, `table-layout: fixed`,
+# `satisfies` refs as chips, link/task/nav hover states, one off-scale radius corrected) plus the
+# `data-group` attribute those bands are keyed on. No `corpus` argument was passed and the
+# None-branch still renders no region.
+_BASELINE_DIGEST = "b619291e8bad8c6a7c3a916bcccc9f57ef8c06b242e07ea0eb91414de23c428c"
 
 
 def test_omitting_corpus_reproduces_the_pre_change_output_byte_for_byte():

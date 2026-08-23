@@ -552,7 +552,11 @@
   input:checked + .panel-switch::after { transform: translateX(12px); background: var(--ring); }
   input:focus-visible + .panel-switch { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring); }
   .file-preview-header,
-  .spec-reading-header { border-bottom: 1px solid var(--border-region); background: var(--rail); }
+  /* Background only, deliberately no border-bottom. `SpecDocumentPanel.tsx` records why: a second
+     horizontal line across the top read as a seam cutting the document off from the control that
+     names it (operator, 2026-08-10). A refinement pass added the rule back without noticing the
+     comment sitting directly above the element it styles; removed again 2026-08-23. */
+  .spec-reading-header { background: var(--rail); }
   .spec-reading-body { background: var(--bg); box-shadow: inset 0 1px var(--lift-hi); }
   .spec-loading-card {
     margin: 18px;

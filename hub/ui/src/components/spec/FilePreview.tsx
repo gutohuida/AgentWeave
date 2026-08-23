@@ -76,6 +76,10 @@ const markdownComponents: Components = {
 interface FilePreviewProps {
   path: string
   content: string
+  /** The owning tab's actions, rendered into this header. `FileTab` used to draw a second header
+   *  strip of its own for them, which repeated the filename and cost a row of a panel the
+   *  research describes as "always on screen while working". */
+  headerActions?: React.ReactNode
 }
 
 /**
@@ -93,8 +97,11 @@ interface FilePreviewProps {
  * of its input before wrapping tokens in spans — the documented way to use it, and it never sees
  * anything but the file's own text.
  */
-export function FilePreview({ path, content }: FilePreviewProps) {
+export function FilePreview({ path, content, headerActions }: FilePreviewProps) {
   const { copied, copy } = useCopy()
+  const lastSlash = path.lastIndexOf('/')
+  const directories = lastSlash > 0 ? path.slice(0, lastSlash) : ''
+  const filename = lastSlash >= 0 ? path.slice(lastSlash + 1) : path
   const language = fileLanguageFor(path)
   const asMarkdown = isMarkdownPath(path)
 
@@ -148,7 +155,15 @@ export function FilePreview({ path, content }: FilePreviewProps) {
     <div className="flex h-full min-h-0 flex-col" data-testid="file-preview">
       <div className="file-preview-header flex shrink-0 items-center gap-2 px-3 py-2">
         <Icon name="article" size={14} style={{ color: 'var(--text-3)' }} />
-        <span className="min-w-0 flex-1 truncate font-mono text-[11px]" title={path}>{path}</span>
+        {/* The directories truncate; the filename never does. A single `truncate` across the whole
+            path clips the *end*, which hides the one segment the reader actually needs —
+            `hub/ui/src/components/…` tells you nothing about which file you are looking at. */}
+        <span className="flex min-w-0 flex-1 items-baseline font-mono text-[11px]" title={path}>
+          {directories && (
+            <span className="truncate" style={{ color: 'var(--text-3)' }}>{directories}/</span>
+          )}
+          <span className="shrink-0" style={{ color: 'var(--text-2)' }}>{filename}</span>
+        </span>
         <span className="aw-chip" data-pill="true">{asMarkdown ? 'Markdown' : language ?? 'Plain text'}</span>
         <Button
           variant="ghost"
@@ -159,6 +174,10 @@ export function FilePreview({ path, content }: FilePreviewProps) {
         >
           <Icon name={copied ? 'check' : 'content_copy'} size={13} />
         </Button>
+        {/* The tab's own actions render here rather than in a second header strip of their own —
+            two stacked strips both naming the same file cost two rows of an always-on-screen
+            panel and said the filename twice. */}
+        {headerActions}
       </div>
       <div className="min-h-0 flex-1 overflow-auto">{preview}</div>
     </div>
