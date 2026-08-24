@@ -13,7 +13,7 @@ function loop(over: Partial<LoopSummary> = {}): LoopSummary {
     purpose: 'keep the queue moving',
     stop_when_queue_empties: true,
     queue: { pending: 2 },
-    current_task: null,
+    current_tasks: [],
     open_questions: 0,
     firing_active: false,
     ...over,

@@ -101,7 +101,12 @@ class LoopSummary(BaseModel):
     ending_state: Optional[str] = None
     archived_at: Optional[datetime] = None
     queue: Dict[str, int] = Field(default_factory=dict)  # status -> count
-    current_task: Optional[Dict[str, str]] = None  # {"id", "title", "status"}
+    # `loop-becomes-a-flow` task 1.5: a list, because a flow may staff several tasks at once
+    # (group 5) and every caller's shape should change once rather than again later. Group 1
+    # changes no behaviour, so this holds zero or one member and the UI renders it exactly as it
+    # rendered the scalar. Empty list, never null — "nothing current" and "several current" then
+    # have the same type, and a caller can iterate without a null check.
+    current_tasks: List[Dict[str, str]] = Field(default_factory=list)  # {"id", "title", "status"}
     open_questions: int = 0
     # Design D10 (task A1.1): who decides whether this queue may be extended. NULL means the
     # current default (the operator) — returned as-is, never resolved to "operator" here, mirroring

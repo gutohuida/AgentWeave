@@ -162,13 +162,17 @@ async def _batch_loop_summaries(
     for loop_id, task_status, count in counts_result.all():
         queue_counts.setdefault(loop_id, {})[task_status] = count
 
-    current_task_by_loop: Dict[str, Dict[str, str]] = {}
+    current_tasks_by_loop: Dict[str, List[Dict[str, str]]] = {}
     # Same ordering the firing itself uses, imported rather than restated: the board and the
     # firing must never disagree about which queue item is current, which is exactly what
     # human-only check 13.1 asks. `Task.updated` is scoped to non-pending rows there — see that
     # helper for the bug the scoping fixes. Imported inside the function, matching this module's
     # existing convention for `...scheduler` (get_scheduler does the same at three call sites).
-    from ...scheduler import CLAIMABLE_LOOP_TASK_STATUSES, _loop_queue_order
+    from ...scheduler import (
+        CLAIMABLE_LOOP_TASK_STATUSES,
+        _loop_queue_order,
+        candidate_is_startable,
+    )
 
     candidates_result = await session.execute(
         select(Task)
@@ -184,24 +188,29 @@ async def _batch_loop_summaries(
     )
     # D10 (`task-dependencies` section 9.10): the firing itself skips a gated candidate rather than
     # claiming it, so "current" has to skip the same one or the board shows a task the next firing
-    # will pass over — the exact disagreement human-only check 13.1 exists to catch. Mirrors
-    # `scheduler._first_startable_candidate`'s rule rather than a second one: `in_progress` needs no
-    # fresh check (already running, no `-> in_progress` transition pending); everything else is
-    # tested against the same `dependency_gate.evaluate` the gate itself calls.
-    from ... import dependency_gate
-
+    # will pass over — the exact disagreement human-only check 13.1 exists to catch.
+    #
+    # `loop-becomes-a-flow` task 1.4: this used to restate the firing's rule inline, with a comment
+    # saying it "mirrors" it. It now *calls* it — `scheduler.candidate_is_startable` is the single
+    # statement, and only the traversal differs (this one is batched across every loop in six fixed
+    # queries, design D7, so it cannot call `_first_startable_candidate` itself).
+    #
+    # The cap of one is also task 1.4's: a flow may staff several tasks (group 5), and this
+    # derivation is already shaped to report them, but group 1 changes no behaviour — so the board
+    # still renders exactly one current item.
     for task in candidates_result.scalars().all():
-        if task.loop_id in current_task_by_loop:
+        if current_tasks_by_loop.get(task.loop_id):
             continue
-        if task.status != "in_progress":
-            refusal = await dependency_gate.evaluate(session, task)
-            if refusal.refuses:
-                continue
-        current_task_by_loop[task.loop_id] = {
-            "id": task.id,
-            "title": task.title,
-            "status": task.status,
-        }
+        startable, _refusal = await candidate_is_startable(session, task)
+        if not startable:
+            continue
+        current_tasks_by_loop[task.loop_id] = [
+            {
+                "id": task.id,
+                "title": task.title,
+                "status": task.status,
+            }
+        ]
 
     # Distinct (job_id, conversation_id) pairs first, so a resume-mode job that fired more than
     # once on the same conversation does not join the same question row once per firing.
@@ -252,7 +261,7 @@ async def _batch_loop_summaries(
             ending_state=loop.ending_state,
             archived_at=loop.archived_at,
             queue=queue_counts.get(loop.id, {}),
-            current_task=current_task_by_loop.get(loop.id),
+            current_tasks=current_tasks_by_loop.get(loop.id, []),
             open_questions=open_questions_by_job.get(job_id, 0),
             control=loop.control,
             pending_edit=_pending_loop_edit(loop),
@@ -444,7 +453,7 @@ async def create_job(
             stop_reason=loop.stop_reason,
             stopped_at=loop.stopped_at,
             queue={},
-            current_task=None,
+            current_tasks=[],
             open_questions=0,
         )
 

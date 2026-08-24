@@ -486,7 +486,7 @@ async def test_creating_with_purpose_alone_opts_into_a_loop(app, auth_headers):
     assert loop["purpose"] == "Nightly dependency audit"
     assert loop["stop_when_queue_empties"] is False
     assert loop["queue"] == {}
-    assert loop["current_task"] is None
+    assert loop["current_tasks"] == []
     assert loop["open_questions"] == 0
 
 

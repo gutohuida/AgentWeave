@@ -163,6 +163,9 @@ function LoopBlock({ job, onOpenTasks }: { job: Job; onOpenTasks?: (taskIds: str
 
   const totalQueued = Object.values(loop.queue).reduce((sum, n) => sum + n, 0)
   const canOpenQueue = Boolean(onOpenTasks && loopTasks && loopTasks.length > 0)
+  // `loop-becomes-a-flow` task 1.5: `current_tasks` is a list so group 5 can staff several.
+  // Group 1 renders the first and only member exactly as the scalar field rendered.
+  const currentTask = loop.current_tasks?.[0]
   const openQueue = () => {
     if (onOpenTasks && loopTasks) onOpenTasks(loopTasks.map((t) => t.id))
   }
@@ -219,14 +222,14 @@ function LoopBlock({ job, onOpenTasks }: { job: Job; onOpenTasks?: (taskIds: str
         ))}
       </div>
 
-      {loop.current_task ? (
+      {currentTask ? (
         canOpenQueue ? (
           <button type="button" onClick={openQueue} style={linkStyle} className="text-[11px]">
-            {loop.current_task.title} ({loop.current_task.status})
+            {currentTask.title} ({currentTask.status})
           </button>
         ) : (
           <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>
-            {loop.current_task.title} ({loop.current_task.status})
+            {currentTask.title} ({currentTask.status})
           </p>
         )
       ) : (

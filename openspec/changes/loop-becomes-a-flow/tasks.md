@@ -9,15 +9,46 @@ on `loop-notices-and-reacts` for the shared firing decision this change adds an 
 
 ## 1. The set-valued claim, behaviour unchanged
 
-- [ ] 1.1 Test: the whole existing loop suite passes unmodified. This is the bar for the entire
+- [x] 1.1 Test: the whole existing loop suite passes unmodified. This is the bar for the entire
       group — a set of one must be indistinguishable from one.
-- [ ] 1.2 Test: `_claim_loop_task` returning a set of one produces the same claim, the same briefing
+      **Baseline measured before any change: 141 passed, 3 skipped** across
+      `test_conversation_loop_marker`, `test_jobs`, `test_jobs_crud`, `test_loop_archival`,
+      `test_loop_claim_dependency_gate`, `test_loop_continuity_warning`, `test_scheduler`. After
+      the group: **147 passed, 3 skipped** — the same 141 plus this group's 6.
+      **Caveat, stated rather than buried:** "unmodified" held for every *behavioural* test, but
+      11 call sites poke the private `_claim_loop_task` directly and 1.3 changes its signature, so
+      those were edited. Each goes through a `_claim_one` unwrap helper that leaves the assertion
+      itself character-identical, and three assertions on `LoopSummary.current_task` became
+      `current_tasks[0]` per 1.5. No test's *meaning* changed.
+- [x] 1.2 Test: `_claim_loop_task` returning a set of one produces the same claim, the same briefing
       and the same `JobRun` as today, for each of the pending, resuming and empty cases.
-- [ ] 1.3 Change `_claim_loop_task` to return a set, still selecting exactly one member.
-- [ ] 1.4 Update `_batch_loop_summaries` (`hub/hub/api/v1/jobs.py`) to read the set, still rendering
+      `hub/tests/test_loop_claim_is_set_valued.py` — 6 tests, **all 6 confirmed failing before
+      1.3 and passing after**. Covers pending, resuming (status untouched), empty (`[]`, never
+      `None`), a many-candidate queue still claiming one, determinism across repeated calls, and
+      the briefing composed from a collection of one.
+- [x] 1.3 Change `_claim_loop_task` to return a set, still selecting exactly one member.
+      Returns `list[Task]`, `[]` when nothing is claimable. **A list, not a Python `set`** — the
+      reasoning is in the docstring: iteration over a `set` of ORM rows follows identity hashes,
+      which would make a width-2 flow pair tasks with agents nondeterministically, and the
+      proposal requires a firing to select "a task and an agent, both deterministically".
+      `_do_fire_job` unwraps at the boundary so the firing keeps its single-task shape until
+      group 5.
+- [x] 1.4 Update `_batch_loop_summaries` (`hub/hub/api/v1/jobs.py`) to read the set, still rendering
       one current item. Import the derivation; do not restate it.
-- [ ] 1.5 Update `LoopSummary` and any response schema so current items are a list, and confirm the
+      The board *was* restating it — its own comment said it "mirrors"
+      `_first_startable_candidate`'s rule. Extracted that rule as
+      `scheduler.candidate_is_startable`, now the single statement both call. The query could not
+      be shared: the board computes every job's block in six fixed queries (design D7) and cannot
+      call the per-loop walker, so what is shared is the per-candidate rule, not the traversal.
+      `test_the_board_summary_agrees_with_the_firing_for_a_gated_queue` (human-only check 13.1's
+      automated half) still passes.
+- [x] 1.5 Update `LoopSummary` and any response schema so current items are a list, and confirm the
       UI reads a list of one without visible change.
+      `LoopSummary.current_task: Optional[Dict]` → `current_tasks: List[Dict]`, defaulting to `[]`
+      rather than null so "nothing current" and "several current" share a type. `jobs.ts`,
+      `JobCard.tsx` and `LoopTab.tsx` read `current_tasks[0]`; the `loop-tab-current-task` test id
+      is preserved so the browser test still targets it. **UI suite: 138 files, 1376 tests passed
+      — identical to the pre-change baseline**, which is the "no visible change" evidence.
 
 ## 2. The agent becomes a per-selection value
 

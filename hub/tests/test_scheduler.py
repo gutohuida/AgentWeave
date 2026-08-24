@@ -63,6 +63,15 @@ async def _make_job(db, *, suffix, agent, session_mode="new"):
     return job
 
 
+async def _claim_one(db, loop):
+    """`loop-becomes-a-flow` group 1 made `_claim_loop_task` set-valued. This test was written
+    against the scalar it used to return and asserts exactly the same fact about exactly the same
+    claim; unwrapping here keeps the assertion about *the claim* rather than about its container.
+    """
+    claimed = await _claim_loop_task(db, loop)
+    return claimed[0] if claimed else None
+
+
 @pytest.mark.asyncio
 async def test_fired_job_creates_a_run_via_direct_execution_not_a_message(
     app, auth_headers, bind_runner
@@ -837,7 +846,7 @@ async def test_a_stalled_loop_queue_is_neither_claimable_nor_drained(stalled_sta
         fresh_job = await db.get(AIJob, job.id)
         fresh_loop = (await db.execute(select(Loop).where(Loop.job_id == job.id))).scalar_one()
         # Nothing to work on...
-        assert await _claim_loop_task(db, fresh_loop) is None
+        assert await _claim_one(db, fresh_loop) is None
         # ...and no reason to stop, because the queue is stalled rather than drained.
         assert await _loop_stop_reason(db, fresh_job) is None
         # That combination used to mean "fire anyway". It now has a name of its own, and the

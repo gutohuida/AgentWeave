@@ -412,6 +412,36 @@ CLAIMABLE_LOOP_TASK_STATUSES: tuple = (
 )
 
 
+async def candidate_is_startable(
+    session: AsyncSession, task: Task
+) -> "tuple[bool, Optional[dependency_gate.DependencyRefusal]]":
+    """Whether one claimable-status candidate may actually be started, and the refusal if not.
+
+    **The single statement of a rule that had two implementations.** The firing
+    (`_first_startable_candidate`) and the board (`_batch_loop_summaries`) must never disagree
+    about which queue item is current -- that agreement is human-only check 13.1 of
+    `task-dependencies`, and until `loop-becomes-a-flow` task 1.4 it was maintained by two copies
+    of this rule kept carefully in step, with a comment on the board's copy saying it "mirrors"
+    the firing's. Mirroring is what drift looks like before it happens; this module's own
+    `_loop_queue_order` comment records the same shape.
+
+    The board cannot simply call `_first_startable_candidate`: that walks one loop's queue, and
+    `_batch_loop_summaries` computes every job's block in six fixed queries and never one query
+    per job (`jobs.py` design D7). So what is shared is the per-candidate *rule*, not the query --
+    each side keeps its own traversal and both ask this the same question.
+
+    `in_progress` is startable without a fresh gate check: it is already running, no
+    `-> in_progress` transition is about to happen, and a prerequisite that regressed underneath
+    it is `task-dependencies` D8's "flagged, not stopped" case rather than a reason to skip past
+    it. Every other claimable status is one `apply_transition` away from `in_progress` -- the same
+    edge `dependency_gate.evaluate` guards -- so it is tested against that gate here.
+    """
+    if task.status == "in_progress":
+        return True, None
+    refusal = await dependency_gate.evaluate(session, task)
+    return (not refusal.refuses), refusal
+
+
 async def _first_startable_candidate(
     session: AsyncSession, loop: Loop
 ) -> "tuple[Optional[Task], list[tuple[Task, dependency_gate.DependencyRefusal]]]":
@@ -445,18 +475,17 @@ async def _first_startable_candidate(
     )
     gated: "list[tuple[Task, dependency_gate.DependencyRefusal]]" = []
     for task in candidates:
-        if task.status == "in_progress":
-            return task, gated
-        refusal = await dependency_gate.evaluate(session, task)
-        if refusal.refuses:
+        startable, refusal = await candidate_is_startable(session, task)
+        if not startable:
+            assert refusal is not None  # only the gated branch reports not-startable
             gated.append((task, refusal))
             continue
         return task, gated
     return None, gated
 
 
-async def _claim_loop_task(session: AsyncSession, loop: Loop) -> Optional[Task]:
-    """The queue item this firing works on (design D3): resume the loop's existing active task
+async def _claim_loop_task(session: AsyncSession, loop: Loop) -> "list[Task]":
+    """The queue items this firing works on (design D3): resume the loop's existing active task
     (`in_progress` or `assigned`) if one exists, else claim the oldest startable
     `pending` one -- skipping past a gated candidate in queue order rather than claiming it and
     letting the dependency gate refuse the transition (design D10, section 9).
@@ -465,9 +494,22 @@ async def _claim_loop_task(session: AsyncSession, loop: Loop) -> Optional[Task]:
     (`_loop_queue_order`) with `_batch_loop_summaries`'s "current item" derivation, so the board
     and the firing answer the same question the same way -- they are the two halves of human-only
     check 13.1, and it only means anything if they cannot drift.
+
+    **Set-valued, and still exactly one member** (`loop-becomes-a-flow` group 1). A flow may staff
+    several tasks at once; a loop staffs one. Group 1 changes only the shape of the answer so that
+    the widening in group 5 is a change to *how many* are selected rather than to every caller's
+    signature at the same time. Until then this returns zero or one, and `[]` is the empty case --
+    never `None`, so `if not claimed` keeps working while `len()` and iteration become safe.
+
+    **A list, not a Python `set`.** `tasks.md` 1.3 says "set" in the sense of set-valued rather
+    than scalar; read as the type it would be wrong. Iteration over a `set` of ORM rows follows
+    identity hashes, so once this holds more than one member a flow would pair tasks with agents
+    in an order that varies between runs -- and the proposal requires a firing to select "a task
+    and an agent, both deterministically". `_loop_queue_order` is where that determinism comes
+    from, so the collection has to preserve it.
     """
     task, _gated = await _first_startable_candidate(session, loop)
-    return task
+    return [] if task is None else [task]
 
 
 async def _loop_stall_reason(session: AsyncSession, loop: Loop) -> Optional[str]:
@@ -1076,7 +1118,13 @@ class JobScheduler:
 
             content = job.message
             if loop is not None:
-                claimed_task = await _claim_loop_task(session, loop)
+                # Set-valued as of `loop-becomes-a-flow` group 1, and still holding at most one
+                # member until group 5 widens it. The firing keeps its single-task shape here
+                # deliberately: group 1 must be indistinguishable from today, so the collection is
+                # unwrapped at the boundary rather than threaded through `_do_fire_job` before
+                # anything can staff a second agent.
+                claimed_tasks = await _claim_loop_task(session, loop)
+                claimed_task = claimed_tasks[0] if claimed_tasks else None
                 if claimed_task is None:
                     stall_reason = await _loop_stall_reason(session, loop)
                     if stall_reason:

@@ -23,6 +23,17 @@ from hub.task_transitions import operator
 pytestmark = pytest.mark.asyncio
 
 
+async def _claim_one(db, loop):
+    """`loop-becomes-a-flow` group 1 made `_claim_loop_task` set-valued. These tests were written
+    against the scalar it used to return and assert exactly the same facts about exactly the same
+    claim; unwrapping here keeps each assertion about *the claim* rather than about its container,
+    so group 1's bar -- the existing loop suite passing unmodified -- is tested rather than edited
+    around.
+    """
+    claimed = await _claim_loop_task(db, loop)
+    return claimed[0] if claimed else None
+
+
 async def _make_job(db, *, suffix, agent):
     job = AIJob(
         id=f"job-depgate-{suffix}",
@@ -102,7 +113,7 @@ async def test_a_dependent_task_with_an_unapproved_prerequisite_is_never_claimed
     async with async_session_factory() as db:
         fresh_loop = (await db.execute(select(Loop).where(Loop.job_id == job.id))).scalar_one()
         # B is gated behind A, so A — not B — is what the claim must return.
-        claimed = await _claim_loop_task(db, fresh_loop)
+        claimed = await _claim_one(db, fresh_loop)
         assert claimed is not None
         assert claimed.id == prereq_a.id
 
@@ -110,7 +121,7 @@ async def test_a_dependent_task_with_an_unapproved_prerequisite_is_never_claimed
     # surface B either — the gate's answer does not depend on how many times it is asked.
     async with async_session_factory() as db:
         fresh_loop = (await db.execute(select(Loop).where(Loop.job_id == job.id))).scalar_one()
-        claimed_again = await _claim_loop_task(db, fresh_loop)
+        claimed_again = await _claim_one(db, fresh_loop)
         assert claimed_again.id == prereq_a.id
 
 
@@ -148,7 +159,7 @@ async def test_an_older_gated_task_is_skipped_for_a_newer_startable_one(app):
 
     async with async_session_factory() as db:
         fresh_loop = (await db.execute(select(Loop).where(Loop.job_id == job.id))).scalar_one()
-        claimed = await _claim_loop_task(db, fresh_loop)
+        claimed = await _claim_one(db, fresh_loop)
         assert claimed.id == newer_startable.id
 
     async with async_session_factory() as db:
@@ -182,7 +193,7 @@ async def test_a_queue_where_every_task_is_gated_claims_nothing_and_stays_enable
     async with async_session_factory() as db:
         fresh_job = await db.get(AIJob, job.id)
         fresh_loop = (await db.execute(select(Loop).where(Loop.job_id == job.id))).scalar_one()
-        assert await _claim_loop_task(db, fresh_loop) is None
+        assert await _claim_one(db, fresh_loop) is None
         # Gated, not drained -- the job must not be stopped over this.
         assert await _loop_stop_reason(db, fresh_job) is None
         stall = await _loop_stall_reason(db, fresh_loop)
@@ -206,7 +217,7 @@ async def test_approving_the_prerequisite_makes_the_dependent_claimable(app):
 
     async with async_session_factory() as db:
         fresh_loop = (await db.execute(select(Loop).where(Loop.job_id == job.id))).scalar_one()
-        claimed = await _claim_loop_task(db, fresh_loop)
+        claimed = await _claim_one(db, fresh_loop)
         assert claimed.id == prereq.id
 
     # Walk the prerequisite all the way to approved -- no action on the dependent at all.
@@ -218,7 +229,7 @@ async def test_approving_the_prerequisite_makes_the_dependent_claimable(app):
 
     async with async_session_factory() as db:
         fresh_loop = (await db.execute(select(Loop).where(Loop.job_id == job.id))).scalar_one()
-        claimed = await _claim_loop_task(db, fresh_loop)
+        claimed = await _claim_one(db, fresh_loop)
         assert claimed.id == "task-9-4-dependent"
 
 
@@ -242,7 +253,7 @@ async def test_every_claimed_task_would_be_accepted_by_the_dependency_gate(app):
 
     async with async_session_factory() as db:
         fresh_loop = (await db.execute(select(Loop).where(Loop.job_id == job.id))).scalar_one()
-        claimed = await _claim_loop_task(db, fresh_loop)
+        claimed = await _claim_one(db, fresh_loop)
         assert claimed is not None
         if claimed.status != "in_progress":
             refusal = await evaluate(db, claimed)
@@ -270,7 +281,7 @@ async def test_reversing_a_rejection_revives_a_stalled_loop_with_no_further_acti
     async with async_session_factory() as db:
         fresh_job = await db.get(AIJob, job.id)
         fresh_loop = (await db.execute(select(Loop).where(Loop.job_id == job.id))).scalar_one()
-        assert await _claim_loop_task(db, fresh_loop) is None
+        assert await _claim_one(db, fresh_loop) is None
         assert await _loop_stop_reason(db, fresh_job) is None
         stall = await _loop_stall_reason(db, fresh_loop)
         assert stall is not None and "rejected" in stall
@@ -284,7 +295,7 @@ async def test_reversing_a_rejection_revives_a_stalled_loop_with_no_further_acti
 
     async with async_session_factory() as db:
         fresh_loop = (await db.execute(select(Loop).where(Loop.job_id == job.id))).scalar_one()
-        claimed = await _claim_loop_task(db, fresh_loop)
+        claimed = await _claim_one(db, fresh_loop)
         assert claimed is not None
         assert claimed.id == "task-9-9-prereq"
 
@@ -310,9 +321,10 @@ async def test_the_board_summary_agrees_with_the_firing_for_a_gated_queue(app):
 
     async with async_session_factory() as db:
         fresh_loop = (await db.execute(select(Loop).where(Loop.job_id == job.id))).scalar_one()
-        claimed = await _claim_loop_task(db, fresh_loop)
+        claimed = await _claim_one(db, fresh_loop)
 
         summaries = await _batch_loop_summaries(db, [job.id])
-        current = summaries[job.id].current_task
+        # `loop-becomes-a-flow` task 1.5: a list holding the one current item.
+        current = summaries[job.id].current_tasks[0]
         assert current is not None
         assert current["id"] == claimed.id == blocker.id

@@ -274,7 +274,8 @@ async def test_assigned_task_is_seen_as_the_current_task(app, auth_headers):
 
     resp = await app.get(f"/api/v1/projects/proj-test/loops/{loop.id}", headers=auth_headers)
     assert resp.status_code == 200
-    current = resp.json()["current_task"]
+    # `loop-becomes-a-flow` task 1.5: a list holding the one current item.
+    current = resp.json()["current_tasks"][0]
     assert current is not None
     assert current["id"] == "task-loop-assigned-1"
     assert current["status"] == "assigned"

@@ -53,7 +53,9 @@ export interface LoopSummary {
   archived_at?: string | null
   /** status -> count of this loop's non-fetched-yet-terminal tasks, keyed by `Task.status`. */
   queue: Record<string, number>
-  current_task?: { id: string; title: string; status: string } | null
+  // `loop-becomes-a-flow` task 1.5: a list, because a flow may staff several tasks at once.
+  // Group 1 changes no behaviour, so it holds zero or one and renders as the scalar did.
+  current_tasks?: { id: string; title: string; status: string }[]
   open_questions: number
   /** Who may extend this queue (design D10). Null means the current default, the operator —
    *  returned unresolved by the Hub, so it is left unresolved here too. */

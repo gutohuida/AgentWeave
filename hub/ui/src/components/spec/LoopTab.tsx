@@ -265,9 +265,9 @@ export function LoopTab({ loopId, onClose }: LoopTabProps) {
         <p className="mb-1.5" style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-3)' }}>
           Current item
         </p>
-        {loop.current_task ? (
+        {loop.current_tasks?.[0] ? (
           <p style={{ fontSize: 11, color: 'var(--text)' }} data-testid="loop-tab-current-task">
-            {loop.current_task.title} ({loop.current_task.status})
+            {loop.current_tasks[0].title} ({loop.current_tasks[0].status})
           </p>
         ) : (
           <p style={{ fontSize: 11, color: 'var(--text-3)', opacity: 0.6 }}>No current item</p>
