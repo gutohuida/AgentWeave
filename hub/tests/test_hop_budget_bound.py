@@ -19,9 +19,9 @@ from sqlalchemy import select
 
 import hub.api.v1.agent_trigger as agent_trigger
 from hub.db.engine import async_session_factory
-from hub.db.models import Conversation, InboundQueueEntry, Project, Run
+from hub.db.models import Conversation, EventLog, InboundQueueEntry, Project, Run
 from hub.inbound_queue import new_entry
-from hub.turn_scheduler import schedule_agent
+from hub.turn_scheduler import redrain_queued_agents, schedule_agent
 
 
 def _completed_session(pid, session_id):
@@ -291,3 +291,174 @@ async def test_an_operator_message_does_not_release_a_held_chain_in_its_own_conv
     async with async_session_factory() as db:
         run = await db.get(Run, run_id)
         assert run.turn_depth == 0
+
+
+async def _held_entry(app, auth_headers, bind_runner, agent, *, budget=1, depth=2):
+    """One agent with one entry held over the budget, and its id."""
+    await _register(app, auth_headers, bind_runner, agent)
+    entry = new_entry(
+        project_id="proj-test",
+        agent=agent,
+        origin_type="agent",
+        origin_agent="relay",
+        content="held over the budget",
+        hop_depth=depth,
+        conversation_id=f"conv-{agent}",
+    )
+    await _seed(agent, f"conv-{agent}", budget, [entry])
+    return entry.id
+
+
+async def _events(kind):
+    async with async_session_factory() as db:
+        rows = (
+            (
+                await db.execute(
+                    select(EventLog)
+                    .where(EventLog.project_id == "proj-test", EventLog.event_type == kind)
+                    .order_by(EventLog.id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        return [row.data for row in rows]
+
+
+@pytest.mark.asyncio
+async def test_releasing_a_held_entry_delivers_it_on_the_next_turn(app, auth_headers, bind_runner):
+    entry_id = await _held_entry(app, auth_headers, bind_runner, "release-target")
+
+    spawn = MagicMock(return_value=_completed_session(7201, "release-1"))
+    with patch("hub.api.v1.agent_trigger.PtySession.spawn", spawn):  # noqa: SIM117
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            released = await app.post(
+                f"/api/v1/projects/proj-test/queue/entries/{entry_id}/release",
+                headers=auth_headers,
+            )
+            await _drain()
+
+    assert released.status_code == 200
+    # Re-based to 0, not granted `+N`: the depth left behind says the operator restarted the
+    # chain here, rather than carrying an offset whose meaning depends on history nobody kept.
+    assert released.json()["hop_depth"] == 0
+    assert await _entries("release-target") == [("held over the budget", 0, "delivered")]
+    assert spawn.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_releasing_a_held_entry_records_what_it_was_released_from(
+    app, auth_headers, bind_runner
+):
+    entry_id = await _held_entry(app, auth_headers, bind_runner, "record-target", depth=4)
+
+    with patch(  # noqa: SIM117
+        "hub.api.v1.agent_trigger.PtySession.spawn",
+        MagicMock(return_value=_completed_session(7202, "record-1")),
+    ):
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            await app.post(
+                f"/api/v1/projects/proj-test/queue/entries/{entry_id}/release",
+                headers=auth_headers,
+            )
+            await _drain()
+
+    # After the re-base the row itself reads 0, so the depth it came from survives only here.
+    assert await _events("queue_entry_released") == [
+        {"entry_id": entry_id, "agent": "record-target", "released_from_depth": 4}
+    ]
+
+
+@pytest.mark.asyncio
+async def test_releasing_an_entry_the_budget_is_not_holding_is_refused_with_the_reason(
+    app, auth_headers, bind_runner
+):
+    entry_id = await _held_entry(app, auth_headers, bind_runner, "within-target", budget=6, depth=2)
+
+    with patch("hub.api.v1.agent_trigger.PtySession.spawn"):
+        refused = await app.post(
+            f"/api/v1/projects/proj-test/queue/entries/{entry_id}/release",
+            headers=auth_headers,
+        )
+
+    assert refused.status_code == 409
+    detail = refused.json()["detail"]
+    assert "hop 2" in detail and "hop budget of 6" in detail
+    # And it says where to look instead, because the entry really is waiting for something.
+    assert "queue status" in detail
+    assert await _events("queue_entry_released") == []
+
+
+@pytest.mark.asyncio
+async def test_releasing_an_absent_entry_is_refused(app, auth_headers):
+    refused = await app.post(
+        "/api/v1/projects/proj-test/queue/entries/entry-nonexistent/release",
+        headers=auth_headers,
+    )
+    assert refused.status_code == 409
+    assert "absent" in refused.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_a_held_entry_can_be_discarded_instead(app, auth_headers, bind_runner):
+    entry_id = await _held_entry(app, auth_headers, bind_runner, "discard-target")
+
+    with patch("hub.api.v1.agent_trigger.PtySession.spawn") as spawn:
+        discarded = await app.delete(
+            f"/api/v1/projects/proj-test/queue/entries/{entry_id}",
+            headers=auth_headers,
+        )
+
+    assert discarded.status_code == 200
+    assert await _entries("discard-target") == [("held over the budget", 2, "withdrawn")]
+    spawn.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_raising_the_budget_releases_a_held_entry_without_an_explicit_action(
+    app, auth_headers, bind_runner
+):
+    await _held_entry(app, auth_headers, bind_runner, "raise-target")
+
+    spawn = MagicMock(return_value=_completed_session(7203, "raise-1"))
+    with patch("hub.api.v1.agent_trigger.PtySession.spawn", spawn):  # noqa: SIM117
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            saved = await app.patch(
+                "/api/v1/projects/proj-test/queue/settings",
+                json={"hop_budget": 4, "turn_delivery_cap": 10},
+                headers=auth_headers,
+            )
+            await _drain()
+
+    assert saved.status_code == 200
+    # Delivered at the depth it always had — raising the bound is not the operator restarting
+    # the chain, so nothing is re-based and no release is recorded.
+    assert await _entries("raise-target") == [("held over the budget", 2, "delivered")]
+    assert await _events("queue_entry_released") == []
+
+
+@pytest.mark.asyncio
+async def test_redrain_delivers_a_held_entry_once_the_budget_admits_it(
+    app, auth_headers, bind_runner
+):
+    """Pins behaviour that already existed and was never asserted (task 2.3).
+
+    `redrain_queued_agents` is what project open and workspace repair call, so it is a second,
+    independent path to the same release — and the delivery filter added in this change is
+    exactly the kind of edit that could have broken it silently.
+    """
+    await _held_entry(app, auth_headers, bind_runner, "redrain-target")
+    async with async_session_factory() as db:
+        project = await db.get(Project, "proj-test")
+        project.hop_budget = 5
+        await db.commit()
+
+    with patch(  # noqa: SIM117
+        "hub.api.v1.agent_trigger.PtySession.spawn",
+        MagicMock(return_value=_completed_session(7204, "redrain-1")),
+    ):
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            await redrain_queued_agents("proj-test")
+            await _drain()
+
+    assert await _entries("redrain-target") == [("held over the budget", 2, "delivered")]

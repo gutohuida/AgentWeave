@@ -17,12 +17,12 @@ pytest but produces three false failures in `test_pty_runner.py` on a green tree
 
 ## 2. Continue and discard
 
-- [ ] 2.1 Add the release endpoint: re-base a budget-held entry to depth 0 and requeue it for
+- [x] 2.1 Add the release endpoint: re-base a budget-held entry to depth 0 and requeue it for
       delivery. Refuse an entry that is not actually budget-held, with a stated reason.
-- [ ] 2.2 Persist and broadcast an event recording the operator's decision to release (design D3).
-- [ ] 2.3 Confirm `redrain_queued_agents` still releases held entries when the budget is raised, and
+- [x] 2.2 Persist and broadcast an event recording the operator's decision to release (design D3).
+- [x] 2.3 Confirm `redrain_queued_agents` still releases held entries when the budget is raised, and
       add the test that pins it — the behaviour exists and is unasserted.
-- [ ] 2.4 Tests: release delivers on the next turn; release is recorded; discard withdraws; raising
+- [x] 2.4 Tests: release delivers on the next turn; release is recorded; discard withdraws; raising
       the budget releases without an explicit action.
 
 ## 3. Surfacing
