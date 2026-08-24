@@ -77,18 +77,47 @@ on `loop-notices-and-reacts` for the shared firing decision this change adds an 
 ## 4. Reviewer resolution
 
 - [ ] 4.1 Test each rung of design D4 independently: a declared reviewer that resolves; one that does
-      not, falling back to availability; no declaration at all; and nobody eligible.
+      **not** resolve, which is surfaced and never substituted (amended 2026-08-24 — this said
+      "falling back to availability", which contradicted shipped behaviour); no declaration at all,
+      falling back to availability; and nobody eligible.
 - [ ] 4.2 Test: an agent that is running, or that holds a task in an active status, is not selected
       while another eligible agent exists.
 - [ ] 4.3 Test: an agent with no runner bound is not selected, and is treated as unavailable rather
       than failing the firing.
 - [ ] 4.4 Test: a single-agent project reaches rung 3 by the general rule, with no special-case code
       path — assert the path, not only the outcome.
-- [ ] 4.5 **Decide how a declared reviewer resolves** — against charter names, agent names, or both —
+- [x] 4.5 **Decide how a declared reviewer resolves** — against charter names, agent names, or both —
       and record it in design D4. `task-dependencies` D11 deliberately left this here.
-- [ ] 4.6 Implement the ladder.
+      **Answered 2026-08-24 without a decision being needed: agent names.**
+      `a-reviewer-can-see-the-work` shipped `review_turn.resolve_declared_reviewer` first, matching
+      the declared string against roster `Agent.name` for the project and treating an archived agent
+      as unresolved. Recorded in D4. The flow reuses that function rather than writing a second
+      resolution — so 4.6 implements the ladder *around* it, not a replacement for it.
+- [ ] 4.6 Implement the ladder, **calling `review_turn.resolve_declared_reviewer` for rung 1 rather
+      than resolving the declaration again.** Two implementations of "who did the document name" is
+      the drift shape this repo has been bitten by three times.
 - [ ] 4.7 Implement rung 3's surfacing, following the event and SSE pattern the stop path uses.
       Confirm it leaves the job enabled and scheduled.
+
+## 4b. The review turn — a reviewer must see the work
+
+**Added 2026-08-24 (design D9).** `a-reviewer-can-see-the-work` shipped after this change was
+written. Without this group a flow fires the reviewer into its own working checkout, where the
+author's unmerged work does not exist — reproducing finding F10, which that change existed to fix.
+
+- [ ] 4b.1 Test: a flow firing an agent for a `completed` task produces a queue entry carrying
+      `review_task_id`, and the resulting turn is a review turn.
+- [ ] 4b.2 Test the property that matters rather than the plumbing: the reviewing agent's workspace
+      contains a commit that exists only on the author's branch. This is F10's own assertion, and
+      task 5.5 of `a-reviewer-can-see-the-work` is the pattern to copy.
+- [ ] 4b.3 Test: a review turn that cannot be prepared surfaces `ReviewTurnRefused`'s stated reason
+      and does **not** fire the agent with an ordinary turn instead.
+- [ ] 4b.4 Test: a firing that staffs ordinary (non-review) work still carries no `review_task_id`,
+      so nothing that is not a review acquires a checkout.
+- [ ] 4b.5 Pass `review_task_id` from the selection through `new_entry` in `_do_fire_job`
+      (`hub/hub/scheduler.py:1187`). This is the one-argument gap D9 names.
+- [ ] 4b.6 Confirm the reviewer resolved by 4.6 is the agent the checkout is built for — review
+      isolation is per agent, so a mismatch here builds the right checkout for the wrong agent.
 
 ## 5. Width
 
@@ -150,6 +179,8 @@ on `loop-notices-and-reacts` for the shared firing decision this change adds an 
 - [ ] 10.4 `openspec validate loop-becomes-a-flow` reports valid.
 - [ ] 10.5 The whole chain: a document declares A → B, a flow runs A with one agent, a second agent
       reviews and approves it, and B then starts — with no operator action at any point.
+      **The reviewer must reach its verdict from the checkout, not by asking the author** (design
+      D9); a chain that completes because the two agents talked has not demonstrated this.
 - [ ] 10.6 Confirm the 20 `agent-loops` requirements this change does not modify still hold, by
       running their scenarios against the flow implementation rather than assuming.
 
@@ -161,6 +192,9 @@ on `loop-notices-and-reacts` for the shared firing decision this change adds an 
       be obvious from the conversation list that a handover happened and to whom.
 - [ ] 11.3 **The reviewer arrives briefed.** Read what the reviewer was given. If the implementer's
       checkpoint reads as notes-to-self, task 6.5 did not work.
+- [ ] 11.3b **The reviewer is looking at the work.** Open the reviewer's workspace during a review
+      firing and confirm the author's changes are in it. This is the human half of 4b.2, and it is
+      the check that would have caught F10.
 - [ ] 11.4 **Rung 3 reads as staffing, not breakage.** With no eligible agent, confirm the notice
       says the flow needs someone rather than that it failed.
 - [ ] 11.5 **Concurrent work is comprehensible.** With a flow running three agents, judge whether the
