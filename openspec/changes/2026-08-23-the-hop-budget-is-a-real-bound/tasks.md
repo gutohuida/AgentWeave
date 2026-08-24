@@ -46,9 +46,12 @@ pytest but produces three false failures in `test_pty_runner.py` on a green tree
 
 ## 5. Verification only a person can do
 
-- [ ] 5.1 Judge whether the held-entry explanation tells you what to do, not merely what happened.
-- [ ] 5.2 Release a held chain by hand and confirm the conversation reads coherently afterwards —
-      that the released message arrives somewhere it still makes sense.
+- [x] 5.1 Judge whether the held-entry explanation tells you what to do, not merely what happened.
+      **Confirmed by the operator 2026-08-24**, against the live held entry `entry-e4af6e6b38cb`
+      (hop 2, budget 1) on `proj-18e5d4e0`.
+- [x] 5.2 Release a held chain by hand and confirm the conversation reads coherently afterwards —
+      that the released message arrives somewhere it still makes sense. **Confirmed by the
+      operator 2026-08-24** on the same entry.
 
 ## 6. User test guide
 
