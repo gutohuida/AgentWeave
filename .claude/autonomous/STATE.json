@@ -9,7 +9,7 @@
   "started_at": "2026-08-23T23:58:00+01:00",
   "stop_at": "2026-08-24T08:00:00+01:00",
   "stop_when_queue_empties": true,
-  "iteration": 4,
+  "iteration": 5,
   "log_file": ".claude/autonomous/2026-08-24-stress-test-remediation-log.md",
   "queue": [
     {
@@ -37,8 +37,8 @@
       "verify": "py -3.11 -m pytest hub/tests/ -q"
     }
   ],
-  "current": "Q4",
-  "next_action": "Start queue item Q4 (bundle, full verification, morning summary). Q3 is done and committed as 7fcd172, verified in that firing on the full backend suite (2838 passed / 84 skipped / 1 xpassed, 14m44s), vitest (1374/1374), tsc, eslint, ruff, black, openspec --strict, a 17/17 HTTP drive of the real routes, and a falsification pass (backend sources stashed: 17 failed; restored: 54 passed). ORDER MATTERS and has cost two earlier sessions a cycle: the Q3 source commit is already in, so now run `cd hub/ui && npm run build`, then from the repo root `py -3.11 scripts/refresh_ui_bundle.py`, then commit `hub/hub/static/ui` INCLUDING the stamp -- git's CRLF normalisation on commit invalidates a stamp taken before that commit, so if /health still reports ui_stale afterwards, re-run the refresh script on the committed tree and commit the stamp again. Then the full sweep: `py -3.11 -m pytest hub/tests/ -q` (NEVER bare python), `cd hub/ui && npx vitest run`, `uvx ruff@0.15.22 check src/ hub/ tests/`, `uvx black@26.5.1 --check src/ hub/hub/ hub/tests/ tests/`, `npx openspec validate --changes --strict`. Then read the whole diff since 3b4efd6's parent for accidental legacy revival, generated debris and unrelated files. Then write the morning summary at the log_file path: what landed per finding id, what did not and why, and anything that surprised you -- the operator reads that first at 08:00. Two firings died mid-iteration on `API Error: 529 Overloaded` (05:55, 06:12); nothing was lost either time because the tree was on disk, but expect it and commit early rather than at the end.",
+  "current": null,
+  "next_action": "NOTHING — the queue is empty and `stop_when_queue_empties` is true. This run is COMPLETE. A firing that picks this up should stand down and leave the branch alone; do not invent a Q5. All fifteen mechanical items in scope landed and were verified (fourteen scripts/drive/FINDINGS.md ids plus S2, which is from SURVEY.md): Q1 F4/F6/F18/F7/F8/F16/S2 (3b4efd6), Q2 F11/F13/F1-backend (d706187), Q3 F17/F19/F9/F14/F2/F1-UI (7fcd172), Q4 the bundle rebuild (9eb37c8) plus the full sweep. Final verification, all run in the closing firing: backend suite 2838 passed / 84 skipped / 1 xpassed / 0 failed (14m33s); vitest 1374/1374 across 138 files; tsc, eslint --max-warnings 0, ruff 0.15.22, black 26.5.1 (448 files), openspec validate --changes --strict (4 passed) all clean; AW_CHECK_UI_BUNDLE=1 stamp gate 11 passed; /health reports no ui_stale on the committed tree; and a 20-check HTTP drive of the real app (.claude/autonomous/scratch/drive_q4.py) with one check unreachable without a minted run credential and stated as read rather than driven. What remains is the OPERATOR's, and it is all in decisions_for_user below — read the two 2026-08-23 openspec changes and the approval posture question first.",
   "decisions_for_user": [
     "The two specified changes are NOT in this queue and are waiting for you: openspec/changes/2026-08-23-a-reviewer-can-see-the-work (F10, which also unblocks the in-flight loop-becomes-a-flow, a change that ships a reviewer unable to read code without it) and openspec/changes/2026-08-23-the-hop-budget-is-a-real-bound (F5). Both validate strict. Read them before deciding when to implement.",
     "Posture is still undecided: may an AGENT take under_review to approved, and therefore write to your main branch, or is approval always yours? Deferred deliberately. Decide it after seeing a reviewer work with F10 fixed.",
@@ -48,7 +48,10 @@
     "F4 is fixed only for the two branch names the Hub already knew: detect_main_branch walks MAIN_BRANCH_NAMES, which is exactly ('main', 'master'). A project on 'develop' or 'trunk' still opens with main_branch null and still needs you to set it in settings. Widening what the Hub recognises is a separate decision and was deliberately not taken unattended -- guessing that the single branch of a one-branch repository is its trunk is plausible, but it is a guess that ends in a cherry-pick into that branch.",
     "F11 changed what `run_count` means, and one place reads it as policy rather than as a display value: hub/hub/api/v1/tasks.py's `_authorize_loop_task_creation` gates a creator agent's ability to extend its own loop's queue on `job.run_count > 0` -- D10's \"definition window\", i.e. \"this loop has already fired at least once\". With F11 in, a loop that has only ever SKIPPED (stalled on unreviewed work, or its agent unavailable) no longer counts as having fired, so its creator's definition window stays open longer than it used to. That reads as more correct, not less -- no agent ran, so nothing has been briefed on the queue yet -- and it is why the change was made rather than special-cased. Flagged because it is a governance boundary moving as a side effect of a display fix, which is your call to confirm, not mine.",
     "F17's fix changes what a task card says about a STALLED agent. `_attach_assignee_liveness` copies `agents.py`'s precedence verbatim, so a live Run row now outranks a stalled heartbeat on the board as well as on the roster: a stalled agent mid-run reads `running` on its card where it previously read `stalled`. That is the only way the board and the rail can describe one agent the same way, which is what F6/F18 reported -- but it is a real change in what `stalled` is visible on, so it is yours to confirm. It is pinned by `test_a_live_run_outranks_a_stalled_heartbeat_here_exactly_as_it_does_on_the_roster`, and if you want it back, it has to move in agents.py and tasks.py together or the two surfaces disagree again.",
-    "F19 was implemented for prerequisites only, not dependents. The queue item said TaskCard renders neither; the card now marks what GATES it (with the blocking prerequisites and their statuses in the title) and still says nothing about what it is itself blocking downstream. A task with dependents is not blocked by them, the Dependencies board already draws those edges, and widening a card badge to carry the reverse direction looked like a different design decision rather than a papercut fix. Say if you want the other half."
+    "F19 was implemented for prerequisites only, not dependents. The queue item said TaskCard renders neither; the card now marks what GATES it (with the blocking prerequisites and their statuses in the title) and still says nothing about what it is itself blocking downstream. A task with dependents is not blocked by them, the Dependencies board already draws those edges, and widening a card badge to carry the reverse direction looked like a different design decision rather than a papercut fix. Say if you want the other half.",
+    "F15 needs your decision and was missed by this queue's scoping: there is no way to pause an AGENT, only to stop a run. `POST /agent/{name}/stop` behaves correctly -- run goes to `stopped`, `ended_at` set, the delivered entry not spuriously returned -- and then a peer conversation that outlived the stop starts the next run moments later. Adding a pause needs a decision about what a paused agent does with input that arrives while it is paused (queue it, refuse it, or drop it), which is why it was not taken unattended. Flagged as an omission rather than as a judgement: unlike F3 and F20, nobody had decided it was not worth fixing.",
+    "Handoff boilerplate to correct before the next prep: the line that says git's CRLF normalisation on commit invalidates the UI build stamp is wrong, and it has cost two sessions a cycle. /health reads `src_fingerprint` alone (hub/hub/main.py:163-167), which is a fingerprint of hub/ui/src and is unaffected by committing the stamp; only `src_commit` and `built_at` churn. Build, refresh, commit once, done -- there is no second re-stamp to do.",
+    "Noticed while reading the diff, not a defect today: agent_actions.py's record_evidence route (:846-849) maps EvidenceRefusedError to a hard 409 without consulting exc.http_status, where the decide route (:959) honours it. Correct now -- F7's duplicate refusal sets no http_status and 409 is right for a duplicate -- but a future refusal on the record path that sets one would be silently downgraded. Worth an eye if that field grows callers."
   ],
   "limits": [
     "Run the Hub test suite with `py -3.11 -m pytest hub/tests/ -q`. NEVER bare `python`: in this shell it resolves to C:\\Users\\huida\\AppData\\Local\\hermes\\hermes-agent\\venv\\Scripts\\python.exe, which HAS pytest so it looks legitimate, but produces three false failures in test_pty_runner.py on a completely green tree. Measured 2026-08-23 on the same commit: bare python gave 3 failed / 2755 passed / 13 skipped; py -3.11 gave 2758 passed / 84 skipped. If test_pty_runner fails with empty spawn output, check the interpreter before the code.",
@@ -64,5 +67,44 @@
     "Never mark a task complete because a plan for it exists. Only verified implementation closes a task.",
     "At 08:00 local time stop cleanly even if the queue is incomplete. The operator gets up then and will read the log first, so a truthful account of where you stopped is worth more than a rushed final item. Record the exact continuation work rather than inventing completion."
   ],
-  "last_heartbeat": "2026-08-24T05:53:59+01:00"
+  "last_heartbeat": "2026-08-24T07:15:37+01:00",
+  "completed_at": "2026-08-24T07:15:37+01:00",
+  "queue_state": "empty — Q1 (3b4efd6), Q2 (d706187), Q3 (7fcd172) and Q4 (bundle 9eb37c8 + full sweep) are all closed and verified. `stop_when_queue_empties` is true, so this run is finished; a later firing should stand down rather than invent work.",
+  "run_summary": {
+    "landed": {
+      "3b4efd6": [
+        "F4",
+        "F6/F18",
+        "F7",
+        "F8",
+        "F16",
+        "S2"
+      ],
+      "d706187": [
+        "F11",
+        "F13",
+        "F1 (backend)"
+      ],
+      "7fcd172": [
+        "F17",
+        "F19 (prerequisites only)",
+        "F9",
+        "F14",
+        "F2",
+        "F1 (UI)"
+      ],
+      "9eb37c8": [
+        "the committed UI bundle for 7fcd172's sources"
+      ]
+    },
+    "not_landed": {
+      "F5, F10": "the two architectural changes — specified and strict-validated, left for an attended session by design",
+      "F12": "held out; loop-becomes-a-flow fixes the root cause",
+      "F3, F20": "judged not worth fixing — say so if you disagree",
+      "F15": "never in the queue and, until this final iteration, not in decisions_for_user either — an omission, now closed. Stopping an agent stops one run and the queue starts the next; there is no pause-this-agent lever. A missing capability needing a decision, not a papercut.",
+      "F19 dependents half": "the card marks what gates it, not what it gates"
+    },
+    "corrected_belief": "The inherited warning that git's CRLF normalisation invalidates the UI build stamp is aimed at the wrong field. `_compute_ui_staleness_warning` (hub/hub/main.py:163-167) reads `src_fingerprint` ONLY; re-running refresh_ui_bundle.py after a commit changes just `src_commit` and `built_at`, so the second commit the older handoffs advise achieves nothing and re-stales `src_commit` on the next commit forever. Measured: fingerprint byte-identical, /health clean on the committed tree, AW_CHECK_UI_BUNDLE=1 gate passing. Two earlier sessions burned a cycle chasing this.",
+    "morning_summary": "Iteration 5 of .claude/autonomous/2026-08-24-stress-test-remediation-log.md"
+  }
 }

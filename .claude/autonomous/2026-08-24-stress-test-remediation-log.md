@@ -458,3 +458,160 @@ diff since `ec633a3` for accidental legacy revival and debris, and the morning s
 **One practical note for whoever picks up Q4:** two firings in a row died on `API Error: 529
 Overloaded` mid-iteration, at 05:55 and 06:12. Nothing was lost either time, because the tree was
 on disk — but it is why Q3 took four firings to close, and it is worth expecting again.
+
+---
+
+## Iteration 5 — Q4, the bundle, the sweep, and the morning summary
+
+The queue is empty. This entry is the one written for you to read first, so it says what landed per
+finding, what did not, and what surprised us — and it is the whole run's account, not just this
+firing's.
+
+### The bundle, in the order that has now cost three sessions a cycle
+
+`hub/ui/src` changed in `7fcd172` (Q3) with the committed artefact deliberately left stale, so it is
+written exactly once. This firing did `npm run build` (clean, `tsc` inside it clean, 14.4s) then
+`py -3.11 scripts/refresh_ui_bundle.py`, and committed `hub/hub/static/ui` as `9eb37c8`. One JS
+chunk moved (`index-D89EB_De.js` → `index-BEeynRU2.js`); the CSS hash did not change.
+
+**And the ordering warning inherited from two earlier sessions turns out to be aimed at the wrong
+field.** Re-running the refresh script after that commit does dirty the stamp again — but the diff
+is only `src_commit` and `built_at`. `src_fingerprint` is byte-identical, and `src_fingerprint` is
+the *only* field `_compute_ui_staleness_warning` reads (`hub/hub/main.py:163-167`). So committing
+the second stamp would achieve nothing except making `src_commit` stale-by-one again on the next
+commit, forever. It was reverted, and the check was run rather than assumed:
+`_compute_ui_staleness_warning(UI_DIST, UI_SRC)` returns `None` on the committed tree, and
+`GET /health` on the real app answers `{"status":"ok"}` with no `ui_stale` key. The
+`AW_CHECK_UI_BUNDLE=1` gate passes too (11 passed).
+
+Worth correcting in the handoff vocabulary: what invalidates a stamp is a *source* change, not
+git's CRLF normalisation. The advice "commit, then re-stamp" is harmless but unnecessary, and it is
+why an earlier session went round twice looking for a staleness that was already gone.
+
+### What landed, per finding
+
+F-numbers are `scripts/drive/FINDINGS.md`; **S2 is from `scripts/drive/SURVEY.md`** — a scale risk read out of the code rather than hit during the drive, which is why it has a different prefix and no reproduction.
+
+| Id | Landed in | What changed |
+|---|---|---|
+| F4 | `3b4efd6` | `POST /projects/open` adopts the branch `detect_main_branch` already found, into a null only. A git project is no longer degraded until someone visits settings. |
+| F6/F18 | `3b4efd6` | `bind_run_to_task` sets `task.assignee`, so a direct trigger names who is working, as the loop's claim already did. |
+| F7 | `3b4efd6` | A second piece of evidence for the same requirement + task + commit is refused, naming the piece that already holds it. `digest` was never this check. |
+| F8 | `3b4efd6` | A malformed evidence decision is 422 naming `accepted`/`rejected`, not 403. An agent reading the status code no longer concludes it lacks permission. |
+| F16 | `3b4efd6` | `TaskResponse` echoes `loop_id`, so a caller can confirm from the create call that the task joined the loop. |
+| S2 | `3b4efd6` | `short_id()` widened 8 → 12 hex. No migration; every column was already `String(64)` and a segment is generated, never parsed. |
+| F11 | `d706187` | `run_count`/`last_run` are stamped where `run.status` becomes `in_progress`, not above every skip branch. `next_run` deliberately stays where it was. |
+| F13 | `d706187` | `PATCH {enabled: true}` on an ended loop is 409 with `code: loop_ended`, instead of 200 that the next firing silently undoes. |
+| F1 | `d706187` + `7fcd172` | A cron restricting both day-of-month and day-of-week is refused at create and update, and the form and card say why instead of dating it with croniter's OR answer. |
+| F17 | `7fcd172` | `last_seen` derives from runs, outputs *and* heartbeats (`hub/hub/agent_activity.py`). It was heartbeat-only, and only self-registered agents post those — so it was permanently NULL for every agent the product manages. |
+| F19 | `7fcd172` | `TaskCard` marks a gated task, with the blocking prerequisites and their statuses in the title. Neutral for an ordinary gate, red only for `gated_on_rejected`. |
+| F9 | `7fcd172` | A read-only `GET /tasks/{id}/integration-preview` and an inline note on the approve control naming the commit and the branch. Not a dialog. |
+| F14 | `7fcd172` | `awaiting_answer_reason`, computed per request, so a run parked on `ask_user` reads "waiting on you" without the status being touched. |
+| F2 | `7fcd172` | "server time" → "UTC" on both jobs surfaces. The value was always right; the word was wrong by an hour, every summer, on your own machine. |
+
+### What did not land, and why
+
+All twenty F-findings plus S2 are accounted for below or in the table above — F1, F2, F4, F6, F7, F8, F9, F11, F13, F14, F16, F17, F18, F19 and S2 landed; F3, F5, F10, F12, F15 and F20 did not.
+
+- **F19's `dependents` half.** The card says what gates it, not what it gates. A task with
+  dependents is not blocked by them and the Dependencies board already draws those edges. Recorded
+  as a decision in `decisions_for_user`, not an oversight.
+- **F5 and F10** — the two architectural changes. Specified, strict-validated, deliberately not
+  implemented unattended. That was the whole point of how this queue was scoped.
+- **F12** (a loop firing every minute while finished work waits for review) — held out, because
+  `loop-becomes-a-flow` fixes its root cause and papering over it now is work thrown away.
+- **F3** (`contact_mode` still defaults to `watchdog-spawn`) and **F20** (an unknown deep link falls
+  back to Overview) — judged not worth fixing. Say if you disagree.
+- **F15 was never in this queue, and was not in `decisions_for_user` either — that was an
+  omission, and this is it being closed.** "Stopping an agent does not stop the work":
+  `POST /agent/{name}/stop` stops one run correctly, and the queue starts the next one moments
+  later, because a peer conversation outlives a per-run stop. There is no "pause this agent" lever
+  at all. That is a missing *capability*, not a papercut — it needs a decision about what a paused
+  agent does with queued input, so it could not have been taken unattended even if it had been
+  listed. It is now in `decisions_for_user`.
+- **F4 only recognises `main`/`master`.** `detect_main_branch` walks
+  `requirement_evidence.MAIN_BRANCH_NAMES`, which is exactly those two. A project on `develop` or
+  `trunk` still opens with `main_branch` null. Widening it was not taken unattended: guessing that a
+  one-branch repository's branch is its trunk is plausible, but it is a guess that ends in a
+  cherry-pick into that branch.
+
+### Verification run in this firing
+
+- **Full backend suite**, `py -3.11 -m pytest hub/tests/ -q`: **2838 passed, 84 skipped, 1 xpassed, 0 failed** (14m33s). Identical to the Q3 firing's count, which is the right answer — Q4 changed only the built artefact, so a different number would have meant something moved that should not have.
+- `npx vitest run`: **1374 passed, 138 files, 0 failed** (42s).
+- `npm run lint` at `--max-warnings 0`: clean. `npx tsc --noEmit`: clean (also inside the build).
+- `uvx ruff@0.15.22 check src/ hub/ tests/`: clean.
+- `uvx black@26.5.1 --check src/ hub/hub/ hub/tests/ tests/`: 448 files unchanged.
+- `npx openspec validate --changes --strict`: 4 passed.
+- `AW_CHECK_UI_BUNDLE=1 pytest hub/tests/test_ui_build_stamp.py`: 11 passed.
+
+### Driven, not just tested
+
+`.claude/autonomous/scratch/drive_q4.py` (gitignored) boots the real FastAPI app on a temp SQLite
+database, seeds a project and a real git repository, and reads the JSON a real caller receives:
+**20 checks pass, 1 unreachable.**
+
+It covers what the unit suites cannot: `/health` reporting on the *committed* artefact; F4 read
+through **both** surfaces that expose it (`GET /settings` and the suggestion route's `chosen`) plus
+the re-open case, where a branch changed to `release` is not overwritten; F1 refused at create *and*
+update, with a check that the refused update left the stored cron alone; F13's 409 followed by a
+re-read proving the job really stayed disabled; and F8's 422 with the permitted values in the body.
+
+The one unreachable check is F8 on `POST /agent-actions/spec/evidence/{id}/decision`, which 401s on
+a missing run credential before it reaches any decision logic. It maps the refusal identically —
+`exc.http_status or status.HTTP_403_FORBIDDEN`, `agent_actions.py:959` — read rather than driven,
+and stated here as read.
+
+### Cross-surface check the suites do not make
+
+F1 lives in two independent implementations — `cron_day_ambiguity_reason` in Python and
+`cronDayAmbiguity` in TypeScript — and a disagreement between them is exactly the "two surfaces,
+two answers" the finding was about. Both were run over the same 17 expressions and **agree on every
+one**, including the ones designed to catch a sloppy port: `0 0 * * 0-7` (eight accepted values,
+still seven days → allow), `0 0 15 * 0,7` (refuse), `0 0 1-31 * 5` (a day-of-month that restricts
+nothing → allow), `0 12 * * mon,fri` (allow), and `0 0 L * 5` / `0 0 15 * ?` (unparseable → do not
+refuse, leaving croniter and APScheduler the authorities).
+
+### Read of the whole diff
+
+`git diff 3b4efd6^..HEAD`, excluding the bundle: **38 files, +3666/−50**. No file under `src/`
+changed at all — the CLI is untouched. No deleted subsystem reappears (`watchdog.py`,
+`messaging.py`, `runner.py`, `transport/local.py`, `transport/git.py`, the role subsystem: none
+present). No `kimichanges.md`, no `kimiwork.md`, no root `agentweave.yml`, no generated debris. Eight
+new files, all of them either a test, the one new module `hub/hub/agent_activity.py`, or this log.
+
+### Two things noticed while reading, neither a defect today
+
+1. **`record_evidence`'s agent route drops `http_status`.** `agent_actions.py:846-849` maps
+   `EvidenceRefusedError` to a hard 409 without consulting `exc.http_status`, where the *decide*
+   route at `:959` honours it. Correct today — F7's duplicate refusal sets no `http_status` and 409
+   is right for a duplicate — but a future refusal on the record path that sets one would be
+   silently downgraded. Worth an eye if that field grows callers.
+2. **F11 moved a governance boundary as a side effect.** `_authorize_loop_task_creation` gates a
+   creator agent's definition window on `job.run_count > 0`. Now that `run_count` counts only real
+   firings, a loop that has only ever *skipped* keeps its creator's window open longer. That reads
+   as more correct — no agent ran, so nothing has been briefed — which is why it was not
+   special-cased. It is in `decisions_for_user` because it is yours to confirm.
+
+### What surprised us
+
+- **The staleness warning was chasing the wrong field**, and two sessions before this one burned a
+  cycle on it. `src_fingerprint` is the whole check; `src_commit` and `built_at` are documentation.
+- **`ProjectSummary` has never carried `main_branch`**, which briefly read as F4 having failed on
+  the real route. The stored value was correct the whole time; the drive was reading a field that
+  does not exist on that schema. The F4 regression test's own docstring says so, and it was faster
+  to read the test than to re-derive it — an argument for tests that explain themselves.
+- **Two firings died mid-iteration on `API Error: 529 Overloaded`** (05:55, 06:12), and Q3 took four
+  firings to close as a result. Nothing was lost either time, because every iteration leaves the
+  tree on disk and the state in `STATE.json`. The design held.
+
+### Committed
+
+`9eb37c8` (the bundle) plus this entry and the final state. Nothing is uncommitted.
+
+### Continuation
+
+**The queue is empty and `stop_when_queue_empties` is true, so this run is done.** What is waiting
+for you is in `decisions_for_user` — read the posture question and the two 2026-08-23 openspec
+changes first; `2026-08-23-a-reviewer-can-see-the-work` also unblocks `loop-becomes-a-flow`, which
+currently ships a reviewer that cannot read code.
