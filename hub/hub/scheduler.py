@@ -412,6 +412,25 @@ CLAIMABLE_LOOP_TASK_STATUSES: tuple = (
     "revision_needed",
 )
 
+#: The statuses that can be a loop's **current item** on the board. The claimable set plus
+#: `blocked`, and the difference is not an oversight in either direction.
+#:
+#: **Fixed 2026-08-24. These were one constant, and that was a live defect.** `agent-loops` §85
+#: says: *"WHEN a loop's queue holds a task that is in progress or blocked / THEN that task is the
+#: loop's current item"*. When `blocked` left the claimable set on 2026-08-21 -- correctly, to stop
+#: a firing spawning an agent every tick against work that cannot move -- `_batch_loop_summaries`
+#: shared that constant for a different question and silently lost sight of blocked tasks with it.
+#: A loop parked on an unanswered question then reported `queue: {blocked: 1}` and **no current
+#: item**, so the surface that exists to say what a loop is waiting for said nothing was happening.
+#: Reproduced before the fix; no test covered §85's blocked scenario, which is why it shipped.
+#:
+#: Two questions were sharing one answer: *may a firing claim this?* and *what is this loop
+#: working on?* A blocked task is no to the first and yes to the second -- it is the loop's work,
+#: and it is precisely what the operator needs to see. `loop-notices-and-reacts`' one-vocabulary
+#: group exists for exactly this shape; this pair is the minimum correct split until it lands, and
+#: should be derived from the bands rather than spelled out here once it does.
+CURRENT_ITEM_TASK_STATUSES: tuple = CLAIMABLE_LOOP_TASK_STATUSES + ("blocked",)
+
 
 async def candidate_is_startable(
     session: AsyncSession, task: Task
@@ -436,8 +455,16 @@ async def candidate_is_startable(
     it is `task-dependencies` D8's "flagged, not stopped" case rather than a reason to skip past
     it. Every other claimable status is one `apply_transition` away from `in_progress` -- the same
     edge `dependency_gate.evaluate` guards -- so it is tested against that gate here.
+
+    `blocked` joins `in_progress` in skipping the check, for the same reason stated differently:
+    nothing is about to transition it either -- it is waiting on a person. Gating it would be
+    asking whether work that is not about to start is allowed to start, and a refusal would hide
+    it from the board, which is the one place the operator can see that the loop is waiting on
+    them. It never reaches the *claim* regardless, because `CLAIMABLE_LOOP_TASK_STATUSES` excludes
+    it; only `CURRENT_ITEM_TASK_STATUSES` lets it through, so the sets do that gating and this
+    rule stays single.
     """
-    if task.status == "in_progress":
+    if task.status in ("in_progress", "blocked"):
         return True, None
     refusal = await dependency_gate.evaluate(session, task)
     return (not refusal.refuses), refusal

@@ -169,7 +169,7 @@ async def _batch_loop_summaries(
     # helper for the bug the scoping fixes. Imported inside the function, matching this module's
     # existing convention for `...scheduler` (get_scheduler does the same at three call sites).
     from ...scheduler import (
-        CLAIMABLE_LOOP_TASK_STATUSES,
+        CURRENT_ITEM_TASK_STATUSES,
         _loop_queue_order,
         candidate_is_startable,
     )
@@ -182,7 +182,12 @@ async def _batch_loop_summaries(
             # `task_transitions.py`'s `ENTRY_STATUSES` both already treat it as such) — D3's claim
             # sets exactly this status, so without it a freshly claimed task vanished from
             # `current_task` the moment a firing picked it up.
-            Task.status.in_(CLAIMABLE_LOOP_TASK_STATUSES),
+            #
+            # `CURRENT_ITEM_TASK_STATUSES`, not the claimable set: the board answers "what is this
+            # loop working on", which includes a `blocked` task (`agent-loops` §85) that a firing
+            # must not claim. Sharing one constant for both questions was a live defect — see the
+            # constant's own comment for what it looked like.
+            Task.status.in_(CURRENT_ITEM_TASK_STATUSES),
         )
         .order_by(Task.loop_id, *_loop_queue_order())
     )
