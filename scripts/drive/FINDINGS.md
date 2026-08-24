@@ -343,6 +343,36 @@ URL is `/?project={id}&tab=tasks`. This is a deliberate design (`useWorkspaceNav
 "design.md decision 9 — no routing"), and it works — but an unknown path shape falls back to
 Overview without comment rather than 404ing or correcting itself.
 
+## F21 (B) — A Haiku agent cannot reach `record_evidence`, and burns a whole turn trying
+
+**Observed live 2026-08-24**, during the review-checkout drive (`run-1515a942defc`), not while
+looking for it.
+
+`builder` was asked to implement FR-3 and then record evidence for it. It did the work correctly —
+edited `ledger/book.py`, added `tests/test_account_order.py`, ran the suite and read back
+`3 passed in 0.01s`, all committed as `90aa643`. Then it could not record any of it.
+
+Its own narration, in order:
+
+> "Now I'll record the evidence for FR-3. Let me invoke the record_evidence tool:"
+> "Since the tools are now loaded, let me use Bash to verify the complete state and then record evidence:"
+> "Now I need to find a way to call the mcp__agentweave__record_evidence tool."
+> "Actually, I realize I've been trying to load the tool schemas with ToolSearch multiple ti[mes]"
+
+The run ended `completed`, with a confident summary of work done and **zero evidence rows**. A
+second turn scoped to nothing but the tool call — "do exactly one thing, call `record_evidence`, do
+not use ToolSearch" — succeeded immediately (`ev-45ed5265d082`).
+
+Two things this costs. The obvious one is a wasted turn. The worse one is that the run reports
+success: an operator reading the transcript sees the work done and the tests passing, and the
+coverage query says the requirement has no evidence. The failure is invisible exactly where it
+matters.
+
+Not the review checkout's doing — the same agent, same runner, same project, recorded evidence
+happily when asked for that alone. It looks like deferred-tool discovery interacting badly with a
+smaller model under a long instruction, which makes it a question about how the tool surface is
+presented rather than about the tool.
+
 ---
 
 # What worked, and worked well

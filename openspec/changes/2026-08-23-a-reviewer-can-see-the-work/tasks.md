@@ -58,11 +58,11 @@ pytest but produces three false failures in `test_pty_runner.py` on a green tree
 - [x] 5.3 `uvx ruff@0.15.22 check src/ hub/ tests/` and `uvx black@26.5.1 --check` at CI's pinned
       versions.
 - [x] 5.4 `npx openspec validate --changes --strict`.
-- [ ] 5.5 An end-to-end run against the trial Hub using `scripts/drive/`: an author completes work
+- [x] 5.5 An end-to-end run against the trial Hub using `scripts/drive/`: an author completes work
       on its own branch, a reviewer is given a review turn, and the reviewer **reads a file that
       does not exist on the main branch**. This is the assertion that distinguishes this change from
       doing nothing.
-- [ ] 5.6 The reviewer runs the project's test suite inside its review checkout and reports a result
+- [x] 5.6 The reviewer runs the project's test suite inside its review checkout and reports a result
       it observed rather than one it was told.
 
 ## 6. Verification only a person can do
