@@ -1,1 +1,1 @@
-handoff-0076-2026-08-23-1812-design-audit-remediation-and-sandbox.md
+handoff-0077-2026-08-24-0001-stress-test-drive-and-overnight-remediation.md
