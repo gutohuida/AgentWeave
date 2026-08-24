@@ -44,20 +44,50 @@
 
 ## 2. Tick recording
 
-- [ ] 2.1 Test: firing repeatedly against one stalled queue produces exactly one `JobRun` whose tick
+- [x] 2.1 Test: firing repeatedly against one stalled queue produces exactly one `JobRun` whose tick
       count equals the number of refused firings.
-- [ ] 2.2 Test: a stall whose reason text changes starts a new `JobRun` rather than incrementing the
+      `hub/tests/test_loop_stall_ticks_in_place.py`, five firings → one row reading 5. Plus the
+      boundary the default has to get right: a stall seen once reads 1, not 0.
+- [x] 2.2 Test: a stall whose reason text changes starts a new `JobRun` rather than incrementing the
       previous one.
-- [ ] 2.3 Test: a loop that alternates between real firings and long refusal periods still shows the
+      Driven by adding a second unclaimable task, which changes what the reason says about how many
+      tasks are open and in which statuses. Asserts the earlier row keeps its own count rather than
+      being absorbed.
+- [x] 2.3 Test: a loop that alternates between real firings and long refusal periods still shows the
       real firings in the most recent records — the last-ten view stays useful at a fast tick rate.
-- [ ] 2.4 Migration adding the tick counter to `JobRun` — **`0087`**, the head being `0086`
+      Twenty refusals after a real firing leave **two** rows, not twenty-one, with the real one
+      still present. A second test pins the reason that works: an increment does **not** move
+      `fired_at`. Kept at the first refusal, the row reads "this stall began then and has been
+      re-checked N times", and genuine later firings sort above it in a history ordered by
+      `fired_at`. Moving it would send a stalled loop back to the top of the list every five
+      minutes — the same burying, by another route.
+- [x] 2.4 Migration adding the tick counter to `JobRun` — **`0087`**, the head being `0086`
       (`0086_queue_entry_review_task`) as of 2026-08-24. Guard for a missing table as `0033`/`0034`
       do; default reads as one for pre-existing rows.
-- [ ] 2.5 Bump the head assertions in `hub/tests/test_migrations.py` and
+      `0087_job_run_tick_count.py`, guarded for a missing `job_runs` table. **Default 1, not 0**,
+      and server-side as well as client-side: the column counts firings the row represents, every
+      pre-existing row represents exactly one, and a row reading 0 would say a firing that
+      demonstrably happened did not.
+- [x] 2.5 Bump the head assertions in `hub/tests/test_migrations.py` and
       `hub/tests/test_project_persistence.py`.
-- [ ] 2.6 Implement the increment-or-append rule in `_do_fire_job`'s stall path: same job, most recent
+      Both bumped to `0087`; the two files' migration suites pass (78 passed, 1 skipped).
+- [x] 2.6 Implement the increment-or-append rule in `_do_fire_job`'s stall path: same job, most recent
       run is a stall, same reason -> increment; otherwise append.
-- [ ] 2.7 Expose the count on `JobRunResponse` so the history endpoints can render it.
+      `_stall_run_to_increment`, narrow in both directions deliberately — *most recent*, so a stall
+      that resumed and stalled again gets its own row rather than resurrecting a count from before
+      the work happened; *same reason*, so a stall that changes shape stays visible.
+      **One wrinkle worth naming:** the `JobRun` is already `session.add`ed by the time a firing
+      knows it will not record one, so `_discard_unused_run` handles both dispositions — `expunge`
+      when it is still pending, `delete` when an intervening query autoflushed it. Which applies
+      depends on what else the firing happened to query first, so neither is assumed.
+- [x] 2.7 Expose the count on `JobRunResponse` so the history endpoints can render it.
+      Defaulting to 1 there too, so a row written before the column existed serialises honestly.
+      Asserted through the real route, `GET /projects/{id}/jobs/{job_id}/history`.
+
+      **Three existing scheduler tests asserted the old behaviour** — three stalled firings, three
+      rows — and were updated to one row with `tick_count == 3`. Each keeps the fact it was written
+      to test (no agent spawned; the reason names what is waited on; `run_count`/`last_run`
+      describe firings rather than considerations) and gains a note saying what changed and why.
 
 ## 3. The status vocabulary
 

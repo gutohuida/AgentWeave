@@ -74,6 +74,11 @@ class JobRunResponse(BaseModel):
     trigger: str = Field(max_length=64)
     session_id: Optional[str] = Field(default=None, max_length=128)
     error_summary: Optional[str] = Field(default=None, max_length=500)
+    # How many firings this record stands for (`loop-notices-and-reacts` design D6). Always 1 on a
+    # record of a firing that happened; more only on a stall record, where each subsequent refusal
+    # for the same stall counts here instead of appending another row. Defaults to 1 rather than 0
+    # so a row written before the column existed reads as the one firing it represents.
+    tick_count: int = 1
 
     model_config = {"from_attributes": True}
 

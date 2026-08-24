@@ -956,9 +956,15 @@ async def test_loop_whose_tasks_are_all_completed_but_unapproved_skips_instead_o
         )
         assert [t.status for t in tasks] == ["completed", "completed"]
 
-        # No agent was spawned. Three skipped JobRuns, each naming what is being waited on.
+        # No agent was spawned. **One** skipped JobRun counting all three refusals — this asserted
+        # three rows until `loop-notices-and-reacts` group 2, which made a continuing stall count in
+        # place rather than append (design D6). The fact under test is unchanged: three firings, no
+        # agent, and a record naming what is being waited on. What changed is that the record does
+        # not multiply, because `JobRun` feeds the last-ten-runs view and a stalled loop was burying
+        # the firings that did work.
         job_runs = (await db.execute(select(JobRun).where(JobRun.job_id == job.id))).scalars().all()
-        assert len(job_runs) == 3
+        assert len(job_runs) == 1
+        assert job_runs[0].tick_count == 3
         assert {r.status for r in job_runs} == {"skipped"}
         assert all("stalled" in r.error_summary for r in job_runs)
         assert all("2 completed" in r.error_summary for r in job_runs)
@@ -1117,9 +1123,11 @@ async def test_loop_whose_only_task_is_blocked_on_an_unanswered_question_skips_i
         assert parked.status == "blocked"
         assert parked.blocked_reason == "Which database should the migration target?"
 
-        # Nothing spawned. Three skipped JobRuns, each naming what is being waited on.
+        # Nothing spawned. One skipped JobRun counting all three refusals (design D6 — see the
+        # note on the completed-and-unapproved test above for why this stopped being three rows).
         job_runs = (await db.execute(select(JobRun).where(JobRun.job_id == job.id))).scalars().all()
-        assert len(job_runs) == 3
+        assert len(job_runs) == 1
+        assert job_runs[0].tick_count == 3
         assert {r.status for r in job_runs} == {"skipped"}
         assert all("stalled" in r.error_summary for r in job_runs)
         assert all("1 blocked" in r.error_summary for r in job_runs)
@@ -2104,9 +2112,13 @@ async def test_run_count_and_last_run_describe_firings_not_considerations(
         assert stalled_job.last_run is None
         # ...but the schedule itself did move on.
         assert stalled_job.next_run is not None
-        # The skips are still recorded, in the place that was always honest about them.
+        # The skips are still recorded, in the place that was always honest about them — as one
+        # row counting three since `loop-notices-and-reacts` group 2 (design D6). The point of this
+        # test is that `run_count`/`last_run` describe firings rather than considerations, and that
+        # is unaffected: three considerations, zero firings, and a record that says so.
         job_runs = (await db.execute(select(JobRun).where(JobRun.job_id == job.id))).scalars().all()
-        assert len(job_runs) == 3
+        assert len(job_runs) == 1
+        assert job_runs[0].tick_count == 3
         assert {r.status for r in job_runs} == {"skipped"}
 
     async with async_session_factory() as db:

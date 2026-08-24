@@ -615,6 +615,64 @@ async def _select_for_firing(
     ]
 
 
+async def _stall_run_to_increment(
+    session: AsyncSession, job_id: str, stall_reason: str, exclude_run_id: str
+) -> "Optional[JobRun]":
+    """The `JobRun` this stall should count against, or `None` to write a new row.
+
+    **`loop-notices-and-reacts` design D6.** A loop ticking against a stalled queue writes one row
+    per tick saying the same thing, and `JobRun` is what the last-ten-runs view and the "is this
+    loop running" check both read -- so at a five-minute cadence a stall buries the firings that
+    did work under twelve identical rows an hour and a healthy loop reads as dead.
+
+    "The same stall" is deliberately narrow: the **most recent** run for this job is itself a stall
+    record *and* its reason is unchanged. Narrow in both directions on purpose --
+
+    * Most recent, so a stall that resumed and stalled again gets its own row rather than
+      resurrecting a count from before the work happened.
+    * Same reason, so a stall that changes shape stays visible instead of hiding inside a growing
+      number. The reason names how many tasks are open and in which statuses, so it moves whenever
+      the queue does.
+
+    `exclude_run_id` is the run this firing has already constructed. Without it the newest row is
+    always this firing's own and nothing ever matches.
+    """
+    from sqlalchemy import select
+
+    latest = (
+        (
+            await session.execute(
+                select(JobRun)
+                .where(JobRun.job_id == job_id, JobRun.id != exclude_run_id)
+                .order_by(JobRun.fired_at.desc())
+                .limit(1)
+            )
+        )
+        .scalars()
+        .first()
+    )
+    if latest is None:
+        return None
+    if latest.status != "skipped" or latest.error_summary != stall_reason:
+        return None
+    return latest
+
+
+async def _discard_unused_run(session: AsyncSession, run: JobRun) -> None:
+    """Drop a `JobRun` this firing built but must not persist (design D6).
+
+    `session.add` has already been called by the time a firing knows it will not record a row.
+    Which disposal applies depends on whether an intervening query autoflushed it -- `delete`
+    refuses an object that was never flushed, and `expunge` alone would leave a flushed row in the
+    database. Both are handled rather than assumed, because the autoflush depends on what else the
+    firing happened to query first.
+    """
+    if run in session.new:
+        session.expunge(run)
+    else:
+        await session.delete(run)
+
+
 async def _loop_stall_reason(session: AsyncSession, loop: Loop) -> Optional[str]:
     """Why a firing that claimed nothing should be skipped rather than spawned, or `None`.
 
@@ -1258,6 +1316,30 @@ class JobScheduler:
                         # scheduler, so the next tick picks the queue up the moment something
                         # becomes claimable again. See `_loop_stall_reason` for why this is not
                         # the `_loop_stop_reason` branch above.
+                        #
+                        # Design D6: a *continuing* stall counts in place rather than appending.
+                        # The row this firing built is discarded in that case, so twenty refusals
+                        # leave one row reading 20 instead of twenty rows reading the same thing.
+                        counted = await _stall_run_to_increment(
+                            session, job.id, stall_reason, exclude_run_id=run_id
+                        )
+                        if counted is not None:
+                            counted.tick_count += 1
+                            # `fired_at` is deliberately not moved. Kept at the first refusal, the
+                            # row reads "this stall began then and has been re-checked N times",
+                            # and genuine firings that happen later sort above it in a history view
+                            # ordered by `fired_at`. Moving it would send a stalled loop's row back
+                            # to the top of that list every five minutes — the same burying this
+                            # decision exists to stop, by another route.
+                            await _discard_unused_run(session, run)
+                            await session.commit()
+                            if pending_edit_payload is not None:
+                                await _emit_loop_edit_applied(session, pending_edit_payload)
+                            logger.debug(
+                                f"Job {job.id} stall continues "
+                                f"({counted.tick_count}): {stall_reason}"
+                            )
+                            return False
                         run.status = "skipped"
                         run.error_summary = stall_reason
                         await session.commit()

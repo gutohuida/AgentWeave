@@ -1221,6 +1221,27 @@ class JobRun(Base):
     # `AgentOutput.run_id`'s own precedent — every `JobRun` written before `0075` honestly has NULL
     # here, because nothing recorded it.
     conversation_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # How many firings this row stands for (`loop-notices-and-reacts` design D6). One for every
+    # row that records a firing which actually happened; more only on a *stall* record, where each
+    # subsequent refusal for the same stall increments this instead of appending another row.
+    #
+    # The precedent is `InboundQueueEntry.delivery_attempts` above, which chose a counter over
+    # duplicate rows for the identical problem: "an entry returned five times is indistinguishable
+    # from one never tried." Here the harm is the reverse and worse — `JobRun` feeds the
+    # last-ten-runs view and the "is this loop running" check, so a stalled loop ticking every five
+    # minutes buries the firings that did work under twelve identical rows an hour, and a healthy
+    # loop reads as dead.
+    #
+    # **A departure taken knowingly:** this is the one column on `JobRun` that is *updated* after
+    # the row is written. `JobRun` is not held to `TaskTransition`'s explicit append-only rule, so
+    # it is permitted — but it is a change in this table's write semantics, chosen rather than
+    # discovered. Confined to stall records, whose identity is "most recent run for this job, and
+    # the same stall reason"; a stall whose reason changes starts a new row, so a stall that
+    # changes shape stays visible.
+    #
+    # Defaults to 1, never 0: the column counts firings this row represents, and every row written
+    # before it existed represents exactly one.
+    tick_count: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
 
     __table_args__ = (Index("ix_job_runs_job_fired", "job_id", "fired_at"),)
 
