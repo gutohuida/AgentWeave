@@ -236,4 +236,57 @@ describe('JobCard run history', () => {
     await user.click(screen.getByLabelText('Expand job details'))
     expect(screen.getByText('No runs yet')).toBeInTheDocument()
   })
+
+  /**
+   * A continuing stall counts in place (design D6): no new row, and `fired_at` stays at the first
+   * refusal so later real firings still sort above it. That is right for the history as a whole
+   * and wrong for the row on its own — text frozen, timestamp ageing — which is a loop being
+   * re-checked every five minutes wearing the appearance of one nobody has touched. The count is
+   * the only thing separating the two, and it was recorded but not rendered.
+   */
+  it('says how many times a stalled firing has been re-checked', async () => {
+    const user = userEvent.setup()
+    loopTasks = []
+    jobHistory = {
+      data: [
+        {
+          id: 'run-stall',
+          job_id: 'job-1',
+          fired_at: '2026-08-24T09:00:00Z',
+          status: 'skipped',
+          trigger: 'scheduled',
+          error_summary: 'loop queue is stalled: no claimable task among 2 open (2 completed)',
+          tick_count: 9,
+        },
+      ],
+      isLoading: false,
+    }
+    renderCard(baseJob())
+
+    await user.click(screen.getByLabelText('Expand job details'))
+    expect(screen.getByTestId('job-run-ticks-run-stall')).toHaveTextContent('re-checked 9 times')
+  })
+
+  it('does not label a single firing as re-checked', async () => {
+    const user = userEvent.setup()
+    loopTasks = []
+    jobHistory = {
+      data: [
+        {
+          id: 'run-once',
+          job_id: 'job-1',
+          fired_at: '2026-08-24T09:00:00Z',
+          status: 'skipped',
+          trigger: 'scheduled',
+          error_summary: 'loop queue is stalled: no claimable task among 1 open (1 completed)',
+          tick_count: 1,
+        },
+      ],
+      isLoading: false,
+    }
+    renderCard(baseJob())
+
+    await user.click(screen.getByLabelText('Expand job details'))
+    expect(screen.queryByTestId('job-run-ticks-run-once')).not.toBeInTheDocument()
+  })
 })

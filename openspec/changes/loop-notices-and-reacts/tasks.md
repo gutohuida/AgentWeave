@@ -277,26 +277,112 @@ Both depend on the busy guard (group 1). Five minutes is only safe once a busy t
       outranks oldest-pending, and `_loop_queue_order` is what encodes that. The regression test
       from this morning's blocked fix caught it.
 - [x] 5.6 `make ui` after `npm run build`, and commit `hub/ui/src` and `hub/hub/static/ui` together.
+- [x] 5.7 **Added 2026-08-24, from writing group 9's guide.** Render the tick count. Group 2 records
+      it and the API carries it, but no surface displayed it, and writing down what an operator
+      would see made the omission impossible to miss: design D6 stops a continuing stall appending
+      a row *and* holds `fired_at` at the first refusal, so the row's text and its timestamp are
+      both frozen. A loop re-checked every five minutes was therefore pixel-identical to one
+      nothing had touched in an hour — which is precisely the reading task 8.3 exists to prevent,
+      and 8.2 could not have been answered "yes" against the code as it stood.
+      `JobRun.tick_count` added to the UI type (optional — a Hub older than `0087` does not send
+      it) and rendered in `JobCard` as `re-checked N times`, muted and immediately before the
+      timestamp so the two read as one sentence — "re-checked 12 times · about 1 hour ago" — which
+      is the whole claim the frozen `fired_at` needs the count to make. Amber was tried first and
+      competed with the reason for the eye rather than qualifying the time.
+      Shown only above 1: `re-checked 1 time` would be a firing describing itself.
+      Two tests in `jobCard.test.tsx`, the first **confirmed failing** against the unmodified
+      `JobCard` before the fix.
 
 ## 6. Retroactive specification of what already shipped
 
-- [ ] 6.1 Confirm the `agent-loops` delta's stall-refusal requirement matches the behaviour
+- [x] 6.1 Confirm the `agent-loops` delta's stall-refusal requirement matches the behaviour
       `_loop_stall_reason` already implements, and that its scenarios pass against the shipped code
       before this change adds anything.
-- [ ] 6.2 Confirm `revision_needed`'s presence in `CLAIMABLE_LOOP_TASK_STATUSES` is covered by an
+      Confirmed for all three scenarios, and **the confirmation found the requirement wrong**, which
+      is the whole reason a retroactive group exists. Scenario 1 (reason names count and statuses),
+      scenario 2 (job stays enabled, no stop reason) and scenario 3 (a resolved stall claims on the
+      next tick) are each asserted by shipped tests:
+      `test_a_stalled_loop_queue_is_neither_claimable_nor_drained`, parametrized off the gap itself,
+      asserts `"1 {status}"` appears in the reason; and
+      `test_loop_whose_tasks_are_all_completed_but_unapproved_skips_instead_of_spinning` asserts
+      `enabled is True`, `stop_reason is None`, and then adds a claimable task and asserts the very
+      next firing claims it. "Before queueing any input" is structural rather than asserted-in-place:
+      every refusal returns above the `new_conversation`/`new_entry` block in `_do_fire_job`.
+      **The defect:** the requirement said the reason SHALL name "how many tasks are open and in
+      which statuses" as a blanket SHALL, but `_stall_reason_from_walk` has two shapes, and the
+      dependency-gated one names counts and *causes* ("N still awaiting a prerequisite's approval",
+      "N gated on a rejected prerequisite") with no status breakdown at all. As written the new
+      requirement contradicted `agent-loops`' existing "A queue gated on unapproved work is stalled,
+      never stopped", which requires exactly that causal wording — two requirements in one capability
+      demanding different text from one string. Amended: the reason names *what the queue is waiting
+      on*, the status breakdown is required only where no gate is involved, and the gated case is
+      handed to the requirement that already owns it. Added a scenario for the gated shape, itself
+      already covered by `test_loop_claim_dependency_gate.py`'s `"gated on a rejected prerequisite"`
+      assertions.
+- [x] 6.2 Confirm `revision_needed`'s presence in `CLAIMABLE_LOOP_TASK_STATUSES` is covered by an
       existing test and needs no new requirement here.
+      Covered twice over, and no new requirement is needed.
+      `test_scheduler.py::test_revision_needed_is_claimable_so_a_returned_review_resumes` asserts the
+      membership and states the reason — `revision_needed -> in_progress` is `_BOTH` in the
+      transition map, so the loop's own agent is exactly who should act on it, and until 2026-08-20
+      it sat in the gap and stalled a loop whose reviewer had done their job. Group 3's
+      `test_task_lifecycle_bands.py` then made the membership derived rather than asserted:
+      `STATUS_BANDS["revision_needed"] == BAND_AGENT_ACTIONABLE`, and the claimable set is that
+      band's union, so the status cannot silently leave the claim without a band moving.
 
 ## 7. Agent-verifiable checks
 
-- [ ] 7.1 `pytest hub/tests/ -v` passes, with the three pre-existing `test_pty_runner` environment
+- [x] 7.1 `pytest hub/tests/ -v` passes, with the three pre-existing `test_pty_runner` environment
       failures unchanged and no new failures.
-- [ ] 7.2 `openspec validate loop-notices-and-reacts` reports valid.
-- [ ] 7.3 `ruff check hub/` and `black --check hub/` pass on every touched file, and
+      `py -3.11 -m pytest hub/tests/ -q` — **2963 passed, 84 skipped, 0 failed** (18m19s), against a
+      **measured** baseline of 2958 taken on this same tree before any of this session's tests
+      existed. The delta is exactly the five added here: four in `test_no_refusal_queues_input.py`
+      and 7.5's call-site scan.
+      **The task's own premise is stale and was not accepted on trust.** There are no "three
+      pre-existing `test_pty_runner` failures" — those appear only under a bare `python`, which
+      resolves to a venv missing the runtime this suite needs. Under `py -3.11`, which is what this
+      repo's tests are run with, the tree is green and always was; a task that expected three
+      failures would have taught the next reader to tolerate three.
+      The `1 xpassed` is likewise not a regression:
+      `test_a_conversation_whose_model_changed_attributes_usage_per_turn` is a `strict=False` xfail
+      over a documented StaticPool fixture defect, and it xpasses in isolation. Present identically
+      in the baseline run and the final one.
+      **One qualification, stated rather than glossed.** 7.5's scan was rewritten from a textual
+      match to an `ast` parse *after* this run began, so the full suite exercised the earlier form.
+      The rewrite touches one test's body and no source; its module was re-run directly (12 passed)
+      and the AST form was re-confirmed able to fail against a planted third caller. A confirming
+      full run follows the commit.
+- [x] 7.2 `openspec validate loop-notices-and-reacts` reports valid.
+      `npx openspec validate loop-notices-and-reacts --strict` — valid, after group 6's amendment.
+- [x] 7.3 `ruff check hub/` and `black --check hub/` pass on every touched file, and
       `cd hub/ui && npm run lint` passes.
-- [ ] 7.4 A firing refused for any reason creates no `InboundQueueEntry` — asserted directly, not
+      `uvx ruff@0.15.22 check hub/` clean (one B007 introduced by 7.5's scan and fixed),
+      `uvx black@26.5.1 --check hub/tests/` clean across 206 files, `npm run lint` exit 0,
+      `npx tsc --noEmit` clean, `npx vitest run` **1385 passed** (1383 baseline + 5.7's two).
+- [x] 7.4 A firing refused for any reason creates no `InboundQueueEntry` — asserted directly, not
       inferred from a `JobRun` status.
-- [ ] 7.5 The claim decision function has exactly two call sites, asserted by a source scan in the
+      `hub/tests/test_no_refusal_queues_input.py`, new. Only the busy route had this assertion; the
+      stalled and stopped routes leave `_do_fire_job` at different points and were covered only by
+      what they *did* record. All three now assert the row count directly.
+      **With a positive control, without which the three zeros prove nothing.** A count is also zero
+      when the mechanism that would raise it is out of reach for an unrelated reason — and these
+      fixtures bind no runner, so that was a live possibility rather than a formality. Measured: an
+      otherwise identical firing with a claimable task and a free agent produces exactly **1**
+      entry, unbound runner and all. So the entry is written strictly before the launch path and
+      the counter observes what it claims to.
+- [x] 7.5 The claim decision function has exactly two call sites, asserted by a source scan in the
       style of `hub/tests/test_task_transitions.py`'s existing origin scan.
+      `test_the_firing_decision_has_exactly_two_call_sites` in `test_firing_decision_is_shared.py`.
+      **This task was recorded as already satisfied and was not.** The claim was that group 3's
+      `test_no_module_spells_a_status_set_out_by_hand` covered it — that test's own docstring cites
+      7.5 — but it asserts a different property: that no module re-lists a *status set* longhand.
+      Neither implies the other, and the property 7.5 asks for is the one that matters here, since
+      the tests around it prove the board and the firing *agree* without proving that agreement is
+      structural. Two derivations that happen to match today pass every one of them, which is
+      exactly how `_loop_queue_order`'s recorded failure survived review.
+      Asserts the exact set `{scheduler.py, jobs.py}`, so it fails on a lost caller as well as a
+      new one — a lost caller means something went back to deriving the answer for itself.
+      **Verified able to fail** by planting a third call site in `checkpoints.py`.
 
 ## 8. Human-only verification
 
@@ -313,7 +399,18 @@ These cannot be established by an agent and must be checked by the operator agai
 
 ## 9. User test guide
 
-- [ ] 9.1 Write the operator-facing guide covering: creating a loop, watching a firing claim work,
+- [x] 9.1 Write the operator-facing guide covering: creating a loop, watching a firing claim work,
       letting its queue stall, reading the stall from the loop's own history, and resolving it.
-- [ ] 9.2 Include how to tell the three refusal reasons apart from the loop's own history, and what
+      `openspec/changes/loop-notices-and-reacts/test-guide.md`, following the pattern of
+      `archive/2026-08-24-the-hop-budget-is-a-real-bound/test-guide.md`. Group 8's four checks are
+      carried in it as a table with what to look at for each, since the guide is what the operator
+      will have in front of them when they do them.
+      **Writing it is what surfaced 5.7.** Describing what the operator would see in the history
+      meant reading the component rather than the schema, and the count was not there.
+- [x] 9.2 Include how to tell the three refusal reasons apart from the loop's own history, and what
       each one means about what the loop is waiting for.
+      A four-column table: the trace, the meaning, and the operator's move. The load-bearing cell is
+      the empty one — a busy refusal records **nothing at all**, so an operator hunting the history
+      for evidence of one will find none and must not read that as a fault. Also covers the fourth
+      trace, dependency-gating, as the special case of the stall it is, since its two wordings have
+      different remedies and one of them never clears on its own.

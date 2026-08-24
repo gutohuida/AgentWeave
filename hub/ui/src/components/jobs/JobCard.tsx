@@ -140,6 +140,26 @@ function RunHistory({ runs, isLoading }: { runs?: JobRun[]; isLoading?: boolean 
               {run.error_summary}
             </span>
           )}
+          {/* The count design D6 records but nothing rendered until now. A continuing stall
+              neither appends a row nor moves `fired_at`, which is what stops it burying real
+              firings — but it also means the row's text and timestamp are both frozen, so a loop
+              that is being re-checked every five minutes looked identical to one nothing had
+              touched in an hour. That is the reading task 8.3 exists to prevent. Shown only above
+              1: "re-checked 1 time" would be a firing describing itself.
+
+              Muted rather than amber, and immediately before the timestamp: the two form one
+              sentence — "re-checked 12 times · about 1 hour ago" — and that sentence is the whole
+              claim the frozen `fired_at` needs the count to make. In amber it competed with the
+              reason for the eye instead of qualifying the time. */}
+          {(run.tick_count ?? 1) > 1 && (
+            <span
+              className="text-[11px] shrink-0"
+              style={{ color: 'var(--text-3)' }}
+              data-testid={`job-run-ticks-${run.id}`}
+            >
+              re-checked {run.tick_count} times
+            </span>
+          )}
           <span className="text-[11px] shrink-0" style={{ color: 'var(--text-3)' }}>
             {formatDistanceToNow(hubDate(run.fired_at), { addSuffix: true })}
           </span>

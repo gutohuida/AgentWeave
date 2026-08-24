@@ -11,6 +11,11 @@ export interface JobRun {
   session_id?: string
   message_id?: string
   error_summary?: string
+  /** How many firings this one record stands for (`loop-notices-and-reacts` design D6).
+   *  1 on a firing that happened; higher only on a stall record, where each further refusal for
+   *  the same stall counts here instead of appending a row. Optional because a Hub older than
+   *  migration `0087` does not send it. */
+  tick_count?: number
 }
 
 /**

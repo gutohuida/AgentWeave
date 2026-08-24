@@ -233,3 +233,52 @@ async def test_a_loop_that_would_fire_reports_no_stall_reason(app):
         summary = (await _batch_loop_summaries(db, [job.id]))[job.id]
 
     assert summary.stall_reason is None
+
+
+# ---------------------------------------------------------------------------
+# 7.5 — the decision has exactly two call sites, asserted from the source
+# ---------------------------------------------------------------------------
+
+
+async def test_the_firing_decision_has_exactly_two_call_sites():
+    """A source scan in the manner of `test_task_transitions.py`'s origin scan (task 7.5).
+
+    The tests above prove the firing and the board *agree*. They cannot prove that agreement is
+    structural rather than coincidental: two separate derivations that happen to match today pass
+    every one of them. That is not a hypothetical — `_loop_queue_order`'s own comment records the
+    time it happened, when both derivations shared a flaw and "two consistent wrong answers read as
+    a match".
+
+    So this asserts the shape instead of the outcome: `decide_firing` is called from the firing and
+    from the board, and from nowhere else. A third caller is not automatically wrong, but it is a
+    new consumer of the decision and should arrive with its own agreement test rather than
+    silently. A *removed* caller is the real quarry — it means something went back to deriving the
+    answer for itself, which is exactly how the board lost sight of `blocked` tasks on 2026-08-21.
+
+    Parsed rather than grepped. `decide_firing` is discussed by name in comments and docstrings
+    across both modules and in `schemas/jobs.py`, so a textual scan would have to special-case
+    prose, and would start counting a *mention* as a caller the moment someone wrote one into a
+    third file. `ast` distinguishes a call from a sentence about one for free.
+
+    `async` only because this module's `pytestmark` makes every test in it async; the scan reads
+    files and touches no database.
+    """
+    import ast
+    from pathlib import Path
+
+    hub_package = Path(__file__).resolve().parents[1] / "hub"
+    call_sites = set()
+    for path in sorted(hub_package.rglob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            name = func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", None)
+            if name == "decide_firing":
+                call_sites.add(path.name)
+
+    assert call_sites == {"scheduler.py", "jobs.py"}, (
+        "`decide_firing` must be the one place a firing is decided; "
+        f"found call sites in {sorted(call_sites)}"
+    )
