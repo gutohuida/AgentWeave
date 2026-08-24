@@ -22,11 +22,11 @@ pytest but produces three false failures in `test_pty_runner.py` on a green tree
 
 ## 2. Resolving the commit
 
-- [ ] 2.1 Add a helper that returns the commit for a task's review from its most recent evidence
+- [x] 2.1 Add a helper that returns the commit for a task's review from its most recent evidence
       footprint, plus any earlier distinct commits (design D5).
-- [ ] 2.2 Return a stated refusal — not an exception, not a guess — when the task has no evidence
+- [x] 2.2 Return a stated refusal — not an exception, not a guess — when the task has no evidence
       naming a commit.
-- [ ] 2.3 Unit tests: single evidence; two evidence rows naming different commits (the newer wins
+- [x] 2.3 Unit tests: single evidence; two evidence rows naming different commits (the newer wins
       and the older is reported); no evidence at all.
 
 ## 3. The review turn

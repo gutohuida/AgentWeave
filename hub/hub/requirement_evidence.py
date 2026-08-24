@@ -521,6 +521,106 @@ async def reviews_for(session: AsyncSession, evidence_id: str) -> List[EvidenceR
     return list(result.scalars().all())
 
 
+@dataclass
+class EarlierCommit:
+    """A commit an *earlier* piece of evidence for the same task named."""
+
+    commit_sha: str
+    evidence_id: str
+    produced_at: datetime
+
+
+@dataclass
+class ReviewTarget:
+    """Which commit a review turn is about, or why there is not one.
+
+    A result rather than a raised exception, deliberately (task 2.2). "This task cannot be reviewed
+    yet" is an ordinary answer that the caller renders to an operator, not a fault — and a refusal
+    carrying its own reason cannot be caught and discarded by a generic handler on the way out.
+    """
+
+    commit_sha: Optional[str] = None
+    evidence_id: Optional[str] = None
+    branch: Optional[str] = None
+    #: Distinct commits named by earlier evidence for the same task, oldest first. Design D5: the
+    #: reviewer is *told* the work moved rather than silently handed the newest commit — one that
+    #: knows can ask why, and one that does not cannot.
+    earlier_commits: List[EarlierCommit] = None  # type: ignore[assignment]
+    refusal: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        if self.earlier_commits is None:
+            self.earlier_commits = []
+
+    @property
+    def resolved(self) -> bool:
+        return self.commit_sha is not None
+
+
+async def commit_for_task_review(session: AsyncSession, task_id: str) -> ReviewTarget:
+    """The commit to check out to review *task_id*, per design D5.
+
+    **The most recent evidence wins.** A task can carry several evidence rows naming different
+    commits — observed live, `ev-42cad5d2` and `ev-5d0273ad` on the same task — so this needs a rule
+    rather than an assumption.
+
+    Rejected while designing this: the task's latest run snapshot. It is the same commit in the
+    ordinary case and a different one whenever a run ended without recording evidence, and in that
+    case there is nothing to review anyway.
+    """
+    result = await session.execute(
+        select(RequirementEvidence, EvidenceFootprint)
+        .join(EvidenceFootprint, EvidenceFootprint.evidence_id == RequirementEvidence.id)
+        .where(RequirementEvidence.task_id == task_id)
+        .order_by(RequirementEvidence.produced_at, RequirementEvidence.id)
+    )
+    rows = list(result.all())
+
+    naming_a_commit = [
+        (evidence, footprint)
+        for evidence, footprint in rows
+        if footprint.commit_sha and footprint.commit_sha.strip()
+    ]
+
+    if not naming_a_commit:
+        # Two different states, and an operator can act on only one of them, so they are not
+        # collapsed into one message.
+        if rows:
+            reason = (
+                f"task {task_id} has recorded evidence, but none of it names a commit — the "
+                "project may not be a git repository, so there is no tree to check out for review"
+            )
+        else:
+            reason = (
+                f"task {task_id} has no recorded evidence, so there is no commit to review. "
+                "Evidence naming a commit is what a review turn is given."
+            )
+        return ReviewTarget(refusal=reason)
+
+    newest_evidence, newest_footprint = naming_a_commit[-1]
+    newest_sha = newest_footprint.commit_sha.strip()
+
+    earlier: List[EarlierCommit] = []
+    seen = {newest_sha}
+    for evidence, footprint in naming_a_commit[:-1]:
+        sha = footprint.commit_sha.strip()
+        if sha in seen:
+            continue
+        seen.add(sha)
+        earlier.append(
+            EarlierCommit(
+                commit_sha=sha, evidence_id=evidence.id, produced_at=evidence.produced_at
+            )
+        )
+
+    return ReviewTarget(
+        commit_sha=newest_sha,
+        evidence_id=newest_evidence.id,
+        branch=newest_footprint.branch,
+        earlier_commits=earlier,
+    )
+
+
 async def for_requirement(session: AsyncSession, requirement_id: str) -> List[RequirementEvidence]:
     result = await session.execute(
         select(RequirementEvidence)
