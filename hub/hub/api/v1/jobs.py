@@ -206,12 +206,18 @@ async def _batch_loop_summaries(
     # loop, which is worse than what this replaced. The per-candidate `candidate_is_startable`
     # calls that used to live here are gone; `decide_firing` does that work once.
     stall_reason_by_loop: Dict[str, Optional[str]] = {}
-    claimed_task_id_by_loop: Dict[str, str] = {}
+    # `loop-becomes-a-flow` group 9, design D15. This held one task id per loop and took
+    # `selections[0]`, which was right while a firing made at most one selection and became an
+    # under-report the moment group 5 widened the walk: a flow working three tasks showed one.
+    # Keyed by task rather than collected as a list because the walk below needs to answer "is this
+    # candidate one the firing would claim, and by whom" per row, and a list would make that a scan.
+    claimed_agents_by_loop: Dict[str, Dict[str, str]] = {}
     for job_id, loop in loop_by_job.items():
         decision = await decide_firing(session, loop, default_agent=job_agent_by_id.get(job_id, ""))
         stall_reason_by_loop[loop.id] = decision.stall_reason
-        if decision.selections:
-            claimed_task_id_by_loop[loop.id] = decision.selections[0].task.id
+        claimed_agents_by_loop[loop.id] = {
+            selection.task.id: selection.agent for selection in decision.selections
+        }
 
     # The current item is the first candidate **in queue order** that is either the task the firing
     # would claim, or a `blocked` one. Order is what makes this `agent-loops` §85 rather than an
@@ -222,17 +228,25 @@ async def _batch_loop_summaries(
     # No `candidate_is_startable` call here any more: the decision has already answered which task
     # is claimable, so this walk is a lookup rather than a second evaluation of the dependency gate.
     for task in candidates_result.scalars().all():
-        if current_tasks_by_loop.get(task.loop_id):
-            continue
+        claimed = claimed_agents_by_loop.get(task.loop_id, {})
         is_blocked = task.status == "blocked"
-        if not is_blocked and claimed_task_id_by_loop.get(task.loop_id) != task.id:
+        if not is_blocked and task.id not in claimed:
             continue
         # A blocked task is not claimable and still the loop's current work — the operator is who
         # unblocks it. The firing and the board diverge here on purpose; see
         # `scheduler.CURRENT_ITEM_TASK_STATUSES` for the defect that came of merging the two.
-        current_tasks_by_loop[task.loop_id] = [
-            {"id": task.id, "title": task.title, "status": task.status}
-        ]
+        #
+        # **Every match, not the first** (group 9, design D15). The cap of one was task 1.4's, kept
+        # while a firing could only ever claim one thing. Order still comes from the query's
+        # `_loop_queue_order`, so the card lists them the way the firing considered them.
+        entry: Dict[str, str] = {"id": task.id, "title": task.title, "status": task.status}
+        # The selection's agent where the firing made one, the task's own assignee for a blocked
+        # row (nobody is being selected for it — it is waiting on a person). Omitted rather than
+        # blank when neither exists, so a reader never sees an empty attribution.
+        agent = claimed.get(task.id) or task.assignee
+        if agent:
+            entry["agent"] = agent
+        current_tasks_by_loop.setdefault(task.loop_id, []).append(entry)
 
     # Distinct (job_id, conversation_id) pairs first, so a resume-mode job that fired more than
     # once on the same conversation does not join the same question row once per firing.

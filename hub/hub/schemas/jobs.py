@@ -111,7 +111,12 @@ class LoopSummary(BaseModel):
     # changes no behaviour, so this holds zero or one member and the UI renders it exactly as it
     # rendered the scalar. Empty list, never null — "nothing current" and "several current" then
     # have the same type, and a caller can iterate without a null check.
-    current_tasks: List[Dict[str, str]] = Field(default_factory=list)  # {"id", "title", "status"}
+    #: Every task this loop is currently working, in queue order (design D15). `agent` is the
+    #: selection's agent, or a blocked task's assignee, and is absent when neither is known —
+    #: never blank, so a reader is not shown an empty attribution.
+    current_tasks: List[Dict[str, str]] = Field(  # {"id", "title", "status", "agent"?}
+        default_factory=list
+    )
     # Why this loop's next firing would be refused, or None if it would proceed
     # (`loop-notices-and-reacts` 5.5). Taken from `decide_firing` — the same computation that
     # decides it — rather than inferred from the queue counts, so the board cannot say one thing

@@ -60,7 +60,9 @@ export interface LoopSummary {
   queue: Record<string, number>
   // `loop-becomes-a-flow` task 1.5: a list, because a flow may staff several tasks at once.
   // Group 1 changes no behaviour, so it holds zero or one and renders as the scalar did.
-  current_tasks?: { id: string; title: string; status: string }[]
+  /** Every task the loop is currently working, in queue order. Several when a flow staffs
+   *  several (design D15). `agent` is absent rather than blank when nobody is attributed. */
+  current_tasks?: { id: string; title: string; status: string; agent?: string }[]
   // Why the next firing would be refused, or absent if it would proceed
   // (`loop-notices-and-reacts` 5.5). From the Hub's own firing decision, never inferred from
   // the queue counts, so the board cannot say one thing while the firing does another.

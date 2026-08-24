@@ -263,12 +263,21 @@ export function LoopTab({ loopId, onClose }: LoopTabProps) {
 
       <div className="mt-4">
         <p className="mb-1.5" style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-3)' }}>
-          Current item
+          {(loop.current_tasks?.length ?? 0) > 1 ? 'Current items' : 'Current item'}
         </p>
-        {loop.current_tasks?.[0] ? (
-          <p style={{ fontSize: 11, color: 'var(--text)' }} data-testid="loop-tab-current-task">
-            {loop.current_tasks[0].title} ({loop.current_tasks[0].status})
-          </p>
+        {loop.current_tasks?.length ? (
+          loop.current_tasks.map((task) => (
+            <p
+              key={task.id}
+              style={{ fontSize: 11, color: 'var(--text)' }}
+              data-testid="loop-tab-current-task"
+            >
+              {task.title} ({task.status})
+              {task.agent ? (
+                <span style={{ color: 'var(--text-3)', opacity: 0.75 }}> — {task.agent}</span>
+              ) : null}
+            </p>
+          ))
         ) : (
           <p style={{ fontSize: 11, color: 'var(--text-3)', opacity: 0.6 }}>No current item</p>
         )}

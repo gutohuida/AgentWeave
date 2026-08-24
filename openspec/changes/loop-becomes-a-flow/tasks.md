@@ -646,18 +646,58 @@ instruction.** Three findings, and the first two narrow this group considerably.
 
 ## 9. Presentation
 
-**9.3 stopped being speculative when group 5 landed (2026-08-24).** `_batch_loop_summaries` takes
-`decision.selections[0]` and renders one current item; as of group 5 a firing can genuinely staff
-several, so the board now under-reports a working flow rather than merely being unprepared for one.
-The field is already a list and the derivation is already shaped for it — what is missing is 9.4's
-decision about *how* several are shown, which is why this was not widened along with the firing.
+**Reviewed against the shipped code 2026-08-24, before implementing, per the operator's standing
+instruction.** 9.3 stopped being speculative when group 5 landed: `_batch_loop_summaries` took
+`decision.selections[0]`, so a flow working three tasks reported one. Two findings shaped 9.1 and
+9.2, and one shaped 9.3:
 
-- [ ] 9.1 Test: a change of agent breaks a collapsed run of consecutive firings.
-- [ ] 9.2 Implement that break, and confirm collapsing still does not reorder.
-- [ ] 9.3 Show several current items where a flow is staffing several tasks, each naming its agent.
-- [ ] 9.4 **Decide what the dependency board shows for concurrent work** — per card, per layer, or a
+1. **The agent-change break matters in exactly one of the two call sites.** `AgentTree` groups a
+   list already scoped to one agent (`byAgent.get(agent.name)`), so no run there can span agents.
+   `RecencyView` is project-wide and colour-codes by agent, and it is where a flow's firings for
+   three agents land consecutively. The guard belongs in `groupConsecutiveFirings` rather than at
+   the call site that needs it, so the two cannot drift.
+2. **`LoopFiringGroup` takes a single `agentName` and `agentColor` for the whole row**, which is why
+   breaking the run is the fix rather than rendering several agents inside one group. A run spanning
+   agents would have labelled three agents' work with whichever fired first.
+3. **The blocked-task rule had to give up exclusivity, not ordering.**
+   `test_a_blocked_task_outranks_a_pending_one` asserted the blocked task was the *only* current
+   item. §85 requires an ordering; the exclusivity was a consequence of the board reporting one
+   item, which this change's own delta replaces ("current items are a set rather than a single
+   value"). Both facts are true at once — the loop waits on the operator for one and would claim the
+   other next firing — so both are reported, blocked first. The assertion moved; the ordering did
+   not.
+
+- [x] 9.1 Test: a change of agent breaks a collapsed run of consecutive firings.
+      `hub/ui/src/__tests__/loopGrouping.test.ts`, four tests: two agents of one flow yield two
+      groups, three single firings stay three plain rows (`MIN_FIRINGS_TO_GROUP` still applies per
+      run), a run that is one agent throughout still collapses — the regression guard for every loop
+      that exists today — and the order is unchanged whichever way a run is broken.
+- [x] 9.2 Implement that break, and confirm collapsing still does not reorder.
+      One clause in `groupConsecutiveFirings`'s run-extension condition. Order is asserted directly
+      in `never reorders, whichever way the run is broken`, over a list mixing operator
+      conversations, two agents of one loop, and a second loop.
+- [x] 9.3 Show several current items where a flow is staffing several tasks, each naming its agent.
+      `_batch_loop_summaries` now collects every selection rather than `selections[0]`, keyed by task
+      so the candidate walk can answer "would the firing claim this, and by whom" per row. The walk
+      appends every match instead of stopping at the first, in `_loop_queue_order`'s order, so the
+      card lists them the way the firing considered them. `agent` is the selection's agent, or a
+      blocked task's own assignee, and is **omitted rather than blank** when neither exists.
+      Backend: four tests in `test_flow_width.py` — the wide case, the single-agent regression bar,
+      the omitted key, and a blocked task carrying its assignee (the agent whose work an answer
+      unblocks). UI: `JobCard` renders the list with a muted trailing agent label, `LoopTab`
+      switches its heading between "Current item" and "Current items"; two tests in
+      `jobCard.test.tsx`, one asserting `textContent` exactly so a stray blank cannot pass.
+- [x] 9.4 **Decide what the dependency board shows for concurrent work** — per card, per layer, or a
       flow header — and record it. Open question in the design.
-- [ ] 9.5 `make ui` after `npm run build`; commit `hub/ui/src` and `hub/hub/static/ui` together.
+      **Decided by the operator 2026-08-24: several current items on the loop's card, each naming
+      its agent.** Recorded as design D15, with the two rejected shapes and why. The design's open
+      question is struck through.
+- [x] 9.5 `make ui` after `npm run build`; commit `hub/ui/src` and `hub/hub/static/ui` together.
+      `npm run build` then `py -3.11 scripts/refresh_ui_bundle.py` **from the repo root** — the
+      script refuses to work from `hub/ui`, and the Bash tool's cwd persists between calls, which is
+      the trap recorded in earlier handoffs. Bundle `index-S_JuGAvs.js` → `index-C10cTKzU.js`, with
+      `index.html` and `ui-build-stamp.json`. `AW_CHECK_UI_BUNDLE=1 pytest hub/tests/test_ui_build_stamp.py`
+      passes, which is the stricter assertion that the bundle matches the source it claims.
 
 ## 10. Verification an agent can do
 

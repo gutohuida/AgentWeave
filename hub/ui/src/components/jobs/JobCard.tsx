@@ -29,6 +29,22 @@ function getStatusLabel(enabled: boolean): string {
 }
 
 /**
+ * Who is working a current item, shown beside its title.
+ *
+ * Muted and trailing, deliberately: the task is what the operator is reading and the agent is the
+ * qualifier on it — the same relationship the tick count has to a stall's timestamp
+ * (`loop-notices-and-reacts`), and rendered the same way for that reason. A flow's card is a list
+ * of "what, by whom" lines; making the name compete with the title would turn three facts into six.
+ */
+function CurrentTaskAgent({ name }: { name: string }) {
+  return (
+    <span className="ml-1.5" style={{ color: 'var(--text-3)', opacity: 0.75 }}>
+      {name}
+    </span>
+  )
+}
+
+/**
  * One status→colour map for a job run, read by both the expanded history rows and the collapsed
  * card's trend dots. Kept as a single function rather than restated at each site: a second copy of
  * a status mapping is precisely the drift `IDENTITY.md` guards against, three copies of the task
@@ -183,9 +199,10 @@ function LoopBlock({ job, onOpenTasks }: { job: Job; onOpenTasks?: (taskIds: str
 
   const totalQueued = Object.values(loop.queue).reduce((sum, n) => sum + n, 0)
   const canOpenQueue = Boolean(onOpenTasks && loopTasks && loopTasks.length > 0)
-  // `loop-becomes-a-flow` task 1.5: `current_tasks` is a list so group 5 can staff several.
-  // Group 1 renders the first and only member exactly as the scalar field rendered.
-  const currentTask = loop.current_tasks?.[0]
+  // `loop-becomes-a-flow` task 9.3, design D15: a firing can staff several tasks, so the card
+  // lists every one with the agent beside it rather than showing the first and implying it is the
+  // only one. A single-agent loop still renders exactly one line, unchanged.
+  const currentTasks = loop.current_tasks ?? []
   const openQueue = () => {
     if (onOpenTasks && loopTasks) onOpenTasks(loopTasks.map((t) => t.id))
   }
@@ -242,16 +259,28 @@ function LoopBlock({ job, onOpenTasks }: { job: Job; onOpenTasks?: (taskIds: str
         ))}
       </div>
 
-      {currentTask ? (
-        canOpenQueue ? (
-          <button type="button" onClick={openQueue} style={linkStyle} className="text-[11px]">
-            {currentTask.title} ({currentTask.status})
-          </button>
-        ) : (
-          <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>
-            {currentTask.title} ({currentTask.status})
-          </p>
-        )
+      {currentTasks.length > 0 ? (
+        <div className="flex flex-col gap-0.5" data-testid="job-loop-current-tasks">
+          {currentTasks.map((task) =>
+            canOpenQueue ? (
+              <button
+                key={task.id}
+                type="button"
+                onClick={openQueue}
+                style={linkStyle}
+                className="text-[11px]"
+              >
+                {task.title} ({task.status})
+                {task.agent ? <CurrentTaskAgent name={task.agent} /> : null}
+              </button>
+            ) : (
+              <p key={task.id} className="text-[11px]" style={{ color: 'var(--text-3)' }}>
+                {task.title} ({task.status})
+                {task.agent ? <CurrentTaskAgent name={task.agent} /> : null}
+              </p>
+            ),
+          )}
+        </div>
       ) : (
         <p className="text-[11px]" style={{ color: 'var(--text-3)', opacity: 0.6 }}>
           No current item

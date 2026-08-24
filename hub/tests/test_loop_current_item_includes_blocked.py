@@ -82,7 +82,15 @@ async def test_a_blocked_task_is_the_loops_current_item(app):
 
 async def test_a_blocked_task_outranks_a_pending_one(app):
     """§85 orders in-progress-or-blocked ahead of the oldest pending. The pending task is created
-    first, so an ordering that ignored status would pick it."""
+    first, so an ordering that ignored status would pick it.
+
+    **Both are reported as of `loop-becomes-a-flow` group 9**, where this asserted the blocked task
+    alone. §85 requires an *ordering*, and the exclusivity was a consequence of the board reporting
+    a single current item rather than something the requirement asked for — the change's own delta
+    now says current items "are a set rather than a single value". Both statements here are true at
+    once: the loop is waiting on the operator for the blocked task and would claim the pending one
+    on its next firing, and an operator reading the card should see both. What must not change is
+    which comes first, so that is what this now asserts."""
     async with async_session_factory() as db:
         job, _ = await _loop_with(
             db, "order", [("task-blk-pending", "pending"), ("task-blk-blocked", "blocked")]
@@ -91,7 +99,8 @@ async def test_a_blocked_task_outranks_a_pending_one(app):
     async with async_session_factory() as db:
         current = await _current(db, job.id)
 
-    assert [t["id"] for t in current] == ["task-blk-blocked"]
+    assert [t["id"] for t in current] == ["task-blk-blocked", "task-blk-pending"]
+    assert current[0]["status"] == "blocked"
 
 
 async def test_a_queue_of_only_terminal_work_has_no_current_item(app):

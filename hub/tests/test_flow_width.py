@@ -615,3 +615,82 @@ async def test_the_tier_statement_survives_an_oversized_checkpoint(app):
 
     assert "Finish the task below and stop." in briefing
     assert briefing.index("routing is the flow's job") < briefing.index("## Prior checkpoint")
+
+
+# ---------------------------------------------------------------------------
+# 9.3 — the board reports every task a firing staffs, each naming its agent
+# ---------------------------------------------------------------------------
+
+
+async def _summary(job_id):
+    from hub.api.v1.jobs import _batch_loop_summaries
+
+    async with async_session_factory() as db:
+        return (await _batch_loop_summaries(db, [job_id]))[job_id]
+
+
+async def test_the_board_reports_every_task_a_wide_firing_staffs(app, auth_headers, bind_runner):
+    """Design D15, and the under-report group 5 introduced.
+
+    `_batch_loop_summaries` took `selections[0]`, which was right while a firing made at most one
+    selection and became a lie the moment the walk widened: a flow working three tasks showed one.
+    The field was already a list — group 1 left it that way for exactly this — so what changed is
+    that the walk stops after the first match.
+    """
+    await _roster(app, auth_headers, bind_runner, OWNER, SECOND, THIRD)
+    async with async_session_factory() as db:
+        job, loop = await _flow(db, suffix="board")
+        await _task(db, loop, "board-a")
+        await _task(db, loop, "board-b")
+
+    summary = await _summary(job.id)
+
+    assert [t["id"] for t in summary.current_tasks] == ["task-width-board-a", "task-width-board-b"]
+    assert [t["agent"] for t in summary.current_tasks] == [OWNER, SECOND]
+
+
+async def test_the_board_still_reports_one_item_for_a_single_agent_loop(
+    app, auth_headers, bind_runner
+):
+    """The regression bar. Every loop that exists today has one agent, and its card must read
+    exactly as it did — one line, one agent, no sign that anything widened underneath it."""
+    await _roster(app, auth_headers, bind_runner, OWNER)
+    async with async_session_factory() as db:
+        job, loop = await _flow(db, suffix="board-one")
+        await _task(db, loop, "board-one-a")
+        await _task(db, loop, "board-one-b")
+
+    summary = await _summary(job.id)
+
+    assert [t["id"] for t in summary.current_tasks] == ["task-width-board-one-a"]
+    assert summary.current_tasks[0]["agent"] == OWNER
+
+
+async def test_a_current_item_with_nobody_attributed_omits_the_agent_rather_than_blanking_it(
+    app, auth_headers, bind_runner
+):
+    """A blocked task is nobody's selection — it is waiting on a person — so its attribution is its
+    own assignee, and there may not be one. The key is absent rather than empty, so a reader is
+    never shown a blank where a name should be."""
+    await _roster(app, auth_headers, bind_runner, OWNER)
+    async with async_session_factory() as db:
+        job, loop = await _flow(db, suffix="board-blocked")
+        await _task(db, loop, "board-blocked-a", status="blocked")
+
+    summary = await _summary(job.id)
+
+    assert [t["id"] for t in summary.current_tasks] == ["task-width-board-blocked-a"]
+    assert "agent" not in summary.current_tasks[0]
+
+
+async def test_a_blocked_task_carries_its_assignee_when_it_has_one(app, auth_headers, bind_runner):
+    """And where the task does name somebody, that is who the operator needs — the agent whose work
+    stopped for a question is the one the answer unblocks."""
+    await _roster(app, auth_headers, bind_runner, OWNER, SECOND)
+    async with async_session_factory() as db:
+        job, loop = await _flow(db, suffix="board-assigned")
+        await _task(db, loop, "board-assigned-a", status="blocked", assignee=SECOND)
+
+    summary = await _summary(job.id)
+
+    assert summary.current_tasks[0]["agent"] == SECOND

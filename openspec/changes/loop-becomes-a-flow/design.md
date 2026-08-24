@@ -316,6 +316,53 @@ Two costs, accepted rather than mitigated:
 is. *Rejected:* **parent and child rows**, which is a migration and a UI change on top of this
 group's scheduler work, for a presentation improvement group 9 is the place to consider.
 
+### D14 — The tier is presentation; a loop and a flow behave identically
+
+**Decided by the operator 2026-08-24**, answering the question group 8's spec review raised and
+closing it below.
+
+Nothing in `decide_firing`, `task_is_claimable_by` or `resolve_reviewer` consults
+`Loop.spec_document_id`. Width comes from the graph and the roster, claimability by a non-author
+comes from the transition history, and rung 2 of D4's ladder is deliberately written to work with
+nothing configured at all. So a document-less loop in a project with three agents already behaves
+exactly as a flow does, and has since group 5 landed.
+
+That is not a defect to be closed by adding gates — it is the design working. **D1's three tiers
+nest in naming, not in behaviour.** What `create_flow` buys is that the caller states intent, that
+the briefing can tell the agent something true about where its work came from, and that the operator
+reading a board knows which loops are decompositions of an approved document.
+
+*Rejected:* **gating behaviour on the tier** — a plain loop staying serial with its finished work
+never claimed for review. It would make the three tiers real at the cost of contradicting rung 2's
+entire purpose, which is the operator's own objection answered: *"I don't want to end up in a old
+problem where having a squad to develop is a price that you need to pay before even starting
+development."* A loop that cannot get its work reviewed until somebody declares a document is that
+price, reintroduced one tier down.
+
+**Consequence for D1's stated consequence.** D1 said *flow* and *loop* are two live words for one
+table and that this is tolerable while they nest. They do nest, and now it is known exactly how: one
+is the other plus a document, with no behavioural boundary between them. The words disagree nowhere.
+
+### D15 — A wide firing shows several current items, each naming its agent
+
+**Decided by the operator 2026-08-24**, answering the board question this change carried open from
+the start.
+
+The loop's card lists every task being worked with the agent beside it, rather than summarising the
+width on one line or moving the marker onto the graph nodes. `current_tasks` is already a list and
+`_batch_loop_summaries` is already shaped to fill it — group 1 left it that way on purpose — so this
+is the smallest change that stops the board under-reporting, and it needs no new component.
+
+**Accepted cost:** a card grows with the flow's width. That is the right thing to grow with: an
+operator looking at a card wants to know what is happening, and three agents working is three lines
+of fact rather than noise.
+
+*Rejected:* **one line summarising the width** ("3 tasks across 3 agents"). Fixed card height, but
+the operator cannot see what is being worked without navigating, and the thing they most often want
+from this card is exactly that. *Rejected:* **marking the graph nodes instead.** It puts concurrency
+where the structure already is, but leaves the card and the graph disagreeing about what "current"
+means — and this module's history is a catalogue of two derivations of one question drifting apart.
+
 ## Risks / Trade-offs
 
 **[Set-valued claim breaks the board, the firing and §548 at once]** → Land the set-valued form
@@ -356,8 +403,8 @@ existing loop suite, unmodified.
 
 - ~~**May an agent take a task from `under_review` to `approved`?**~~ **Answered 2026-08-24: yes,
   provided it is not the agent that completed it.** See D11.
-- **What does the board show for a flow staffing several tasks?** The dependency board renders the
-  graph; whether concurrent work is shown per card, per layer, or as a flow header is undecided.
+- ~~**What does the board show for a flow staffing several tasks?**~~ **Answered 2026-08-24:
+  several current items on the loop's card, each naming its agent.** See D15.
 - ~~**How is a declared reviewer resolved — against charters, agent names, or both?**~~
   **Answered 2026-08-24: agent names.** Not decided here — `a-reviewer-can-see-the-work` shipped
   `review_turn.resolve_declared_reviewer` first, matching the declared string against roster
@@ -365,15 +412,8 @@ existing loop suite, unmodified.
 - ~~**Does a flow ever fire the same agent for a task it is already working?**~~ **Answered
   2026-08-24: yes — an already-assigned task resumes with its own assignee, never with the job's
   default agent.** See D12, step 1.
-- **Does the tier gate behaviour, or is it only a name?** Raised by group 8's spec review,
-  2026-08-24. D1 describes three tiers, but nothing in `decide_firing`, `task_is_claimable_by` or
-  `resolve_reviewer` consults `Loop.spec_document_id` — width and review-by-a-non-author apply to
-  every loop, and rung 2 of the ladder is deliberately written to work with nothing configured. So a
-  document-less loop in a project with three agents already behaves exactly as a flow does, and the
-  only thing `create_flow` changes is what the caller was made to say. Either the tier gates
-  behaviour (and a loop stays serial and unreviewed, which contradicts rung 2's whole argument), or
-  the tier is presentation and D1's three tiers are two with a label. Group 8 implements the second
-  reading, because it is what the code does; the choice is the operator's.
+- ~~**Does the tier gate behaviour, or is it only a name?**~~ **Answered 2026-08-24: it is
+  presentation. A loop and a flow behave identically.** See D14.
 - **Cross-firing selection races** — see the risk above.
 - **Should a loop's checkpoint anchor on the loop's previous checkpoint rather than the
   conversation's?** Raised by group 6's spec review, 2026-08-24, and deliberately not acted on.
