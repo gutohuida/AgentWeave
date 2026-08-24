@@ -295,7 +295,11 @@ async def test_escalation_to_an_agent_that_does_not_exist_surfaces(app):
         assert divergence.outcome == "surfaced"
         assert await _queued_for(session, "ghost") == []
         task = await session.get(Task, "task-pol-5")
-        assert task.assignee is None
+        # The claim is that the task did not move to a name nobody answers to. It used to be
+        # written `is None`, which held only because binding a run named nobody at all; since
+        # 2026-08-24 a bound run puts its own agent on the task (F6/F18), so the assertion has to
+        # say what it actually means — still with the agent that ran it, never with the ghost.
+        assert task.assignee == "worker"
 
 
 # ---------------------------------------------------------------------------

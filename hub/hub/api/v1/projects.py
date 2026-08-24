@@ -302,6 +302,8 @@ async def open_project(
     except ProjectWorkspaceError as exc:
         raise_workspace_http_error(exc)
 
+    await _adopt_detected_main_branch(session, project)
+
     from ...turn_scheduler import redrain_queued_agents
 
     await redrain_queued_agents(project.id)
@@ -311,6 +313,49 @@ async def open_project(
         {"id": project.id, "name": project.name, "directory_state": project.directory_state},
     )
     return await _project_summary(session, project)
+
+
+async def _adopt_detected_main_branch(session: AsyncSession, project: Project) -> None:
+    """Take the branch the repository already names, where the project has not chosen one.
+
+    `GET /projects/{id}/main-branch-suggestion` could answer `"master"` the instant a repository was
+    opened, and `POST /projects/open` still returned `main_branch: null` — so everything that needs
+    a base branch (worktree isolation, conflict detection, evidence footprint re-stamping) stayed
+    degraded until the operator went and confirmed in settings the same answer the Hub had already
+    computed, with nothing on screen saying so (`scripts/drive/FINDINGS.md`, F4).
+
+    Only into a null. A project that has chosen a branch has made a statement, and re-opening it —
+    which is the ordinary way a project is reached after the first time — must not overwrite that
+    with whatever `detect_main_branch` currently prefers.
+
+    Then drains what was waiting on a branch, for the same reason
+    `update_project_settings` does: approved work that skipped for want of one cannot be re-approved
+    into a merge, because restating a status is a no-op.
+
+    Never fatal. A repository the Hub cannot read is a project that opens with no branch chosen,
+    which is exactly where this started; failing the open instead would make a git problem look like
+    an unopenable project.
+    """
+    if project.main_branch:
+        return
+
+    from ... import project_workspace, task_integration
+
+    try:
+        workspace = await project_workspace.resolve_project_workspace(session, project.id)
+        if not task_integration.is_repository(workspace.root):
+            return
+        detected = task_integration.detect_main_branch(workspace.root)
+    except Exception:  # noqa: BLE001 - a branch that cannot be detected is not a failure to open
+        logger.warning("Could not detect a main branch for %s", project.id, exc_info=True)
+        return
+
+    if not detected:
+        return
+
+    project.main_branch = detected
+    await session.commit()
+    await _integrate_what_was_waiting_for_a_branch(session, project.id)
 
 
 @router.post("/create", response_model=ProjectSummary, status_code=status.HTTP_201_CREATED)
@@ -364,11 +409,15 @@ async def suggest_main_branch(
     project_identity: Tuple[str, str] = Depends(get_operator_project),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
-    """A branch the operator might mean, and the one they have chosen.
+    """A branch the operator might mean, and the one this project has.
 
-    A suggestion, never an assignment. `chosen` being null is what stops anything merging, and this
-    route exists so that state is a decision the operator makes once rather than a guess the system
-    makes on their behalf every time.
+    Still a suggestion and never an assignment — this route changes nothing. It used to be the *only*
+    way `main_branch` ever became non-null, which meant a project opened on a repository sat degraded
+    until the operator confirmed in settings the answer the Hub had already computed. Since
+    2026-08-24 `POST /projects/open` adopts that answer itself (`_adopt_detected_main_branch`), so on
+    a git project `chosen` is normally already set by the time anyone asks here, and this route's job
+    is the remaining one: showing what the repository suggests next to what the project holds, so the
+    operator can change it.
     """
     from ... import project_workspace, task_integration
 

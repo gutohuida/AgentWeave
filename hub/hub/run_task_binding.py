@@ -238,11 +238,26 @@ async def bind_run_to_task(
     record a divergence, which is the bug this whole line of work exists to remove. A block is
     released by the answer arriving or by the operator saying so, never by something merely starting.
 
+    The task also learns *who* is doing it. Two paths reach `in_progress` and until 2026-08-24 only
+    one named an agent: the loop's claim sets `claimed_task.assignee = job.agent`
+    (`scheduler.py`), a direct `task_id` trigger set nothing. So a task a run was actively working
+    read `status: in_progress, assignee: null` — and since `assignee_status` is derived from that
+    null (`_task_response`), the board reported `idle` about an agent that was at that moment
+    running. Written here rather than in the trigger route because this is the one place both paths
+    pass through.
+
+    Only where the task does not already name someone else. An operator who assigned the card to a
+    person, or a loop that claimed it for one agent, has made a statement; a run starting is not
+    grounds to overwrite it. Re-binding the same agent is a no-op either way.
+
     Nothing is committed. The caller stages this alongside the `Run` insert so a bound run whose
     task never moved cannot exist as a partial write.
     """
     run.task_id = task.id
     actor = run_actor(run.id, run.agent)
+
+    if run.agent and not task.assignee:
+        task.assignee = run.agent
 
     if task.status == STATUS_BLOCKED:
         return None

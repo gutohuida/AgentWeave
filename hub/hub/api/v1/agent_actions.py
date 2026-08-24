@@ -953,8 +953,10 @@ async def decide_evidence(
             actor=spec_lifecycle.Actor(kind="agent", name=actor.agent, run_id=actor.run_id),
         )
     except requirement_evidence.EvidenceRefusedError as exc:
+        # 403 for the two capability refusals; the refusal itself overrides that where it is a
+        # validation error rather than an authorisation one (F8).
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
+            status_code=exc.http_status or status.HTTP_403_FORBIDDEN,
             detail={"message": str(exc), "code": exc.code},
         ) from exc
 

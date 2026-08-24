@@ -242,6 +242,56 @@ async def test_an_agent_cannot_accept_its_own_evidence(app, auth_headers, builde
 
 
 @pytest.mark.asyncio
+async def test_a_misspelled_decision_names_what_would_have_worked(
+    app, auth_headers, builder, tmp_path
+):
+    """Measured live: `{"decision": "accept"}` answered `403 unknown decision 'accept'`, minutes
+    after the trigger route refused a bad `permission_mode` by listing all four permitted values
+    (`scripts/drive/FINDINGS.md`, F8).
+
+    Two things were wrong. The message named nothing the caller could act on, which is the retry
+    loop `spec_payload` exists to prevent; and 403 is an authorisation answer to a validation
+    problem, so an agent reading the status code rather than the body concludes it lacks permission
+    and stops trying.
+    """
+    await _document(app, auth_headers, builder)
+    recorded = await app.post(
+        AGENT_EVIDENCE, json={"identifier": "FR-1", "summary": "ran it"}, headers=builder
+    )
+
+    response = await app.post(
+        f"{BASE}/spec/evidence/{recorded.json()['id']}/decision",
+        json={"decision": "accept"},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 422, response.text
+    detail = response.json()["detail"]
+    assert detail["code"] == "unknown_decision"
+    assert "accepted" in detail["message"] and "rejected" in detail["message"]
+
+
+@pytest.mark.asyncio
+async def test_the_capability_refusals_are_still_403(app, auth_headers, builder, tmp_path):
+    """The status override is per refusal, so widening it must not have flattened the two that
+    genuinely are about authority."""
+    await _document(app, auth_headers, builder)
+    recorded = await app.post(
+        AGENT_EVIDENCE, json={"identifier": "FR-1", "summary": "ran it"}, headers=builder
+    )
+    await _grant("builder")
+
+    response = await app.post(
+        f"{AGENT_EVIDENCE}/{recorded.json()['id']}/decision",
+        json={"decision": "rejected"},
+        headers=builder,
+    )
+
+    assert response.status_code == 403, response.text
+    assert response.json()["detail"]["code"] == "self_acceptance"
+
+
+@pytest.mark.asyncio
 async def test_with_no_granted_agent_the_operator_still_decides(
     app, auth_headers, builder, tmp_path
 ):

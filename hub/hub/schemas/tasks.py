@@ -6,10 +6,12 @@ from typing import Any, List, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-# Matches the agentweave CLI's generate_id() output: "{prefix}-{8hex}",
-# where the prefix is a short word (e.g. "task", "msg"). Used to validate
-# client-supplied ids so we only accept well-formed ones and reject anything
-# that could be used for path traversal or to impersonate other entity types.
+# Matches generated ids of the form "{prefix}-{hex}", where the prefix is a short word (e.g.
+# "task", "msg"). Deliberately does not pin the segment's width: `short_id()` widened from 8 hex
+# characters to 12 on 2026-08-24 and ids at both widths are valid forever, because a segment is only
+# ever generated and never parsed. Used to validate client-supplied ids so we only accept well-formed
+# ones and reject anything that could be used for path traversal or to impersonate other entity
+# types.
 _TASK_ID_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9_-]{0,63}$")
 
 _TASK_STATUSES = [
@@ -289,6 +291,12 @@ class TaskResponse(BaseModel):
     # to the specification it implements.
     spec_document_id: Optional[str] = Field(default=None, max_length=64)
     spec_task_key: Optional[str] = Field(default=None, max_length=128)
+    # Which loop's queue this task belongs to. `TaskCreate` has accepted `loop_id` since the column
+    # existed and the response never carried it back, so `POST /tasks {"loop_id": …}` answered 201
+    # with `loop_id: null` while the loop's own summary already counted the task in its queue. The
+    # write worked; only the reply denied it, and a caller had no way to confirm from the create
+    # call that the task had joined the loop.
+    loop_id: Optional[str] = Field(default=None, max_length=64)
     # The most recent attempt to integrate this task's approved work, or null where none has ever
     # been made (every non-`approved` task, and one whose approval predates this field existing on
     # older rows the migration never touched). The full history stays at

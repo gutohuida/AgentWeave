@@ -62,10 +62,19 @@ EVIDENCE_ROOT = "evidence"
 
 
 class EvidenceRefusedError(RuntimeError):  # noqa: N818 - "refused" is the outcome, not a fault
-    """Something that may not be recorded or decided, with the reason stated."""
+    """Something that may not be recorded or decided, with the reason stated.
 
-    def __init__(self, message: str, *, code: str) -> None:
+    `http_status` is how a refusal that is *not* about authority overrides a route's default. The
+    decision routes answer 403, which is right for the two capability refusals — no grant, and an
+    agent deciding about its own work — and wrong for a malformed enum. An agent reading the status
+    code rather than the body concluded it lacked permission and stopped retrying, when all it had
+    to do was spell the value correctly (`scripts/drive/FINDINGS.md`, F8). None means "whatever the
+    route would have sent", so adding a refusal never silently changes an existing one.
+    """
+
+    def __init__(self, message: str, *, code: str, http_status: Optional[int] = None) -> None:
         self.code = code
+        self.http_status = http_status
         super().__init__(message)
 
 
@@ -99,12 +108,32 @@ async def record(
     An operator recording evidence is recording their own observation, so it is
     accepted on arrival — there is nobody else for it to await. An agent's lands
     `awaiting` regardless of how confidently it was described.
+
+    The footprint is read *before* the row is created, because it is half of what says whether this
+    piece has already been recorded — see `duplicate_of`.
     """
     if requirement.state != "active":
         raise EvidenceRefusedError(
             f"{requirement.identifier} is retired; there is nothing left to demonstrate",
             code="requirement_retired",
         )
+
+    taken: Optional[Footprint] = None
+    if workspace is not None:
+        taken = read_footprint(footprint_root(workspace, actor.kind, actor.name or ""))
+        already = await duplicate_of(
+            session, requirement, task_id=task_id, commit_sha=taken.commit_sha
+        )
+        if already is not None:
+            raise EvidenceRefusedError(
+                f"{already.id} already records evidence for {requirement.identifier} on this task "
+                f"at this commit, and is {already.review_state}. Recording the same demonstration "
+                f"twice makes the reviewer decide once per copy and overstates "
+                f"{requirement.identifier}'s evidence count. If the wording is wrong, say so on "
+                f"that piece; if the work has moved on, commit it first so the new evidence names "
+                f"the commit it demonstrates.",
+                code="duplicate_evidence",
+            )
 
     evidence = RequirementEvidence(
         id=f"ev-{short_id()}",
@@ -139,9 +168,53 @@ async def record(
         )
 
     if workspace is not None:
-        await capture_footprint(session, evidence, workspace)
+        await capture_footprint(session, evidence, workspace, taken=taken)
 
     return evidence
+
+
+async def duplicate_of(
+    session: AsyncSession,
+    requirement: SpecRequirement,
+    *,
+    task_id: Optional[str],
+    commit_sha: Optional[str],
+) -> Optional[RequirementEvidence]:
+    """The evidence a new piece would merely repeat, if there is one.
+
+    Same requirement, same task, same commit is the narrowest key that means "this demonstrates
+    nothing the record does not already hold": the requirement fixes what is being shown, the task
+    fixes which piece of work is showing it, and the commit fixes the state of the code it was shown
+    against. Observed live — `builder` recorded FR-1 unprompted on its first turn and again when
+    asked, near-identical prose, both stored, both `awaiting`, coverage reading `evidence_count: 2,
+    accepted_count: 0` (`scripts/drive/FINDINGS.md`, F7).
+
+    Note the existing `digest` column is *not* this check and never was. It pins the requirement's
+    wording at production time, which is the mechanism behind staleness — a different and
+    well-designed thing that happens to be equal across duplicates for the same reason it is equal
+    across two genuinely distinct demonstrations.
+
+    Silent — returns None — where either half of the key is unknown. A project with no repository
+    has no commit, and evidence recorded against no task has nothing to be a second copy *of*;
+    guessing in either case would refuse a first piece of evidence, which is far worse than
+    accepting a second.
+
+    A `rejected` piece never matches. It was judged inadequate, and a re-record at the same commit
+    with a better summary is the honest response to that judgement rather than a duplicate of it.
+    """
+    if not task_id or not commit_sha:
+        return None
+    result = await session.execute(
+        select(RequirementEvidence)
+        .join(EvidenceFootprint, EvidenceFootprint.evidence_id == RequirementEvidence.id)
+        .where(RequirementEvidence.requirement_id == requirement.id)
+        .where(RequirementEvidence.task_id == task_id)
+        .where(EvidenceFootprint.commit_sha == commit_sha)
+        .where(RequirementEvidence.review_state != REJECTED)
+        .order_by(RequirementEvidence.produced_at, RequirementEvidence.id)
+        .limit(1)
+    )
+    return result.scalars().first()
 
 
 def footprint_root(workspace: ProjectWorkspace, actor_kind: str, actor: str) -> Path:
@@ -192,7 +265,11 @@ def _apply_footprint(
 
 
 async def capture_footprint(
-    session: AsyncSession, evidence: RequirementEvidence, workspace: ProjectWorkspace
+    session: AsyncSession,
+    evidence: RequirementEvidence,
+    workspace: ProjectWorkspace,
+    *,
+    taken: Optional[Footprint] = None,
 ) -> EvidenceFootprint:
     """What the implementation looked like when this evidence was produced.
 
@@ -202,8 +279,14 @@ async def capture_footprint(
 
     Mid-turn this necessarily names the commit the turn *started* from, because the agent's work is
     still uncommitted — see `restamp_run_footprints`, which corrects it once the commit exists.
+
+    `taken` is for the one caller that has already read it: `record` needs the commit *before* the
+    row exists, to answer the duplicate check, and re-reading here would spend a second set of git
+    calls to learn the same answer. It is the same read, derived from the same root — `record`
+    passes the actor it is about to write onto the row.
     """
-    taken = read_footprint(footprint_root(workspace, evidence.actor_kind, evidence.actor))
+    if taken is None:
+        taken = read_footprint(footprint_root(workspace, evidence.actor_kind, evidence.actor))
     return _apply_footprint(session, evidence, taken)
 
 
@@ -382,7 +465,17 @@ async def decide(
     and a run-based check is satisfied by an agent simply continuing.
     """
     if decision not in (ACCEPTED, REJECTED):
-        raise EvidenceRefusedError(f"unknown decision {decision!r}", code="unknown_decision")
+        # Names what would work, the way `model_catalog.validate_overrides` names the permitted
+        # `permission_mode` values. The product's own stated principle — "a refusal the author
+        # cannot act on produces a retry loop, which is the failure mode the prose contract had"
+        # (`spec_payload.py`) — was honoured there and not here.
+        raise EvidenceRefusedError(
+            f"{decision!r} is not a permitted evidence decision "
+            f"(permitted: {', '.join(sorted((ACCEPTED, REJECTED)))})",
+            code="unknown_decision",
+            # A malformed enum is a validation error, not an authorisation one.
+            http_status=422,
+        )
 
     if not await may_accept(session, evidence.project_id, actor):
         raise EvidenceRefusedError(

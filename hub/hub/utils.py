@@ -5,10 +5,21 @@ from typing import Any, Dict, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+#: How many hex characters an id segment carries. Twelve, widened from eight on 2026-08-24.
+#:
+#: Eight hex characters is 32 bits, which puts the birthday bound at roughly 77,000 rows before a
+#: collision is more likely than not — and `event_logs` and `agent_outputs` are both append-only
+#: with nothing that prunes them, so they cross that on an ordinary week of use. Twelve moves the
+#: bound to roughly 800 million, which those tables will not reach.
+#:
+#: No migration: every id column is already `String(64)`, and the segment is only ever generated,
+#: never parsed, so ids written at eight characters keep working unchanged alongside new ones.
+_ID_HEX_CHARS = 12
+
 
 def short_id() -> str:
-    """Return an 8-character random hex ID segment."""
-    return str(uuid.uuid4())[:8]
+    """Return a 12-character random hex ID segment."""
+    return uuid.uuid4().hex[:_ID_HEX_CHARS]
 
 
 async def persist_event(
