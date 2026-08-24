@@ -510,13 +510,78 @@ Three things the spec does not say:
 
 ## 7. The tool surface
 
-- [ ] 7.1 Test: `create_flow` without a document is refused, stating why.
-- [ ] 7.2 Test: `create_loop` with a document is refused and names `create_flow`.
-- [ ] 7.3 Test: both tools produce a job and a loop record, differing only in the declared document.
-- [ ] 7.4 Add `create_flow` to `hub/hub/mcp_server.py`. **Stdlib and fastmcp only** — anything it
+**Reviewed against the shipped code 2026-08-24, before implementing, per the operator's standing
+instruction.** D1's premise holds — `Loop.spec_document_id` is `nullable=True, unique=True` and the
+Hub stores all three tiers in one row — so `create_flow` is a naming tool over an existing route,
+not new storage. Four things the spec does not say:
+
+1. **`create_loop` already accepts `spec_document_id`, so 7.2 withdraws a shipped capability rather
+   than closing a gap**, and a shipped test exercises it:
+   `test_create_loop_sends_the_widened_governed_jobs_payload` passes `spec_document_id="doc-1"` and
+   asserts the whole posted body. That test moves to `create_flow` rather than being deleted — the
+   payload assertion is what keeps the tool and the route it posts to in step, and losing it to a
+   rename would cost more than the refusal gains.
+2. **The refusal must keep the parameter.**
+   `test_create_loop_offers_exactly_the_fields_the_route_it_posts_to_accepts` asserts
+   `create_loop`'s property set equals `AgentJobCreate`'s minus two, and that invariant exists
+   because "a field on one schema but not the other silently drops the caller's intent". Removing
+   `spec_document_id` from the signature would break it for exactly the reason it was written. So
+   7.2 is a call-time refusal with the parameter retained, which is what 7.5 already prescribes
+   ("in the style that file already uses for a loop with no stop condition").
+3. **The tiers should differ in the schema, not only in the function body.** `create_flow` declares
+   `spec_document_id: str` — no `Optional`, no default — so the MCP schema itself carries the
+   requirement and a caller's client refuses before a request is made. 7.1's client-side check then
+   covers what a schema cannot: the empty string, and `None` reaching a tool whose declared type
+   says otherwise. Worth stating so a later reader does not mistake the check for the whole
+   enforcement, or delete it as redundant with the annotation.
+4. **Nothing on the Hub distinguishes a flow from a loop**, which is D1 working as designed: both
+   tools post a byte-identical body to `/agent-actions/jobs`, and the whole distinction is what the
+   caller was made to say. That makes 7.3 the load-bearing test of D1 rather than a formality — if
+   the two bodies ever diverge, a `Flow` table has grown in all but name.
+
+
+- [x] 7.1 Test: `create_flow` without a document is refused, stating why.
+      `test_create_flow_without_a_document_is_refused_before_any_hub_call`, over both `""` and
+      `None`, asserting no HTTP call was made and that the message names `create_loop` as the thing
+      to call instead. Plus `test_create_flow_still_needs_a_stop_condition`: a flow keeps every
+      respect of a loop except its queue behaviour, and *"a loop that cannot stop is not created"*
+      is one of them.
+      **Not redundant with the `str` annotation**, which is finding 3 of the review above: the
+      annotation is what a well-behaved client enforces before calling, and this is what catches the
+      empty string and a `None` from a client that did not.
+- [x] 7.2 Test: `create_loop` with a document is refused and names `create_flow`.
+      `test_create_loop_with_a_document_is_refused_and_names_create_flow`. The parameter is
+      **retained** in the signature rather than removed — see finding 2: the schema test asserts
+      `create_loop` offers exactly the fields the route accepts, an invariant that exists so a
+      caller's intent is never silently dropped, and an unexpected-argument `TypeError` would tell
+      the caller nothing about what to do instead.
+- [x] 7.3 Test: both tools produce a job and a loop record, differing only in the declared document.
+      Three tests. `test_create_flow_sends_the_same_payload_a_loop_does_plus_the_document` is the
+      shipped `create_loop` payload assertion **moved** rather than deleted (finding 1) — it is what
+      keeps the tool and the route it posts to in step. `test_create_loop_sends_...` keeps the loop
+      half with `spec_document_id` now `None`. And
+      `test_the_two_tools_post_bodies_that_differ_only_in_the_document` asserts D1 directly rather
+      than leaving it inferable from two tests that could drift apart one edit at a time without
+      either failing.
+- [x] 7.4 Add `create_flow` to `hub/hub/mcp_server.py`. **Stdlib and fastmcp only** — anything it
       needs from the Hub is restated there, with a test asserting the two agree.
-- [ ] 7.5 Add the refusal to `create_loop`, in the style that file already uses for a loop with no
+      Added. Imports nothing new; the body is `create_loop`'s with the document required, which is
+      design D1 holding — one route, one row, and the whole distinction in what the caller was made
+      to say. The agreement test is
+      `test_create_flow_offers_the_same_fields_and_requires_the_document`, which checks the property
+      set against `AgentJobCreate` exactly as the `create_loop` one does **and** that the two tools
+      differ in `required` alone: `spec_document_id` required on the flow, absent from the loop's
+      required set, everything else identical.
+      The docstring is the agent-facing statement of what a flow *is* — width, review by a non-author,
+      the ladder, `agent` as default rather than mandate, and the checkpoint being the flow's. That is
+      the one place an agent reliably reads, which is the same argument design D8 makes for the
+      briefing.
+- [x] 7.5 Add the refusal to `create_loop`, in the style that file already uses for a loop with no
       stop condition.
+      Done — a client-side `HubAPIError(400, ...)` before any HTTP call, beside the existing
+      stop-condition refusal. `create_loop`'s docstring now opens by naming the tier boundary
+      ("One agent, one task at a time. Use create_flow instead when...") so the refusal is
+      avoidable rather than only recoverable.
 
 ## 8. The briefing
 

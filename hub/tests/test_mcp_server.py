@@ -349,19 +349,61 @@ def test_create_loop_accepts_stop_at_alone(hub):
 def test_create_loop_sends_the_widened_governed_jobs_payload(hub):
     """`create_loop` posts to the same `/agent-actions/jobs` route `create_job` does, now
     widened with the loop-opt-in and `initial_tasks` fields (design D2). No `session_mode` —
-    a loop's continuity is always by checkpoint (design D4), never a resumed session."""
+    a loop's continuity is always by checkpoint (design D4), never a resumed session.
+
+    `spec_document_id` is `None` here as of `loop-becomes-a-flow` group 7: a loop that declares a
+    document is a flow, and `create_loop` now refuses one. The field stays in the payload because
+    the route still accepts it — see the schema test that asserts the two agree."""
     from hub.mcp_server import create_loop
 
     calls, responses = hub
     responses.append(b'{"ok":true}')
     create_loop(
-        "Nightly decomposition",
+        "Nightly sweep",
         "worker",
         "Work the queue",
         "0 2 * * *",
+        purpose="keep the backlog tidy",
+        stop_when_queue_empties=True,
+        initial_tasks=[{"title": "First task"}],
+    )
+    assert calls[0].method == "POST"
+    assert calls[0].full_url.endswith("/api/v1/agent-actions/jobs")
+    assert _body(calls[0]) == {
+        "name": "Nightly sweep",
+        "agent": "worker",
+        "message": "Work the queue",
+        "cron": "0 2 * * *",
+        "purpose": "keep the backlog tidy",
+        "stop_at": None,
+        "stop_when_queue_empties": True,
+        "spec_document_id": None,
+        "initial_tasks": [{"title": "First task"}],
+    }
+
+
+def test_create_flow_sends_the_same_payload_a_loop_does_plus_the_document(hub):
+    """`loop-becomes-a-flow` task 7.3, and the load-bearing test of design D1.
+
+    D1 says a flow is *a configuration, not a record* — three tiers, one row, one route. So this
+    body must be identical to `create_loop`'s but for `spec_document_id`. If the two ever diverge, a
+    `Flow` table has grown in all but name, which is the thing D1 rejected.
+
+    This assertion is inherited from `create_loop`, where it lived with `spec_document_id="doc-1"`
+    until group 7 moved the capability. It is moved rather than dropped because it is what keeps the
+    tool and the route it posts to in step."""
+    from hub.mcp_server import create_flow
+
+    calls, responses = hub
+    responses.append(b'{"ok":true}')
+    create_flow(
+        "Nightly decomposition",
+        "worker",
+        "Work the queue",
+        "doc-1",
+        cron="0 2 * * *",
         purpose="decompose the backlog",
         stop_when_queue_empties=True,
-        spec_document_id="doc-1",
         initial_tasks=[{"title": "First task"}],
     )
     assert calls[0].method == "POST"
@@ -377,6 +419,68 @@ def test_create_loop_sends_the_widened_governed_jobs_payload(hub):
         "spec_document_id": "doc-1",
         "initial_tasks": [{"title": "First task"}],
     }
+
+
+def test_the_two_tools_post_bodies_that_differ_only_in_the_document(hub):
+    """D1 asserted directly rather than inferred from the two tests above, which could drift apart
+    one edit at a time without either failing."""
+    from hub.mcp_server import create_flow, create_loop
+
+    calls, responses = hub
+    responses.extend([b'{"ok":true}', b'{"ok":true}'])
+    kwargs = dict(purpose="p", stop_when_queue_empties=True, initial_tasks=[{"title": "T"}])
+    create_loop("N", "worker", "M", "0 2 * * *", **kwargs)
+    create_flow("N", "worker", "M", "doc-1", cron="0 2 * * *", **kwargs)
+
+    loop_body, flow_body = _body(calls[0]), _body(calls[1])
+    assert loop_body["spec_document_id"] is None
+    assert flow_body["spec_document_id"] == "doc-1"
+    assert {k: v for k, v in loop_body.items() if k != "spec_document_id"} == {
+        k: v for k, v in flow_body.items() if k != "spec_document_id"
+    }
+
+
+def test_create_flow_without_a_document_is_refused_before_any_hub_call(hub):
+    """Task 7.1. The `str` annotation is what a well-behaved client enforces; this is what catches
+    the empty string, and a `None` from a client that did not. Not redundant with the annotation —
+    deleting it as such is the mistake the review anticipated."""
+    from hub.mcp_server import HubAPIError, create_flow
+
+    calls, _responses = hub
+    for missing in ("", None):
+        with pytest.raises(HubAPIError) as excinfo:
+            create_flow("N", "worker", "M", missing, stop_when_queue_empties=True)
+        assert "spec_document_id" in str(excinfo.value)
+        assert "create_loop" in str(excinfo.value)
+    assert calls == []
+
+
+def test_create_flow_still_needs_a_stop_condition(hub):
+    """A flow is a loop in every respect but its queue behaviour, and *"a loop that cannot stop is
+    not created"* is one of the respects it keeps."""
+    from hub.mcp_server import HubAPIError, create_flow
+
+    calls, _responses = hub
+    with pytest.raises(HubAPIError) as excinfo:
+        create_flow("N", "worker", "M", "doc-1")
+    assert "stop condition" in str(excinfo.value)
+    assert calls == []
+
+
+def test_create_loop_with_a_document_is_refused_and_names_create_flow(hub):
+    """Task 7.2. The refusal keeps the parameter rather than dropping it from the signature: the
+    schema test asserts `create_loop` offers exactly the fields the route accepts, precisely so a
+    caller's intent is never silently dropped, and an unexpected-argument `TypeError` tells the
+    caller nothing about what to do instead."""
+    from hub.mcp_server import HubAPIError, create_loop
+
+    calls, _responses = hub
+    with pytest.raises(HubAPIError) as excinfo:
+        create_loop(
+            "N", "worker", "M", "0 2 * * *", stop_when_queue_empties=True, spec_document_id="doc-1"
+        )
+    assert "create_flow" in str(excinfo.value)
+    assert calls == []
 
 
 def test_job_mutation_preserves_forbidden_failure(hub):
