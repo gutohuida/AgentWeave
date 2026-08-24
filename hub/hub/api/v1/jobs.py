@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...auth import get_project
 from ...db.engine import get_session
 from ...db.models import AIJob, JobRun, Loop, Project, Question, Run, Task
+from ...scheduler import cron_day_ambiguity_reason
 from ...schemas.jobs import JobCreate, JobResponse, JobRunResponse, JobUpdate, LoopSummary
 from ...schemas.tasks import TaskCreate
 from ...sse import sse_manager
@@ -352,6 +353,14 @@ async def create_job(
             detail=f"Invalid cron expression: {e}",
         ) from e
 
+    # F1: valid to croniter is not the same as unambiguous here — see
+    # `scheduler.cron_day_ambiguity_reason` for why an expression restricting both day fields
+    # fires on a different date than the one this Hub stores and displays. Refused at both write
+    # sites so no such expression can reach the scheduler at all.
+    day_ambiguity = cron_day_ambiguity_reason(body.cron)
+    if day_ambiguity:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=day_ambiguity)
+
     # Design D2's "definition window": `initial_tasks` is validated up front, before any row is
     # created, so one malformed entry cannot leave a job (and its loop) half-created behind a 422.
     initial_task_bodies: List[TaskCreate] = []
@@ -580,6 +589,42 @@ async def update_job(
     if job is None or job.project_id != project_id:
         raise HTTPException(status_code=404, detail="Job not found")
 
+    # F13: re-enabling a loop that has already ended used to be accepted, and then silently
+    # undone — the job fired once more a minute later, hit `_loop_stop_reason` again, and set
+    # `enabled` back to false, leaving `enabled: true` alongside `stopped_at` and
+    # `ending_state` in between. Refused here, before anything is mutated, so the operator is
+    # told the toggle cannot do what it looks like it does. `ending_state` is the definitive
+    # ended signal (`Loop.ending_state`); a loop merely paused with `toggle_job` leaves it
+    # `None` and re-enabling that is still ordinary and still allowed. The remedy named is a
+    # new loop rather than "give this one work", because D12 closes an ended loop's queue to
+    # every caller, the operator included (see `_authorize_loop_task_creation` in tasks.py) —
+    # there is no way to feed this one.
+    if body.enabled is True and not job.enabled:
+        ended_result = await session.execute(select(Loop).where(Loop.job_id == job_id))
+        ended_loop = ended_result.scalar_one_or_none()
+        if ended_loop is not None and ended_loop.ending_state is not None:
+            ended_reason = ended_loop.stop_reason or ended_loop.ending_state
+            ended_when = (
+                ended_loop.stopped_at.isoformat() if ended_loop.stopped_at else "an unknown time"
+            )
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "message": (
+                        f"This loop has ended ({ended_reason}) at {ended_when} and cannot be "
+                        "restarted: its queue is closed, so the next firing would stop it again "
+                        "within the minute. Create a new loop with the work instead."
+                    ),
+                    "code": "loop_ended",
+                    "loop_id": ended_loop.id,
+                    "ending_state": ended_loop.ending_state,
+                    "stop_reason": ended_loop.stop_reason,
+                    "stopped_at": (
+                        ended_loop.stopped_at.isoformat() if ended_loop.stopped_at else None
+                    ),
+                },
+            )
+
     # Loop fields (design D6): supplying any of the five on a job with no `Loop` row is a 400
     # unless this update is the one that opts the job in for the first time (mirrors create_job's
     # "at least one field" rule). `spec_document_id` alone does NOT opt a job in (design D2 keeps
@@ -691,6 +736,12 @@ async def update_job(
     if body.message is not None:
         job.message = body.message
     if body.cron is not None:
+        # F1, checked before croniter is even reached, so the rule does not quietly lapse on an
+        # installation without it — the `else` branch below still stores the expression.
+        day_ambiguity = cron_day_ambiguity_reason(body.cron)
+        if day_ambiguity:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=day_ambiguity)
+
         # Validate cron
         croniter_available = True
         try:

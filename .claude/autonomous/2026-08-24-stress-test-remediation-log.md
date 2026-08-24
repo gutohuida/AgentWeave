@@ -166,3 +166,156 @@ branches, so it counts considerations not firings), F13 (`PATCH {enabled:true}` 
 `ending_state` must be refused rather than silently undone a minute later), and F1's backend half
 (refuse a cron restricting both day-of-month and day-of-week, which APScheduler ANDs and croniter
 ORs). Q3 and Q4 untouched.
+
+---
+
+## Iteration 3 — Q2, scheduler honesty (F11, F13, F1's backend half)
+
+Started 2026-08-24 01:59 local. Branch and `git log` matched STATE.json exactly: `862315a` on
+`autonomous/2026-08-24-stress-test-remediation`, clean tree, Q1's `3b4efd6` two commits back. No
+reconciliation needed. The previous iteration's closing heartbeat release worked as designed — this
+firing picked the work up rather than standing down.
+
+### F11 — `run_count` counted considerations, not runs
+
+`_do_fire_job` stamped `job.last_run` and incremented `job.run_count` in its first four lines,
+above every skip branch. Every one of those branches returns, so both fields described "the
+scheduler looked at this job". The drive measured `run_count` 9 against 4 firings that actually
+spawned an agent, with `last_run` pointing at a skip.
+
+Both statements moved down to sit beside `run.status = "in_progress"` — the line the file's own
+existing comment already identifies as the boundary between "considered" and "worked", because
+every early return above it overwrites `fired` with `skipped`. Nothing else was needed: the
+boundary was already named, the counters were just on the wrong side of it.
+
+**`next_run` deliberately stayed at the top.** The schedule advances whether or not the firing did
+anything, and a `next_run` left in the past would be its own lie — a card reading "Next: 4 hours
+ago". That asymmetry is the one judgement in this fix, and it is now asserted rather than implied:
+the F11 test checks `run_count == 0`, `last_run is None` and `next_run is not None` after the same
+three skips.
+
+Two consumers were checked before moving anything. `jobs.py`'s response passes both fields through
+untouched. `tasks.py:484` gates loop-queue extension on `job.run_count > 0` — "this loop has
+already fired at least once", D10's definition window. That reading gets *more* correct, not less:
+a loop that has only ever skipped has not fired, so its creator's window is genuinely still open.
+Worth flagging to the operator as a semantic side effect rather than a bug.
+
+A firing that queues an entry and then fails to start a turn still counts. The entry is in the
+queue and the job did fire; only the turn did not begin, and `JobRun.status` already says `failed`
+for that case. Stated in a comment at the increment.
+
+### F13 — re-enabling a finished loop was accepted and then silently undone
+
+`PATCH /jobs/{id} {"enabled": true}` on a loop carrying an `ending_state` returned 200, left
+`enabled: true` next to `stopped_at` and `stop_reason` for one minute, then fired, re-stopped, and
+set `enabled` back to false. Now refused, before anything is mutated, with a machine-readable
+detail: `code: "loop_ended"`, plus `ending_state`, `stop_reason`, `stopped_at` and the loop id.
+
+**Two decisions worth recording.**
+
+*The status code is 409, not 400 or 403.* This is a conflict with the resource's current state,
+which is precisely what 409 means, and Q1 has already shown what a wrong code costs — F8 was a 403
+that told an agent it lacked permission when it had sent a malformed enum. A caller reading 409
+learns "not in this state", which is true and actionable.
+
+*The message says "create a new loop", not "give this loop work" — which is what the queue item's
+own wording suggested.* That wording could not be honoured truthfully. D12 (`tasks.py`'s
+`_authorize_loop_task_creation`) closes an ended loop's queue to **every** caller, the operator
+included: "It will not be revived — create a new loop and pass this task as one of its
+`initial_tasks`". Telling the operator to feed a loop that refuses to be fed would have been a
+second wrong answer on the same screen. The refusal is deliberately worded to match D12's, and a
+comment at the check says why.
+
+The check turns on `ending_state`, never on `enabled`. D6 rejected a third "paused" state, so a
+loop an operator disabled by hand carries `ending_state`, `stop_reason` and `stopped_at` all NULL
+and resumes exactly as before. There is a test whose entire job is to fail if the F13 fix ever
+takes the pause button with it, and another for a plain job with no `Loop` row at all.
+
+### F1 (backend half) — a cron restricting both day fields can no longer be stored
+
+The premise is now **asserted, not assumed**. `test_the_two_cron_readers_this_repository_holds_
+really_do_disagree` runs croniter and APScheduler side by side on `0 0 15 * 5` from a fixed start
+and asserts the answers are more than 200 days apart. Measured here: they are. If a dependency bump
+ever makes them agree, that test fails and the refusal becomes removable — which is the point of
+writing it down as a test rather than as a paragraph.
+
+`scheduler.cron_day_ambiguity_reason(cron)` returns a sentence or `None`. `jobs.py` calls it at
+both write sites — create, and update before croniter is even reached, so the rule does not lapse
+on an installation without croniter, where the `else` branch still stores the expression. `AIJob(`
+has exactly one construction site in the whole Hub, so those two routes are the complete boundary.
+
+**The detector is deliberately the same grammar as `hub/ui/src/lib/cron.ts`'s `parseField`** —
+lists, ranges, steps, three-letter aliases — and deliberately no more. `L`, `W`, `#`, `?`, a
+wrapping range like `22-2`: all return `None`, which means *undecided*, and undecided never
+refuses. croniter and APScheduler stay the authorities on validity; this only ever adds a refusal,
+and a validator that guessed at an extension it does not implement would reject schedules that
+work. Both halves of that are tested — five ambiguous expressions refused, nine legal ones
+accepted, five unreadable ones declined without judgement.
+
+The two "legal" cases most worth having: `0 9 15 * 0-6` and `0 9 15 * 1-7`. A day-of-week that
+names all seven days restricts nothing, and `1-7` folds 7 back onto Sunday, so it is seven days and
+not eight. A naive `field != "*"` check would have refused both.
+
+**This makes Q3's UI half smaller than it looks.** The backend predicate is exactly
+`isAmbiguousDayPair`, so `describeCron` and the new refusal already agree by construction. What Q3
+still has to do is route `nextRuns` — the JobForm preview and the JobCard "Next:" — through the
+same guard, so the two numeric answers stop being rendered for a shape that can no longer exist.
+
+### Verification
+
+`py -3.11 -m pytest hub/tests/ -q` on the frozen tree: **2814 passed, 84 skipped, 1 xpassed, 0 failed** (15m55s). The 35 new tests are the whole delta from Q1's 2779 — no existing test pinned the old behaviour anywhere, which is the thing the Q1 continuation note warned to check for and the reason the run was repeated after the tree was frozen rather than trusted mid-edit. `uvx ruff check` and
+`uvx black --check` over `hub/hub/` and `hub/tests/`: clean.
+
+**And driven over real HTTP**, because a passing suite is not proof of behaviour. A throwaway
+harness at `.claude/autonomous/scratch/drive_q2.py` (gitignored, same shape as Q1's) boots the
+actual FastAPI app on a temp SQLite database: **19 checks, all passing.** Three things it gave that
+the suite could not:
+
+- **F13's ending was produced by the scheduler, not hand-written.** The test fixture sets
+  `ending_state` directly; the drive creates a loop with a `stop_at` already in the past, fires it
+  through `_fire_job_internal`, and lets the stop branch end it — then re-enables over HTTP and
+  reads the 409. That is the measured sequence, not a reconstruction of it.
+- **The first `POST /jobs/{id}/run` returned 503.** `run_job` reaches the module singleton
+  `get_scheduler()`, not whatever `JobScheduler()` the harness happens to hold, so the "a real
+  firing counts once" half of F11 was passing vacuously in a branch that never ran. Publishing the
+  instance as `scheduler_module._scheduler_instance` fixed it and the check went green with
+  `run_count == 1`. Left as a comment in the harness: this is the second time in two iterations
+  that a drive check has "passed" by not executing.
+- **The refusal reads correctly on the wire.** `hub/ui/src/api/client.ts` already extracts
+  `.message` from an object `detail`, so the 409's structured body renders as prose in the UI
+  without a Q3 change.
+
+One wording change came out of reading the output rather than the code: the message first said
+"This loop finished", which is wrong for the `stopped` ending — a loop killed by its `stop_at` did
+not finish anything. It now says "has ended", which covers both.
+
+**Each new test was watched fail without its fix**, not assumed to. Reverting F11's two
+statements back to the top of `_do_fire_job` turns the assertions into `assert 3 == 0` and
+`assert 1 == 0`; stubbing out the two `jobs.py` checks turns the six F1/F13 refusal tests into
+`201 == 400`, `200 == 400` and `200 == 409`. Both reverts were restored and the suite re-run
+green before committing.
+
+### Noticed, not done — an agent reads a structured refusal as a Python dict
+
+`mcp_server._readable_detail` reduces a list detail (Pydantic's shape) to a sentence, but falls
+through to `str(detail)` for a dict one — so an agent calling `toggle_job` on an ended loop gets
+`{'message': 'This loop has ended ...', 'code': 'loop_ended', ...}` rather than the sentence.
+That is not new and not F13's doing: `tasks.py`'s D12 refusal has the same shape and the same
+outcome, and `hub/ui/src/api/client.ts` already prefers `detail.message` on the operator side. A
+three-line branch in `_readable_detail` would make both legible to an agent. Left out because it
+is outside Q2's scope and `mcp_server.py` carries its own stdlib-only contract; recorded here so
+it is not lost.
+
+### Committed
+
+One commit for the whole of Q2, naming F11, F13 and F1.
+
+### Continuation
+
+Q2 is closed. Next is **Q3** — the dashboard-truth item, all under `hub/ui/src` and deliberately
+one item so the committed bundle is rebuilt exactly once in Q4: F17 (every Hub-managed agent reads
+"No activity yet" forever because `last_seen` only comes from a heartbeat row), F19 (prerequisites
+are returned by `GET /tasks` and rendered nowhere), F9 (an inline note on approve saying which
+commit goes into which branch), F14 ("waiting on you" on a task blocked on an unanswered
+`ask_user`, without changing its status), F2 ("server time" → "UTC"), and F1's UI half as described
+above. Read `design/IDENTITY.md` before touching any of it. Q4 untouched.

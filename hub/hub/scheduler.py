@@ -7,7 +7,7 @@ and triggers agents when cron expressions match.
 import logging
 import re
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any, Dict, Optional, Set
 
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -36,6 +36,138 @@ _SECRET_RE = re.compile(r"(aw_live_[A-Za-z0-9_=-]+|sk-[A-Za-z0-9_=-]+|[A-Za-z0-9
 
 def _safe_error_summary(exc: Exception) -> str:
     return _SECRET_RE.sub("<redacted>", str(exc))[:500]
+
+
+# --- Cron day-field ambiguity (finding F1) ---------------------------------------------------
+#
+# A cron expression that restricts BOTH day-of-month and day-of-week has two incompatible
+# readings, and this repository holds both of them at once. `JobScheduler.add_job` builds an
+# APScheduler `CronTrigger`, which **ANDs** the two fields, so the job fires only on days that
+# satisfy both. `_do_fire_job` recomputes `job.next_run` with croniter, which **ORs** them, the
+# way Vixie cron and every crontab on the operator's machine do. Measured 2026-08-23 on
+# `proj-18e5d4e0`: `0 0 15 * 5` was stored with `next_run` 2026-08-28 and actually fires
+# 2027-05-15 — 260 days apart, with the *displayed* value the standard-correct one and the
+# behaviour the deviation.
+#
+# `hub/ui/src/lib/cron.ts` already declines this shape in prose (`isAmbiguousDayPair`), so the
+# product had already recognised the ambiguity and still stored it. This is the same rule moved
+# to the write boundary: the expression cannot be saved, so no surface has to guess which reading
+# it meant. Refusing is chosen over picking a reading because either choice silently reschedules
+# jobs that already exist, and because two jobs say exactly what the operator meant.
+
+_CRON_DAY_ALIASES = {
+    "sun": 0,
+    "mon": 1,
+    "tue": 2,
+    "wed": 3,
+    "thu": 4,
+    "fri": 5,
+    "sat": 6,
+}
+
+
+def _cron_value(
+    token: str, minimum: int, maximum: int, aliases: Optional[Dict[str, int]]
+) -> Optional[int]:
+    """One bound of a cron field — a number or a three-letter alias — or ``None`` if unreadable."""
+    resolved = (aliases or {}).get(token.lower())
+    if resolved is None:
+        resolved = int(token) if token.isdigit() else None
+    if resolved is None or resolved < minimum or resolved > maximum:
+        return None
+    return resolved
+
+
+def _cron_field_values(
+    raw: str,
+    minimum: int,
+    maximum: int,
+    aliases: Optional[Dict[str, int]] = None,
+) -> Optional[Set[int]]:
+    """The set of values one standard cron field selects, or ``None`` if this grammar cannot say.
+
+    Deliberately the same subset `hub/ui/src/lib/cron.ts`'s `parseField` accepts — lists, ranges
+    and steps — and deliberately no more: `L`, `W`, `#`, `?` and `~` fail to parse here and yield
+    ``None``. ``None`` means *undecided*, and every caller treats undecided as "do not refuse":
+    croniter and APScheduler remain the authorities on whether an expression is valid at all, and
+    a validator that guessed would reject working schedules.
+    """
+    if not raw or not re.fullmatch(r"[0-9A-Za-z*/,-]+", raw):
+        return None
+
+    values: Set[int] = set()
+    for part in raw.split(","):
+        segments = part.split("/")
+        if len(segments) > 2:
+            return None
+        spec = segments[0]
+        step = 1
+        if len(segments) == 2:
+            if not segments[1].isdigit():
+                return None
+            step = int(segments[1])
+            if step < 1:
+                return None
+
+        if spec == "*":
+            low, high = minimum, maximum
+        else:
+            bounds = spec.split("-")
+            if len(bounds) > 2:
+                return None
+            low_value = _cron_value(bounds[0], minimum, maximum, aliases)
+            if low_value is None:
+                return None
+            if len(bounds) == 1:
+                low = low_value
+                # `5/15` means "from 5 to the end of the range, every 15" — the reading both
+                # crontab and APScheduler give it. A bare `5` is just the one value.
+                high = low_value if len(segments) == 1 else maximum
+            else:
+                high_value = _cron_value(bounds[1], minimum, maximum, aliases)
+                # A wrapping range (`22-2`) is read differently by different implementations, so
+                # it is declined rather than guessed at.
+                if high_value is None or high_value < low_value:
+                    return None
+                low, high = low_value, high_value
+
+        for candidate in range(low, high + 1, step):
+            values.add(candidate)
+
+    return values or None
+
+
+def cron_day_ambiguity_reason(cron: str) -> Optional[str]:
+    """Why *cron* cannot be scheduled unambiguously, or ``None`` when it can.
+
+    The single caller-facing entry point for the module comment above. Returns a sentence written
+    for whoever typed the expression — operator or agent — naming both restricted fields and the
+    remedy, because "invalid cron" alone would read as a typo in a string that is valid everywhere
+    else.
+    """
+    fields = cron.strip().split()
+    if len(fields) != 5:
+        # `add_job` refuses anything but five fields outright, and croniter's own validation runs
+        # first at both write sites; nothing is added by a second opinion here.
+        return None
+
+    day_of_month = _cron_field_values(fields[2], 1, 31)
+    day_of_week = _cron_field_values(fields[4], 0, 7, _CRON_DAY_ALIASES)
+    if day_of_month is None or day_of_week is None:
+        return None
+    if len(day_of_month) == 31:
+        return None
+    # Day-of-week accepts both 0 and 7 for Sunday, so eight accepted values are still seven days.
+    if len({0 if v == 7 else v for v in day_of_week}) == 7:
+        return None
+
+    return (
+        f"'{cron}' restricts both day-of-month ('{fields[2]}') and day-of-week ('{fields[4]}'), "
+        "which has two incompatible meanings: standard cron fires when EITHER matches, this "
+        "scheduler fires only when BOTH fall on the same day — for some expressions that is "
+        "months apart. Leave one of the two as '*'. If you meant either day, create two jobs, "
+        f"one with '{fields[2]}' as the day-of-month and one with '{fields[4]}' as the day-of-week."
+    )
 
 
 async def _job_agent_skip_reason(
@@ -792,9 +924,14 @@ class JobScheduler:
         try:
             fired_at = datetime.now(timezone.utc)
 
-            # Update job stats
-            job.last_run = fired_at
-            job.run_count += 1
+            # `job.last_run`/`job.run_count` are NOT stamped here (finding F11). Every skip branch
+            # below returns after this point, so a counter incremented here would describe "the
+            # scheduler considered this job", not "this job ran" — measured on 2026-08-23 as
+            # `run_count` 9 for 4 firings that actually spawned an agent, with `last_run` pointing
+            # at a skip. Both are stamped once, further down, at the same point `run.status`
+            # becomes `in_progress`: the firing reached a queued entry. `next_run` below is
+            # different and stays here — the schedule advances whether or not the firing did work,
+            # and a `next_run` left in the past would be its own lie.
 
             # Recompute next run
             try:
@@ -1017,6 +1154,12 @@ class JobScheduler:
             # (design D13, task A4.3). `finalize_job_run_for_conversation` flips it to a
             # terminal status once the agent's own `Run` ends (`agent_trigger.py`).
             run.status = "in_progress"
+            # F11: the job's own counters are stamped at exactly this boundary, for exactly the
+            # reason the paragraph above gives for `in_progress` — this is where a firing stops
+            # being a consideration and becomes work. A `schedule_agent` failure below still
+            # counts: the entry is queued and the job did fire; only the turn did not start.
+            job.last_run = fired_at
+            job.run_count += 1
             await session.commit()
 
             if pending_edit_payload is not None:

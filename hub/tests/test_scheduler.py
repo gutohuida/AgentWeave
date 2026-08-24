@@ -41,6 +41,7 @@ from hub.scheduler import (
     _claim_loop_task,
     _loop_stall_reason,
     _loop_stop_reason,
+    cron_day_ambiguity_reason,
     finalize_job_run_for_conversation,
 )
 from hub.task_transitions import TRANSITIONS
@@ -2016,3 +2017,254 @@ async def test_loop_queue_exhausted_event_prefers_the_question_when_both_are_out
 
     assert len(matching) == 1
     assert matching[0].data["pending_request"]["kind"] == "question"
+
+
+@pytest.mark.asyncio
+async def test_run_count_and_last_run_describe_firings_not_considerations(
+    app, auth_headers, bind_runner
+):
+    """Finding F11: `AIJob.run_count`/`last_run` used to count every tick, skips included.
+
+    Measured on the 2026-08-23 stress drive: a loop card read "9 runs · last run 18:01" for a
+    loop that had spawned an agent **4** times, with `last_run` pointing at a firing that did
+    nothing. Both fields were stamped at the top of `_do_fire_job`, above every skip branch, so
+    they described "the scheduler considered this job".
+
+    The shape below is the measured one in miniature — three stalled ticks, then one real firing
+    once the queue holds claimable work. `next_run` is asserted separately and deliberately: the
+    schedule advances on a skip too, because a `next_run` left in the past would be its own lie.
+    """
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {"loop-agent-count": {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    await bind_runner("loop-agent-count", cli="claude")
+
+    fake_session = MagicMock()
+    fake_session.pid = 4848
+    fake_session.read.side_effect = [
+        '{"type":"result","subtype":"success","is_error":false,"session_id":"sess-count"}\n',
+        "",
+    ]
+    fake_session.wait.return_value = 0
+
+    now = datetime.now(timezone.utc)
+    async with async_session_factory() as db:
+        job = await _make_job(db, suffix="count", agent="loop-agent-count")
+        loop = await _make_loop(
+            db,
+            job_id=job.id,
+            purpose="counted honestly",
+            stop_when_queue_empties=True,
+        )
+        db.add(
+            Task(
+                id="task-count-stalled",
+                project_id="proj-test",
+                title="done, awaiting review",
+                status="completed",
+                assignee="loop-agent-count",
+                loop_id=loop.id,
+                created_at=now - timedelta(minutes=5),
+                updated=now - timedelta(minutes=5),
+            )
+        )
+        await db.commit()
+
+    scheduler = JobScheduler()
+    with patch(  # noqa: SIM117
+        "hub.api.v1.agent_trigger.PtySession.spawn", MagicMock(return_value=fake_session)
+    ):
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            for _ in range(3):
+                async with async_session_factory() as db:
+                    fresh_job = await db.get(AIJob, job.id)
+                    assert (
+                        await scheduler._fire_job_internal(
+                            fresh_job, trigger="scheduled", session=db
+                        )
+                        is False
+                    )
+
+    async with async_session_factory() as db:
+        stalled_job = await db.get(AIJob, job.id)
+        # Three considerations, no firing.
+        assert stalled_job.run_count == 0
+        assert stalled_job.last_run is None
+        # ...but the schedule itself did move on.
+        assert stalled_job.next_run is not None
+        # The skips are still recorded, in the place that was always honest about them.
+        job_runs = (await db.execute(select(JobRun).where(JobRun.job_id == job.id))).scalars().all()
+        assert len(job_runs) == 3
+        assert {r.status for r in job_runs} == {"skipped"}
+
+    async with async_session_factory() as db:
+        db.add(
+            Task(
+                id="task-count-claimable",
+                project_id="proj-test",
+                title="real work",
+                status="pending",
+                loop_id=f"loop-{job.id}",
+                created_at=now,
+                updated=now,
+            )
+        )
+        await db.commit()
+
+    with patch(  # noqa: SIM117
+        "hub.api.v1.agent_trigger.PtySession.spawn", MagicMock(return_value=fake_session)
+    ):
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            async with async_session_factory() as db:
+                fresh_job = await db.get(AIJob, job.id)
+                assert (
+                    await scheduler._fire_job_internal(fresh_job, trigger="scheduled", session=db)
+                    is True
+                )
+            for task in list(agent_trigger._background_runs):
+                await task
+
+    async with async_session_factory() as db:
+        fired_job = await db.get(AIJob, job.id)
+        assert fired_job.run_count == 1
+        assert fired_job.last_run is not None
+        # The one stamped time belongs to the firing that did the work, not to the last skip.
+        job_runs = (
+            (
+                await db.execute(
+                    select(JobRun)
+                    .where(JobRun.job_id == job.id, JobRun.status != "skipped")
+                    .order_by(JobRun.fired_at)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert len(job_runs) == 1
+        assert fired_job.last_run == job_runs[0].fired_at
+
+
+@pytest.mark.asyncio
+async def test_a_stopped_loops_final_tick_does_not_count_as_a_run():
+    """F11's other skip route: the branch that ends the loop must not bill it for a firing.
+
+    `stop_at` elapsing disables the job from inside `_do_fire_job`. That tick reached no agent and
+    queued no entry, so the count an operator reads afterwards is the count of work the loop
+    actually did — here, none.
+    """
+    async with async_session_factory() as db:
+        job = await _make_job(db, suffix="count-stop", agent="loop-agent-count-stop")
+        await _make_loop(
+            db,
+            job_id=job.id,
+            purpose="ends before it works",
+            stop_at=datetime.now(timezone.utc) - timedelta(minutes=1),
+        )
+
+    scheduler = JobScheduler()
+    async with async_session_factory() as db:
+        fresh_job = await db.get(AIJob, job.id)
+        assert (
+            await scheduler._fire_job_internal(fresh_job, trigger="scheduled", session=db) is False
+        )
+
+    async with async_session_factory() as db:
+        stopped_job = await db.get(AIJob, job.id)
+        assert stopped_job.enabled is False
+        assert stopped_job.run_count == 0
+        assert stopped_job.last_run is None
+        run = (await db.execute(select(JobRun).where(JobRun.job_id == job.id))).scalar_one()
+        assert run.status == "skipped"
+
+
+# ---------------------------------------------------------------------------
+# Finding F1 — the day-field ambiguity detector itself
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "cron",
+    [
+        "0 0 15 * 5",  # the measured case: stored as 2026-08-28, fires 2027-05-15
+        "0 0 1 * 1",
+        "0 0 15 * MON",  # aliases count
+        "0 0 */2 * 1",  # a step is a restriction
+        "0 0 1,15 * 1-3",  # lists and ranges too
+    ],
+)
+def test_cron_day_ambiguity_is_named_for_expressions_restricting_both_day_fields(cron):
+    reason = cron_day_ambiguity_reason(cron)
+    assert reason is not None
+    assert "day-of-month" in reason and "day-of-week" in reason
+    assert "two jobs" in reason
+
+
+@pytest.mark.parametrize(
+    "cron",
+    [
+        "0 9 * * *",
+        "*/5 * * * *",
+        "0 9 * * 1-5",
+        "0 9 15 * *",
+        "0 0 * * 0",
+        "0 0 * * 7",  # 7 is Sunday, and one day is still a restriction — but of one field only
+        "0 9 15 * 0-6",  # a day-of-week naming all seven days restricts nothing
+        "0 9 15 * 1-7",  # ...and neither does 1-7, where 7 folds back onto 0
+        "0 9 1-31 * 5",  # a day-of-month naming every day restricts nothing either
+    ],
+)
+def test_cron_day_ambiguity_is_silent_for_everything_else(cron):
+    assert cron_day_ambiguity_reason(cron) is None
+
+
+@pytest.mark.parametrize(
+    "cron",
+    [
+        "not a cron",
+        "0 0 L * 5",  # `L` is outside this grammar
+        "0 0 15 * 5#2",  # ...so is `#`
+        "0 0 15 * 5 0",  # six fields is not our grammar; `add_job` refuses it separately
+        "0 0 22-2 * 5",  # a wrapping range is read differently by different implementations
+    ],
+)
+def test_cron_day_ambiguity_declines_to_judge_what_it_cannot_read(cron):
+    """`None` here means *undecided*, not *fine*.
+
+    croniter and APScheduler stay the authorities on whether an expression is valid at all; this
+    detector only ever adds a refusal, and a detector that guessed at an extension it does not
+    implement would reject schedules that work.
+    """
+    assert cron_day_ambiguity_reason(cron) is None
+
+
+def test_the_two_cron_readers_this_repository_holds_really_do_disagree():
+    """The premise of F1, asserted rather than assumed.
+
+    If a future dependency bump makes croniter and APScheduler agree on the day pair, this test
+    fails and the refusal above becomes removable. Until then it is the evidence that the two
+    numeric answers the product used to render were genuinely different answers, not rounding.
+    """
+    croniter = pytest.importorskip("croniter").croniter
+    cron_trigger = pytest.importorskip("apscheduler.triggers.cron").CronTrigger
+
+    start = datetime(2026, 8, 23, 12, 0, tzinfo=timezone.utc)
+    cron = "0 0 15 * 5"
+
+    or_reading = croniter(cron, start).get_next(datetime)
+    parts = cron.split()
+    and_reading = cron_trigger(
+        minute=parts[0],
+        hour=parts[1],
+        day=parts[2],
+        month=parts[3],
+        day_of_week=parts[4],
+        timezone="UTC",
+    ).get_next_fire_time(None, start)
+
+    assert or_reading.date() != and_reading.date()
+    # croniter fires on the next Friday *or* the 15th, whichever comes first; APScheduler waits
+    # for a 15th that is also a Friday. Months apart, from the same five fields.
+    assert (and_reading - or_reading).days > 200
