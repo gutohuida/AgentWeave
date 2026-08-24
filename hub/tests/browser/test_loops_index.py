@@ -102,8 +102,10 @@ def test_loops_index_lists_real_loops_with_counts_by_ending_state(
 
     row = page.get_by_test_id(f"loops-index-row-{CURRENT_ITEM_LOOP_ID}")
     expect(row).to_be_visible()
-    expect(row).to_contain_text("Running")
-    expect(row).to_contain_text("Queue: 1")
+    # Lowercase, and the meta line reads `@agent · queue N` — `design/mocks/S3/considered.html`,
+    # the variant the operator approved. The build said "Running" and "Queue: 1" until 2026-08-24.
+    expect(row).to_contain_text("running")
+    expect(row).to_contain_text("queue 1")
 
 
 def test_selecting_a_loop_opens_the_drill_down_and_the_index_stays_open(

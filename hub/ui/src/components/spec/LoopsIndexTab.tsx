@@ -24,15 +24,69 @@ function summarizeCounts(loops: LoopSummary[]): string {
   return parts.length > 0 ? parts.join(' · ') : 'No loops'
 }
 
-function EndingBadge({ loop }: { loop: LoopSummary }) {
+/**
+ * The 5px dot the S3 `considered` mock puts inside every loop status badge. `currentColor` is the
+ * whole point: the dot takes the badge's own tone, so a status can never end up with a dot in a
+ * colour its text does not share — the same rule `Badge`'s own comment states for bg and border.
+ */
+function StatusDot() {
+  return (
+    <span
+      aria-hidden="true"
+      style={{ width: 5, height: 5, borderRadius: 9999, background: 'currentColor', flexShrink: 0 }}
+    />
+  )
+}
+
+/**
+ * The row's single status badge.
+ *
+ * **Open questions are folded in here rather than carried separately.** The mock gives a row one
+ * badge, and shows `1 open question` occupying that slot on the loop that has one — an unanswered
+ * question is the more urgent fact about a loop than whether it is between firings, so it wins the
+ * slot. The previous build showed the ending state *and* a second badge further down, which read
+ * as two independent statuses for one loop.
+ */
+function StatusBadge({ loop }: { loop: LoopSummary }) {
+  if (loop.open_questions > 0) {
+    return (
+      <Badge variant="warning">
+        <StatusDot />
+        {loop.open_questions} open question{loop.open_questions === 1 ? '' : 's'}
+      </Badge>
+    )
+  }
   const bucket = endingBucket(loop)
-  if (bucket === 'completed') return <Badge variant="success">Complete</Badge>
-  if (bucket === 'stopped') return <Badge variant="warning">Stopped early</Badge>
+  if (bucket === 'completed')
+    return (
+      <Badge variant="success">
+        <StatusDot />
+        complete
+      </Badge>
+    )
+  if (bucket === 'stopped')
+    return (
+      <Badge variant="warning">
+        <StatusDot />
+        stopped early
+      </Badge>
+    )
   // "Running" is claimed only while a firing is actually in progress. A loop between firings —
   // or one whose job is paused and has never fired at all — is idle, and saying otherwise made
   // the panel report work that was not happening.
-  if (bucket === 'running') return <Badge variant="info">Running</Badge>
-  return <Badge variant="secondary">Idle</Badge>
+  if (bucket === 'running')
+    return (
+      <Badge variant="info">
+        <StatusDot />
+        running
+      </Badge>
+    )
+  return (
+    <Badge variant="secondary">
+      <StatusDot />
+      idle
+    </Badge>
+  )
 }
 
 /**
@@ -44,6 +98,22 @@ function EndingBadge({ loop }: { loop: LoopSummary }) {
  * (`panelTabsStore.openTab` has no `loops`-closing rule the way it closes `files` for a `file:`
  * tab) — a governance glance, not a launcher. Selecting a loop here is therefore never wired
  * through anything that would close this tab.
+ *
+ * **Brought to `design/mocks/S3/considered.html` on 2026-08-24**, the variant the operator
+ * approved. What changed and why each was a divergence rather than a preference:
+ *
+ * - The loading state was three 64px solid blocks. Finding 7's whole point is that a skeleton
+ *   "previews the shape of what's coming" — so it is now four rows of a 14px icon square and a
+ *   10px line, the shape of a real row, plus the toolbar's own skeleton.
+ * - The switch sat before its label; the mock reads "Show archived" then the control. The
+ *   `.panel-switch` CSS needs the input as its immediate previous sibling, so the input moves
+ *   with the switch and the text leads.
+ * - Status badges were capitalised and dotless, and open questions were a *second* badge on a
+ *   lower row — two statuses for one loop. One badge, one dot, lowercase, questions winning the
+ *   slot when there are any.
+ * - The row carried a leading `sync` icon and a purpose line the mock does not have, and split
+ *   its metadata across two shapes. The mock's meta is one line: agent glyph, `@name`, `·`,
+ *   `queue N`.
  */
 export function LoopsIndexTab({
   loops,
@@ -57,16 +127,18 @@ export function LoopsIndexTab({
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col" data-testid="loops-index-tab">
-      <div
-        className="flex shrink-0 items-center justify-between gap-2 px-3 py-2"
-      >
-        <span style={{ fontSize: 11, color: 'var(--text-3)' }} data-testid="loops-index-summary">
+      <div className="flex shrink-0 items-center justify-between gap-2 px-2.5 pb-2 pt-1">
+        <span style={{ fontSize: 12, color: 'var(--text-3)' }} data-testid="loops-index-summary">
           {summary}
         </span>
+        {/* Label first, then the control — the mock's reading order. The input stays immediately
+            before `.panel-switch` because the switch's checked and focus styling is written as an
+            adjacent-sibling rule in `index.css`. */}
         <label
-          className="flex items-center gap-1.5"
-          style={{ fontSize: 11, color: 'var(--text-2)', cursor: 'pointer' }}
+          className="flex items-center gap-[7px]"
+          style={{ fontSize: 12, color: 'var(--text-2)', cursor: 'pointer' }}
         >
+          Show archived
           <input
             type="checkbox"
             checked={includeArchived}
@@ -75,17 +147,28 @@ export function LoopsIndexTab({
             className="sr-only"
           />
           <span className="panel-switch" aria-hidden="true" />
-          Show archived
         </label>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto p-1.5" data-testid="loops-index-results">
+      <div className="min-h-0 flex-1 overflow-y-auto px-1 pb-1.5" data-testid="loops-index-results">
         {isLoading ? (
-          <div className="flex flex-col gap-2 p-2" aria-label="Loading loops">
-            {[82, 67, 75].map((width) => <div key={width} className="skeleton h-16" style={{ width: `${width}%` }} />)}
+          // Finding 7: shaped like the rows that will arrive, not like a block. Four, matching the
+          // mock — enough to read as a list rather than as one thing still loading.
+          <div aria-label="Loading loops">
+            <div className="flex items-center gap-2 px-2.5 py-1.5">
+              <span className="skeleton" style={{ height: 12, width: '60%' }} />
+            </div>
+            {['60%', '45%', '70%', '60%'].map((width, i) => (
+              <div key={i} className="flex items-center gap-2 px-2.5 py-1.5">
+                <span className="skeleton" style={{ width: 14, height: 14, flex: 'none' }} />
+                <span className="skeleton" style={{ height: 10, flex: 1, maxWidth: width }} />
+              </div>
+            ))}
           </div>
         ) : loops.length === 0 ? (
           <p style={{ padding: 10, fontSize: 12, color: 'var(--text-3)' }}>
-            {includeArchived ? 'No loops yet.' : 'No loops yet. Archived loops are hidden — check "Show archived".'}
+            {includeArchived
+              ? 'No loops yet.'
+              : 'No loops yet. Archived loops are hidden — check "Show archived".'}
           </p>
         ) : (
           loops.map((loop) => {
@@ -99,16 +182,12 @@ export function LoopsIndexTab({
                 onClick={() => onSelect(loop.id)}
                 data-active={selected ? 'true' : 'false'}
                 className="row-item !items-stretch flex-col gap-1 px-2.5 py-2"
-                style={{
-                  border: 'none',
-                  cursor: 'pointer',
-                }}
+                style={{ border: 'none', cursor: 'pointer' }}
               >
-                <div className="flex min-w-0 items-center gap-1.5">
-                  <Icon name="sync" size={14} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
+                <div className="flex min-w-0 items-center gap-2">
                   <span
-                    className="min-w-0 flex-1 truncate"
-                    style={{ fontSize: 12, fontWeight: 500, color: 'var(--text)' }}
+                    className="min-w-0 flex-1 truncate text-left"
+                    style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)' }}
                   >
                     {loop.label}
                   </span>
@@ -118,34 +197,31 @@ export function LoopsIndexTab({
                     </Badge>
                   )}
                   <span className="shrink-0">
-                    <EndingBadge loop={loop} />
+                    <StatusBadge loop={loop} />
                   </span>
                 </div>
-                {loop.purpose && (
-                  <p className="truncate" style={{ fontSize: 11, color: 'var(--text-2)' }}>
-                    {loop.purpose}
-                  </p>
-                )}
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {/* Who is actually running this loop. The index listed a label and a purpose but
-                      never said whose loop it was, so "what is running right now" could not be
-                      answered by agent (operator, 2026-08-19). */}
+                {/* One line, in the mock's order and punctuation. Who is actually running this
+                    loop: the index listed a label and a purpose but never said whose loop it was,
+                    so "what is running right now" could not be answered by agent (operator,
+                    2026-08-19). */}
+                <div
+                  className="flex min-w-0 items-center gap-1.5 pl-0.5"
+                  style={{ fontSize: 11, color: 'var(--text-3)' }}
+                >
                   {loop.agent && (
-                    <span
-                      className="inline-flex items-center gap-1"
-                      style={{ fontSize: 11, color: 'var(--text-2)' }}
-                      data-testid={`loops-index-agent-${loop.id}`}
-                    >
-                      <Icon name="smart_toy" size={13} style={{ color: 'var(--text-3)' }} />
-                      {loop.agent}
-                    </span>
+                    <>
+                      <Icon
+                        name="smart_toy"
+                        size={12}
+                        style={{ color: 'var(--text-3)', flexShrink: 0 }}
+                      />
+                      <span className="truncate" data-testid={`loops-index-agent-${loop.id}`}>
+                        @{loop.agent}
+                      </span>
+                      <span aria-hidden="true">·</span>
+                    </>
                   )}
-                  <span style={{ fontSize: 11, color: 'var(--text-3)' }}>Queue: {totalQueued}</span>
-                  {loop.open_questions > 0 && (
-                    <Badge variant="warning">
-                      {loop.open_questions} open question{loop.open_questions === 1 ? '' : 's'}
-                    </Badge>
-                  )}
+                  <span className="shrink-0">queue {totalQueued}</span>
                 </div>
               </button>
             )

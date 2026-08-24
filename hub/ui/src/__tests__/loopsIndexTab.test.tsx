@@ -20,11 +20,11 @@ function loop(over: Partial<LoopSummary> = {}): LoopSummary {
   } as LoopSummary
 }
 
-function renderIndex(loops: LoopSummary[]) {
+function renderIndex(loops: LoopSummary[], opts: { isLoading?: boolean } = {}) {
   return render(
     <LoopsIndexTab
       loops={loops}
-      isLoading={false}
+      isLoading={opts.isLoading ?? false}
       includeArchived={false}
       onToggleIncludeArchived={vi.fn()}
       currentLoopId={null}
@@ -76,7 +76,46 @@ describe('LoopsIndexTab — the governance glance (task B5.1)', () => {
     const summary = screen.getByTestId('loops-index-summary')
     expect(summary).toHaveTextContent('1 running')
     expect(summary).toHaveTextContent('1 idle')
-    expect(screen.getByText('Idle')).toBeInTheDocument()
-    expect(screen.getByText('Running')).toBeInTheDocument()
+    // Lowercase, per `design/mocks/S3/considered.html` — the badge reads `running`, not `Running`.
+    expect(screen.getByText('idle')).toBeInTheDocument()
+    expect(screen.getByText('running')).toBeInTheDocument()
+  })
+
+  // ---------------------------------------------------------------------------
+  // Conformance to `design/mocks/S3/considered.html`, the variant the operator approved.
+  // Each of these pins a divergence that was actually shipped and had to be corrected on
+  // 2026-08-24, so the panel cannot drift back to it unnoticed.
+  // ---------------------------------------------------------------------------
+
+  it("folds open questions into the row's single status badge", () => {
+    // The mock gives a row one badge and shows `1 open question` occupying that slot. The build
+    // showed the ending state AND a second badge lower down, reading as two statuses for one loop.
+    renderIndex([loop({ id: 'l1', ending_state: null, firing_active: false, open_questions: 1 })])
+
+    expect(screen.getByText('1 open question')).toBeInTheDocument()
+    expect(screen.queryByText('idle')).not.toBeInTheDocument()
+  })
+
+  it('writes the meta line as the mock does: @agent, a separator, then a lowercase queue count', () => {
+    renderIndex([loop({ id: 'l1', agent: 'builder', queue: { pending: 2 } })])
+
+    expect(screen.getByTestId('loops-index-agent-l1')).toHaveTextContent('@builder')
+    expect(screen.getByText('queue 2')).toBeInTheDocument()
+    // The previous build wrote `Queue: 2` as a separate span with no `@` on the agent.
+    expect(screen.queryByText('Queue: 2')).not.toBeInTheDocument()
+  })
+
+  it('previews the shape of a row while loading, not a stack of blocks', () => {
+    // Finding 7: "the point of a skeleton is that it previews the shape of what's coming". The
+    // build used three 64px solid blocks; the mock uses four icon-plus-line rows and a toolbar
+    // skeleton. Asserted by count and by the icon square's fixed 14px, which a block does not have.
+    const { container } = renderIndex([], { isLoading: true })
+
+    const skeletons = container.querySelectorAll('.skeleton')
+    expect(skeletons.length).toBe(9) // one toolbar line + four rows of (icon square + line)
+    const iconSquares = Array.from(skeletons).filter(
+      (el) => (el as HTMLElement).style.width === '14px'
+    )
+    expect(iconSquares.length).toBe(4)
   })
 })
