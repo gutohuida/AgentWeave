@@ -67,13 +67,24 @@ pytest but produces three false failures in `test_pty_runner.py` on a green tree
 
 ## 6. Verification only a person can do
 
+> **Archived 2026-08-24 with 6.1 and 6.3 unticked.** The operator was told both were outstanding
+> and chose to archive anyway. They are left as `- [ ]` deliberately: this change shipped without
+> the two human checks it asked for, and a later reader should see that rather than a clean sheet.
+
 - [ ] 6.1 Re-run the exact scenario that produced finding F10 — `builder` completes FR-2 and FR-3,
       `critic` reviews — and confirm `critic` does **not** have to ask `builder` what changed.
       The transcript in `scripts/drive/FINDINGS.md` is the before-state to compare against.
+      **WAIVED, not done.** The operator chose on 2026-08-24 to archive this change with 6.1 and
+      6.3 outstanding. Task 5.5 covers the same ground by automation — a reviewer read a file that
+      does not exist on the main branch — but no person re-ran F10's exact scenario. Nobody has
+      confirmed by eye that `critic` does not have to ask.
 - [x] 6.2 Read one review turn's context and judge whether an agent would understand it is
       reviewing rather than building. This is the failure D4 names as most likely, and no test
       catches it. **Answered by the operator 2026-08-24: "Yeah the text reads alright."**
 - [ ] 6.3 Confirm the review checkouts on disk are what you expected, and that nothing accumulated.
+      **WAIVED, not done.** Archived on the operator's decision of 2026-08-24 with this unverified.
+      Nothing has checked whether review checkouts accumulate on disk over many reviews; if they
+      leak, this task is where it would have been caught.
 
 ## 7. User test guide
 
