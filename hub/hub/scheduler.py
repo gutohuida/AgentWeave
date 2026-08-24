@@ -1454,8 +1454,48 @@ async def _compose_loop_briefing(
     the claimed queue item, the prior firing's checkpoint if one exists, and a one-line queue
     summary — in that order. A prefix, never a replacement: `_do_fire_job` puts `job.message`
     after this unchanged, so the operator's own message template still reads exactly as authored.
+
+    **The tier statement leads, as of `loop-becomes-a-flow` group 8 (design D8).** An agent inside a
+    flow did not choose to be there and has no reason to ask, so it is told here — the one place it
+    reliably reads. D8 rejected a tool to ask with the reason that "an agent that does not know to
+    ask never asks", which is how the self-messaging capability stayed invisible for a month.
+
+    It sits *above* the checkpoint deliberately. §257's fixed bound applies to prior checkpoint
+    content, and an oversized checkpoint is truncated in place; a statement placed after it would
+    survive or not depending on how much the previous agent wrote, which is the one thing an
+    instruction about stopping must not depend on.
+
+    **What separates the two wordings is what is true, not which tool created the loop.** Nothing in
+    `decide_firing` or `resolve_reviewer` consults `spec_document_id` — width and review by a
+    non-author apply to every loop, and rung 2 of the ladder is written to work with nothing
+    configured. So "finish and stop" is stated for *all* of them, because it is true of all of them,
+    and only a flow is told its work comes from a document and will be reviewed by somebody else.
+    Telling a single-agent loop that somebody will review its work is the false claim task 8.2
+    exists to prevent, and it is false for a document-less loop that happens to be alone in its
+    project. See `design.md`'s open question on whether the tier should gate behaviour at all.
     """
     lines: list[str] = ["# Loop briefing", ""]
+
+    if loop.spec_document_id:
+        lines.append(
+            "This is a **flow**: the queue below was decomposed from a specification document, "
+            "and its tasks are worked by whichever agents are free. Finished work is claimed for "
+            "review by an agent other than the one that did it."
+        )
+        lines.append("")
+        lines.append(
+            "**Finish the task below and stop.** Do not pick up the next item and do not hand "
+            "the work to anyone — routing is the flow's job, and the next firing decides who does "
+            "what. Record what a reviewer will need (see `submit_checkpoint_notes`); somebody "
+            "else reads it."
+        )
+        lines.append("")
+    else:
+        lines.append(
+            "**Finish the task below and stop.** Do not pick up the next item — the next firing "
+            "claims it."
+        )
+        lines.append("")
 
     if loop.purpose:
         lines.append(f"Purpose: {loop.purpose}")

@@ -428,7 +428,7 @@ def test_the_two_tools_post_bodies_that_differ_only_in_the_document(hub):
 
     calls, responses = hub
     responses.extend([b'{"ok":true}', b'{"ok":true}'])
-    kwargs = dict(purpose="p", stop_when_queue_empties=True, initial_tasks=[{"title": "T"}])
+    kwargs = {"purpose": "p", "stop_when_queue_empties": True, "initial_tasks": [{"title": "T"}]}
     create_loop("N", "worker", "M", "0 2 * * *", **kwargs)
     create_flow("N", "worker", "M", "doc-1", cron="0 2 * * *", **kwargs)
 

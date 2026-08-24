@@ -955,8 +955,16 @@ def _tool_surface_lines(*, has_peers: bool = True) -> List[str]:
         "stop_when_queue_empties=False, spec_document_id=None, initial_tasks=None)` — a job that "
         "also queues its own work, each firing claiming the queue's current task. Refused with no "
         "HTTP call made unless at least one of `stop_at` or `stop_when_queue_empties` is given: a "
-        "loop that cannot stop is not created. `initial_tasks` seeds the queue at creation, each "
+        "loop that cannot stop is not created, and refused if `spec_document_id` is given: a loop "
+        "that declares a document is a flow. `initial_tasks` seeds the queue at creation, each "
         "entry the same shape `create_task` takes. Same allowance as `create_job`.",
+        '- `create_flow(name, agent, message, spec_document_id, cron, purpose="", stop_at=None, '
+        "stop_when_queue_empties=False, initial_tasks=None)` — a loop that decomposes an approved "
+        "specification document. Same row and same allowance as `create_loop`; what differs is the "
+        "queue behaviour. Each firing starts every task whose prerequisites are met and for which "
+        "an agent is free, so independent work runs in parallel, and a task somebody finished "
+        "becomes claimable by anybody except its author — which is how work is reviewed without "
+        "the author being asked to hand it over. `agent` is the default, not the mandate.",
         "",
         (
             "Address a peer by its exact name from the roster above. There is no inbox tool: "

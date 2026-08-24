@@ -36,7 +36,7 @@ from hub.db.models import (
     TaskDependency,
     TurnUsage,
 )
-from hub.scheduler import JobScheduler, decide_firing
+from hub.scheduler import JobScheduler, _compose_loop_briefing, decide_firing
 
 from .test_review_turn import _roster
 
@@ -535,3 +535,83 @@ async def test_a_review_left_over_after_the_agents_are_taken_is_deferred_not_uns
     assert len(decision.deferred) == 1
     assert decision.unstaffed == ()
     assert "next firing" in decision.deferred[0][1]
+
+
+# ---------------------------------------------------------------------------
+# 8.1 / 8.2 — the briefing states the tier, and says nothing false about a loop
+# ---------------------------------------------------------------------------
+
+
+async def _briefing_for(loop, task):
+    async with async_session_factory() as db:
+        fresh_loop = (await db.execute(select(Loop).where(Loop.id == loop.id))).scalar_one()
+        return await _compose_loop_briefing(db, fresh_loop, task, None)
+
+
+async def test_a_flows_briefing_says_the_flow_routes_the_work_onward(app):
+    """Design D8. The agent did not choose to be in a flow and has no reason to ask, so the one
+    place it reliably reads has to tell it — and what it most needs to know is that finishing is
+    the end of its job, because an agent that helpfully starts the next task defeats both the
+    ordering the graph encodes and the review that follows it."""
+    async with async_session_factory() as db:
+        _job, loop = await _flow(db, suffix="tier-flow")
+        loop.spec_document_id = "doc-tier"
+        await db.commit()
+        task = await _task(db, loop, "tier-flow")
+
+    briefing = await _briefing_for(loop, task)
+
+    assert "flow" in briefing.lower()
+    assert "Finish the task below and stop." in briefing
+    assert "routing is the flow's job" in briefing
+    assert "review" in briefing.lower()
+
+
+async def test_a_loops_briefing_never_claims_someone_will_review_the_work(app):
+    """Task 8.2, on the true split rather than the stated one — see the group 8 review block. A
+    document-less loop still gets width and review when other agents exist, so the briefing does not
+    pretend the tier is what decides that; what it must never do is tell an agent alone in its
+    project that somebody will check its work."""
+    async with async_session_factory() as db:
+        _job, loop = await _flow(db, suffix="tier-loop")
+        assert loop.spec_document_id is None
+        task = await _task(db, loop, "tier-loop")
+
+    briefing = await _briefing_for(loop, task)
+
+    assert "Finish the task below and stop." in briefing
+    assert "review" not in briefing.lower()
+    assert "flow" not in briefing.lower()
+    assert "the next firing claims it" in briefing
+
+
+async def test_the_tier_statement_survives_an_oversized_checkpoint(app):
+    """Finding 2 of the review, asserted rather than trusted. §257 truncates *prior checkpoint
+    content* in place, so a statement placed after it would survive or not depending on how much the
+    previous agent happened to write — which is the one thing an instruction about stopping must not
+    depend on. It leads the briefing for exactly that reason."""
+    from hub.checkpoints import compute_envelope, create_checkpoint
+    from hub.conversations import new_conversation
+    from hub.scheduler import _LOOP_BRIEFING_CHECKPOINT_CHARS
+
+    async with async_session_factory() as db:
+        _job, loop = await _flow(db, suffix="tier-big")
+        loop.spec_document_id = "doc-tier-big"
+        await db.commit()
+        task = await _task(db, loop, "tier-big")
+        conversation = new_conversation(project_id="proj-test", agent=OWNER, origin="job")
+        db.add(conversation)
+        await db.commit()
+        checkpoint = await create_checkpoint(
+            db,
+            conversation,
+            trigger="task_completion",
+            envelope=await compute_envelope(db, conversation),
+            body="x" * (_LOOP_BRIEFING_CHECKPOINT_CHARS * 2),
+            loop=loop,
+        )
+        fresh_loop = (await db.execute(select(Loop).where(Loop.id == loop.id))).scalar_one()
+        briefing = await _compose_loop_briefing(db, fresh_loop, task, checkpoint)
+
+    assert "Finish the task below and stop." in briefing
+    assert briefing.index("routing is the flow's job") < briefing.index("## Prior checkpoint")

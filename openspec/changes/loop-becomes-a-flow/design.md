@@ -365,6 +365,15 @@ existing loop suite, unmodified.
 - ~~**Does a flow ever fire the same agent for a task it is already working?**~~ **Answered
   2026-08-24: yes — an already-assigned task resumes with its own assignee, never with the job's
   default agent.** See D12, step 1.
+- **Does the tier gate behaviour, or is it only a name?** Raised by group 8's spec review,
+  2026-08-24. D1 describes three tiers, but nothing in `decide_firing`, `task_is_claimable_by` or
+  `resolve_reviewer` consults `Loop.spec_document_id` — width and review-by-a-non-author apply to
+  every loop, and rung 2 of the ladder is deliberately written to work with nothing configured. So a
+  document-less loop in a project with three agents already behaves exactly as a flow does, and the
+  only thing `create_flow` changes is what the caller was made to say. Either the tier gates
+  behaviour (and a loop stays serial and unreviewed, which contradicts rung 2's whole argument), or
+  the tier is presentation and D1's three tiers are two with a label. Group 8 implements the second
+  reading, because it is what the code does; the choice is the operator's.
 - **Cross-firing selection races** — see the risk above.
 - **Should a loop's checkpoint anchor on the loop's previous checkpoint rather than the
   conversation's?** Raised by group 6's spec review, 2026-08-24, and deliberately not acted on.

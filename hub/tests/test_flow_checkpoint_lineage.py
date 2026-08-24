@@ -181,7 +181,7 @@ async def test_every_checkpoint_in_a_multi_agent_lineage_names_its_author(app):
         rendered = [render_checkpoint(row) for row in rows]
 
     assert {row.agent for row in rows} == {FIRST, SECOND}
-    for row, text in zip(rows, rendered):
+    for row, text in zip(rows, rendered, strict=True):
         assert f"Agent: {row.agent}" in text
 
 

@@ -585,10 +585,64 @@ not new storage. Four things the spec does not say:
 
 ## 8. The briefing
 
-- [ ] 8.1 Test: a flow's briefing states that the flow routes the work onward.
-- [ ] 8.2 Test: a loop's briefing does not claim that anything will route its work onward.
-- [ ] 8.3 Implement it in `_compose_loop_briefing`, within the bound `agent-loops` §257 sets — it
+**Reviewed against the shipped code 2026-08-24, before implementing, per the operator's standing
+instruction.** Three findings, and the first two narrow this group considerably.
+
+1. **A reviewer is already told it is reviewing — in the canonical context, not the briefing.**
+   `api/v1/agents.py:1102` renders *"**This is a review turn. You are reviewing someone else's work,
+   not doing your own**"*, the task under review, the commit, the branch, and the rule that an agent
+   editing the work has reviewed its own work. It is gated on `review=review_context`, which
+   `agent_trigger.py` sets from the queue entry's `review_task_id` — the argument group 4b started
+   passing. Its own comment states the failure it exists to prevent: *"A reviewer that is not told
+   it is reviewing will helpfully fix the bug itself and report the work as verified."*
+   So the earlier reading of this group — that a flow-staffed reviewer is briefed with the author's
+   task framing and would redo the work — is **true of the briefing and false of the turn**. What is
+   actually missing is only what D8 asks for: the *tier*, and that finishing means stopping.
+2. **§257 does not bound what this group adds.** Its fixed bound is on *prior checkpoint content*
+   (`_LOOP_BRIEFING_CHECKPOINT_CHARS = 4_000`), and its SHALL is a *shall-include* list, not a
+   shall-only-include one. So 8.3's "it competes for room with the checkpoint and the task" is not
+   the constraint it sounds like: two or three lines take room from nothing. The real constraint is
+   narrower — the statement must sit outside the truncated region, or an oversized checkpoint would
+   silently eat it.
+3. **The tier is a naming distinction with no behavioural boundary, which makes 8.1/8.2's split
+   partly false.** Nothing in `decide_firing`, `task_is_claimable_by` or `resolve_reviewer` consults
+   `Loop.spec_document_id`; width and review-by-a-non-author apply to *every* loop, and rung 2 of
+   the ladder is explicitly written to work "with nothing configured". So a document-less loop in a
+   project with three agents already gets exactly what a flow gets. 8.1 as written is satisfiable,
+   but 8.2 — "a loop's briefing does not claim that anything will route its work onward" — cannot
+   be read as "a loop routes nothing", because it does.
+   Implemented on the true split rather than the stated one: **every** loop is told to finish and
+   stop, since that is true of all of them, and only a **flow** is told that its work comes from a
+   document and that finished work is reviewed by somebody else. A single-agent loop is therefore
+   never told that somebody will review its work, which is the false claim 8.2 exists to prevent.
+   **The underlying inconsistency is the operator's** and is recorded as a design open question:
+   either the tier gates behaviour, or the tier is presentation and D1's three tiers are two.
+
+
+- [x] 8.1 Test: a flow's briefing states that the flow routes the work onward.
+      `test_a_flows_briefing_says_the_flow_routes_the_work_onward`. The statement leads the
+      briefing and carries the three things an agent inside a flow cannot infer: that the queue came
+      from a document, that finished work is claimed for review by somebody else, and that finishing
+      is the end of its job — "routing is the flow's job, and the next firing decides who does
+      what".
+- [x] 8.2 Test: a loop's briefing does not claim that anything will route its work onward.
+      `test_a_loops_briefing_never_claims_someone_will_review_the_work`, which asserts the words
+      "review" and "flow" are absent entirely rather than checking for a particular alternative
+      phrasing — the failure to guard against is a false promise, and a test that names the right
+      wording would pass for any other wrong one.
+      Implemented on the true split rather than the stated one (finding 3): every loop is told to
+      finish and stop, because that is true of every loop, and only a flow is told about the
+      document and the review. See the review block above, and `design.md`'s new open question.
+- [x] 8.3 Implement it in `_compose_loop_briefing`, within the bound `agent-loops` §257 sets — it
       competes for room with the checkpoint and the task.
+      Implemented, and the bound turned out not to apply (finding 2): §257 bounds *prior checkpoint
+      content*, and its SHALL is a shall-include rather than a shall-only-include, so a few lines
+      take room from nothing. The real constraint is placement — the statement **leads** the
+      briefing, above the checkpoint, because §257 truncates the checkpoint in place and anything
+      after it would survive or not depending on how much the previous agent happened to write.
+      `test_the_tier_statement_survives_an_oversized_checkpoint` pins that with a body twice the
+      bound, asserting both that the statement is present and that it precedes the checkpoint
+      section.
 
 ## 9. Presentation
 
