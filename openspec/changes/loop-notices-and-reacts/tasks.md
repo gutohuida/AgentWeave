@@ -179,25 +179,56 @@ reverted. 3.9 and 3.10 both still pass unmodified.
 
 ## 4. The shared claimability decision
 
-- [ ] 4.1 Test: for a stalled queue, `_batch_loop_summaries`' current item and `_do_fire_job`'s
+- [x] 4.1 Test: for a stalled queue, `_batch_loop_summaries`' current item and `_do_fire_job`'s
       decision agree. This is human-only check 13.1 made mechanical, and the drift it guards against
       is the one `_loop_queue_order` records.
-- [ ] 4.2 Implement the decision as one function returning what this firing should do — claim,
+      `hub/tests/test_firing_decision_is_shared.py`. Three shapes: they name the same task when
+      there is one (with the gated task created *first*, so a derivation ignoring the dependency
+      gate would pick the wrong one); a stalled `completed` queue claims nothing and shows no
+      current item; and an empty queue proceeds rather than stalling.
+      **A fourth case pins where they legitimately differ**, which "agree" must not be read to
+      forbid: a `blocked` queue stalls the firing while the board still shows the task. A board
+      that agreed with the firing there would show nothing and the loop would read as idle — the
+      defect fixed earlier today.
+- [x] 4.2 Implement the decision as one function returning what this firing should do — claim,
       refuse-stalled, or proceed-empty. **Leave room for a fourth answer**: the flow
       (`openspec/explorations/2026-08-21-the-loop-becomes-a-flow.md`) adds "fire a different agent
       for this task", and this function is where it lands.
-- [ ] 4.3 Call it from `_do_fire_job` and from `_batch_loop_summaries` (`hub/hub/api/v1/jobs.py`),
+      `decide_firing` returning a frozen `FiringDecision(kind, selections, stall_reason)`.
+      **The fourth answer needs no new `kind`:** `loop-becomes-a-flow` group 2 made the agent a
+      property of each `LoopSelection`, so "fire a different agent for this task" is a selection
+      whose agent differs from the job's — already expressible.
+      **It also removed a real inefficiency, not only a structural one.** `_do_fire_job` was
+      walking the dependency gate *twice* on a stalled queue: once through the claim to find
+      nothing, then again inside `_loop_stall_reason` to find out why — the whole walk repeated to
+      produce a sentence, on exactly the firings doing no work. `_stall_reason_from_walk` now takes
+      the walk's result; `_loop_stall_reason` stays as the one-call form for callers that have not
+      walked.
+- [x] 4.3 Call it from `_do_fire_job` and from `_batch_loop_summaries` (`hub/hub/api/v1/jobs.py`),
       importing rather than restating, matching the existing convention in that module.
       **Partly done already:** `loop-becomes-a-flow` group 1 extracted `candidate_is_startable`,
       which both now call, so the per-candidate rule is shared. What remains is the surrounding
       decision — claim / refuse-stalled / proceed-empty — which is still inline in `_do_fire_job`.
       Note the two callers legitimately pass different status sets (3.6 and 3.6b); the shared thing
       is the decision, not the candidate set.
-- [ ] 4.4 Confirm `completed` is NOT added to `CLAIMABLE_LOOP_TASK_STATUSES` (design D3) — assert it
+      **Done for `_do_fire_job`, which now takes its whole answer from `decide_firing`.** The board
+      shares `candidate_is_startable` — the per-candidate rule — and keeps its own walk, because it
+      answers a different question over a different set (`CURRENT_ITEM_STATUSES`, which includes
+      `blocked`). Group 5.5's stalled label is what will consume `decision.stall_reason`, and that
+      is the point at which the board reads the decision rather than a fact about it.
+      *(D7's "six fixed queries, never one per job" no longer describes this function either way:
+      `task-dependencies` already added a `dependency_gate.evaluate` per candidate task.)*
+      **`_select_for_firing` is gone**, absorbed rather than wrapped. It was `loop-becomes-a-flow`
+      group 2's short-lived seam for pairing a task with an agent; keeping it would have left the
+      reviewer ladder deciding somewhere the firing decision could not see. Its tests now drive
+      `decide_firing`.
+- [x] 4.4 Confirm `completed` is NOT added to `CLAIMABLE_LOOP_TASK_STATUSES` (design D3) — assert it
       in a test, since widening the tuple is the obvious wrong fix.
-- [ ] 4.5 Confirm `blocked` is NOT added back to `CLAIMABLE_LOOP_TASK_STATUSES` either. Same shape
+- [x] 4.5 Confirm `blocked` is NOT added back to `CLAIMABLE_LOOP_TASK_STATUSES` either. Same shape
       as 4.4 and a live risk rather than a theoretical one: this change's own tasks asserted it was
       there until 2026-08-24.
+      Both asserted, plus the property behind them rather than only the constant: a queue holding
+      only `completed` and `under_review` work never yields a selection at all.
 
 ## 5. Cadence and presentation
 

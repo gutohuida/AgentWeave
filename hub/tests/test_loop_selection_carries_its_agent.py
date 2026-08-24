@@ -1,7 +1,9 @@
 """`loop-becomes-a-flow` group 2 — the agent becomes a per-selection value.
 
 Design D2: `AIJob.agent` stops being the mandate and becomes *the agent this job fires when nothing
-says otherwise*. The column stays `NOT NULL`; nothing is dropped. Group 4 is what will eventually
+says otherwise*. The seam these tests drive was briefly `_select_for_firing`; it was absorbed into
+`scheduler.decide_firing` by `loop-notices-and-reacts` group 4, because "which tasks" and "who
+works them" are two halves of one decision. The column stays `NOT NULL`; nothing is dropped. Group 4 is what will eventually
 put a different agent in a selection (a resolved reviewer); this group only makes the firing able
 to carry one, with the job's own agent as the default.
 
@@ -24,7 +26,7 @@ from sqlalchemy import select
 from hub.api.v1 import agent_trigger
 from hub.db.engine import async_session_factory
 from hub.db.models import AIJob, Conversation, InboundQueueEntry, Loop, Run, Task
-from hub.scheduler import JobScheduler, LoopSelection, _select_for_firing
+from hub.scheduler import DECISION_CLAIM, FiringDecision, JobScheduler, LoopSelection, decide_firing
 
 pytestmark = pytest.mark.asyncio
 
@@ -100,9 +102,12 @@ async def test_a_loop_with_no_document_selects_the_jobs_own_agent(app):
     async with async_session_factory() as db:
         fresh_job = await db.get(AIJob, job.id)
         fresh_loop = (await db.execute(select(Loop).where(Loop.job_id == job.id))).scalar_one()
-        selections = await _select_for_firing(db, fresh_loop, default_agent=fresh_job.agent)
+        decision = await decide_firing(db, fresh_loop, default_agent=fresh_job.agent)
 
-    assert [(s.task.id, s.agent) for s in selections] == [("task-sel-default", "loop-owner")]
+    assert decision.kind == DECISION_CLAIM
+    assert [(s.task.id, s.agent) for s in decision.selections] == [
+        ("task-sel-default", "loop-owner")
+    ]
 
 
 async def test_an_empty_queue_selects_nothing_and_still_carries_no_agent(app):
@@ -113,7 +118,9 @@ async def test_an_empty_queue_selects_nothing_and_still_carries_no_agent(app):
 
     async with async_session_factory() as db:
         fresh_loop = (await db.execute(select(Loop).where(Loop.job_id == job.id))).scalar_one()
-        assert await _select_for_firing(db, fresh_loop, default_agent="loop-owner") == []
+        decision = await decide_firing(db, fresh_loop, default_agent="loop-owner")
+        assert decision.selections == ()
+        assert decision.kind != DECISION_CLAIM
 
 
 # ---------------------------------------------------------------------------
@@ -153,15 +160,18 @@ async def test_a_selection_naming_another_agent_is_who_actually_gets_fired(
         await _make_task(db, "task-sel-other", status="pending", loop_id=loop.id)
         await db.commit()
 
-    async def _selection_naming_other(session, loop_row, *, default_agent):
+    async def _decision_naming_other(session, loop_row, *, default_agent):
         task = (await session.execute(select(Task).where(Task.id == "task-sel-other"))).scalar_one()
-        return [LoopSelection(task=task, agent="other-agent")]
+        return FiringDecision(
+            kind=DECISION_CLAIM,
+            selections=(LoopSelection(task=task, agent="other-agent"),),
+        )
 
     with patch(  # noqa: SIM117
         "hub.api.v1.agent_trigger.PtySession.spawn", MagicMock(return_value=_fake_pty())
     ):
         with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
-            with patch("hub.scheduler._select_for_firing", _selection_naming_other):
+            with patch("hub.scheduler.decide_firing", _decision_naming_other):
                 scheduler = JobScheduler()
                 async with async_session_factory() as db:
                     fresh_job = await db.get(AIJob, job.id)

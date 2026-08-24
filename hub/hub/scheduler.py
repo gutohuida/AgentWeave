@@ -590,26 +590,6 @@ class LoopSelection:
     agent: str
 
 
-async def _select_for_firing(
-    session: AsyncSession, loop: Loop, *, default_agent: str
-) -> "list[LoopSelection]":
-    """What this firing will do: every claimed task paired with the agent that will work it.
-
-    The seam between *which tasks* (`_claim_loop_task`, group 1) and *who works them* (group 4's
-    reviewer ladder). Today every selection takes `default_agent` -- the job's own -- which is
-    exactly D2's default and is why a loop with no document behaves identically to one before this
-    change existed.
-
-    Group 4 replaces the constant with the ladder, and group 5 lets the list grow past one. Both
-    land here rather than in `_do_fire_job`, so the firing never has to know how the answer was
-    reached.
-    """
-    return [
-        LoopSelection(task=task, agent=default_agent)
-        for task in await _claim_loop_task(session, loop)
-    ]
-
-
 async def _stall_run_to_increment(
     session: AsyncSession, job_id: str, stall_reason: str, exclude_run_id: str
 ) -> "Optional[JobRun]":
@@ -668,6 +648,69 @@ async def _discard_unused_run(session: AsyncSession, run: JobRun) -> None:
         await session.delete(run)
 
 
+#: What a firing decided to do. Three answers today; the fourth is the flow's.
+DECISION_CLAIM = "claim"
+DECISION_STALLED = "stalled"
+DECISION_PROCEED_EMPTY = "proceed_empty"
+
+
+@dataclass(frozen=True)
+class FiringDecision:
+    """The single answer to *what should this firing do* (`loop-notices-and-reacts` design D3).
+
+    Before this, that answer was spread across `_do_fire_job` in a shape only it could read, and
+    the board re-derived what it needed. Two derivations read by two callers is the drift the
+    codebase has been bitten by three times -- and the board must be able to say *why* a loop is
+    doing nothing from the same computation that decided it, rather than from a guess about it.
+
+    **Room for a fourth answer is left deliberately** (D3). The flow adds *"fire a different agent
+    for this task"*, and it needs no new `kind`: group 2 made the agent a property of each
+    `LoopSelection`, so a reviewer is a selection whose agent differs from the job's. The fourth
+    answer is therefore already expressible here, which is most of what
+    `loop-becomes-a-flow` needs from this change.
+    """
+
+    kind: str
+    #: What to run. Non-empty exactly when `kind` is `DECISION_CLAIM`.
+    selections: "tuple[LoopSelection, ...]" = ()
+    #: Why the firing is refused, naming what is being waited on. Set exactly when `kind` is
+    #: `DECISION_STALLED`, and carried to the board so its label can say the same thing.
+    stall_reason: Optional[str] = None
+
+
+async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str) -> FiringDecision:
+    """Decide what this firing does, in one walk of the queue.
+
+    Replaces a real inefficiency as well as a structural one: `_do_fire_job` used to call
+    `_first_startable_candidate` **twice** on a stalled queue -- once through `_claim_loop_task`
+    to find nothing, then again inside `_loop_stall_reason` to find out why -- so the whole
+    dependency-gate walk ran a second time to produce a sentence.
+
+    **This is also the seam `loop-becomes-a-flow` group 4 extends.** Group 2 of that change put a
+    short-lived `_select_for_firing` here to pair each claimed task with an agent; this function
+    absorbed it rather than wrapping it, because "which tasks" and "who works them" are two halves
+    of one decision and splitting them would leave the reviewer ladder deciding in a place the
+    firing decision could not see. `default_agent` is design D2's default — the job's own agent,
+    used when nothing says otherwise.
+
+    The three answers are `agent-loops`' own three queue states, and the order matters. A queue
+    that has never been filled and one that has drained both reach `DECISION_PROCEED_EMPTY`: the
+    agent's job is to fill it, and whether a *drained* queue should stop firing at all is
+    `_loop_stop_reason`'s question, asked earlier and separately.
+    """
+    task, gated = await _first_startable_candidate(session, loop)
+    if task is not None:
+        return FiringDecision(
+            kind=DECISION_CLAIM,
+            selections=(LoopSelection(task=task, agent=default_agent),),
+        )
+
+    stall_reason = await _stall_reason_from_walk(session, loop, gated)
+    if stall_reason is None:
+        return FiringDecision(kind=DECISION_PROCEED_EMPTY)
+    return FiringDecision(kind=DECISION_STALLED, stall_reason=stall_reason)
+
+
 async def _loop_stall_reason(session: AsyncSession, loop: Loop) -> Optional[str]:
     """Why a firing that claimed nothing should be skipped rather than spawned, or `None`.
 
@@ -713,6 +756,22 @@ async def _loop_stall_reason(session: AsyncSession, loop: Loop) -> Optional[str]
     Returns `None` for a queue that has never been filled or is fully drained, so neither the
     create-then-populate order nor `_loop_stop_reason`'s own territory is disturbed.
     """
+    _, gated = await _first_startable_candidate(session, loop)
+    return await _stall_reason_from_walk(session, loop, gated)
+
+
+async def _stall_reason_from_walk(
+    session: AsyncSession,
+    loop: Loop,
+    gated: "list[tuple[Task, dependency_gate.DependencyRefusal]]",
+) -> Optional[str]:
+    """`_loop_stall_reason`'s body, taking the walk's result instead of repeating it.
+
+    Split out for `decide_firing`, which has already walked the queue to discover there was
+    nothing to claim; asking `_first_startable_candidate` again purely to produce a sentence ran
+    the entire dependency-gate walk a second time on exactly the firings that were doing no work.
+    `_loop_stall_reason` is kept as the one-call form for callers that have not walked.
+    """
     rows = (
         await session.execute(
             select(Task.status, func.count(Task.id))
@@ -723,7 +782,6 @@ async def _loop_stall_reason(session: AsyncSession, loop: Loop) -> Optional[str]
     if not rows:
         return None
 
-    _, gated = await _first_startable_candidate(session, loop)
     if gated:
         unmet = [task for task, refusal in gated if refusal.unmet]
         rejected = [task for task, refusal in gated if refusal.rejected]
@@ -1301,11 +1359,14 @@ class JobScheduler:
                 # Set-valued as of `loop-becomes-a-flow` group 1, and carrying its own agent as
                 # of group 2 (design D2). Still at most one member until group 5 widens it, so the
                 # firing keeps its single-selection shape and unwraps at this boundary.
-                selections = await _select_for_firing(session, loop, default_agent=job.agent)
-                selection = selections[0] if selections else None
+                # One decision, one walk (design D3). This used to claim, find nothing, and then
+                # walk the whole dependency gate a *second* time inside `_loop_stall_reason` just
+                # to produce the sentence explaining why — on exactly the firings doing no work.
+                decision = await decide_firing(session, loop, default_agent=job.agent)
+                selection = decision.selections[0] if decision.selections else None
                 claimed_task = selection.task if selection is not None else None
                 if claimed_task is None:
-                    stall_reason = await _loop_stall_reason(session, loop)
+                    stall_reason = decision.stall_reason
                     if stall_reason:
                         # Skipped, not stopped: the job stays enabled and stays in the live
                         # scheduler, so the next tick picks the queue up the moment something
