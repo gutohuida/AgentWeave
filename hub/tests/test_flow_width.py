@@ -694,3 +694,111 @@ async def test_a_blocked_task_carries_its_assignee_when_it_has_one(app, auth_hea
     summary = await _summary(job.id)
 
     assert summary.current_tasks[0]["agent"] == SECOND
+
+
+# ---------------------------------------------------------------------------
+# F23 — work in flight is current work, and a moving queue is not a stalled one
+# ---------------------------------------------------------------------------
+
+
+async def test_a_task_a_busy_agent_is_working_is_reported_in_flight_not_skipped(
+    app, auth_headers, bind_runner
+):
+    """Finding F23, found on the first live firing of a real flow.
+
+    `decide_firing` has two callers asking two different questions: the firing asks "what can I
+    start", the board asks "what is this loop working on". Design D12's resumption branch skipped a
+    busy agent's task with a bare `continue` — correct for the first question, and it silently
+    deleted the answer to the second.
+    """
+    await _roster(app, auth_headers, bind_runner, OWNER, SECOND)
+    async with async_session_factory() as db:
+        job, loop = await _flow(db, suffix="inflight")
+        await _task(db, loop, "inflight-a", status="in_progress", assignee=SECOND)
+        db.add(Run(id="run-width-inflight", project_id="proj-test", agent=SECOND, status="running"))
+        await db.commit()
+
+    decision = await _decide(job.id, loop.id)
+
+    assert decision.selections == (), "nothing can be started — that agent is mid-turn"
+    assert decision.in_flight == (("task-width-inflight-a", SECOND),)
+
+
+async def test_a_queue_whose_work_is_all_in_flight_is_not_stalled(app, auth_headers, bind_runner):
+    """The half that made F23 an (A) rather than a cosmetic wrong label.
+
+    With the task dropped from the walk, `_stall_reason_from_walk` counted it as open and reported
+    *"no claimable task among N open"* — so a flow reported as stalled precisely when every one of
+    its agents was working. `loop-notices-and-reacts` exists because a working loop that reads as
+    dead invites the operator to restart something that needed nothing.
+    """
+    await _roster(app, auth_headers, bind_runner, OWNER, SECOND, THIRD)
+    async with async_session_factory() as db:
+        job, loop = await _flow(db, suffix="notstalled")
+        for key, who in (("a", OWNER), ("b", SECOND), ("c", THIRD)):
+            await _task(db, loop, f"notstalled-{key}", status="assigned", assignee=who)
+        for i, who in enumerate((OWNER, SECOND, THIRD)):
+            db.add(Run(id=f"run-width-ns-{i}", project_id="proj-test", agent=who, status="running"))
+        await db.commit()
+
+    decision = await _decide(job.id, loop.id)
+
+    assert decision.stall_reason is None, "three agents mid-turn is the opposite of a stall"
+    assert len(decision.in_flight) == 3
+    assert decision.kind == "in_flight"
+
+
+async def test_a_firing_with_everything_in_flight_records_nothing(app, auth_headers, bind_runner):
+    """Same reasoning `_loop_flow_busy_reason` gives for the whole-firing case: the agents' own
+    running rows already say they are working, and a `JobRun` per tick would duplicate that and
+    evict real history through `_prune_job_history`'s window at a five-minute cadence."""
+    await _roster(app, auth_headers, bind_runner, OWNER, SECOND)
+    async with async_session_factory() as db:
+        job, loop = await _flow(db, suffix="norecord")
+        await _task(db, loop, "norecord-a", status="in_progress", assignee=SECOND)
+        # OWNER is free, so the whole-firing busy guard does not catch this — the decision must.
+        db.add(Run(id="run-width-nr", project_id="proj-test", agent=SECOND, status="running"))
+        await db.commit()
+
+    scheduler = JobScheduler()
+    async with async_session_factory() as db:
+        fresh_job = await db.get(AIJob, job.id)
+        fired = await scheduler._fire_job_internal(fresh_job, trigger="scheduled", session=db)
+
+    assert fired is False
+    async with async_session_factory() as db:
+        runs = (await db.execute(select(JobRun).where(JobRun.job_id == job.id))).scalars().all()
+        entries = (
+            (
+                await db.execute(
+                    select(InboundQueueEntry).where(InboundQueueEntry.origin_type == "job")
+                )
+            )
+            .scalars()
+            .all()
+        )
+    assert runs == [], "no row for a tick that correctly did nothing"
+    assert entries == [], "and no briefing queued for an agent already working"
+
+
+async def test_the_board_shows_in_flight_work_as_the_current_item(app, auth_headers, bind_runner):
+    """The symptom an operator actually saw: `current_tasks: []` while three agents worked.
+
+    The board reads `decide_firing` too, so this is the same fix seen from the caller that made it
+    a defect rather than an inefficiency.
+    """
+    from hub.api.v1.jobs import _batch_loop_summaries
+
+    await _roster(app, auth_headers, bind_runner, OWNER, SECOND)
+    async with async_session_factory() as db:
+        job, loop = await _flow(db, suffix="boardflight")
+        await _task(db, loop, "boardflight-a", status="in_progress", assignee=SECOND)
+        db.add(Run(id="run-width-bf", project_id="proj-test", agent=SECOND, status="running"))
+        await db.commit()
+
+    async with async_session_factory() as db:
+        summary = (await _batch_loop_summaries(db, [job.id]))[job.id]
+
+    assert [t["id"] for t in summary.current_tasks] == ["task-width-boardflight-a"]
+    assert summary.current_tasks[0]["agent"] == SECOND
+    assert summary.stall_reason is None

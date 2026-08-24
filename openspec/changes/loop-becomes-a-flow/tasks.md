@@ -793,6 +793,31 @@ instruction.** Two findings, one about this list and one about the product.
 
 ## 11. Verification only a human can do
 
+**Driven live 2026-08-24 against the trial Hub on 8010, project `ledger-stress`
+(`proj-18e5d4e0`), with three real Claude agents.** Nothing below is ticked — every one of these is
+a judgement, and the judgement is the operator's. What the drive did was remove the setup cost and
+gather the evidence, so each check is now *read this* rather than *build this and then read it*.
+
+Six firings, ~3.5M tokens (builder +2.45M, critic +1.04M, relay +41k). The flow is left **disabled**
+so nothing keeps spending; re-enable `job-bdea22bb0308` to carry on.
+
+| Check | What the drive established | What is left to judge |
+|---|---|---|
+| 11.1 | Not exercised — the drive ran three agents throughout. | Run one with the other two archived. |
+| 11.2 | A handover happened with **no message between agents**: builder completed `task-23a0986e7fe9`, and the next firing queued a turn for `critic` carrying `review_task_id` for it. Zero `Message` rows. | Whether the *conversation list* makes that obvious. |
+| 11.3 | **Not answerable from this drive: no checkpoint was generated.** The flow's agents finished tasks without one being written, so there is no real checkpoint to read. | Whether the amended `submit_checkpoint_notes` wording changes what agents write — needs a run that produces one. |
+| 11.3b | **Confirmed.** `.agentweave/reviews/critic` was checked out detached at `f10d198`, the head of `agentweave/builder`. `master` still contains SEEDED DEFECT 2; the reviewer's copy contains builder's fix. F10 closed with real agents. | Nothing — but worth seeing once yourself. |
+| 11.4 | Rung 3 fired once, live: *"could not staff this step: no agent is free to take it. Every agent on the roster is either running a turn, already holding active work, or is the one that completed this task."* It named all three causes rather than only the one needing action. | Whether that reads as staffing or as breakage. |
+| 11.5 | One firing staffed **three agents at once** — three `JobRun` rows, three conversations, three turns. And it surfaced **finding F23**, below. | Whether three lines of "task — agent" is comprehension or noise. |
+| 11.6 | **Confirmed visible.** One call returns the project total and a per-agent breakdown; no reconstruction from runs. | Whether the number arrives early enough to act on. |
+
+**The drive earned its cost by finding F23** (`scripts/drive/FINDINGS.md`), which every one of the
+3037 passing tests missed: while all three agents were mid-turn, the board reported
+`current_tasks: []` and `"loop queue is stalled"`. A flow read as dead at its busiest. Fixed, with
+four regression tests confirmed failing against the unfixed code, and the fix re-verified live —
+the same query now returns `stall_reason: None` and both current items with their agents.
+
+
 - [ ] 11.1 **A flow with one agent is indistinguishable from a loop.** Run one. If anything reads
       differently, D2 has leaked.
 - [ ] 11.2 **The handover is legible.** Watch an implementer finish and a reviewer start. It should

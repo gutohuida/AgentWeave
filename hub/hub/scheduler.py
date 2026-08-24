@@ -806,10 +806,15 @@ async def _discard_unused_run(session: AsyncSession, run: JobRun) -> None:
         await session.delete(run)
 
 
-#: What a firing decided to do. Three answers today; the fourth is the flow's.
+#: What a firing decided to do. The fourth is the flow's, and arrived with it (finding F23).
 DECISION_CLAIM = "claim"
 DECISION_STALLED = "stalled"
 DECISION_PROCEED_EMPTY = "proceed_empty"
+#: Every candidate is already being worked by an agent mid-turn. Distinct from `DECISION_STALLED`,
+#: which means the queue is *waiting* on something, and from `DECISION_PROCEED_EMPTY`, which fires
+#: an agent to fill a queue that has nothing in it. Here the queue is full and moving, and the right
+#: thing for this firing to do is nothing at all -- see `FiringDecision.in_flight`.
+DECISION_IN_FLIGHT = "in_flight"
 
 
 @dataclass(frozen=True)
@@ -1039,6 +1044,16 @@ class FiringDecision:
     #: surface a review it could not staff, or the operator never learns that the queue has
     #: finished work nobody can take.
     unstaffed: "tuple[tuple[str, str], ...]" = ()
+    #: `(task_id, agent)` for every candidate an agent is **already mid-turn on** (finding F23).
+    #: Not selectable by this firing -- `schedule_agent` would refuse a second turn for that agent
+    #: -- and still the loop's current work, which is the distinction that made this a defect.
+    #:
+    #: `decide_firing` has two callers asking two different questions: the firing asks *"what can I
+    #: start"* and the board asks *"what is this loop working on"*. Skipping a busy agent's task
+    #: answers only the first, and answering only the first made a flow running three agents report
+    #: `current_tasks: []` and `"loop queue is stalled"` -- measured live, on the first firing of a
+    #: real flow. The busier the flow, the more certainly it reported as stalled.
+    in_flight: "tuple[tuple[str, str], ...]" = ()
     #: `(task_id, reason)` for every candidate whose agent resolved but was **already selected by
     #: this same firing** (design D6). Recorded rather than dropped silently, which is the whole of
     #: what D6 asks for: without it the second selection would reach `schedule_agent`, be refused
@@ -1090,6 +1105,7 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
     gated: "list[tuple[Task, dependency_gate.DependencyRefusal]]" = []
     unstaffed: "list[tuple[str, str]]" = []
     deferred: "list[tuple[str, str]]" = []
+    in_flight: "list[tuple[str, str]]" = []
     selections: "list[LoopSelection]" = []
     # Design D6, and the only mutable state the walk carries. An agent selected twice in one firing
     # would be started twice concurrently; `schedule_agent` refuses the second and drops it without
@@ -1120,9 +1136,14 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
                 # under width it hands one agent's running task to another and briefs them for it.
                 agent = task.assignee
                 if agent in running:
-                    # The old whole-firing busy guard, now scoped to the one selection it is
-                    # actually about. That agent's turn is still going; nothing else about this
-                    # firing is affected.
+                    # That agent's turn is still going, so this firing cannot start it -- the old
+                    # whole-firing busy guard, scoped to the one selection it is actually about.
+                    #
+                    # **Recorded rather than skipped** (finding F23). A bare `continue` here removed
+                    # the task from the walk entirely, so the board -- which reads this same
+                    # function to ask what the loop is *working on* -- saw no current item and then
+                    # reported a stall, for a flow whose agents were all mid-turn.
+                    in_flight.append((task.id, agent))
                     continue
                 if agent in taken:
                     deferred.append(
@@ -1188,6 +1209,18 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
         return FiringDecision(
             kind=DECISION_CLAIM,
             selections=tuple(selections),
+            in_flight=tuple(in_flight),
+            unstaffed=tuple(unstaffed),
+            deferred=tuple(deferred),
+        )
+
+    if in_flight:
+        # **Checked before the stall, and that order is the fix** (finding F23). A queue whose work
+        # is being done is not waiting on anything; asking `_stall_reason_from_walk` here would
+        # count those very tasks as "open" and report the flow stalled at its busiest.
+        return FiringDecision(
+            kind=DECISION_IN_FLIGHT,
+            in_flight=tuple(in_flight),
             unstaffed=tuple(unstaffed),
             deferred=tuple(deferred),
         )
@@ -1968,6 +2001,22 @@ class JobScheduler:
                 # one is fully away, each with its own `JobRun` and conversation (design D13). The
                 # split keeps every path below -- stall, skip, resume, briefing -- exactly the shape
                 # it had when at most one selection existed.
+                if decision.kind == DECISION_IN_FLIGHT:
+                    # Finding F23. Every candidate is being worked right now, so there is nothing
+                    # for this firing to start and nothing wrong to report. **Records nothing** --
+                    # the same reasoning `_loop_flow_busy_reason` gives for the whole-firing case:
+                    # the agents' own running rows already carry the fact that they are working, and
+                    # a row here would duplicate it and evict real history through
+                    # `_prune_job_history`'s window at a five-minute cadence.
+                    await _discard_unused_run(session, run)
+                    await session.commit()
+                    if pending_edit_payload is not None:
+                        await _emit_loop_edit_applied(session, pending_edit_payload)
+                    logger.debug(
+                        f"Job {job.id} firing skipped: "
+                        f"{len(decision.in_flight)} task(s) already in flight"
+                    )
+                    return False
                 selection = decision.selections[0] if decision.selections else None
                 extra_selections = list(decision.selections[1:])
                 claimed_task = selection.task if selection is not None else None

@@ -454,3 +454,57 @@ misdescribes the product.
   standard the rest of the API should meet.
 - **Integration reporting is honest on the card.** "Not merged — no accepted evidence names a
   commit" with a "Try again" affordance, right where the operator is looking.
+
+---
+
+## F23 (A) — A flow at full width reads as stalled with nothing to do
+
+**Found live, 2026-08-24, on the first firing of a real flow.** `loop-becomes-a-flow` group 5 gave a
+firing width; this is the regression it introduced into the *board*, and no unit test caught it
+because the unit tests never had three agents mid-turn at the moment the summary was read.
+
+Measured, with `builder`, `critic` and `relay` all executing turns on three tasks of one flow:
+
+```
+GET /projects/proj-18e5d4e0/loops   ->
+  queue:         {"assigned": 3}
+  current_tasks: []
+  stall_reason:  "loop queue is stalled: no claimable task among 3 open (3 assigned)"
+  firing_active: true
+```
+
+Three agents working flat out, and the loop reports **no current item** and **stalled**. It also
+contradicts itself in one payload: `firing_active: true` beside a stall reason.
+
+**Cause.** `decide_firing` is read by two callers for two different questions — the firing asks
+*"what can I start"*, the board asks *"what is this loop working on"* — and design D12's resumption
+branch answers only the first:
+
+```python
+if task.assignee:
+    agent = task.assignee
+    if agent in running:
+        continue          # right for staffing, wrong for the board
+```
+
+Skipping a busy agent's task is correct for staffing: `schedule_agent` would refuse a second turn
+anyway, so selecting it would be a drop. But the same `continue` removes the task from the walk
+entirely, so no selection survives, and `_stall_reason_from_walk` then counts the queue and reports
+a stall. Before group 5 the ordinary branch returned an `assigned` task unconditionally, so the
+board saw it.
+
+**Why it matters more than a cosmetic wrong label.** `loop-notices-and-reacts` exists because a
+working loop that reads as dead invites the operator to restart something that needed nothing. This
+reintroduces exactly that, and does it precisely when the flow is at its most productive — the
+busier the flow, the more certainly it reports as stalled.
+
+**Fix.** A task being worked by a busy agent is *in flight*: not selectable this tick, still the
+loop's current work. `FiringDecision` gains `in_flight`, the board renders those as current items
+with their agent, and a queue with work in flight is not stalled. That is the fourth answer
+`FiringDecision`'s own docstring says room was left for.
+
+**This is the finding that justified the live drive.** Groups 5 to 10 landed with 3037 passing tests
+and a spec review per group, and none of it asked what the board says while three agents are
+actually mid-turn — because in every test the turns are either finished or faked.
+
+---

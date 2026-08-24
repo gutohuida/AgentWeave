@@ -215,8 +215,13 @@ async def _batch_loop_summaries(
     for job_id, loop in loop_by_job.items():
         decision = await decide_firing(session, loop, default_agent=job_agent_by_id.get(job_id, ""))
         stall_reason_by_loop[loop.id] = decision.stall_reason
+        # Selections *and* in-flight work, because this derivation answers "what is this loop
+        # working on" rather than "what can the next firing start" (finding F23). A task an agent is
+        # mid-turn on is the most current thing a loop has, and omitting it made a flow running
+        # three agents report no current item and a stall.
         claimed_agents_by_loop[loop.id] = {
-            selection.task.id: selection.agent for selection in decision.selections
+            **dict(decision.in_flight),
+            **{selection.task.id: selection.agent for selection in decision.selections},
         }
 
     # The current item is the first candidate **in queue order** that is either the task the firing
