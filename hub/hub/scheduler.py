@@ -197,6 +197,42 @@ async def _job_agent_skip_reason(
     return None
 
 
+async def _loop_agent_busy_reason(
+    session: AsyncSession, project_id: str, agent: str
+) -> Optional[str]:
+    """Return why *agent*'s loop should not fire right now, or `None` if it should.
+
+    **`loop-notices-and-reacts` design D4.** A loop's agent runs one turn at a time. Until this
+    existed, a firing during a live turn claimed a task and queued a briefing anyway;
+    `schedule_agent` then refused to *start* a second turn (`turn_scheduler.py`), one step too late
+    to prevent the work. Measured: five firings during one turn produced five queued entries and
+    five `JobRun`s, which the agent drains afterwards as five separate turns all briefed on the
+    same task. Turning the cron up multiplies it, which is why five-minute polling could not be
+    the default before this landed.
+
+    Reads the same fact `schedule_agent` reads -- a `Run` for this agent in `running` -- so the two
+    cannot disagree about whether the agent is busy. Deliberately *not* imported from
+    `turn_scheduler`: that function takes the per-agent lock and starts a turn, which is the
+    opposite of what a guard wants.
+
+    **Scoped to loops by its caller**, not by this function, which only answers the question it is
+    asked. A plain scheduled job firing while its agent is busy is not the same problem: its
+    message is a standing instruction still true when the agent frees up, so queuing it is the
+    inbound queue working as designed. A loop's briefing re-briefs the task it just claimed, and a
+    second copy is stale before it is read.
+    """
+    from sqlalchemy import select
+
+    running = await session.execute(
+        select(Run.id)
+        .where(Run.project_id == project_id, Run.agent == agent, Run.status == "running")
+        .limit(1)
+    )
+    if running.scalar_one_or_none() is not None:
+        return f"{agent} is already running a turn"
+    return None
+
+
 async def _loop_stop_reason(session: AsyncSession, job: AIJob) -> Optional[str]:
     """Return why *job*'s loop should stop firing, or `None` if it should proceed.
 
@@ -1060,6 +1096,28 @@ class JobScheduler:
                     agent=job.agent,
                     provider_session_id=resume_session_id,
                 )
+            # Loaded before the `JobRun` exists, because the busy guard below must be able to
+            # return without writing one at all (design D4, task 1.4) and it only applies to loops.
+            loop_result = await session.execute(select(Loop).where(Loop.job_id == job.id))
+            loop = loop_result.scalars().first()
+
+            if loop is not None:
+                busy_reason = await _loop_agent_busy_reason(session, job.project_id, job.agent)
+                if busy_reason:
+                    # **Records nothing.** No `JobRun`, and no event either: the agent's own
+                    # running `Run` already carries the fact that it is working, and
+                    # `_batch_loop_summaries` reads exactly that row to report the loop as firing.
+                    # A row here would duplicate it and, at a five-minute tick, evict real history
+                    # through `_prune_job_history`'s 100-row window -- which is the problem this
+                    # guard exists to prevent, reintroduced by its own bookkeeping.
+                    #
+                    # The commit is still needed: `job.next_run` was advanced above, and a refused
+                    # firing that left it in the past would be its own lie. Nothing else is dirty
+                    # at this point, so this persists the schedule and no more.
+                    await session.commit()
+                    logger.debug(f"Job {job.id} fire refused: {busy_reason}")
+                    return False
+
             # Create run record
             run_id = f"run-{short_id()}"
             run = JobRun(
@@ -1099,8 +1157,6 @@ class JobScheduler:
                 logger.info(f"Job {job.id} fire skipped: {skip_reason}")
                 return False
 
-            loop_result = await session.execute(select(Loop).where(Loop.job_id == job.id))
-            loop = loop_result.scalars().first()
             # Design D11 (task A2.2): stage-apply any pending edit in memory before the stop check
             # below and before the briefing is composed further down — both must see this loop's
             # current definition, not one still waiting on the firing after next. The audit event

@@ -1,15 +1,46 @@
 ## 1. The busy guard
 
-- [ ] 1.1 Test: firing a loop five times while its agent has a running `Run` creates zero
+- [x] 1.1 Test: firing a loop five times while its agent has a running `Run` creates zero
       `InboundQueueEntry` rows and zero `JobRun` rows, and leaves every task's status and assignee
       unchanged. This is the measured failure — it currently produces five of each.
-- [ ] 1.2 Test: a firing after the agent's run ends claims normally, proving the guard refuses rather
+      `hub/tests/test_loop_busy_guard.py`. **The measurement was re-reproduced on 2026-08-24 rather
+      than taken on trust: five busy firings produced exactly 5 queue entries** before the guard,
+      matching the proposal. The test asserts the counts before the return value, so a regression
+      names the number it produced rather than only that something was true.
+- [x] 1.2 Test: a firing after the agent's run ends claims normally, proving the guard refuses rather
       than disables.
-- [ ] 1.3 Add the already-running check to `_do_fire_job`, before the claim and before `new_entry`.
+      `test_a_firing_after_the_turn_ends_claims_normally`, which ends the run and asserts the next
+      firing reaches the claim (observable on the task's assignee). Plus
+      `test_a_run_for_another_agent_does_not_refuse_this_loop` — the guard is per agent, and a
+      project-wide reading would make a busy project look like a stopped one.
+- [x] 1.3 Add the already-running check to `_do_fire_job`, before the claim and before `new_entry`.
       Same shape as `_job_agent_skip_reason`, which is already in that function.
-- [ ] 1.4 Return without writing a `JobRun` — the `JobRun` created earlier in the function must not
+      `_loop_agent_busy_reason`, written next to `_job_agent_skip_reason` so the pair reads
+      together. It reads the same fact `schedule_agent` reads — a `Run` for this agent in
+      `running` — so the two cannot disagree, but deliberately does not call into
+      `turn_scheduler`: that function takes the per-agent lock and *starts* a turn, the opposite of
+      what a guard wants.
+      **Scoped to loops, by the caller.** A plain scheduled job firing while its agent is busy is a
+      different situation: its message is a standing instruction still true when the agent frees
+      up, so queuing it is the inbound queue working as designed. A loop's briefing re-briefs the
+      task it just claimed and is stale before it is read.
+- [x] 1.4 Return without writing a `JobRun` — the `JobRun` created earlier in the function must not
       be persisted for this path (design D4). Confirm the early return does not leave a partial row.
-- [ ] 1.5 Verify `_prune_job_history` is unaffected and the loop's job stays enabled and scheduled.
+      Solved by ordering rather than by cleanup: the `Loop` row is now loaded **above** the
+      `JobRun` construction, so the guard returns before any run object exists and there is no
+      partial row to leave. The one thing it does commit is `job.next_run`, advanced further up — a
+      refused firing that left `next_run` in the past would be its own lie. No event is emitted
+      either: the agent's running `Run` already carries the fact, and `_batch_loop_summaries` reads
+      exactly that row to report the loop as firing.
+- [x] 1.5 Verify `_prune_job_history` is unaffected and the loop's job stays enabled and scheduled.
+      `_prune_job_history` is unreachable on this path — it runs after the `JobRun` block the guard
+      returns above — which is the point: a busy tick that wrote a row would evict real history
+      through its 100-row window at a five-minute cron, reintroducing by bookkeeping the problem
+      the guard exists to prevent. `test_the_job_stays_enabled_and_keeps_its_schedule` asserts
+      `enabled`, an advanced `next_run`, and `run_count`/`last_run` untouched;
+      `test_a_busy_refusal_does_not_stamp_the_loop_as_stopped` asserts busy never becomes a stop
+      condition — a loop that acquired a `stop_reason` here would need an operator to restart it,
+      which `remove_job` cannot undo.
 
 ## 2. Tick recording
 
