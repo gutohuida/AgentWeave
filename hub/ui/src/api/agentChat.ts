@@ -269,6 +269,7 @@ const QUEUE_EVENT_TYPES = new Set([
   'queue_entry_queued',
   'queue_entry_delivered',
   'queue_entry_withdrawn',
+  'queue_entry_released',
   'queue_chain_suspended',
 ])
 

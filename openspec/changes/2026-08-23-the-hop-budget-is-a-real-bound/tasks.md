@@ -27,10 +27,10 @@ pytest but produces three false failures in `test_pty_runner.py` on a green tree
 
 ## 3. Surfacing
 
-- [ ] 3.1 Render Continue and Discard on an entry the UI already marks `hop_budget_exceeded`. The
+- [x] 3.1 Render Continue and Discard on an entry the UI already marks `hop_budget_exceeded`. The
       state is already computed and already displayed — this adds the actions, not the indicator.
-- [ ] 3.2 State why the entry is held, in words naming the remedy rather than the rule.
-- [ ] 3.3 UI tests for both actions and the held state.
+- [x] 3.2 State why the entry is held, in words naming the remedy rather than the rule.
+- [x] 3.3 UI tests for both actions and the held state.
 
 ## 4. Verification an agent can do
 

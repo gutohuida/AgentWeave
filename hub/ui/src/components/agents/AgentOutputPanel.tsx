@@ -18,7 +18,7 @@ import {
 } from '@/api/agentChat'
 import { PERMISSION_MODE_CONTROL } from '@/api/modelCatalog'
 import { NEW_CONVERSATION_ID } from '@/lib/navigation'
-import { useQueueStatus, useQueuedEntries, withdrawQueueEntry } from '@/api/queue'
+import { useQueueStatus, useQueuedEntries, releaseQueueEntry, withdrawQueueEntry } from '@/api/queue'
 import { useRunners } from '@/api/runners'
 import { useWorkspacePaths } from '@/api/workspace'
 import {
@@ -627,7 +627,14 @@ export function AgentOutputPanel({
       ? { id: 'stream-loss', message: 'Live updates are disconnected — reconnecting…' }
       : null,
     timelineEntries.some((entry) => entry.hop_budget_exceeded)
-      ? { id: 'blocked-queue', message: 'Queued messages are blocked by the hop limit — deliver now to continue.' }
+      ? {
+          id: 'blocked-queue',
+          // Names the remedy, not the rule. The bound is deliberate; what the operator needs
+          // to know is that nothing will move it except them.
+          message:
+            'Queued messages reached the hop limit and will not be delivered on their own — '
+            + 'Continue to deliver them, or discard them.',
+        }
       : null,
   ]
   const banners: ConversationBanner[] = bannerCandidates.filter(
@@ -697,25 +704,30 @@ export function AgentOutputPanel({
   }
 
   const handleDeliverNow = async () => {
-    // Any operator-origin entry is depth 0, so it unblocks a hop-budget-suspended
-    // chain and drains it in the same turn (design.md: "operator input resets
-    // the chain") — this reuses that existing behavior rather than adding a
-    // dedicated force-deliver endpoint.
-    if (!apiKey || !projectId || isRunning || isSending) return
+    // This used to post an operator message and rely on it dragging the held entries along:
+    // "any operator-origin entry is depth 0, so it unblocks a hop-budget-suspended chain and
+    // drains it in the same turn". That was the leak (F5) — the scheduler now filters the batch
+    // by depth, so an operator message releases nothing and this button would have silently
+    // stopped working while still claiming to deliver.
+    //
+    // Release each held entry explicitly instead. The endpoint schedules the agent itself, so
+    // there is no message to invent and nothing said on the operator's behalf.
+    if (!apiKey || !projectId || isSending) return
+    const heldIds = timelineEntries.filter((entry) => entry.hop_budget_exceeded).map((e) => e.id)
+    if (heldIds.length === 0) return
     setIsSending(true)
     try {
-      const result = await postTrigger(
-        'Continue — deliver the queued messages.',
-        currentConversationId,
-      )
-      if (result.conversation_id !== currentConversationId) moveTo(result.conversation_id)
-      const notice = queuedNotice(result, `${agent.name} is still not available to receive it`)
-      if (notice) setSessionNotice(`Still queued — ${notice}`)
+      for (const entryId of heldIds) await releaseQueueEntry(projectId, entryId)
     } catch (err) {
-      console.error('Failed to deliver queued messages:', err)
+      console.error('Failed to continue the held chain:', err)
     } finally {
       setIsSending(false)
     }
+  }
+
+  const handleRelease = (entryId: string) => {
+    if (!projectId) return
+    void releaseQueueEntry(projectId, entryId)
   }
 
   /** Start the queued work without inventing a message to carry it.
@@ -994,6 +1006,7 @@ export function AgentOutputPanel({
             isRunning={isRunning}
             onDeliverNow={handleDeliverNow}
             onWithdraw={handleWithdraw}
+            onRelease={handleRelease}
             foldAllSignal={foldAllSignal}
             recentTurns={accounting?.recent_turns}
           />

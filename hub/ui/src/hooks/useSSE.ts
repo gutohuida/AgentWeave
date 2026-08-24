@@ -53,6 +53,7 @@ const SSE_EVENT_TYPES = [
   'queue_entry_queued',
   'queue_entry_delivered',
   'queue_entry_withdrawn',
+  'queue_entry_released',
   'accounting_budget_updated',
   'queue_chain_suspended',
   'permission_denied',
@@ -488,6 +489,7 @@ export function useSSE(onEvent?: SSEListener) {
         case 'queue_entry_queued':
         case 'queue_entry_delivered':
         case 'queue_entry_withdrawn':
+        case 'queue_entry_released':
         case 'queue_chain_suspended': {
           const d = event.data as { agent?: string }
           queryClient.invalidateQueries({ queryKey: ['project', pid, 'agents'] })

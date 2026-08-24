@@ -33,6 +33,9 @@ interface AgentTimelineProps {
   isRunning: boolean
   onDeliverNow?: () => void
   onWithdraw?: (entryId: string) => void
+  /** Continue a chain the hop budget is holding — re-bases the entry to depth 0 and
+   *  delivers it. Offered only on entries the timeline marks `hop_budget_exceeded`. */
+  onRelease?: (entryId: string) => void
   /** Bump to fold every turn — driven by the header's "Fold all turns" button. */
   foldAllSignal?: number
   /** The project's recent measured turns (accounting API) — matched to a rendered turn by
@@ -67,6 +70,7 @@ export function AgentTimeline({
   isRunning,
   onDeliverNow,
   onWithdraw,
+  onRelease,
   foldAllSignal,
   recentTurns,
 }: AgentTimelineProps) {
@@ -292,6 +296,7 @@ export function AgentTimeline({
           colorByName={colorByName}
           queued
           onWithdraw={onWithdraw}
+          onRelease={onRelease}
         />
       ))}
 
@@ -310,7 +315,14 @@ export function AgentTimeline({
             {[...suspendedByParticipant.entries()]
               .map(([who, count]) => `${count} ${count === 1 ? 'entry' : 'entries'} from ${who}`)
               .join(', ')}{' '}
-            reached the hop budget. They'll be delivered with your next message.
+            {/* This used to end "They'll be delivered with your next message", which described
+                the leak this change closes: an operator message no longer releases the chain,
+                and saying so would send the operator to do something that does nothing. Name
+                what to do instead — Continue delivers them and restarts the count from here,
+                Discard on each entry drops it, and raising the project's hop budget admits
+                them at the depth they already have. */}
+            reached the hop budget. Continue to deliver them and restart the count from here,
+            or discard them individually below.
           </div>
           {onDeliverNow && (
             <button
@@ -318,7 +330,7 @@ export function AgentTimeline({
               className="shrink-0 text-[12px] font-medium px-2 py-1 rounded"
               style={{ color: 'var(--text-2)' }}
             >
-              Deliver now
+              Continue
             </button>
           )}
         </div>
@@ -752,12 +764,14 @@ function MessageEntry({
   colorByName,
   queued = false,
   onWithdraw,
+  onRelease,
 }: {
   entry: TimelineEntry
   agentName: string
   colorByName: ColorLookup
   queued?: boolean
   onWithdraw?: (entryId: string) => void
+  onRelease?: (entryId: string) => void
 }) {
   const time = format(hubDate(entry.timestamp), 'HH:mm')
   const fullTime = format(hubDate(entry.timestamp), 'EEE d MMM, HH:mm:ss')
@@ -775,15 +789,33 @@ function MessageEntry({
       queued
     </span>
   )
-  const withdraw = queued && onWithdraw && (
-    <button
-      onClick={() => onWithdraw(entry.id)}
-      title="Withdraw before it's delivered"
-      className="text-[11px]"
-      style={{ color: 'var(--text-3)' }}
-    >
-      <Icon name="close" size={14} />
-    </button>
+  // Continue only where the hop budget is what is holding the entry. Elsewhere the entry is
+  // waiting for something a re-base would not fix — an agent already running, a missing CLI —
+  // and the endpoint refuses, so offering the button there would be an offer to be told no.
+  const held = queued && entry.hop_budget_exceeded === true
+  const actions = queued && (onWithdraw || onRelease) && (
+    <span className="inline-flex items-center gap-[.35rem]">
+      {held && onRelease && (
+        <button
+          onClick={() => onRelease(entry.id)}
+          title="Deliver this now, restarting the chain's count from here"
+          className="text-[11px] font-medium px-[.35rem] h-[18px] rounded"
+          style={{ color: 'var(--amber)' }}
+        >
+          Continue
+        </button>
+      )}
+      {onWithdraw && (
+        <button
+          onClick={() => onWithdraw(entry.id)}
+          title={held ? 'Discard — this message is never delivered' : "Withdraw before it's delivered"}
+          className="text-[11px]"
+          style={{ color: 'var(--text-3)' }}
+        >
+          {held ? 'Discard' : <Icon name="close" size={14} />}
+        </button>
+      )}
+    </span>
   )
 
   // Own plain text (or an error) — borderless, no bubble, just a "who" line.
@@ -800,7 +832,7 @@ function MessageEntry({
           {agentName}
           {timestamp}
           {queuedTag}
-          {withdraw}
+          {actions}
         </div>
         {isError ? (
           <div
@@ -828,7 +860,7 @@ function MessageEntry({
       <div className="timeline-message-row timeline-message-row-mine flex flex-col items-end gap-[5px]" style={wrapperStyle}>
         <div className="flex items-center gap-[.4rem] text-[11.5px] font-semibold" style={{ color: 'var(--text-2)' }}>
           {queuedTag}
-          {withdraw}
+          {actions}
           you
           {timestamp}
         </div>
@@ -859,7 +891,7 @@ function MessageEntry({
         time={time}
         wrapperStyle={wrapperStyle}
         queuedTag={queuedTag}
-        withdraw={withdraw}
+        actions={actions}
       />
     )
   }
@@ -884,7 +916,7 @@ function MessageEntry({
         </span>
         {timestamp}
         {queuedTag}
-        {withdraw}
+        {actions}
       </div>
       <div className="break-words" style={{ color: 'var(--text)' }}>
         <MarkdownMessage content={entry.content} />
@@ -908,7 +940,7 @@ function OutboundMessageEntry({
   time,
   wrapperStyle,
   queuedTag,
-  withdraw,
+  actions,
 }: {
   entry: TimelineEntry
   agentName: string
@@ -916,7 +948,7 @@ function OutboundMessageEntry({
   time: string
   wrapperStyle: React.CSSProperties
   queuedTag: React.ReactNode
-  withdraw: React.ReactNode
+  actions: React.ReactNode
 }) {
   const [expanded, setExpanded] = useState(false)
   const colors = agentColorVars(colorByName.get(entry.participant || ''))
@@ -952,10 +984,10 @@ function OutboundMessageEntry({
           {time}
         </span>
       </button>
-      {(queuedTag || withdraw) && (
+      {(queuedTag || actions) && (
         <div className="flex items-center gap-[.4rem] mt-1">
           {queuedTag}
-          {withdraw}
+          {actions}
         </div>
       )}
       {expanded && (
