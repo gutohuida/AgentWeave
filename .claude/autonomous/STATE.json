@@ -67,7 +67,7 @@
     "Never mark a task complete because a plan for it exists. Only verified implementation closes a task.",
     "At 08:00 local time stop cleanly even if the queue is incomplete. The operator gets up then and will read the log first, so a truthful account of where you stopped is worth more than a rushed final item. Record the exact continuation work rather than inventing completion."
   ],
-  "last_heartbeat": "2026-08-24T07:15:37+01:00",
+  "last_heartbeat": "2026-08-24T06:36:14+01:00",
   "completed_at": "2026-08-24T07:15:37+01:00",
   "queue_state": "empty — Q1 (3b4efd6), Q2 (d706187), Q3 (7fcd172) and Q4 (bundle 9eb37c8 + full sweep) are all closed and verified. `stop_when_queue_empties` is true, so this run is finished; a later firing should stand down rather than invent work.",
   "run_summary": {
