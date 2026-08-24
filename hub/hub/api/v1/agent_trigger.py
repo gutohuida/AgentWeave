@@ -747,7 +747,13 @@ async def trigger_agent_directly(
             work_dir=effective_work_dir,
             known_session_id=resume_session_id,
             env=env,
-            worktree=isolated_workspace,
+            # A **review** turn passes None, deliberately. `_execute_run` snapshots this directory
+            # when the turn ends, and a reviewer is not an author: there is nothing of its to
+            # preserve, and committing on a detached HEAD moves the checkout off the very commit
+            # the review was about. Observed live on 2026-08-24 — `critic` reviewed `90aa643` and
+            # the checkout ended at `886124f`, an orphan commit of three `.pyc` files that running
+            # the tests had touched.
+            worktree=None if review_context is not None else isolated_workspace,
             use_codex_app_server=use_codex_app_server,
             cli=probe["cli"],
             prompt=prompt,

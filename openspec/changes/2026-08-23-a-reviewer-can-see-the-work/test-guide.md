@@ -67,11 +67,20 @@ without depending on the prompt to.
 review checkout and confirm a file the author changed on its own branch is there in its changed
 form, while your own checkout still has the old one.
 
-**The reviewer can run your tests.** `node_modules`, `.venv` and `venv` are symlinked in from the
-project the same way they are for a working checkout. On Windows without Developer Mode the
-symlink silently does not happen — the checkout is still created, but the reviewer will have to
-install what it needs, and a review that reports "could not run the suite" on that machine is
-telling you the truth.
+**The reviewer can run your tests — with one measured caveat.** `node_modules`, `.venv` and `venv`
+are symlinked in from the project the same way they are for a working checkout.
+
+**On this machine they are not.** Measured 2026-08-24: `Path.symlink_to` fails with
+`WinError 1314, A required privilege is not held by the client` — Windows without Developer Mode or
+admin rights. `_symlink_shared_dependencies` degrades silently by design rather than failing
+provisioning, so the checkout is still created and simply has no dependencies in it.
+
+That matters more here than it does for a working checkout, because design D1's entire
+justification for giving the reviewer a *checkout* rather than a *diff* is that it can run the
+suite. A Python project whose tools are on `PATH` is unaffected — that is why the `ledger-stress`
+drive could run pytest. **A Node project reviewed on this machine cannot run its tests without
+installing its own copy first.** Turning on Windows Developer Mode fixes it for every worktree,
+not just reviews.
 
 ## The judgement only you can make
 

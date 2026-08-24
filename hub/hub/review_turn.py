@@ -29,6 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from . import requirement_evidence, worktrees
 from .db.models import Agent, SpecDocument, Task
 from .project_workspace import ProjectWorkspaceError, resolve_project_workspace
+from .repo_hygiene import seed_repo_excludes
 from .spec_documents import read_document
 from .spec_manifest import SpecPathError
 from .spec_payload import extract_payload
@@ -202,6 +203,11 @@ async def prepare_review_turn(
             "this project is not a git repository, so there is no commit to check out for "
             "review. Evidence recorded here names changed paths rather than a commit."
         )
+
+    # `resolve_agent_workspace` seeds these on every ordinary turn, and a review turn deliberately
+    # does not go through it — so this is now a second funnel into the project, and skipping it
+    # would leave a project whose only turns are reviews with no ignore rules at all.
+    seed_repo_excludes(repo_root)
 
     try:
         workspace = worktrees.ensure_review_checkout(repo_root, reviewer, target.commit_sha)

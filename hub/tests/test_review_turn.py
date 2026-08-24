@@ -667,3 +667,71 @@ async def test_a_declared_reviewer_on_the_roster_resolves_to_itself(
     assert resolution.agent == "critic"
     assert resolution.unresolved is None
     assert resolution.falls_back_to_operator is False
+
+
+@pytest.mark.asyncio
+async def test_a_review_turn_does_not_commit_on_the_reviewers_detached_head(
+    app, auth_headers, bind_runner, bind_project_workspace, tmp_path, monkeypatch
+):
+    """Observed live 2026-08-24: `critic` reviewed 90aa643 and the checkout ended at 886124f.
+
+    `_execute_run` snapshots the turn's worktree when it ends, and a review turn was passing its
+    review checkout as that worktree. A reviewer is not an author -- there is nothing of its to
+    preserve -- and committing on a detached HEAD moves the checkout off the very commit the
+    review was about. Harmless (the commit is orphaned, and the next review force-detaches back)
+    but it makes the checkout lie about what it holds.
+    """
+    repo = _init_repo(tmp_path / "repo")
+    sha = _author_commit(repo, filename="ledger.py", body="x = 1\n")
+    await bind_project_workspace(repo)
+    monkeypatch.setattr(worktrees, "ensure_review_checkout", _REAL_ENSURE_REVIEW_CHECKOUT)
+    await _roster(app, auth_headers, bind_runner, "critic")
+    await _reviewable_task(commit=sha)
+
+    def _dirty_the_checkout(*args, **kwargs):
+        # Stand in for what running the tests did: leave a tracked file modified.
+        (worktrees.review_path(repo, "critic") / "ledger.py").write_text("x = 1  # scribble\n")
+        return _fake_pty(['{"type":"result","subtype":"success","is_error":false}\n'])(
+            *args, **kwargs
+        )
+
+    with patch("hub.api.v1.agent_trigger.PtySession.spawn", _dirty_the_checkout):  # noqa: SIM117
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            await _trigger_review(app, auth_headers)
+            await _await_background_run()
+
+    checkout = worktrees.review_path(repo, "critic")
+    head = _git(checkout, "rev-parse", "HEAD").stdout.strip()
+    assert head == sha, "the review checkout must still be at the commit under review"
+    assert _git(checkout, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip() == "HEAD"
+
+
+@pytest.mark.asyncio
+async def test_a_review_turn_seeds_the_repository_excludes(
+    app, auth_headers, bind_runner, bind_project_workspace, tmp_path, monkeypatch
+):
+    """A review turn skips `resolve_agent_workspace`, which is where seeding normally happens.
+
+    So a project whose only turns are reviews would otherwise never get ignore rules, and the
+    review checkout itself is one of the directories those rules exist to keep out of history.
+    """
+    repo = _init_repo(tmp_path / "repo")
+    sha = _author_commit(repo, filename="ledger.py", body="x = 1\n")
+    await bind_project_workspace(repo)
+    monkeypatch.setattr(worktrees, "ensure_review_checkout", _REAL_ENSURE_REVIEW_CHECKOUT)
+    await _roster(app, auth_headers, bind_runner, "critic")
+    await _reviewable_task(commit=sha)
+    exclude = repo / ".git" / "info" / "exclude"
+    if exclude.is_file():
+        exclude.write_text("", encoding="utf-8")
+
+    async with async_session_factory() as session:
+        await review_turn.prepare_review_turn(
+            session,
+            project_id="proj-test",
+            reviewer="critic",
+            task_id="task-1",
+            repo_root=repo,
+        )
+
+    assert ".agentweave/reviews/" in exclude.read_text(encoding="utf-8")

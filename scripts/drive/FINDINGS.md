@@ -373,6 +373,32 @@ happily when asked for that alone. It looks like deferred-tool discovery interac
 smaller model under a long instruction, which makes it a question about how the tool surface is
 presented rather than about the tool.
 
+## F22 (B) — Shared dependencies are not symlinked on this machine, and nothing says so
+
+**Measured 2026-08-24**, not inferred:
+
+```
+Path.symlink_to(...) -> OSError [WinError 1314]
+A required privilege is not held by the client
+```
+
+Windows without Developer Mode or admin rights. `_symlink_shared_dependencies` catches this and
+degrades — it logs at INFO and carries on, which is the right call for provisioning, since failing
+a whole turn over a missing `node_modules` would be worse.
+
+The cost is that **every worktree on this machine has no shared dependencies and no surface says
+so.** Not the agent, which discovers it by running the suite and failing; not the operator, who
+sees a provisioned checkout that looks complete; not `doctor`, which does not check.
+
+It has been invisible until now because the drive's fixtures are Python projects whose tools are on
+`PATH`. It stops being invisible with the review checkout, because that change's entire
+justification for handing a reviewer a checkout rather than a diff is that it can **run the tests** —
+so a reviewer on a Node project here reports "could not run the suite" and is telling the truth
+about an environment nobody told it about.
+
+Worth fixing at the surface rather than the mechanism: say it once, where someone can act on it. The
+remedy is one Windows setting, and it fixes every worktree at once.
+
 ---
 
 # What worked, and worked well
