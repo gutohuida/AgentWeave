@@ -93,6 +93,41 @@ on `loop-notices-and-reacts` for the shared firing decision this change adds an 
 
 ## 3. Actor-aware claimability
 
+**Reviewed against the shipped code 2026-08-24, before implementing, per the operator's standing
+instruction.** D3's two premises hold: `_agent_that_completed` is where the design says it is
+(`task_transition_service.py:108`), read by `_guard_author_is_not_reviewer` at `:153`, and it keys
+on **agent** rather than run, which is what makes 3.2's correctness property expressible at all.
+D4's rung 1 (`review_turn.resolve_declared_reviewer`) and D9's `ReviewTurnRefused` both exist.
+
+Three things the spec does not say, each of which would ship a defect if implemented literally:
+
+1. **`candidate_is_startable` asks the wrong question of a `completed` candidate.** It exempts
+   `in_progress` and `blocked` from the dependency gate on the stated grounds that nothing is about
+   to transition them, and gates everything else because it is "one `apply_transition` away from
+   `in_progress` — the same edge `dependency_gate.evaluate` guards". A `completed` task claimed for
+   review is not about to reach `in_progress`; it is about to reach a review outcome. Gating it on
+   the `-> in_progress` edge would silently skip a finished task from review because *its own*
+   prerequisite is unapproved, which has nothing to do with whether the work may be looked at. It
+   needs the same exemption, for the same reason, or the correct edge.
+2. **A `completed` task with no recorded completer is claimable by anyone**, because
+   `_agent_that_completed` returns `None` and the guard treats `None` as permitting. That is the
+   right answer — it is what makes 3.2's property hold in both directions — but it changes the
+   premise of `loop-notices-and-reacts`' shipped stall tests, which construct `completed` tasks
+   directly and therefore without history. Those tests assert a queue of completed work *stalls*;
+   under this group it becomes reviewable. They need history, not deletion — a task that reached
+   `completed` through `apply_transition` always has a completer, so giving them one makes them
+   more faithful rather than less.
+3. **`_loop_queue_order` already sorts a `completed` task ahead of pending work** (non-pending
+   first, by `updated` descending). So review preempts new work by default, which is probably right
+   and is certainly undeclared. Whatever it should be, it should be stated rather than inherited.
+
+**Sequencing, which is the operator's call and not recorded anywhere.** Landing group 3 alone puts
+a half-state in the live firing path: a `completed` task becomes claimable, the firing claims it and
+leaves the status untouched, and `_compose_loop_briefing` — which knows nothing about review until
+group 4b — briefs that agent to *work* finished work, in its own checkout without the author's
+commits. That is finding F10's exact shape, which group 4b exists to prevent. Groups 3, 4 and 4b
+look like one landing rather than three.
+
 - [ ] 3.1 Test: a `completed` task is offered to an agent that did not complete it, and not to the
       one that did.
 - [ ] 3.2 Test the correctness property directly — every task the flow offers an agent can be moved
