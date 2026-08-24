@@ -246,6 +246,76 @@ Two consequences worth stating, since a later reader will ask:
   permission posture still stop a run, and B4's evidence gates still govern *what* an approval
   requires. This decides who may press the button, not what has to be true before it is pressed.
 
+### D12 — Ordinary work resolves an agent too, and an assignee outranks the default
+
+**Decided by the operator 2026-08-24, implementing group 5.** D2 made the job's agent the *default*
+and D4 built a ladder for reviewers, which left the question D5 needs answered and does not ask: a
+firing that starts three ordinary tasks has to say who works the second and third. `decide_firing`
+paired every non-review candidate with `default_agent`, so widening the walk literally would have
+produced three selections that D6 then collapsed to one — a flow with three independent tasks and
+three idle agents starting one, which is D5's own *Rejected* case reached by accident.
+
+So ordinary work resolves an agent, in two steps:
+
+1. **A candidate that already has an assignee resumes with that assignee.** This closes the open
+   question below rather than deferring it again, and it is the finding that made the rest visible:
+   `claimed_task.assignee = selection.agent` is unconditional, so under width a task running under
+   agent B is re-selected next tick as ordinary work, reassigned to the job's agent and briefed to
+   them while B is still working it. An `in_progress` or `assigned` task is *already staffed*; the
+   firing is resuming it, not staffing it.
+2. **Otherwise the job's agent takes the first such task and each further one takes the next free
+   agent**, drawn from `_agents_that_are_free` — the same not-running, holds-no-active-task,
+   not-archived, runner-bound set D4 rung 2 already uses. One notion of "free" in the module, in
+   queue-stable order, so a wide firing pairs the same tasks with the same agents on a rerun.
+
+   **The job's own agent is tested against "running a turn", not against that free set**, and the
+   asymmetry is deliberate. `_agents_that_are_free` is a *recruitment* pool: it additionally demands
+   a roster row with a bound runner and no active work, which is the right bar for an agent the flow
+   is choosing on the operator's behalf and the wrong one for the agent the operator already chose
+   when they created the job. Applying it to the default made a loop whose agent happens to hold any
+   active task — or whose project has no roster rows at all — resolve nobody and read as stalled.
+   That is not hypothetical: the dependency board derives its current item from this same walk, so
+   the first implementation of this decision broke the board's agreement with the firing, which is
+   `task-dependencies` human-only check 13.1 and has a shipped test.
+
+*Rejected:* **running D4's full ladder over ordinary work.** Its rung 1 is
+`resolve_declared_reviewer`, which is review-specific; an ordinary-work sibling would be a second
+resolver with no requirement asking for one. *Rejected:* **leaving ordinary work at width one.** It
+fails task 5.1 as written and is the shape D5 rejects.
+
+**The busy guard has to move for any of this to be reachable.** `_do_fire_job` calls
+`_loop_agent_busy_reason(..., job.agent)` and returns before `decide_firing` runs, on the stated
+grounds that "a loop's agent runs one turn at a time" — true of a loop, false of a flow, where
+`job.agent` is only the default. Left there, the moment a flow staffs its own job's agent, every
+tick for the length of that turn refuses to staff any *other* free agent on any *other* independent
+task, and width is reachable only inside a tick that finds the job's agent idle. Busy-ness becomes a
+fact about *a candidate agent* — it excludes that agent from resolution — rather than a reason to
+abandon the firing. A firing that resolves nobody for anything still refuses, which is the old
+behaviour of a single-agent loop, unchanged.
+
+### D13 — A wide firing records one `JobRun` per selection
+
+**Decided by the operator 2026-08-24.** `JobRun` correlates back to the `Run` it started **only**
+through `conversation_id` — `finalize_job_run_for_conversation` says so, and `models.py` records
+that there is no foreign key. A firing that starts three agents creates three conversations, so one
+row per firing would have nothing left to correlate with, and would need a new rule for when a run
+covering three agents stops being "in progress".
+
+One row per selection keeps that correlation exactly as it is: the finalize path is untouched, and
+each agent's outcome — completed, failed, the error summary — is separately visible instead of
+being merged into a single verdict for the tick.
+
+Two costs, accepted rather than mitigated:
+
+- **`_prune_job_history`'s 100-row window fills N times faster** for a flow of width N, so a wide
+  flow keeps proportionally less history. Left alone: the window is per job, and a flow doing three
+  times the work per tick producing three times the rows is the window measuring the same thing.
+- **`JobCard`'s history shows N rows for one tick.** Correct rather than noisy — they are N turns.
+
+*Rejected:* **one `JobRun` spanning several conversations**, which breaks the only correlation there
+is. *Rejected:* **parent and child rows**, which is a migration and a UI change on top of this
+group's scheduler work, for a presentation improvement group 9 is the place to consider.
+
 ## Risks / Trade-offs
 
 **[Set-valued claim breaks the board, the firing and §548 at once]** → Land the set-valued form
@@ -292,6 +362,7 @@ existing loop suite, unmodified.
   **Answered 2026-08-24: agent names.** Not decided here — `a-reviewer-can-see-the-work` shipped
   `review_turn.resolve_declared_reviewer` first, matching the declared string against roster
   `Agent.name` and treating an archived agent as unresolved. See D4.
-- **Does a flow ever fire the same agent for a task it is already working?** Resumption of an
-  `in_progress` task should keep its agent; nothing says so yet.
+- ~~**Does a flow ever fire the same agent for a task it is already working?**~~ **Answered
+  2026-08-24: yes — an already-assigned task resumes with its own assignee, never with the job's
+  default agent.** See D12, step 1.
 - **Cross-firing selection races** — see the risk above.

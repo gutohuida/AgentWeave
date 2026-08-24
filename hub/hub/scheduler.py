@@ -238,6 +238,55 @@ async def _loop_agent_busy_reason(
     return None
 
 
+async def _agents_running_a_turn(session: AsyncSession, project_id: str) -> "Set[str]":
+    """Every agent in this project with a `Run` in `running`.
+
+    The set-valued form of the fact `_loop_agent_busy_reason` and `schedule_agent` both read, added
+    for `loop-becomes-a-flow` design D12. A wide firing asks the question about several agents in
+    one walk, and asking it one agent at a time would be one query per candidate; more importantly
+    it would be a *third* place the question is asked, which is the drift shape this module's own
+    comments record going wrong twice.
+    """
+    return set(
+        (
+            await session.execute(
+                select(Run.agent).where(Run.project_id == project_id, Run.status == "running")
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+
+async def _loop_flow_busy_reason(
+    session: AsyncSession, project_id: str, agent: str
+) -> Optional[str]:
+    """Why a firing should be refused outright, recording nothing — or `None` to proceed.
+
+    **This is `_loop_agent_busy_reason` narrowed for a flow (design D12).** That guard refuses the
+    whole firing when the *job's* agent is running, on the stated grounds that "a loop's agent runs
+    one turn at a time". True of a loop; false of a flow, where `job.agent` is only D2's default.
+    Left as it was, the moment a flow staffed its own job's agent, every tick for the length of
+    that turn refused to staff any *other* free agent on any *other* independent task — so width
+    was reachable only inside a tick that happened to find the job's agent idle, which is the one
+    state a working flow is least often in.
+
+    So the refusal now needs both halves: the job's agent is busy **and** nobody else could be
+    staffed instead. A single-agent loop reaches that by the general rule with no branch of its own
+    — its one agent is the busy one and the free list is empty — which is what keeps this exactly
+    as strict as before for every loop that exists today, including the "records nothing" property
+    the old guard's docstring argues for at length. A firing that proceeds past this and then
+    resolves nobody falls into the ordinary stall path instead, which is the right place for it:
+    something was staffable in principle and was not staffed, and that is a fact about the queue.
+    """
+    busy_reason = await _loop_agent_busy_reason(session, project_id, agent)
+    if busy_reason is None:
+        return None
+    if await _agents_that_are_free(session, project_id):
+        return None
+    return busy_reason
+
+
 async def _loop_stop_reason(session: AsyncSession, job: AIJob) -> Optional[str]:
     """Return why *job*'s loop should stop firing, or `None` if it should proceed.
 
@@ -776,7 +825,11 @@ class ReviewerChoice:
 
     #: The agent to fire, or `None` when no rung produced one.
     agent: Optional[str] = None
-    #: Which rung answered: "declared", "unresolved", "available", or "unstaffed".
+    #: Which rung answered: "declared", "unresolved", "available", "deferred", or "unstaffed".
+    #: "deferred" is not a rung of D4's ladder — it is design D6 interrupting one, and it is kept
+    #: distinct from "unstaffed" because the two ask opposite things of the operator. Unstaffed
+    #: needs them (add an agent, free one, fix a name); deferred needs nothing at all, since the
+    #: agent is merely taken by this same firing and the next tick will find them again.
     rung: str = "unstaffed"
     #: Operator-facing explanation. Set on every rung that produced no agent.
     reason: Optional[str] = None
@@ -849,7 +902,12 @@ async def _agents_that_are_free(session: AsyncSession, project_id: str) -> "list
 
 
 async def resolve_reviewer(
-    session: AsyncSession, task: Task, *, project_id: str, exclude: "set[str]"
+    session: AsyncSession,
+    task: Task,
+    *,
+    project_id: str,
+    exclude: "set[str]",
+    unavailable: "Optional[set[str]]" = None,
 ) -> ReviewerChoice:
     """Who should take *task*, walking design D4's ladder. `exclude` is who may not (the author).
 
@@ -876,13 +934,35 @@ async def resolve_reviewer(
     **A single-agent project reaches rung 3 by the general rule**, with no branch of its own: its
     only agent is the author, so it is excluded, rung 2's list comes back empty and rung 3
     surfaces. That was D4's own stated test of whether the ladder was right.
+
+    **`unavailable` is separate from `exclude`, and the separation is the point** (added for group
+    5, design D6). Both mean "not this agent", but for opposite reasons and to opposite effect.
+    `exclude` is the author: a permanent fact about this task, and a declaration resolving into it
+    is rung 1b — the document named somebody who may not do it, and the operator has to fix the
+    name. `unavailable` is an agent this same firing has already selected for other work: a fact
+    about *this tick* and nothing else. Collapsing the two would tell an operator their document
+    named the author when it named a perfectly good reviewer who happened to be busy for ten
+    minutes, which is a false statement about the work that outlives the tick that produced it.
+    So a declaration resolving into `unavailable` is `rung="deferred"` instead, and rung 2 simply
+    walks past those candidates.
     """
     from . import review_turn
+
+    unavailable = unavailable or set()
 
     resolution = await review_turn.resolve_declared_reviewer(
         session, project_id=project_id, task=task
     )
     if resolution.declared:
+        if resolution.agent and resolution.agent in unavailable and resolution.agent not in exclude:
+            return ReviewerChoice(
+                rung="deferred",
+                reason=(
+                    f"{resolution.agent} is this task's declared reviewer and is already taken by "
+                    f"this firing. Nothing is wrong and nothing needs doing -- the next firing "
+                    f"picks it up."
+                ),
+            )
         if resolution.agent and resolution.agent not in exclude:
             return ReviewerChoice(agent=resolution.agent, rung="declared")
         if resolution.agent:
@@ -897,10 +977,30 @@ async def resolve_reviewer(
             )
         return ReviewerChoice(rung="unresolved", reason=resolution.unresolved)
 
+    only_taken = False
     for candidate in await _agents_that_are_free(session, project_id):
         if candidate in exclude:
             continue
+        if candidate in unavailable:
+            # Eligible in every way that lasts, and merely spoken for by this same firing. Held so
+            # rung 3 below can tell the difference.
+            only_taken = True
+            continue
         return ReviewerChoice(agent=candidate, rung="available")
+
+    if only_taken:
+        # **Not rung 3.** Rung 3 tells the operator to add an agent, free one, or fix a name --
+        # remedies for a queue that cannot be staffed. A firing that simply used up the free agents
+        # on earlier selections has none of those problems, and surfacing one would be a false
+        # alarm on exactly the flows that are working hardest: the wider the firing, the more often
+        # it would fire. The next tick finds these agents again.
+        return ReviewerChoice(
+            rung="deferred",
+            reason=(
+                "every agent that could review this is already taken by this firing. Nothing is "
+                "wrong and nothing needs doing -- the next firing picks it up."
+            ),
+        )
 
     return ReviewerChoice(
         rung="unstaffed",
@@ -939,10 +1039,34 @@ class FiringDecision:
     #: surface a review it could not staff, or the operator never learns that the queue has
     #: finished work nobody can take.
     unstaffed: "tuple[tuple[str, str], ...]" = ()
+    #: `(task_id, reason)` for every candidate whose agent resolved but was **already selected by
+    #: this same firing** (design D6). Recorded rather than dropped silently, which is the whole of
+    #: what D6 asks for: without it the second selection would reach `schedule_agent`, be refused
+    #: with *"agent is already running"*, and vanish with no record that the firing ever wanted it.
+    #:
+    #: **Deliberately not an event, and not a stall.** A flow with more ready work than agents
+    #: defers on every tick forever by design, and emitting for that would bury `review_unstaffed`
+    #: — the one that genuinely needs the operator — under the healthy case, which is precisely the
+    #: burying `loop-notices-and-reacts` design D6 exists to stop. Nothing is wrong here and the
+    #: next tick resolves it, so this is carried for tests and the log and no further.
+    deferred: "tuple[tuple[str, str], ...]" = ()
 
 
 async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str) -> FiringDecision:
     """Decide what this firing does, in one walk of the queue.
+
+    **Set-valued as of `loop-becomes-a-flow` group 5 (design D5).** The walk used to return on its
+    first staffable candidate; it now runs to the end of the queue and accumulates, so a firing
+    starts every task whose dependencies are met and for which an agent resolved. There is no cap
+    and no setting — the bound is the graph the operator approved and the agents they have, which
+    is D5's whole position: the operator starts parallelism at spec time, by decomposing into
+    independent work, not by turning a dial afterwards.
+
+    Two invariants the accumulation has to keep, and one it deliberately does not. It keeps
+    `_loop_queue_order`'s ordering, so a rerun pairs the same tasks with the same agents; and it
+    keeps design D6, one agent to one task per firing, in `taken`. It does **not** promise that a
+    ready task is started — running out of free agents is the bound working, not a failure, and
+    such a task is simply left untouched for the next tick.
 
     Replaces a real inefficiency as well as a structural one: `_do_fire_job` used to call
     `_first_startable_candidate` **twice** on a stalled queue -- once through `_claim_loop_task`
@@ -965,6 +1089,21 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
 
     gated: "list[tuple[Task, dependency_gate.DependencyRefusal]]" = []
     unstaffed: "list[tuple[str, str]]" = []
+    deferred: "list[tuple[str, str]]" = []
+    selections: "list[LoopSelection]" = []
+    # Design D6, and the only mutable state the walk carries. An agent selected twice in one firing
+    # would be started twice concurrently; `schedule_agent` refuses the second and drops it without
+    # a word, so the collision is decided here where it can be recorded instead.
+    taken: "Set[str]" = set()
+
+    # Both asked once, before the walk. `_agents_that_are_free` excludes agents that are running a
+    # turn *or* holding active work, which is right for staffing something new and wrong for
+    # resuming something already staffed: a task's own assignee is, by construction, holding active
+    # work — itself. So resumption consults `running` directly (design D12 step 1) and only fresh
+    # work draws from `free`.
+    free = await _agents_that_are_free(session, loop.project_id)
+    running = await _agents_running_a_turn(session, loop.project_id)
+    default_taken = False
 
     for task in await _loop_candidates(session, loop):
         startable, refusal = await candidate_is_startable(session, task)
@@ -974,12 +1113,50 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
             continue
 
         if task.status not in REVIEWABLE_LOOP_TASK_STATUSES:
-            # Ordinary work. The job's own agent, per design D2 — nothing has said otherwise.
-            return FiringDecision(
-                kind=DECISION_CLAIM,
-                selections=(LoopSelection(task=task, agent=default_agent),),
-                unstaffed=tuple(unstaffed),
-            )
+            # Ordinary work, resolved per design D12.
+            if task.assignee:
+                # Already staffed; this firing is *resuming* it, not staffing it. Overwriting the
+                # assignee with the job's default here is the defect group 5's spec review found:
+                # under width it hands one agent's running task to another and briefs them for it.
+                agent = task.assignee
+                if agent in running:
+                    # The old whole-firing busy guard, now scoped to the one selection it is
+                    # actually about. That agent's turn is still going; nothing else about this
+                    # firing is affected.
+                    continue
+                if agent in taken:
+                    deferred.append(
+                        (
+                            task.id,
+                            f"{agent} already holds another selection in this firing and may take "
+                            f"only one at a time",
+                        )
+                    )
+                    continue
+            elif not default_taken and default_agent not in running and default_agent not in taken:
+                # D2's default, still first in line for the first unstaffed task.
+                #
+                # Tested against `running`, deliberately **not** against `free`. `free` is the
+                # recruitment pool — it additionally demands a roster row with a bound runner and
+                # no active work, which is right for an agent the flow is choosing and wrong for
+                # the one the operator already chose when they created the job. Requiring it here
+                # made a loop whose agent holds any active task, or whose project has no roster
+                # rows at all, resolve nobody and read as stalled — caught by
+                # `test_the_board_summary_agrees_with_the_firing_for_a_gated_queue`, since the
+                # board derives its current item from this same walk.
+                agent = default_agent
+                default_taken = True
+            else:
+                candidate = next((name for name in free if name not in taken), None)
+                if candidate is None:
+                    # Width is bounded by available agents (design D5) and this is that bound
+                    # being reached, not a fault. Nothing is recorded: the task keeps its status
+                    # and its assignee, and the next firing considers it again.
+                    continue
+                agent = candidate
+            selections.append(LoopSelection(task=task, agent=agent))
+            taken.add(agent)
+            continue
 
         # Finished work. **The ladder decides, always** — not "the job's agent if it happens to be
         # eligible". A declared reviewer that resolves outranks the job's own agent, or the
@@ -990,23 +1167,41 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
             # this is the safe direction. Not `unstaffed` either: nothing is waiting on staffing, the
             # task simply has no provenance, and the stall reason already counts it as open work.
             continue
-        choice = await resolve_reviewer(session, task, project_id=loop.project_id, exclude={author})
+        choice = await resolve_reviewer(
+            session, task, project_id=loop.project_id, exclude={author}, unavailable=taken
+        )
         if choice.agent is not None:
-            return FiringDecision(
-                kind=DECISION_CLAIM,
-                selections=(LoopSelection(task=task, agent=choice.agent, is_review=True),),
-                unstaffed=tuple(unstaffed),
-            )
+            selections.append(LoopSelection(task=task, agent=choice.agent, is_review=True))
+            taken.add(choice.agent)
+            continue
+        if choice.rung == "deferred":
+            # D6 again, reached through the ladder rather than through resumption. Not `unstaffed`:
+            # the declaration is fine and the operator has nothing to fix.
+            deferred.append((task.id, choice.reason or "already taken by this firing"))
+            continue
         # Rung 1b or rung 3. Surfaced, and the walk **continues**: D4 says surface the step, not
         # stop the flow, and a queue holding an unstaffable review behind ordinary work should do
         # the ordinary work rather than sit still. The operator learns about the review either way.
         unstaffed.append((task.id, choice.reason or "could not staff this step"))
 
+    if selections:
+        return FiringDecision(
+            kind=DECISION_CLAIM,
+            selections=tuple(selections),
+            unstaffed=tuple(unstaffed),
+            deferred=tuple(deferred),
+        )
+
     stall_reason = await _stall_reason_from_walk(session, loop, gated)
     if stall_reason is None:
-        return FiringDecision(kind=DECISION_PROCEED_EMPTY, unstaffed=tuple(unstaffed))
+        return FiringDecision(
+            kind=DECISION_PROCEED_EMPTY, unstaffed=tuple(unstaffed), deferred=tuple(deferred)
+        )
     return FiringDecision(
-        kind=DECISION_STALLED, stall_reason=stall_reason, unstaffed=tuple(unstaffed)
+        kind=DECISION_STALLED,
+        stall_reason=stall_reason,
+        unstaffed=tuple(unstaffed),
+        deferred=tuple(deferred),
     )
 
 
@@ -1555,7 +1750,12 @@ class JobScheduler:
             loop = loop_result.scalars().first()
 
             if loop is not None:
-                busy_reason = await _loop_agent_busy_reason(session, job.project_id, job.agent)
+                # `_loop_flow_busy_reason`, not `_loop_agent_busy_reason`: refusing the whole
+                # firing because *the job's* agent is mid-turn is right for a loop and wrong for a
+                # flow, where another agent may be free for independent work (design D12). The
+                # narrower question — busy *and* nobody else free — is identical for every
+                # single-agent loop, so this branch behaves exactly as it did for all of them.
+                busy_reason = await _loop_flow_busy_reason(session, job.project_id, job.agent)
                 if busy_reason:
                     # **Records nothing.** No `JobRun`, and no event either: the agent's own
                     # running `Run` already carries the fact that it is working, and
@@ -1701,6 +1901,7 @@ class JobScheduler:
             # outside it: a plain scheduled job has no loop, makes no selection, and must reach
             # `new_entry` with `review_task_id=None` rather than a `NameError`.
             selection: Optional[LoopSelection] = None
+            extra_selections: "list[LoopSelection]" = []
             if loop is not None:
                 # Set-valued as of `loop-becomes-a-flow` group 1, and carrying its own agent as
                 # of group 2 (design D2). Still at most one member until group 5 widens it, so the
@@ -1718,7 +1919,17 @@ class JobScheduler:
                     await _emit_review_unstaffed(
                         session, job, loop, unstaffed_task_id, unstaffed_reason
                     )
+                for deferred_task_id, deferred_reason in decision.deferred:
+                    # Design D6. Logged, never surfaced -- a flow with more ready work than agents
+                    # defers on every tick by design, and an event for that would bury
+                    # `review_unstaffed` under the healthy case. See `FiringDecision.deferred`.
+                    logger.debug(f"Job {job.id} deferred {deferred_task_id}: {deferred_reason}")
+                # The firing's own selection is the first; `extra_selections` are staged after this
+                # one is fully away, each with its own `JobRun` and conversation (design D13). The
+                # split keeps every path below -- stall, skip, resume, briefing -- exactly the shape
+                # it had when at most one selection existed.
                 selection = decision.selections[0] if decision.selections else None
+                extra_selections = list(decision.selections[1:])
                 claimed_task = selection.task if selection is not None else None
                 if claimed_task is None:
                     stall_reason = decision.stall_reason
@@ -1784,6 +1995,12 @@ class JobScheduler:
                     # flow staffs a task with someone other than the job's own agent, and a task
                     # assigned to the job's agent while another works it is the first place that
                     # divergence would become a lie the board repeats.
+                    #
+                    # From group 5 this is also a no-op for a resumption rather than an overwrite:
+                    # `decide_firing` resolves an already-assigned task to its own assignee (design
+                    # D12 step 1), so the value written back is the one already there. It used to be
+                    # `default_agent` unconditionally, which under width silently reassigned another
+                    # agent's running task to the job's own.
                     claimed_task.assignee = selection.agent
                 # `selection` is None on the "never filled" queue — no task, but the firing still
                 # proceeds, because filling the queue is the agent's job (`_loop_stall_reason`).
@@ -1908,6 +2125,29 @@ class JobScheduler:
                 agent=acting_agent,
             )
 
+            # Design D5's width, and D13's row-per-selection. Staged after the primary one is
+            # fully away — queued, committed and scheduled — so a failure here can never leave the
+            # firing's own selection half-done. `loop` is not None whenever this list is non-empty:
+            # only `decide_firing` produces selections and only a loop reaches it.
+            for extra in extra_selections:
+                assert loop is not None
+                try:
+                    await self._fire_additional_selection(
+                        job, loop, extra, trigger, fired_at, session
+                    )
+                except Exception as extra_error:
+                    # Contained deliberately. The outer handler marks *the firing's own* `run` as
+                    # failed, and the primary selection is already queued and scheduled by this
+                    # point -- so letting this escape would record a lie about the one selection
+                    # that succeeded, and drop the remaining ones on top of it. Each selection
+                    # stands or falls alone, which is the same independence design D13 gives them
+                    # a `JobRun` each for.
+                    logger.error(
+                        f"Job {job.id} could not stage {extra.agent} for {extra.task.id}: "
+                        f"{_safe_error_summary(extra_error)}"
+                    )
+                    await session.rollback()
+
             logger.info(f"Job {job.id} fired (trigger: {trigger})")
             return True
 
@@ -1935,6 +2175,130 @@ class JobScheduler:
                 )
                 await session.commit()
             return False
+
+    async def _fire_additional_selection(
+        self,
+        job: AIJob,
+        loop: Loop,
+        selection: LoopSelection,
+        trigger: str,
+        fired_at: datetime,
+        session: AsyncSession,
+    ) -> None:
+        """Stage one more of a wide firing's selections: its own `JobRun`, conversation and queue
+        entry, then start its turn (`loop-becomes-a-flow` group 5).
+
+        **Design D13 is why this creates a `JobRun` rather than sharing the firing's.**
+        `finalize_job_run_for_conversation` correlates a run back to the `Run` it started **only**
+        through `conversation_id` — there is no foreign key, as `models.py` records — and each
+        selection gets its own conversation. One row spanning several would have nothing left to
+        correlate with, and would need a new rule for when a row covering three agents stops being
+        "in progress". One row each keeps the finalize path untouched and each agent's outcome
+        separately visible.
+
+        **Never resumes a provider session**, and `session_id` is `None` on both the run and the
+        entry. An extra selection is by construction an agent other than the primary one, so
+        `job.last_session_id` belongs to somebody else; resuming one agent's session as another is
+        not a thing this product does, and the primary path already refuses it for the same reason
+        where its own agent diverges.
+
+        Failure is per selection and not fatal to the firing: `run.status` becomes `failed` with the
+        scheduler's own reason, exactly as the primary path records a terminal `schedule_agent`
+        refusal, and the remaining selections still go.
+        """
+        from .inbound_queue import new_entry
+        from .turn_scheduler import schedule_agent
+
+        task = selection.task
+        if task.status == "pending":
+            await apply_transition(session, task, "assigned", operator())
+        task.assignee = selection.agent
+
+        conversation = new_conversation(
+            project_id=job.project_id, agent=selection.agent, origin="job"
+        )
+        session.add(conversation)
+        await inherit_runtime_overrides(session, conversation)
+        name_conversation(conversation, job.name)
+
+        run_id = f"run-{short_id()}"
+        run = JobRun(
+            id=run_id,
+            job_id=job.id,
+            project_id=job.project_id,
+            fired_at=fired_at,
+            # Straight to `in_progress`: unlike the primary row this one is created only once the
+            # firing is known to proceed, so it never passes through the `"fired"` state the skip
+            # branches above exist to overwrite.
+            status="in_progress",
+            trigger=trigger,
+            session_id=None,
+            conversation_id=conversation.id,
+        )
+        session.add(run)
+
+        prior_checkpoint = await latest_checkpoint_for_loop(session, loop.id)
+        briefing = await _compose_loop_briefing(session, loop, task, prior_checkpoint)
+        entry = new_entry(
+            project_id=job.project_id,
+            agent=selection.agent,
+            origin_type="job",
+            content=f"{briefing}\n{job.message}",
+            hop_depth=0,
+            session_mode=job.session_mode,
+            session_id=None,
+            conversation_id=conversation.id,
+            # Design D9, same as the primary path: only a selection the ladder made *as a review*
+            # gets a checkout of the author's work.
+            review_task_id=task.id if selection.is_review else None,
+        )
+        session.add(entry)
+        # One per row, so `run_count` keeps counting `JobRun`s (finding F11 stamps the primary's at
+        # the same boundary). `job.last_run` is not touched: the firing has one time, already
+        # stamped, and moving it per selection would make it mean "the last agent started".
+        job.run_count += 1
+        await session.commit()
+
+        queue_payload = {
+            "entry_id": entry.id,
+            "agent": selection.agent,
+            "origin_type": "job",
+            "hop_depth": 0,
+            "job_id": job.id,
+            "conversation_id": conversation.id,
+        }
+        await persist_event(
+            session, job.project_id, "queue_entry_queued", queue_payload, agent=selection.agent
+        )
+        await sse_manager.broadcast(job.project_id, "queue_entry_queued", queue_payload)
+
+        schedule_result = await schedule_agent(job.project_id, selection.agent)
+        if schedule_result.waiting_reason and schedule_result.terminal_failure:
+            run.status = "failed"
+            run.error_summary = schedule_result.waiting_reason
+            await session.commit()
+
+        fired_payload = {
+            "job_id": job.id,
+            "job_name": job.name,
+            "agent": selection.agent,
+            "trigger": trigger,
+            "run_id": run_id,
+        }
+        await sse_manager.broadcast(
+            job.project_id,
+            "job_fired",
+            {
+                "id": job.id,
+                "name": job.name,
+                "agent": selection.agent,
+                "trigger": trigger,
+                "run_id": run_id,
+            },
+        )
+        await persist_event(
+            session, job.project_id, "job_fired", fired_payload, agent=selection.agent
+        )
 
 
 async def init_scheduler() -> JobScheduler:
