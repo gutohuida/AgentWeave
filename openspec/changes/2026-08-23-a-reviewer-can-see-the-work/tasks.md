@@ -70,9 +70,9 @@ pytest but produces three false failures in `test_pty_runner.py` on a green tree
 - [ ] 6.1 Re-run the exact scenario that produced finding F10 — `builder` completes FR-2 and FR-3,
       `critic` reviews — and confirm `critic` does **not** have to ask `builder` what changed.
       The transcript in `scripts/drive/FINDINGS.md` is the before-state to compare against.
-- [ ] 6.2 Read one review turn's context and judge whether an agent would understand it is
+- [x] 6.2 Read one review turn's context and judge whether an agent would understand it is
       reviewing rather than building. This is the failure D4 names as most likely, and no test
-      catches it.
+      catches it. **Answered by the operator 2026-08-24: "Yeah the text reads alright."**
 - [ ] 6.3 Confirm the review checkouts on disk are what you expected, and that nothing accumulated.
 
 ## 7. User test guide
