@@ -523,7 +523,13 @@ def create_job(
         name: Job name.
         agent: Exact name of the registered agent the job triggers.
         message: The message delivered to that agent on each run.
-        cron: Cron expression for the schedule.
+        cron: Cron expression for the schedule. Defaults to every five minutes, which is cheap:
+            a firing whose agent is already running is refused before it claims or queues
+            anything and records nothing at all, and a firing against a stalled queue counts on
+            the existing record rather than adding another. So a frequent schedule costs a query
+            and no rows, and it bounds how long a finished step waits before the next one starts.
+            Choose a slower one only when the work itself is periodic — nightly, weekly — rather
+            than to avoid waste.
         session_mode: "new" to start a fresh conversation each run, "resume" to continue.
     """
     return _job_effect(
@@ -544,7 +550,7 @@ def create_loop(
     name: str,
     agent: str,
     message: str,
-    cron: str,
+    cron: str = "*/5 * * * *",
     purpose: str = "",
     stop_at: Optional[str] = None,
     stop_when_queue_empties: bool = False,

@@ -14,12 +14,13 @@ interface LoopsIndexTabProps {
 }
 
 function summarizeCounts(loops: LoopSummary[]): string {
-  const counts = { running: 0, idle: 0, completed: 0, stopped: 0 }
+  const counts = { running: 0, stalled: 0, idle: 0, completed: 0, stopped: 0 }
   for (const loop of loops) counts[endingBucket(loop)] += 1
   const parts: string[] = []
   if (counts.completed > 0) parts.push(`${counts.completed} complete`)
   if (counts.stopped > 0) parts.push(`${counts.stopped} stopped early`)
   if (counts.running > 0) parts.push(`${counts.running} running`)
+  if (counts.stalled > 0) parts.push(`${counts.stalled} stalled`)
   if (counts.idle > 0) parts.push(`${counts.idle} idle`)
   return parts.length > 0 ? parts.join(' · ') : 'No loops'
 }
@@ -57,6 +58,13 @@ function StatusBadge({ loop }: { loop: LoopSummary }) {
     )
   }
   const bucket = endingBucket(loop)
+  if (bucket === 'stalled')
+    return (
+      <Badge variant="warning">
+        <StatusDot />
+        stalled
+      </Badge>
+    )
   if (bucket === 'completed')
     return (
       <Badge variant="success">
@@ -223,6 +231,18 @@ export function LoopsIndexTab({
                   )}
                   <span className="shrink-0">queue {totalQueued}</span>
                 </div>
+                {/* 5.4: the label says what is being waited on, not merely that something is. The
+                    text is the Hub's own refusal reason, so the board and the firing cannot say
+                    different things about why nothing is happening. */}
+                {loop.stall_reason && (
+                  <p
+                    className="truncate pl-0.5 text-left"
+                    style={{ fontSize: 11, color: 'var(--amber)' }}
+                    data-testid={`loops-index-stall-${loop.id}`}
+                  >
+                    {loop.stall_reason.replace(/^loop queue is /, '')}
+                  </p>
+                )}
               </button>
             )
           })

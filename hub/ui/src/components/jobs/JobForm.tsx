@@ -11,8 +11,17 @@ interface JobFormProps {
   isPending: boolean
 }
 
+// `loop-notices-and-reacts` 5.3. These bottomed out at every six hours, because until the busy
+// guard landed a fast tick manufactured duplicate briefings. A firing whose agent is running is now
+// refused before it claims or queues anything, and a firing against a stalled queue counts on the
+// record it already has — so five minutes costs a query and no rows, and it bounds how long a
+// finished step waits for the next one to start.
+const LOOP_DEFAULT_CRON = '*/5 * * * *'
+const JOB_DEFAULT_CRON = '0 9 * * *'
+
 const CRON_EXAMPLES = [
-  { label: 'Daily at 9am', value: '0 9 * * *' },
+  { label: 'Every 5 minutes', value: LOOP_DEFAULT_CRON },
+  { label: 'Daily at 9am', value: JOB_DEFAULT_CRON },
   { label: 'Weekdays at 9am', value: '0 9 * * 1-5' },
   { label: 'Every 6 hours', value: '0 */6 * * *' },
   { label: 'Weekly (Sundays)', value: '0 0 * * 0' },
@@ -24,7 +33,7 @@ export function JobForm({ onSubmit, onCancel, isPending }: JobFormProps) {
   const [name, setName] = useState('')
   const [agent, setAgent] = useState('')
   const [message, setMessage] = useState('')
-  const [cron, setCron] = useState('0 9 * * *')
+  const [cron, setCron] = useState(JOB_DEFAULT_CRON)
   const [sessionMode, setSessionMode] = useState<'new' | 'resume'>('new')
   const [error, setError] = useState('')
 
@@ -264,7 +273,15 @@ export function JobForm({ onSubmit, onCancel, isPending }: JobFormProps) {
           <div className="rounded-lg p-3" style={{ border: '1px solid var(--border)', background: loopEnabled ? 'var(--surface-2)' : undefined }}>
             <button
               type="button"
-              onClick={() => setLoopEnabled(!loopEnabled)}
+              onClick={() => {
+                const next = !loopEnabled
+                // 5.3: opening the loop section moves the schedule to the loop default, but only
+                // while it is still the untouched job default. A plain job is not a loop and
+                // nothing here makes a fast *job* cheap, so the two defaults stay distinct — and an
+                // operator who has already typed a schedule keeps it.
+                if (next && cron === JOB_DEFAULT_CRON) setCron(LOOP_DEFAULT_CRON)
+                setLoopEnabled(next)
+              }}
               className="flex items-center gap-1.5 text-[11px] font-medium"
               style={{ color: 'var(--text-3)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
               aria-expanded={loopEnabled}

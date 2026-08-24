@@ -234,19 +234,49 @@ reverted. 3.9 and 3.10 both still pass unmodified.
 
 Both depend on the busy guard (group 1). Five minutes is only safe once a busy tick is refused.
 
-- [ ] 5.1 Test: a loop created without an explicit cron gets `*/5 * * * *`.
-- [ ] 5.2 Give `create_loop`'s `cron` a default of `*/5 * * * *` (`hub/hub/mcp_server.py:547`), and
+- [x] 5.1 Test: a loop created without an explicit cron gets `*/5 * * * *`.
+      Asserted off the signature rather than by calling the tool: `mcp_server` may import only
+      stdlib and fastmcp, so there is nothing to stub and a live Hub would be needed otherwise.
+- [x] 5.2 Give `create_loop`'s `cron` a default of `*/5 * * * *` (`hub/hub/mcp_server.py:547`), and
       say in its `Args:` description that a busy tick is refused, so a frequent schedule is cheap.
       Keep the twin-file discipline — `mcp_server.py` may import only stdlib and fastmcp.
-- [ ] 5.3 Add a sub-hourly option to `CRON_EXAMPLES`
+      Done, and the description says both halves of why it is cheap — a busy firing records nothing
+      and a repeated stall counts in place — plus when *not* to take the default: work that is
+      genuinely periodic. Imports unchanged, still stdlib only.
+- [x] 5.3 Add a sub-hourly option to `CRON_EXAMPLES`
       (`hub/ui/src/components/jobs/JobForm.tsx:13-19`), whose five entries bottom out at every six
       hours, and default a loop's form to it. Leave the plain job default alone — a job is not a loop
       and nothing here makes a fast job cheap.
-- [ ] 5.4 Test: the loop board labels a stalled loop distinctly from a running one, and the label
+      "Every 5 minutes" added at the top; `describeCron` already renders it, so the plain-English
+      preview and the next-three-firings list work with no formatter change. The two defaults are
+      named constants (`LOOP_DEFAULT_CRON`, `JOB_DEFAULT_CRON`) rather than repeated literals.
+      **Opening the loop section switches the schedule only while it is still the untouched job
+      default** — an operator who has already typed one keeps it, and a plain job keeps 9am.
+- [x] 5.4 Test: the loop board labels a stalled loop distinctly from a running one, and the label
       says what is being waited on rather than only that something is (design D10).
-- [ ] 5.5 Implement that label, deriving the state from group 4's shared decision rather than
+      Four UI tests: stalled and running are distinguishable and the summary counts both; the line
+      names what is waited on (`2 completed`, `no claimable task`); a loop that would fire carries
+      no stall line at all; and a **stopped** loop reads as stopped rather than stalled, so a stale
+      reason alongside an `ending_state` cannot relabel it. Two backend tests assert the summary
+      carries the reason, and that its absence is a real `None` rather than an empty string — the
+      UI keys the label off that.
+- [x] 5.5 Implement that label, deriving the state from group 4's shared decision rather than
       recomputing it.
-- [ ] 5.6 `make ui` after `npm run build`, and commit `hub/ui/src` and `hub/hub/static/ui` together.
+      `LoopSummary.stall_reason` comes from `decide_firing`, so the board and the firing cannot say
+      different things about why nothing is happening. `endingBucket` gains a `stalled` case ahead
+      of `idle` — the reading it must not have, because "idle" says both that nothing is happening
+      and that nothing is wrong.
+      **This is also where 4.3's board half landed, and it lowered the cost rather than raising
+      it.** Computing the label beside the existing candidate walk would have run the dependency
+      gate twice per loop. Instead the board's per-candidate `candidate_is_startable` calls are
+      gone entirely: the decision answers which task is claimable, and the batched candidate walk
+      became a lookup that picks the first candidate in queue order which is either that task or a
+      `blocked` one.
+      **One thing that had to be caught rather than assumed:** taking the decision's task directly
+      inverted `agent-loops` §85 for a queue holding both a blocked task and a pending one — blocked
+      outranks oldest-pending, and `_loop_queue_order` is what encodes that. The regression test
+      from this morning's blocked fix caught it.
+- [x] 5.6 `make ui` after `npm run build`, and commit `hub/ui/src` and `hub/hub/static/ui` together.
 
 ## 6. Retroactive specification of what already shipped
 

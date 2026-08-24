@@ -168,11 +168,7 @@ async def _batch_loop_summaries(
     # human-only check 13.1 asks. `Task.updated` is scoped to non-pending rows there — see that
     # helper for the bug the scoping fixes. Imported inside the function, matching this module's
     # existing convention for `...scheduler` (get_scheduler does the same at three call sites).
-    from ...scheduler import (
-        CURRENT_ITEM_TASK_STATUSES,
-        _loop_queue_order,
-        candidate_is_startable,
-    )
+    from ...scheduler import CURRENT_ITEM_TASK_STATUSES, _loop_queue_order, decide_firing
 
     candidates_result = await session.execute(
         select(Task)
@@ -203,18 +199,39 @@ async def _batch_loop_summaries(
     # The cap of one is also task 1.4's: a flow may staff several tasks (group 5), and this
     # derivation is already shaped to report them, but group 1 changes no behaviour — so the board
     # still renders exactly one current item.
+    #
+    # `loop-notices-and-reacts` 4.3/5.5: the board now takes both answers from `decide_firing`
+    # rather than re-deriving either. That is why it is one walk per loop and not two — computing
+    # the stall label beside a separate candidate walk would have run the dependency gate twice per
+    # loop, which is worse than what this replaced. The per-candidate `candidate_is_startable`
+    # calls that used to live here are gone; `decide_firing` does that work once.
+    stall_reason_by_loop: Dict[str, Optional[str]] = {}
+    claimed_task_id_by_loop: Dict[str, str] = {}
+    for job_id, loop in loop_by_job.items():
+        decision = await decide_firing(session, loop, default_agent=job_agent_by_id.get(job_id, ""))
+        stall_reason_by_loop[loop.id] = decision.stall_reason
+        if decision.selections:
+            claimed_task_id_by_loop[loop.id] = decision.selections[0].task.id
+
+    # The current item is the first candidate **in queue order** that is either the task the firing
+    # would claim, or a `blocked` one. Order is what makes this `agent-loops` §85 rather than an
+    # approximation of it: "in progress or blocked" outranks "oldest pending", and `_loop_queue_order`
+    # already puts every non-pending status first. Taking the decision's task directly would invert
+    # that for a queue holding both a blocked task and a pending one.
+    #
+    # No `candidate_is_startable` call here any more: the decision has already answered which task
+    # is claimable, so this walk is a lookup rather than a second evaluation of the dependency gate.
     for task in candidates_result.scalars().all():
         if current_tasks_by_loop.get(task.loop_id):
             continue
-        startable, _refusal = await candidate_is_startable(session, task)
-        if not startable:
+        is_blocked = task.status == "blocked"
+        if not is_blocked and claimed_task_id_by_loop.get(task.loop_id) != task.id:
             continue
+        # A blocked task is not claimable and still the loop's current work — the operator is who
+        # unblocks it. The firing and the board diverge here on purpose; see
+        # `scheduler.CURRENT_ITEM_TASK_STATUSES` for the defect that came of merging the two.
         current_tasks_by_loop[task.loop_id] = [
-            {
-                "id": task.id,
-                "title": task.title,
-                "status": task.status,
-            }
+            {"id": task.id, "title": task.title, "status": task.status}
         ]
 
     # Distinct (job_id, conversation_id) pairs first, so a resume-mode job that fired more than
@@ -267,6 +284,7 @@ async def _batch_loop_summaries(
             archived_at=loop.archived_at,
             queue=queue_counts.get(loop.id, {}),
             current_tasks=current_tasks_by_loop.get(loop.id, []),
+            stall_reason=stall_reason_by_loop.get(loop.id),
             open_questions=open_questions_by_job.get(job_id, 0),
             control=loop.control,
             pending_edit=_pending_loop_edit(loop),

@@ -189,3 +189,47 @@ async def test_a_queue_of_only_completed_work_never_yields_a_selection(app):
 
     assert decision.selections == ()
     assert decision.kind == DECISION_STALLED
+
+
+# ---------------------------------------------------------------------------
+# 5.1 / 5.5 — the cadence, and the label that makes it safe to read
+# ---------------------------------------------------------------------------
+
+
+async def test_create_loop_defaults_to_a_five_minute_cadence(app):
+    """5.1. The default became payable only once a busy tick is refused and a repeated stall counts
+    in place — before groups 1 and 2 a fast tick manufactured duplicate briefings, so the honest
+    advice was *slowly*. Read off the signature rather than by calling the tool, which would need a
+    live Hub: `mcp_server` may import only stdlib and fastmcp, so there is nothing to stub."""
+    import inspect
+
+    from hub.mcp_server import create_loop
+
+    default = inspect.signature(create_loop).parameters["cron"].default
+    assert default == "*/5 * * * *"
+
+
+async def test_a_stalled_loop_reports_why_on_its_summary(app):
+    """5.5. The board's label comes from `decide_firing` — the same computation that would refuse
+    the firing — so the two cannot say different things about why nothing is happening."""
+    async with async_session_factory() as db:
+        job, _loop = await _loop_with(db, "label", [("task-dec-label", "completed")])
+
+    async with async_session_factory() as db:
+        summary = (await _batch_loop_summaries(db, [job.id]))[job.id]
+
+    assert summary.stall_reason is not None
+    assert "no claimable task" in summary.stall_reason
+    assert "1 completed" in summary.stall_reason
+
+
+async def test_a_loop_that_would_fire_reports_no_stall_reason(app):
+    """The absence is what the UI keys the label off, so it has to be a real None rather than an
+    empty string."""
+    async with async_session_factory() as db:
+        job, _loop = await _loop_with(db, "nolabel", [("task-dec-ok", "pending")])
+
+    async with async_session_factory() as db:
+        summary = (await _batch_loop_summaries(db, [job.id]))[job.id]
+
+    assert summary.stall_reason is None

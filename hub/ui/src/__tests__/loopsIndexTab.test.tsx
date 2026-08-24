@@ -105,6 +105,67 @@ describe('LoopsIndexTab — the governance glance (task B5.1)', () => {
     expect(screen.queryByText('Queue: 2')).not.toBeInTheDocument()
   })
 
+  // -------------------------------------------------------------------------
+  // `loop-notices-and-reacts` 5.4 — a stalled loop reads as waiting, not as dead
+  // -------------------------------------------------------------------------
+
+  it('labels a stalled loop distinctly from a running one', () => {
+    renderIndex([
+      loop({ id: 'l-run', ending_state: null, firing_active: true }),
+      loop({
+        id: 'l-stall',
+        ending_state: null,
+        firing_active: false,
+        stall_reason: 'loop queue is stalled: no claimable task among 2 open (2 completed)',
+      }),
+    ])
+
+    expect(screen.getByText('running')).toBeInTheDocument()
+    expect(screen.getByText('stalled')).toBeInTheDocument()
+    // The one reading it must not have: "idle" says both that nothing is happening and that
+    // nothing is wrong.
+    expect(screen.queryByText('idle')).not.toBeInTheDocument()
+
+    const summary = screen.getByTestId('loops-index-summary')
+    expect(summary).toHaveTextContent('1 running')
+    expect(summary).toHaveTextContent('1 stalled')
+  })
+
+  it('says what the stalled loop is waiting on, not merely that it is waiting', () => {
+    renderIndex([
+      loop({
+        id: 'l-why',
+        ending_state: null,
+        firing_active: false,
+        stall_reason: 'loop queue is stalled: no claimable task among 2 open (2 completed)',
+      }),
+    ])
+
+    const line = screen.getByTestId('loops-index-stall-l-why')
+    expect(line).toHaveTextContent('2 completed')
+    expect(line).toHaveTextContent('no claimable task')
+  })
+
+  it('a loop that would fire carries no stall line at all', () => {
+    renderIndex([loop({ id: 'l-ok', ending_state: null, firing_active: true })])
+    expect(screen.queryByTestId('loops-index-stall-l-ok')).not.toBeInTheDocument()
+  })
+
+  it('a stopped loop reads as stopped rather than stalled', () => {
+    // `ending_state` wins: a loop that has ended is not waiting for anything, and a stale
+    // `stall_reason` alongside it must not relabel it.
+    renderIndex([
+      loop({
+        id: 'l-done',
+        ending_state: 'stopped',
+        stop_reason: 'operator stopped it',
+        stall_reason: 'loop queue is stalled: whatever',
+      }),
+    ])
+    expect(screen.getByText('stopped early')).toBeInTheDocument()
+    expect(screen.queryByText('stalled')).not.toBeInTheDocument()
+  })
+
   it('previews the shape of a row while loading, not a stack of blocks', () => {
     // Finding 7: "the point of a skeleton is that it previews the shape of what's coming". The
     // build used three 64px solid blocks; the mock uses four icon-plus-line rows and a toolbar

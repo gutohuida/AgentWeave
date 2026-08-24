@@ -112,6 +112,12 @@ class LoopSummary(BaseModel):
     # rendered the scalar. Empty list, never null — "nothing current" and "several current" then
     # have the same type, and a caller can iterate without a null check.
     current_tasks: List[Dict[str, str]] = Field(default_factory=list)  # {"id", "title", "status"}
+    # Why this loop's next firing would be refused, or None if it would proceed
+    # (`loop-notices-and-reacts` 5.5). Taken from `decide_firing` — the same computation that
+    # decides it — rather than inferred from the queue counts, so the board cannot say one thing
+    # while the firing does another. Names what is being waited on, not merely that something is:
+    # a stalled loop must read as *waiting*, not as dead.
+    stall_reason: Optional[str] = None
     open_questions: int = 0
     # Design D10 (task A1.1): who decides whether this queue may be extended. NULL means the
     # current default (the operator) — returned as-is, never resolved to "operator" here, mirroring
