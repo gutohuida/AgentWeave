@@ -615,3 +615,71 @@ new files, all of them either a test, the one new module `hub/hub/agent_activity
 for you is in `decisions_for_user` — read the posture question and the two 2026-08-23 openspec
 changes first; `2026-08-23-a-reviewer-can-see-the-work` also unblocks `loop-becomes-a-flow`, which
 currently ships a reviewer that cannot read code.
+
+---
+
+## Iteration 6 — stand-down (no work done, none available)
+
+**07:44 local.** A firing picked the branch up because iteration 5 released the heartbeat, which is
+the mechanism working as designed — it releases unconditionally, without knowing whether what
+follows is more work or nothing. There was nothing. `next_action` reads `NOTHING`, `queue` is empty,
+`stop_when_queue_empties` is `true`, and `completed_at` was already stamped at 07:15. **No new work
+was invented and no Q5 exists.** `stop_at` is 08:00, sixteen minutes out.
+
+### Reconciliation — state against the repository
+
+`STATE.json` matches the tree exactly. Branch `autonomous/2026-08-24-stress-test-remediation`,
+`HEAD` `f2a9e2e`, `origin/…` the same sha, working tree clean. The four commits the run claims are
+all present and in the claimed order: `3b4efd6` (Q1), `d706187` (Q2), `7fcd172` (Q3), `9eb37c8` (the
+bundle). Nothing to reconcile.
+
+### The claims were re-verified rather than trusted
+
+A completion claim written by the process that did the work is worth re-reading from disk, so each
+of the fifteen was spot-checked at its named location rather than taken from the summary:
+
+- **S2** `hub/hub/utils.py:20-22` — `short_id` documents 12 characters and returns `[:_ID_HEX_CHARS]`.
+- **F16** `hub/hub/schemas/tasks.py:58` — `loop_id` on the response schema.
+- **F1 (backend)** `cron_day_ambiguity_reason` at `scheduler.py:140`, called from `jobs.py:360`
+  (create) *and* `:741` (update) — both paths, which was the point.
+- **F1 (UI)** `cronDayAmbiguity` at `cron.ts:222`.
+- **F17** `hub/hub/agent_activity.py` exists as a module, not a patch in place.
+- **F2** the literal `server time` is **gone** from `hub/ui/src` — the only two hits are a comment
+  and a test docstring explaining why it went; `JobForm.tsx:207` renders `(UTC)`.
+- **F4** `projects.py:357` calls `detect_main_branch` on the open path, not only at `:440`'s
+  suggestion route.
+- **F6/F18** `run_task_binding.py:259-260` sets `task.assignee` from `run.agent`.
+- **F11** `scheduler.py:1162` is the only `run_count` increment, and the comment at `:927` records
+  that the skip branches deliberately do not stamp it.
+- **F8** `requirement_evidence.py:477` carries `http_status=422`.
+
+### One live check, chosen because it is the one that has bitten twice
+
+`AW_CHECK_UI_BUNDLE=1 py -3.11 -m pytest hub/tests/test_ui_build_stamp.py -q` → **11 passed**. That
+is the strict gate, the one that actually compares the committed bundle against `hub/ui/src`, and it
+is the decisive answer to the question two earlier sessions got wrong. The committed
+`src_fingerprint` still matches the sources, so `/health` reports no `ui_stale` on this tree. The
+`src_commit` field in the stamp points at `87000e5` rather than `HEAD`, and **that is correct and not
+a staleness bug** — `_compute_ui_staleness_warning` reads `src_fingerprint` alone, exactly as
+iteration 5's corrected belief records.
+
+The nine-minute backend suite was **not** re-run. Nothing has changed since it passed 2838/0-failed
+at 07:15, sixteen minutes of wall clock before `stop_at` is not the moment to start a fourteen-minute
+run, and re-running a suite over a byte-identical tree tests the suite, not the code.
+
+### The heartbeat was NOT released this time, deliberately
+
+Every prior iteration ended by backdating `last_heartbeat` ~40 minutes so the next firing would pick
+the work up instead of standing down against its own predecessor. **That is a hand-off mechanism, and
+there is nothing to hand off.** `last_heartbeat` is set to now, which holds the branch for 40 minutes
+and so carries past the 08:00 `stop_at` — the loop ends here rather than waking to re-read an empty
+queue and write another entry like this one. Releasing it again would have produced exactly that.
+
+### For the operator
+
+Nothing in this iteration changes the previous one's account. Everything waiting is in
+`decisions_for_user`, and the first three are the ones that gate further work: the two 2026-08-23
+openspec changes (`a-reviewer-can-see-the-work`, which also unblocks `loop-becomes-a-flow`, and
+`the-hop-budget-is-a-real-bound`), then the approval-posture question. F15 is the omission this
+queue's scoping missed — a missing pause-an-agent capability, not a papercut — and it needs a
+decision about what a paused agent does with input that arrives while it is paused.

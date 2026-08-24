@@ -9,7 +9,7 @@
   "started_at": "2026-08-23T23:58:00+01:00",
   "stop_at": "2026-08-24T08:00:00+01:00",
   "stop_when_queue_empties": true,
-  "iteration": 5,
+  "iteration": 6,
   "log_file": ".claude/autonomous/2026-08-24-stress-test-remediation-log.md",
   "queue": [
     {
@@ -38,7 +38,7 @@
     }
   ],
   "current": null,
-  "next_action": "NOTHING — the queue is empty and `stop_when_queue_empties` is true. This run is COMPLETE. A firing that picks this up should stand down and leave the branch alone; do not invent a Q5. All fifteen mechanical items in scope landed and were verified (fourteen scripts/drive/FINDINGS.md ids plus S2, which is from SURVEY.md): Q1 F4/F6/F18/F7/F8/F16/S2 (3b4efd6), Q2 F11/F13/F1-backend (d706187), Q3 F17/F19/F9/F14/F2/F1-UI (7fcd172), Q4 the bundle rebuild (9eb37c8) plus the full sweep. Final verification, all run in the closing firing: backend suite 2838 passed / 84 skipped / 1 xpassed / 0 failed (14m33s); vitest 1374/1374 across 138 files; tsc, eslint --max-warnings 0, ruff 0.15.22, black 26.5.1 (448 files), openspec validate --changes --strict (4 passed) all clean; AW_CHECK_UI_BUNDLE=1 stamp gate 11 passed; /health reports no ui_stale on the committed tree; and a 20-check HTTP drive of the real app (.claude/autonomous/scratch/drive_q4.py) with one check unreachable without a minted run credential and stated as read rather than driven. What remains is the OPERATOR's, and it is all in decisions_for_user below — read the two 2026-08-23 openspec changes and the approval posture question first.",
+  "next_action": "NOTHING. This run is COMPLETE and the heartbeat was deliberately NOT released, so no further firing should reach this branch before `stop_at` (2026-08-24T08:00:00+01:00). Do not invent a Q5. All fifteen mechanical items in scope landed and were verified twice - once by the iteration that wrote them and again from disk in iteration 6: Q1 F4/F6/F18/F7/F8/F16/S2 (3b4efd6), Q2 F11/F13/F1-backend (d706187), Q3 F17/F19/F9/F14/F2/F1-UI (7fcd172), Q4 the bundle rebuild (9eb37c8) plus the full sweep. What remains is the OPERATOR's and is entirely in decisions_for_user - read the two 2026-08-23 openspec changes and the approval-posture question first, then F15, which is the omission this queue's scoping missed.",
   "decisions_for_user": [
     "The two specified changes are NOT in this queue and are waiting for you: openspec/changes/2026-08-23-a-reviewer-can-see-the-work (F10, which also unblocks the in-flight loop-becomes-a-flow, a change that ships a reviewer unable to read code without it) and openspec/changes/2026-08-23-the-hop-budget-is-a-real-bound (F5). Both validate strict. Read them before deciding when to implement.",
     "Posture is still undecided: may an AGENT take under_review to approved, and therefore write to your main branch, or is approval always yours? Deferred deliberately. Decide it after seeing a reviewer work with F10 fixed.",
@@ -67,9 +67,9 @@
     "Never mark a task complete because a plan for it exists. Only verified implementation closes a task.",
     "At 08:00 local time stop cleanly even if the queue is incomplete. The operator gets up then and will read the log first, so a truthful account of where you stopped is worth more than a rushed final item. Record the exact continuation work rather than inventing completion."
   ],
-  "last_heartbeat": "2026-08-24T06:36:14+01:00",
+  "last_heartbeat": "2026-08-24T07:46:22+01:00",
   "completed_at": "2026-08-24T07:15:37+01:00",
-  "queue_state": "empty — Q1 (3b4efd6), Q2 (d706187), Q3 (7fcd172) and Q4 (bundle 9eb37c8 + full sweep) are all closed and verified. `stop_when_queue_empties` is true, so this run is finished; a later firing should stand down rather than invent work.",
+  "queue_state": "empty and CLOSED. Q1 (3b4efd6), Q2 (d706187), Q3 (7fcd172) and Q4 (bundle 9eb37c8 + full sweep) are all closed and verified. `stop_when_queue_empties` is true and `completed_at` is stamped, so this run is finished. Iteration 6 was a stand-down: it reconciled STATE.json against the tree (exact match), re-verified all fifteen fixes at their named source locations rather than trusting iteration 5's summary, re-ran the AW_CHECK_UI_BUNDLE=1 stamp gate (11 passed), and invented no work.",
   "run_summary": {
     "landed": {
       "3b4efd6": [
@@ -105,6 +105,9 @@
       "F19 dependents half": "the card marks what gates it, not what it gates"
     },
     "corrected_belief": "The inherited warning that git's CRLF normalisation invalidates the UI build stamp is aimed at the wrong field. `_compute_ui_staleness_warning` (hub/hub/main.py:163-167) reads `src_fingerprint` ONLY; re-running refresh_ui_bundle.py after a commit changes just `src_commit` and `built_at`, so the second commit the older handoffs advise achieves nothing and re-stales `src_commit` on the next commit forever. Measured: fingerprint byte-identical, /health clean on the committed tree, AW_CHECK_UI_BUNDLE=1 gate passing. Two earlier sessions burned a cycle chasing this.",
-    "morning_summary": "Iteration 5 of .claude/autonomous/2026-08-24-stress-test-remediation-log.md"
-  }
+    "morning_summary": "Iteration 5 of .claude/autonomous/2026-08-24-stress-test-remediation-log.md, with iteration 6's stand-down and independent re-verification appended after it."
+  },
+  "stood_down_at": "2026-08-24T07:46:22+01:00",
+  "heartbeat_released": false,
+  "heartbeat_release_note": "Iterations 1-5 each ended by backdating `last_heartbeat` ~40 minutes to hand the work to the next firing. Iteration 6 deliberately did NOT: that mechanism hands off WORK, and the queue is empty. `last_heartbeat` is now, which holds the branch for 40 minutes and therefore past the 08:00 `stop_at`, ending the loop instead of waking it to re-read an empty queue. The release in iteration 5 is why iteration 6 fired at all - it releases unconditionally, without knowing whether what follows is more work or nothing."
 }
