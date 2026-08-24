@@ -366,3 +366,13 @@ existing loop suite, unmodified.
   2026-08-24: yes — an already-assigned task resumes with its own assignee, never with the job's
   default agent.** See D12, step 1.
 - **Cross-firing selection races** — see the risk above.
+- **Should a loop's checkpoint anchor on the loop's previous checkpoint rather than the
+  conversation's?** Raised by group 6's spec review, 2026-08-24, and deliberately not acted on.
+  `generate_checkpoint` anchors on `latest_checkpoint(conversation.id)`, which for a loop is always
+  `None`, so `_ANCHOR_SECTION` — *"Carry forward what is still true and record what has changed"* —
+  never reaches the worker. The briefing carries checkpoint N into agent B's turn, but the worker
+  writing checkpoint N+1 sees only B's transcript and whatever B chose to restate, so across a flow
+  each checkpoint covers one firing and A's reasoning survives only as far as B repeated it.
+  Changing the anchor to `latest_checkpoint_for_loop` also moves `_transcript_since`'s and
+  `runs_to_cover`'s boundaries onto another conversation's timestamp, which needs deciding rather
+  than assuming — hence a question rather than a fix.

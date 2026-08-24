@@ -464,10 +464,16 @@ def submit_checkpoint_notes(
     files changed, which tasks are assigned, what is unanswered, and when everything happened.
     Do not restate any of that here.
 
+    Write for somebody else. The checkpoint these notes feed is read by whichever agent the
+    Hub picks up the work next, which may not be you and may not even be working your task —
+    a reviewer of what you just finished reads it too. Anything you would only understand
+    yourself is lost at that handover, so name the file, the task and the decision in full
+    rather than referring back to them.
+
     Give only what cannot be read back from the transcript:
-      intent     — what you were in the middle of doing, and what you were about to do next.
-      suspicions — what you believe but did not verify, and what would confirm or refute it.
-      warnings   — what a successor should not repeat, assume, or waste time re-deriving.
+      intent     — what was in the middle of being done, and what comes next.
+      suspicions — what is believed but unverified, and what would confirm or refute it.
+      warnings   — what the next agent should not repeat, assume, or waste time re-deriving.
 
     Keep it brief; a few hundred words in total is right. These notes are one input among
     several, not the checkpoint — the checkpoint is produced whether or not you call this.

@@ -427,15 +427,86 @@ task it is already working?".
 
 ## 6. The checkpoint lineage
 
-- [ ] 6.1 Test: a flow fires A, A checkpoints, the flow fires B, and B's briefing carries A's
+**Reviewed against the shipped code 2026-08-24, before implementing, per the operator's standing
+instruction.** D7's premise holds: `latest_checkpoint_for_loop` retrieves by `Checkpoint.loop_id`
+across every conversation a loop has fired into, exactly as `agent-loops` §231 requires, and
+`_compose_loop_briefing` already calls it. So 6.1 is a test of shipped behaviour rather than work,
+and so is 6.2 — `render_checkpoint` already emits `Agent: {checkpoint.agent}` as its third line.
+
+Three things the spec does not say:
+
+1. **For a loop the lineage columns are not "single-agent" — they are structurally empty**, which
+   makes 6.4 a bigger correction than it looks. `generate_checkpoint` anchors on
+   `latest_checkpoint(db, conversation.id)`, which is *conversation*-scoped; a loop may not be
+   resume-mode at all (`jobs.py` refuses it: *"this job is a loop; continuity is by checkpoint, not
+   by resumed session"*), so every firing is a fresh conversation and every loop checkpoint has
+   `previous_checkpoint_id=None` and founds its own `lineage_id`. A correction that only swapped the
+   agent count would leave the next reader believing a loop's checkpoints form a chain they have
+   never formed. What is true is narrower and more useful: the chain describes a *conversation*, and
+   a loop's continuity is not the chain — it is `loop_id` plus `created_at`.
+2. **The prior checkpoint reaches the next agent but not the next checkpoint's author.**
+   `_ANCHOR_SECTION` — *"The previous checkpoint for this conversation is below. Carry forward what
+   is still true"* — is included only when `anchor` is non-None, and by finding 1 that never happens
+   for a loop. So the briefing carries checkpoint N into agent B's turn, but the worker that writes
+   checkpoint N+1 sees only B's transcript and whatever B happened to restate. Across a flow that
+   degrades: each checkpoint covers one firing, and anything A recorded survives only as far as B
+   chose to repeat it. **Not fixed here** — nothing in group 6 or D7 asks for it, and changing the
+   anchor to `latest_checkpoint_for_loop` also moves `_transcript_since`'s and `runs_to_cover`'s
+   boundaries onto another conversation's timestamp, which needs deciding rather than assuming.
+   Raised as an open question below.
+3. **6.5's instruction is already correct in the place it appears to live, and wrong in the place
+   it actually lives.** `_GENERATION_PROMPT` opens *"You are writing a checkpoint for a software
+   conversation so that a different agent, who has never seen it, can pick the work up"* — D7's
+   consequence, already satisfied, for the *worker*. The gap is `submit_checkpoint_notes`, the tool
+   the agent itself calls: `warnings` mentions "a successor", but `intent` and `suspicions` are
+   framed entirely self-referentially ("what you were in the middle of doing"), and nothing tells
+   the agent the reader may be somebody else working a different task. That is precisely the
+   "agents write notes to themselves and a reviewer inherits shorthand" D7 predicts.
+
+
+- [x] 6.1 Test: a flow fires A, A checkpoints, the flow fires B, and B's briefing carries A's
       checkpoint content.
-- [ ] 6.2 Test: each checkpoint in a multi-agent lineage identifies its author.
-- [ ] 6.3 Test: a document-less loop's lineage behaves exactly as before.
-- [ ] 6.4 Correct the `Checkpoint` model comment — *"Linear, single-agent chain"* — to say what is
+      `hub/tests/test_flow_checkpoint_lineage.py`, three tests: the carry itself, that two
+      checkpoints from two agents brief the third firing from whichever came *last* rather than from
+      the one belonging to the agent about to run, and that a second loop's checkpoint is not
+      carried — `loop_id` scoping means "the newest checkpoint" must never come to mean "the newest
+      in the project". Shipped behaviour; these are the regression guard D7's migration plan asks
+      for.
+      **The fixture is the load-bearing part.** `_checkpoint_by` writes each checkpoint into its own
+      fresh conversation, because a loop may not be resume-mode and that is the only shape a loop's
+      checkpoint ever has. Reusing one conversation across both agents would have tested a lineage
+      the product cannot produce.
+- [x] 6.2 Test: each checkpoint in a multi-agent lineage identifies its author.
+      `test_every_checkpoint_in_a_multi_agent_lineage_names_its_author`. Already true —
+      `render_checkpoint` emits `Agent: {checkpoint.agent}` as its third line — and asserted because
+      group 6 is what makes it load-bearing: once a lineage holds two agents' work, an unattributed
+      checkpoint is a handover whose reader cannot tell whether they are resuming their own
+      reasoning or inheriting somebody else's.
+- [x] 6.3 Test: a document-less loop's lineage behaves exactly as before.
+      `test_a_document_less_single_agent_loop_is_unchanged`, driven through a real
+      `_fire_job_internal` rather than through the composer, so it covers the path a loop actually
+      takes — including that `_fire_additional_selection` never runs for it and the entry carries no
+      `review_task_id`. This is D7's migration bar: *"The behaviour of a flow with one agent is
+      today's behaviour."*
+- [x] 6.4 Correct the `Checkpoint` model comment — *"Linear, single-agent chain"* — to say what is
       now true, and say why it changed. The comment is the artefact that disagreed with §231
       (design D7).
-- [ ] 6.5 Change the instruction an agent is given when writing a checkpoint so it addresses whoever
+      Corrected, and **not** in the direction the task expected. "Single-agent becomes multi-agent"
+      would still have been wrong: by finding 1 of the review above, a loop's `previous_checkpoint_id`
+      is *always* `None` and its `lineage_id` always itself, because the anchor is conversation-scoped
+      and a loop may not be resume-mode. The comment now says the chain belongs to a conversation,
+      that a loop's continuity is `loop_id` plus `created_at`, and why the disagreement went
+      unnoticed. `test_a_loops_checkpoints_do_not_chain_and_that_is_the_point` pins it so a later
+      reader cannot correct it back.
+- [x] 6.5 Change the instruction an agent is given when writing a checkpoint so it addresses whoever
       continues the work, not itself. Without this, agents write shorthand a reviewer inherits.
+      Changed in `submit_checkpoint_notes`, which is where the gap actually was — see finding 3.
+      `_GENERATION_PROMPT` already opened *"so that a different agent, who has never seen it, can
+      pick the work up"*, so the worker was already told; the agent was not. The tool now opens
+      "Write for somebody else", names the reviewer case explicitly, and its three field
+      descriptions were rewritten out of the second person ("what you were in the middle of doing"
+      → "what was in the middle of being done") so the framing does not undo the instruction one
+      line later.
 
 ## 7. The tool surface
 

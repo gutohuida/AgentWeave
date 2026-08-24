@@ -1452,8 +1452,23 @@ class Checkpoint(Base):
     status: Mapped[str] = mapped_column(String(16), nullable=False)
     visibility: Mapped[str] = mapped_column(String(16), default="private", nullable=False)
 
-    # Linear, single-agent chain. `lineage_id` is the first checkpoint's id, carried forward, so
-    # "show me this thread" is one indexed read rather than a walk.
+    # A **conversation's** chain, not a loop's. `lineage_id` is the first checkpoint's id, carried
+    # forward, so "show me this thread" is one indexed read rather than a walk.
+    #
+    # This said "linear, single-agent chain" until `loop-becomes-a-flow` group 6, which is the
+    # comment `agent-loops` §231 has disagreed with since loops existed: a firing is briefed with
+    # the checkpoint of "any prior firing of that same loop, regardless of which conversation
+    # produced it", and `latest_checkpoint_for_loop` retrieves exactly that way. Nothing had to
+    # settle the disagreement while a loop had one agent; a flow has several, so it does.
+    #
+    # The correction is not "single-agent becomes multi-agent". `generate_checkpoint` anchors on
+    # `latest_checkpoint(conversation.id)`, and a loop may not be resume-mode (`api/v1/jobs.py`
+    # refuses it: continuity is by checkpoint, not by resumed session), so **every** loop firing is
+    # a fresh conversation and every loop checkpoint sets `previous_checkpoint_id=None` and founds
+    # its own lineage. These two columns have never linked a loop's checkpoints together and do not
+    # now. A loop's continuity is `loop_id` plus `created_at`, which is what
+    # `latest_checkpoint_for_loop` reads; this chain links the firings of a single conversation,
+    # which for a loop is always exactly one.
     previous_checkpoint_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     lineage_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
 
