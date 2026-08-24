@@ -118,6 +118,34 @@ whether an operator message is *meant* to forgive the chain. The second reading 
 intended policy — but nothing in the code or its comments says so, `can_start`'s `any` reads like a
 liveness check rather than a pardon, and either way the depth arithmetic is wrong.
 
+### Resolved 2026-08-24 — `2026-08-23-the-hop-budget-is-a-real-bound`
+
+The operator chose the first reading. `schedule_agent` filters the batch by depth as well as by
+conversation, and the turn's depth is the admitting entry's rather than `min()` across the batch.
+Forgiveness stays available but becomes explicit: `POST /queue/entries/{id}/release` re-bases a
+held entry to depth 0 and delivers it, surfaced as **Continue** beside **Discard** on the entry.
+The rejected alternative — an operator message forgives the chain, but loudly — is argued in the
+change's proposal.
+
+Re-driven on the same fixture, same shape as the reproduction above:
+
+```
+entry-d7953fb45fb8  agent     hop 2  queued                        <- held, and stays held
+run-bfacac7ea3b2    builder   turn_depth = 0                       <- the operator message
+                                                                      delivered nothing else
+```
+
+Then Continue, on the same entry:
+
+```
+POST /queue/entries/entry-d7953fb45fb8/release  ->  200, hop_depth 0
+entry-d7953fb45fb8  agent     hop 0  delivered  run-f87d988893f7
+queue_entry_released  {"entry_id": "entry-d7953fb45fb8", "released_from_depth": 2}
+run-f87d988893f7      builder  turn_depth = 0
+```
+
+The depth it was released from survives only in the event: after the re-base the row reads 0.
+
 ## F6 (B) — A task being actively worked shows no assignee and an idle assignee-status
 
 While `run-f8f7a33c` was live on `task-cdd990b1`, the task read:

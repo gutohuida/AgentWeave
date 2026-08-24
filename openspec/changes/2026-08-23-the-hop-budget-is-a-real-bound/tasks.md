@@ -34,14 +34,14 @@ pytest but produces three false failures in `test_pty_runner.py` on a green tree
 
 ## 4. Verification an agent can do
 
-- [ ] 4.1 `py -3.11 -m pytest hub/tests/ -q` — green, no new skips.
-- [ ] 4.2 `cd hub/ui && npm run lint && npx tsc --noEmit`, then `npm run build` and
+- [x] 4.1 `py -3.11 -m pytest hub/tests/ -q` — green, no new skips.
+- [x] 4.2 `cd hub/ui && npm run lint && npx tsc --noEmit`, then `npm run build` and
       `python scripts/refresh_ui_bundle.py`, and commit the bundle and the stamp together — once.
       `/health` reads `src_fingerprint` alone (`hub/hub/main.py:161-167`), which committing does
       not change, so there is nothing to re-stamp afterwards.
-- [ ] 4.3 `uvx ruff@0.15.22 check src/ hub/ tests/` and `uvx black@26.5.1 --check`.
-- [ ] 4.4 `npx openspec validate --changes --strict`.
-- [ ] 4.5 Re-run `scripts/drive/t_hop.py` against the trial Hub and confirm the depth-2 entry is not
+- [x] 4.3 `uvx ruff@0.15.22 check src/ hub/ tests/` and `uvx black@26.5.1 --check`.
+- [x] 4.4 `npx openspec validate --changes --strict`.
+- [x] 4.5 Re-run `scripts/drive/t_hop.py` against the trial Hub and confirm the depth-2 entry is not
       delivered when an operator message arrives.
 
 ## 5. Verification only a person can do
@@ -52,5 +52,5 @@ pytest but produces three false failures in `test_pty_runner.py` on a green tree
 
 ## 6. User test guide
 
-- [ ] 6.1 Write the operator-facing walkthrough: what a held entry looks like, the three ways
+- [x] 6.1 Write the operator-facing walkthrough: what a held entry looks like, the three ways
       forward, and what changes about the chain after a release.
