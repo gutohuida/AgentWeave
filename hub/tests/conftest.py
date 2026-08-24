@@ -188,6 +188,12 @@ def _no_real_worktree_provision(monkeypatch):
     monkeypatch.setattr(
         worktrees, "resolve_agent_workspace", lambda repo_root, agent, config: repo_root
     )
+    # A review turn resolves its workspace through `ensure_review_checkout` instead, which shells
+    # out to `git worktree add --detach` — same hazard, same default. `test_review_checkout.py`
+    # restores the real function against a `tmp_path` repository.
+    monkeypatch.setattr(
+        worktrees, "ensure_review_checkout", lambda repo_root, agent, sha: repo_root
+    )
 
 
 @pytest.fixture(autouse=True)

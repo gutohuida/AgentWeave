@@ -8,16 +8,16 @@ pytest but produces three false failures in `test_pty_runner.py` on a green tree
 
 ## 1. Worktree machinery
 
-- [ ] 1.1 Add `review_path(repo_root, agent)` to `hub/hub/worktrees.py`, returning
+- [x] 1.1 Add `review_path(repo_root, agent)` to `hub/hub/worktrees.py`, returning
       `.agentweave/reviews/<agent>`. Mirror `worktree_path`'s validation of the agent name.
-- [ ] 1.2 Add `ensure_review_checkout(repo_root, agent, sha)`: create the worktree detached at `sha`
+- [x] 1.2 Add `ensure_review_checkout(repo_root, agent, sha)`: create the worktree detached at `sha`
       if absent, otherwise `git checkout --detach <sha>` in the existing one. Idempotent, the same
       way `ensure_worktree` is.
-- [ ] 1.3 Run `_symlink_shared_dependencies` against the review checkout. Without this the reviewer
+- [x] 1.3 Run `_symlink_shared_dependencies` against the review checkout. Without this the reviewer
       cannot run the suite, which is design D1's entire justification.
-- [ ] 1.4 Make `release_worktree` / cleanup aware of review checkouts, so a removed agent does not
+- [x] 1.4 Make `release_worktree` / cleanup aware of review checkouts, so a removed agent does not
       leave one behind.
-- [ ] 1.5 Unit tests: created detached; re-pointed rather than duplicated on a second call; refuses
+- [x] 1.5 Unit tests: created detached; re-pointed rather than duplicated on a second call; refuses
       an unknown sha with a stated reason; symlinks present.
 
 ## 2. Resolving the commit

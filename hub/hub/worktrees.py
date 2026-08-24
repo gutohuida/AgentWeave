@@ -79,6 +79,14 @@ class IsolationUnavailableError(RuntimeError):
     """A writing agent cannot be given the isolated checkout the spec requires."""
 
 
+class ReviewCommitUnavailableError(RuntimeError):
+    """The commit a review turn was asked to check out is not in this repository.
+
+    A stated refusal rather than a guess. A reviewer pointed at the wrong tree reports a verdict
+    about code nobody wrote, which is worse than no review at all.
+    """
+
+
 def _run_git(cwd: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess:
     result = subprocess.run(
         ["git", *args],
@@ -138,6 +146,25 @@ def branch_name(agent: str) -> str:
     return f"{BRANCH_PREFIX}{agent}"
 
 
+def review_root(repo_root: Path) -> Path:
+    return repo_root / ".agentweave" / "reviews"
+
+
+def review_path(repo_root: Path, agent: str) -> Path:
+    """Where *agent* reviews someone else's work (design D3).
+
+    Keyed by the **reviewing** agent, not by the commit, task or evidence, because that is what
+    makes the set bounded: one directory per agent forever, re-pointed with `git checkout --detach`
+    at each review. Only one run per agent can be live at a time, so one is provably enough. Keying
+    by anything else grows without limit and reintroduces a cleanup problem.
+
+    Pure, like `worktree_path`, and validated the same way — an agent name that cannot safely become
+    a path component is refused here rather than at the git call.
+    """
+    validate_agent_name(agent)
+    return review_root(repo_root) / agent
+
+
 def is_writing_agent(config: Dict[str, Any]) -> bool:
     """Isolation is the default; sharing the primary checkout is the opt-in
     (Decision 7's own mitigation: "isolate only agents that *write*").
@@ -168,8 +195,17 @@ def _symlink_shared_dependencies(repo_root: Path, worktree: Path) -> None:
             continue
 
 
-def _registered_worktree_branch(repo_root: Path, path: Path) -> Optional[str]:
-    """Return the branch registered at *path*, without following path aliases."""
+def _registered_worktree_record(repo_root: Path, path: Path) -> Optional[Dict[str, str]]:
+    """Return git's own porcelain record for the worktree registered at *path*, if any.
+
+    Whole record rather than just the branch, because a **review** checkout is detached and so has
+    no `branch` line at all — `detached` appears instead, with no value. A helper that could only
+    answer "which branch" therefore could not tell an unregistered path from a registered detached
+    one, and both callers below need that distinction.
+
+    Path comparison is `absolute()`, deliberately not `resolve()`: following symlinks here would let
+    an aliased path answer for a directory git does not actually track there.
+    """
     result = _run_git(repo_root, "worktree", "list", "--porcelain")
     expected_path = path.absolute()
     record: Dict[str, str] = {}
@@ -182,9 +218,15 @@ def _registered_worktree_branch(repo_root: Path, path: Path) -> Optional[str]:
             continue
         registered_path = record.get("worktree")
         if registered_path and Path(registered_path).absolute() == expected_path:
-            return record.get("branch")
+            return record
         record = {}
     return None
+
+
+def _registered_worktree_branch(repo_root: Path, path: Path) -> Optional[str]:
+    """Return the branch registered at *path*, without following path aliases."""
+    record = _registered_worktree_record(repo_root, path)
+    return record.get("branch") if record is not None else None
 
 
 def existing_worktree(repo_root: Path, agent: str) -> Optional[Path]:
@@ -258,6 +300,113 @@ def ensure_worktree(repo_root: Path, agent: str) -> Path:
 
     _symlink_shared_dependencies(repo_root, path)
     return path
+
+
+def resolve_review_commit(repo_root: Path, sha: str) -> str:
+    """Return the full SHA *sha* names, or refuse with a reason (tasks 1.5, 2.2).
+
+    `^{commit}` rather than a bare verify: a tag or a tree would otherwise pass here and fail later
+    inside `worktree add`, where the error names git's plumbing instead of the review.
+    """
+    if not sha or not sha.strip():
+        raise ReviewCommitUnavailableError("no commit was given to review")
+    candidate = sha.strip()
+    result = _run_git(
+        repo_root, "rev-parse", "--verify", "--quiet", f"{candidate}^{{commit}}", check=False
+    )
+    resolved = result.stdout.strip()
+    if result.returncode != 0 or not resolved:
+        raise ReviewCommitUnavailableError(
+            f"commit {candidate} is not present in this repository, so there is nothing to check "
+            "out for review"
+        )
+    return resolved
+
+
+def existing_review_checkout(repo_root: Path, agent: str) -> Optional[Path]:
+    """*agent*'s review checkout if git really tracks a detached one there, else `None`.
+
+    Provisions nothing, for the same reason `existing_worktree` provisions nothing, and tests the
+    registration rather than the directory for the same reason too: a git command run with `cwd`
+    set to an untracked directory answers about the *enclosing* repository, so an abandoned
+    directory would look like a passing case.
+
+    A record carrying a `branch` is rejected. That path is supposed to be detached (design D2); if
+    something has put a branch there it is not ours to reuse silently.
+    """
+    try:
+        path = review_path(repo_root, agent)
+    except ValueError:
+        return None
+    if not path.is_dir() or path.is_symlink():
+        return None
+    try:
+        record = _registered_worktree_record(repo_root, path)
+    except (GitCommandError, OSError, subprocess.SubprocessError):
+        return None
+    if record is None or record.get("branch"):
+        return None
+    return path
+
+
+def ensure_review_checkout(repo_root: Path, agent: str, sha: str) -> Path:
+    """Provision *agent*'s review checkout, detached at *sha*. Idempotent (task 1.2).
+
+    Created on the first review and **re-pointed** on every one after it, so the number of these
+    directories is bounded by the roster rather than by the number of reviews (design D3).
+
+    *Detached, with no branch* (design D2). A branch invites a commit, and a reviewer is not an
+    author — if it wants a change made, the product already has `revision_needed` and the author
+    makes it. Detached also means git itself states the role: `git status` in here says
+    "HEAD detached at <sha>", so the environment tells the agent what it is doing rather than
+    depending on the prompt to. An accidental commit is then orphaned and harmless.
+
+    `checkout --force`, because a review checkout is disposable and the reviewer is not its author:
+    a tracked file it modified must not be able to block the next review. Untracked files are left
+    alone — `--force` does not remove them — so a scratch note costs nothing.
+    """
+    commit = resolve_review_commit(repo_root, sha)
+    path = review_path(repo_root, agent)
+
+    if path.exists():
+        if existing_review_checkout(repo_root, agent) is None:
+            raise IsolationUnavailableError(
+                f"refusing existing path {path}: it is not a detached git worktree registered for "
+                f"{agent}'s reviews"
+            )
+        _run_git(path, "checkout", "--force", "--detach", commit)
+    else:
+        # Same reason as `ensure_worktree`: git's own `.git/worktrees/<name>` metadata can outlive
+        # a directory removed by something other than `release_review_checkout`, and `worktree add`
+        # refuses to proceed while it does.
+        _run_git(repo_root, "worktree", "prune", check=False)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        _run_git(repo_root, "worktree", "add", "--detach", str(path), commit)
+
+    # Task 1.3, and design D6: without this the reviewer cannot run the suite, which is the entire
+    # justification for giving it a checkout rather than a diff.
+    _symlink_shared_dependencies(repo_root, path)
+    return path
+
+
+def release_review_checkout(repo_root: Path, agent: str) -> bool:
+    """Remove *agent*'s review checkout. Returns whether there was one (task 1.4).
+
+    Nothing is preserved and nothing needs to be. A working worktree is released carefully because
+    it carries the agent's own unmerged work; a review checkout carries no work by construction —
+    it is detached, and anything committed onto it was already orphaned.
+    """
+    try:
+        path = review_path(repo_root, agent)
+    except ValueError:
+        return False
+    if not path.exists():
+        return False
+    _run_git(repo_root, "worktree", "remove", "--force", str(path), check=False)
+    if path.exists():
+        shutil.rmtree(path, ignore_errors=True)
+    _run_git(repo_root, "worktree", "prune", check=False)
+    return True
 
 
 def resolve_agent_workspace(repo_root: Path, agent: str, config: Dict[str, Any]) -> Path:
@@ -355,6 +504,9 @@ class ReleaseResult:
     had_uncommitted_changes: bool = False
     snapshot_commit: Optional[str] = None
     unmerged_commits: List[str] = field(default_factory=list)
+    #: Whether this agent also had a review checkout, and it was removed (task 1.4). Independent of
+    #: `released`: an agent that only ever reviewed has one of these and no working worktree.
+    review_checkout_released: bool = False
 
     @property
     def has_unmerged_work(self) -> bool:
@@ -366,12 +518,21 @@ def release_worktree(repo_root: Path, agent: str) -> ReleaseResult:
     never the branch, and never silently — any uncommitted change is snapshotted
     onto the branch first, and any commit the branch carries beyond the primary
     checkout's HEAD is reported back, not discarded.
+
+    The agent's *review* checkout goes too (task 1.4), and goes first, because it is released
+    unconditionally: an agent that has only ever reviewed has one of those and no working worktree
+    at all, so releasing it after the early return below would never happen for exactly the agent
+    that needs it.
     """
     path = worktree_path(repo_root, agent)
     branch = branch_name(agent)
 
+    review_released = release_review_checkout(repo_root, agent)
+
     if not path.exists():
-        return ReleaseResult(released=False, branch=branch)
+        return ReleaseResult(
+            released=False, branch=branch, review_checkout_released=review_released
+        )
 
     had_uncommitted = _has_uncommitted_changes(path)
     snapshot_commit = snapshot_worktree(path, agent) if had_uncommitted else None
@@ -385,6 +546,7 @@ def release_worktree(repo_root: Path, agent: str) -> ReleaseResult:
         had_uncommitted_changes=had_uncommitted,
         snapshot_commit=snapshot_commit,
         unmerged_commits=unmerged,
+        review_checkout_released=review_released,
     )
 
 
