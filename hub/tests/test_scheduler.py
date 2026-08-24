@@ -63,12 +63,17 @@ async def _make_job(db, *, suffix, agent, session_mode="new"):
     return job
 
 
-async def _claim_one(db, loop):
+async def _claim_one(db, loop, agent="claim-probe"):
     """`loop-becomes-a-flow` group 1 made `_claim_loop_task` set-valued. This test was written
     against the scalar it used to return and asserts exactly the same fact about exactly the same
     claim; unwrapping here keeps the assertion about *the claim* rather than about its container.
+
+    **Takes an agent as of `loop-becomes-a-flow` group 3**, because claimability became a question
+    about a *(task, agent)* pair. These tests predate that and none of them is about review, so
+    they pass a name no fixture ever records as completing anything -- which is what makes the
+    claim they assert the actor-blind one they were written for.
     """
-    claimed = await _claim_loop_task(db, loop)
+    claimed = await _claim_loop_task(db, loop, agent=agent)
     return claimed[0] if claimed else None
 
 
@@ -851,7 +856,7 @@ async def test_a_stalled_loop_queue_is_neither_claimable_nor_drained(stalled_sta
         assert await _loop_stop_reason(db, fresh_job) is None
         # That combination used to mean "fire anyway". It now has a name of its own, and the
         # name carries the breakdown an operator needs to see what is being waited on.
-        stall = await _loop_stall_reason(db, fresh_loop)
+        stall = await _loop_stall_reason(db, fresh_loop, agent="claim-probe")
         assert stall is not None
         assert "stalled" in stall
         assert f"1 {stalled_status}" in stall

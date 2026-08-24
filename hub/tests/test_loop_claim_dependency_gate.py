@@ -23,14 +23,19 @@ from hub.task_transitions import operator
 pytestmark = pytest.mark.asyncio
 
 
-async def _claim_one(db, loop):
+async def _claim_one(db, loop, agent="claim-probe"):
     """`loop-becomes-a-flow` group 1 made `_claim_loop_task` set-valued. These tests were written
     against the scalar it used to return and assert exactly the same facts about exactly the same
     claim; unwrapping here keeps each assertion about *the claim* rather than about its container,
     so group 1's bar -- the existing loop suite passing unmodified -- is tested rather than edited
     around.
+
+    **Takes an agent as of `loop-becomes-a-flow` group 3**, because claimability became a question
+    about a *(task, agent)* pair. These tests predate that and none of them is about review, so
+    they pass a name no fixture ever records as completing anything -- which is what makes the
+    claim they assert the actor-blind one they were written for.
     """
-    claimed = await _claim_loop_task(db, loop)
+    claimed = await _claim_loop_task(db, loop, agent=agent)
     return claimed[0] if claimed else None
 
 
@@ -196,7 +201,7 @@ async def test_a_queue_where_every_task_is_gated_claims_nothing_and_stays_enable
         assert await _claim_one(db, fresh_loop) is None
         # Gated, not drained -- the job must not be stopped over this.
         assert await _loop_stop_reason(db, fresh_job) is None
-        stall = await _loop_stall_reason(db, fresh_loop)
+        stall = await _loop_stall_reason(db, fresh_loop, agent="claim-probe")
         assert stall is not None
         assert "gated on a rejected prerequisite" in stall
 
@@ -283,7 +288,7 @@ async def test_reversing_a_rejection_revives_a_stalled_loop_with_no_further_acti
         fresh_loop = (await db.execute(select(Loop).where(Loop.job_id == job.id))).scalar_one()
         assert await _claim_one(db, fresh_loop) is None
         assert await _loop_stop_reason(db, fresh_job) is None
-        stall = await _loop_stall_reason(db, fresh_loop)
+        stall = await _loop_stall_reason(db, fresh_loop, agent="claim-probe")
         assert stall is not None and "rejected" in stall
 
     # The operator's only way back: reopen the rejected prerequisite to pending. No action at all

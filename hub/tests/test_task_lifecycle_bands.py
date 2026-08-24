@@ -30,6 +30,7 @@ from hub.task_transitions import (
     CLAIMABLE_STATUSES,
     CURRENT_ITEM_STATUSES,
     LIVE_STATUSES,
+    REVIEWABLE_STATUSES,
     STATUS_BANDS,
     TERMINAL_STATUSES,
     TRANSITIONS,
@@ -117,9 +118,18 @@ def test_claimable_matches_the_literal_it_replaced():
 
 
 def test_current_item_matches_the_literal_it_replaced():
-    """`scheduler.CURRENT_ITEM_TASK_STATUSES` — the claimable four plus `blocked`."""
+    """`scheduler.CURRENT_ITEM_TASK_STATUSES` — the claimable four, plus `blocked`, plus
+    `completed`.
+
+    `completed` joined in `loop-becomes-a-flow` group 3 and is the second status to enter this set
+    without entering the claim, for the same reason as the first arriving from the other direction.
+    `blocked` is here because a firing may *not* take it and the operator must see it; `completed`
+    because a firing now *may* take it — for review, by an agent that did not finish it — and if
+    the board's query could not return the row it would show no current item for a loop that was
+    actively reviewing. That is the 2026-08-21 defect again, mirrored.
+    """
     assert (
-        frozenset({"in_progress", "assigned", "pending", "revision_needed", "blocked"})
+        frozenset({"in_progress", "assigned", "pending", "revision_needed", "blocked", "completed"})
         == CURRENT_ITEM_STATUSES
     )
 
@@ -157,15 +167,37 @@ def test_the_consumers_agree_with_the_derived_sets():
 # ---------------------------------------------------------------------------
 
 
-def test_the_two_sets_that_differ_only_by_blocked_still_differ():
+def test_current_item_holds_everything_claimable_and_more():
     """The 2026-08-24 defect, as a property of the classification rather than of two literals.
 
     `blocked` is *no* to "may a firing claim this?" and *yes* to "is this the loop's current
     work?". A classification that collapsed those into one "live" band would reproduce the bug it
     was written to prevent.
+
+    **Renamed and loosened by `loop-becomes-a-flow` group 3**, which added a second such status.
+    The direction is what is load-bearing and is asserted exactly: nothing claimable may be missing
+    from current-item, or the board would fail to name work the firing is about to take. What may
+    be present without being claimable is open-ended by design, and the two members it has today
+    are pinned by name below so a *third* arriving unnoticed still fails something.
     """
-    assert {"blocked"} == CURRENT_ITEM_STATUSES - CLAIMABLE_STATUSES
     assert frozenset() == CLAIMABLE_STATUSES - CURRENT_ITEM_STATUSES
+    assert {"blocked", "completed"} == CURRENT_ITEM_STATUSES - CLAIMABLE_STATUSES
+
+
+def test_the_two_statuses_that_are_current_without_being_claimable_differ_in_kind():
+    """They are in the same difference for opposite reasons, and conflating them would lose the
+    distinction group 3 depends on.
+
+    `blocked` is unclaimable by *everyone*: the answer that unblocks it comes from a person, so
+    firing any agent at it cannot help. `completed` is unclaimable by exactly *one* agent, the one
+    that finished it, and claimable by everyone else — which is why it is the reviewable set and
+    `blocked` is not. A future refactor that merged the two bands would either make finished work
+    unreviewable or make blocked work claimable, and both have already shipped once.
+    """
+    assert {"completed"} == REVIEWABLE_STATUSES
+    assert "blocked" not in REVIEWABLE_STATUSES
+    assert REVIEWABLE_STATUSES <= CURRENT_ITEM_STATUSES
+    assert frozenset() == REVIEWABLE_STATUSES & CLAIMABLE_STATUSES
 
 
 def test_live_and_current_item_are_not_the_same_question_either():

@@ -347,11 +347,10 @@ Both depend on the busy guard (group 1). Five minutes is only safe once a busy t
       `test_a_conversation_whose_model_changed_attributes_usage_per_turn` is a `strict=False` xfail
       over a documented StaticPool fixture defect, and it xpasses in isolation. Present identically
       in the baseline run and the final one.
-      **One qualification, stated rather than glossed.** 7.5's scan was rewritten from a textual
-      match to an `ast` parse *after* this run began, so the full suite exercised the earlier form.
-      The rewrite touches one test's body and no source; its module was re-run directly (12 passed)
-      and the AST form was re-confirmed able to fail against a planted third caller. A confirming
-      full run follows the commit.
+      The scan was rewritten from a textual match to an `ast` parse after the first of these
+      runs, so a confirming run was made against the committed tree afterwards: **2963 passed,
+      84 skipped, 0 failed** (21m28s) — same numbers, with the AST form in it. Both forms were
+      separately confirmed able to fail against a planted third caller.
 - [x] 7.2 `openspec validate loop-notices-and-reacts` reports valid.
       `npx openspec validate loop-notices-and-reacts --strict` — valid, after group 6's amendment.
 - [x] 7.3 `ruff check hub/` and `black --check hub/` pass on every touched file, and

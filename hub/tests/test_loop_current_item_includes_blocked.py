@@ -25,6 +25,7 @@ from hub.db.models import AIJob, Loop, Task
 from hub.scheduler import (
     CLAIMABLE_LOOP_TASK_STATUSES,
     CURRENT_ITEM_TASK_STATUSES,
+    REVIEWABLE_LOOP_TASK_STATUSES,
     _claim_loop_task,
 )
 
@@ -117,7 +118,7 @@ async def test_the_firing_still_refuses_to_claim_a_blocked_task(app):
 
     async with async_session_factory() as db:
         fresh_loop = (await db.execute(select(Loop).where(Loop.job_id == job.id))).scalar_one()
-        assert await _claim_loop_task(db, fresh_loop) == []
+        assert await _claim_loop_task(db, fresh_loop, agent="claim-probe") == []
 
 
 async def test_the_two_sets_differ_only_by_blocked(app):
@@ -126,5 +127,14 @@ async def test_the_two_sets_differ_only_by_blocked(app):
 
     Async purely to sit under this module's `pytestmark`; it touches no database.
     """
-    assert set(CURRENT_ITEM_TASK_STATUSES) - set(CLAIMABLE_LOOP_TASK_STATUSES) == {"blocked"}
+    assert set(CURRENT_ITEM_TASK_STATUSES) - set(CLAIMABLE_LOOP_TASK_STATUSES) == {
+        "blocked",
+        "completed",
+    }
     assert set(CLAIMABLE_LOOP_TASK_STATUSES) - set(CURRENT_ITEM_TASK_STATUSES) == set()
+    # `completed` is the reviewable set entire, and it is in current-item without being in the
+    # claim for the opposite reason `blocked` is: not "no firing may take this", but "only a
+    # firing by somebody else may". The claim tuple stays actor-blind and stays without it
+    # (`loop-becomes-a-flow` task 3.3); `task_is_claimable_by` is where the actor enters.
+    assert set(REVIEWABLE_LOOP_TASK_STATUSES) == {"completed"}
+    assert set(REVIEWABLE_LOOP_TASK_STATUSES) & set(CLAIMABLE_LOOP_TASK_STATUSES) == set()

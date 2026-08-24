@@ -197,8 +197,16 @@ BAND_AGENT_ACTIONABLE = "agent_actionable"
 #: (`openspec/explorations/2026-08-21-which-band-blocked-belongs-to.md`.)
 BAND_AWAITING_PERSON = "awaiting_person"
 
-#: Finished by its author and waiting for somebody else to take it up. Not claimable -- an agent
-#: cannot approve its own work -- and not yet anyone's active task.
+#: Finished by its author and waiting for somebody else to take it up. Not yet anyone's active task.
+#:
+#: **Claimability here depends on who is asking** (`loop-becomes-a-flow` design D3), which is what
+#: makes this band different in kind from the other four: every other band answers "may a firing
+#: claim this?" with a yes or a no, and this one answers "not by the agent that finished it". An
+#: agent may not approve its own work, so the author cannot take it back -- but anybody else can,
+#: and that is the entire review mechanism. `REVIEWABLE_STATUSES` is the set; `scheduler`'s
+#: `task_is_claimable_by` is the question, and it asks `_agent_that_completed` rather than a second
+#: implementation of the same determination, so a task the Hub offers an agent is never one that
+#: agent would then be refused for approving.
 BAND_AWAITING_HANDOFF = "awaiting_handoff"
 
 #: Somebody else has it. Not claimable, but live work: it is in flight, just not here.
@@ -277,10 +285,30 @@ _check_bands()
 #: progress possible? Consumed by `scheduler.CLAIMABLE_LOOP_TASK_STATUSES`.
 CLAIMABLE_STATUSES: FrozenSet[str] = _statuses_in(BAND_AGENT_ACTIONABLE)
 
-#: Can a task in this status be a loop's *current item* on the board? The claimable statuses plus
-#: `blocked`, and the difference is the point: a blocked task is not something a firing may take,
-#: and is exactly what the operator needs to see the loop waiting on.
-CURRENT_ITEM_STATUSES: FrozenSet[str] = _statuses_in(BAND_AGENT_ACTIONABLE, BAND_AWAITING_PERSON)
+#: May a firing claim a task in this status **if the agent asking is not the one that finished
+#: it**? Consumed by `scheduler.REVIEWABLE_LOOP_TASK_STATUSES`.
+#:
+#: Deliberately not folded into `CLAIMABLE_STATUSES`. That set answers a question about a status
+#: alone, and this one cannot be answered without an actor -- merging them would make the claim
+#: actor-blind again, which `loop-becomes-a-flow` task 3.3 names as the obvious wrong fix.
+REVIEWABLE_STATUSES: FrozenSet[str] = _statuses_in(BAND_AWAITING_HANDOFF)
+
+#: Can a task in this status be a loop's *current item* on the board? The claimable statuses, plus
+#: `blocked`, plus the reviewable ones -- and each addition is there because the board must be able
+#: to name work the firing is dealing with even when it is not ordinary claimable work.
+#:
+#: `blocked` was the first: not something a firing may take, and exactly what the operator needs to
+#: see the loop waiting on. `completed` joined it in `loop-becomes-a-flow` group 3 for the mirror
+#: reason -- a firing *can* now claim one, for review, and if the board's query could not return
+#: the row it would show no current item for a loop that was actively reviewing. That is the same
+#: defect `blocked` caused on 2026-08-21, arriving from the other direction.
+#:
+#: Membership here is not a claim that the task is claimable. The board's own walk still shows a
+#: task as current only when the firing would claim it or it is `blocked`, so a `completed` task
+#: nobody may review is in this set and still not displayed as current.
+CURRENT_ITEM_STATUSES: FrozenSet[str] = _statuses_in(
+    BAND_AGENT_ACTIONABLE, BAND_AWAITING_PERSON, BAND_AWAITING_HANDOFF
+)
 
 #: Is this task finished, for the purpose of binding a run to it? Consumed by
 #: `run_task_binding.TERMINAL_FOR_BINDING`.

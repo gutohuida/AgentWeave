@@ -84,7 +84,7 @@ async def test_a_pending_queue_claims_a_collection_holding_exactly_that_task(app
         await db.commit()
 
     async with async_session_factory() as db:
-        claimed = await _claim_loop_task(db, await _fresh_loop(db, job.id))
+        claimed = await _claim_loop_task(db, await _fresh_loop(db, job.id), agent="claim-probe")
         assert [task.id for task in claimed] == ["task-setclaim-pending"]
 
 
@@ -99,7 +99,7 @@ async def test_a_resuming_queue_claims_the_active_task_and_leaves_its_status_alo
         await db.commit()
 
     async with async_session_factory() as db:
-        claimed = await _claim_loop_task(db, await _fresh_loop(db, job.id))
+        claimed = await _claim_loop_task(db, await _fresh_loop(db, job.id), agent="claim-probe")
         assert [task.id for task in claimed] == ["task-setclaim-active"]
         assert claimed[0].status == "in_progress"
 
@@ -113,7 +113,7 @@ async def test_an_empty_queue_claims_an_empty_collection_not_a_none(app):
         await _make_loop(db, job_id=job.id, purpose="an empty queue")
 
     async with async_session_factory() as db:
-        claimed = await _claim_loop_task(db, await _fresh_loop(db, job.id))
+        claimed = await _claim_loop_task(db, await _fresh_loop(db, job.id), agent="claim-probe")
         assert claimed == []
         assert len(claimed) == 0
 
@@ -131,7 +131,7 @@ async def test_a_queue_of_many_still_claims_one_in_this_group(app):
         await db.commit()
 
     async with async_session_factory() as db:
-        claimed = await _claim_loop_task(db, await _fresh_loop(db, job.id))
+        claimed = await _claim_loop_task(db, await _fresh_loop(db, job.id), agent="claim-probe")
         assert len(claimed) == 1
 
 
@@ -147,9 +147,19 @@ async def test_the_claim_is_ordered_and_repeatable(app):
         await db.commit()
 
     async with async_session_factory() as db:
-        first = [task.id for task in await _claim_loop_task(db, await _fresh_loop(db, job.id))]
+        first = [
+            task.id
+            for task in await _claim_loop_task(
+                db, await _fresh_loop(db, job.id), agent="claim-probe"
+            )
+        ]
     async with async_session_factory() as db:
-        second = [task.id for task in await _claim_loop_task(db, await _fresh_loop(db, job.id))]
+        second = [
+            task.id
+            for task in await _claim_loop_task(
+                db, await _fresh_loop(db, job.id), agent="claim-probe"
+            )
+        ]
 
     assert first == second
     assert isinstance(first, list)
@@ -172,7 +182,7 @@ async def test_the_briefing_for_a_collection_of_one_is_unchanged(app):
 
     async with async_session_factory() as db:
         fresh_loop = await _fresh_loop(db, job.id)
-        claimed = await _claim_loop_task(db, fresh_loop)
+        claimed = await _claim_loop_task(db, fresh_loop, agent="claim-probe")
         prior = await latest_checkpoint_for_loop(db, fresh_loop.id)
         briefing = await _compose_loop_briefing(db, fresh_loop, claimed[0], prior)
 

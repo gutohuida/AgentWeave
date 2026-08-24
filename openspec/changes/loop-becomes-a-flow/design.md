@@ -207,6 +207,45 @@ so the agent rung 2 picks determines which checkout is built. Nothing here requi
 across retries, but a released or re-fired review builds a fresh checkout, which is the bounded and
 reused behaviour the reviewer change's own third requirement already specifies.
 
+### D10 — Review outranks new work, because the ordering already said so
+
+**Added 2026-08-24, implementing group 3.** `_loop_queue_order` sorts non-`pending` rows first, by
+`updated` descending, then pending rows oldest-first. A `completed` task is non-pending, so the
+moment group 3 makes one claimable it sorts **ahead of** untouched pending work — a flow reviews
+finished work before starting more.
+
+That was inherited rather than chosen, and it is being written down rather than changed, because it
+is the behaviour a queue should have: work that is finished and waiting on a second pair of eyes is
+closer to done than work not yet begun, and letting it wait while the flow opens new fronts is how a
+queue accumulates a tail of unreviewed work. It also falls out of the same rule that already makes
+an in-progress task outrank a pending one, so there is one ordering rule rather than an exception
+for review.
+
+The author is unaffected: it walks past its own finished task and takes the pending one, because
+claimability is answered per agent before ordering is consulted.
+
+*Rejected:* **a separate ordering for reviewable candidates.** Two orderings is what
+`_loop_queue_order`'s own comment records going wrong — the board and the firing each had one, both
+shared a flaw, and two consistent wrong answers read as a match.
+
+### D11 — A non-author agent may take a task to `approved`
+
+**Decided by the operator 2026-08-24**, answering a question carried unanswered since handoff 0078
+and load-bearing for everything in groups 3, 4 and 4b.
+
+An agent may sign work off. The only guard is author/reviewer separation — the agent that recorded
+the move to `completed` may not approve, reject or request revision of it — and that guard is
+already implemented, already tested, and already the thing group 3's claimability defers to.
+
+Two consequences worth stating, since a later reader will ask:
+
+- **The flow's review is a real review, not a staging step.** A reviewer's turn can end at
+  `approved`, so a queue can drain without the operator in it. That is what makes an unattended flow
+  possible at all; without it every loop stops at a wall of finished work.
+- **The operator is not removed from the loop, only from the critical path.** `ask_user` and the
+  permission posture still stop a run, and B4's evidence gates still govern *what* an approval
+  requires. This decides who may press the button, not what has to be true before it is pressed.
+
 ## Risks / Trade-offs
 
 **[Set-valued claim breaks the board, the firing and §548 at once]** → Land the set-valued form
@@ -245,6 +284,8 @@ existing loop suite, unmodified.
 
 ## Open Questions
 
+- ~~**May an agent take a task from `under_review` to `approved`?**~~ **Answered 2026-08-24: yes,
+  provided it is not the agent that completed it.** See D11.
 - **What does the board show for a flow staffing several tasks?** The dependency board renders the
   graph; whether concurrent work is shown per card, per layer, or as a flow header is undecided.
 - ~~**How is a declared reviewer resolved — against charters, agent names, or both?**~~

@@ -27,7 +27,12 @@ from .db.models import Agent, AIJob, Checkpoint, JobRun, Loop, Message, Question
 from .run_task_binding import TERMINAL_FOR_BINDING
 from .sse import sse_manager
 from .task_transition_service import apply_transition
-from .task_transitions import CLAIMABLE_STATUSES, CURRENT_ITEM_STATUSES, operator
+from .task_transitions import (
+    CLAIMABLE_STATUSES,
+    CURRENT_ITEM_STATUSES,
+    REVIEWABLE_STATUSES,
+    operator,
+)
 from .utils import persist_event, short_id
 
 logger = logging.getLogger(__name__)
@@ -462,6 +467,65 @@ CLAIMABLE_LOOP_TASK_STATUSES: tuple = tuple(sorted(CLAIMABLE_STATUSES))
 #: should be derived from the bands rather than spelled out here once it does.
 CURRENT_ITEM_TASK_STATUSES: tuple = tuple(sorted(CURRENT_ITEM_STATUSES))
 
+#: The statuses a firing may claim **only after asking who is claiming** (`loop-becomes-a-flow`
+#: design D3). `completed`, and nothing else today.
+#:
+#: Kept separate from `CLAIMABLE_LOOP_TASK_STATUSES` rather than added to it, which task 3.3 names
+#: as the obvious wrong fix: that tuple answers a question about a status alone, and this one has
+#: no answer without an actor. Widening it would say "any agent may claim finished work", which is
+#: false for exactly one agent -- the one that finished it -- and that agent is the only one the
+#: rule exists to stop.
+REVIEWABLE_LOOP_TASK_STATUSES: tuple = tuple(sorted(REVIEWABLE_STATUSES))
+
+
+async def task_is_claimable_by(session: AsyncSession, task: Task, agent: str) -> bool:
+    """Whether *agent* may be fired for *task* (`loop-becomes-a-flow` design D3).
+
+    Claimability stopped being a property of a status here and became a question about a *(task,
+    agent)* pair. Only one band needs the actor: a task in `completed` is claimable by anybody
+    except the agent recorded as completing it, which is the whole review mechanism -- no handoff
+    message, no review task row, nothing asked of the finishing agent that could be omitted.
+
+    **`_agent_that_completed` is called rather than reimplemented, and that is the correctness
+    property rather than tidiness.** It is the same determination `_guard_author_is_not_reviewer`
+    reads for `-> approved`/`rejected`/`revision_needed`, so a task this function offers an agent
+    can never be one that agent is then refused for approving. Two implementations of "who finished
+    this" would be free to drift into exactly that contradiction, and the loop would fire an agent
+    at work it is structurally unable to sign off -- forever, since the refusal changes nothing
+    about the queue.
+
+    A `completed` task with **no recorded completer** is claimable by nobody, and this is the one
+    place the two functions deliberately diverge. `_guard_author_is_not_reviewer` treats an unknown
+    completer as *permitting*, which is right for a refusal: a guard that blocked every move it
+    could not attribute would stop legitimate work over a missing history row. It is exactly wrong
+    for an **offer**. Handing finished work to an agent the Hub cannot rule out as its author, when
+    the guard will then also fail to rule it out, is self-approval reached by two permissive
+    defaults agreeing -- the guard bypassed entirely, for precisely the tasks whose provenance is
+    unknown.
+
+    So the asymmetry is the safe direction of each: refuse to offer, permit to act. The cost is a
+    task completed before the transition table existed, or written straight into the status, which
+    the flow will not staff for review; it stalls the queue and the operator reviews it, which is
+    what happens today and is a state the operator can see and resolve. Every task that reaches
+    `completed` through `apply_transition` records its completer, so this is the legacy and
+    hand-written case only.
+
+    **Found by a hang, not by reasoning.** The first version of this returned `completed_by !=
+    agent`, which for `None` is `True`; `test_scheduler.py`'s spin test constructs its completed
+    tasks directly, so the firing claimed one and spawned an agent the fixture had no reads queued
+    for. Chasing that back is what surfaced the self-approval route above.
+    """
+    if task.status in CLAIMABLE_LOOP_TASK_STATUSES:
+        return True
+    if task.status not in REVIEWABLE_LOOP_TASK_STATUSES:
+        return False
+    from .task_transition_service import _agent_that_completed
+
+    completed_by = await _agent_that_completed(session, task.id)
+    if completed_by is None:
+        return False
+    return completed_by != agent
+
 
 async def candidate_is_startable(
     session: AsyncSession, task: Task
@@ -494,15 +558,53 @@ async def candidate_is_startable(
     them. It never reaches the *claim* regardless, because `CLAIMABLE_LOOP_TASK_STATUSES` excludes
     it; only `CURRENT_ITEM_TASK_STATUSES` lets it through, so the sets do that gating and this
     rule stays single.
+
+    **`completed` joins them in `loop-becomes-a-flow` group 3, and this was caught by reviewing the
+    spec against this function rather than by a failing test.** A `completed` task claimed for
+    review is not one `apply_transition` away from `in_progress` -- it is one away from a review
+    outcome, which `dependency_gate.evaluate` does not guard. Asking the gate about it would refuse
+    finished work its *own* prerequisite had not cleared, and whether a prerequisite is approved
+    has nothing whatever to do with whether the work may be looked at. The consequence of getting
+    it wrong is quiet: the task is skipped from review, the queue stalls citing a gate, and the
+    remedy the stall names is one nobody can act on.
     """
-    if task.status in ("in_progress", "blocked"):
+    if task.status in ("in_progress", "blocked") or task.status in REVIEWABLE_LOOP_TASK_STATUSES:
         return True, None
     refusal = await dependency_gate.evaluate(session, task)
     return (not refusal.refuses), refusal
 
 
+async def _loop_candidates(session: AsyncSession, loop: Loop) -> "list[Task]":
+    """This loop's queue, in the order a firing considers it.
+
+    One query, in one place, because there are now two walkers over it: `_first_startable_candidate`
+    asks what *one named agent* may take, and `decide_firing` asks what *anyone* may take and who.
+    Both must see the same rows in the same order or the board and the firing part company -- which
+    is what `_loop_queue_order`'s own comment records happening the last time a derivation was
+    duplicated here.
+
+    The reviewable statuses are in the set as of `loop-becomes-a-flow` group 3. They are not
+    claimable by status alone; whether any given one may be taken is answered per agent, further
+    down.
+    """
+    return list(
+        (
+            await session.execute(
+                select(Task)
+                .where(
+                    Task.loop_id == loop.id,
+                    Task.status.in_(CLAIMABLE_LOOP_TASK_STATUSES + REVIEWABLE_LOOP_TASK_STATUSES),
+                )
+                .order_by(*_loop_queue_order())
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+
 async def _first_startable_candidate(
-    session: AsyncSession, loop: Loop
+    session: AsyncSession, loop: Loop, *, agent: str
 ) -> "tuple[Optional[Task], list[tuple[Task, dependency_gate.DependencyRefusal]]]":
     """Walks the loop's claimable-status queue in order (design D10, `task-dependencies` section 9)
     and returns the first task the dependency gate would not refuse, plus every gated candidate
@@ -520,20 +622,22 @@ async def _first_startable_candidate(
     Uses `dependency_gate.evaluate` directly rather than a second readiness computation -- two
     implementations of "are this task's dependencies met" is the exact drift shape
     `_loop_queue_order`'s own comment already records.
+
+    **Takes the acting agent as of `loop-becomes-a-flow` group 3.** The candidate set widened to
+    include the reviewable statuses, whose claimability has no answer without knowing who is
+    asking, so this walk now filters each candidate through `task_is_claimable_by` before testing
+    whether it is startable. A queue whose only finished task was finished by *this* agent
+    therefore walks past it and reports nothing claimable, exactly as it did before the widening --
+    which is what keeps a single-agent loop's behaviour unchanged by this group.
     """
-    candidates = (
-        (
-            await session.execute(
-                select(Task)
-                .where(Task.loop_id == loop.id, Task.status.in_(CLAIMABLE_LOOP_TASK_STATUSES))
-                .order_by(*_loop_queue_order())
-            )
-        )
-        .scalars()
-        .all()
-    )
+    candidates = await _loop_candidates(session, loop)
     gated: "list[tuple[Task, dependency_gate.DependencyRefusal]]" = []
     for task in candidates:
+        if not await task_is_claimable_by(session, task, agent):
+            # Not gated -- gating is a statement about prerequisites, and this is a statement about
+            # who is asking. Putting it in `gated` would make the stall reason say the queue was
+            # waiting on an approval when it is waiting on a second agent.
+            continue
         startable, refusal = await candidate_is_startable(session, task)
         if not startable:
             assert refusal is not None  # only the gated branch reports not-startable
@@ -543,7 +647,7 @@ async def _first_startable_candidate(
     return None, gated
 
 
-async def _claim_loop_task(session: AsyncSession, loop: Loop) -> "list[Task]":
+async def _claim_loop_task(session: AsyncSession, loop: Loop, *, agent: str) -> "list[Task]":
     """The queue items this firing works on (design D3): resume the loop's existing active task
     (`in_progress` or `assigned`) if one exists, else claim the oldest startable
     `pending` one -- skipping past a gated candidate in queue order rather than claiming it and
@@ -567,7 +671,7 @@ async def _claim_loop_task(session: AsyncSession, loop: Loop) -> "list[Task]":
     and an agent, both deterministically". `_loop_queue_order` is where that determinism comes
     from, so the collection has to preserve it.
     """
-    task, _gated = await _first_startable_candidate(session, loop)
+    task, _gated = await _first_startable_candidate(session, loop, agent=agent)
     return [] if task is None else [task]
 
 
@@ -588,6 +692,11 @@ class LoopSelection:
 
     task: Task
     agent: str
+    #: Whether this selection is a *review* of finished work rather than ordinary work on it
+    #: (`loop-becomes-a-flow` design D9). Carried on the selection rather than re-derived from the
+    #: task's status at the point of use, because by then the status may have moved and because the
+    #: one consumer that matters -- `new_entry`'s `review_task_id` -- is three call layers away.
+    is_review: bool = False
 
 
 async def _stall_run_to_increment(
@@ -655,6 +764,155 @@ DECISION_PROCEED_EMPTY = "proceed_empty"
 
 
 @dataclass(frozen=True)
+class ReviewerChoice:
+    """The outcome of `resolve_reviewer` — one rung of design D4's ladder, and which one.
+
+    Carries the rung rather than only the answer, because rung 1b and rung 3 are both "no agent"
+    and mean opposite things to an operator. 1b is *a name was given and it is wrong*, which the
+    operator fixes by correcting the document. 3 is *nobody was named and nobody is free*, which
+    they fix by adding an agent or waiting. A single `Optional[str]` would collapse them, and the
+    surfacing that D4 asks for would have nothing to say.
+    """
+
+    #: The agent to fire, or `None` when no rung produced one.
+    agent: Optional[str] = None
+    #: Which rung answered: "declared", "unresolved", "available", or "unstaffed".
+    rung: str = "unstaffed"
+    #: Operator-facing explanation. Set on every rung that produced no agent.
+    reason: Optional[str] = None
+
+
+async def _agents_that_are_free(session: AsyncSession, project_id: str) -> "list[str]":
+    """Design D4 rung 2's "free": **not running** *and* **holding no active task**, in queue-stable
+    order.
+
+    Both facts already existed and neither alone is enough. Not-running by itself was rejected in
+    D4 because an agent can hold three assigned tasks and be idle between turns, which is the
+    pile-up the operator named as the thing to avoid; holding-no-task by itself would pick an agent
+    mid-turn and `schedule_agent` would refuse the second start.
+
+    Reads the same running query `schedule_agent` and `_loop_agent_busy_reason` read, and the same
+    `LIVE_STATUSES` the roster's own "active task" derivation reads, so a third opinion about
+    whether an agent is busy cannot appear here.
+
+    Archived agents are excluded for the reason `trigger_agent_directly` refuses one: nothing runs
+    an archived agent. **Agents with no bound runner are excluded for the same reason and are the
+    same kind of fact** (task 4.3): `trigger_agent_directly` refuses to spawn one, so selecting it
+    would turn a staffing question into a launch failure one step later -- a firing that reports
+    "could not staff this step" is telling the operator something they can act on, and a firing that
+    dies trying to spawn a runnerless agent is not. Unavailable, never an error path.
+
+    Ordered by name so a project with two free agents picks the same one twice. The proposal
+    requires a firing to select "a task and an agent, both deterministically", and "whichever row
+    the database returned first" is not that.
+    """
+    from .task_transitions import LIVE_STATUSES
+
+    running = set(
+        (
+            await session.execute(
+                select(Run.agent).where(Run.project_id == project_id, Run.status == "running")
+            )
+        )
+        .scalars()
+        .all()
+    )
+    holding = set(
+        (
+            await session.execute(
+                select(Task.assignee).where(
+                    Task.project_id == project_id,
+                    Task.assignee.isnot(None),
+                    Task.status.in_(tuple(sorted(LIVE_STATUSES))),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    roster = (
+        (
+            await session.execute(
+                select(Agent.name)
+                .where(
+                    Agent.project_id == project_id,
+                    Agent.lifecycle != "archived",
+                    Agent.runner_id.isnot(None),
+                )
+                .order_by(Agent.name)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return [name for name in roster if name not in running and name not in holding]
+
+
+async def resolve_reviewer(
+    session: AsyncSession, task: Task, *, project_id: str, exclude: "set[str]"
+) -> ReviewerChoice:
+    """Who should take *task*, walking design D4's ladder. `exclude` is who may not (the author).
+
+    ```
+       1.  the task's declared reviewer, if it resolves
+       1b. a declaration that does NOT resolve  -> surface it; never substitute
+       2.  no declaration: any agent not running and holding no active task
+       3.  surface: "could not staff this step"
+    ```
+
+    **Rung 1b is the rung with an argument behind it.** Silence and a failed declaration are
+    different facts. Nobody named a reviewer means the flow may choose freely, and rung 2 runs the
+    whole thing with nothing configured -- which is the operator's objection to squad-before-work
+    answered. Somebody named a reviewer and the name did not resolve means substituting would tell
+    the operator something false about who checked the work, and they are the one who can fix the
+    name. `review_turn.resolve_declared_reviewer` shipped taking exactly this position on
+    2026-08-24, with the reasoning in its docstring; this **calls it** rather than resolving the
+    declaration a second time.
+
+    A declared reviewer that resolves to an excluded agent is rung 1b, not rung 2. The declaration
+    named somebody who may not do it, which is a fact about the document rather than about
+    availability, and quietly staffing somebody else is the substitution 1b exists to refuse.
+
+    **A single-agent project reaches rung 3 by the general rule**, with no branch of its own: its
+    only agent is the author, so it is excluded, rung 2's list comes back empty and rung 3
+    surfaces. That was D4's own stated test of whether the ladder was right.
+    """
+    from . import review_turn
+
+    resolution = await review_turn.resolve_declared_reviewer(
+        session, project_id=project_id, task=task
+    )
+    if resolution.declared:
+        if resolution.agent and resolution.agent not in exclude:
+            return ReviewerChoice(agent=resolution.agent, rung="declared")
+        if resolution.agent:
+            return ReviewerChoice(
+                rung="unresolved",
+                reason=(
+                    f"this task names {resolution.declared!r} as its reviewer, and that agent is "
+                    f"the one that completed the work. Naming a different reviewer, or reviewing "
+                    f"it yourself, is the way forward -- the flow will not substitute somebody "
+                    f"else for a named reviewer."
+                ),
+            )
+        return ReviewerChoice(rung="unresolved", reason=resolution.unresolved)
+
+    for candidate in await _agents_that_are_free(session, project_id):
+        if candidate in exclude:
+            continue
+        return ReviewerChoice(agent=candidate, rung="available")
+
+    return ReviewerChoice(
+        rung="unstaffed",
+        reason=(
+            "could not staff this step: no agent is free to take it. Every agent on the roster is "
+            "either running a turn, already holding active work, or is the one that completed this "
+            "task and so may not review it."
+        ),
+    )
+
+
+@dataclass(frozen=True)
 class FiringDecision:
     """The single answer to *what should this firing do* (`loop-notices-and-reacts` design D3).
 
@@ -676,6 +934,11 @@ class FiringDecision:
     #: Why the firing is refused, naming what is being waited on. Set exactly when `kind` is
     #: `DECISION_STALLED`, and carried to the board so its label can say the same thing.
     stall_reason: Optional[str] = None
+    #: `(task_id, reason)` for every reviewable candidate this firing could not staff (design D4
+    #: rung 3). Independent of `kind`: a firing that goes on to claim other work still has to
+    #: surface a review it could not staff, or the operator never learns that the queue has
+    #: finished work nobody can take.
+    unstaffed: "tuple[tuple[str, str], ...]" = ()
 
 
 async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str) -> FiringDecision:
@@ -698,20 +961,56 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
     agent's job is to fill it, and whether a *drained* queue should stop firing at all is
     `_loop_stop_reason`'s question, asked earlier and separately.
     """
-    task, gated = await _first_startable_candidate(session, loop)
-    if task is not None:
-        return FiringDecision(
-            kind=DECISION_CLAIM,
-            selections=(LoopSelection(task=task, agent=default_agent),),
-        )
+    from .task_transition_service import _agent_that_completed
+
+    gated: "list[tuple[Task, dependency_gate.DependencyRefusal]]" = []
+    unstaffed: "list[tuple[str, str]]" = []
+
+    for task in await _loop_candidates(session, loop):
+        startable, refusal = await candidate_is_startable(session, task)
+        if not startable:
+            assert refusal is not None  # only the gated branch reports not-startable
+            gated.append((task, refusal))
+            continue
+
+        if task.status not in REVIEWABLE_LOOP_TASK_STATUSES:
+            # Ordinary work. The job's own agent, per design D2 — nothing has said otherwise.
+            return FiringDecision(
+                kind=DECISION_CLAIM,
+                selections=(LoopSelection(task=task, agent=default_agent),),
+                unstaffed=tuple(unstaffed),
+            )
+
+        # Finished work. **The ladder decides, always** — not "the job's agent if it happens to be
+        # eligible". A declared reviewer that resolves outranks the job's own agent, or the
+        # declaration would be advisory; and D4 is the one statement of who reviews.
+        author = await _agent_that_completed(session, task.id)
+        if author is None:
+            # Unattributable, and therefore offered to nobody — see `task_is_claimable_by` for why
+            # this is the safe direction. Not `unstaffed` either: nothing is waiting on staffing, the
+            # task simply has no provenance, and the stall reason already counts it as open work.
+            continue
+        choice = await resolve_reviewer(session, task, project_id=loop.project_id, exclude={author})
+        if choice.agent is not None:
+            return FiringDecision(
+                kind=DECISION_CLAIM,
+                selections=(LoopSelection(task=task, agent=choice.agent, is_review=True),),
+                unstaffed=tuple(unstaffed),
+            )
+        # Rung 1b or rung 3. Surfaced, and the walk **continues**: D4 says surface the step, not
+        # stop the flow, and a queue holding an unstaffable review behind ordinary work should do
+        # the ordinary work rather than sit still. The operator learns about the review either way.
+        unstaffed.append((task.id, choice.reason or "could not staff this step"))
 
     stall_reason = await _stall_reason_from_walk(session, loop, gated)
     if stall_reason is None:
-        return FiringDecision(kind=DECISION_PROCEED_EMPTY)
-    return FiringDecision(kind=DECISION_STALLED, stall_reason=stall_reason)
+        return FiringDecision(kind=DECISION_PROCEED_EMPTY, unstaffed=tuple(unstaffed))
+    return FiringDecision(
+        kind=DECISION_STALLED, stall_reason=stall_reason, unstaffed=tuple(unstaffed)
+    )
 
 
-async def _loop_stall_reason(session: AsyncSession, loop: Loop) -> Optional[str]:
+async def _loop_stall_reason(session: AsyncSession, loop: Loop, *, agent: str) -> Optional[str]:
     """Why a firing that claimed nothing should be skipped rather than spawned, or `None`.
 
     A loop's queue has three states, and until 2026-08-20 the firing distinguished none of them:
@@ -756,7 +1055,7 @@ async def _loop_stall_reason(session: AsyncSession, loop: Loop) -> Optional[str]
     Returns `None` for a queue that has never been filled or is fully drained, so neither the
     create-then-populate order nor `_loop_stop_reason`'s own territory is disturbed.
     """
-    _, gated = await _first_startable_candidate(session, loop)
+    _, gated = await _first_startable_candidate(session, loop, agent=agent)
     return await _stall_reason_from_walk(session, loop, gated)
 
 
@@ -905,6 +1204,49 @@ async def _emit_loop_edit_applied(session: AsyncSession, payload: dict) -> None:
         loop_id=payload["id"],
     )
     await sse_manager.broadcast(payload["project_id"], "loop_edit_applied", payload)
+
+
+async def _emit_review_unstaffed(
+    session: AsyncSession,
+    job: AIJob,
+    loop: Loop,
+    task_id: str,
+    reason: str,
+) -> None:
+    """Surface a review the ladder could not staff (`loop-becomes-a-flow` design D4 rung 3, and
+    rung 1b).
+
+    Follows the same persist-and-broadcast pattern the loop stop path uses, for the same reason: an
+    operator watching the app should learn this without going to look for it, and the persisted row
+    is what makes it survive a page they were not on.
+
+    **It does not touch the job.** Not `enabled`, not the schedule, not `stop_reason`. This is the
+    2026-08-20 skip-versus-stop reasoning applied to a third case: unstaffable is a condition the
+    operator resolves — by adding an agent, freeing one, or fixing a name in a document — and every
+    one of those is a change the *next* firing should pick up by itself. `remove_job` is not undone
+    by any of them.
+
+    Emitted whatever else the firing goes on to do, including when it claims other work. A review
+    nobody can take is a fact about the queue rather than about this tick, and a firing that quietly
+    did something else instead would leave the operator with a queue that never finishes and no
+    indication why.
+    """
+    payload = {
+        "job_id": job.id,
+        "job_name": job.name,
+        "loop_id": loop.id,
+        "task_id": task_id,
+        "reason": reason,
+    }
+    await persist_event(
+        session,
+        job.project_id,
+        "review_unstaffed",
+        payload,
+        agent=job.agent,
+        loop_id=loop.id,
+    )
+    await sse_manager.broadcast(job.project_id, "review_unstaffed", payload)
 
 
 async def _compose_loop_briefing(
@@ -1355,6 +1697,10 @@ class JobScheduler:
             # (design D2) — a job with no loop has no selection to say anything, so it stays the
             # job's own agent and this variable changes nothing for it.
             acting_agent = job.agent
+            # Bound before the branch because the queue entry below reads it, and that line is
+            # outside it: a plain scheduled job has no loop, makes no selection, and must reach
+            # `new_entry` with `review_task_id=None` rather than a `NameError`.
+            selection: Optional[LoopSelection] = None
             if loop is not None:
                 # Set-valued as of `loop-becomes-a-flow` group 1, and carrying its own agent as
                 # of group 2 (design D2). Still at most one member until group 5 widens it, so the
@@ -1363,6 +1709,15 @@ class JobScheduler:
                 # walk the whole dependency gate a *second* time inside `_loop_stall_reason` just
                 # to produce the sentence explaining why — on exactly the firings doing no work.
                 decision = await decide_firing(session, loop, default_agent=job.agent)
+                # Design D4 rung 3, and rung 1b. Emitted before anything else this firing does,
+                # including before a refusal returns below: a review nobody can take is a fact
+                # about the queue that outlives this tick, and the operator is the only one who
+                # can resolve it. Never disables the job -- same reasoning that chose *skip* over
+                # *stop* on 2026-08-20, since `remove_job` is not undone by resolving anything.
+                for unstaffed_task_id, unstaffed_reason in decision.unstaffed:
+                    await _emit_review_unstaffed(
+                        session, job, loop, unstaffed_task_id, unstaffed_reason
+                    )
                 selection = decision.selections[0] if decision.selections else None
                 claimed_task = selection.task if selection is not None else None
                 if claimed_task is None:
@@ -1479,6 +1834,13 @@ class JobScheduler:
                 session_mode=job.session_mode,
                 session_id=resume_session_id,
                 conversation_id=conversation.id,
+                # Design D9, and the whole of task 4b. Without this the reviewer is fired into its
+                # own working checkout, where the author's unmerged work does not exist -- finding
+                # F10 reproduced by the flow that was meant to make review routine. Set only for a
+                # selection the ladder made *as a review*, so ordinary work acquires no checkout.
+                review_task_id=(
+                    selection.task.id if (selection is not None and selection.is_review) else None
+                ),
             )
             session.add(entry)
             # The firing genuinely becomes "in progress" here, not at `JobRun` creation above —

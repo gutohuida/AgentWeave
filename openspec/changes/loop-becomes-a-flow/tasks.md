@@ -128,30 +128,96 @@ group 4b — briefs that agent to *work* finished work, in its own checkout with
 commits. That is finding F10's exact shape, which group 4b exists to prevent. Groups 3, 4 and 4b
 look like one landing rather than three.
 
-- [ ] 3.1 Test: a `completed` task is offered to an agent that did not complete it, and not to the
+- [x] 3.1 Test: a `completed` task is offered to an agent that did not complete it, and not to the
       one that did.
-- [ ] 3.2 Test the correctness property directly — every task the flow offers an agent can be moved
+      `hub/tests/test_actor_aware_claimability.py`, four tests: offered to a non-author, refused to
+      the author, both answers taken from one queue at one instant so nothing about the *task*
+      decides it, and the no-recorded-completer case below.
+      **The fixture is the load-bearing part.** `_completed_by` walks the task to `completed`
+      *through `apply_transition`* as a named agent. Constructing the row at `completed` directly —
+      which is what most of the older loop tests do — leaves no `TaskTransition`, so
+      `_agent_that_completed` answers `None` and every test in the file would have passed for the
+      wrong reason.
+- [x] 3.2 Test the correctness property directly — every task the flow offers an agent can be moved
       by that agent to a review outcome without author/reviewer separation refusing it. Assert this
       rather than inferring it from the cases above (design D3).
-- [ ] 3.3 Test: `CLAIMABLE_LOOP_TASK_STATUSES` does **not** gain `completed`. Widening the tuple is
+      `test_every_offered_task_can_be_carried_to_a_review_outcome` drives it end to end: the offer
+      comes from `_claim_loop_task`, the permission from `apply_transition` either raising or not.
+      Deliberately not a comparison of two functions' return values — a reimplementation of either
+      side has to keep them agreeing to pass this.
+      `test_the_agent_the_queue_refuses_is_the_agent_the_guard_refuses` is the other half, and is
+      the one that catches drift in either direction: the author is refused by the queue and by the
+      guard, from the same row.
+- [x] 3.3 Test: `CLAIMABLE_LOOP_TASK_STATUSES` does **not** gain `completed`. Widening the tuple is
       the obvious wrong fix and it is actor-blind.
-- [ ] 3.4 Implement claimability as a question about `(task, agent)`, using `_agent_that_completed`
+      Asserted, along with the two sets being disjoint, plus `blocked` as the control: it is also
+      outside the claimable tuple and must *not* have acquired an actor-dependent answer, because
+      the person holding the unanswered question is who unblocks it and no agent is a candidate.
+      `test_task_lifecycle_bands.py` carries the vocabulary half —
+      `test_the_two_statuses_that_are_current_without_being_claimable_differ_in_kind` states why
+      `blocked` and `completed` sit in the same set difference for opposite reasons.
+- [x] 3.4 Implement claimability as a question about `(task, agent)`, using `_agent_that_completed`
       rather than a second implementation of the same question.
-- [ ] 3.5 Confirm the board's derivation and the firing's agree for a queue holding a `completed`
+      `scheduler.task_is_claimable_by`, plus `REVIEWABLE_STATUSES` derived from
+      `BAND_AWAITING_HANDOFF` — the band the previous change created, which already said "finished
+      by its author and waiting for somebody else to take it up". Group 3 is that sentence becoming
+      executable, and needed no new band.
+      The actor is threaded through `_first_startable_candidate`, `_claim_loop_task`,
+      `_loop_stall_reason` and `decide_firing`; every production caller already goes through
+      `decide_firing`, which had the agent as `default_agent` since group 2, so no call site outside
+      tests changed.
+      **An unclaimable-by-you candidate is skipped, not recorded as gated.** Gating is a statement
+      about prerequisites; this is a statement about who is asking. Putting it in `gated` would make
+      the stall reason say the queue was waiting on an approval when it is waiting on a second agent.
+- [x] 3.5 Confirm the board's derivation and the firing's agree for a queue holding a `completed`
       task — the same 13.1 property, now with an actor in it.
+      `test_the_board_and_the_firing_agree_about_a_completed_task`. **And it was not agreement that
+      needed the work — it was the board's query.** The board takes both answers from
+      `decide_firing` already, so it became actor-aware for free; but `CURRENT_ITEM_TASK_STATUSES`
+      gates which rows its candidate query can return at all, and `completed` was outside it. A
+      firing reviewing a completed task would have shown **no current item**, which is the
+      2026-08-21 blocked defect exactly, mirrored. `completed` therefore joins current-item without
+      joining the claim — the second status to do so, for the opposite reason to the first.
+      The test asserts both directions: with the job's agent as the author the board shows nothing
+      claimable, and with it as a non-author the board names the task the firing takes.
 
 ## 4. Reviewer resolution
 
-- [ ] 4.1 Test each rung of design D4 independently: a declared reviewer that resolves; one that does
+- [x] 4.1 Test each rung of design D4 independently: a declared reviewer that resolves; one that does
       **not** resolve, which is surfaced and never substituted (amended 2026-08-24 — this said
       "falling back to availability", which contradicted shipped behaviour); no declaration at all,
       falling back to availability; and nobody eligible.
-- [ ] 4.2 Test: an agent that is running, or that holds a task in an active status, is not selected
+      `hub/tests/test_reviewer_ladder.py`, one test per rung. Each rung-1 test puts a *free,
+      eligible* agent on the roster that must not be chosen, so "the declaration was honoured" is
+      distinguishable from "there was only one candidate".
+      **A fourth case not in the task text: a declaration that resolves to the author.** Rung 1b,
+      not rung 2 — the document named somebody who may not do it, which is a fact about the
+      document rather than about availability, and substituting is what 1b refuses. Left to fall
+      through, it would have been the most plausible-looking wrong behaviour in the ladder.
+- [x] 4.2 Test: an agent that is running, or that holds a task in an active status, is not selected
       while another eligible agent exists.
-- [ ] 4.3 Test: an agent with no runner bound is not selected, and is treated as unavailable rather
+      Both halves, each with the ineligible agent sorting *first* by name so that picking the right
+      one is the rule working rather than the ordering. Plus the case that would deadlock a
+      two-agent project if it went the other way: holding a `completed` task does **not** make an
+      agent busy, or the first agent to finish anything would stop being able to review for as long
+      as its own work sat unapproved. Plus determinism — two calls, same order — because the
+      proposal requires a firing to select an agent deterministically.
+- [x] 4.3 Test: an agent with no runner bound is not selected, and is treated as unavailable rather
       than failing the firing.
-- [ ] 4.4 Test: a single-agent project reaches rung 3 by the general rule, with no special-case code
+      Implemented in `_agents_that_are_free` alongside the archived-agent exclusion, because they
+      are the same kind of fact: `trigger_agent_directly` refuses to spawn either, so selecting one
+      turns a staffing question into a launch failure one step later. A firing that says "could not
+      staff this step" gives the operator something to act on; one that dies in the spawn path does
+      not. Tested with the runnerless agent alphabetically first, so it would be picked if
+      eligibility did not exclude it.
+- [x] 4.4 Test: a single-agent project reaches rung 3 by the general rule, with no special-case code
       path — assert the path, not only the outcome.
+      `test_a_single_agent_project_reaches_rung_3_with_no_special_case`. The rung is asserted, and
+      so is the fact that the author *is* free by every measure except being the author — so the
+      exclusion doing the work is the general one, not a branch about project size.
+      **The path is asserted by construction rather than by inspection:** adding one more agent to
+      the same project, changing nothing else, produces a staffed review from the same call. That
+      cannot follow if a single-agent branch exists.
 - [x] 4.5 **Decide how a declared reviewer resolves** — against charter names, agent names, or both —
       and record it in design D4. `task-dependencies` D11 deliberately left this here.
       **Answered 2026-08-24 without a decision being needed: agent names.**
@@ -159,11 +225,30 @@ look like one landing rather than three.
       the declared string against roster `Agent.name` for the project and treating an archived agent
       as unresolved. Recorded in D4. The flow reuses that function rather than writing a second
       resolution — so 4.6 implements the ladder *around* it, not a replacement for it.
-- [ ] 4.6 Implement the ladder, **calling `review_turn.resolve_declared_reviewer` for rung 1 rather
+- [x] 4.6 Implement the ladder, **calling `review_turn.resolve_declared_reviewer` for rung 1 rather
       than resolving the declaration again.** Two implementations of "who did the document name" is
       the drift shape this repo has been bitten by three times.
-- [ ] 4.7 Implement rung 3's surfacing, following the event and SSE pattern the stop path uses.
+      `scheduler.resolve_reviewer`, returning a `ReviewerChoice` that carries **which rung
+      answered** rather than only the answer. That is not bookkeeping: rungs 1b and 3 both produce
+      "no agent" and mean opposite things to an operator — *a name was given and it is wrong* versus
+      *nobody was named and nobody is free* — and a bare `Optional[str]` would collapse them,
+      leaving the surfacing D4 asks for with nothing to say.
+      Wired into `decide_firing`, and **the ladder decides for every reviewable task, always** —
+      not "the job's agent if it happens to be eligible". A declaration that resolves outranks the
+      job's own agent, or it would be advisory.
+- [x] 4.7 Implement rung 3's surfacing, following the event and SSE pattern the stop path uses.
       Confirm it leaves the job enabled and scheduled.
+      `_emit_review_unstaffed`, persisted and broadcast as `review_unstaffed`. Asserted: the job
+      stays `enabled`, the loop takes no `stop_reason`, and nothing is queued for anybody.
+      **Two decisions inside this that the task text does not contain.**
+      *Surfaced whatever else the firing does.* A review nobody can take is a fact about the queue
+      rather than about this tick, so the event is emitted even when the firing goes on to claim
+      other work — otherwise a flow that quietly did something else would leave the operator with a
+      queue that never finishes and no indication why.
+      *The walk continues past it.* D4 says surface **the step**, not stop the flow. A queue holding
+      an unstaffable review ahead of ordinary work — and review does sort ahead, design D10 — does
+      the ordinary work and surfaces the review. Sitting still would let one unreviewable task halt
+      a flow indefinitely. Both are asserted.
 
 ## 4b. The review turn — a reviewer must see the work
 
@@ -171,19 +256,46 @@ look like one landing rather than three.
 written. Without this group a flow fires the reviewer into its own working checkout, where the
 author's unmerged work does not exist — reproducing finding F10, which that change existed to fix.
 
-- [ ] 4b.1 Test: a flow firing an agent for a `completed` task produces a queue entry carrying
+- [x] 4b.1 Test: a flow firing an agent for a `completed` task produces a queue entry carrying
       `review_task_id`, and the resulting turn is a review turn.
-- [ ] 4b.2 Test the property that matters rather than the plumbing: the reviewing agent's workspace
+      `hub/tests/test_flow_fires_a_review_turn.py`. Asserts the entry belongs to the **reviewer**
+      and not the job's agent, and that nothing at all was queued for the author.
+- [x] 4b.2 Test the property that matters rather than the plumbing: the reviewing agent's workspace
       contains a commit that exists only on the author's branch. This is F10's own assertion, and
       task 5.5 of `a-reviewer-can-see-the-work` is the pattern to copy.
-- [ ] 4b.3 Test: a review turn that cannot be prepared surfaces `ReviewTurnRefused`'s stated reason
+      `test_a_flow_fired_reviewer_reads_a_file_that_is_not_on_main` — deliberately the same
+      assertion `test_review_turn.py` makes about a manual trigger, reached through a flow firing.
+      Same property, different door, and the door is what this group adds. **Confirmed failing**
+      with `review_task_id` forced to `None`: the reviewer is spawned in its own working checkout
+      and the file is not there.
+- [x] 4b.3 Test: a review turn that cannot be prepared surfaces `ReviewTurnRefused`'s stated reason
       and does **not** fire the agent with an ordinary turn instead.
-- [ ] 4b.4 Test: a firing that staffs ordinary (non-review) work still carries no `review_task_id`,
+      `test_a_review_that_cannot_be_prepared_does_not_become_an_ordinary_turn`. Driven with a
+      completed task carrying no evidence, which is the ordinary way to reach it: nothing names a
+      commit, so there is nothing to check out.
+      **The property is structural, and the test says so rather than merely observing it.**
+      `trigger_agent_directly` raises `TriggerAgentError(409)` from the `ReviewTurnRefused` handler
+      *before* a workspace is chosen, so the downgrade this task forbids is unreachable rather than
+      merely not taken — there is no branch in which a refused review continues into
+      `resolve_agent_workspace`. Asserted from the outside: no agent is spawned at all, and the
+      reason travels unchanged from the resolver.
+- [x] 4b.4 Test: a firing that staffs ordinary (non-review) work still carries no `review_task_id`,
       so nothing that is not a review acquires a checkout.
-- [ ] 4b.5 Pass `review_task_id` from the selection through `new_entry` in `_do_fire_job`
+      Plus the path that has no selection at all: a plain scheduled job with no loop. It is not a
+      hypothetical — `selection` was bound only inside the loop branch while the queue entry that
+      reads it is outside, so a plain job raised `NameError` until it was bound before the branch.
+      The test pins it.
+- [x] 4b.5 Pass `review_task_id` from the selection through `new_entry` in `_do_fire_job`
       (`hub/hub/scheduler.py:1187`). This is the one-argument gap D9 names.
-- [ ] 4b.6 Confirm the reviewer resolved by 4.6 is the agent the checkout is built for — review
+      Carried on `LoopSelection.is_review` rather than re-derived from the task's status at the
+      point of use: by then the status may have moved, and the consumer is three call layers from
+      the decision.
+- [x] 4b.6 Confirm the reviewer resolved by 4.6 is the agent the checkout is built for — review
       isolation is per agent, so a mismatch here builds the right checkout for the wrong agent.
+      `test_the_checkout_belongs_to_the_agent_the_ladder_resolved`, driven with **three distinct
+      names** — the job's agent, an alphabetically-first idle agent, and a declared reviewer — which
+      is the only arrangement where picking the wrong one is visible. Availability alone would pick
+      the idle agent; the job's own agent would pick neither.
 
 ## 5. Width
 
