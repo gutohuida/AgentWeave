@@ -27,7 +27,7 @@ from .db.models import Agent, AIJob, Checkpoint, JobRun, Loop, Message, Question
 from .run_task_binding import TERMINAL_FOR_BINDING
 from .sse import sse_manager
 from .task_transition_service import apply_transition
-from .task_transitions import operator
+from .task_transitions import CLAIMABLE_STATUSES, CURRENT_ITEM_STATUSES, operator
 from .utils import persist_event, short_id
 
 logger = logging.getLogger(__name__)
@@ -441,12 +441,7 @@ def _loop_queue_order() -> tuple:
 #: mentions `blocked_reason` or the open question, so that agent was handed a blocked task rendered
 #: exactly like a fresh one. Reasoning and the second defect it caused:
 #: `openspec/explorations/2026-08-21-which-band-blocked-belongs-to.md`.
-CLAIMABLE_LOOP_TASK_STATUSES: tuple = (
-    "in_progress",
-    "assigned",
-    "pending",
-    "revision_needed",
-)
+CLAIMABLE_LOOP_TASK_STATUSES: tuple = tuple(sorted(CLAIMABLE_STATUSES))
 
 #: The statuses that can be a loop's **current item** on the board. The claimable set plus
 #: `blocked`, and the difference is not an oversight in either direction.
@@ -465,7 +460,7 @@ CLAIMABLE_LOOP_TASK_STATUSES: tuple = (
 #: and it is precisely what the operator needs to see. `loop-notices-and-reacts`' one-vocabulary
 #: group exists for exactly this shape; this pair is the minimum correct split until it lands, and
 #: should be derived from the bands rather than spelled out here once it does.
-CURRENT_ITEM_TASK_STATUSES: tuple = CLAIMABLE_LOOP_TASK_STATUSES + ("blocked",)
+CURRENT_ITEM_TASK_STATUSES: tuple = tuple(sorted(CURRENT_ITEM_STATUSES))
 
 
 async def candidate_is_startable(

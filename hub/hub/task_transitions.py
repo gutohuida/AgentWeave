@@ -165,6 +165,138 @@ STATUSES: FrozenSet[str] = frozenset(TRANSITIONS)
 
 
 # --------------------------------------------------------------------------------------
+# Lifecycle bands
+# --------------------------------------------------------------------------------------
+
+#: Every status, classified once, into exactly one band (`loop-notices-and-reacts` design D9).
+#:
+#: **Why this exists.** Five constants around the codebase answered questions of the form "is this
+#: task live?" and none knew the others existed. Both stall bugs fixed on 2026-08-20 lived in the
+#: gaps between them -- the spin, because `completed` was in neither the claim nor the terminal
+#: set; `revision_needed`, because it was in neither while two *other* sets already called it live
+#: work. A third landed on 2026-08-24: the board was answering "what is this loop working on" with
+#: the *claimable* set, so when `blocked` left the claim the board silently stopped showing blocked
+#: tasks, and a loop parked on an unanswered question read as idle.
+#:
+#: **The trap this must not fall into.** Those five constants do not all answer one question, and a
+#: classification that assumes they do will re-merge them. `blocked` is *no* to "may a firing claim
+#: this?" and *yes* to "is this the loop's current work?". So the bands below are deliberately
+#: finer than any single set, and each set is defined as the union of bands **for its own
+#: question** -- never as one "live" band that everything reads.
+#:
+#: A status added to `TRANSITIONS` and not classified here fails at import, not at 3am in a loop
+#: that fires forever.
+
+#: Firing an agent makes progress possible. That is the whole test, and it is the one that decided
+#: `revision_needed` belongs here (2026-08-20) while `blocked` does not (2026-08-21).
+BAND_AGENT_ACTIONABLE = "agent_actionable"
+
+#: Waiting on a person. Progress needs an answer no agent can supply, so firing one against it
+#: spawns a turn that cannot move the work -- the 2026-08-20 spin, exactly. Still the loop's
+#: current work, and the operator is the one who needs to see it.
+#: (`openspec/explorations/2026-08-21-which-band-blocked-belongs-to.md`.)
+BAND_AWAITING_PERSON = "awaiting_person"
+
+#: Finished by its author and waiting for somebody else to take it up. Not claimable -- an agent
+#: cannot approve its own work -- and not yet anyone's active task.
+BAND_AWAITING_HANDOFF = "awaiting_handoff"
+
+#: Somebody else has it. Not claimable, but live work: it is in flight, just not here.
+BAND_WITH_REVIEWER = "with_reviewer"
+
+#: Done, one way or the other. The only exits belong to the operator.
+BAND_TERMINAL = "terminal"
+
+STATUS_BANDS: Mapping[str, str] = {
+    "pending": BAND_AGENT_ACTIONABLE,
+    "assigned": BAND_AGENT_ACTIONABLE,
+    "in_progress": BAND_AGENT_ACTIONABLE,
+    "revision_needed": BAND_AGENT_ACTIONABLE,
+    "blocked": BAND_AWAITING_PERSON,
+    "completed": BAND_AWAITING_HANDOFF,
+    "under_review": BAND_WITH_REVIEWER,
+    "approved": BAND_TERMINAL,
+    "rejected": BAND_TERMINAL,
+}
+
+
+def _statuses_in(*bands: str) -> FrozenSet[str]:
+    """The statuses belonging to any of *bands*.
+
+    Sets are built from this rather than listed, so adding a status to `STATUS_BANDS` reaches
+    every set that includes its band with no further edits.
+    """
+    wanted = frozenset(bands)
+    return frozenset(status for status, band in STATUS_BANDS.items() if band in wanted)
+
+
+def _check_bands() -> None:
+    """Refuse to import with a status classified into none of the bands, or into a band that is
+    not one of them.
+
+    Checked against `TRANSITIONS` rather than a hand-maintained list, so the failure arrives the
+    moment a status is added to the machine without a band -- which is the whole point. Raised at
+    import so it cannot be discovered by a loop firing forever at 3am.
+
+    A status cannot be doubly classified in this shape, because `STATUS_BANDS` is a mapping and a
+    repeated key silently keeps the last value. The pairing is asserted from the other direction in
+    `test_task_transitions.py`, where the literal source can be read.
+    """
+    known_bands = {
+        BAND_AGENT_ACTIONABLE,
+        BAND_AWAITING_PERSON,
+        BAND_AWAITING_HANDOFF,
+        BAND_WITH_REVIEWER,
+        BAND_TERMINAL,
+    }
+    unclassified = sorted(set(TRANSITIONS) - set(STATUS_BANDS))
+    if unclassified:
+        raise RuntimeError(
+            "task statuses are missing a lifecycle band: "
+            + ", ".join(unclassified)
+            + " -- add each to STATUS_BANDS in hub/hub/task_transitions.py"
+        )
+    stray = sorted(status for status, band in STATUS_BANDS.items() if band not in known_bands)
+    if stray:
+        raise RuntimeError(
+            "task statuses are classified into an unknown band: "
+            + ", ".join(f"{s} -> {STATUS_BANDS[s]!r}" for s in stray)
+        )
+    unknown = sorted(set(STATUS_BANDS) - set(TRANSITIONS))
+    if unknown:
+        raise RuntimeError(
+            "STATUS_BANDS classifies statuses the transition machine does not define: "
+            + ", ".join(unknown)
+        )
+
+
+_check_bands()
+
+
+#: May a loop firing claim a task in this status -- that is, does firing an agent at it make
+#: progress possible? Consumed by `scheduler.CLAIMABLE_LOOP_TASK_STATUSES`.
+CLAIMABLE_STATUSES: FrozenSet[str] = _statuses_in(BAND_AGENT_ACTIONABLE)
+
+#: Can a task in this status be a loop's *current item* on the board? The claimable statuses plus
+#: `blocked`, and the difference is the point: a blocked task is not something a firing may take,
+#: and is exactly what the operator needs to see the loop waiting on.
+CURRENT_ITEM_STATUSES: FrozenSet[str] = _statuses_in(BAND_AGENT_ACTIONABLE, BAND_AWAITING_PERSON)
+
+#: Is this task finished, for the purpose of binding a run to it? Consumed by
+#: `run_task_binding.TERMINAL_FOR_BINDING`.
+TERMINAL_STATUSES: FrozenSet[str] = _statuses_in(BAND_TERMINAL)
+
+#: Is this task live work somebody is accountable for right now? Consumed by both
+#: `agents._ACTIVE_TASK_STATUSES` and `checkpoints._LIVE_TASK_STATUSES`, which were two identical
+#: literals in two files before this.
+#:
+#: `blocked` is absent deliberately and has always been: a task waiting on a person is not work
+#: anyone is presently doing. `under_review` is present for the mirror reason -- somebody else is
+#: doing it.
+LIVE_STATUSES: FrozenSet[str] = _statuses_in(BAND_AGENT_ACTIONABLE, BAND_WITH_REVIEWER)
+
+
+# --------------------------------------------------------------------------------------
 # Queries
 # --------------------------------------------------------------------------------------
 

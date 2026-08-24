@@ -31,6 +31,7 @@ from .db.models import (
     Run,
     Task,
 )
+from .task_transitions import LIVE_STATUSES
 from .utils import short_id
 
 logger = logging.getLogger(__name__)
@@ -59,13 +60,9 @@ LOOP_TASK_SCOPE_NOTE = (
 _OPEN_QUESTION_STATES = (False,)
 
 # Task states that are still work. Anything else is history and only bloats the envelope.
-_LIVE_TASK_STATUSES = (
-    "pending",
-    "assigned",
-    "in_progress",
-    "under_review",
-    "revision_needed",
-)
+# The same derived set `agents._ACTIVE_TASK_STATUSES` reads — these were two identical literals in
+# two files until `loop-notices-and-reacts` 3.8.
+_LIVE_TASK_STATUSES = tuple(sorted(LIVE_STATUSES))
 
 
 @dataclass

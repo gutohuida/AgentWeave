@@ -54,12 +54,16 @@ from ...schemas.agents import (
     ContextUsageCreate,
 )
 from ...sse import sse_manager
+from ...task_transitions import LIVE_STATUSES
 from ...utils import persist_event, short_id
 
 router = APIRouter(prefix="/agents", tags=["agents"])
 
 _24H = timedelta(hours=24)
-_ACTIVE_TASK_STATUSES = ("pending", "assigned", "in_progress", "under_review", "revision_needed")
+# One derived set, shared with `checkpoints._LIVE_TASK_STATUSES`, which held the identical
+# five statuses in a separate literal until `loop-notices-and-reacts` 3.8. Two copies of one
+# answer is the drift shape all three of this product's loop stall bugs came out of.
+_ACTIVE_TASK_STATUSES = tuple(sorted(LIVE_STATUSES))
 _AGENT_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]{1,32}$")
 _CONTACT_MODES = ("poll", "mcp-push", "watchdog-spawn")
 

@@ -34,7 +34,13 @@ from .task_transition_service import (
     TransitionRefusedError,
     apply_transition,
 )
-from .task_transitions import STATUS_BLOCKED, allowed_targets, operator, run_actor
+from .task_transitions import (
+    STATUS_BLOCKED,
+    TERMINAL_STATUSES,
+    allowed_targets,
+    operator,
+    run_actor,
+)
 
 # --------------------------------------------------------------------------------------
 # What a task says should happen when work bound to it is dropped
@@ -290,7 +296,10 @@ async def bind_run_to_task(
 #:
 #: `completed` and `under_review` are deliberately absent: work under review comes back often, and
 #: releasing there would unbind precisely the thread that is about to do the revisions.
-TERMINAL_FOR_BINDING: Tuple[str, ...] = ("approved", "rejected")
+#: Derived from the lifecycle bands (`loop-notices-and-reacts` 3.7) rather than listed. The
+#: reasoning above is why it is the terminal band and not a wider one, and it survives the
+#: derivation because the band means the same thing.
+TERMINAL_FOR_BINDING: Tuple[str, ...] = tuple(sorted(TERMINAL_STATUSES))
 
 
 async def binding_for_conversation(

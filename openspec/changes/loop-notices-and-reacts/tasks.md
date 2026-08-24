@@ -94,11 +94,11 @@
 Do this before group 4 — the shared claim decision is its first consumer, and writing that against
 the four-set world means rewriting it immediately (design D9).
 
-- [ ] 3.1 Test: every status appearing in `TRANSITIONS` as an origin or destination is classified
+- [x] 3.1 Test: every status appearing in `TRANSITIONS` as an origin or destination is classified
       into exactly one band. Derived from the map, never from a literal list.
-- [ ] 3.2 Test: an unclassified status, and a doubly-classified one, each fail at import with the
+- [x] 3.2 Test: an unclassified status, and a doubly-classified one, each fail at import with the
       status named.
-- [ ] 3.3 Test: each of the **five** derived sets equals its current literal, **measured on
+- [x] 3.3 Test: each of the **five** derived sets equals its current literal, **measured on
       2026-08-24 rather than remembered**:
       - claimable — `in_progress assigned pending revision_needed`
       - current item — the claimable four **plus `blocked`**
@@ -113,7 +113,7 @@ the four-set world means rewriting it immediately (design D9).
       constant to match, and the 2026-08-20 spin bug is back.
 
       **Write these assertions before deleting any literal.**
-- [ ] 3.4 ~~Decide which band `blocked` belongs to~~ — **already decided; record it, do not
+- [x] 3.4 ~~Decide which band `blocked` belongs to~~ — **already decided; record it, do not
       re-decide it.** `openspec/explorations/2026-08-21-which-band-blocked-belongs-to.md` settled it
       and `scheduler.py` carries the reasoning: `blocked` sits with `completed` and `under_review`
       in the *"someone else's turn"* band, its "someone else" being the most literal of the three —
@@ -125,26 +125,57 @@ the four-set world means rewriting it immediately (design D9).
       band cannot produce both the claimable set and the current-item set, because `blocked` is in
       one and not the other. Define each set as the union of bands *for its own question*, never a
       single "live" band — see design D9 and the defect it now records.
-- [ ] 3.5 Define the bands and the classification.
-- [ ] 3.6 Derive `CLAIMABLE_LOOP_TASK_STATUSES` (`hub/hub/scheduler.py`) and delete the literal.
-- [ ] 3.6b Derive `CURRENT_ITEM_TASK_STATUSES` (`hub/hub/scheduler.py`) and delete its literal.
+- [x] 3.5 Define the bands and the classification.
+      `STATUS_BANDS` in `hub/hub/task_transitions.py` — a stdlib-only leaf already imported by four
+      of the five consumers, so nothing had to move to reach it. **Five bands, deliberately finer
+      than any one set:** `agent_actionable` (firing an agent makes progress possible — the test
+      that put `revision_needed` in the claim and kept `blocked` out), `awaiting_person`
+      (`blocked`), `awaiting_handoff` (`completed`), `with_reviewer` (`under_review`), `terminal`.
+      Each set is then a union of bands **for its own question**: claimable = actionable;
+      current-item = actionable + awaiting_person; live = actionable + with_reviewer; terminal =
+      terminal. Four bands would not have worked — `blocked` is in current-item but not live, and
+      `under_review` is in live but not current-item, so no single "live" band reproduces both.
+      `_check_bands()` runs at import and refuses a status with no band, a band that is not one of
+      the five, or a band for a status the machine does not define, naming it in each case.
+- [x] 3.6 Derive `CLAIMABLE_LOOP_TASK_STATUSES` (`hub/hub/scheduler.py`) and delete the literal.
+- [x] 3.6b Derive `CURRENT_ITEM_TASK_STATUSES` (`hub/hub/scheduler.py`) and delete its literal.
       **Added 2026-08-24.** This set did not exist when the change was written; it was added that
       day to fix a live defect where the board used the *claimable* set to answer "what is this loop
       working on" and stopped showing blocked tasks entirely. Its regression tests
       (`hub/tests/test_loop_current_item_includes_blocked.py`) deliberately pin the *relationship*
       between the two sets rather than either literal, so they survive this derivation unchanged and
       must still pass after it.
-- [ ] 3.7 Derive `TERMINAL_FOR_BINDING` (`hub/hub/run_task_binding.py:293`), preserving its docstring
+- [x] 3.7 Derive `TERMINAL_FOR_BINDING` (`hub/hub/run_task_binding.py:293`), preserving its docstring
       — the reasoning about `completed` and `under_review` being deliberately absent must survive.
-- [ ] 3.8 Collapse `_ACTIVE_TASK_STATUSES` (`hub/hub/api/v1/agents.py:60`) and `_LIVE_TASK_STATUSES`
+- [x] 3.8 Collapse `_ACTIVE_TASK_STATUSES` (`hub/hub/api/v1/agents.py:60`) and `_LIVE_TASK_STATUSES`
       (`hub/hub/checkpoints.py:62`) into one derived set — they are identical in content and separate
       in code.
-- [ ] 3.9 Confirm the derived-gap test added 2026-08-20
+- [x] 3.9 Confirm the derived-gap test added 2026-08-20
       (`test_only_the_awaiting_someone_else_statuses_sit_in_the_claim_stop_gap`,
       `hub/tests/test_scheduler.py:765`) still passes and still derives rather than lists.
-- [ ] 3.10 Confirm `hub/tests/test_loop_current_item_includes_blocked.py` still passes — all five
+- [x] 3.10 Confirm `hub/tests/test_loop_current_item_includes_blocked.py` still passes — all five
       tests, including the one asserting a firing still refuses to claim a blocked task. That is the
       direction this refactor is most likely to lose.
+
+**Group 3 evidence.** `hub/tests/test_task_lifecycle_bands.py`, 16 tests.
+3.1 derives the status list from `TRANSITIONS` (origins *and* destinations), never a literal.
+3.2 covers all three refusals, each asserting the offending name appears in the message; a status
+in *two* bands is unrepresentable rather than merely detected, because the classification maps
+status → band — the reason that shape was chosen over band → statuses, which would have made the
+invalid state expressible and then needed a check for it.
+3.3's four equality assertions were **written and passing before any literal was deleted**, and
+still pass after — that is the whole safety property. They spell the members out in full rather
+than comparing one derivation against another, which would pass while both were wrong together;
+`_loop_queue_order`'s own comment records that exact failure surviving review.
+Also added, beyond what the tasks asked: a **source scan** in the style of
+`test_task_transitions.py`'s origin scan, so a literal that happens to be *currently correct*
+cannot creep back — value equality alone cannot tell a derivation from a lucky literal, and a lucky
+literal is what all three stall bugs started as. It inspects individual bracketed literals rather
+than whole files, and skips complete enumerations (`mcp_server.TaskStatus`, which may import only
+stdlib and fastmcp, and `schemas.tasks._TASK_STATUSES`, already pinned elsewhere) by the fact that
+every enumeration contains `approved` and `rejected` while no derived set here contains either.
+**Verified the scan can fail**: reintroducing the old literal in `checkpoints.py` was caught, then
+reverted. 3.9 and 3.10 both still pass unmodified.
 
 ## 4. The shared claimability decision
 
