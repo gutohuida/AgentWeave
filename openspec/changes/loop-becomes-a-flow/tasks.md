@@ -701,18 +701,95 @@ instruction.** 9.3 stopped being speculative when group 5 landed: `_batch_loop_s
 
 ## 10. Verification an agent can do
 
-- [ ] 10.1 `pytest hub/tests/ -q` passes, with the three pre-existing `test_pty_runner` environment
+**Reviewed against the shipped code 2026-08-24, before implementing, per the operator's standing
+instruction.** Two findings, one about this list and one about the product.
+
+1. **10.1's premise is wrong about the interpreter.** It expects "the three pre-existing
+   `test_pty_runner` environment failures". There are none under `py -3.11`; the three are an
+   artefact of a bare `python`, which resolves to a different venv on this machine. Every run this
+   session has been `py -3.11` and every one has been zero-failure, so the qualification is dropped
+   rather than carried.
+2. **A flow's own claim is attributed to the operator.** `_do_fire_job` calls
+   `apply_transition(..., "assigned", operator())`, so the recorded history says a human assigned
+   every task any loop ever claimed. 10.5 asks for a chain with "no operator action at any point",
+   and it is the first requirement that reads `actor_kind` — which is why a defect predating this
+   change surfaced here. Not fixed: `Actor` has two kinds, a third is a migration plus a change to
+   an audit trail the operator reads, and it affects every loop rather than only flows. Recorded as
+   a design open question, and pinned by a test so that fixing it cannot pass unnoticed.
+
+
+- [x] 10.1 `pytest hub/tests/ -q` passes, with the three pre-existing `test_pty_runner` environment
       failures unchanged and no new failures.
-- [ ] 10.2 `pytest tests/ -q` passes.
-- [ ] 10.3 `ruff check hub/`, `black --check hub/`, `mypy hub/hub/` clean on touched files;
+      **Zero failures, not three** — see finding 1. Measured at every commit boundary this session
+      against a baseline taken on the unmodified tree: 2995 → 3008 (group 5) → 3023 (groups 6–8) →
+      3027 (group 9), every increment exactly accounted for by the tests added. The `1 xpassed` is
+      the documented `strict=False` xfail over a StaticPool fixture defect, present in the baseline
+      and every run since.
+- [x] 10.2 `pytest tests/ -q` passes.
+      **412 passed, 3 skipped, 0 failed.** The CLI suite is untouched by this change — nothing here
+      reaches `src/agentweave/` — so this is a guard against having reached it by accident rather
+      than a check of new behaviour.
+- [x] 10.3 `ruff check hub/`, `black --check hub/`, `mypy hub/hub/` clean on touched files;
       `cd hub/ui && npm run lint`.
-- [ ] 10.4 `openspec validate loop-becomes-a-flow` reports valid.
-- [ ] 10.5 The whole chain: a document declares A → B, a flow runs A with one agent, a second agent
+      `ruff` and `black` clean across `hub/` (421 files); `tsc --noEmit` and `npm run lint` clean;
+      `npx vitest run` 1391 passed. **Run tree-wide, not per file** — checking individual source
+      files let two findings into this session's own test files and past two commits before the
+      tree-wide run caught them.
+- [x] 10.4 `openspec validate loop-becomes-a-flow` reports valid.
+      `npx openspec validate --changes --strict` — both changes valid, re-run after every edit to
+      either.
+- [x] 10.5 The whole chain: a document declares A → B, a flow runs A with one agent, a second agent
       reviews and approves it, and B then starts — with no operator action at any point.
       **The reviewer must reach its verdict from the checkout, not by asking the author** (design
       D9); a chain that completes because the two agents talked has not demonstrated this.
-- [ ] 10.6 Confirm the 20 `agent-loops` requirements this change does not modify still hold, by
+      `hub/tests/test_flow_chain_end_to_end.py`, five tests. The chain runs: firing 1 staffs CRITIC
+      to review A while the gate still refuses B, the verdict lands, firing 2 starts B.
+      **What is real and what is simulated is stated in the module docstring**, because the
+      difference is the whole value of the test: real are the firing decision, the ladder, the
+      claim, the dependency gate, the entry, the `review_task_id` and the git checkout; simulated
+      are the two *judgements* a model would make, since there is no model in a test.
+      D9's qualification is covered from both sides —
+      `test_the_reviewer_reaches_its_verdict_from_the_checkout` asserts `ledger.py` is absent from
+      the project and present in the reviewer's own workspace (with the real
+      `ensure_review_checkout` restored, or the assertion would be vacuous), and
+      `test_the_flow_never_relays_anything_between_the_two_agents` asserts zero `Message` rows,
+      since design D3's review mechanism is claimability rather than a handover the author must
+      remember to send. A fifth test guards the fixture itself: if `_author_commit` ever committed
+      to `main`, every other assertion here would still pass and none would mean anything.
+      The operator-action claim is narrowed to what the record supports — see finding 2 — and
+      asserts that no *judgement* was the operator's, with the flow's own misattributed claim pinned
+      explicitly.
+- [x] 10.6 Confirm the 20 `agent-loops` requirements this change does not modify still hold, by
       running their scenarios against the flow implementation rather than assuming.
+      **24, not 20.** `agent-loops` holds 27 requirements today and this change's delta modifies
+      three — current items, consecutive firings, and what a firing claims. The count in this task
+      was written when the capability was smaller.
+      `hub/tests/test_flow_holds_the_loop_requirements.py` re-runs, **against a real flow** (declared
+      document, three roster agents, three ready tasks), the four whose mechanics could bend under
+      width: §449 (a firing in progress is distinguishable from one that has finished), §429 (a
+      loop's history is answerable for that loop alone), §110 (a stop condition only ever prevents a
+      firing that was going to happen), and §85 (a loop surfaces its state without a caller
+      assembling it). The selection is deliberate and the file says so: a requirement about archival
+      refusing to delete a row cannot break because three agents are running, and re-running all 24
+      would restate the existing suite at length while hiding the four that actually needed asking.
+      The remaining 20 are covered by the loop suite unchanged, which is design D7's own stated
+      regression bar — *"the behaviour of a flow with one agent is today's behaviour"* — and
+      `test_a_document_less_single_agent_loop_is_unchanged` plus
+      `test_the_board_still_reports_one_item_for_a_single_agent_loop` are that bar asserted
+      directly.
+      **This task found a real defect, which is what it is for.** §449 is unanswerable with one
+      `JobRun` per firing, so asserting it under width exposed that
+      `_fire_additional_selection` staged each extra selection *and started its turn* in a loop that
+      ran after the primary turn was already away. A turn that ends calls
+      `finalize_job_run_for_conversation`, which writes `job_runs` — so a fast turn interleaved with
+      the staging of the third selection and raised
+      `StaleDataError: UPDATE ... expected to update 1 row(s); 0 were matched`, and the third
+      selection was **silently dropped**: the firing did less than it had decided to, with nothing
+      recorded. Two changes fixed it, and both are properties rather than patches:
+      staging now runs in its own session (the caller's held the primary conversation the background
+      turn was concurrently rewriting), and **every row a firing writes is written before any turn
+      is started** — `_stage_additional_selections` then `_start_additional_turns`. The guard that
+      hid the drop now logs; a guard that returns silently is how a wide firing quietly narrows.
 
 ## 11. Verification only a human can do
 

@@ -2115,6 +2115,16 @@ class JobScheduler:
             job.run_count += 1
             await session.commit()
 
+            # Phase 1 of design D5's width: every extra selection's rows are written **before any
+            # turn starts**, including this firing's own. `loop` is not None whenever the list is
+            # non-empty — only `decide_firing` produces selections and only a loop reaches it.
+            staged_extras: "list[tuple[str, str]]" = []
+            if extra_selections:
+                assert loop is not None
+                staged_extras = await self._stage_additional_selections(
+                    job, loop, extra_selections, trigger, fired_at
+                )
+
             if pending_edit_payload is not None:
                 await _emit_loop_edit_applied(session, pending_edit_payload)
 
@@ -2165,28 +2175,10 @@ class JobScheduler:
                 agent=acting_agent,
             )
 
-            # Design D5's width, and D13's row-per-selection. Staged after the primary one is
-            # fully away — queued, committed and scheduled — so a failure here can never leave the
-            # firing's own selection half-done. `loop` is not None whenever this list is non-empty:
-            # only `decide_firing` produces selections and only a loop reaches it.
-            for extra in extra_selections:
-                assert loop is not None
-                try:
-                    await self._fire_additional_selection(
-                        job, loop, extra, trigger, fired_at, session
-                    )
-                except Exception as extra_error:
-                    # Contained deliberately. The outer handler marks *the firing's own* `run` as
-                    # failed, and the primary selection is already queued and scheduled by this
-                    # point -- so letting this escape would record a lie about the one selection
-                    # that succeeded, and drop the remaining ones on top of it. Each selection
-                    # stands or falls alone, which is the same independence design D13 gives them
-                    # a `JobRun` each for.
-                    logger.error(
-                        f"Job {job.id} could not stage {extra.agent} for {extra.task.id}: "
-                        f"{_safe_error_summary(extra_error)}"
-                    )
-                    await session.rollback()
+            # Phase 2 of design D5's width: every extra selection's rows exist by now, so this
+            # only starts their turns. See `_stage_additional_selections` for why the two are
+            # separated.
+            await self._start_additional_turns(job.project_id, staged_extras)
 
             logger.info(f"Job {job.id} fired (trigger: {trigger})")
             return True
@@ -2216,17 +2208,110 @@ class JobScheduler:
                 await session.commit()
             return False
 
-    async def _fire_additional_selection(
+    async def _stage_additional_selections(
         self,
         job: AIJob,
         loop: Loop,
-        selection: LoopSelection,
+        selections: "list[LoopSelection]",
         trigger: str,
         fired_at: datetime,
-        session: AsyncSession,
+    ) -> "list[tuple[str, str]]":
+        """Write every extra selection's rows, and start none of their turns. Returns
+        `(agent, run_id)` for each one that staged.
+
+        **The split between staging and starting is a correctness requirement, found by task 10.6
+        on 2026-08-24.** The first version staged each extra selection *and* started its turn, in a
+        loop that ran after the primary selection's turn was already away. A turn that ends calls
+        `finalize_job_run_for_conversation`, which writes `job_runs` — so with a fast turn (a test's
+        fake pty, or any quick real one) the primary's completion interleaved with the staging of
+        the third selection and produced
+        `StaleDataError: UPDATE statement on table 'job_runs' expected to update 1 row(s); 0 were
+        matched`. The third selection was then dropped, silently, and the firing did less than it
+        had decided to.
+
+        Every row this firing writes is therefore written before any turn is started, and the only
+        thing left to interleave with a completing turn is `schedule_agent`, which takes the
+        per-agent lock and is built for exactly that.
+
+        A selection that fails to stage is logged and skipped; the others still go. Each stands or
+        falls alone, which is the same independence design D13 gives them a `JobRun` each for.
+        """
+        staged: "list[tuple[str, str]]" = []
+        for selection in selections:
+            try:
+                run_id = await self._fire_additional_selection(
+                    job_id=job.id,
+                    loop_id=loop.id,
+                    task_id=selection.task.id,
+                    agent=selection.agent,
+                    is_review=selection.is_review,
+                    trigger=trigger,
+                    fired_at=fired_at,
+                )
+            except Exception as error:
+                # Contained rather than raised: the outer handler marks *the firing's own* run as
+                # failed, and by this point that run is queued and about to start, so letting this
+                # escape would record a lie about the one selection that succeeded.
+                logger.error(
+                    f"Job {job.id} could not stage {selection.agent} for {selection.task.id}: "
+                    f"{_safe_error_summary(error)}"
+                )
+                continue
+            if run_id is not None:
+                staged.append((selection.agent, run_id))
+        return staged
+
+    async def _start_additional_turns(
+        self, project_id: str, staged: "list[tuple[str, str]]"
     ) -> None:
+        """Start the turns for selections `_stage_additional_selections` already wrote rows for.
+
+        A terminal refusal is recorded against that selection's own `JobRun`, in its own session —
+        the same outcome the primary path records for itself, and the reason design D13 gives each
+        selection a row: one agent's launch failing says nothing about the others.
+        """
+        from .turn_scheduler import schedule_agent
+
+        for agent, run_id in staged:
+            try:
+                result = await schedule_agent(project_id, agent)
+            except Exception as error:
+                logger.error(
+                    f"Could not start {agent} for run {run_id}: {_safe_error_summary(error)}"
+                )
+                continue
+            if result.waiting_reason and result.terminal_failure:
+                async with async_session_factory() as session:
+                    run = await session.get(JobRun, run_id)
+                    if run is not None:
+                        run.status = "failed"
+                        run.error_summary = result.waiting_reason
+                        await session.commit()
+
+    async def _fire_additional_selection(
+        self,
+        *,
+        job_id: str,
+        loop_id: str,
+        task_id: str,
+        agent: str,
+        is_review: bool,
+        trigger: str,
+        fired_at: datetime,
+    ) -> "Optional[str]":
         """Stage one more of a wide firing's selections: its own `JobRun`, conversation and queue
         entry, then start its turn (`loop-becomes-a-flow` group 5).
+
+        **Opens its own session, and takes ids rather than ORM objects, and that is a correctness
+        requirement rather than a style choice** (found by task 10.6, 2026-08-24). By the time this
+        runs, `schedule_agent` has already started the *primary* selection's turn in the background,
+        and that turn writes to the same rows through a session of its own — including the primary
+        `Conversation` the caller's session still holds. Committing here through the caller's
+        session flushed those stale objects and raised
+        `StaleDataError: UPDATE statement on table 'conversations' expected to update 1 row(s); 0
+        were matched`, which then poisoned the whole firing with a `PendingRollbackError`. A
+        separate session touches only the rows this selection creates, which is also what makes the
+        containment in the caller true rather than aspirational.
 
         **Design D13 is why this creates a `JobRun` rather than sharing the firing's.**
         `finalize_job_run_for_conversation` correlates a run back to the `Run` it started **only**
@@ -2246,17 +2331,56 @@ class JobScheduler:
         scheduler's own reason, exactly as the primary path records a terminal `schedule_agent`
         refusal, and the remaining selections still go.
         """
-        from .inbound_queue import new_entry
-        from .turn_scheduler import schedule_agent
+        async with async_session_factory() as session:
+            job = await session.get(AIJob, job_id)
+            loop = await session.get(Loop, loop_id)
+            task = await session.get(Task, task_id)
+            if job is None or loop is None or task is None:
+                # Nothing to stage against. Cannot happen from a firing that just read all three,
+                # so this is a guard rather than a case — but it *says so*: an earlier version
+                # returned silently and turned a staging failure into a firing that quietly did
+                # less than it decided to, which is the one outcome a wide firing must never have.
+                logger.error(
+                    f"Job {job_id} could not stage {agent} for {task_id}: "
+                    f"job={job is not None} loop={loop is not None} task={task is not None}"
+                )
+                return None
+            return await self._stage_selection(
+                session,
+                job=job,
+                loop=loop,
+                task=task,
+                agent=agent,
+                is_review=is_review,
+                trigger=trigger,
+                fired_at=fired_at,
+            )
 
-        task = selection.task
+    async def _stage_selection(
+        self,
+        session: AsyncSession,
+        *,
+        job: AIJob,
+        loop: Loop,
+        task: Task,
+        agent: str,
+        is_review: bool,
+        trigger: str,
+        fired_at: datetime,
+    ) -> str:
+        """The body of `_fire_additional_selection`, given rows already loaded in its own session.
+
+        Writes rows only. The turn is started later, by `_start_additional_turns`, once every
+        selection's rows exist — see `_stage_additional_selections` for why that ordering matters.
+        Returns the `JobRun` id so the starter can record a refusal against it.
+        """
+        from .inbound_queue import new_entry
+
         if task.status == "pending":
             await apply_transition(session, task, "assigned", operator())
-        task.assignee = selection.agent
+        task.assignee = agent
 
-        conversation = new_conversation(
-            project_id=job.project_id, agent=selection.agent, origin="job"
-        )
+        conversation = new_conversation(project_id=job.project_id, agent=agent, origin="job")
         session.add(conversation)
         await inherit_runtime_overrides(session, conversation)
         name_conversation(conversation, job.name)
@@ -2281,7 +2405,7 @@ class JobScheduler:
         briefing = await _compose_loop_briefing(session, loop, task, prior_checkpoint)
         entry = new_entry(
             project_id=job.project_id,
-            agent=selection.agent,
+            agent=agent,
             origin_type="job",
             content=f"{briefing}\n{job.message}",
             hop_depth=0,
@@ -2290,7 +2414,7 @@ class JobScheduler:
             conversation_id=conversation.id,
             # Design D9, same as the primary path: only a selection the ladder made *as a review*
             # gets a checkout of the author's work.
-            review_task_id=task.id if selection.is_review else None,
+            review_task_id=task.id if is_review else None,
         )
         session.add(entry)
         # One per row, so `run_count` keeps counting `JobRun`s (finding F11 stamps the primary's at
@@ -2301,27 +2425,21 @@ class JobScheduler:
 
         queue_payload = {
             "entry_id": entry.id,
-            "agent": selection.agent,
+            "agent": agent,
             "origin_type": "job",
             "hop_depth": 0,
             "job_id": job.id,
             "conversation_id": conversation.id,
         }
         await persist_event(
-            session, job.project_id, "queue_entry_queued", queue_payload, agent=selection.agent
+            session, job.project_id, "queue_entry_queued", queue_payload, agent=agent
         )
         await sse_manager.broadcast(job.project_id, "queue_entry_queued", queue_payload)
-
-        schedule_result = await schedule_agent(job.project_id, selection.agent)
-        if schedule_result.waiting_reason and schedule_result.terminal_failure:
-            run.status = "failed"
-            run.error_summary = schedule_result.waiting_reason
-            await session.commit()
 
         fired_payload = {
             "job_id": job.id,
             "job_name": job.name,
-            "agent": selection.agent,
+            "agent": agent,
             "trigger": trigger,
             "run_id": run_id,
         }
@@ -2331,14 +2449,13 @@ class JobScheduler:
             {
                 "id": job.id,
                 "name": job.name,
-                "agent": selection.agent,
+                "agent": agent,
                 "trigger": trigger,
                 "run_id": run_id,
             },
         )
-        await persist_event(
-            session, job.project_id, "job_fired", fired_payload, agent=selection.agent
-        )
+        await persist_event(session, job.project_id, "job_fired", fired_payload, agent=agent)
+        return run_id
 
 
 async def init_scheduler() -> JobScheduler:

@@ -414,6 +414,16 @@ existing loop suite, unmodified.
   default agent.** See D12, step 1.
 - ~~**Does the tier gate behaviour, or is it only a name?**~~ **Answered 2026-08-24: it is
   presentation. A loop and a flow behave identically.** See D14.
+- **What actor is a flow's own claim?** Found by task 10.5, 2026-08-24, which is the first
+  requirement to read the `actor_kind` column. `_do_fire_job` claims with
+  `apply_transition(..., "assigned", operator())`, so the recorded history says a **human** assigned
+  every task any loop has ever claimed. Nobody did. `Actor` has two kinds and its own docstring
+  insists that *"no run id" and "the operator" are different propositions* — a flow's claim is a
+  third, the Hub acting on a schedule, and it currently borrows the operator's name.
+  Not fixed in this change: a third kind is a migration plus a semantic change to an audit trail the
+  operator reads, and it touches every loop rather than only flows.
+  `test_no_judgement_in_the_chain_was_the_operators` pins the current attribution so that fixing it
+  fails loudly rather than silently.
 - **Cross-firing selection races** — see the risk above.
 - **Should a loop's checkpoint anchor on the loop's previous checkpoint rather than the
   conversation's?** Raised by group 6's spec review, 2026-08-24, and deliberately not acted on.
