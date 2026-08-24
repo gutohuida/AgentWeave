@@ -217,12 +217,14 @@ def test_shared_dependencies_are_symlinked_into_a_review_checkout(repo):
 
     path = ensure_review_checkout(repo, "critic", sha)
 
+    # Provisioning must succeed either way: `_symlink_shared_dependencies` degrades rather than
+    # failing when the platform refuses symlinks (Windows without Developer Mode). So the contract
+    # asserted is the same one `test_worktrees.py` asserts for a working worktree — when the link
+    # *is* made, the content is genuinely shared — rather than skipping the test on this machine.
+    assert path.is_dir()
     linked = path / "node_modules"
-    if not linked.exists():
-        # Windows without Developer Mode cannot create symlinks; `_symlink_shared_dependencies`
-        # degrades rather than failing provisioning, and so does this assertion.
-        pytest.skip("symlinks unavailable in this environment")
-    assert (linked / "marker.txt").read_text() == "installed\n"
+    if linked.exists():
+        assert (linked / "marker.txt").read_text() == "installed\n"
 
 
 # --------------------------------------------------------------------------------------

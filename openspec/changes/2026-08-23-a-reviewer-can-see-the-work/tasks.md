@@ -31,24 +31,24 @@ pytest but produces three false failures in `test_pty_runner.py` on a green tree
 
 ## 3. The review turn
 
-- [ ] 3.1 In `agent_trigger.trigger_agent_directly`, resolve the workspace to the review checkout
+- [x] 3.1 In `agent_trigger.trigger_agent_directly`, resolve the workspace to the review checkout
       when the turn is a review, instead of `resolve_agent_workspace`.
-- [ ] 3.2 Set `AW_WORKSPACE_DIR` to the review checkout so the boundary moves with it. The value the
+- [x] 3.2 Set `AW_WORKSPACE_DIR` to the review checkout so the boundary moves with it. The value the
       agent is *told* and the value that is *enforced* must remain one value.
-- [ ] 3.3 Render the turn context for a review: that this is a review, of which task, at which
+- [x] 3.3 Render the turn context for a review: that this is a review, of which task, at which
       commit, and that earlier evidence named a different commit where D5 applies. The boundary
       enforces *where*; this states *what*, and both are required (design D4).
-- [ ] 3.4 Refuse a review turn whose commit cannot be resolved, with the reason from 2.2.
-- [ ] 3.5 Tests: workspace is the review checkout; the agent's own worktree is outside the boundary
+- [x] 3.4 Refuse a review turn whose commit cannot be resolved, with the reason from 2.2.
+- [x] 3.5 Tests: workspace is the review checkout; the agent's own worktree is outside the boundary
       for that turn; context names the task and commit.
 
 ## 4. Wiring the trigger
 
-- [ ] 4.1 Decide and implement how a review turn is requested. `loop-becomes-a-flow` owns automatic
+- [x] 4.1 Decide and implement how a review turn is requested. `loop-becomes-a-flow` owns automatic
       dispatch; this change needs only an operator-initiated path so the capability is reachable and
       testable before that change lands.
-- [ ] 4.2 Reject a review turn for an archived reviewer, reusing the existing archived-agent guard.
-- [ ] 4.3 Where `Task.reviewer` names an agent not on the roster, surface it and fall back to
+- [x] 4.2 Reject a review turn for an archived reviewer, reusing the existing archived-agent guard.
+- [x] 4.3 Where `Task.reviewer` names an agent not on the roster, surface it and fall back to
       operator review. Never silently substitute a different agent.
 
 ## 5. Verification an agent can do

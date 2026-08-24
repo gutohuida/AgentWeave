@@ -44,6 +44,7 @@ from ...inbound_queue import new_entry
 from ...launchability import get_agent_config, probe_agent
 from ...model_catalog import get_provider, permission_mode_values
 from ...output_recording import record_agent_output, record_context_usage
+from ...review_turn import ReviewContext
 from ...schemas.agents import (
     AgentHeartbeatCreate,
     AgentOutputCreate,
@@ -1009,6 +1010,7 @@ async def _render_hub_agent_context(
     spec_document: Optional[str] = None,
     task_spec_document: Optional[str] = None,
     task_id: Optional[str] = None,
+    review: Optional[ReviewContext] = None,
 ) -> Dict[str, Any]:
     """Render the canonical model-facing context for one agent.
 
@@ -1087,7 +1089,47 @@ async def _render_hub_agent_context(
     if work_dir:
         lines.append("### Your workspace")
         lines.append(f"- Working directory: `{work_dir}`")
-        if isolated:
+        if review is not None:
+            # The other half of design D4. The boundary already put this agent somewhere it cannot
+            # damage the author's checkout; what it cannot do is stop the agent deciding it is here
+            # to build. Said first, before anything about branches, because everything below reads
+            # differently once you know you are reviewing.
+            lines.append(
+                "- **This is a review turn. You are reviewing someone else's work, not doing your "
+                "own.**"
+            )
+            lines.append(
+                f"- Under review: task `{review.task_id}` — {review.task_title}, at commit "
+                f"`{review.commit_sha}`"
+                + (f" from branch `{review.branch}`." if review.branch else ".")
+            )
+            lines.append(
+                "- This directory is a detached checkout of that commit. `git status` will say "
+                "`HEAD detached` — that is correct and expected, not a problem to fix."
+            )
+            lines.append(
+                "- Read it, search it, and **run its test suite**. Verifying the evidence yourself "
+                "is the reason you were given a checkout rather than a diff."
+            )
+            lines.append(
+                "- Do not fix what you find. Report it. The author makes the change, through "
+                "`revision_needed` — a reviewer that edits the work has reviewed its own work."
+            )
+            lines.append(
+                "- Your own working checkout is outside this turn's boundary. You are not in it "
+                "and cannot reach it from here."
+            )
+            if review.work_moved:
+                # Design D5: told, not silently handed the newest. An agent that knows the work
+                # moved can ask why; one that does not cannot.
+                moved = ", ".join(
+                    f"`{c.commit_sha}` ({c.evidence_id})" for c in review.earlier_commits
+                )
+                lines.append(
+                    f"- Earlier evidence for this task named a different commit: {moved}. You have "
+                    "the most recent one. If that difference matters to your verdict, ask."
+                )
+        elif isolated:
             lines.append(
                 f"- This is an isolated git worktree on branch `{worktrees.branch_name(agent)}`."
             )

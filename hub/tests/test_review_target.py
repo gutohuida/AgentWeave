@@ -185,9 +185,7 @@ async def test_evidence_for_a_different_task_is_not_considered():
 
 
 async def _scaffold_second_task(session):
-    session.add(
-        Task(id="task-2", project_id="proj-test", title="Another", status="completed")
-    )
+    session.add(Task(id="task-2", project_id="proj-test", title="Another", status="completed"))
 
 
 # ---------------------------------------------------------------------------

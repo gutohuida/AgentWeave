@@ -36,7 +36,7 @@ ALEMBIC_INI = Path(__file__).parent.parent / "hub" / "alembic.ini"
 # The revision `alembic upgrade head` must land on. Named once so the assertion and its failure
 # message cannot disagree — they did, for two head bumps, telling anyone debugging a failure to go
 # read the wrong migration.
-HEAD_REVISION = "0085"
+HEAD_REVISION = "0086"
 
 
 # ---------------------------------------------------------------------------
@@ -2899,3 +2899,76 @@ def test_migration_0085_adds_lineage_id(tmp_path) -> None:
         assert conn.execute(
             "SELECT id FROM conversations WHERE id = 'conv-existing'"
         ).fetchone() == ("conv-existing",)
+
+
+def test_migration_0086_adds_review_task_id_to_queue_entries(tmp_path) -> None:
+    """`inbound_queue_entries.review_task_id` lands, is nullable, survives a round trip, and is a
+    column of its own rather than a reuse of `task_id` — see the migration's own note for why
+    collapsing the two would make a reviewer look like the task's author.
+    """
+    db_file = tmp_path / "queue_review_task.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run_alembic_with(db_url)
+
+    with sqlite3.connect(db_file) as conn:
+        assert conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == (
+            HEAD_REVISION
+        )
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(inbound_queue_entries)")}
+        assert "review_task_id" in columns
+        assert "task_id" in columns
+
+        conn.execute(
+            "INSERT INTO inbound_queue_entries "
+            "(id, project_id, agent, origin_type, content, arrived_at, hop_depth, state, "
+            " review_task_id) "
+            "VALUES ('entry-r1', 'proj-test', 'critic', 'operator', 'review it', "
+            "        '2026-08-24 09:00:00', 0, 'queued', 'task-under-review')"
+        )
+        assert conn.execute(
+            "SELECT review_task_id, task_id FROM inbound_queue_entries WHERE id = 'entry-r1'"
+        ).fetchone() == ("task-under-review", None)
+
+    from alembic import command
+    from alembic.config import Config
+
+    cfg = Config(str(ALEMBIC_INI))
+    cfg.set_main_option("sqlalchemy.url", db_url)
+    with patch.object(settings, "database_url", db_url):
+        command.downgrade(cfg, "0085")
+
+    with sqlite3.connect(db_file) as conn:
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(inbound_queue_entries)")}
+        assert "review_task_id" not in columns
+        # The entry itself survives; only the column goes.
+        assert conn.execute(
+            "SELECT id FROM inbound_queue_entries WHERE id = 'entry-r1'"
+        ).fetchone() == ("entry-r1",)
+
+    with patch.object(settings, "database_url", db_url):
+        command.upgrade(cfg, "0086")
+
+    with sqlite3.connect(db_file) as conn:
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(inbound_queue_entries)")}
+        assert "review_task_id" in columns
+
+
+def test_migration_0086_is_guarded_when_the_queue_table_does_not_exist(tmp_path) -> None:
+    """Upgrades that start from an early revision reach 0086 with only that revision's tables."""
+    db_file = tmp_path / "no_queue_table.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0085')")
+
+    from alembic import command
+    from alembic.config import Config
+
+    cfg = Config(str(ALEMBIC_INI))
+    cfg.set_main_option("sqlalchemy.url", db_url)
+    with patch.object(settings, "database_url", db_url):
+        command.upgrade(cfg, "0086")
+
+    with sqlite3.connect(db_file) as conn:
+        assert conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "0086"

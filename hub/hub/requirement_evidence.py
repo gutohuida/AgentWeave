@@ -608,9 +608,7 @@ async def commit_for_task_review(session: AsyncSession, task_id: str) -> ReviewT
             continue
         seen.add(sha)
         earlier.append(
-            EarlierCommit(
-                commit_sha=sha, evidence_id=evidence.id, produced_at=evidence.produced_at
-            )
+            EarlierCommit(commit_sha=sha, evidence_id=evidence.id, produced_at=evidence.produced_at)
         )
 
     return ReviewTarget(

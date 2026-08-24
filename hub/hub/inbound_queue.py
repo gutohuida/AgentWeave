@@ -32,6 +32,7 @@ def new_entry(
     spec_document: Optional[str] = None,
     task_id: Optional[str] = None,
     divergence_source_run_id: Optional[str] = None,
+    review_task_id: Optional[str] = None,
 ) -> InboundQueueEntry:
     if origin_type not in ("operator", "agent", "job", "checkpoint", "divergence"):
         raise ValueError(
@@ -58,6 +59,7 @@ def new_entry(
         spec_document=spec_document,
         task_id=task_id,
         divergence_source_run_id=divergence_source_run_id,
+        review_task_id=review_task_id,
         state="queued",
     )
 

@@ -586,6 +586,12 @@ class InboundQueueEntry(Base):
     #: like `task_id` this must survive the queue, or a chain cannot see its own source and cannot
     #: be bounded (design D8).
     divergence_source_run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    #: Set when this entry starts a **review** turn, naming the task whose finished work is being
+    #: reviewed. Survives the queue for the same reason `task_id` does, and is deliberately not
+    #: `task_id` itself: that one is the task this run is working on and binds the run to it, this
+    #: one is the task the run is inspecting. Collapsing them would make a reviewer look like the
+    #: task's author to every consumer of the binding.
+    review_task_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 
     project: Mapped["Project"] = relationship(back_populates="queue_entries")
 
