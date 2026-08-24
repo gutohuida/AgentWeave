@@ -319,3 +319,142 @@ are returned by `GET /tasks` and rendered nowhere), F9 (an inline note on approv
 commit goes into which branch), F14 ("waiting on you" on a task blocked on an unanswered
 `ask_user`, without changing its status), F2 ("server time" → "UTC"), and F1's UI half as described
 above. Read `design/IDENTITY.md` before touching any of it. Q4 untouched.
+
+---
+
+## Iteration 4 — Q3, dashboard truth (F17, F19, F9, F14, F2, F1's UI half)
+
+**This entry covers four firings, not one, and says which did what**, because three of them left no
+record of their own and inheriting their claims silently would be exactly the kind of dishonesty
+this queue item is about.
+
+| Firing | What happened |
+|---|---|
+| ~04:00–05:09 | Took Q3, implemented all six findings, drove them over HTTP, then died before the full backend suite and before committing. Left 16 modified files, 4 new ones, a drafted commit message and a drafted log entry in `scratch/` — and no log entry, no commit. |
+| 05:34–05:55 | Re-verified parts of the tree, refined the drafted entry, died on `API Error: 529 Overloaded`. |
+| 06:09–06:12 | Died on 529 before doing anything. |
+| 06:14– (this one) | Verified the inherited tree independently, end to end, and committed it. |
+
+`git log` matched STATE.json exactly — `ec633a3`, with Q2's `d706187` one commit back — so nothing
+was lost; only the working tree was ahead of the record.
+
+**Reconciled by adopting the work rather than discarding it.** A complete, coherent implementation
+is not made wrong by a missing log entry, and re-deriving it would have cost the last usable hour
+before 08:00. The adoption was conditional on the work surviving verification *run in this firing*,
+which is the section below. Every number there was measured here between 06:14 and 07:00; nothing
+is inherited.
+
+### What the six findings became
+
+**F17** — `last_seen` came from `AgentHeartbeat` rows and nothing else, and since the watchdog was
+deleted the Hub spawns every agent itself and posts no heartbeats. So the field was permanently
+NULL for every managed agent, and the rail read "No activity yet" beside an agent that had just
+done nine runs. New `hub/hub/agent_activity.py` derives it in bulk from three sources — `runs`
+(`started_at`, `ended_at`, `last_heartbeat_at`), `agent_outputs.timestamp`, and heartbeats, still —
+and `agents.py` and `projects.py` both call it, so the rail and the roster cannot disagree about
+one agent. Deliberately *not* wired into `heartbeat_is_stale`: "when did this agent last do
+something" and "is it healthy right now" are different questions, and a two-hour-old run answers
+only the first.
+
+**F6/F18's remaining half** — the task board was the third surface still reading heartbeats alone,
+so its cards reported `assignee_status: "idle"` about the agent the rail beside them called
+`running`. `_attach_assignee_liveness` copies `agents.py`'s precedence verbatim, stalled case
+included.
+
+**F19** — a gated task rendered as an ordinary pending card while the dependency gate silently
+refused every attempt to move it. `TaskCard` now carries a badge — neutral for an ordinary gate,
+red only for `gated_on_rejected` — with the blocking prerequisites and their statuses in the title.
+The distinction is the point: waiting on unapproved work is the system behaving correctly, whereas
+a *rejected* prerequisite can never clear on its own.
+
+**F9** — approving cherry-picks the accepted evidence's commit into the project's main branch, and
+nothing said so on the successful path. A read-only `GET /tasks/{id}/integration-preview` answers
+the same question the merge will ask, from the same source, and the drawer states it beside the
+approve control as an inline note — not a dialog, because approval is the designed behaviour and a
+confirmation step teaches the operator to dismiss it.
+
+**F14** — a run waiting on `ask_user` does not park its task until it *ends*, so for the whole of
+the wait the board said `in_progress` with no reason. `awaiting_answer_reason` is computed per
+request, never stored, and the card draws it exactly like a parked one. The status is deliberately
+untouched.
+
+**F2** — "server time" → "UTC" on both jobs surfaces. The value was always right; only the word was
+wrong, by an hour, every summer, on the operator's own machine.
+
+**F1's UI half** — `cronDayAmbiguity` exports the predicate `describeCron` and `nextRuns` already
+declined on, so the form says why the Hub will refuse the expression instead of rendering nothing,
+and the card stops dating a pre-refusal job with croniter's OR answer for a schedule APScheduler
+ANDs.
+
+### Verification, all of it run in this firing
+
+- `npx tsc --noEmit`: clean.
+- `npm run lint`: clean at `--max-warnings 0`.
+- `npx vitest run`: **1374 passed, 138 files, 0 failed** (42s).
+- `uvx ruff@0.15.22 check src/ hub/ tests/`: clean. `uvx black@26.5.1 --check`: 448 files unchanged.
+- `npx openspec validate --changes --strict`: 4 passed.
+- **Full backend suite**, `py -3.11 -m pytest hub/tests/ -q`: **2838 passed, 84 skipped, 1 xpassed, 0 failed** (14m44s). `test_dashboard_truth.py` contributes 23 of those, and nothing that existed before regressed.
+- **Driven over real HTTP**, because a passing suite is not proof of behaviour:
+  `.claude/autonomous/scratch/drive_q3.py` (gitignored) boots the actual FastAPI app on a temp
+  SQLite database and reads the JSON a real caller gets — **17 checks, 0 failed**, reproduced here
+  rather than taken from the dead firing's transcript. It covers three things the unit tests cannot:
+  `last_seen` agreeing across the two routes that render it, `awaiting_answer_reason` produced by
+  really calling the questions API mid-run, and the F9 preview walked through all three operator
+  states (no evidence, evidence awaiting review, evidence accepted).
+
+**And falsified rather than trusted.** The six changed backend source files were stashed — leaving
+`agent_activity.py` on disk but unwired, and every new test in place — and the two backend suites
+run against the hole: **17 failed, 37 passed.** The failures cover all four findings the backend
+half carries (F17 on both routes, F14, F9, F6/F18) and include
+`test_project_summary_reports_running_for_a_run_with_no_heartbeat`, the pre-existing test whose
+`last_seen is None` assertion this work moved. Stash popped, re-run, **54 passed**.
+
+The UI half was falsified the same way by the firing that wrote it — the seven changed sources
+reverted to `HEAD` with the four test files left in place, 11 failed / 15 passed, restored, 40
+passed. That one measurement is inherited rather than re-run here, and it is the only one in this
+entry that is.
+
+### Read, not assumed
+
+Two claims in the inherited comments were checked against the code they describe rather than taken
+at face value:
+
+- `_attach_assignee_liveness` says its precedence is "copied from `agents.py`, deliberately and
+  exactly". It is: `agents.py` sets `effective_status` from the heartbeat and then overwrites it
+  with `"running", None` for any agent holding a live `Run`; the new code does the same two things
+  in the same order.
+- `nextRuns` and `describeCron` really do already decline an ambiguous day pair, so
+  `cronDayAmbiguity` is that same predicate exported, not a second copy of it.
+
+### Noticed, not done
+
+**F19's `dependents` half is not implemented.** The queue item says `TaskCard` "renders neither
+prerequisites nor dependents"; only the prerequisite side is marked. That is the side that *gates* —
+a task with dependents is not itself blocked by them — so the card says what stops this task from
+starting and not what this task is stopping. The Dependencies board already draws those edges.
+Recorded so the gap is a decision and not an oversight.
+
+**A stalled agent mid-run now reads `running` on a task card**, where it previously read `stalled`.
+That is the price of the board and the rail describing one agent the same way, it is tested
+(`test_a_live_run_outranks_a_stalled_heartbeat_here_exactly_as_it_does_on_the_roster`), and it is
+flagged here rather than left invisible.
+
+### Committed
+
+One commit for the whole of Q3, naming F17, F19, F9, F14, F2 and F1. **No bundle rebuild** — that
+is Q4's, deliberately, so `hub/hub/static/ui` is written exactly once. The committed bundle is
+therefore stale as of this commit and is *expected* to be.
+
+### Continuation
+
+Q3 is closed. Next is **Q4** — rebuild the bundle and verify everything. Order matters and cost an
+earlier session a cycle: **commit the source first, then `cd hub/ui && npm run build`, then
+`py -3.11 scripts/refresh_ui_bundle.py`, then commit the stamp**, because git's CRLF normalisation
+on commit invalidates a stamp taken before it and `/health` then reports `ui_stale` on a clean tree.
+Then the full sweep (backend suite, vitest, ruff, black, openspec validate), a read of the whole
+diff since `ec633a3` for accidental legacy revival and debris, and the morning summary at the
+`log_file` path.
+
+**One practical note for whoever picks up Q4:** two firings in a row died on `API Error: 529
+Overloaded` mid-iteration, at 05:55 and 06:12. Nothing was lost either time, because the tree was
+on disk — but it is why Q3 took four firings to close, and it is worth expecting again.
