@@ -239,8 +239,10 @@ async def bind_run_to_task(
     released by the answer arriving or by the operator saying so, never by something merely starting.
 
     The task also learns *who* is doing it. Two paths reach `in_progress` and until 2026-08-24 only
-    one named an agent: the loop's claim sets `claimed_task.assignee = job.agent`
-    (`scheduler.py`), a direct `task_id` trigger set nothing. So a task a run was actively working
+    one named an agent: the loop's claim sets `claimed_task.assignee` from its selection
+    (`scheduler.py` — `job.agent` until `loop-becomes-a-flow` group 2 made it the selection's own
+    agent, so a flow's reviewer is recorded as the assignee rather than the job's owner), a direct
+    `task_id` trigger set nothing. So a task a run was actively working
     read `status: in_progress, assignee: null` — and since `assignee_status` is derived from that
     null (`_task_response`), the board reported `idle` about an agent that was at that moment
     running. Written here rather than in the trigger route because this is the one place both paths

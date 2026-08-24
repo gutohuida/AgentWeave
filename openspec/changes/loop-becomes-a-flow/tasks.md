@@ -52,13 +52,44 @@ on `loop-notices-and-reacts` for the shared firing decision this change adds an 
 
 ## 2. The agent becomes a per-selection value
 
-- [ ] 2.1 Test: a loop with no document fires `AIJob.agent` on every firing, unchanged.
-- [ ] 2.2 Test: a selection carrying an explicit agent fires that agent, and the run, conversation,
+- [x] 2.1 Test: a loop with no document fires `AIJob.agent` on every firing, unchanged.
+      `test_a_loop_with_no_document_selects_the_jobs_own_agent` plus the empty-queue case, in
+      `hub/tests/test_loop_selection_carries_its_agent.py`. The whole loop suite is the wider bar
+      and still passes: **150 passed, 3 skipped** (141 baseline + group 1's 6 + this group's 3).
+- [x] 2.2 Test: a selection carrying an explicit agent fires that agent, and the run, conversation,
       queue entry and credential all attribute to it.
-- [ ] 2.3 Carry an agent alongside each selected task through `_do_fire_job`, defaulting to
+      `test_a_selection_naming_another_agent_is_who_actually_gets_fired` drives a real firing with
+      the job owned by `job-owner` and the selection naming `other-agent`, then asserts the `Run`,
+      the `Conversation`, the `InboundQueueEntry` **and** `Task.assignee` all read `other-agent`.
+      The credential needs no separate assertion: `agent_auth` derives its `AgentActor` from the
+      run row (`agent_auth.py:80`), so `Run.agent` is the credential's identity.
+- [x] 2.3 Carry an agent alongside each selected task through `_do_fire_job`, defaulting to
       `AIJob.agent` (design D2). Leave the column `NOT NULL`.
-- [ ] 2.4 Confirm nothing reads `job.agent` downstream of the selection where the selection's agent
+      `LoopSelection(task, agent)` — frozen, because a selection is a decision already taken — and
+      `_select_for_firing(session, loop, *, default_agent)`, the seam between *which tasks* (group
+      1's claim) and *who works them* (group 4's ladder). `_do_fire_job` holds an `acting_agent`
+      that starts as `job.agent`, so a job with no loop is untouched. Column left `NOT NULL`.
+      **One thing this exposed:** `_job_agent_skip_reason` and the resume-conversation lookup both
+      run *before* the claim and both take `job.agent`, so they answer about the wrong agent the
+      moment a selection diverges. Restructuring that region is `loop-notices-and-reacts`' firing
+      decision, not this group's — so group 2 guards it instead: a selection naming another agent
+      drops the pre-claim conversation and resume id rather than putting one agent's turn in
+      another agent's thread. Recorded here because group 4 must not assume it away.
+- [x] 2.4 Confirm nothing reads `job.agent` downstream of the selection where the selection's agent
       is what is meant — a source scan, not a reading.
+      Scan done across `hub/hub/`. Downstream of the selection, `scheduler.py` had 12 reads and now
+      has 2 — both inside the stall-skip branch, which is reached only when *nothing* was selected,
+      so the job's agent is what is meant there. Outside the scheduler, three sites read
+      `AIJob.agent` and **all three are correct as they are**:
+      - `tasks.py:586` (`_authorize_loop_task_creation`) — this looks like a site that needs the
+        selection's agent and is precisely one that must not. It asks who may *extend* the queue
+        (`agent-loops` §178, the loop's creator). A reviewer the flow staffs is not the creator and
+        must not inherit that right by being fired once.
+      - `jobs.py:148/449` (`LoopSummary.agent`) — the loop's owner, which is a job-level fact.
+        Imprecise for a flow staffing several agents, but that is task 9.3's job, not this one.
+      - `agent_actions.py:96`, `schemas/tasks.py:56` — comments restating the §178 gate above.
+      One stale **comment** was corrected: `run_task_binding.py:242` asserted the claim sets
+      `assignee = job.agent`, which stopped being true in 2.3.
 
 ## 3. Actor-aware claimability
 

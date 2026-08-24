@@ -6,6 +6,7 @@ and triggers agents when cron expressions match.
 
 import logging
 import re
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional, Set
 
@@ -510,6 +511,45 @@ async def _claim_loop_task(session: AsyncSession, loop: Loop) -> "list[Task]":
     """
     task, _gated = await _first_startable_candidate(session, loop)
     return [] if task is None else [task]
+
+
+@dataclass(frozen=True)
+class LoopSelection:
+    """One thing a firing decided to do: a task, and the agent to do it.
+
+    **`loop-becomes-a-flow` group 2, design D2.** Until this existed a firing selected a task and
+    read the agent off `AIJob.agent`, so "who works this queue" was a property of the job rather
+    than of the selection. A flow needs it to be a property of the selection — a reviewer is a
+    different agent for the same queue — while `AIJob.agent` stays `NOT NULL` and keeps meaning
+    *the agent this job fires when nothing says otherwise*.
+
+    Frozen because a selection is a decision already taken. Anything that wants a different agent
+    makes a different selection, which is also what makes design D6 ("one agent, one task, per
+    firing") checkable: it is a property of a list of these, not of mutable state.
+    """
+
+    task: Task
+    agent: str
+
+
+async def _select_for_firing(
+    session: AsyncSession, loop: Loop, *, default_agent: str
+) -> "list[LoopSelection]":
+    """What this firing will do: every claimed task paired with the agent that will work it.
+
+    The seam between *which tasks* (`_claim_loop_task`, group 1) and *who works them* (group 4's
+    reviewer ladder). Today every selection takes `default_agent` -- the job's own -- which is
+    exactly D2's default and is why a loop with no document behaves identically to one before this
+    change existed.
+
+    Group 4 replaces the constant with the ladder, and group 5 lets the list grow past one. Both
+    land here rather than in `_do_fire_job`, so the firing never has to know how the answer was
+    reached.
+    """
+    return [
+        LoopSelection(task=task, agent=default_agent)
+        for task in await _claim_loop_task(session, loop)
+    ]
 
 
 async def _loop_stall_reason(session: AsyncSession, loop: Loop) -> Optional[str]:
@@ -1117,14 +1157,17 @@ class JobScheduler:
                 return False
 
             content = job.message
+            # Who this firing is actually for. `job.agent` until a selection says otherwise
+            # (design D2) — a job with no loop has no selection to say anything, so it stays the
+            # job's own agent and this variable changes nothing for it.
+            acting_agent = job.agent
             if loop is not None:
-                # Set-valued as of `loop-becomes-a-flow` group 1, and still holding at most one
-                # member until group 5 widens it. The firing keeps its single-task shape here
-                # deliberately: group 1 must be indistinguishable from today, so the collection is
-                # unwrapped at the boundary rather than threaded through `_do_fire_job` before
-                # anything can staff a second agent.
-                claimed_tasks = await _claim_loop_task(session, loop)
-                claimed_task = claimed_tasks[0] if claimed_tasks else None
+                # Set-valued as of `loop-becomes-a-flow` group 1, and carrying its own agent as
+                # of group 2 (design D2). Still at most one member until group 5 widens it, so the
+                # firing keeps its single-selection shape and unwraps at this boundary.
+                selections = await _select_for_firing(session, loop, default_agent=job.agent)
+                selection = selections[0] if selections else None
+                claimed_task = selection.task if selection is not None else None
                 if claimed_task is None:
                     stall_reason = await _loop_stall_reason(session, loop)
                     if stall_reason:
@@ -1161,7 +1204,29 @@ class JobScheduler:
                     # exactly the resume case this branch already guarded for.
                     if claimed_task.status == "pending":
                         await apply_transition(session, claimed_task, "assigned", operator())
-                    claimed_task.assignee = job.agent
+                    # The selection's agent, not the job's: from group 2 these differ whenever a
+                    # flow staffs a task with someone other than the job's own agent, and a task
+                    # assigned to the job's agent while another works it is the first place that
+                    # divergence would become a lie the board repeats.
+                    claimed_task.assignee = selection.agent
+                # `selection` is None on the "never filled" queue — no task, but the firing still
+                # proceeds, because filling the queue is the agent's job (`_loop_stall_reason`).
+                # That firing is for the job's own agent, which `acting_agent` already holds.
+                if selection is not None and selection.agent != job.agent:
+                    acting_agent = selection.agent
+                    # A conversation found above was looked up for *the job's* agent, before this
+                    # firing knew who it was for. Reusing it would put one agent's turn in another
+                    # agent's thread. A fresh conversation for the acting agent is the only
+                    # correct answer here; resuming a provider session across a change of agent is
+                    # not a thing this product does.
+                    #
+                    # The deeper fix is ordering: `_job_agent_skip_reason` and the resume lookup
+                    # both run before the claim and both take `job.agent`, so they answer about
+                    # the wrong agent whenever a selection diverges. Restructuring that region is
+                    # `loop-notices-and-reacts`' firing-decision work, not this group's — until
+                    # then this guard keeps the divergence from producing a wrong thread.
+                    conversation = None
+                    resume_session_id = None
                 prior_checkpoint = await latest_checkpoint_for_loop(session, loop.id)
                 briefing = await _compose_loop_briefing(
                     session, loop, claimed_task, prior_checkpoint
@@ -1173,7 +1238,7 @@ class JobScheduler:
             # is created only once the firing is known to proceed.
             if conversation is None:
                 conversation = new_conversation(
-                    project_id=job.project_id, agent=job.agent, origin="job"
+                    project_id=job.project_id, agent=acting_agent, origin="job"
                 )
                 if resume_session_id:
                     conversation.provider_session_id = resume_session_id
@@ -1186,7 +1251,7 @@ class JobScheduler:
 
             entry = new_entry(
                 project_id=job.project_id,
-                agent=job.agent,
+                agent=acting_agent,
                 origin_type="job",
                 content=content,
                 hop_depth=0,
@@ -1215,17 +1280,17 @@ class JobScheduler:
 
             queue_payload = {
                 "entry_id": entry.id,
-                "agent": job.agent,
+                "agent": acting_agent,
                 "origin_type": "job",
                 "hop_depth": 0,
                 "job_id": job.id,
                 "conversation_id": conversation.id,
             }
             await persist_event(
-                session, job.project_id, "queue_entry_queued", queue_payload, agent=job.agent
+                session, job.project_id, "queue_entry_queued", queue_payload, agent=acting_agent
             )
             await sse_manager.broadcast(job.project_id, "queue_entry_queued", queue_payload)
-            schedule_result = await schedule_agent(job.project_id, job.agent)
+            schedule_result = await schedule_agent(job.project_id, acting_agent)
             if schedule_result.waiting_reason and schedule_result.terminal_failure:
                 # This is the same terminal outcome startup reconciliation would eventually
                 # record, reached honestly at the moment the Hub knows no turn began. Reusing
@@ -1240,7 +1305,7 @@ class JobScheduler:
                 {
                     "id": job.id,
                     "name": job.name,
-                    "agent": job.agent,
+                    "agent": acting_agent,
                     "trigger": trigger,
                     "run_id": run_id,
                 },
@@ -1253,11 +1318,11 @@ class JobScheduler:
                 {
                     "job_id": job.id,
                     "job_name": job.name,
-                    "agent": job.agent,
+                    "agent": acting_agent,
                     "trigger": trigger,
                     "run_id": run_id,
                 },
-                agent=job.agent,
+                agent=acting_agent,
             )
 
             logger.info(f"Job {job.id} fired (trigger: {trigger})")
@@ -1277,12 +1342,12 @@ class JobScheduler:
                     {
                         "job_id": job.id,
                         "job_name": job.name,
-                        "agent": job.agent,
+                        "agent": acting_agent,
                         "trigger": trigger,
                         "run_id": run.id,
                         "error_summary": error_summary,
                     },
-                    agent=job.agent,
+                    agent=acting_agent,
                     severity="error",
                 )
                 await session.commit()
