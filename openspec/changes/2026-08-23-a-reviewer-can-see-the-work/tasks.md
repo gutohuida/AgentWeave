@@ -53,11 +53,11 @@ pytest but produces three false failures in `test_pty_runner.py` on a green tree
 
 ## 5. Verification an agent can do
 
-- [ ] 5.1 `py -3.11 -m pytest hub/tests/ -q` — green, and no new skips.
-- [ ] 5.2 `cd hub/ui && npm run lint && npx tsc --noEmit` if any UI file changed.
-- [ ] 5.3 `uvx ruff@0.15.22 check src/ hub/ tests/` and `uvx black@26.5.1 --check` at CI's pinned
+- [x] 5.1 `py -3.11 -m pytest hub/tests/ -q` — green, and no new skips.
+- [x] 5.2 `cd hub/ui && npm run lint && npx tsc --noEmit` if any UI file changed. **Not applicable** — this change touches no UI file.
+- [x] 5.3 `uvx ruff@0.15.22 check src/ hub/ tests/` and `uvx black@26.5.1 --check` at CI's pinned
       versions.
-- [ ] 5.4 `npx openspec validate --changes --strict`.
+- [x] 5.4 `npx openspec validate --changes --strict`.
 - [ ] 5.5 An end-to-end run against the trial Hub using `scripts/drive/`: an author completes work
       on its own branch, a reviewer is given a review turn, and the reviewer **reads a file that
       does not exist on the main branch**. This is the assertion that distinguishes this change from
@@ -77,5 +77,5 @@ pytest but produces three false failures in `test_pty_runner.py` on a green tree
 
 ## 7. User test guide
 
-- [ ] 7.1 Write the operator-facing walkthrough: how to request a review, what the reviewer can and
+- [x] 7.1 Write the operator-facing walkthrough: how to request a review, what the reviewer can and
       cannot see, what to do when the commit cannot be resolved, and where the review checkouts live.
