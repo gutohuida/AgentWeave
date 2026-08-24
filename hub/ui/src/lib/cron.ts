@@ -201,6 +201,36 @@ function isAmbiguousDayPair(parsed: ParsedCron): boolean {
   return !parsed.dayOfMonth.all && !parsed.dayOfWeek.all
 }
 
+/**
+ * Why this expression cannot be scheduled unambiguously, as a sentence — or `null` when it can.
+ *
+ * The same predicate `describeCron` and `nextRuns` already decline on, made public, because two
+ * other surfaces need it and were each answering it their own way:
+ *
+ * * `JobForm` rendered *nothing* for an ambiguous expression — no sentence, no preview — which
+ *   reads as "still typing", not as "this will be refused". The Hub refuses it on submit
+ *   (`scheduler.cron_day_ambiguity_reason`), so the form can say so first.
+ * * `JobCard` shows `job.next_run`, which is the **server's** croniter answer (OR) for a job that
+ *   APScheduler fires by the AND reading — measured 260 days apart for `0 0 15 * 5`. New jobs of
+ *   this shape can no longer be stored, but jobs created before the refusal still exist and their
+ *   cards were still rendering that number as fact.
+ *
+ * Deliberately the same grammar and the same remedy as the backend refusal, and deliberately no
+ * more: an expression this module cannot parse at all returns `null` — undecided, never refused —
+ * exactly as `cron_day_ambiguity_reason` does. `L`, `W`, `#` and `?` are somebody else's grammar.
+ */
+export function cronDayAmbiguity(expr: string): string | null {
+  const parsed = parseCron(expr)
+  if (!parsed || !isAmbiguousDayPair(parsed)) return null
+  const fields = expr.trim().split(/\s+/)
+  return (
+    `This restricts both day-of-month ('${fields[2]}') and day-of-week ('${fields[4]}'), which has ` +
+    'two incompatible meanings: standard cron fires when either matches, this scheduler fires only ' +
+    'when both fall on the same day — for some expressions that is months apart. Leave one of the ' +
+    "two as '*', or create two jobs."
+  )
+}
+
 function pad(n: number): string {
   return n < 10 ? `0${n}` : String(n)
 }

@@ -13,6 +13,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ... import bound_address, project_workspace, spec_documents, spec_lifecycle, worktrees
+from ...agent_activity import latest_activity_by_agent
 from ...agent_colors import next_color_index
 from ...agent_lifecycle import archivable as agent_archivable
 from ...agent_lifecycle import archive as archive_agent_row
@@ -395,6 +396,13 @@ async def list_agents(
     running_run_res = await session.execute(running_run_q)
     agents_with_active_run = {name for (name,) in running_run_res}
 
+    # F17: when each agent was last observed doing anything — runs and output, not only the
+    # heartbeat rows that a Hub-spawned agent never writes. See `agent_activity` for why the
+    # heartbeat-only reading made every managed agent read "No activity yet" forever.
+    activity_by_agent = await latest_activity_by_agent(
+        session, project_id, agent_names, heartbeats=latest_hbs
+    )
+
     # Bulk fetch message counts (last 24h) per agent
     sender_counts_q = (
         select(Message.sender, func.count())
@@ -534,7 +542,7 @@ async def list_agents(
                 description=(agent_row.description if agent_row else None),
                 status=effective_status,
                 latest_status_msg=effective_status_message,
-                last_seen=hb.timestamp if hb else None,
+                last_seen=activity_by_agent.get(agent_name),
                 message_count=msg_count,
                 active_task_count=task_count,
                 lifecycle=(agent_row.lifecycle if agent_row else "open"),

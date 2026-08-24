@@ -113,12 +113,50 @@ export function TaskCard({
   const isBlocked = task.status === 'blocked'
   const blockedAccent = 'var(--purple)'
 
+  // F14: the same fact, one status earlier. A run waiting on `ask_user` does not park its task
+  // until it *ends* — so for the whole of the wait, which is the entire point of asking, the card
+  // read `in_progress` with nothing to say. Drawn identically to a parked card because it is
+  // identically true: the work has stopped and the answer is on the operator's desk. The status is
+  // deliberately untouched; only the card is honest about it.
+  const awaitingAnswer = task.awaiting_answer_reason ?? null
+  const isWaitingOnOperator = isBlocked || Boolean(awaitingAnswer)
+  const waitingReason = task.blocked_reason ?? awaitingAnswer
+
   // A rejected card is the *cause* of every `gated_on_rejected` card downstream of it, and on the
   // dependency board the red edges pointed at a card that looked like any other. Stated on the card
   // itself rather than only on that board: a rejected task reads the same wherever it is drawn, and
   // one rule beats a board-specific special case. Cannot collide with `isBlocked` — status is a
   // single value, so a card is never both.
   const isRejected = task.status === 'rejected'
+
+  // F19: a task that cannot start because a prerequisite has not been approved rendered exactly
+  // like any other pending card — same badge, same priority, same chips — while the gate silently
+  // refused every attempt to move it. The data was already on the response: `dependency_state` is
+  // derived per request and `prerequisites` carries each prerequisite's own status. Nothing joined
+  // them to the card.
+  //
+  // Named on the card rather than left to the Dependencies board, for the same reason the rejected
+  // border is: the operator has to already suspect there is something to look for before they open
+  // that board, and a card that looks startable is what stops them suspecting it.
+  const gatedOnRejected = task.dependency_state === 'gated_on_rejected'
+  const isGated = gatedOnRejected || task.dependency_state === 'gated'
+  const blockingPrerequisites = (task.prerequisites ?? []).filter(
+    (prerequisite) => prerequisite.status !== 'approved',
+  )
+  const gatedTitle = blockingPrerequisites.length
+    ? `Cannot start yet — waiting on ${blockingPrerequisites
+        .map((prerequisite) => `${prerequisite.title} (${prerequisite.status.replace(/_/g, ' ')})`)
+        .join(', ')}`
+    : 'Cannot start yet — a prerequisite has not been approved.'
+  // "Prerequisite rejected" rather than "blocked by": `blocked` is a task *status* in this product
+  // and a gated task is `pending`, so borrowing the word would name a state the card is not in.
+  // This also matches the `running_on_regressed` badge's own wording two rows down, which is the
+  // vocabulary this badge row already uses for the same subject.
+  const gatedLabel = gatedOnRejected
+    ? 'Prerequisite rejected'
+    : blockingPrerequisites.length
+      ? `Waiting on ${blockingPrerequisites.length} task${blockingPrerequisites.length === 1 ? '' : 's'}`
+      : 'Waiting on a prerequisite'
 
   /* D12: a slow pulsing green hue around a card whose task has a run executing *right now* —
    * a fact the status badge cannot carry, since a task can read `in_progress` with nothing
@@ -143,7 +181,7 @@ export function TaskCard({
       style={{
         background: 'var(--surface-2)',
         border: `1px solid ${
-          isBlocked
+          isWaitingOnOperator
             ? `color-mix(in srgb, ${blockedAccent} 45%, transparent)`
             : isRejected
               ? 'color-mix(in srgb, var(--red) 40%, transparent)'
@@ -287,7 +325,7 @@ export function TaskCard({
         {/* What this task is waiting for, and who it is waiting on. Said in words rather than left
             to a badge: "blocked" alone puts the operator back where they were when the card said in
             progress and nothing was happening. */}
-        {isBlocked && (
+        {isWaitingOnOperator && (
           <div
             data-testid={`task-blocked-${task.id}`}
             className="mt-2 flex items-start gap-2 rounded px-2 py-1.5"
@@ -301,9 +339,9 @@ export function TaskCard({
               <p className="text-[11px] font-medium" style={{ color: blockedAccent }}>
                 Waiting on you
               </p>
-              {task.blocked_reason && (
+              {waitingReason && (
                 <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-2)' }}>
-                  {task.blocked_reason}
+                  {waitingReason}
                 </p>
               )}
             </div>
@@ -340,6 +378,35 @@ export function TaskCard({
             >
               <Icon name="alert_triangle" size={12} />
               Stalled
+            </span>
+          )}
+          {/* F19. Neutral for the ordinary gate and red only for `gated_on_rejected`: waiting on
+              work that has not been approved yet is the system behaving correctly and is not a
+              problem, whereas a prerequisite that was *rejected* can never clear on its own and
+              needs the operator. Two states, two weights, one badge. */}
+          {isGated && (
+            <span
+              data-testid={`task-gated-${task.id}`}
+              title={gatedTitle}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+                background: gatedOnRejected
+                  ? 'color-mix(in srgb, var(--red) 12%, transparent)'
+                  : 'var(--surface-3)',
+                border: gatedOnRejected
+                  ? '1px solid color-mix(in srgb, var(--red) 30%, transparent)'
+                  : '1px solid var(--border)',
+                borderRadius: 9999,
+                padding: '1px 6px',
+                fontSize: 10,
+                fontWeight: 500,
+                color: gatedOnRejected ? 'var(--red)' : 'var(--text-2)',
+              }}
+            >
+              <Icon name="lock" size={12} />
+              {gatedLabel}
             </span>
           )}
           {/* Task 8.9, design D8: "a running task whose dependency regressed is flagged, not

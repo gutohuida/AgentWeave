@@ -97,7 +97,11 @@ async def test_project_summary_reports_running_for_a_run_with_no_heartbeat(
     summary = next(a for a in project["agents"] if a["name"] == "live-run-agent")
 
     assert summary["status"] == "running"
-    assert summary["last_seen"] is None
+    # `last_seen` used to be asserted NULL here, which pinned the defect this test's own docstring
+    # objects to: the rail read heartbeats for the timestamp while reading `runs` for the status,
+    # so a live agent was "running" and "no activity yet" at the same time (2026-08-23 drive, F17).
+    # It is now derived from the run, like the status beside it.
+    assert summary["last_seen"] is not None
 
 
 @pytest.mark.asyncio

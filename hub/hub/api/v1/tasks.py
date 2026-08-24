@@ -10,6 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ... import dependency_gate, project_workspace, spec_lifecycle, spec_reading
+from ...agent_activity import latest_activity_by_agent
 from ...agent_status import effective_heartbeat_status
 from ...auth import get_project
 from ...db.engine import get_session
@@ -19,7 +20,10 @@ from ...db.models import (
     AIJob,
     EvidenceReview,
     Loop,
+    Project,
+    Question,
     RequirementEvidence,
+    Run,
     RunDivergence,
     SpecDocument,
     SpecRequirement,
@@ -33,6 +37,7 @@ from ...requirement_evidence import REJECTED as EVIDENCE_REJECTED
 from ...requirement_links import LinkRefusedError, absorb_free_text, link, resolve_identifiers
 from ...run_task_binding import (
     TERMINAL_FOR_BINDING,
+    reason_from_question,
     release_conversations_bound_to,
     release_reason,
 )
@@ -313,6 +318,121 @@ async def _attach_dependencies(
             response.dependency_state = "gated"
         else:
             response.dependency_state = None
+    return responses
+
+
+async def _attach_awaiting_answer(
+    session: AsyncSession, responses: List[TaskResponse], *, project_id: str
+) -> List[TaskResponse]:
+    """Say which tasks have a live run waiting on an unanswered question (F14).
+
+    A task only reaches `blocked` when the asking run *ends* with the question still open —
+    `block_task_for_question` is reached from `run_divergence.evaluate_run_end` and nowhere else.
+    That is the right moment to change a status, but it means the entire time an agent sits waiting
+    for the operator, which is the whole point of `ask_user`, the board reads `in_progress` with no
+    `blocked_reason`: it claims the work is progressing while nothing is happening and the answer
+    is on the operator's desk.
+
+    So this reports the wait without touching the status. Derived per request and never stored: the
+    durable record is the question row, and a second copy on the task would be one more thing that
+    can disagree with it — the same reasoning as `has_open_divergence` and `dependency_state`.
+
+    Two ways a task is waiting, both counted:
+
+    * a **running** run bound to the task asked it — the case the status cannot yet show;
+    * the question already names the task in `blocked_task_id` — the parked case, so a `blocked`
+      card and an `in_progress` one waiting on the same thing read alike.
+
+    Only `blocking=True`, unanswered, undeclined questions count, matching
+    `unanswered_blocking_question` exactly: a non-blocking `ask_user` is a note the agent left
+    while carrying on, and a declined question is one the operator has already closed.
+    """
+    task_ids = {response.id for response in responses}
+    if not task_ids:
+        return responses
+
+    rows = await session.execute(
+        select(Question, Run.task_id)
+        .outerjoin(Run, Run.id == Question.created_by_run_id)
+        .where(
+            Question.project_id == project_id,
+            Question.blocking.is_(True),
+            Question.answered.is_(False),
+            Question.declined.is_(False),
+        )
+        .where(
+            Question.blocked_task_id.in_(task_ids)
+            | ((Run.status == "running") & Run.task_id.in_(task_ids))
+        )
+        .order_by(Question.created_at, Question.batch_index)
+    )
+    # Earliest first and `setdefault`: a run that asked several is waiting on the first thing it
+    # got stuck on, which is the more useful thing to name — the same choice
+    # `unanswered_blocking_question` makes with its ORDER BY.
+    waiting: dict[str, Question] = {}
+    for question, run_task_id in rows:
+        for candidate in (question.blocked_task_id, run_task_id):
+            if candidate in task_ids:
+                waiting.setdefault(candidate, question)
+
+    for response in responses:
+        question = waiting.get(response.id)
+        if question is not None:
+            response.awaiting_answer_reason = reason_from_question(question)
+    return responses
+
+
+async def _attach_assignee_liveness(
+    session: AsyncSession, responses: List[TaskResponse], *, project_id: str
+) -> List[TaskResponse]:
+    """Make the board agree with the rail and the panels about what an agent is doing (F6, F17).
+
+    Both of this response's assignee fields were derived from `AgentHeartbeat` rows alone, and a
+    Hub-spawned agent writes none — so a card whose agent was mid-run reported `assignee_status:
+    "idle"` and `assignee_last_seen: null` about an agent that was, at that moment, working. The
+    stress-test drive caught the status half as F6 and the timestamp half as F17.
+
+    `agents.py` and `projects.py` already correct for this, each with a comment saying the two must
+    not disagree about the same agent. The board was the third surface and the only one still
+    reading heartbeats alone, so its cards contradicted the rail beside them.
+
+    The precedence is copied from `agents.py`, deliberately and exactly: a live `Run` row wins over
+    whatever the heartbeat said, including a `stalled` one, and clears the status message with it.
+    That is not a claim that a run row is better evidence of health than a heartbeat — it is the
+    only way the board and the rail can describe one agent the same way, which is the whole of what
+    F6 reported. If that precedence is ever reconsidered it has to be reconsidered in one place for
+    both surfaces, not softened here.
+
+    `last_seen` is only ever filled in, never overwritten downward, because a missing timestamp is
+    the defect and any observed one is an improvement on it.
+
+    This also makes D12's live-pulse cue reachable rather than merely specified: `TaskCard` pulses
+    on `assignee_status === "running"`, which since the watchdog was deleted no managed agent could
+    ever report.
+    """
+    assignees = {response.assignee for response in responses if response.assignee}
+    if not assignees:
+        return responses
+
+    running = await session.execute(
+        select(Run.agent).where(
+            Run.project_id == project_id,
+            Run.agent.in_(assignees),
+            Run.status == "running",
+        )
+    )
+    agents_with_active_run = {name for (name,) in running}
+    activity = await latest_activity_by_agent(session, project_id, assignees)
+
+    for response in responses:
+        if not response.assignee:
+            continue
+        if response.assignee in agents_with_active_run:
+            response.assignee_status = "running"
+            response.assignee_status_msg = None
+        seen = activity.get(response.assignee)
+        if seen is not None:
+            response.assignee_last_seen = seen
     return responses
 
 
@@ -600,6 +720,8 @@ async def create_task_for_actor(
         [_task_response(task, heartbeats.get(task.assignee) if task.assignee else None)],
         project_id=project_id,
     )
+    responses = await _attach_awaiting_answer(session, responses, project_id=project_id)
+    responses = await _attach_assignee_liveness(session, responses, project_id=project_id)
     return responses[0]
 
 
@@ -684,7 +806,9 @@ async def list_tasks(
         ],
         project_id=project_id,
     )
-    return await _attach_dependencies(session, responses, project_id=project_id)
+    responses = await _attach_dependencies(session, responses, project_id=project_id)
+    responses = await _attach_awaiting_answer(session, responses, project_id=project_id)
+    return await _attach_assignee_liveness(session, responses, project_id=project_id)
 
 
 @router.get("/board")
@@ -731,6 +855,8 @@ async def task_board(
         project_id=project_id,
     )
     responses = await _attach_dependencies(session, responses, project_id=project_id)
+    responses = await _attach_awaiting_answer(session, responses, project_id=project_id)
+    responses = await _attach_assignee_liveness(session, responses, project_id=project_id)
     edges: List[dict] = []
     if task_ids:
         edge_rows = await session.execute(
@@ -813,6 +939,59 @@ async def task_integrations(
         raise HTTPException(status_code=404, detail="Task not found")
 
     return await _integration_view(session, task_id)
+
+
+@router.get("/{task_id}/integration-preview")
+async def task_integration_preview(
+    task_id: str,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """What approving this task *would* write, before the operator approves it (F9).
+
+    Approving is the most consequential act in the product and the only one that changes the
+    operator's repository: it cherry-picks the commit named by each accepted piece of evidence into
+    the project's main branch. Driven end to end on 2026-08-23, that worked exactly as designed —
+    and nothing on the successful path ever said it was about to happen. The refusal path was
+    already legible ("no accepted evidence names a commit"); the *write* was not.
+
+    So this answers the same question the merge itself will ask, from the same source
+    (`task_integration.integration_targets` and `Project.main_branch`), and the drawer states the
+    answer beside the approve control. Deliberately read-only and deliberately cheap: no git
+    subprocess, no conflict probe — that is `requirement_gate`'s job at the moment of approval,
+    where a refusal can still stop it. This is a sentence, not a second gate.
+
+    `will_merge` is false with a stated `reason` for the two ordinary cases — a project with no
+    main branch configured, and a task whose evidence names no commit — because both are supported
+    project shapes and neither is an error.
+    """
+    project_id, _ = project
+    task = await session.get(Task, task_id)
+    if task is None or task.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    from ... import task_integration
+
+    project_row = await session.get(Project, project_id)
+    main_branch = project_row.main_branch if project_row else None
+    targets = await task_integration.integration_targets(session, task)
+
+    if not main_branch:
+        reason = task_integration.NO_MAIN_BRANCH
+    elif not targets:
+        reason = task_integration.NOTHING_TO_MERGE
+    else:
+        reason = ""
+
+    return {
+        "task_id": task.id,
+        "main_branch": main_branch,
+        "targets": [
+            {"commit_sha": target.commit_sha, "source_branch": target.branch} for target in targets
+        ],
+        "will_merge": bool(main_branch and targets),
+        "reason": reason,
+    }
 
 
 async def _integration_view(session: AsyncSession, task_id: str) -> dict:
@@ -911,6 +1090,8 @@ async def get_task(
         project_id=project_id,
     )
     responses = await _attach_dependencies(session, responses, project_id=project_id)
+    responses = await _attach_awaiting_answer(session, responses, project_id=project_id)
+    responses = await _attach_assignee_liveness(session, responses, project_id=project_id)
     return responses[0]
 
 
@@ -1053,6 +1234,8 @@ async def update_task_for_actor(
         project_id=project_id,
     )
     responses = await _attach_dependencies(session, responses, project_id=project_id)
+    responses = await _attach_awaiting_answer(session, responses, project_id=project_id)
+    responses = await _attach_assignee_liveness(session, responses, project_id=project_id)
     return responses[0]
 
 

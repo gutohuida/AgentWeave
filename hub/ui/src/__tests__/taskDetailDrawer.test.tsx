@@ -29,6 +29,9 @@ vi.mock('@/api/tasks', async (importOriginal) => {
     useAllowedTransitions: () => ({ data: { actor_kind: 'operator', transitions: transitionsMap } }),
     useUpdateTask: () => ({ mutate: vi.fn() }),
     useSetDivergenceHandling: () => ({ mutate: vi.fn() }),
+    // F9's note. Stubbed here for the same reason the three hooks above are: this file is about the
+    // drawer's mechanics, and one of its tests renders outside a QueryClientProvider deliberately.
+    useTaskIntegrationPreview: () => ({ data: undefined }),
   }
 })
 

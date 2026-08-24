@@ -15,6 +15,7 @@ from pydantic.fields import FieldInfo
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ...agent_activity import latest_activity_by_agent
 from ...agent_status import effective_heartbeat_status
 from ...auth import get_operator, get_operator_project
 from ...checkpoint_policy import threshold_error, window_for
@@ -39,6 +40,7 @@ class ProjectAgentSummary(BaseModel):
     name: str
     color_index: Optional[int]
     status: str
+    # Last observed activity, not last heartbeat — see `hub/hub/agent_activity.py` and F17.
     last_seen: Optional[datetime]
 
 
@@ -227,6 +229,13 @@ async def _project_summary(session: AsyncSession, project: Project) -> ProjectSu
         )
     )
     agents_with_active_run = {name for (name,) in running_run_rows}
+    # F17: the rail's "Seen …"/"No activity yet" line reads this. Heartbeats alone never populate
+    # it for a Hub-spawned agent, so it is derived from runs and output as well — the same
+    # `agent_activity` helper `agents.py` uses, because the rail and the agent panels must not
+    # disagree about when the same agent was last busy.
+    activity_by_agent = await latest_activity_by_agent(
+        session, project.id, [agent.name for agent in agents], heartbeats=latest
+    )
     agent_summaries = []
     for agent in agents:
         heartbeat = latest.get(agent.name)
@@ -239,7 +248,7 @@ async def _project_summary(session: AsyncSession, project: Project) -> ProjectSu
                 name=agent.name,
                 color_index=agent.color_index,
                 status=effective_status,
-                last_seen=heartbeat.timestamp if heartbeat else None,
+                last_seen=activity_by_agent.get(agent.name),
             )
         )
     return ProjectSummary(

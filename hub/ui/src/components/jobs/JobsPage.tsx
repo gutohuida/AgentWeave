@@ -179,7 +179,11 @@ export function JobsPage({ onOpenTasks }: JobsPageProps) {
           </div>
           <div className="flex items-center gap-1">
             <Icon name="info" size={14} />
-            <span>Jobs fire based on server time</span>
+            {/* F2: "server time" was a UTC clock wearing a local label. The scheduler pins its
+                CronTrigger to UTC (`scheduler.py`) and `cron.ts` computes its preview in UTC to
+                match, so the value was always right and only the word was wrong — by an hour, every
+                summer, on the operator's own machine. */}
+            <span>Jobs fire on a UTC clock</span>
           </div>
         </div>
       )}

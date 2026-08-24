@@ -9,6 +9,7 @@ import {
   Task,
   useAllowedTransitions,
   useSetDivergenceHandling,
+  useTaskIntegrationPreview,
   useUpdateTask,
 } from '@/api/tasks'
 import { useAgents } from '@/api/agents'
@@ -16,6 +17,64 @@ import { useSpecDocuments } from '@/api/spec'
 import { RowMenu } from '@/components/layout/RowMenu'
 import { useDialogFocus } from '@/hooks/useDialogFocus'
 import { hubDate } from '@/lib/hubTime'
+
+/**
+ * What approving this task is about to write, said beside the control that does it (F9).
+ *
+ * An inline note, deliberately not a dialog: approval is the correct, designed behaviour and a
+ * confirmation step would teach the operator to dismiss it. What was missing is only the sentence —
+ * approving cherry-picks the accepted evidence's commit into the project's main branch, and the
+ * working tree on disk changes. That is the single most consequential act in the product and it
+ * used to happen unannounced.
+ *
+ * Rendered only where approval is actually reachable from here, so a pending card carries no
+ * warning about a merge that is several transitions away.
+ */
+function ApprovalWritesNote({ taskId, canApprove }: { taskId: string; canApprove: boolean }) {
+  const { data } = useTaskIntegrationPreview(taskId, canApprove)
+  if (!canApprove || !data) return null
+
+  // The skipped case is not a warning — nothing will be written — but it is still the answer to
+  // "where did my approved work go", and saying it *before* approval is cheaper than saying it
+  // after. Neutral weight, since no repository changes.
+  if (!data.will_merge) {
+    return (
+      <p
+        data-testid={`task-approval-writes-${taskId}`}
+        className="text-[11px] mt-2 px-2 py-1.5 rounded"
+        style={{
+          color: 'var(--text-2)',
+          background: 'var(--surface-3)',
+          border: '1px solid var(--border)',
+        }}
+      >
+        <Icon name="info" size={12} /> Approving will not merge anything: {data.reason}.
+      </p>
+    )
+  }
+
+  return (
+    <p
+      data-testid={`task-approval-writes-${taskId}`}
+      className="text-[11px] mt-2 px-2 py-1.5 rounded"
+      style={{
+        color: 'var(--amber)',
+        background: 'color-mix(in srgb, var(--amber) 10%, transparent)',
+        border: '1px solid color-mix(in srgb, var(--amber) 25%, transparent)',
+      }}
+    >
+      <Icon name="alert_triangle" size={12} /> Approving writes to your repository: it cherry-picks{' '}
+      {data.targets.map((target, index) => (
+        <span key={target.commit_sha}>
+          {index > 0 ? ' and ' : ''}
+          <code className="text-[11px]">{target.commit_sha.slice(0, 12)}</code>
+          {target.source_branch ? ` from ${target.source_branch}` : ''}
+        </span>
+      ))}{' '}
+      into <strong>{data.main_branch}</strong>.
+    </p>
+  )
+}
 
 function statusLabel(status: string): string {
   return status.replace(/_/g, ' ')
@@ -252,6 +311,7 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
                 />
               )}
             </div>
+            <ApprovalWritesNote taskId={task.id} canApprove={moves.includes('approved')} />
           </Field>
 
           <Field label="Priority">

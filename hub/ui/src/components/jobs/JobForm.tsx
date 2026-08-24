@@ -3,7 +3,7 @@ import { Icon } from '@/components/common/Icon'
 import { useAgents } from '@/api/agents'
 import { Button } from '@/components/ui/button'
 import { JobCreate } from '@/api/jobs'
-import { describeCron, formatNextRun, nextRuns } from '@/lib/cron'
+import { cronDayAmbiguity, describeCron, formatNextRun, nextRuns } from '@/lib/cron'
 
 interface JobFormProps {
   onSubmit: (job: JobCreate) => void
@@ -45,6 +45,10 @@ export function JobForm({ onSubmit, onCancel, isPending }: JobFormProps) {
     const from = new Date()
     return nextRuns(cron, from, 3).map((run) => formatNextRun(run, from))
   }, [cron])
+  // F1: an expression restricting both day fields is refused by the Hub on submit. Before this,
+  // the form's answer to one was silence — no sentence, no preview — which reads as "keep typing",
+  // not as "this will be rejected". Said here, in the same words the refusal uses.
+  const cronAmbiguity = cronDayAmbiguity(cron)
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -186,11 +190,21 @@ export function JobForm({ onSubmit, onCancel, isPending }: JobFormProps) {
                 {cronPlain}
               </p>
             )}
+            {cronAmbiguity && (
+              <p
+                className="next-run-preview"
+                data-testid="cron-ambiguity"
+                style={{ color: 'var(--amber)' }}
+              >
+                <Icon name="alert_triangle" size={12} />
+                {cronAmbiguity}
+              </p>
+            )}
             {upcoming.length > 0 && (
               <p className="next-run-preview" data-testid="next-run-preview">
                 <Icon name="schedule" size={12} />
                 Next {upcoming.length} run{upcoming.length === 1 ? '' : 's'}:{' '}
-                {upcoming.join(' · ')} (server time)
+                {upcoming.join(' · ')} (UTC)
               </p>
             )}
             <div className="flex flex-wrap gap-2 mt-2">

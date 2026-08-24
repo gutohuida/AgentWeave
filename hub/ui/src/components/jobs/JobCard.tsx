@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Job, JobRun, useJobHistory } from '@/api/jobs'
 import { useTasks } from '@/api/tasks'
 import { hubDate } from '@/lib/hubTime'
-import { describeCron } from '@/lib/cron'
+import { cronDayAmbiguity, describeCron } from '@/lib/cron'
 
 interface JobCardProps {
   job: Job
@@ -254,6 +254,16 @@ export function JobCard({ job, onRun, onPause, onResume, onArchive, isPending, o
   // Null for any schedule that cannot be stated exactly — the line is then simply absent rather
   // than repeating the raw expression the chip above already shows.
   const cronPlain = describeCron(job.cron)
+  // F1: `job.next_run` is the *server's* croniter answer, and croniter ORs the two day fields while
+  // the APScheduler trigger that actually fires ANDs them — measured 260 days apart for
+  // `0 0 15 * 5`. The Hub now refuses this shape at both write sites, so no new job can have it,
+  // but jobs stored before the refusal still exist and this card was still rendering their
+  // next-run time as fact. Same guard the form and `describeCron` use, so the two screens can no
+  // longer give two different answers about one expression.
+  //
+  // Shown for a paused job too, unlike the "Next:" line it replaces — a paused job with this
+  // schedule is precisely the one worth warning about before it is resumed.
+  const cronAmbiguity = cronDayAmbiguity(job.cron)
 
   return (
     <div
@@ -318,10 +328,22 @@ export function JobCard({ job, onRun, onPause, onResume, onArchive, isPending, o
 
         {/* Next/Last run */}
         <div className="mt-2 space-y-1">
-          {job.next_run && job.enabled && (
-            <p className="text-[11px]" style={{ color: 'var(--blue)' }}>
-              Next: {formatDistanceToNow(hubDate(job.next_run), { addSuffix: true })}
+          {cronAmbiguity ? (
+            <p
+              className="text-[11px]"
+              data-testid={`job-cron-ambiguity-${job.id}`}
+              title={cronAmbiguity}
+              style={{ color: 'var(--amber)' }}
+            >
+              Next: not knowable — this schedule restricts both day-of-month and day-of-week
             </p>
+          ) : (
+            job.next_run &&
+            job.enabled && (
+              <p className="text-[11px]" style={{ color: 'var(--blue)' }}>
+                Next: {formatDistanceToNow(hubDate(job.next_run), { addSuffix: true })}
+              </p>
+            )
           )}
           {job.last_run && (
             <p className="text-[11px]" style={{ color: 'var(--text-3)', opacity: 0.6 }}>

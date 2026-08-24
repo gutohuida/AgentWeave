@@ -347,7 +347,14 @@ async def release_conversations_bound_to(session: AsyncSession, task: Task) -> i
 _REASON_LIMIT = 280
 
 
-def _reason_from_question(question: Question) -> str:
+def reason_from_question(question: Question) -> str:
+    """The one sentence a card shows for a task waiting on *question*.
+
+    Public because two surfaces need the identical wording: `block_task_for_question` writes it to
+    `blocked_reason` when the task parks, and `tasks.py`'s `_attach_awaiting_answer` reports the
+    same wait *before* it parks (F14). Two spellings of the same wait would read as two different
+    situations.
+    """
     text = " ".join((question.question or "").split())
     if len(text) > _REASON_LIMIT:
         text = text[: _REASON_LIMIT - 1].rstrip() + "…"
@@ -420,7 +427,7 @@ async def block_task_for_question(
         # task untouched, never propagate and turn a finished run into a failed one.
         return None
 
-    task.blocked_reason = _reason_from_question(question)
+    task.blocked_reason = reason_from_question(question)
     question.blocked_task_id = task.id
     return transition
 
