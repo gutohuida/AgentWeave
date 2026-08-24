@@ -811,9 +811,23 @@ instruction.** Two findings, one about this list and one about the product.
 
 ## 12. User test guide
 
-- [ ] 12.1 Write the operator-facing guide: declaring a decomposition with an order and a reviewer,
+- [x] 12.1 Write the operator-facing guide: declaring a decomposition with an order and a reviewer,
       creating a flow over it, and watching it run to fulfilled without relaying anything by hand.
-- [ ] 12.2 Cover the three staffing outcomes and how to tell them apart — a step running, a step
+      `openspec/changes/loop-becomes-a-flow/test-guide.md`. Six walkthroughs, each carrying the
+      group 11 check it exists to support, so the operator runs one sequence rather than a guide and
+      a checklist. Section 4 is the handover and states its three checks **in priority order**, with
+      the reviewer's workspace named as the one most likely to be skipped and most costly to skip —
+      a review conducted by asking the author is not a review, and it is finding F10 returning.
+- [x] 12.2 Cover the three staffing outcomes and how to tell them apart — a step running, a step
       waiting for a busy agent, and a step nobody can take.
-- [ ] 12.3 Lead with 11.1. A flow that behaves differently from a loop for a single agent is the
+      Section 5, as a table of *what you see → what it means → what to do*, and it says which of the
+      three asks anything of the operator: only the third raises a notice, because a flow with more
+      ready work than agents is in the second state on nearly every tick and a notice for that would
+      bury the one that needs them. Both of the quiet states are produced deliberately in the
+      walkthrough rather than described, since the failure to guard against is a working flow read
+      as a stuck one.
+- [x] 12.3 Lead with 11.1. A flow that behaves differently from a loop for a single agent is the
       failure that would undermine confidence in everything else here.
+      Section 1, before anything else, and it says to stop if it fails rather than continuing down
+      the guide. It also names the setup that makes it a real test — archiving the other agents, so
+      the single-agent case is genuinely single-agent rather than incidentally so.
