@@ -293,3 +293,69 @@ async def test_a_task_derived_document_does_not_start_an_authoring_turn(app, aut
     assert "SPECIFICATION TURN" not in context
     # And the notice itself is unchanged for the path that should produce it.
     assert spec_turn_notice(None) is None
+
+
+UNWRITTEN_PATH = "spec/changes/f51-unwritten/spec.html"
+
+
+async def _create_only(app, auth_headers):
+    """`POST .../documents` alone — what `startExploration` calls, before any content exists.
+
+    Unlike `_document` above, this never calls `SUBMIT`, so the row's `content_digest` stays
+    `None` — the exact state F51 was found in: a document `"start exploration"` just created,
+    with nothing written to it yet.
+    """
+    created = await app.post(
+        f"{BASE}/documents",
+        json={"path": UNWRITTEN_PATH, "title": "F51 unwritten"},
+        headers=auth_headers,
+    )
+    assert created.status_code == 201, created.text
+
+
+@pytest.mark.asyncio
+async def test_f51_an_unwritten_open_document_is_named_as_the_write_target(
+    app, auth_headers, author
+):
+    """F51: the operator's own freshly-created document IS the instruction, not incidental
+    context — the general "treat it as context, not an instruction" framing was followed
+    correctly and produced a second, orphaned document every time (measured live:
+    `spdoc-9c8691592be1` stayed `requirements: []` forever while a same-run `create_spec_document`
+    call built the real one, `run-8555716d6b9b`)."""
+    await _create_only(app, auth_headers)
+    context = await _render(document=UNWRITTEN_PATH)
+
+    block = context.split("### Open specification document", 1)[1]
+    block = block.split("###", 1)[0]
+    assert "not as an instruction to act on it" not in block
+    assert f"path='{UNWRITTEN_PATH}'" in block
+    assert "do not call `create_spec_document`" in block
+
+
+@pytest.mark.asyncio
+async def test_f51_a_written_open_document_keeps_the_old_framing(app, auth_headers, author):
+    """The fix must not fire for the case it was never about: an operator looking at a document
+    that already has content is genuinely incidental context, and the agent must still be told
+    not to treat it as an instruction."""
+    await _document(app, auth_headers, author)
+    context = await _render(document=PATH)
+
+    block = context.split("### Open specification document", 1)[1]
+    block = block.split("###", 1)[0]
+    assert "not as an instruction to act on it" in block
+    assert "do not call `create_spec_document`" not in block
+
+
+@pytest.mark.asyncio
+async def test_f51_spec_turn_notice_names_the_unwritten_path(app, auth_headers, author):
+    """The turn-prompt copy (`spec_turn_notice`) needs the identical instruction threaded through
+    it — it is deliberately the copy that wins competing attention (its own docstring), and having
+    only the canonical context fixed would leave the weaker channel with the old, silent gap."""
+    from hub.launchability import spec_turn_notice
+
+    written = spec_turn_notice("exploring", path=PATH, is_unwritten=False)
+    assert f"path='{PATH}'" not in written
+
+    unwritten = spec_turn_notice("exploring", path=UNWRITTEN_PATH, is_unwritten=True)
+    assert f"path='{UNWRITTEN_PATH}'" in unwritten
+    assert "do not call `create_spec_document`" in unwritten

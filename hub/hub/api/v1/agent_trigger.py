@@ -245,22 +245,33 @@ class TriggerAgentError(Exception):
         super().__init__(detail)
 
 
-async def _spec_phase_for(session, project_id: str, spec_document: Optional[str]) -> Optional[str]:
-    """The open document's phase, or None when there is no document or no row for it.
+async def _spec_phase_for(
+    session, project_id: str, spec_document: Optional[str]
+) -> Tuple[Optional[str], bool]:
+    """The open document's (phase, is_unwritten), or (None, False) when there is no row for it.
 
     Failure is silent by design: a turn must not be refused because the phase could not be read.
     The canonical context carries the same statement, so losing the prompt notice degrades to the
     behaviour that existed before it.
+
+    `is_unwritten` is F51's signal: `POST /documents` ("start exploration") writes an initial
+    save with `requirements: []`, so `content_digest` is already set by the time an agent's turn
+    reads it — that column cannot tell "just created" apart from "genuinely written". What does
+    is `requirement_digests`, which is `{}` until a submission carries at least one requirement,
+    exactly the state "start exploration" leaves its own document in, and exactly when the open
+    document IS the write target rather than incidental context.
     """
     if not spec_document:
-        return None
+        return None, False
     try:
         from ... import spec_lifecycle
 
         row = await spec_lifecycle.get_document(session, project_id, spec_document)
-        return row.phase if row is not None else None
+        if row is None:
+            return None, False
+        return row.phase, not row.requirement_digests
     except Exception:  # noqa: BLE001 - a missing phase must never cost the turn
-        return None
+        return None, False
 
 
 async def _review_task_from_entries(
@@ -586,7 +597,8 @@ async def trigger_agent_directly(
     # request is what arrives with the request. Prepended rather than merged into `message`, which
     # stays the durable record of what the operator actually said — the same division
     # `access_path_notice` has always used.
-    spec_notice = spec_turn_notice(await _spec_phase_for(session, project_id, spec_document))
+    spec_phase, spec_is_unwritten = await _spec_phase_for(session, project_id, spec_document)
+    spec_notice = spec_turn_notice(spec_phase, path=spec_document, is_unwritten=spec_is_unwritten)
     if spec_notice:
         notices.append(spec_notice)
     prompt = "\n\n".join([*notices, message])

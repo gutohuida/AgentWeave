@@ -1832,3 +1832,34 @@ already exists for this turn." `spec_turn_notice` needs the same path threaded t
 it is deliberately the copy that wins competing attention. Left unfixed for Q3 to pick up as
 severity A.
 
+**Fixed 2026-08-26, Q3.** One correction to the sketch during implementation: `content_digest` is
+*not* the right emptiness signal — `POST /documents` ("start exploration") already writes an
+initial save with `requirements: []`, so `content_digest` is set from the moment of creation and
+cannot distinguish "just created" from "genuinely written". `requirement_digests` can: it is `{}`
+until a submission carries at least one requirement (`spec_digest.payload_digests` returns `{}`
+for an empty requirement list), which is exactly the state a fresh exploration is in and never the
+state a written one is in. `hub/hub/api/v1/agents.py`'s `_render_hub_agent_context` now checks
+`phase == "exploring" and not row.requirement_digests` and, when true, replaces the "treat it as
+context, not an instruction" line with one naming `open_spec_path` as the `submit_spec_document`
+target and telling the agent not to call `create_spec_document`. `spec_turn_notice`
+(`hub/hub/launchability.py`) gained the identical `path`/`is_unwritten` branch, threaded from a
+new `_spec_phase_for` return shape in `hub/hub/api/v1/agent_trigger.py`. Regression tests in
+`hub/tests/test_task_spec_document_context.py` (`test_f51_*`, three new): one asserts the new
+instruction fires and the old framing is absent for an unwritten document, one asserts the *old*
+framing still holds for a document that already has content (guards against over-firing onto the
+case the general framing is correct for), one covers `spec_turn_notice` directly.
+Mutation-checked: reverting the three source files (keeping the new tests) fails exactly
+`test_f51_an_unwritten_open_document_is_named_as_the_write_target` and
+`test_f51_spec_turn_notice_names_the_unwritten_path` by name; the "keeps the old framing" guard
+test correctly still passes, since that case was never broken.
+
+**Verified live**, on the same project (`proj-8605b92d0028`) the finding was found on, after
+restarting the trial Hub on the beta database to pick up the code change: fresh `doc-new` produced
+`spec/changes/lilac-chimera/spec.html`; a first turn (pure interview, no tool call) produced no
+document event at all — no second document; a second turn, answered honestly, submitted the
+specification — the resulting document is
+`spec/changes/cli-wrapper-for-inventory-stock-level-queries/spec.html`, confirmed from
+`spec_document_events` to be the **same row**, `renamed` then `content` by `agent/author`, no
+`created` event after the operator's own. Three documents exist on the project afterward, not
+four: the two carried over from Q1/Q2 plus this one — `create_spec_document` was never called.
+

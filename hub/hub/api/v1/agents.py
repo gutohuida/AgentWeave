@@ -1236,16 +1236,32 @@ async def _render_hub_agent_context(
 
         if open_spec_path is not None:
             phase = None
+            is_unwritten = False
             with contextlib.suppress(Exception):
                 row = await spec_lifecycle.get_document(db, project_id, open_spec_path)
                 phase = row.phase if row is not None else None
+                is_unwritten = row is not None and not row.requirement_digests
 
             lines.append("### Open specification document")
             lines.append(f"- The operator is viewing `{open_spec_path}` in the Hub's Spec view.")
-            lines.append(
-                "- This is where they are looking right now. Treat it as context for what they "
-                "ask, not as an instruction to act on it."
-            )
+            if phase == "exploring" and is_unwritten:
+                # F51: an empty exploring document, freshly created by "start exploration", IS the
+                # instruction — it exists, per the button's own purpose, so that pressing it creates
+                # the document to be written into. The general "treat it as context, not an
+                # instruction" framing below is correct for an unrelated document happening to be
+                # open, and wrong here: it was followed correctly and produced a second, orphaned
+                # document every time (measured live, `spdoc-9c8691592be1` stayed `requirements: []`
+                # forever while a same-run `create_spec_document` call built the real one).
+                lines.append(
+                    "- **This document is empty and is what you are interviewing for.** When you "
+                    f"call `submit_spec_document`, pass `path='{open_spec_path}'` — do not call "
+                    "`create_spec_document`, one already exists for this turn."
+                )
+            else:
+                lines.append(
+                    "- This is where they are looking right now. Treat it as context for what they "
+                    "ask, not as an instruction to act on it."
+                )
             # Named here as well as in the tool list, because this is the moment it applies. A tool
             # that is served and undiscovered at the point of use is the same failure as one that
             # was never served: an agent concluded it had no way to read the document and worked

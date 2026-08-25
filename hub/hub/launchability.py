@@ -244,7 +244,12 @@ def resolve_access_path(runner: str, cli: str, override: Optional[str] = None) -
     return "mcp"
 
 
-def spec_turn_notice(phase: Optional[str]) -> Optional[str]:
+def spec_turn_notice(
+    phase: Optional[str],
+    *,
+    path: Optional[str] = None,
+    is_unwritten: bool = False,
+) -> Optional[str]:
     """One short block, carried in the **turn prompt**, for a turn with a document open.
 
     The same instructions are already in the canonical context, and three live runs established
@@ -257,6 +262,12 @@ def spec_turn_notice(phase: Optional[str]) -> Optional[str]:
     OpenSpec exploration workflow"*, ran a questionnaire the floor had just told it not to run, and
     when its questions went unanswered proceeded on invented assumptions rather than stopping. This
     is deliberately blunt and short, because it is competing for attention rather than explaining.
+
+    `path` and `is_unwritten` carry F51's fix: when exploration opens on a document that has never
+    been written to, this is the copy that wins competing attention (per the paragraph above), so
+    it needs the same "write here, do not create a second one" instruction the canonical context
+    grew — naming the open path by name is what stopped the agent from calling
+    `create_spec_document` and orphaning the operator's own document, live.
 
     `None` when no document is open, so an ordinary turn carries nothing.
     """
@@ -286,6 +297,12 @@ def spec_turn_notice(phase: Optional[str]) -> Optional[str]:
             "`rename_spec_document(path, subject)` as soon as this reply establishes what the "
             "document is about, and use the path it returns from then on.",
         ]
+        if path and is_unwritten:
+            lines.append(
+                f"This document (`{path}`) is empty and is what you are interviewing for. When "
+                f"you call `submit_spec_document`, pass `path='{path}'` — do not call "
+                "`create_spec_document`, one already exists for this turn."
+            )
     else:
         lines.append(
             "Write the document only with `submit_spec_document`. Never author specification "
