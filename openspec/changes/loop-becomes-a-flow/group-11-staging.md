@@ -3,6 +3,9 @@
 Written 2026-08-25. Companion to `test-guide.md`, which says *what* to judge; this says **where the
 trial Hub already stands**, so each of the seven checks is one action rather than a setup.
 
+**For the commands, see `group-11-runbook.md`** — the same checks in running order, with every
+route verified against the live instance.
+
 Everything below is measured against the trial Hub on **port 8010**, project **`ledger-stress`**
 (`proj-18e5d4e0`), workspace `C:\Users\huida\Documents\aw-stress`, flow **`job-bdea22bb0308`** /
 `loop-e4b864459808`, currently **disabled**.

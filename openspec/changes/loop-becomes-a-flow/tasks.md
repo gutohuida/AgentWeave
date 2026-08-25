@@ -818,12 +818,14 @@ four regression tests confirmed failing against the unfixed code, and the fix re
 the same query now returns `stall_reason: None` and both current items with their agents.
 
 
-**Staged 2026-08-25 — see `group-11-staging.md`.** It records where the trial Hub actually stands
-for each check below: which three cost nothing and can be read now (11.6, 11.3b, 11.2), which need
-one firing and what the queue is staged to produce (11.5, 11.4), which needs real setup (11.1), and
-why 11.3 is blocked. **Read its first section before re-enabling the flow** — finding F45 means the
-next firing re-runs a review `critic` has already done, on every tick, with no stop condition able
-to end it.
+**Staged 2026-08-25 — `group-11-runbook.md` has the commands**, in the order to run them, every
+route checked against the live instance. `group-11-staging.md` is its companion and records where
+the trial Hub actually stands for each check below: which three cost nothing and can be read now
+(11.6, 11.3b, 11.2), which need one firing and what the queue is staged to produce (11.5, 11.4),
+which needs real setup (11.1), and why 11.3 is blocked.
+
+**Read §2 of the runbook before re-enabling the flow** — finding F45 means the next firing re-runs
+a review `critic` has already done, on every tick, with no stop condition able to end it.
 
 - [ ] 11.1 **A flow with one agent is indistinguishable from a loop.** Run one. If anything reads
       differently, D2 has leaked.
