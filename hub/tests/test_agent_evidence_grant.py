@@ -220,3 +220,75 @@ async def test_a_granted_agent_is_not_told_it_cannot(app, auth_headers, reviewer
     # The granted branch already contains the sentence "You cannot decide evidence you produced
     # yourself", so the heading is what distinguishes the two branches.
     assert "### You cannot decide evidence" not in context
+
+
+# ---------------------------------------------------------------------------
+# F39: the checkpoint pair, announced in neither direction until now
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_an_ungranted_agent_is_told_what_it_cannot_see(app, auth_headers, reviewer):
+    """F39, and the reason it is worth stating even when both grants are withheld.
+
+    `recall` answers **not-found** rather than refusing, and it has to — a refusal would itself
+    confirm the record exists. So an agent reading a checkpoint that cites observation ids, calling
+    `recall` on one and getting nothing back, has no way to tell "not permitted" from "not there".
+    Left unstated, the boundary is discovered as a broken record.
+    """
+    rendered = await app.get(
+        f"{AGENTS}/agent-context", params={"agent": "reviewer"}, headers=auth_headers
+    )
+    assert rendered.status_code == 200, rendered.text
+    context = rendered.json()["context"]
+
+    assert "### Other agents' history" in context
+    assert "your own checkpoints and no one else's" in context
+    assert "not-found" in context
+
+
+@pytest.mark.asyncio
+async def test_a_granted_agent_is_told_what_it_may_read(app, auth_headers, reviewer):
+    await app.patch(
+        f"{AGENTS}/reviewer",
+        json={"can_read_checkpoints": True, "can_recall": True},
+        headers=auth_headers,
+    )
+
+    rendered = await app.get(
+        f"{AGENTS}/agent-context", params={"agent": "reviewer"}, headers=auth_headers
+    )
+    context = rendered.json()["context"]
+
+    assert "You may read your peers' checkpoints" in context
+    assert "returns a cited observation verbatim" in context
+    assert "your own checkpoints and no one else's" not in context
+
+
+@pytest.mark.asyncio
+async def test_the_two_grants_are_stated_independently(app, auth_headers, reviewer):
+    """`checkpoint_access` keeps them separate because "summary access is not transcript access".
+    A context that collapsed them would make the narrower grant undescribable — which is the same
+    reason the columns are separate in the first place."""
+    await app.patch(f"{AGENTS}/reviewer", json={"can_read_checkpoints": True}, headers=auth_headers)
+
+    rendered = await app.get(
+        f"{AGENTS}/agent-context", params={"agent": "reviewer"}, headers=auth_headers
+    )
+    context = rendered.json()["context"]
+
+    assert "You may read your peers' checkpoints" in context
+    assert "will not return another agent's observations to you" in context
+
+
+@pytest.mark.asyncio
+async def test_the_recall_tool_line_names_the_grant(app, auth_headers, reviewer):
+    """The tool list is where F39 was measured: `decide_evidence` said "Only if the operator has
+    granted you this" and `recall`, gated the same way, said nothing at all."""
+    rendered = await app.get(
+        f"{AGENTS}/agent-context", params={"agent": "reviewer"}, headers=auth_headers
+    )
+    context = rendered.json()["context"]
+
+    line = next(row for row in context.splitlines() if row.startswith("- `recall(observation_id)`"))
+    assert "Only if the operator has granted you this" in line

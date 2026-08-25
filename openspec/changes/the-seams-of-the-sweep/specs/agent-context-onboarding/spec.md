@@ -28,3 +28,22 @@ conclusion landed on a branch nobody reads.
 #### Scenario: A readable capability that is not writable
 - **WHEN** an agent can list a queue it is not permitted to answer
 - **THEN** the context SHALL say so before the turn spends effort on it
+
+#### Scenario: Every operator grant, not only the one that was noticed
+- **WHEN** canonical context is assembled for any agent
+- **THEN** each capability the operator can grant or withhold SHALL be stated in whichever direction applies
+- **AND** a grant SHALL NOT be announced when held and silent when withheld
+
+The audit this requirement asked for found the principle applied to one grant of three. The other
+two — reading a peer's checkpoints, and recalling the observations a checkpoint cites — appeared in
+neither direction: the recall tool was listed among the agent's tools with no mention that a grant
+is required, beside a tool that did say so.
+
+#### Scenario: A refusal that is indistinguishable from absence
+- **WHEN** a capability's refusal is reported as "not found" rather than as a refusal
+- **THEN** the boundary SHALL be stated in context before the turn meets it
+
+This is why the withheld direction matters even where nothing is granted. A refusal that announced
+itself would confirm the record exists, so it correctly cannot; the consequence is that an agent
+which meets the boundary unprepared concludes the record is missing rather than that it is not
+permitted to see it, and reports a broken system in good faith.

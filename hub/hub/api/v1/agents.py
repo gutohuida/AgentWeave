@@ -942,7 +942,9 @@ def _tool_surface_lines(*, has_peers: bool = True) -> List[str]:
         "- `decide_evidence(evidence_id, decision, reason)` — accept or reject somebody else's "
         "evidence; `decision` is `accepted` or `rejected`. Only if the operator has granted you "
         "this, and never on evidence you produced yourself.",
-        "- `recall(observation_id)` — read back one observation by its identifier.",
+        "- `recall(observation_id)` — read back one observation by its identifier. Only if the "
+        "operator has granted you this; without it, an observation another agent recorded returns "
+        "not-found whether or not it exists. Your own are always yours to read.",
         "- `request_agent(name, template, task)` — governed; subject to the project agent budget.",
         f"- `create_job(name, agent, message, cron, session_mode=new)` — session_mode is one of "
         f"{values(JobSessionMode)}. Requires the operator's scheduled-work allowance.",
@@ -1371,6 +1373,47 @@ async def _render_hub_agent_context(
             "message, or record it on the task. A review written only into your worktree is on a "
             "branch nobody reads."
         )
+        lines.append("")
+
+    # F39: the same reasoning again, for the pair the F32 audit found announced in neither
+    # direction. `can_read_checkpoints` and `can_recall` are separate grants (`checkpoint_access`:
+    # "summary access is not transcript access"), but an agent only ever meets them as one
+    # question — how much of a peer's history can I see — so they are stated together and named
+    # individually.
+    #
+    # Stated even when both are withheld, and that is the half worth defending. The failure this
+    # closes is not an agent missing a capability; it is an agent reading a checkpoint that cites
+    # observation ids, calling `recall` on one, getting not-found, and concluding the record is
+    # missing rather than that it is not permitted to see it. Not-found is deliberately
+    # indistinguishable from absent — it must be, or the refusal would itself confirm the record
+    # exists — which is exactly why the boundary has to be stated up front instead of discovered.
+    if agent_row is not None:
+        may_read = bool(getattr(agent_row, "can_read_checkpoints", False))
+        may_recall = bool(getattr(agent_row, "can_recall", False))
+        lines.append("### Other agents' history")
+        if may_read:
+            lines.append(
+                "- You may read your peers' checkpoints — the summaries an agent leaves when its "
+                "conversation is cut over — where those are shared with the project."
+            )
+        else:
+            lines.append(
+                "- You may read your own checkpoints and no one else's. A peer's is not withheld "
+                "from you by accident, so do not go looking for a way around it."
+            )
+        if may_recall:
+            lines.append(
+                "- `recall(observation_id)` returns a cited observation verbatim, for the "
+                "checkpoints you may read. Use it rather than guessing at what a summary "
+                "compressed away."
+            )
+        else:
+            lines.append(
+                "- `recall` will not return another agent's observations to you. It answers "
+                "not-found rather than refusing, so treat a not-found on an id a checkpoint "
+                "cited as this boundary and not as a missing record — asking the agent that "
+                "recorded it is the way through."
+            )
         lines.append("")
 
     if project_instructions:
