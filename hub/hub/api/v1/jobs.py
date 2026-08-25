@@ -304,6 +304,9 @@ async def _batch_loop_summaries(
     # Keyed by task rather than collected as a list because the walk below needs to answer "is this
     # candidate one the firing would claim, and by whom" per row, and a list would make that a scan.
     claimed_agents_by_loop: Dict[str, Dict[str, str]] = {}
+    #: Task ids an agent is *mid-turn* on, as opposed to ones the next firing would claim. The
+    #: distinction is invisible in `claimed_agents_by_loop`, which merges both (F26).
+    working_by_loop: Dict[str, set] = {}
     for job_id, loop in loop_by_job.items():
         decision = await decide_firing(session, loop, default_agent=job_agent_by_id.get(job_id, ""))
         stall_reason_by_loop[loop.id] = decision.stall_reason
@@ -315,6 +318,12 @@ async def _batch_loop_summaries(
             **dict(decision.in_flight),
             **{selection.task.id: selection.agent for selection in decision.selections},
         }
+        # Which of the two the name came from (F26). Both answer "which agent", and the board
+        # rendered them identically — so `completed | relay` read as "relay is working this" when
+        # it meant "relay is who would review this". Deciding that in the UI from the task's status
+        # is not possible: the same status can arrive by either route. Only this merge knows, and
+        # it is one dict comprehension away from saying so.
+        working_by_loop[loop.id] = set(decision.in_flight)
 
     # The current item is the first candidate **in queue order** that is either the task the firing
     # would claim, or a `blocked` one. Order is what makes this `agent-loops` §85 rather than an
@@ -343,6 +352,17 @@ async def _batch_loop_summaries(
         agent = claimed.get(task.id) or task.assignee
         if agent:
             entry["agent"] = agent
+            # What the name means, so the reader is not left to infer it from the status (F26).
+            # `working` — this agent is mid-turn on it. `next` — this is who the next firing would
+            # give it to, which for a `completed` task is its reviewer, not the person who did it.
+            # `assigned` — nobody is being selected, and this is the row's own assignee, which is
+            # the blocked case waiting on a person.
+            if task.id in working_by_loop.get(task.loop_id, ()):
+                entry["agent_role"] = "working"
+            elif task.id in claimed:
+                entry["agent_role"] = "next"
+            else:
+                entry["agent_role"] = "assigned"
         current_tasks_by_loop.setdefault(task.loop_id, []).append(entry)
 
     # Distinct (job_id, conversation_id) pairs first, so a resume-mode job that fired more than

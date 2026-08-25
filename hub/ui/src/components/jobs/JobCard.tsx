@@ -36,9 +36,24 @@ function getStatusLabel(enabled: boolean): string {
  * (`loop-notices-and-reacts`), and rendered the same way for that reason. A flow's card is a list
  * of "what, by whom" lines; making the name compete with the title would turn three facts into six.
  */
-function CurrentTaskAgent({ name }: { name: string }) {
+/**
+ * The agent attributed to a loop's current task — and what that attribution *means* (F26).
+ *
+ * This rendered the bare name, and the name's meaning silently changed with the task's status: for
+ * an `in_progress` task it is the agent mid-turn, for a `completed` one it is whoever the next
+ * firing would hand the review to. So `completed | relay` read as "relay is working this" when it
+ * meant "relay is who would review this" — the value right, the presentation wrong. A column whose
+ * meaning changes row to row is unreadable once a flow puts three of them on the card at once.
+ *
+ * The role comes from the Hub, which is the only place that knows: the merge producing this name
+ * draws from in-flight work and from the firing's selections, and by the time the board sees it
+ * the two are indistinguishable.
+ */
+function CurrentTaskAgent({ name, role }: { name: string; role?: 'working' | 'next' | 'assigned' }) {
+  const qualifier = role === 'next' ? 'next: ' : role === 'assigned' ? 'assigned: ' : ''
   return (
     <span className="ml-1.5" style={{ color: 'var(--text-3)', opacity: 0.75 }}>
+      {qualifier}
       {name}
     </span>
   )
@@ -139,7 +154,23 @@ function RunHistory({ runs, isLoading }: { runs?: JobRun[]; isLoading?: boolean 
               size={16}
               style={{ color: runStatusColor(run.status) }}
             />
-            <span className="text-[11px]" style={{ color: 'var(--text)' }}>
+            {/* Status first, trigger second (F24). This rendered `run.trigger` alone, so a
+                refused firing led with the word **scheduled** in the neutral text colour, an inch
+                from its own amber stall reason — a row that reads "scheduled" and "stalled" at the
+                same time makes the reader work out which to believe. The row's own status was
+                `skipped` all along, and both user test guides tell the operator to look for "one
+                skipped row", which is what the UI did not say.
+
+                The trigger is kept, muted, because it still answers a different question: whether
+                the cron fired this or a person did. It just is not the row's headline. */}
+            <span
+              className="text-[11px] capitalize"
+              style={{ color: runStatusColor(run.status) }}
+              data-testid={`job-run-status-${run.id}`}
+            >
+              {run.status}
+            </span>
+            <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>
               {run.trigger}
             </span>
           </div>
@@ -271,12 +302,12 @@ function LoopBlock({ job, onOpenTasks }: { job: Job; onOpenTasks?: (taskIds: str
                 className="text-[11px]"
               >
                 {task.title} ({task.status})
-                {task.agent ? <CurrentTaskAgent name={task.agent} /> : null}
+                {task.agent ? <CurrentTaskAgent name={task.agent} role={task.agent_role} /> : null}
               </button>
             ) : (
               <p key={task.id} className="text-[11px]" style={{ color: 'var(--text-3)' }}>
                 {task.title} ({task.status})
-                {task.agent ? <CurrentTaskAgent name={task.agent} /> : null}
+                {task.agent ? <CurrentTaskAgent name={task.agent} role={task.agent_role} /> : null}
               </p>
             ),
           )}
@@ -302,6 +333,9 @@ export function JobCard({ job, onRun, onPause, onResume, onArchive, isPending, o
   // and a project can list many jobs the operator never expands.
   const { data: fetchedHistory, isLoading: historyLoading } = useJobHistory(job.id, expanded)
   const history = job.history ?? fetchedHistory
+  // Firings the queue refused. `skipped` records exist and are listed, but never reach
+  // `run_count`, which is what made `0 runs` read as a contradiction of the list below it (F25).
+  const refusedRecently = (history ?? []).filter((run) => run.status === 'skipped').length
   const [showArchiveConfirm, setShowArchiveConfirm] = useState(false)
   // Null for any schedule that cannot be stated exactly — the line is then simply absent rather
   // than repeating the raw expression the chip above already shows.
@@ -374,6 +408,20 @@ export function JobCard({ job, onRun, onPause, onResume, onArchive, isPending, o
           <Badge variant={getStatusVariant(job.enabled)}>{getStatusLabel(job.enabled)}</Badge>
           <Badge variant="secondary">{job.session_mode}</Badge>
           <Badge variant="default">{job.run_count} runs</Badge>
+          {/* F25: `0 runs` sat on the same card as a Recent Runs list showing one entry, and the
+              two disagreed on first read. Neither number was wrong — `run_count` counts firings
+              that actually ran, so a queue that has only ever refused is honestly zero — but a
+              reader meets them as two counts of one word. Naming the refusals separately
+              reconciles them: "0 runs · 1 refused" adds up to the one row underneath, where
+              "0 runs" alone contradicted it.
+
+              Drawn from the history the card already has rather than a new field: it is capped at
+              five, so this says "of the recent history" and stops claiming more than it knows. */}
+          {refusedRecently > 0 && (
+            <span data-testid={`job-refused-${job.id}`}>
+              <Badge variant="secondary">{refusedRecently} refused</Badge>
+            </span>
+          )}
         </div>
 
         {history && history.length > 0 && <TrendDots runs={history} />}

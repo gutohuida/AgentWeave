@@ -352,3 +352,166 @@ describe('JobCard run history', () => {
     expect(screen.queryByTestId('job-run-ticks-run-once')).not.toBeInTheDocument()
   })
 })
+
+describe('JobCard: what the row and the chips actually claim', () => {
+  it('leads a refused firing with its own status, not with "scheduled" (F24)', async () => {
+    // Measured 2026-08-25 on a real stall row: the first token read `scheduled`, in the neutral
+    // text colour, an inch from its own amber stall reason. The `JobRun`'s status was `skipped`
+    // all along, and both user test guides tell the operator to look for "one skipped row" — which
+    // is exactly what the UI did not say. A row reading "scheduled" and "stalled" at once makes
+    // the reader work out which word to believe.
+    const user = userEvent.setup()
+    loopTasks = []
+    jobHistory = {
+      data: [
+        {
+          id: 'run-stall',
+          job_id: 'job-1',
+          fired_at: '2026-08-25T09:00:00Z',
+          status: 'skipped',
+          trigger: 'scheduled',
+          error_summary: 'loop queue is stalled: no claimable task among 1 open (1 completed)',
+          tick_count: 5,
+        },
+      ],
+      isLoading: false,
+    }
+    renderCard(baseJob())
+
+    await user.click(screen.getByLabelText('Expand job details'))
+
+    expect(screen.getByTestId('job-run-status-run-stall')).toHaveTextContent('skipped')
+    // The trigger stays — it answers a different question, whether the cron fired this or a
+    // person did — it just is not the row's headline any more.
+    expect(screen.getByText('scheduled')).toBeInTheDocument()
+  })
+
+  it('names the refusals beside a "0 runs" chip so the two counts agree (F25)', async () => {
+    // Neither number was wrong. `run_count` counts firings that actually ran, so a queue that has
+    // only ever refused is honestly zero — but the card then showed `0 runs` above a Recent Runs
+    // list holding one entry, and a reader meets those as two counts of the same word.
+    const user = userEvent.setup()
+    loopTasks = []
+    jobHistory = {
+      data: [
+        {
+          id: 'run-stall',
+          job_id: 'job-1',
+          fired_at: '2026-08-25T09:00:00Z',
+          status: 'skipped',
+          trigger: 'scheduled',
+          error_summary: 'loop queue is stalled',
+        },
+      ],
+      isLoading: false,
+    }
+    renderCard(baseJob({ run_count: 0 }))
+
+    expect(screen.getByText('0 runs')).toBeInTheDocument()
+    expect(screen.getByTestId('job-refused-job-1')).toHaveTextContent('1 refused')
+
+    await user.click(screen.getByLabelText('Expand job details'))
+    expect(screen.getByTestId('job-run-status-run-stall')).toHaveTextContent('skipped')
+  })
+
+  it('does not claim refusals when every firing ran (F25)', async () => {
+    loopTasks = []
+    jobHistory = {
+      data: [
+        {
+          id: 'run-ok',
+          job_id: 'job-1',
+          fired_at: '2026-08-25T09:00:00Z',
+          status: 'completed',
+          trigger: 'scheduled',
+        },
+      ],
+      isLoading: false,
+    }
+    renderCard(baseJob({ run_count: 1 }))
+
+    expect(screen.getByText('1 runs')).toBeInTheDocument()
+    expect(screen.queryByTestId('job-refused-job-1')).not.toBeInTheDocument()
+  })
+
+  it('says a prospective reviewer is next, not that it is working the task (F26)', async () => {
+    // `completed | relay` read as "relay is working this" and meant "relay is who would review
+    // this". The value was right and the presentation wrong, and the column's meaning changed
+    // silently with the task's status — unreadable once a flow puts three such lines on one card.
+    const user = userEvent.setup()
+    loopTasks = [{ id: 'task-1' }, { id: 'task-2' }, { id: 'task-3' }]
+    renderCard(
+      baseJob({
+        loop: {
+          id: 'loop-1',
+          label: 'Ledger fixes',
+          purpose: 'Land the balance fix',
+          stop_when_queue_empties: true,
+          queue: { in_progress: 1, completed: 1, blocked: 1 },
+          current_tasks: [
+            {
+              id: 'task-1',
+              title: 'Fix row 42',
+              status: 'in_progress',
+              agent: 'builder',
+              agent_role: 'working',
+            },
+            {
+              id: 'task-2',
+              title: 'Name the two totals',
+              status: 'completed',
+              agent: 'relay',
+              agent_role: 'next',
+            },
+            {
+              id: 'task-3',
+              title: 'Await a decision',
+              status: 'blocked',
+              agent: 'critic',
+              agent_role: 'assigned',
+            },
+          ],
+          open_questions: 0,
+          firing_active: true,
+        },
+      }),
+    )
+
+    await user.click(screen.getByLabelText('Expand job details'))
+    const list = screen.getByTestId('job-loop-current-tasks')
+
+    // Mid-turn: the bare name, exactly as before.
+    expect(within(list).getByText('builder')).toBeInTheDocument()
+    // A proposal, and it says so.
+    expect(within(list).getByText('next: relay')).toBeInTheDocument()
+    expect(within(list).queryByText('relay')).not.toBeInTheDocument()
+    // Waiting on a person: the row's own assignee, and nobody is being selected for it.
+    expect(within(list).getByText('assigned: critic')).toBeInTheDocument()
+  })
+
+  it('falls back to the bare name when the Hub sends no role (F26)', async () => {
+    // A Hub older than this change sends `agent` without `agent_role`. It must render as it always
+    // did rather than acquiring a qualifier the server never claimed.
+    const user = userEvent.setup()
+    loopTasks = [{ id: 'task-1' }]
+    renderCard(
+      baseJob({
+        loop: {
+          id: 'loop-1',
+          label: 'Ledger fixes',
+          purpose: 'Land the balance fix',
+          stop_when_queue_empties: true,
+          queue: { in_progress: 1 },
+          current_tasks: [
+            { id: 'task-1', title: 'Fix row 42', status: 'in_progress', agent: 'builder' },
+          ],
+          open_questions: 0,
+          firing_active: true,
+        },
+      }),
+    )
+
+    await user.click(screen.getByLabelText('Expand job details'))
+    expect(within(screen.getByTestId('job-loop-current-tasks')).getByText('builder')).toBeInTheDocument()
+  })
+})

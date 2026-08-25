@@ -114,7 +114,12 @@ class LoopSummary(BaseModel):
     #: Every task this loop is currently working, in queue order (design D15). `agent` is the
     #: selection's agent, or a blocked task's assignee, and is absent when neither is known —
     #: never blank, so a reader is not shown an empty attribution.
-    current_tasks: List[Dict[str, str]] = Field(  # {"id", "title", "status", "agent"?}
+    current_tasks: List[Dict[str, str]] = Field(
+        # {"id", "title", "status", "agent"?, "agent_role"?}
+        # `agent_role` says what the name means — "working" (mid-turn), "next" (who the next
+        # firing would give it to) or "assigned" (the row's own assignee, the blocked case). It
+        # exists because the board rendered all three identically, so a completed task showed its
+        # prospective reviewer as though that agent were working it (F26).
         default_factory=list
     )
     # Why this loop's next firing would be refused, or None if it would proceed
