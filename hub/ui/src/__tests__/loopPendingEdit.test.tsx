@@ -28,7 +28,7 @@ function baseLoop(overrides: Partial<LoopDetail> = {}): LoopDetail {
     ending_state: null,
     archived_at: null,
     queue: { pending: 2 },
-    current_task: null,
+    current_tasks: [],
     open_questions: 0,
     firing_active: false,
     history: [],

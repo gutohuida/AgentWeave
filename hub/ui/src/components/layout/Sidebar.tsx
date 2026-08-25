@@ -14,6 +14,7 @@ import {
   type WorkspaceDestination,
 } from '@/lib/navigation'
 import { useConfigStore } from '@/store/configStore'
+import { useSSEConnectionState, type SSEConnectionState } from '@/hooks/useSSE'
 import { SpecRailNav } from '@/components/spec/SpecRailNav'
 import { AgentTree } from './AgentTree'
 import { RecencyView } from './RecencyView'
@@ -102,6 +103,25 @@ const SECTION_ICONS: Record<EnvironmentSection, string> = {
   settings: 'settings',
 }
 
+/**
+ * What the dot beside the wordmark actually reports.
+ *
+ * It used to be rendered unconditionally, `aria-hidden`, and filled with `--green` — a
+ * permanently-"live" mark bound to nothing. IDENTITY.md: semantic colour is earned, and
+ * green/amber/red carry state. The Hub stream is a real signal and this corner is now the only
+ * place it shows: `StatusBar`, which used to carry the reconnecting chip, is no longer rendered
+ * anywhere in the app.
+ *
+ * `closed` is deliberately neutral rather than red — not configured yet, or nothing subscribed,
+ * is not a fault, and colouring it as one is the same mistake in the other direction.
+ */
+const CONNECTION_LABEL: Record<SSEConnectionState, string> = {
+  open: 'Live — receiving updates from the Hub',
+  connecting: 'Connecting to the Hub…',
+  reconnecting: 'Live updates interrupted — reconnecting',
+  closed: 'Not connected to the Hub',
+}
+
 function loadFlags(key: string): Record<string, boolean> {
   try {
     return JSON.parse(localStorage.getItem(key) ?? '{}') as Record<string, boolean>
@@ -136,6 +156,7 @@ export function Sidebar({
 }: SidebarProps) {
   const { data: projects = [] } = useProjects()
   const selectedProjectId = useConfigStore((state) => state.selectedProjectId)
+  const connection = useSSEConnectionState()
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => loadFlags(COLLAPSED_KEY))
   const [expandedAgents, setExpandedAgents] = useState<Record<string, boolean>>(() =>
     loadFlags(AGENTS_EXPANDED_KEY),
@@ -207,7 +228,16 @@ export function Sidebar({
         className={compact ? 'mb-3 flex flex-col items-center gap-1' : 'mb-3 flex items-center gap-2 px-1.5 py-1'}
         style={{ fontSize: 13, fontWeight: 600 }}
       >
-        <span className="rail-live-dot" aria-hidden="true" />
+        {/* Not `aria-hidden`: it is the only report of the stream's health on this screen, so
+            it carries a name and a tooltip rather than being decoration with a colour. */}
+        <span
+          className="rail-live-dot"
+          data-testid="rail-live-dot"
+          data-state={connection}
+          role="img"
+          aria-label={CONNECTION_LABEL[connection]}
+          title={CONNECTION_LABEL[connection]}
+        />
         {!compact && <span className="flex-1">AgentWeave</span>}
         {onCompactChange && (
           <Button
@@ -351,10 +381,17 @@ export function Sidebar({
                       type="button"
                       data-testid={`project-name-${project.id}`}
                       data-active={activeProject ? 'true' : 'false'}
+                      /* Level 1 of the rail's selection ladder — see the `.row-item[data-active]`
+                       * block in index.css. The project is marked by weight alone: which one is
+                       * current is already stated by the whole subtree hanging open beneath it,
+                       * and marking the outermost thing most strongly is the inversion this
+                       * attribute exists to fix. The leading indicator that used to be rendered
+                       * here — on project rows and nowhere else — was the accent bar the operator
+                       * had removed on 2026-08-19, and is gone. */
+                      data-depth="project"
                       onClick={() => onOpenProject(project.id)}
                       className="row-item min-w-0 flex-1"
                     >
-                      <span className="row-selection-indicator" aria-hidden="true" />
                       <span className="min-w-0 flex-1">
                         <span className="block truncate">{project.name}</span>
                         {duplicateName && <span className="block truncate text-[11px]" style={{ color: 'var(--text-3)' }}>{project.path_display ?? 'Directory unavailable'}</span>}

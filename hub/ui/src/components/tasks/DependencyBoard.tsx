@@ -42,6 +42,9 @@ interface EdgeLine {
   id: string
   fromTaskId: string
   toTaskId: string
+  /** A `ghost` line has one end inside a folded layer — see the stub logic in `useEdgeLines`. It
+   *  carries no semantic colour because its endpoint's state is exactly what is not on screen. */
+  kind: 'edge' | 'ghost'
   x1: number
   y1: number
   x2: number
@@ -56,11 +59,21 @@ interface EdgeLine {
  *
  * Task 8.12 defers crossing minimisation as unbounded polish; this draws the direct line between
  * each pair; "good enough" for now is that no edge is silently omitted, not that they never cross.
+ *
+ * A folded layer (task 8.6) unmounts its cards, so its edges have no endpoint left to measure and
+ * used to disappear without trace — the operator's actual complaint about collapse: the graph stops
+ * making sense rather than merely getting shorter. Those edges are drawn as ghost stubs instead,
+ * running between the layer's own collapse toggle and whichever end is still on screen, so the
+ * connection still lands somewhere the eye can follow back. An edge with *both* ends folded away
+ * draws nothing: there is no visible end to anchor a stub to, and the count on the toggle already
+ * says how many links the fold is holding.
  */
 function useEdgeLines(
   containerRef: RefObject<HTMLDivElement | null>,
   cardRefs: Map<string, HTMLDivElement>,
+  toggleRefs: Map<number, HTMLButtonElement>,
   edges: TaskBoardEdge[],
+  foldedTaskDepth: Map<string, number>,
   layoutKey: string,
 ): EdgeLine[] {
   const [lines, setLines] = useState<EdgeLine[]>([])
@@ -71,22 +84,72 @@ function useEdgeLines(
 
     const recompute = () => {
       const containerRect = container.getBoundingClientRect()
+      // Content space, not viewport space: the svg scrolls with the cards, so both ends of every
+      // line have to be measured from the top of the scrolled content.
+      const topOf = (rect: DOMRect) => rect.top - containerRect.top + container.scrollTop
+      const bottomOf = (rect: DOMRect) => rect.bottom - containerRect.top + container.scrollTop
+      const centreOf = (rect: DOMRect) => rect.left + rect.width / 2 - containerRect.left + container.scrollLeft
+
       const next: EdgeLine[] = []
       for (const edge of edges) {
         const fromEl = cardRefs.get(edge.depends_on_task_id)
         const toEl = cardRefs.get(edge.task_id)
-        if (!fromEl || !toEl) continue // off-board reference (task 8.7) — nothing on this board to draw to
-        const fromRect = fromEl.getBoundingClientRect()
-        const toRect = toEl.getBoundingClientRect()
-        next.push({
-          id: `${edge.depends_on_task_id}->${edge.task_id}`,
-          fromTaskId: edge.depends_on_task_id,
-          toTaskId: edge.task_id,
-          x1: fromRect.left + fromRect.width / 2 - containerRect.left + container.scrollLeft,
-          y1: fromRect.bottom - containerRect.top + container.scrollTop,
-          x2: toRect.left + toRect.width / 2 - containerRect.left + container.scrollLeft,
-          y2: toRect.top - containerRect.top + container.scrollTop,
-        })
+        const id = `${edge.depends_on_task_id}->${edge.task_id}`
+
+        if (fromEl && toEl) {
+          next.push({
+            id,
+            fromTaskId: edge.depends_on_task_id,
+            toTaskId: edge.task_id,
+            kind: 'edge',
+            x1: centreOf(fromEl.getBoundingClientRect()),
+            y1: bottomOf(fromEl.getBoundingClientRect()),
+            x2: centreOf(toEl.getBoundingClientRect()),
+            y2: topOf(toEl.getBoundingClientRect()),
+          })
+          continue
+        }
+
+        const fromFoldedAt = foldedTaskDepth.get(edge.depends_on_task_id)
+        const toFoldedAt = foldedTaskDepth.get(edge.task_id)
+        // A prerequisite folded away: stub down from its layer's toggle to the dependent still
+        // on screen.
+        if (fromFoldedAt !== undefined && toEl) {
+          const toggle = toggleRefs.get(fromFoldedAt)
+          if (!toggle) continue
+          const toggleRect = toggle.getBoundingClientRect()
+          const toRect = toEl.getBoundingClientRect()
+          next.push({
+            id: `${id}:ghost`,
+            fromTaskId: edge.depends_on_task_id,
+            toTaskId: edge.task_id,
+            kind: 'ghost',
+            x1: toggleRect.left + 14 - containerRect.left + container.scrollLeft,
+            y1: bottomOf(toggleRect),
+            x2: centreOf(toRect),
+            y2: topOf(toRect),
+          })
+          continue
+        }
+        // The dependent folded away: stub down from the visible prerequisite to its layer's toggle.
+        if (toFoldedAt !== undefined && fromEl) {
+          const toggle = toggleRefs.get(toFoldedAt)
+          if (!toggle) continue
+          const toggleRect = toggle.getBoundingClientRect()
+          const fromRect = fromEl.getBoundingClientRect()
+          next.push({
+            id: `${id}:ghost`,
+            fromTaskId: edge.depends_on_task_id,
+            toTaskId: edge.task_id,
+            kind: 'ghost',
+            x1: centreOf(fromRect),
+            y1: bottomOf(fromRect),
+            x2: toggleRect.left + 14 - containerRect.left + container.scrollLeft,
+            y2: topOf(toggleRect),
+          })
+          continue
+        }
+        // Otherwise an off-board reference (task 8.7) — nothing on this board to draw to.
       }
       setLines(next)
     }
@@ -105,9 +168,19 @@ function useEdgeLines(
     // `layoutKey` stands in for "the set of cards actually mounted" — cardRefs is a mutable Map
     // and does not itself trigger a re-run.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [containerRef, edges, layoutKey])
+  }, [containerRef, edges, foldedTaskDepth, layoutKey])
 
   return lines
+}
+
+/** Which marker a line's arrowhead uses. There is one marker per edge class rather than one shared
+ *  grey head, because an SVG marker cannot inherit the referencing path's `stroke`/`currentColor`
+ *  through `marker-end` in every engine — so a single marker means a single colour, and the head is
+ *  the highest-contrast part of a directed edge, exactly where the eye lands. A grey head on a red
+ *  edge undoes the colour coding at the only point that is read at a glance. */
+function markerIdFor(edgeClass: string, isLineage: boolean): string {
+  if (isLineage) return 'dependency-arrow-lineage'
+  return `dependency-arrow-${edgeClass.replace('dependency-edge-', '')}`
 }
 
 interface DependencyBoardProps {
@@ -147,9 +220,11 @@ export function DependencyBoard({ specDocumentId, onOpenRequirement, onSelectBoa
 
   const containerRef = useRef<HTMLDivElement | null>(null)
   const cardRefsRef = useRef<Map<string, HTMLDivElement>>(new Map())
+  const toggleRefsRef = useRef<Map<number, HTMLButtonElement>>(new Map())
 
   const tasks = useMemo(() => board?.tasks ?? [], [board?.tasks])
   const edges = useMemo(() => board?.edges ?? [], [board?.edges])
+  const taskById = useMemo(() => new Map(tasks.map((task) => [task.id, task])), [tasks])
 
   const layers = useMemo(() => {
     const depth = assignDepths(tasks, edges)
@@ -159,8 +234,41 @@ export function DependencyBoard({ specDocumentId, onOpenRequirement, onSelectBoa
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tasks.map((t) => t.id).join(','), edges.map((e) => `${e.task_id}:${e.depends_on_task_id}`).join(',')])
 
-  const layoutKey = `${layers.map((l) => `${l.depth}:${l.tasks.map((t) => t.id).join(',')}`).join('|')}|${JSON.stringify(expandedOverride)}`
-  const lines = useEdgeLines(containerRef, cardRefsRef.current, edges, layoutKey)
+  // Which layers are folded, hoisted out of the render loop because the edge measurement needs it
+  // too — a folded layer's cards are unmounted, and the ghost stubs are how those edges stay
+  // legible. Same rule as before (task 8.6): a fully terminal layer folds by default, a partly
+  // finished one never folds, and an explicit override outranks both.
+  const collapsedDepths = useMemo(() => {
+    const folded = new Set<number>()
+    for (const layer of layers) {
+      const allTerminal = layer.tasks.length > 0 && layer.tasks.every(isTerminalTask)
+      if (!(expandedOverride[layer.depth] ?? !allTerminal)) folded.add(layer.depth)
+    }
+    return folded
+  }, [layers, expandedOverride])
+
+  const foldedTaskDepth = useMemo(() => {
+    const byTask = new Map<string, number>()
+    for (const layer of layers) {
+      if (!collapsedDepths.has(layer.depth)) continue
+      for (const task of layer.tasks) byTask.set(task.id, layer.depth)
+    }
+    return byTask
+  }, [layers, collapsedDepths])
+
+  const layoutKey = `${layers.map((l) => `${l.depth}:${l.tasks.map((t) => t.id).join(',')}`).join('|')}|${[...collapsedDepths].join(',')}`
+  const lines = useEdgeLines(containerRef, cardRefsRef.current, toggleRefsRef.current, edges, foldedTaskDepth, layoutKey)
+
+  // The lineage hint (S4 finding 5) is only true of a card that actually has an edge — promising a
+  // trace on an isolated node would be an affordance that does nothing.
+  const connectedTaskIds = useMemo(() => {
+    const connected = new Set<string>()
+    for (const edge of edges) {
+      connected.add(edge.task_id)
+      connected.add(edge.depends_on_task_id)
+    }
+    return connected
+  }, [edges])
 
   const lineageIds = useMemo(() => {
     if (!hoveredTaskId) return null
@@ -233,36 +341,72 @@ export function DependencyBoard({ specDocumentId, onOpenRequirement, onSelectBoa
         <svg
           data-testid="dependency-board-edges"
           className="absolute inset-0"
-          style={{ width: '100%', height: '100%', pointerEvents: 'none' }}
+          // `overflow: visible`, and it is load-bearing. `inset-0` + `height: 100%` inside an
+          // `overflow-auto` scrollport resolves against the *padding box* — the visible height —
+          // while every path coordinate above is in content space (`+ scrollTop`). The svg is
+          // anchored at content y=0 and scrolls with the cards, so it draws correctly down to one
+          // viewport height and an svg root clips to its viewport: every edge below the fold was
+          // simply absent. Measured in Chromium on a 400px-tall scrollport over 1064px of content —
+          // the last edge sat at y=940, the svg was 400 tall, nothing was drawn past the first
+          // screen. `overflow: visible` un-clips it without changing the box, so it adds nothing to
+          // `scrollHeight` (verified unchanged at 1064) and cannot feed back into the measurement.
+          // The scrollport's own `overflow-auto` still bounds what paints.
+          style={{ width: '100%', height: '100%', overflow: 'visible', pointerEvents: 'none' }}
         >
           <defs>
-            <marker id="dependency-arrow" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
-              <path d="M0,0 L7,3.5 L0,7 Z" fill="var(--border-hi)" />
-            </marker>
+            {/* One marker per edge class — see `markerIdFor`. `context-stroke` would collapse
+                these into one, but it is not supported everywhere this ships. */}
+            {[
+              ['normal', 'var(--border-hi)'],
+              ['gated', 'color-mix(in srgb, var(--amber) 60%, var(--border-hi))'],
+              ['rejected', 'color-mix(in srgb, var(--red) 65%, var(--border-hi))'],
+              ['live', 'var(--green)'],
+              ['lineage', 'var(--ring)'],
+              ['ghost', 'var(--border)'],
+            ].map(([name, fill]) => (
+              <marker
+                key={name}
+                id={`dependency-arrow-${name}`}
+                markerWidth="7"
+                markerHeight="7"
+                refX="6"
+                refY="3.5"
+                orient="auto"
+              >
+                <path d="M0,0 L7,3.5 L0,7 Z" fill={fill} />
+              </marker>
+            ))}
           </defs>
-          {lines.map((line) => (
-            <path
-              key={line.id}
-              data-testid="dependency-board-edge"
-              d={`M ${line.x1} ${line.y1} V ${(line.y1 + line.y2) / 2} H ${line.x2} V ${line.y2}`}
-              markerEnd="url(#dependency-arrow)"
-              className={[
-                'dependency-edge',
-                tasks.find((task) => task.id === line.fromTaskId)?.assignee_status === 'running'
+          {lines.map((line) => {
+            const edgeClass =
+              line.kind === 'ghost'
+                ? 'dependency-edge-ghost'
+                : taskById.get(line.fromTaskId)?.assignee_status === 'running'
                   ? 'dependency-edge-live'
-                  : tasks.find((task) => task.id === line.toTaskId)?.dependency_state === 'gated_on_rejected'
+                  : taskById.get(line.toTaskId)?.dependency_state === 'gated_on_rejected'
                     ? 'dependency-edge-rejected'
-                    : tasks.find((task) => task.id === line.toTaskId)?.dependency_state === 'gated'
+                    : taskById.get(line.toTaskId)?.dependency_state === 'gated'
                       ? 'dependency-edge-gated'
-                      : 'dependency-edge-normal',
-                lineageIds
-                  ? lineageIds.has(line.fromTaskId) && lineageIds.has(line.toTaskId)
-                    ? 'lineage-active'
-                    : 'lineage-dim'
-                  : '',
-              ].filter(Boolean).join(' ')}
-            />
-          ))}
+                      : 'dependency-edge-normal'
+            // A ghost never joins a lineage trace: its far end is folded away, so claiming it is
+            // part of the highlighted path would assert something the operator cannot see.
+            const isLineage =
+              line.kind === 'edge' &&
+              Boolean(lineageIds?.has(line.fromTaskId) && lineageIds.has(line.toTaskId))
+            return (
+              <path
+                key={line.id}
+                data-testid={line.kind === 'ghost' ? 'dependency-board-ghost-edge' : 'dependency-board-edge'}
+                d={`M ${line.x1} ${line.y1} V ${(line.y1 + line.y2) / 2} H ${line.x2} V ${line.y2}`}
+                markerEnd={`url(#${markerIdFor(edgeClass, isLineage)})`}
+                className={[
+                  'dependency-edge',
+                  edgeClass,
+                  lineageIds && line.kind === 'edge' ? (isLineage ? 'lineage-active' : 'lineage-dim') : '',
+                ].filter(Boolean).join(' ')}
+              />
+            )
+          })}
         </svg>
 
         <div className="relative flex flex-col gap-6" style={{ zIndex: 1 }}>
@@ -303,7 +447,7 @@ export function DependencyBoard({ specDocumentId, onOpenRequirement, onSelectBoa
           )}
           {layers.map((layer) => {
             const allTerminal = layer.tasks.length > 0 && layer.tasks.every(isTerminalTask)
-            const expanded = expandedOverride[layer.depth] ?? !allTerminal
+            const expanded = !collapsedDepths.has(layer.depth)
             const stallSummary = layerStallSummary(layer.tasks)
             return (
               <div key={layer.depth} data-testid={`dependency-board-layer-${layer.depth}`}>
@@ -328,6 +472,12 @@ export function DependencyBoard({ specDocumentId, onOpenRequirement, onSelectBoa
                     type="button"
                     data-testid={`dependency-board-layer-${layer.depth}-toggle`}
                     aria-expanded={expanded}
+                    // The ghost stubs anchor here, so the toggle has to be measurable — it is the
+                    // only thing left on screen standing for the layer's folded-away cards.
+                    ref={(el) => {
+                      if (el) toggleRefsRef.current.set(layer.depth, el)
+                      else toggleRefsRef.current.delete(layer.depth)
+                    }}
                     onClick={() =>
                       setExpandedOverride((prev) => ({ ...prev, [layer.depth]: !expanded }))
                     }
@@ -336,11 +486,16 @@ export function DependencyBoard({ specDocumentId, onOpenRequirement, onSelectBoa
                   >
                     <Icon name={expanded ? 'expand_more' : 'chevron_right'} size={14} />
                     {layer.tasks.length} done
-                    {!expanded && (
-                      <span style={{ color: 'var(--text-3)' }}>
-                        · {edges.filter((edge) => layer.tasks.some((task) => task.id === edge.task_id || task.id === edge.depends_on_task_id)).length} links hidden
-                      </span>
-                    )}
+                    {!expanded && (() => {
+                      const hidden = edges.filter((edge) =>
+                        layer.tasks.some((task) => task.id === edge.task_id || task.id === edge.depends_on_task_id),
+                      ).length
+                      return (
+                        <span style={{ color: 'var(--text-3)' }}>
+                          · {hidden} link{hidden === 1 ? '' : 's'} hidden
+                        </span>
+                      )
+                    })()}
                   </button>
                 )}
                 {expanded && (
@@ -364,6 +519,7 @@ export function DependencyBoard({ specDocumentId, onOpenRequirement, onSelectBoa
                           assigneeColorIndex={colorsByAgent.get(task.assignee ?? '')}
                           onOpenRequirement={onOpenRequirement}
                           onOpen={() => setOpenTaskId(task.id)}
+                          showLineageHint={connectedTaskIds.has(task.id)}
                         />
                       </div>
                     ))}

@@ -1,4 +1,5 @@
 import { tint } from '@/lib/colorTint'
+import { taskStatusTone } from '@/lib/taskStatusColors'
 import type { BadgeVariant } from './badgeVariants'
 import { Icon } from './Icon'
 
@@ -22,23 +23,20 @@ function tone(token: string): { bg: string; border: string; color: string } {
 }
 
 const NEUTRAL = tone('var(--text-2)')
-// In-progress/info needs attention but is not terminal. Amber carries that
-// meaning; blue remains reserved for focus and selection.
+// `info` is the generic "needs attention but is not terminal" variant, used by callers that are not
+// task statuses. Amber carries that meaning. It is deliberately NOT the same thing as the
+// `in_progress` task status, which has its own tone — see `lib/taskStatusColors`.
 const INFO = tone('var(--amber)')
-const PROGRESS = tone('var(--blue)')
 const WARNING = tone('var(--amber)')
 const SUCCESS = tone('var(--green)')
 const DANGER = tone('var(--red)')
 
-const STATUS_STYLES: Record<string, { bg: string; border: string; color: string }> = {
-  pending:         NEUTRAL,
-  assigned:        NEUTRAL,
-  in_progress:     PROGRESS,
-  under_review:    WARNING,
-  completed:       NEUTRAL,
-  approved:        SUCCESS,
-  rejected:        DANGER,
-  revision_needed: DANGER,
+// Lifecycle status colours are owned by `lib/taskStatusColors`, not restated here — this map used
+// to be one of three copies that had drifted apart. A `null` tone means the status is deliberately
+// carried by neutral text.
+function statusTone(status: string) {
+  const token = taskStatusTone(status)
+  return token === null ? NEUTRAL : tone(token)
 }
 
 const PRIORITY_STYLES: Record<string, { bg: string; border: string; color: string }> = {
@@ -75,7 +73,7 @@ export function Badge({ children, variant = 'default', className, pill = false }
 }
 
 export function StatusBadge({ status, pill }: { status: string; pill?: boolean }) {
-  const s = STATUS_STYLES[status] ?? STATUS_STYLES.pending
+  const s = statusTone(status)
   return (
     <span
       className="aw-chip"

@@ -4,6 +4,7 @@ import { Badge } from '@/components/common/Badge'
 import { Button } from '@/components/ui/button'
 import { useLoop, type LoopSummary } from '@/api/loops'
 import { hubDate } from '@/lib/hubTime'
+import { endingBucket } from './loopCounts'
 
 interface LoopTabProps {
   loopId: string
@@ -123,10 +124,25 @@ function PendingEdit({ loop }: { loop: LoopSummary }) {
   )
 }
 
-function EndingSummary({ endingState, stopReason }: { endingState?: string | null; stopReason?: string | null }) {
-  if (endingState === 'completed') return <Badge variant="success">Complete</Badge>
-  if (endingState === 'stopped') return <Badge variant="warning">Stopped early{stopReason ? `: ${stopReason}` : ''}</Badge>
-  return <Badge variant="info">Running</Badge>
+/** The loop's state, from the one shared helper rather than a second reading of `ending_state`.
+ *
+ *  This used to fall through to "Running" whenever `ending_state` was null, which is true of a loop
+ *  that has never fired as well as one firing right now — so a paused loop reported itself as
+ *  running. It was also redundant in the one case it got right: the animated "Running now" pill
+ *  rendered immediately beside it already says that, with motion. So `running` renders nothing
+ *  here and lets that pill carry it. */
+function EndingSummary({ loop }: { loop: LoopSummary }) {
+  const bucket = endingBucket(loop)
+  if (bucket === 'completed') return <Badge variant="success">Complete</Badge>
+  if (bucket === 'stopped') {
+    return (
+      <Badge variant="warning">
+        Stopped early{loop.stop_reason ? `: ${loop.stop_reason}` : ''}
+      </Badge>
+    )
+  }
+  if (bucket === 'running') return null
+  return <Badge variant="secondary">Idle</Badge>
 }
 
 /**
@@ -151,9 +167,14 @@ export function LoopTab({ loopId, onClose }: LoopTabProps) {
   const { data: loop, isLoading, isError } = useLoop(loopId)
 
   if (isLoading) {
+    // Shape-matched, like the index tabs already are: a heading line, then the step rows this
+    // panel is about to fill in. The two detail tabs were the last places still saying "Loading…".
     return (
-      <div className="p-4" data-testid="loop-tab" style={{ fontSize: 12, color: 'var(--text-3)' }}>
-        Loading…
+      <div className="space-y-2 p-4" data-testid="loop-tab" aria-label="Loading loop">
+        <div className="skeleton h-3 w-1/2" />
+        <div className="skeleton h-9 w-full" />
+        <div className="skeleton h-9 w-full" />
+        <div className="skeleton h-9 w-5/6" />
       </div>
     )
   }
@@ -184,7 +205,7 @@ export function LoopTab({ loopId, onClose }: LoopTabProps) {
       </div>
 
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
-        <EndingSummary endingState={loop.ending_state} stopReason={loop.stop_reason} />
+        <EndingSummary loop={loop} />
         {loop.archived_at && <Badge variant="secondary">Archived</Badge>}
         {loop.firing_active && (
           <span data-testid="loop-tab-firing-active">
@@ -242,12 +263,21 @@ export function LoopTab({ loopId, onClose }: LoopTabProps) {
 
       <div className="mt-4">
         <p className="mb-1.5" style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-3)' }}>
-          Current item
+          {(loop.current_tasks?.length ?? 0) > 1 ? 'Current items' : 'Current item'}
         </p>
-        {loop.current_task ? (
-          <p style={{ fontSize: 11, color: 'var(--text)' }} data-testid="loop-tab-current-task">
-            {loop.current_task.title} ({loop.current_task.status})
-          </p>
+        {loop.current_tasks?.length ? (
+          loop.current_tasks.map((task) => (
+            <p
+              key={task.id}
+              style={{ fontSize: 11, color: 'var(--text)' }}
+              data-testid="loop-tab-current-task"
+            >
+              {task.title} ({task.status})
+              {task.agent ? (
+                <span style={{ color: 'var(--text-3)', opacity: 0.75 }}> — {task.agent}</span>
+              ) : null}
+            </p>
+          ))
         ) : (
           <p style={{ fontSize: 11, color: 'var(--text-3)', opacity: 0.6 }}>No current item</p>
         )}

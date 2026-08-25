@@ -206,6 +206,22 @@ describe('losing the race to the run', () => {
   })
 })
 
+describe('the waiting sentence', () => {
+  it('carries a clock so it reads as a deadline, not a caption', () => {
+    const { container } = render(<PermissionRequestCard requests={[request()]} agent="haiku-1" />)
+    const waiting = container.querySelector('.permission-waiting')
+    expect(waiting).toHaveTextContent(/will be refused if nobody answers/)
+    expect(waiting?.querySelector('svg')).not.toBeNull()
+  })
+
+  it('still states the consequence in words rather than counting down', () => {
+    // The research finding this surface was built on: no countdown pressure on the highest-stakes
+    // control in the product. The clock is an icon, not a timer.
+    const { container } = render(<PermissionRequestCard requests={[request()]} agent="haiku-1" />)
+    expect(container.querySelector('.permission-waiting')?.textContent).not.toMatch(/\d/)
+  })
+})
+
 describe('permission card wears the composer’s chrome', () => {
   it('is the shared surface, not an amber callout', () => {
     const { container } = render(

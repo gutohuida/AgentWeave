@@ -36,6 +36,7 @@ from ... import (
     instance_identity,
     project_workspace,
     requirement_evidence,
+    review_turn,
     worktrees,
 )
 from ...agent_auth import hash_run_token, mint_run_token
@@ -185,6 +186,14 @@ class TriggerAgentRequest(BaseModel):
         "in_progress when that move is legal. Operator-supplied: an agent cannot bind its own run, "
         "because a run that never binds is never checked at its boundary.",
     )
+    review_task_id: Optional[str] = Field(
+        default=None,
+        max_length=64,
+        description="Start this turn as a review of the named task's finished work. The agent's "
+        "workspace becomes a detached checkout of the commit that task's most recent evidence "
+        "names, and its own working checkout is outside the turn's boundary. Refused when the "
+        "task has no evidence naming a commit, because then there is nothing to review.",
+    )
 
     @field_validator("spec_document")
     @classmethod
@@ -253,6 +262,39 @@ async def _spec_phase_for(session, project_id: str, spec_document: Optional[str]
         return None
 
 
+async def _review_task_from_entries(
+    session: AsyncSession, queue_entry_ids: Optional[List[str]]
+) -> Optional[str]:
+    """Which task, if any, the queued entries starting this turn ask to have reviewed.
+
+    Refuses rather than picks when two entries in one batch name different tasks. A turn has one
+    workspace (design D4), so "review both" is not a thing this can mean, and choosing one silently
+    would put the reviewer on one commit while its context named the other.
+    """
+    if not queue_entry_ids:
+        return None
+    from sqlalchemy import select
+
+    from ...db.models import InboundQueueEntry
+
+    result = await session.execute(
+        select(InboundQueueEntry.review_task_id).where(
+            InboundQueueEntry.id.in_(queue_entry_ids),
+            InboundQueueEntry.review_task_id.isnot(None),
+        )
+    )
+    named = {row for row in result.scalars().all() if row}
+    if not named:
+        return None
+    if len(named) > 1:
+        raise TriggerAgentError(
+            status.HTTP_409_CONFLICT,
+            "this turn batches requests to review more than one task "
+            f"({', '.join(sorted(named))}); a review turn has one workspace and one subject",
+        )
+    return named.pop()
+
+
 async def trigger_agent_directly(
     *,
     project_id: str,
@@ -267,6 +309,7 @@ async def trigger_agent_directly(
     spec_document: Optional[str] = None,
     task_id: Optional[str] = None,
     divergence_source_run_id: Optional[str] = None,
+    review_task_id: Optional[str] = None,
 ) -> TriggerAgentResponse:
     """Validate and spawn *agent* directly, returning its run identifier.
 
@@ -399,6 +442,35 @@ async def trigger_agent_directly(
     # Only where there *is* isolation to override. A project directory that is not a git
     # repository has none, so refusing there would be a guard with no subject.
     project_is_repo = worktrees.is_git_repo(repo_root)
+    # A review turn's workspace is decided before anything else, because it replaces the ordinary
+    # resolution rather than adjusting it (design D4: exactly one workspace per review turn).
+    #
+    # Read off the queue entries when the caller did not name one, exactly as `task_id` is: the
+    # scheduler starts this turn from a later call than the one that queued the request, so an
+    # argument alone would be gone by the time the turn exists.
+    if not review_task_id:
+        review_task_id = await _review_task_from_entries(session, queue_entry_ids)
+    review_context = None
+    if review_task_id:
+        if work_dir:
+            raise TriggerAgentError(
+                status.HTTP_400_BAD_REQUEST,
+                "work_dir cannot be combined with a review turn: a review turn's workspace is the "
+                "checkout of the commit under review.",
+            )
+        try:
+            review_context = await review_turn.prepare_review_turn(
+                session,
+                project_id=project_id,
+                reviewer=agent,
+                task_id=review_task_id,
+                repo_root=repo_root,
+            )
+        except review_turn.ReviewTurnRefused as exc:
+            # Task 3.4. The reason comes from the resolver unchanged, so the operator reads why
+            # there is nothing to review rather than that something failed.
+            raise TriggerAgentError(status.HTTP_409_CONFLICT, str(exc)) from exc
+
     if work_dir and worktrees.is_writing_agent(config) and project_is_repo:
         raise TriggerAgentError(
             status.HTTP_400_BAD_REQUEST,
@@ -415,6 +487,12 @@ async def trigger_agent_directly(
                 status.HTTP_400_BAD_REQUEST, f"Invalid work_dir: {exc}"
             ) from exc
         isolated_workspace: Optional[Path] = None
+    elif review_context is not None:
+        # Task 3.1: the review checkout replaces `resolve_agent_workspace` outright. The agent's own
+        # working worktree is not part of this turn, which is what makes the wrong directory
+        # *outside the boundary* rather than merely the wrong choice.
+        effective_work_dir = str(review_context.workspace)
+        isolated_workspace = review_context.workspace
     else:
         try:
             workspace = worktrees.resolve_agent_workspace(repo_root, agent, config)
@@ -478,6 +556,10 @@ async def trigger_agent_directly(
         # against. Rendered as its own block for exactly that reason.
         task_spec_document=task_document,
         task_id=binding.task.id if binding.task is not None else None,
+        # The other half of design D4: the boundary above enforces *where*, this states *what*.
+        # A reviewer that is not told it is reviewing will helpfully fix the bug itself and report
+        # the work as verified.
+        review=review_context,
     )
     context_file = Path(effective_work_dir) / ".agentweave" / "context" / f"{agent}.md"
     try:
@@ -665,7 +747,13 @@ async def trigger_agent_directly(
             work_dir=effective_work_dir,
             known_session_id=resume_session_id,
             env=env,
-            worktree=isolated_workspace,
+            # A **review** turn passes None, deliberately. `_execute_run` snapshots this directory
+            # when the turn ends, and a reviewer is not an author: there is nothing of its to
+            # preserve, and committing on a detached HEAD moves the checkout off the very commit
+            # the review was about. Observed live on 2026-08-24 — `critic` reviewed `90aa643` and
+            # the checkout ended at `886124f`, an orphan commit of three `.pyc` files that running
+            # the tests had touched.
+            worktree=None if review_context is not None else isolated_workspace,
             use_codex_app_server=use_codex_app_server,
             cli=probe["cli"],
             prompt=prompt,
@@ -812,6 +900,15 @@ async def trigger_agent(
         # an unbound run whose boundary is then never checked.
         await resolve_task_for_project(session, body.task_id, project_id)
 
+    if body.review_task_id:
+        # Same reasoning, and one refusal more: a task with no evidence naming a commit cannot be
+        # reviewed at all, and the operator should learn that here rather than by watching a run
+        # start and immediately fail.
+        await resolve_task_for_project(session, body.review_task_id, project_id)
+        target = await requirement_evidence.commit_for_task_review(session, body.review_task_id)
+        if not target.resolved:
+            raise HTTPException(status_code=409, detail=target.refusal)
+
     if body.overrides:
         agent_row_result = await session.execute(
             select(Agent).where(Agent.project_id == project_id, Agent.name == body.agent)
@@ -849,6 +946,7 @@ async def trigger_agent(
         # board card binds through the same path a delegation does. The scheduler may start this
         # agent's turn from a later call than this one, and anything held only here would be gone.
         task_id=body.task_id,
+        review_task_id=body.review_task_id,
     )
     session.add(entry)
     conversation.updated_at = entry.arrived_at

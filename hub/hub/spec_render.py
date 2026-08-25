@@ -73,9 +73,12 @@ h3 { font-size: 1rem; margin: 1.5rem 0 .4rem; }
 p { margin: .5rem 0; }
 ul, ol { margin: .5rem 0; padding-left: 1.4rem; }
 li { margin: .25rem 0; }
-a { color: var(--aw-accent); }
+a { color: var(--aw-accent); transition: color var(--aw-dur-fast) var(--aw-ease); }
+a:hover { color: color-mix(in srgb, var(--aw-accent) 80%, var(--fg)); }
 .aw-meta { color: var(--muted); font-size: .85rem; margin: 0 0 1.5rem; }
 .aw-nav { font-size: .85rem; margin: 0 0 1.5rem; }
+.aw-nav a { padding: .1rem .25rem; border-radius: 6px; }
+.aw-nav a:hover { background: var(--surface); }
 .aw-nav a + a::before { content: "›"; color: var(--muted); margin: 0 .6rem; }
 .aw-map-list { list-style: none; margin: .5rem 0; padding-left: 0; }
 .aw-map-list .aw-map-list { padding-left: 1.25rem; margin-top: .5rem; }
@@ -128,7 +131,7 @@ a { color: var(--aw-accent); }
 .aw-position { float: right; color: var(--muted); font-size: .72rem; text-transform: uppercase;
                letter-spacing: .05em; }
 .aw-anchor-copy { margin-left: .35rem; padding: .1rem .3rem; border: 1px solid transparent;
-                  border-radius: 4px; background: transparent; color: var(--muted); cursor: pointer; }
+                  border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; }
 .aw-anchor-copy:hover { border-color: var(--border); color: var(--aw-accent); }
 .aw-anchor-copy:focus-visible, a:focus-visible { outline: 2px solid var(--aw-accent); outline-offset: 2px; }
 .aw-rationale { margin-top: .7rem; padding-left: .7rem; border-left: 2px solid var(--border);
@@ -136,19 +139,34 @@ a { color: var(--aw-accent); }
 .aw-rationale-label { display: block; margin-bottom: .15rem; font-size: .68rem; font-weight: 650;
                       letter-spacing: .08em; text-transform: uppercase; }
 .aw-refs { font-size: .82rem; color: var(--muted); }
+.aw-refs-label { margin-right: .1rem; }
+.aw-chip-ref { display: inline-block; padding: .05rem .4rem; border: 1px solid var(--border);
+               border-radius: 6px; font-size: .78rem; text-decoration: none;
+               transition: border-color var(--aw-dur-fast) var(--aw-ease),
+                           background var(--aw-dur-fast) var(--aw-ease); }
+.aw-chip-ref:hover { border-color: var(--aw-accent); background: var(--surface-2); }
 .aw-note { color: var(--muted); font-style: italic; }
 .aw-empty { color: var(--muted); }
-table { border-collapse: collapse; margin: .75rem 0; width: 100%; }
+/* `fixed` so the <colgroup> widths are the constraint rather than a hint. Under auto layout a
+   long "Then" cell simply overrides them, which is what the column budget exists to prevent. */
+table { border-collapse: collapse; margin: .75rem 0; width: 100%; table-layout: fixed; }
 th, td { border: 1px solid var(--border); padding: .4rem .6rem; text-align: left;
-         vertical-align: top; font-size: .92rem; }
+         vertical-align: top; font-size: .92rem; overflow-wrap: anywhere; }
 tbody tr { transition: background var(--aw-dur-fast) var(--aw-ease); }
-tbody tr:hover { background: var(--surface); }
-tbody tr[data-first="true"] td { border-top: 2px solid var(--aw-accent); }
+/* Banding carries the grouping; the first row of each group gets a quiet left-edge cue on its
+   first cell only. This used to be a full-width 2px accent rule repeated once per requirement —
+   the subtle cue amplified while the structural one was dropped. */
+tbody tr[data-group="odd"] td { background: var(--surface); }
+tbody tr[data-first="true"] td:first-child { border-left: 2px solid var(--aw-accent); }
+tbody tr:hover td { background: var(--surface-2); }
 .aw-cell-empty { color: var(--muted); text-align: center; }
 .aw-task-list { list-style: none; padding-left: 0; }
 .aw-task { margin: .5rem 0; padding: .65rem .75rem; border: 1px solid var(--border);
-           border-radius: 6px; background: var(--surface); }
-.aw-task .aw-refs { display: flex; flex-wrap: wrap; gap: .3rem; margin-top: .35rem; }
+           border-radius: 6px; background: var(--surface);
+           transition: border-color var(--aw-dur-fast) var(--aw-ease); }
+.aw-task:hover { border-color: var(--muted); }
+.aw-task .aw-refs { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem;
+                    margin-top: .35rem; }
 code, pre { background: var(--surface); border-radius: 4px; }
 code { padding: .1rem .3rem; font-size: .88em; }
 """.strip()
@@ -305,16 +323,26 @@ def _acceptance(payload: SpecPayload, identifiers: Dict[str, str]) -> str:
         "</tr></thead><tbody>"
     ]
     previous_requirement: Optional[str] = None
+    # Alternating band per requirement group. A long document's acceptance table runs to ~110
+    # undifferentiated rows, and banding is what makes a group readable as a group; the quiet
+    # left-edge cue on the first row of each group is a supplement to it, not a replacement.
+    # Shipping only the cue — and widening it to a full-width rule — meant the one grouping signal
+    # was also the loudest thing in the table, repeated once per requirement.
+    group_index = -1
     for criterion in ordered:
         identifier = identifiers.get(criterion.requirement, criterion.requirement)
         first = criterion.requirement != previous_requirement
+        if first:
+            group_index += 1
         previous_requirement = criterion.requirement
         given = (
             _e(criterion.given) if criterion.given else '<span aria-label="Not specified">—</span>'
         )
         given_class = ' class="aw-cell-empty"' if not criterion.given else ""
+        group = "odd" if group_index % 2 else "even"
         rows.append(
-            f'<tr data-first="{"true" if first else "false"}"><td>{_link(identifier)}</td>'
+            f'<tr data-first="{"true" if first else "false"}" data-group="{group}">'
+            f"<td>{_link(identifier)}</td>"
             f"<td{given_class}>{given}</td>"
             f"<td>{_e(criterion.when)}</td><td>{_e(criterion.then)}</td></tr>"
         )
@@ -327,8 +355,20 @@ def _tasks(payload: SpecPayload, identifiers: Dict[str, str]) -> str:
         return ""
     items: List[str] = []
     for task in payload.tasks:
-        refs = ", ".join(_link(identifiers.get(key, key)) for key in task.requirements)
-        satisfies = f'<span class="aw-refs"><span>satisfies</span> {refs}</span>' if refs else ""
+        # Chips, not a comma-joined string. `.aw-refs` is a flex container, so each ", " text node
+        # became its own anonymous flex item and the separators floated free with a gap either
+        # side. Chips also match how Requirements and Acceptance already present the same
+        # relationship, which is what the design asked for.
+        refs = "".join(
+            f'<a class="aw-chip-ref" href="#{_e(identifiers.get(key, key))}">'
+            f"{_e(identifiers.get(key, key))}</a>"
+            for key in task.requirements
+        )
+        satisfies = (
+            f'<span class="aw-refs"><span class="aw-refs-label">satisfies</span>{refs}</span>'
+            if refs
+            else ""
+        )
         # The title is what a board will show, so a reader of the document should see the same name
         # they will later see on the board. Without one the description carries the item, as before.
         if task.title.strip():

@@ -43,9 +43,14 @@ Explored and decided with the operator in
   becomes work the flow can staff rather than a message someone must remember to send. The
   determination already exists (`_agent_that_completed`).
 - **A flow may start every task whose dependencies are met**, up to the width its graph offers.
-- **Reviewer resolution:** the task's declared reviewer (`task-dependencies` D11) if it resolves,
-  else any agent that is neither running nor holding an active task, else the flow surfaces that it
-  could not staff the step.
+- **Reviewer resolution:** the task's declared reviewer (`task-dependencies` D11) if it resolves;
+  a declaration that does **not** resolve is surfaced rather than substituted; where none is
+  declared, any agent that is neither running nor holding an active task; else the flow surfaces
+  that it could not staff the step. *(Amended 2026-08-24 to match shipped
+  `review_turn.resolve_declared_reviewer` — see design D4.)*
+- **A firing that staffs a review delivers a review turn**, so the reviewer can see the work.
+  *(Added 2026-08-24: `a-reviewer-can-see-the-work` shipped after this proposal was written, and
+  without this the flow reproduces finding F10 — see design D9.)*
 - **`create_flow`** joins `create_job` and `create_loop` — the third instance of a pattern already
   used twice: separate verbs writing one table.
 - **The briefing states which tier this firing belongs to and what follows for the agent** — in a
@@ -87,7 +92,11 @@ Explored and decided with the operator in
 **Code**
 
 - `hub/hub/scheduler.py` — the firing decision gains its fourth answer; `_claim_loop_task` returns a
-  set rather than one task; `_compose_loop_briefing` states the tier.
+  set rather than one task; `_compose_loop_briefing` states the tier; a firing that staffs a review
+  passes `review_task_id` to `new_entry` (design D9).
+- `hub/hub/review_turn.py` — reused, not extended: `resolve_declared_reviewer` for D4 rung 1 and
+  `prepare_review_turn` by way of the queue entry. This change writes no second reviewer resolution
+  and no second review-workspace path.
 - `hub/hub/api/v1/jobs.py` — `_batch_loop_summaries` must reflect several current items.
 - `hub/hub/mcp_server.py` — `create_flow`, and `create_loop` refusing a document. Stdlib + fastmcp
   only.
@@ -101,9 +110,11 @@ Explored and decided with the operator in
 
 **Specification**
 
-- `agent-loops` has 25 requirements. **20 are untouched by this change** — including the controller,
+- `agent-loops` has 27 requirements. **24 are untouched by this change** — including the controller,
   stop conditions, archiving, history, and the queue's ownership. That count is the evidence this is
-  an extension rather than the rebuild the operator ruled out on 2026-08-20.
+  an extension rather than the rebuild the operator ruled out on 2026-08-20. *(Recounted 2026-08-24:
+  this said 25 and 20. `task-dependencies` added two requirements after it was written, and the
+  delta modifies 3 — so the evidence is stronger than originally stated, not weaker.)*
 
 **Depends on**
 

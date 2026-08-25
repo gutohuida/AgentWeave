@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useProjectConversations } from '@/api/agentChat'
 import type { ProjectAgentSummary } from '@/api/projects'
 import { Icon } from '@/components/common/Icon'
+import { Button } from '@/components/ui/button'
 import { agentColorVars } from '@/lib/agentColors'
 import { capRows, groupConsecutiveFirings } from '@/lib/loopGrouping'
 import { ConversationRow } from './ConversationRow'
@@ -111,14 +112,30 @@ export function RecencyView({
         </button>
       )}
 
+      {/* Dressed at rail scale, for the same reason `AgentTree`'s is: a bare grey line was the
+          plainest thing in the product, sitting exactly where the operator has nothing to click.
+          It absorbs the standalone "New conversation" row below rather than sitting above a
+          second copy of it — the one action available from this spot should appear once. */}
       {conversations.length === 0 && (
-        <span
-          className="px-2 py-1 text-[12px]"
-          data-testid={`recency-empty-${projectId}`}
-          style={{ color: 'var(--text-3)' }}
-        >
-          No conversations yet
-        </span>
+        <div className="rail-empty" data-testid={`recency-empty-${projectId}`}>
+          <div className="rail-empty-head">
+            <span className="rail-empty-icon" aria-hidden="true">
+              <Icon name="forum" size={14} />
+            </span>
+            <span className="rail-empty-title">No conversations yet</span>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full justify-start"
+            data-testid={`recency-new-conversation-${projectId}`}
+            aria-label="Start a conversation"
+            onClick={() => onNewConversation?.(projectId, null)}
+          >
+            <Icon name="add" size={14} />
+            New conversation
+          </Button>
+        </div>
       )}
 
       {archivedCount > 0 && (
@@ -149,16 +166,21 @@ export function RecencyView({
         ))}
 
       {/* The tree starts a conversation from an agent's row menu. This view has no agent rows,
-          so it needs its own way in — and the surface it opens has to ask which agent. */}
-      <button
-        type="button"
-        className="row-item"
-        data-testid={`recency-new-conversation-${projectId}`}
-        onClick={() => onNewConversation?.(projectId, null)}
-      >
-        <Icon name="add" size={14} />
-        New conversation
-      </button>
+          so it needs its own way in — and the surface it opens has to ask which agent.
+          Suppressed while the list is empty: the empty state above carries this same action, under
+          the same test id, and two identical entry points stacked on top of each other is the
+          "is 2 buttons the right call?" defect the project rail already had once. */}
+      {conversations.length > 0 && (
+        <button
+          type="button"
+          className="row-item"
+          data-testid={`recency-new-conversation-${projectId}`}
+          onClick={() => onNewConversation?.(projectId, null)}
+        >
+          <Icon name="add" size={14} />
+          New conversation
+        </button>
+      )}
     </div>
   )
 }

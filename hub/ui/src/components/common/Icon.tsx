@@ -2,6 +2,8 @@ import React from 'react'
 import { BRAND_MARKS, BRAND_PREFIX } from './brandMarks'
 import {
   Activity,
+  CircleMinus,
+  Gauge,
   CircleAlert,
   TriangleAlert,
   Archive,
@@ -131,9 +133,11 @@ const ICONS: Record<string, LucideIcon> = {
   chat: MessageSquare,
   check: Check,
   check_circle: CircleCheck,
+  remove_circle: CircleMinus,
   close: X,
   content_copy: Copy,
   dark_mode: Moon,
+  data_usage: Gauge,
   delete: Trash2,
   description: FileText,
   edit: Pencil,

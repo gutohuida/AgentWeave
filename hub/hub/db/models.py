@@ -586,6 +586,12 @@ class InboundQueueEntry(Base):
     #: like `task_id` this must survive the queue, or a chain cannot see its own source and cannot
     #: be bounded (design D8).
     divergence_source_run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    #: Set when this entry starts a **review** turn, naming the task whose finished work is being
+    #: reviewed. Survives the queue for the same reason `task_id` does, and is deliberately not
+    #: `task_id` itself: that one is the task this run is working on and binds the run to it, this
+    #: one is the task the run is inspecting. Collapsing them would make a reviewer look like the
+    #: task's author to every consumer of the binding.
+    review_task_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 
     project: Mapped["Project"] = relationship(back_populates="queue_entries")
 
@@ -1215,6 +1221,27 @@ class JobRun(Base):
     # `AgentOutput.run_id`'s own precedent — every `JobRun` written before `0075` honestly has NULL
     # here, because nothing recorded it.
     conversation_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # How many firings this row stands for (`loop-notices-and-reacts` design D6). One for every
+    # row that records a firing which actually happened; more only on a *stall* record, where each
+    # subsequent refusal for the same stall increments this instead of appending another row.
+    #
+    # The precedent is `InboundQueueEntry.delivery_attempts` above, which chose a counter over
+    # duplicate rows for the identical problem: "an entry returned five times is indistinguishable
+    # from one never tried." Here the harm is the reverse and worse — `JobRun` feeds the
+    # last-ten-runs view and the "is this loop running" check, so a stalled loop ticking every five
+    # minutes buries the firings that did work under twelve identical rows an hour, and a healthy
+    # loop reads as dead.
+    #
+    # **A departure taken knowingly:** this is the one column on `JobRun` that is *updated* after
+    # the row is written. `JobRun` is not held to `TaskTransition`'s explicit append-only rule, so
+    # it is permitted — but it is a change in this table's write semantics, chosen rather than
+    # discovered. Confined to stall records, whose identity is "most recent run for this job, and
+    # the same stall reason"; a stall whose reason changes starts a new row, so a stall that
+    # changes shape stays visible.
+    #
+    # Defaults to 1, never 0: the column counts firings this row represents, and every row written
+    # before it existed represents exactly one.
+    tick_count: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
 
     __table_args__ = (Index("ix_job_runs_job_fired", "job_id", "fired_at"),)
 
@@ -1425,8 +1452,23 @@ class Checkpoint(Base):
     status: Mapped[str] = mapped_column(String(16), nullable=False)
     visibility: Mapped[str] = mapped_column(String(16), default="private", nullable=False)
 
-    # Linear, single-agent chain. `lineage_id` is the first checkpoint's id, carried forward, so
-    # "show me this thread" is one indexed read rather than a walk.
+    # A **conversation's** chain, not a loop's. `lineage_id` is the first checkpoint's id, carried
+    # forward, so "show me this thread" is one indexed read rather than a walk.
+    #
+    # This said "linear, single-agent chain" until `loop-becomes-a-flow` group 6, which is the
+    # comment `agent-loops` §231 has disagreed with since loops existed: a firing is briefed with
+    # the checkpoint of "any prior firing of that same loop, regardless of which conversation
+    # produced it", and `latest_checkpoint_for_loop` retrieves exactly that way. Nothing had to
+    # settle the disagreement while a loop had one agent; a flow has several, so it does.
+    #
+    # The correction is not "single-agent becomes multi-agent". `generate_checkpoint` anchors on
+    # `latest_checkpoint(conversation.id)`, and a loop may not be resume-mode (`api/v1/jobs.py`
+    # refuses it: continuity is by checkpoint, not by resumed session), so **every** loop firing is
+    # a fresh conversation and every loop checkpoint sets `previous_checkpoint_id=None` and founds
+    # its own lineage. These two columns have never linked a loop's checkpoints together and do not
+    # now. A loop's continuity is `loop_id` plus `created_at`, which is what
+    # `latest_checkpoint_for_loop` reads; this chain links the firings of a single conversation,
+    # which for a loop is always exactly one.
     previous_checkpoint_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     lineage_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
 

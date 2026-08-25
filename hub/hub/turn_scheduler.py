@@ -62,7 +62,16 @@ async def schedule_agent(project_id: str, agent: str) -> ScheduleResult:
         ):
             return ScheduleResult(waiting_reason="conversation is unavailable")
 
-        selected = [entry for entry in entries if entry.conversation_id == conversation.id][:cap]
+        # Filter by depth as well as conversation. `can_start` asks whether the turn may begin;
+        # nothing used to ask which entries may ride on it, so an over-budget entry was bundled
+        # into a turn admitted by a shallower one and delivered anyway (design D1, finding F5).
+        selected = [
+            entry
+            for entry in entries
+            if entry.conversation_id == conversation.id and entry.hop_depth <= hop_budget
+        ][:cap]
+        if not selected:
+            return ScheduleResult(waiting_reason="hop budget exhausted")
         controlling_operator = next(
             (entry for entry in selected if entry.origin_type == "operator"), None
         )
@@ -88,7 +97,11 @@ async def schedule_agent(project_id: str, agent: str) -> ScheduleResult:
                 spec_document=spec_document,
                 session=db,
                 queue_entry_ids=[entry.id for entry in selected],
-                turn_depth=min(entry.hop_depth for entry in selected),
+                # The admitting entry's depth, not `min()` across the batch. `min()` was never a
+                # decision — it let a turn batching a hop-0 entry with a deeper one restart the
+                # count from zero, so the chain ran backwards (design D2). With the filter above,
+                # every delivered entry is within budget and `controlling` is the first of them.
+                turn_depth=controlling.hop_depth,
                 initiator=initiator,
             )
         except TriggerAgentError as exc:

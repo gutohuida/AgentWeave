@@ -34,7 +34,13 @@ from .task_transition_service import (
     TransitionRefusedError,
     apply_transition,
 )
-from .task_transitions import STATUS_BLOCKED, allowed_targets, operator, run_actor
+from .task_transitions import (
+    STATUS_BLOCKED,
+    TERMINAL_STATUSES,
+    allowed_targets,
+    operator,
+    run_actor,
+)
 
 # --------------------------------------------------------------------------------------
 # What a task says should happen when work bound to it is dropped
@@ -238,11 +244,28 @@ async def bind_run_to_task(
     record a divergence, which is the bug this whole line of work exists to remove. A block is
     released by the answer arriving or by the operator saying so, never by something merely starting.
 
+    The task also learns *who* is doing it. Two paths reach `in_progress` and until 2026-08-24 only
+    one named an agent: the loop's claim sets `claimed_task.assignee` from its selection
+    (`scheduler.py` — `job.agent` until `loop-becomes-a-flow` group 2 made it the selection's own
+    agent, so a flow's reviewer is recorded as the assignee rather than the job's owner), a direct
+    `task_id` trigger set nothing. So a task a run was actively working
+    read `status: in_progress, assignee: null` — and since `assignee_status` is derived from that
+    null (`_task_response`), the board reported `idle` about an agent that was at that moment
+    running. Written here rather than in the trigger route because this is the one place both paths
+    pass through.
+
+    Only where the task does not already name someone else. An operator who assigned the card to a
+    person, or a loop that claimed it for one agent, has made a statement; a run starting is not
+    grounds to overwrite it. Re-binding the same agent is a no-op either way.
+
     Nothing is committed. The caller stages this alongside the `Run` insert so a bound run whose
     task never moved cannot exist as a partial write.
     """
     run.task_id = task.id
     actor = run_actor(run.id, run.agent)
+
+    if run.agent and not task.assignee:
+        task.assignee = run.agent
 
     if task.status == STATUS_BLOCKED:
         return None
@@ -273,7 +296,10 @@ async def bind_run_to_task(
 #:
 #: `completed` and `under_review` are deliberately absent: work under review comes back often, and
 #: releasing there would unbind precisely the thread that is about to do the revisions.
-TERMINAL_FOR_BINDING: Tuple[str, ...] = ("approved", "rejected")
+#: Derived from the lifecycle bands (`loop-notices-and-reacts` 3.7) rather than listed. The
+#: reasoning above is why it is the terminal band and not a wider one, and it survives the
+#: derivation because the band means the same thing.
+TERMINAL_FOR_BINDING: Tuple[str, ...] = tuple(sorted(TERMINAL_STATUSES))
 
 
 async def binding_for_conversation(
@@ -332,7 +358,14 @@ async def release_conversations_bound_to(session: AsyncSession, task: Task) -> i
 _REASON_LIMIT = 280
 
 
-def _reason_from_question(question: Question) -> str:
+def reason_from_question(question: Question) -> str:
+    """The one sentence a card shows for a task waiting on *question*.
+
+    Public because two surfaces need the identical wording: `block_task_for_question` writes it to
+    `blocked_reason` when the task parks, and `tasks.py`'s `_attach_awaiting_answer` reports the
+    same wait *before* it parks (F14). Two spellings of the same wait would read as two different
+    situations.
+    """
     text = " ".join((question.question or "").split())
     if len(text) > _REASON_LIMIT:
         text = text[: _REASON_LIMIT - 1].rstrip() + "…"
@@ -405,7 +438,7 @@ async def block_task_for_question(
         # task untouched, never propagate and turn a finished run into a failed one.
         return None
 
-    task.blocked_reason = _reason_from_question(question)
+    task.blocked_reason = reason_from_question(question)
     question.blocked_task_id = task.id
     return transition
 

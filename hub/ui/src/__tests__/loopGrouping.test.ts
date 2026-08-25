@@ -14,10 +14,14 @@ import {
   MIN_FIRINGS_TO_GROUP,
 } from '@/lib/loopGrouping'
 
-function conv(id: string, loop?: { id: string; label: string }): AgentConversation {
+function conv(
+  id: string,
+  loop?: { id: string; label: string },
+  agent = 'claude',
+): AgentConversation {
   return {
     id,
-    agent: 'claude',
+    agent,
     provider_session_id: null,
     lifecycle: 'open',
     title: id,
@@ -131,5 +135,69 @@ describe('capRows', () => {
     const rows = groupConsecutiveFirings([conv('a'), conv('b')])
 
     expect(capRows(rows, 7)).toEqual({ visible: rows, hiddenConversations: 0 })
+  })
+})
+
+describe('a change of agent breaks a run (loop-becomes-a-flow group 9)', () => {
+  it('does not collapse two agents of one flow into one row', () => {
+    // Until a flow existed this could not arise: one loop fired one agent, so every firing in a run
+    // was theirs. `LoopFiringGroup` still takes a single `agentName` and `agentColor` for the whole
+    // row, so a run spanning agents would label three agents' work with whichever came first.
+    const rows = groupConsecutiveFirings([
+      conv('a1', SWEEP, 'builder'),
+      conv('a2', SWEEP, 'builder'),
+      conv('b1', SWEEP, 'critic'),
+      conv('b2', SWEEP, 'critic'),
+    ])
+
+    expect(rows.map((r) => r.kind)).toEqual(['loopGroup', 'loopGroup'])
+    expect(rows.flatMap((r) => conversationsOf(r).map((c) => c.id))).toEqual([
+      'a1',
+      'a2',
+      'b1',
+      'b2',
+    ])
+  })
+
+  it('leaves a lone firing per agent as plain rows rather than one-firing groups', () => {
+    const rows = groupConsecutiveFirings([
+      conv('a1', SWEEP, 'builder'),
+      conv('b1', SWEEP, 'critic'),
+      conv('c1', SWEEP, 'auditor'),
+    ])
+
+    // MIN_FIRINGS_TO_GROUP still applies per run, so three runs of one stay three plain rows —
+    // collapsing a single firing hides a conversation behind a click and gains nothing.
+    expect(rows.map((r) => r.kind)).toEqual(['conversation', 'conversation', 'conversation'])
+  })
+
+  it('still collapses a run that is one agent throughout', () => {
+    // The regression guard: the break must not fire on a single-agent loop, which is every loop
+    // that existed before this change and most of them after it.
+    const rows = groupConsecutiveFirings([
+      conv('a1', SWEEP, 'builder'),
+      conv('a2', SWEEP, 'builder'),
+      conv('a3', SWEEP, 'builder'),
+    ])
+
+    expect(rows.map((r) => r.kind)).toEqual(['loopGroup'])
+    expect(conversationsOf(rows[0])).toHaveLength(3)
+  })
+
+  it('never reorders, whichever way the run is broken', () => {
+    const input = [
+      conv('op1'),
+      conv('a1', SWEEP, 'builder'),
+      conv('b1', SWEEP, 'critic'),
+      conv('b2', SWEEP, 'critic'),
+      conv('x1', OTHER, 'critic'),
+      conv('op2'),
+    ]
+
+    const rows = groupConsecutiveFirings(input)
+
+    expect(rows.flatMap((r) => conversationsOf(r).map((c) => c.id))).toEqual(
+      input.map((c) => c.id),
+    )
   })
 })

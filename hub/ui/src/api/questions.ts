@@ -39,6 +39,16 @@ export interface Question {
   asker_waiting?: boolean
 }
 
+/** How long a run waits for an answer when its agent sets no `question_timeout_seconds`.
+ *
+ * Mirrors `QUESTION_ANSWER_TIMEOUT` in `hub/hub/mcp_server.py` — 240s, what an ordinary MCP tool
+ * call was measured tolerating. Restated here because nothing on the wire carries it: the
+ * questions payload has no timeout field at all, and the roster reports `null` to mean "the
+ * built-in default" without ever saying what that default is. `AgentSettingsPage` already states
+ * the same 240 as its placeholder, so this is the second copy, not the first.
+ */
+export const DEFAULT_QUESTION_TIMEOUT_SECONDS = 240
+
 export function useQuestions(answered?: boolean) {
   const { isConfigured, selectedProjectId: projectId } = useConfigStore()
   const params = answered !== undefined ? `?answered=${answered}` : ''

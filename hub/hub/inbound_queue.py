@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Iterable, List, Optional
 
@@ -32,6 +33,7 @@ def new_entry(
     spec_document: Optional[str] = None,
     task_id: Optional[str] = None,
     divergence_source_run_id: Optional[str] = None,
+    review_task_id: Optional[str] = None,
 ) -> InboundQueueEntry:
     if origin_type not in ("operator", "agent", "job", "checkpoint", "divergence"):
         raise ValueError(
@@ -58,6 +60,7 @@ def new_entry(
         spec_document=spec_document,
         task_id=task_id,
         divergence_source_run_id=divergence_source_run_id,
+        review_task_id=review_task_id,
         state="queued",
     )
 
@@ -238,6 +241,53 @@ async def abandoned_for_run(db: AsyncSession, run_id: str) -> List[InboundQueueE
         )
     )
     return list(result.scalars().all())
+
+
+@dataclass
+class ReleaseOutcome:
+    """The result of asking to release a budget-held entry.
+
+    The refusal is returned rather than raised, matching `commit_for_task_review`: there are two
+    distinct ways this fails and an operator can only act on one of them. An entry that is gone or
+    already handled is somebody else's doing; an entry sitting inside the budget is waiting for a
+    reason the release action would not fix, and saying "released" would be a lie about which
+    thing was stuck.
+    """
+
+    entry: Optional[InboundQueueEntry] = None
+    refusal: Optional[str] = None
+    #: The depth the entry carried before the re-base, for the record of what the operator did.
+    released_from_depth: Optional[int] = None
+
+
+async def release_entry(db: AsyncSession, project_id: str, entry_id: str) -> ReleaseOutcome:
+    """Re-base a budget-held entry to depth 0 so the next turn delivers it (design D3).
+
+    Depth 0 rather than a `+N` grant: "the operator restarted this chain here" is a fact a later
+    reader can reconstruct from the event, where an arithmetic grant leaves behind a depth whose
+    meaning depends on history nobody recorded.
+    """
+    result = await db.execute(select(InboundQueueEntry).where(InboundQueueEntry.id == entry_id))
+    entry = result.scalar_one_or_none()
+    if entry is None or entry.project_id != project_id or entry.state != "queued":
+        return ReleaseOutcome(
+            refusal="Queue entry is absent or has already been delivered/withdrawn"
+        )
+    project = await db.get(Project, project_id)
+    if project is None:
+        raise ValueError(f"project {project_id!r} does not exist")
+    if entry.hop_depth <= project.hop_budget:
+        return ReleaseOutcome(
+            refusal=(
+                f"Queue entry is at hop {entry.hop_depth}, within the project's hop budget of "
+                f"{project.hop_budget}, so the hop budget is not what is holding it. Check the "
+                f"agent's queue status for the reason it is waiting."
+            )
+        )
+    released_from = entry.hop_depth
+    entry.hop_depth = 0
+    await db.commit()
+    return ReleaseOutcome(entry=entry, released_from_depth=released_from)
 
 
 async def withdraw_entry(

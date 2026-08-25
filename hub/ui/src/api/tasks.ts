@@ -32,6 +32,15 @@ export interface Task {
    * is most of what tells the operator the card is waiting on *them* rather than merely stalled.
    */
   blocked_reason?: string | null
+  /**
+   * What a run bound to this task is waiting on *you* to answer, right now — in the same words
+   * `blocked_reason` uses once the run ends and the task actually parks.
+   *
+   * The status deliberately does not move while the wait is on: `block_task_for_question` runs only
+   * when the asking run *ends*, so until then the board said `in_progress` about work that had
+   * stopped and was waiting on a person (F14). Derived per request, never stored.
+   */
+  awaiting_answer_reason?: string | null
   /** The specification document this work is against, and — where a document declared this task —
    *  the key it was declared under. */
   spec_document_id?: string | null
@@ -119,6 +128,39 @@ export function useTaskIntegrations(taskId: string, enabled: boolean) {
     queryFn: () =>
       getJson<{ integrations: TaskIntegration[] }>(
         `/api/v1/projects/${projectId}/tasks/${taskId}/integrations`,
+      ),
+    enabled: isConfigured && !!projectId && enabled,
+  })
+}
+
+/**
+ * What approving this task *would* write, before it is approved (F9).
+ *
+ * Approval is the only act in the product that changes the operator's own repository — it
+ * cherry-picks the commit named by each accepted piece of evidence into the project's main branch.
+ * The refusal path already explained itself ("no accepted evidence names a commit"); the
+ * *successful* path announced nothing at all, and an operator clicking approve on a task board was
+ * writing to their main branch without being told.
+ *
+ * Read-only and cheap on the server: same source as the merge (`integration_targets` plus
+ * `Project.main_branch`), no git subprocess, no conflict probe. This is a sentence, not a gate.
+ */
+export interface TaskIntegrationPreview {
+  task_id: string
+  main_branch: string | null
+  targets: { commit_sha: string; source_branch: string | null }[]
+  will_merge: boolean
+  /** Why nothing will be merged. Empty when something will. */
+  reason: string
+}
+
+export function useTaskIntegrationPreview(taskId: string, enabled: boolean) {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  return useQuery<TaskIntegrationPreview>({
+    queryKey: ['project', projectId, 'task', taskId, 'integration-preview'],
+    queryFn: () =>
+      getJson<TaskIntegrationPreview>(
+        `/api/v1/projects/${projectId}/tasks/${taskId}/integration-preview`,
       ),
     enabled: isConfigured && !!projectId && enabled,
   })

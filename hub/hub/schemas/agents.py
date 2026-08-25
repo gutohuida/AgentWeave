@@ -41,6 +41,10 @@ class AgentSummary(BaseModel):
     description: Optional[str] = Field(default=None, max_length=256)
     status: str = Field(max_length=64)
     latest_status_msg: Optional[str] = Field(default=None, max_length=10000)
+    # The last moment the Hub observed this agent doing anything: a run starting or ending, a
+    # line of output, or a heartbeat. Not heartbeats alone — only a self-registered agent posts
+    # those, so a heartbeat-only reading was permanently NULL for every Hub-spawned agent and the
+    # rail said "No activity yet" about an agent mid-run (F17). See `hub/hub/agent_activity.py`.
     last_seen: Optional[datetime] = None
     message_count: int
     active_task_count: int

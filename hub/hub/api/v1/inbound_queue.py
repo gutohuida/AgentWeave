@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...auth import get_project
 from ...db.engine import get_session
 from ...db.models import InboundQueueEntry, Project
-from ...inbound_queue import DELIVERY_ATTEMPT_LIMIT, withdraw_entry
+from ...inbound_queue import DELIVERY_ATTEMPT_LIMIT, release_entry, withdraw_entry
 from ...launchability import get_agent_config, probe_agent
 from ...sse import sse_manager
 from ...usage_accounting import project_budget_state
@@ -207,6 +207,41 @@ async def list_queue_entries(
         query = query.where(InboundQueueEntry.state == state_filter)
     result = await session.execute(query.order_by(InboundQueueEntry.sequence))
     return list(result.scalars().all())
+
+
+@router.post("/entries/{entry_id}/release", response_model=QueueEntryResponse)
+async def release_queue_entry(
+    entry_id: str,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+) -> InboundQueueEntry:
+    """Continue a chain the hop budget is holding: re-base the entry to depth 0 and deliver it.
+
+    A bound with no exit is a wedge (design D3). Filtering delivery by depth without this would be
+    worse than the leak it replaces: the held entry would sit queued forever while the agent, told
+    something by the operator, starts a fresh chain around it — so a real message from another
+    agent is silently never read, and there are now two conversations about it.
+    """
+    project_id, _ = project
+    outcome = await release_entry(session, project_id, entry_id)
+    if outcome.entry is None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=outcome.refusal)
+    entry = outcome.entry
+    payload = {
+        "entry_id": entry.id,
+        "agent": entry.agent,
+        # The depth it was released *from* is the whole content of the record: after the re-base
+        # the row itself says 0, and nothing else would show that a chain was restarted here.
+        "released_from_depth": outcome.released_from_depth,
+    }
+    await persist_event(session, project_id, "queue_entry_released", payload, agent=entry.agent)
+    await sse_manager.broadcast(project_id, "queue_entry_released", payload)
+
+    from ...turn_scheduler import schedule_agent
+
+    await schedule_agent(project_id, entry.agent)
+    await session.refresh(entry)
+    return entry
 
 
 @router.delete("/entries/{entry_id}", response_model=QueueEntryResponse)

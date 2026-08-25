@@ -61,12 +61,20 @@ cheap check is the one above: hit the API, then compare mtimes across the candid
 test output and still should not be deleted — it is a real earlier database — but nothing serves it
 today.
 
-Start it — **from `hub/`, not the repo root** (see the trap below):
+Start it — **from `hub/`, not the repo root** (see the trap below), **from source, not the console
+script**:
 
 ```bash
 cd hub
-DATABASE_URL="sqlite+aiosqlite:///$(pwd)/data/agentweave.db" agentweave --port 8010
+DATABASE_URL="sqlite+aiosqlite:///C:/Users/huida/.agentweave/hub/profiles/beta/agentweave.db"   py -3.11 -m uvicorn hub.main:app --port 8010 --host 127.0.0.1
 ```
+
+**Do not use `agentweave --port 8010` here.** The console script is the *installed* `agentweave-hub`,
+whose bundled migrations lag this checkout, so on any branch past the installed head it dies with
+`Migration failed: Can't locate revision identified by '00NN'`. This cost two sessions on
+2026-08-24 before it was written down. Note also that the `DATABASE_URL` above names the **beta
+profile**, which is what 8010 actually serves — not `<repo>/hub/data/agentweave.db`, which an
+earlier version of this command wrongly pointed at (see the two paragraphs above).
 
 Point the Vite dev server at it with `AW_DEV_HUB=http://127.0.0.1:8010 npm run dev`, and
 `scripts/uishot.py --url http://127.0.0.1:8010` for screenshots.
@@ -249,7 +257,7 @@ no second runtime and no filesystem or git collaboration substrate.
 hub/
 ├── hub/                      # Python package
 │   ├── main.py               # FastAPI app factory + lifespan
-│   ├── mcp_server.py         # Hub-side MCP server (21 @mcp.tool(), 20 agent-callable —
+│   ├── mcp_server.py         # Hub-side MCP server (24 @mcp.tool(), 23 agent-callable —
 │   │                         # approve_tool_call is a harness endpoint, not a capability)
 │   ├── data/charters/        # Starter charter seed documents + manifest
 │   ├── db/                   # SQLAlchemy async models and migrations

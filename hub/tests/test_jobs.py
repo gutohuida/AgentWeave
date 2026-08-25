@@ -486,7 +486,7 @@ async def test_creating_with_purpose_alone_opts_into_a_loop(app, auth_headers):
     assert loop["purpose"] == "Nightly dependency audit"
     assert loop["stop_when_queue_empties"] is False
     assert loop["queue"] == {}
-    assert loop["current_task"] is None
+    assert loop["current_tasks"] == []
     assert loop["open_questions"] == 0
 
 
@@ -931,3 +931,238 @@ async def test_patch_re_declaring_your_own_document_is_not_a_conflict(app, auth_
         headers=auth_headers,
     )
     assert resp.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Finding F1 — a cron restricting both day fields is refused at every write site
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("cron", ["0 0 15 * 5", "0 0 1 * 1", "0 0 */2 * MON"])
+async def test_create_job_refuses_a_cron_restricting_both_day_fields(app, auth_headers, cron):
+    """F1: `0 0 15 * 5` was accepted, stored with `next_run` 2026-08-28, and fired 2027-05-15.
+
+    APScheduler ANDs day-of-month with day-of-week; croniter — which computes the `next_run` the
+    card shows, and which matches every other crontab on the operator's machine — ORs them. The
+    expression is valid to both libraries and means two different things, so it is refused rather
+    than silently assigned one of the two readings.
+    """
+    resp = await app.post(
+        "/api/v1/projects/proj-test/jobs",
+        json={"name": "Ambiguous", "agent": "kimi", "message": "x", "cron": cron},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 400
+    detail = resp.json()["detail"]
+    # The refusal has to be actionable: it names both offending fields and the way out, because
+    # "invalid cron" alone reads as a typo in a string that works everywhere else.
+    assert "day-of-month" in detail and "day-of-week" in detail
+    assert "two jobs" in detail
+
+    listed = await app.get("/api/v1/projects/proj-test/jobs", headers=auth_headers)
+    assert [j for j in listed.json() if j["cron"] == cron] == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "cron",
+    [
+        "0 9 * * *",  # neither day field restricted
+        "0 9 * * 1-5",  # weekdays only — day-of-month is `*`
+        "0 9 15 * *",  # the 15th — day-of-week is `*`
+        "0 9 15 * 0-6",  # every weekday listed out is not a restriction
+        "0 9 15 * 1-7",  # ...nor is 1-7, where 7 is Sunday again
+    ],
+)
+async def test_create_job_still_accepts_every_unambiguous_cron(app, auth_headers, cron):
+    """The refusal must be narrow. A validator that guessed would reject working schedules."""
+    resp = await app.post(
+        "/api/v1/projects/proj-test/jobs",
+        json={"name": f"Fine {cron}", "agent": "kimi", "message": "x", "cron": cron},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201, resp.json()
+    assert resp.json()["cron"] == cron
+
+
+@pytest.mark.asyncio
+async def test_update_job_refuses_a_cron_restricting_both_day_fields(app, auth_headers):
+    """The same rule on the update path, or the expression walks in through the back door."""
+    create_resp = await app.post(
+        "/api/v1/projects/proj-test/jobs",
+        json={"name": "Retimed", "agent": "kimi", "message": "x", "cron": "0 9 * * *"},
+        headers=auth_headers,
+    )
+    job_id = create_resp.json()["id"]
+
+    resp = await app.patch(
+        f"/api/v1/projects/proj-test/jobs/{job_id}",
+        json={"cron": "0 0 15 * 5"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 400
+    assert "day-of-week" in resp.json()["detail"]
+
+    # Refused before anything was written: the job keeps the schedule it had.
+    after = await app.get(f"/api/v1/projects/proj-test/jobs/{job_id}", headers=auth_headers)
+    assert after.json()["cron"] == "0 9 * * *"
+
+
+# ---------------------------------------------------------------------------
+# Finding F13 — re-enabling a loop that has already ended is refused, not undone
+# ---------------------------------------------------------------------------
+
+
+async def _ended_loop_job(app, auth_headers, *, name, ending_state, stop_reason):
+    """A job whose loop has ended, in the state `_do_fire_job`'s stop branch leaves behind."""
+    from datetime import datetime, timezone
+
+    from sqlalchemy import select
+
+    from hub.db.engine import async_session_factory
+    from hub.db.models import AIJob, Loop
+
+    create = await app.post(
+        "/api/v1/projects/proj-test/jobs",
+        json={
+            "name": name,
+            "agent": "kimi",
+            "message": "loop work",
+            "cron": "0 9 * * *",
+            "purpose": "a loop that finished",
+            "stop_when_queue_empties": True,
+        },
+        headers=auth_headers,
+    )
+    assert create.status_code == 201, create.json()
+    job_id = create.json()["id"]
+
+    async with async_session_factory() as db:
+        job = await db.get(AIJob, job_id)
+        job.enabled = False
+        loop = (await db.execute(select(Loop).where(Loop.job_id == job_id))).scalar_one()
+        loop.ending_state = ending_state
+        loop.stop_reason = stop_reason
+        loop.stopped_at = datetime.now(timezone.utc)
+        await db.commit()
+    return job_id
+
+
+@pytest.mark.asyncio
+async def test_reenabling_a_finished_loop_is_refused(app, auth_headers):
+    """F13: PATCH {"enabled": true} returned 200 on a loop carrying `ending_state: completed`.
+
+    Measured 2026-08-23: the loop then read `enabled: true` alongside `stopped_at` and
+    `stop_reason` for one minute, fired once more, re-stopped itself, and set `enabled` back to
+    false — the operator's action silently undone, with only a history row to say why.
+    """
+    job_id = await _ended_loop_job(
+        app,
+        auth_headers,
+        name="Finished Loop",
+        ending_state="completed",
+        stop_reason="loop queue is empty",
+    )
+
+    resp = await app.patch(
+        f"/api/v1/projects/proj-test/jobs/{job_id}",
+        json={"enabled": True},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 409
+    detail = resp.json()["detail"]
+    assert detail["code"] == "loop_ended"
+    assert detail["ending_state"] == "completed"
+    assert detail["stop_reason"] == "loop queue is empty"
+    assert detail["stopped_at"] is not None
+    # Says what to do instead. A new loop, not "give this one work": D12 closes an ended loop's
+    # queue to every caller including the operator, so there is no way to feed this one.
+    assert "Create a new loop" in detail["message"]
+
+    after = await app.get(f"/api/v1/projects/proj-test/jobs/{job_id}", headers=auth_headers)
+    assert after.json()["enabled"] is False
+
+
+@pytest.mark.asyncio
+async def test_a_loop_stopped_by_its_stop_at_also_refuses_re_enabling(app, auth_headers):
+    """`completed` is not the only ending — a `stopped` loop is just as closed."""
+    job_id = await _ended_loop_job(
+        app,
+        auth_headers,
+        name="Timed Out Loop",
+        ending_state="stopped",
+        stop_reason="loop reached its stop time",
+    )
+
+    resp = await app.patch(
+        f"/api/v1/projects/proj-test/jobs/{job_id}",
+        json={"enabled": True},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 409
+    assert resp.json()["detail"]["ending_state"] == "stopped"
+
+
+@pytest.mark.asyncio
+async def test_a_merely_paused_loop_can_still_be_re_enabled(app, auth_headers):
+    """The refusal turns on `ending_state`, not on `enabled`.
+
+    D6 rejected a third "paused" state: a loop an operator disabled by hand leaves `ending_state`,
+    `stop_reason` and `stopped_at` all NULL, and resuming it is ordinary. If this ever 409s, the
+    fix for F13 has taken the pause button with it.
+    """
+    create = await app.post(
+        "/api/v1/projects/proj-test/jobs",
+        json={
+            "name": "Paused Loop",
+            "agent": "kimi",
+            "message": "loop work",
+            "cron": "0 9 * * *",
+            "purpose": "still going",
+            "stop_when_queue_empties": True,
+        },
+        headers=auth_headers,
+    )
+    job_id = create.json()["id"]
+
+    pause = await app.patch(
+        f"/api/v1/projects/proj-test/jobs/{job_id}",
+        json={"enabled": False},
+        headers=auth_headers,
+    )
+    assert pause.status_code == 200
+    assert pause.json()["enabled"] is False
+
+    resume = await app.patch(
+        f"/api/v1/projects/proj-test/jobs/{job_id}",
+        json={"enabled": True},
+        headers=auth_headers,
+    )
+    assert resume.status_code == 200
+    assert resume.json()["enabled"] is True
+
+
+@pytest.mark.asyncio
+async def test_re_enabling_an_ordinary_job_is_untouched_by_the_loop_refusal(app, auth_headers):
+    """A job with no `Loop` row at all never reaches the F13 check."""
+    create = await app.post(
+        "/api/v1/projects/proj-test/jobs",
+        json={
+            "name": "Plain Job",
+            "agent": "kimi",
+            "message": "x",
+            "cron": "0 9 * * *",
+            "enabled": False,
+        },
+        headers=auth_headers,
+    )
+    job_id = create.json()["id"]
+
+    resume = await app.patch(
+        f"/api/v1/projects/proj-test/jobs/{job_id}",
+        json={"enabled": True},
+        headers=auth_headers,
+    )
+    assert resume.status_code == 200
+    assert resume.json()["enabled"] is True

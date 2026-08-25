@@ -58,6 +58,10 @@ EXCLUDE_END = "# End AgentWeave"
 #: it is tracked and these rules no longer apply to it.
 EXCLUDE_PATTERNS = [
     ".agentweave/worktrees/",
+    # A reviewing agent's detached checkout of the code under review. Same reason as the line above
+    # and the same failure if it is missing: `snapshot_worktree` runs `git add -A`, so an agent that
+    # both writes and reviews would commit an entire second checkout onto its own branch.
+    ".agentweave/reviews/",
     ".agentweave/logs/",
     ".agentweave/evidence/",
     # Rewritten from the canonical context on every single turn (`agent_trigger`), so it is pure

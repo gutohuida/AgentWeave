@@ -13,6 +13,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ... import bound_address, project_workspace, spec_documents, spec_lifecycle, worktrees
+from ...agent_activity import latest_activity_by_agent
 from ...agent_colors import next_color_index
 from ...agent_lifecycle import archivable as agent_archivable
 from ...agent_lifecycle import archive as archive_agent_row
@@ -43,6 +44,7 @@ from ...inbound_queue import new_entry
 from ...launchability import get_agent_config, probe_agent
 from ...model_catalog import get_provider, permission_mode_values
 from ...output_recording import record_agent_output, record_context_usage
+from ...review_turn import ReviewContext
 from ...schemas.agents import (
     AgentHeartbeatCreate,
     AgentOutputCreate,
@@ -52,12 +54,16 @@ from ...schemas.agents import (
     ContextUsageCreate,
 )
 from ...sse import sse_manager
+from ...task_transitions import LIVE_STATUSES
 from ...utils import persist_event, short_id
 
 router = APIRouter(prefix="/agents", tags=["agents"])
 
 _24H = timedelta(hours=24)
-_ACTIVE_TASK_STATUSES = ("pending", "assigned", "in_progress", "under_review", "revision_needed")
+# One derived set, shared with `checkpoints._LIVE_TASK_STATUSES`, which held the identical
+# five statuses in a separate literal until `loop-notices-and-reacts` 3.8. Two copies of one
+# answer is the drift shape all three of this product's loop stall bugs came out of.
+_ACTIVE_TASK_STATUSES = tuple(sorted(LIVE_STATUSES))
 _AGENT_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]{1,32}$")
 _CONTACT_MODES = ("poll", "mcp-push", "watchdog-spawn")
 
@@ -395,6 +401,13 @@ async def list_agents(
     running_run_res = await session.execute(running_run_q)
     agents_with_active_run = {name for (name,) in running_run_res}
 
+    # F17: when each agent was last observed doing anything — runs and output, not only the
+    # heartbeat rows that a Hub-spawned agent never writes. See `agent_activity` for why the
+    # heartbeat-only reading made every managed agent read "No activity yet" forever.
+    activity_by_agent = await latest_activity_by_agent(
+        session, project_id, agent_names, heartbeats=latest_hbs
+    )
+
     # Bulk fetch message counts (last 24h) per agent
     sender_counts_q = (
         select(Message.sender, func.count())
@@ -534,7 +547,7 @@ async def list_agents(
                 description=(agent_row.description if agent_row else None),
                 status=effective_status,
                 latest_status_msg=effective_status_message,
-                last_seen=hb.timestamp if hb else None,
+                last_seen=activity_by_agent.get(agent_name),
                 message_count=msg_count,
                 active_task_count=task_count,
                 lifecycle=(agent_row.lifecycle if agent_row else "open"),
@@ -942,8 +955,16 @@ def _tool_surface_lines(*, has_peers: bool = True) -> List[str]:
         "stop_when_queue_empties=False, spec_document_id=None, initial_tasks=None)` — a job that "
         "also queues its own work, each firing claiming the queue's current task. Refused with no "
         "HTTP call made unless at least one of `stop_at` or `stop_when_queue_empties` is given: a "
-        "loop that cannot stop is not created. `initial_tasks` seeds the queue at creation, each "
+        "loop that cannot stop is not created, and refused if `spec_document_id` is given: a loop "
+        "that declares a document is a flow. `initial_tasks` seeds the queue at creation, each "
         "entry the same shape `create_task` takes. Same allowance as `create_job`.",
+        '- `create_flow(name, agent, message, spec_document_id, cron, purpose="", stop_at=None, '
+        "stop_when_queue_empties=False, initial_tasks=None)` — a loop that decomposes an approved "
+        "specification document. Same row and same allowance as `create_loop`; what differs is the "
+        "queue behaviour. Each firing starts every task whose prerequisites are met and for which "
+        "an agent is free, so independent work runs in parallel, and a task somebody finished "
+        "becomes claimable by anybody except its author — which is how work is reviewed without "
+        "the author being asked to hand it over. `agent` is the default, not the mandate.",
         "",
         (
             "Address a peer by its exact name from the roster above. There is no inbox tool: "
@@ -1001,6 +1022,7 @@ async def _render_hub_agent_context(
     spec_document: Optional[str] = None,
     task_spec_document: Optional[str] = None,
     task_id: Optional[str] = None,
+    review: Optional[ReviewContext] = None,
 ) -> Dict[str, Any]:
     """Render the canonical model-facing context for one agent.
 
@@ -1079,7 +1101,47 @@ async def _render_hub_agent_context(
     if work_dir:
         lines.append("### Your workspace")
         lines.append(f"- Working directory: `{work_dir}`")
-        if isolated:
+        if review is not None:
+            # The other half of design D4. The boundary already put this agent somewhere it cannot
+            # damage the author's checkout; what it cannot do is stop the agent deciding it is here
+            # to build. Said first, before anything about branches, because everything below reads
+            # differently once you know you are reviewing.
+            lines.append(
+                "- **This is a review turn. You are reviewing someone else's work, not doing your "
+                "own.**"
+            )
+            lines.append(
+                f"- Under review: task `{review.task_id}` — {review.task_title}, at commit "
+                f"`{review.commit_sha}`"
+                + (f" from branch `{review.branch}`." if review.branch else ".")
+            )
+            lines.append(
+                "- This directory is a detached checkout of that commit. `git status` will say "
+                "`HEAD detached` — that is correct and expected, not a problem to fix."
+            )
+            lines.append(
+                "- Read it, search it, and **run its test suite**. Verifying the evidence yourself "
+                "is the reason you were given a checkout rather than a diff."
+            )
+            lines.append(
+                "- Do not fix what you find. Report it. The author makes the change, through "
+                "`revision_needed` — a reviewer that edits the work has reviewed its own work."
+            )
+            lines.append(
+                "- Your own working checkout is outside this turn's boundary. You are not in it "
+                "and cannot reach it from here."
+            )
+            if review.work_moved:
+                # Design D5: told, not silently handed the newest. An agent that knows the work
+                # moved can ask why; one that does not cannot.
+                moved = ", ".join(
+                    f"`{c.commit_sha}` ({c.evidence_id})" for c in review.earlier_commits
+                )
+                lines.append(
+                    f"- Earlier evidence for this task named a different commit: {moved}. You have "
+                    "the most recent one. If that difference matters to your verdict, ask."
+                )
+        elif isolated:
             lines.append(
                 f"- This is an isolated git worktree on branch `{worktrees.branch_name(agent)}`."
             )

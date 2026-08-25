@@ -1,7 +1,8 @@
 ## Context
 
-A loop is *"an `AIJob` wearing a purpose and an optional stop condition"* with 24 requirements
-accumulated around it. Its firing path (`hub/hub/scheduler.py::_do_fire_job`) asks exactly one
+A loop is *"an `AIJob` wearing a purpose and an optional stop condition"* with 27 requirements
+accumulated around it *(24 when this was written; `task-dependencies` added §690 and §723)*. Its
+firing path (`hub/hub/scheduler.py::_do_fire_job`) asks exactly one
 question before working — *should this loop stop?* — and otherwise proceeds. This change adds the
 question it should also be asking before it works: *is my agent already busy?* — and adds the
 vocabulary and the shared decision point that make the answer trustworthy.
@@ -26,9 +27,13 @@ Neither was specified through openspec; the `agent-loops` delta in this change i
 refusal gets its requirement, retroactively and deliberately.
 
 **The constraint that shapes everything below.** `_batch_loop_summaries`
-(`hub/hub/api/v1/jobs.py:170`) imports `CLAIMABLE_LOOP_TASK_STATUSES` and `_loop_queue_order` from
-the scheduler rather than restating them, because the board and the firing must not disagree about
-which queue item is current. `_loop_queue_order`'s own comment records what happened the one time
+(`hub/hub/api/v1/jobs.py`) imports its status set, `_loop_queue_order` and `candidate_is_startable`
+from the scheduler rather than restating them, because the board and the firing must not disagree
+about which queue item is current. *(Updated 2026-08-24: it used to import
+`CLAIMABLE_LOOP_TASK_STATUSES` and restate the startability rule inline. `loop-becomes-a-flow`
+group 1 extracted `candidate_is_startable` so the rule is shared rather than mirrored, and the set
+it imports is now `CURRENT_ITEM_TASK_STATUSES` — see D9's corrected table for why those are two
+sets.)* `_loop_queue_order`'s own comment records what happened the one time
 they drifted: *"Both derivations shared the flaw, so the board and the firing agreed on the wrong
 task — two consistent wrong answers read as a match, which is how it survived review."*
 
@@ -90,7 +95,7 @@ board must be able to say *why* a loop is doing nothing from the same computatio
 ### D4 — A busy firing records nothing at all
 
 There is no already-running guard in the firing path today; `schedule_agent` refuses to *start* a
-turn (`hub/hub/turn_scheduler.py:43`) but the firing has already claimed and queued by then.
+turn (`hub/hub/turn_scheduler.py:44`) but the firing has already claimed and queued by then.
 **Measured:** five firings during one turn produced five queued entries and five `JobRun`s, which the
 agent then drains as five separate turns all briefed on the same task.
 
@@ -99,8 +104,8 @@ The guard is the same shape as `_job_agent_skip_reason`, already in that functio
 
 It writes no `JobRun`. A busy tick carries no information the `in_progress` `JobRun` does not already
 carry, and `_batch_loop_summaries` reads exactly that row to decide whether a loop is running
-(`hub/hub/api/v1/jobs.py:216`). Recording the tick would duplicate a fact and evict real history
-through `_prune_job_history`'s 100-row window.
+(`hub/hub/api/v1/jobs.py`, the `firing_active` query). Recording the tick would duplicate a fact
+and evict real history through `_prune_job_history`'s 100-row window.
 
 *Rejected:* **recording busy ticks behind a UI filter.** The prune window still fills, so real
 history ages out at a fast cron — the problem moved rather than solved.
@@ -113,7 +118,7 @@ No re-brief. See D1.
 
 A stall records one `JobRun`, and subsequent refusals for the same stall increment a count on it.
 
-The precedent is `InboundQueueEntry.delivery_attempts` (`hub/hub/db/models.py:551-557`), which chose
+The precedent is `InboundQueueEntry.delivery_attempts` (`hub/hub/db/models.py:561`), which chose
 a counter over duplicate rows for the identical problem: *"an entry returned five times is
 indistinguishable from one never tried."*
 
@@ -138,14 +143,30 @@ must never disable the job is unchanged and restated wherever it lands.
 
 ### D9 — One status vocabulary, four derived sets, no membership changes
 
-Four constants answer *"is this task live?"* and none knows the others exist:
+**Corrected 2026-08-24.** This table said `CLAIMABLE_LOOP_TASK_STATUSES` contained `blocked`. It
+has not since 2026-08-21, when `blocked` left the claim to stop a firing spawning an agent every
+tick against work that cannot move. There are also five constants now, not four. The membership
+column below is measured, not remembered:
 
 | Constant | Where | Members |
 |---|---|---|
-| `CLAIMABLE_LOOP_TASK_STATUSES` | `hub/hub/scheduler.py` | `pending assigned in_progress blocked revision_needed` |
-| `TERMINAL_FOR_BINDING` | `hub/hub/run_task_binding.py:272` | `approved rejected` |
+| `CLAIMABLE_LOOP_TASK_STATUSES` | `hub/hub/scheduler.py` | `in_progress assigned pending revision_needed` |
+| `CURRENT_ITEM_TASK_STATUSES` | `hub/hub/scheduler.py` | the above **plus `blocked`** |
+| `TERMINAL_FOR_BINDING` | `hub/hub/run_task_binding.py:293` | `approved rejected` |
 | `_ACTIVE_TASK_STATUSES` | `hub/hub/api/v1/agents.py:60` | `pending assigned in_progress under_review revision_needed` |
 | `_LIVE_TASK_STATUSES` | `hub/hub/checkpoints.py:62` | identical to the row above |
+
+**`CURRENT_ITEM_TASK_STATUSES` was added on 2026-08-24 to fix a live defect, and it is the sharpest
+argument for this whole decision.** The board was using the *claimable* set to answer *"what is this
+loop working on"*. When `blocked` left the claimable set — correctly, for the claim — the board
+silently lost sight of blocked tasks with it, so a loop parked on an unanswered question reported
+`queue: {blocked: 1}` and **no current item**. The one surface that exists to say what a loop is
+waiting for said nothing was happening. Reproduced before the fix; no test covered it.
+
+So the framing above — *four constants answer "is this task live?"* — is itself the trap. They do
+**not** all answer one question. `blocked` is *no* to "may a firing claim this?" and *yes* to "is
+this the loop's current work?", and a classification that cannot express that difference will
+re-merge them and reproduce the defect.
 
 **Both stall bugs fixed on 2026-08-20 lived in the gaps.** The spin, because `completed` was in
 neither of the first two. `revision_needed`, because it was in neither — while the *other two* sets
@@ -171,7 +192,7 @@ rewriting it immediately.
 
 ### D10 — Five minutes
 
-There is no default to change: `create_loop` requires `cron` (`hub/hub/mcp_server.py:541`) and the
+There is no default to change: `create_loop` requires `cron` (`hub/hub/mcp_server.py:547`) and the
 UI's five examples bottom out at every six hours (`hub/ui/src/components/jobs/JobForm.tsx:13-19`). So
 a loop polls on whatever the caller invents, and until the busy guard lands the honest advice is
 *slowly*, because a fast tick manufactures duplicate briefings.
@@ -212,9 +233,19 @@ Rollback is dropping the tick column and restoring the literals.
 
 ## Open Questions
 
-- **What band does `blocked` belong to under D9?** It is claimable by the loop yet means *"waiting on
-  a person"*. Today's sets disagree — `CLAIMABLE_LOOP_TASK_STATUSES` includes it, the other three do
-  not. The classification must state which it is, and the answer is not obvious from existing code.
+- ~~**What band does `blocked` belong to under D9?**~~ **Answered 2026-08-21, before this change
+  starts.** `openspec/explorations/2026-08-21-which-band-blocked-belongs-to.md` decided it, and
+  `scheduler.py` carries the reasoning in full: `blocked` sits with `completed` and `under_review`
+  in the *"someone else's turn"* band, and its "someone else" is the most literal of the three — a
+  person holding an unanswered question. The test that separates it from `revision_needed`, which
+  went the other way the day before, is whether firing an agent makes progress *possible*.
+  The premise of the question was also wrong: it said `CLAIMABLE_LOOP_TASK_STATUSES` includes
+  `blocked`. It does not.
+
+  **What is still open is narrower and newer:** a band alone cannot produce both
+  `CLAIMABLE_LOOP_TASK_STATUSES` and `CURRENT_ITEM_TASK_STATUSES`, because `blocked` belongs to one
+  and not the other. Deriving both from one classification needs the sets to be defined as unions
+  of bands *per question*, not as a single "live" band — see D9.
 
 **Closed since first drafting:**
 

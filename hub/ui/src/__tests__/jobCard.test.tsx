@@ -101,6 +101,68 @@ describe('JobCard loop block', () => {
     expect(screen.queryByTestId('job-loop-block')).not.toBeInTheDocument()
   })
 
+  it('lists every current item with its agent when a flow staffs several', async () => {
+    // `loop-becomes-a-flow` task 9.3, design D15. The card took `current_tasks[0]` while a firing
+    // could only claim one thing; a flow claims several, and showing the first implies it is the
+    // only one — the card under-reports exactly when the operator most needs to know what is going
+    // on.
+    const user = userEvent.setup()
+    loopTasks = [{ id: 'task-1' }, { id: 'task-2' }, { id: 'task-3' }]
+    renderCard(
+      baseJob({
+        loop: {
+          id: 'loop-1',
+          label: 'Dependency bumps',
+          purpose: 'Keep dependencies current',
+          stop_when_queue_empties: true,
+          queue: { in_progress: 3 },
+          current_tasks: [
+            { id: 'task-1', title: 'Bump lodash', status: 'in_progress', agent: 'builder' },
+            { id: 'task-2', title: 'Fix row 42', status: 'in_progress', agent: 'critic' },
+            { id: 'task-3', title: 'Review schema', status: 'completed', agent: 'auditor' },
+          ],
+          open_questions: 0,
+          firing_active: true,
+        },
+      }),
+    )
+
+    await user.click(screen.getByLabelText('Expand job details'))
+    const list = screen.getByTestId('job-loop-current-tasks')
+    expect(within(list).getByText('Bump lodash (in_progress)')).toBeInTheDocument()
+    expect(within(list).getByText('Fix row 42 (in_progress)')).toBeInTheDocument()
+    expect(within(list).getByText('Review schema (completed)')).toBeInTheDocument()
+    for (const agent of ['builder', 'critic', 'auditor']) {
+      expect(within(list).getByText(agent)).toBeInTheDocument()
+    }
+  })
+
+  it('omits the agent label entirely when nobody is attributed', async () => {
+    // Absent rather than blank, matching what the API sends: a reader is never shown an empty
+    // space where a name should be. A blocked task with no assignee is the case that reaches this.
+    const user = userEvent.setup()
+    loopTasks = [{ id: 'task-1' }]
+    renderCard(
+      baseJob({
+        loop: {
+          id: 'loop-1',
+          label: 'Dependency bumps',
+          purpose: 'Keep dependencies current',
+          stop_when_queue_empties: true,
+          queue: { blocked: 1 },
+          current_tasks: [{ id: 'task-1', title: 'Waiting on you', status: 'blocked' }],
+          open_questions: 1,
+          firing_active: false,
+        },
+      }),
+    )
+
+    await user.click(screen.getByLabelText('Expand job details'))
+    const list = screen.getByTestId('job-loop-current-tasks')
+    expect(within(list).getByText('Waiting on you (blocked)')).toBeInTheDocument()
+    expect(list.textContent).toBe('Waiting on you (blocked)')
+  })
+
   it('renders purpose, queue counts, current item and open questions when job.loop is set', async () => {
     const user = userEvent.setup()
     loopTasks = [{ id: 'task-1' }, { id: 'task-2' }]
@@ -112,7 +174,7 @@ describe('JobCard loop block', () => {
           purpose: 'Keep dependencies current',
           stop_when_queue_empties: true,
           queue: { pending: 1, in_progress: 1 },
-          current_task: { id: 'task-1', title: 'Bump lodash', status: 'in_progress' },
+          current_tasks: [{ id: 'task-1', title: 'Bump lodash', status: 'in_progress' }],
           open_questions: 2,
           firing_active: false,
         },
@@ -147,7 +209,7 @@ describe('JobCard loop block', () => {
           stop_reason: 'queue empty',
           stopped_at: '2026-08-17T01:00:00Z',
           queue: {},
-          current_task: null,
+          current_tasks: [],
           open_questions: 0,
           firing_active: false,
         },
@@ -172,7 +234,7 @@ describe('JobCard loop block', () => {
           purpose: '',
           stop_when_queue_empties: false,
           queue: { in_progress: 1 },
-          current_task: { id: 'task-1', title: 'Bump lodash', status: 'in_progress' },
+          current_tasks: [{ id: 'task-1', title: 'Bump lodash', status: 'in_progress' }],
           open_questions: 0,
           firing_active: false,
         },
@@ -235,5 +297,58 @@ describe('JobCard run history', () => {
 
     await user.click(screen.getByLabelText('Expand job details'))
     expect(screen.getByText('No runs yet')).toBeInTheDocument()
+  })
+
+  /**
+   * A continuing stall counts in place (design D6): no new row, and `fired_at` stays at the first
+   * refusal so later real firings still sort above it. That is right for the history as a whole
+   * and wrong for the row on its own — text frozen, timestamp ageing — which is a loop being
+   * re-checked every five minutes wearing the appearance of one nobody has touched. The count is
+   * the only thing separating the two, and it was recorded but not rendered.
+   */
+  it('says how many times a stalled firing has been re-checked', async () => {
+    const user = userEvent.setup()
+    loopTasks = []
+    jobHistory = {
+      data: [
+        {
+          id: 'run-stall',
+          job_id: 'job-1',
+          fired_at: '2026-08-24T09:00:00Z',
+          status: 'skipped',
+          trigger: 'scheduled',
+          error_summary: 'loop queue is stalled: no claimable task among 2 open (2 completed)',
+          tick_count: 9,
+        },
+      ],
+      isLoading: false,
+    }
+    renderCard(baseJob())
+
+    await user.click(screen.getByLabelText('Expand job details'))
+    expect(screen.getByTestId('job-run-ticks-run-stall')).toHaveTextContent('re-checked 9 times')
+  })
+
+  it('does not label a single firing as re-checked', async () => {
+    const user = userEvent.setup()
+    loopTasks = []
+    jobHistory = {
+      data: [
+        {
+          id: 'run-once',
+          job_id: 'job-1',
+          fired_at: '2026-08-24T09:00:00Z',
+          status: 'skipped',
+          trigger: 'scheduled',
+          error_summary: 'loop queue is stalled: no claimable task among 1 open (1 completed)',
+          tick_count: 1,
+        },
+      ],
+      isLoading: false,
+    }
+    renderCard(baseJob())
+
+    await user.click(screen.getByLabelText('Expand job details'))
+    expect(screen.queryByTestId('job-run-ticks-run-once')).not.toBeInTheDocument()
   })
 })

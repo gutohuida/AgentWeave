@@ -102,6 +102,10 @@ export function SpecTree({ inventory, currentPath = null, onSelect, density = 'd
             aria-expanded={!isCollapsed(row.path)}
             onClick={() => toggle(row.path)}
             title={row.path}
+            // The same `.row-item` treatment `FileTree` uses, and for the same reason: these two
+            // trees sit in the same rail and the same panel, and a row that highlights on hover
+            // beside one that does not reads as one of them being broken.
+            className={row.depth > 0 ? 'row-item panel-tree-row' : 'row-item'}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -110,13 +114,13 @@ export function SpecTree({ inventory, currentPath = null, onSelect, density = 'd
               padding: '7px 10px 3px',
               paddingLeft: 10 + row.depth * indent,
               border: 'none',
-              background: 'none',
               fontSize: 12,
               fontWeight: 600,
               color: 'var(--text-3)',
               textAlign: 'left',
               cursor: 'pointer',
-            }}
+              '--tree-guide-x': `${Math.max(6, 10 + (row.depth - 1) * indent)}px`,
+            } as React.CSSProperties}
           >
             <span
               style={{
@@ -127,7 +131,9 @@ export function SpecTree({ inventory, currentPath = null, onSelect, density = 'd
             >
               <Icon name="chevron_right" size={14} />
             </span>
-            <Icon name="folder_open" size={14} />
+            {/* Folded folders were drawing `folder_open` regardless — the chevron said one thing
+                and the glyph the other. `folder` exists in the icon map now, so the two agree. */}
+            <Icon name={isCollapsed(row.path) ? 'folder' : 'folder_open'} size={14} />
             {row.label}
           </button>
         ) : (
@@ -142,6 +148,7 @@ export function SpecTree({ inventory, currentPath = null, onSelect, density = 'd
             data-active={row.path === currentPath ? 'true' : 'false'}
             onClick={() => row.node && onSelect(row.node)}
             title={row.path}
+            className="row-item panel-tree-row"
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -152,7 +159,9 @@ export function SpecTree({ inventory, currentPath = null, onSelect, density = 'd
               // being *in* the folder above it.
               paddingLeft: 10 + row.depth * indent + 18,
               border: 'none',
-              background: row.path === currentPath ? 'var(--surface-2)' : 'none',
+              // No resting fill for the open document: `.row-item[data-active="true"]` marks it
+              // with weight and colour, and the fill is reserved for hover and press
+              // (2026-08-04-hub-charcoal-visual-refresh). `FileTree` already follows that rule.
               color: row.path === currentPath ? 'var(--text)' : 'var(--text-2)',
               fontSize: 13,
               textAlign: 'left',
@@ -161,7 +170,8 @@ export function SpecTree({ inventory, currentPath = null, onSelect, density = 'd
               // a document the operator can still choose to read, just not one that is current.
               opacity: row.node?.missing ? 0.55 : row.node?.archived ? 0.65 : 1,
               borderRadius: 'var(--radius-sm)',
-            }}
+              '--tree-guide-x': `${Math.max(6, 10 + (row.depth - 1) * indent)}px`,
+            } as React.CSSProperties}
           >
             <Icon name={row.node?.archived ? 'archive' : 'article'} size={14} />
             <span className="truncate">{row.label}</span>

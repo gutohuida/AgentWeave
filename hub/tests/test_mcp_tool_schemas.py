@@ -132,6 +132,29 @@ def test_create_loop_offers_exactly_the_fields_the_route_it_posts_to_accepts():
     assert offered == accepted
 
 
+def test_create_flow_offers_the_same_fields_and_requires_the_document():
+    """`loop-becomes-a-flow` task 7.4. `create_flow` posts to the same route, so it is held to the
+    same agreement — CLAUDE.md's rule that anything `mcp_server.py` restates from the Hub carries a
+    test asserting the two agree.
+
+    The tiers differ in `required`, not in `properties`, and that is deliberate (design D1: one
+    route, one row). `spec_document_id` is declared `str` rather than `Optional[str]` so the schema
+    itself carries the requirement and a caller's client refuses before a request is made; the
+    client-side check in `create_flow` covers what a schema cannot, which is the empty string.
+    """
+    from hub.api.v1.agent_actions import AgentJobCreate
+
+    offered = set(_schemas()["create_flow"]["properties"])
+    accepted = set(AgentJobCreate.model_fields) - {"session_mode", "enabled"}
+    assert offered == accepted
+
+    flow_required = set(_schemas()["create_flow"].get("required", []))
+    loop_required = set(_schemas()["create_loop"].get("required", []))
+    assert "spec_document_id" in flow_required
+    assert "spec_document_id" not in loop_required
+    assert flow_required - {"spec_document_id"} == loop_required
+
+
 class TestReadableDetail:
     """A rejection an agent can act on, rather than a stringified list of Pydantic dicts."""
 

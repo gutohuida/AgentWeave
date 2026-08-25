@@ -11,6 +11,11 @@ export interface JobRun {
   session_id?: string
   message_id?: string
   error_summary?: string
+  /** How many firings this one record stands for (`loop-notices-and-reacts` design D6).
+   *  1 on a firing that happened; higher only on a stall record, where each further refusal for
+   *  the same stall counts here instead of appending a row. Optional because a Hub older than
+   *  migration `0087` does not send it. */
+  tick_count?: number
 }
 
 /**
@@ -53,7 +58,15 @@ export interface LoopSummary {
   archived_at?: string | null
   /** status -> count of this loop's non-fetched-yet-terminal tasks, keyed by `Task.status`. */
   queue: Record<string, number>
-  current_task?: { id: string; title: string; status: string } | null
+  // `loop-becomes-a-flow` task 1.5: a list, because a flow may staff several tasks at once.
+  // Group 1 changes no behaviour, so it holds zero or one and renders as the scalar did.
+  /** Every task the loop is currently working, in queue order. Several when a flow staffs
+   *  several (design D15). `agent` is absent rather than blank when nobody is attributed. */
+  current_tasks?: { id: string; title: string; status: string; agent?: string }[]
+  // Why the next firing would be refused, or absent if it would proceed
+  // (`loop-notices-and-reacts` 5.5). From the Hub's own firing decision, never inferred from
+  // the queue counts, so the board cannot say one thing while the firing does another.
+  stall_reason?: string | null
   open_questions: number
   /** Who may extend this queue (design D10). Null means the current default, the operator —
    *  returned unresolved by the Hub, so it is left unresolved here too. */

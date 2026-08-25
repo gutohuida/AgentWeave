@@ -14,6 +14,11 @@ export interface PanelTabDescriptor {
   id: TabId
   label: string
   icon: string
+  /** How much is waiting behind this panel right now, shown as a badge on its launcher card. The
+   *  caller supplies it — the shell fetches nothing and stays ignorant of what a `loops` or `spec:`
+   *  tab is — and `0` or `undefined` shows no badge at all: a badge is a reason to look, and
+   *  "nothing is happening" is not one. */
+  count?: number
 }
 
 /** One line saying what a panel is *for*, shown only on the empty-state launcher cards. Keyed by
@@ -223,6 +228,18 @@ export function PanelShell({ projectId, availableTabs, describeTab, renderTabCon
                     cursor: 'pointer',
                   }}
                 >
+                  {/* The empty state used to discard a number the app already had: with nothing
+                      open, the operator could not tell whether Loops held three running loops or
+                      none. Green because it counts live work — the same thing the loops index's
+                      own Running badge means. */}
+                  {(descriptor.count ?? 0) > 0 && (
+                    <span
+                      className="panel-launcher-badge"
+                      data-testid={`panel-launch-badge-${descriptor.id}`}
+                    >
+                      {descriptor.count}
+                    </span>
+                  )}
                   <Icon name={descriptor.icon} size={18} />
                   <span style={{ fontSize: 13, fontWeight: 500 }}>{descriptor.label}</span>
                   <span style={{ fontSize: 12, color: 'var(--text-3)' }}>

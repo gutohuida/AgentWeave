@@ -23,6 +23,14 @@ export const MIN_FIRINGS_TO_GROUP = 2
  * recency: a firing that happened between two things the operator did belongs between them. So a
  * loop that fired, was interrupted, and fired again yields two groups, correctly.
  *
+ * **A change of agent breaks a run too** (`loop-becomes-a-flow` group 9). Until a flow existed this
+ * could not happen: one loop fired one agent, so every firing in a run was theirs. A flow staffs
+ * several, and `LoopFiringGroup` takes a single `agentName` and `agentColor` for the whole row — so
+ * a run spanning agents would label three agents' work with whichever one happened to be first, in
+ * the one view (`RecencyView`) that is project-wide and colour-codes by agent. `AgentTree` is
+ * unaffected either way, since its list is already one agent's; the guard is cheap and belongs here
+ * rather than at one of the two call sites, so the two cannot drift.
+ *
  * Input order is preserved exactly, and every conversation appears exactly once.
  */
 export function groupConsecutiveFirings(
@@ -41,7 +49,12 @@ export function groupConsecutiveFirings(
     }
 
     let end = index + 1
-    while (end < conversations.length && conversations[end].loop?.id === loop.id) end += 1
+    while (
+      end < conversations.length &&
+      conversations[end].loop?.id === loop.id &&
+      conversations[end].agent === conversation.agent
+    )
+      end += 1
     const run = conversations.slice(index, end)
 
     if (run.length >= MIN_FIRINGS_TO_GROUP) {

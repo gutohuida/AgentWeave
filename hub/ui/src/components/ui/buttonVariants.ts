@@ -28,7 +28,10 @@ const buttonVariants = cva(
     'border border-transparent',
     'transition-[background-color,border-color,box-shadow,color,opacity]',
     'duration-[var(--dur-fast)] ease-[var(--ease)]',
-    'focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-1',
+    // One focus recipe across the product: a 2px `--bg` gap then a 2px `--ring`. This used to be
+    // ring-offset-1, so every Button focused visibly differently from every .row-item and
+    // .control-field, which use the two-layer box-shadow spelled out in index.css.
+    'focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2',
     'focus-visible:ring-offset-[var(--bg)]',
     'disabled:pointer-events-none disabled:opacity-[0.64] disabled:shadow-none',
     "[&_svg:not([class*='opacity-'])]:opacity-80",

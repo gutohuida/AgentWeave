@@ -10,6 +10,9 @@ import { ContextUsageIndicator } from '@/components/context/ContextUsageIndicato
 import { OverviewBudgetSummary } from './OverviewBudgetSummary'
 import { Icon } from '@/components/common/Icon'
 import { getStatusConfig } from '@/lib/agentStatusConfig'
+import { agentColorVars } from '@/lib/agentColors'
+import { tint } from '@/lib/colorTint'
+import { taskStatusColor } from '@/lib/taskStatusColors'
 import { hubDate } from '@/lib/hubTime'
 
 interface OverviewPageProps {
@@ -36,10 +39,20 @@ function AgentHealthCard({ agent, onClick }: { agent: AgentSummary; onClick: () 
             width: 8,
             height: 8,
             background: statusColor,
-            boxShadow: statusCfg.pulse ? `0 0 0 2px ${statusColor}40` : undefined,
+            // color-mix, not a `${token}40` suffix — `var(--green)40` is not a colour, so this
+            // declaration was dropped entirely and the running-agent glow never rendered. The glow
+            // is what separates `running` from `idle` at a glance (S7 research, "do not undo").
+            boxShadow: statusCfg.pulse ? `0 0 0 2px ${tint(statusColor, 25)}` : undefined,
           }}
         />
-        <span className="truncate text-sm font-medium" style={{ color: 'var(--text)' }}>
+        {/* Identity colour on the name, status colour on the dot — the two questions never share a
+            channel. The Overview and agent settings were the only two surfaces opting out of the
+            8-colour agent scale while ten others used it, so the same agent read as coloured in the
+            rail and grey here. `accent` is the token's documented name-label role. */}
+        <span
+          className="truncate text-sm font-medium"
+          style={{ color: agentColorVars(agent.color_index).accent }}
+        >
           {agent.name}
         </span>
       </div>
@@ -112,6 +125,14 @@ export function OverviewPage({ onNavigate }: OverviewPageProps) {
 
       <section className="overview-group" aria-labelledby="overview-attention">
         <h2 id="overview-attention" className="overview-group-label">Attention</h2>
+        {/* A blocked run is the only thing on this page that requires the operator to act, so it
+            leads the group that says so. It used to render inside Navigate, below the Tasks/Spec/
+            Jobs shortcuts, which left "Attention" holding nothing but idle agent cards. */}
+        {unanswered > 0 && (
+          <div className="mb-3">
+            <QuestionInterruptCard questions={questions} onNavigateToQuestions={() => onNavigate('questions')} />
+          </div>
+        )}
         {agents.length > 0 ? (
           <div className="overview-agent-grid">
             {agents.map((agent) => (
@@ -147,22 +168,12 @@ export function OverviewPage({ onNavigate }: OverviewPageProps) {
           ))}
         </div>
 
-        {unanswered > 0 && (
-          <div className="mt-5">
-            <QuestionInterruptCard questions={questions} onNavigateToQuestions={() => onNavigate('questions')} />
-          </div>
-        )}
-
         <div className="mt-5">
           <h2 className="mb-2 text-[13px] font-semibold" style={{ color: 'var(--text)' }}>Tasks</h2>
           {Object.keys(taskCounts).length > 0 ? (
             <div className="flex flex-wrap gap-2">
               {Object.entries(taskCounts).map(([taskStatus, count]) => {
-                const color = taskStatus === 'in_progress' ? 'var(--amber)' :
-                  taskStatus === 'under_review' ? 'var(--amber)' :
-                  taskStatus === 'approved' ? 'var(--green)' :
-                  taskStatus === 'revision_needed' || taskStatus === 'rejected' ? 'var(--red)' :
-                  'var(--text-2)'
+                const color = taskStatusColor(taskStatus)
                 const label = taskStatus.replace(/_/g, ' ')
                 return (
                   <button

@@ -107,7 +107,7 @@ describe('AgentTimeline', () => {
     expect(screen.getByText('not delivered yet')).toBeInTheDocument()
   })
 
-  it('explains a hop-budget-suspended chain and offers to deliver now', () => {
+  it('explains a hop-budget-suspended chain and offers to continue it', () => {
     const onDeliverNow = vi.fn()
     render(
       <AgentTimeline
@@ -130,8 +130,72 @@ describe('AgentTimeline', () => {
       />,
     )
     expect(screen.getByText('Autonomous continuation paused')).toBeInTheDocument()
-    fireEvent.click(screen.getByText('Deliver now'))
+    // The banner used to promise "They'll be delivered with your next message" — the leak this
+    // change closes. It must name what the operator can actually do instead.
+    expect(screen.queryByText(/delivered with your next message/)).not.toBeInTheDocument()
+    expect(screen.getByText(/restart the count from here/)).toBeInTheDocument()
+    fireEvent.click(screen.getByText('Continue'))
     expect(onDeliverNow).toHaveBeenCalled()
+  })
+
+  it('offers Continue and Discard on a held entry, and calls back with its id', () => {
+    const onRelease = vi.fn()
+    const onWithdraw = vi.fn()
+    render(
+      <AgentTimeline
+        agent={agent}
+        entries={[
+          entry({
+            id: 'held-1',
+            kind: 'inbound_peer',
+            participant: 'codex',
+            content: 'over budget',
+            delivery_state: 'queued',
+            hop_budget_exceeded: true,
+            run_id: undefined,
+          }),
+        ]}
+        roster={[agent, peer]}
+        timelineEvents={[]}
+        isRunning={false}
+        onRelease={onRelease}
+        onWithdraw={onWithdraw}
+      />,
+    )
+    fireEvent.click(screen.getByText('Continue'))
+    expect(onRelease).toHaveBeenCalledWith('held-1')
+    // Named, not an X: on a held entry the choice is between two dispositions, and one of them
+    // throws the message away permanently.
+    fireEvent.click(screen.getByText('Discard'))
+    expect(onWithdraw).toHaveBeenCalledWith('held-1')
+  })
+
+  it('does not offer Continue on a queued entry the hop budget is not holding', () => {
+    const onRelease = vi.fn()
+    render(
+      <AgentTimeline
+        agent={agent}
+        entries={[
+          entry({
+            id: 'waiting-1',
+            kind: 'inbound_peer',
+            participant: 'codex',
+            content: 'within budget, just waiting',
+            delivery_state: 'queued',
+            hop_budget_exceeded: false,
+            run_id: undefined,
+          }),
+        ]}
+        roster={[agent, peer]}
+        timelineEvents={[]}
+        isRunning={false}
+        onRelease={onRelease}
+      />,
+    )
+    // Releasing it would be refused by the endpoint — it is waiting for something a re-base
+    // does not fix — so the button would be an offer to be told no.
+    expect(screen.queryByText('Continue')).not.toBeInTheDocument()
+    expect(screen.getByText('queued')).toBeInTheDocument()
   })
 
   it('offers to withdraw an undelivered entry and calls back with its id', () => {

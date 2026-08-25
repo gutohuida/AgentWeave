@@ -318,3 +318,73 @@ def test_the_default_policy_matches_the_column_default():
     assert column.default.arg == DEFAULT_POLICY
     assert column.server_default.arg == DEFAULT_POLICY
     assert DEFAULT_POLICY in POLICIES
+
+
+# ---------------------------------------------------------------------------
+# Who is doing it (F6/F18)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_binding_names_the_agent_doing_the_work(app):
+    """The board reported `in_progress / assignee: null / assignee_status: idle` about a live run.
+
+    Two paths reach `in_progress`: the loop's claim, which sets `assignee`, and a direct `task_id`
+    trigger, which went through here and set nothing. Since `assignee_status` is derived from that
+    null, an agent that was at that moment running read as idle (`scripts/drive/FINDINGS.md`, F6
+    and F18).
+    """
+    async with async_session_factory() as session:
+        task = await _make_task(session, "task-bind-assignee", "pending")
+        run = _run("run-bind-assignee", agent="builder")
+        session.add(run)
+
+        await bind_run_to_task(session, run, task)
+        await session.commit()
+
+        assert task.status == "in_progress"
+        assert task.assignee == "builder"
+
+
+@pytest.mark.asyncio
+async def test_binding_does_not_take_a_task_someone_else_holds(app):
+    """An operator's assignment, or a loop's claim for one agent, is a statement. A run merely
+    starting is not grounds to overwrite it."""
+    async with async_session_factory() as session:
+        task = await _make_task(session, "task-bind-held", "assigned")
+        task.assignee = "reviewer"
+        run = _run("run-bind-held", agent="builder")
+        session.add(run)
+
+        await bind_run_to_task(session, run, task)
+        await session.commit()
+
+        assert task.assignee == "reviewer"
+
+
+@pytest.mark.asyncio
+async def test_a_task_that_binds_without_starting_still_names_its_agent(app):
+    """A gated task stays `pending` and the run stays bound to it. It is still being worked on by
+    somebody, and the card saying who is the only thing that distinguishes it from an abandoned
+    one."""
+    async with async_session_factory() as session:
+        await _make_task(session, "task-bind-assignee-prereq", "pending")
+        task = await _make_task(session, "task-bind-assignee-gated", "pending")
+        session.add(
+            TaskDependency(
+                id="tdep-bind-assignee-gated",
+                project_id="proj-test",
+                task_id="task-bind-assignee-gated",
+                depends_on_task_id="task-bind-assignee-prereq",
+            )
+        )
+        run = _run("run-bind-assignee-gated", agent="builder")
+        session.add(run)
+        await session.commit()
+
+        transition = await bind_run_to_task(session, run, task)
+        await session.commit()
+
+        assert transition is None
+        assert task.status == "pending"
+        assert task.assignee == "builder"

@@ -16,6 +16,8 @@ interface EventRowProps {
   }
   actorName?: string | null
   actorColorIndex?: number | null
+  /** True only while this row is flashing its arrival — see ActivityLog's arrival tracking. */
+  isNew?: boolean
 }
 
 function iconForType(type: string): string {
@@ -44,7 +46,7 @@ const SEVERITY_BORDER: Record<string, string> = {
   warn:  'var(--amber)',
 }
 
-export function EventRow({ event, actorName, actorColorIndex }: EventRowProps) {
+export function EventRow({ event, actorName, actorColorIndex, isNew = false }: EventRowProps) {
   const { copied, copy } = useCopy()
   const iconName   = iconForType(event.type)
   const container  = containerForType(event.type)
@@ -55,7 +57,7 @@ export function EventRow({ event, actorName, actorColorIndex }: EventRowProps) {
 
   return (
     <div
-      className="group flex items-start gap-3 py-2.5 border-b last:border-b-0"
+      className={`feed-card group flex items-start gap-3 py-2.5 border-b last:border-b-0${isNew ? ' is-new' : ''}`}
       style={{
         borderBottomColor: 'var(--border)',
         ...(borderClr ? { borderLeft: `2px solid ${borderClr}`, paddingLeft: 10 } : {}),

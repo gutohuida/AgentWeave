@@ -26,11 +26,17 @@ against a hand-maintained list of statuses.
 
 ### Requirement: Status sets are derived from the classification, not listed independently
 
-Any set of task statuses used to answer whether a task is live, claimable, terminal or active SHALL
-be derived from the lifecycle classification rather than enumerated at its point of use.
+Any set of task statuses SHALL be derived from the lifecycle classification rather than enumerated
+at its point of use — including every set used to answer whether a task is live, claimable,
+terminal, active, or the current item of a queue.
 
 Deriving these sets SHALL NOT change which statuses any of them contains. Each set SHALL contain
 exactly the statuses it contained before being derived.
+
+**A derived set SHALL be defined by the question it answers, and two sets answering different
+questions SHALL NOT be merged even where their members overlap.** Deriving from one classification
+is a requirement about where membership comes from, never a licence to collapse distinct questions
+into one set.
 
 #### Scenario: A derived set matches what it replaced
 
@@ -41,6 +47,19 @@ exactly the statuses it contained before being derived.
 
 - **WHEN** two call sites need the same classification of task statuses
 - **THEN** they read the same derived set rather than each defining one
+
+#### Scenario: Two sets that answer different questions stay distinct
+
+- **WHEN** one call site asks which statuses a firing may claim and another asks which statuses can
+  be a queue's current item
+- **THEN** they read different derived sets
+- **AND** a status that is claimable by neither, yet is a queue's current work, appears in the
+  second and not the first
+
+#### Scenario: Deriving a set does not remove a status from a surface that showed it
+
+- **WHEN** a set is replaced by a derivation
+- **THEN** no surface that displayed a task before the change stops displaying it
 
 #### Scenario: A new status reaches every derived set
 

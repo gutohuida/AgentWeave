@@ -27,6 +27,9 @@ const EXEMPT = new Set([
   'components/jobs/JobForm.tsx',
   // React Query's own epoch milliseconds, measured in this browser.
   'components/logs/LogsView.tsx',
+  // Epoch milliseconds this module computed itself while walking a cron expression forward —
+  // never a Hub timestamp string, so there is nothing for `hubDate` to normalise.
+  'lib/cron.ts',
   // The helper itself.
   'lib/hubTime.ts',
 ])

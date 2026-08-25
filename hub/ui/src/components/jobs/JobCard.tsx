@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Job, JobRun, useJobHistory } from '@/api/jobs'
 import { useTasks } from '@/api/tasks'
 import { hubDate } from '@/lib/hubTime'
+import { cronDayAmbiguity, describeCron } from '@/lib/cron'
 
 interface JobCardProps {
   job: Job
@@ -25,6 +26,82 @@ function getStatusVariant(enabled: boolean): 'default' | 'secondary' | 'success'
 
 function getStatusLabel(enabled: boolean): string {
   return enabled ? 'Active' : 'Paused'
+}
+
+/**
+ * Who is working a current item, shown beside its title.
+ *
+ * Muted and trailing, deliberately: the task is what the operator is reading and the agent is the
+ * qualifier on it — the same relationship the tick count has to a stall's timestamp
+ * (`loop-notices-and-reacts`), and rendered the same way for that reason. A flow's card is a list
+ * of "what, by whom" lines; making the name compete with the title would turn three facts into six.
+ */
+function CurrentTaskAgent({ name }: { name: string }) {
+  return (
+    <span className="ml-1.5" style={{ color: 'var(--text-3)', opacity: 0.75 }}>
+      {name}
+    </span>
+  )
+}
+
+/**
+ * One status→colour map for a job run, read by both the expanded history rows and the collapsed
+ * card's trend dots. Kept as a single function rather than restated at each site: a second copy of
+ * a status mapping is precisely the drift `IDENTITY.md` guards against, three copies of the task
+ * mapping having already diverged before that clause was written.
+ */
+function runStatusColor(status: string): string {
+  switch (status) {
+    case 'completed':
+      return 'var(--green)'
+    case 'failed':
+      return 'var(--red)'
+    case 'skipped':
+      return 'var(--amber)'
+    default:
+      return 'var(--text-3)'
+  }
+}
+
+/**
+ * "Is this job healthy?" answered at list-scan speed — the last five firings as status dots,
+ * reusing `runStatusColor` so the strip can never come to mean something the expanded list below it
+ * does not.
+ *
+ * Rendered only when the runs are already in hand, never fetched for it. `GET /jobs` carries no
+ * `history` at all — `JobResponse.history` is documented "Included in get_job only" — and this
+ * card's own history request is deliberately gated on `expanded` so a project with many jobs does
+ * not pay one request per card just to draw five dots. For a *collapsed* card to show this, the
+ * collection response would have to carry each job's last five runs inline; `status` alone is
+ * enough, nothing else here is read.
+ */
+function TrendDots({ runs }: { runs: JobRun[] }) {
+  // Oldest on the left: this strip is read as a trend, while `RunHistory` below it is a
+  // newest-first log. Each order is the right one for its own shape.
+  const recent = runs.slice(0, 5).reverse()
+  const counts = recent.reduce<Record<string, number>>((acc, run) => {
+    acc[run.status] = (acc[run.status] ?? 0) + 1
+    return acc
+  }, {})
+  const summary = Object.entries(counts)
+    .map(([status, n]) => `${n} ${status}`)
+    .join(', ')
+
+  return (
+    <div className="trend-row" data-testid="job-trend">
+      <span className="trend-label">Last {recent.length}</span>
+      {/* Colour alone carries the outcome here, so the strip states it in words too. */}
+      <div className="trend-dots" role="img" aria-label={`Recent runs: ${summary}`} title={summary}>
+        {recent.map((run) => (
+          <span
+            key={run.id}
+            className="trend-dot"
+            style={{ background: runStatusColor(run.status) }}
+          />
+        ))}
+      </div>
+    </div>
+  )
 }
 
 function RunHistory({ runs, isLoading }: { runs?: JobRun[]; isLoading?: boolean }) {
@@ -60,16 +137,7 @@ function RunHistory({ runs, isLoading }: { runs?: JobRun[]; isLoading?: boolean 
                   : 'schedule'
               }
               size={16}
-              style={{
-                color:
-                  run.status === 'completed'
-                    ? 'var(--green)'
-                    : run.status === 'failed'
-                    ? 'var(--red)'
-                    : run.status === 'skipped'
-                    ? 'var(--amber)'
-                    : 'var(--text-3)',
-              }}
+              style={{ color: runStatusColor(run.status) }}
             />
             <span className="text-[11px]" style={{ color: 'var(--text)' }}>
               {run.trigger}
@@ -86,6 +154,26 @@ function RunHistory({ runs, isLoading }: { runs?: JobRun[]; isLoading?: boolean 
               title={run.error_summary}
             >
               {run.error_summary}
+            </span>
+          )}
+          {/* The count design D6 records but nothing rendered until now. A continuing stall
+              neither appends a row nor moves `fired_at`, which is what stops it burying real
+              firings — but it also means the row's text and timestamp are both frozen, so a loop
+              that is being re-checked every five minutes looked identical to one nothing had
+              touched in an hour. That is the reading task 8.3 exists to prevent. Shown only above
+              1: "re-checked 1 time" would be a firing describing itself.
+
+              Muted rather than amber, and immediately before the timestamp: the two form one
+              sentence — "re-checked 12 times · about 1 hour ago" — and that sentence is the whole
+              claim the frozen `fired_at` needs the count to make. In amber it competed with the
+              reason for the eye instead of qualifying the time. */}
+          {(run.tick_count ?? 1) > 1 && (
+            <span
+              className="text-[11px] shrink-0"
+              style={{ color: 'var(--text-3)' }}
+              data-testid={`job-run-ticks-${run.id}`}
+            >
+              re-checked {run.tick_count} times
             </span>
           )}
           <span className="text-[11px] shrink-0" style={{ color: 'var(--text-3)' }}>
@@ -111,6 +199,10 @@ function LoopBlock({ job, onOpenTasks }: { job: Job; onOpenTasks?: (taskIds: str
 
   const totalQueued = Object.values(loop.queue).reduce((sum, n) => sum + n, 0)
   const canOpenQueue = Boolean(onOpenTasks && loopTasks && loopTasks.length > 0)
+  // `loop-becomes-a-flow` task 9.3, design D15: a firing can staff several tasks, so the card
+  // lists every one with the agent beside it rather than showing the first and implying it is the
+  // only one. A single-agent loop still renders exactly one line, unchanged.
+  const currentTasks = loop.current_tasks ?? []
   const openQueue = () => {
     if (onOpenTasks && loopTasks) onOpenTasks(loopTasks.map((t) => t.id))
   }
@@ -167,16 +259,28 @@ function LoopBlock({ job, onOpenTasks }: { job: Job; onOpenTasks?: (taskIds: str
         ))}
       </div>
 
-      {loop.current_task ? (
-        canOpenQueue ? (
-          <button type="button" onClick={openQueue} style={linkStyle} className="text-[11px]">
-            {loop.current_task.title} ({loop.current_task.status})
-          </button>
-        ) : (
-          <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>
-            {loop.current_task.title} ({loop.current_task.status})
-          </p>
-        )
+      {currentTasks.length > 0 ? (
+        <div className="flex flex-col gap-0.5" data-testid="job-loop-current-tasks">
+          {currentTasks.map((task) =>
+            canOpenQueue ? (
+              <button
+                key={task.id}
+                type="button"
+                onClick={openQueue}
+                style={linkStyle}
+                className="text-[11px]"
+              >
+                {task.title} ({task.status})
+                {task.agent ? <CurrentTaskAgent name={task.agent} /> : null}
+              </button>
+            ) : (
+              <p key={task.id} className="text-[11px]" style={{ color: 'var(--text-3)' }}>
+                {task.title} ({task.status})
+                {task.agent ? <CurrentTaskAgent name={task.agent} /> : null}
+              </p>
+            ),
+          )}
+        </div>
       ) : (
         <p className="text-[11px]" style={{ color: 'var(--text-3)', opacity: 0.6 }}>
           No current item
@@ -199,6 +303,19 @@ export function JobCard({ job, onRun, onPause, onResume, onArchive, isPending, o
   const { data: fetchedHistory, isLoading: historyLoading } = useJobHistory(job.id, expanded)
   const history = job.history ?? fetchedHistory
   const [showArchiveConfirm, setShowArchiveConfirm] = useState(false)
+  // Null for any schedule that cannot be stated exactly — the line is then simply absent rather
+  // than repeating the raw expression the chip above already shows.
+  const cronPlain = describeCron(job.cron)
+  // F1: `job.next_run` is the *server's* croniter answer, and croniter ORs the two day fields while
+  // the APScheduler trigger that actually fires ANDs them — measured 260 days apart for
+  // `0 0 15 * 5`. The Hub now refuses this shape at both write sites, so no new job can have it,
+  // but jobs stored before the refusal still exist and this card was still rendering their
+  // next-run time as fact. Same guard the form and `describeCron` use, so the two screens can no
+  // longer give two different answers about one expression.
+  //
+  // Shown for a paused job too, unlike the "Next:" line it replaces — a paused job with this
+  // schedule is precisely the one worth warning about before it is resumed.
+  const cronAmbiguity = cronDayAmbiguity(job.cron)
 
   return (
     <div
@@ -216,8 +333,11 @@ export function JobCard({ job, onRun, onPause, onResume, onArchive, isPending, o
               <p className="text-[13px] font-medium" style={{ color: 'var(--text)' }}>
                 {job.name}
               </p>
+              {/* Where the job is defined is a category, not a state — `info` is amber, the
+                  product's attention colour, and spent it on a fact that needs none. Neutral plus
+                  the glyph carries the distinction without competing with the status badges below. */}
               {job.source === 'local' && (
-                <Badge variant="info" className="text-[10px]"><Icon name="home" size={11} />Local</Badge>
+                <Badge variant="secondary" className="text-[10px]"><Icon name="home" size={11} />Local</Badge>
               )}
             </div>
 
@@ -232,6 +352,7 @@ export function JobCard({ job, onRun, onPause, onResume, onArchive, isPending, o
                 {job.cron}
               </code>
             </div>
+            {cronPlain && <p className="job-cron-plain"><Icon name="chat" size={11} />{cronPlain}</p>}
           </div>
 
           {/* Expand button */}
@@ -255,12 +376,26 @@ export function JobCard({ job, onRun, onPause, onResume, onArchive, isPending, o
           <Badge variant="default">{job.run_count} runs</Badge>
         </div>
 
+        {history && history.length > 0 && <TrendDots runs={history} />}
+
         {/* Next/Last run */}
         <div className="mt-2 space-y-1">
-          {job.next_run && job.enabled && (
-            <p className="text-[11px]" style={{ color: 'var(--blue)' }}>
-              Next: {formatDistanceToNow(hubDate(job.next_run), { addSuffix: true })}
+          {cronAmbiguity ? (
+            <p
+              className="text-[11px]"
+              data-testid={`job-cron-ambiguity-${job.id}`}
+              title={cronAmbiguity}
+              style={{ color: 'var(--amber)' }}
+            >
+              Next: not knowable — this schedule restricts both day-of-month and day-of-week
             </p>
+          ) : (
+            job.next_run &&
+            job.enabled && (
+              <p className="text-[11px]" style={{ color: 'var(--blue)' }}>
+                Next: {formatDistanceToNow(hubDate(job.next_run), { addSuffix: true })}
+              </p>
+            )
           )}
           {job.last_run && (
             <p className="text-[11px]" style={{ color: 'var(--text-3)', opacity: 0.6 }}>
@@ -298,7 +433,11 @@ export function JobCard({ job, onRun, onPause, onResume, onArchive, isPending, o
               </Button>
             </div>
           ) : (
-            <Button variant="outline" size="xs" onClick={() => setShowArchiveConfirm(true)} disabled={isPending} title="Archive" aria-label="Archive" style={{ color: 'var(--red)' }}>
+            /* `destructive`, not `outline` tinted red: the outline variant forces its own SVG to
+               `--text-2`, so the inline `color: var(--red)` this used to carry rendered nothing at
+               all and Archive was pixel-identical to Pause. It also made one action wear two
+               vocabularies — the confirm step beside it is already `destructive`. */
+            <Button variant="destructive" size="icon-xs" onClick={() => setShowArchiveConfirm(true)} disabled={isPending} title="Archive" aria-label="Archive">
               <Icon name="archive" size={16} />
             </Button>
           )}

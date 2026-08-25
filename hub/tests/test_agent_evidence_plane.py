@@ -267,6 +267,13 @@ async def test_a_withdrawn_grant_takes_effect(app, auth_headers, builder, review
 
 @pytest.mark.asyncio
 async def test_an_unknown_decision_is_refused(app, auth_headers, builder, reviewer):
+    """422, not 403 — and the refusal names what would have worked.
+
+    A misspelt enum is a validation error. It answered 403 until 2026-08-24, and an agent reading
+    the status code rather than the body concluded it lacked permission and stopped retrying, when
+    all it had to do was send `accepted` (`scripts/drive/FINDINGS.md`, F8). The permitted values are
+    in the message for the same reason `model_catalog` puts `permission_mode`'s four in its.
+    """
     await _document(app, auth_headers, builder)
     recorded = await _record(app, builder)
     await _grant(app, auth_headers, "reviewer")
@@ -274,8 +281,10 @@ async def test_an_unknown_decision_is_refused(app, auth_headers, builder, review
     refused = await app.post(
         f"{EVIDENCE}/{recorded['id']}/decision", json={"decision": "accept"}, headers=reviewer
     )
-    assert refused.status_code == 403, refused.text
+    assert refused.status_code == 422, refused.text
     assert refused.json()["detail"]["code"] == "unknown_decision"
+    message = refused.json()["detail"]["message"]
+    assert "accepted" in message and "rejected" in message, message
 
 
 @pytest.mark.asyncio

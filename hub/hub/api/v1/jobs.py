@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...auth import get_project
 from ...db.engine import get_session
 from ...db.models import AIJob, JobRun, Loop, Project, Question, Run, Task
+from ...scheduler import cron_day_ambiguity_reason
 from ...schemas.jobs import JobCreate, JobResponse, JobRunResponse, JobUpdate, LoopSummary
 from ...schemas.tasks import TaskCreate
 from ...sse import sse_manager
@@ -161,13 +162,13 @@ async def _batch_loop_summaries(
     for loop_id, task_status, count in counts_result.all():
         queue_counts.setdefault(loop_id, {})[task_status] = count
 
-    current_task_by_loop: Dict[str, Dict[str, str]] = {}
+    current_tasks_by_loop: Dict[str, List[Dict[str, str]]] = {}
     # Same ordering the firing itself uses, imported rather than restated: the board and the
     # firing must never disagree about which queue item is current, which is exactly what
     # human-only check 13.1 asks. `Task.updated` is scoped to non-pending rows there — see that
     # helper for the bug the scoping fixes. Imported inside the function, matching this module's
     # existing convention for `...scheduler` (get_scheduler does the same at three call sites).
-    from ...scheduler import CLAIMABLE_LOOP_TASK_STATUSES, _loop_queue_order
+    from ...scheduler import CURRENT_ITEM_TASK_STATUSES, _loop_queue_order, decide_firing
 
     candidates_result = await session.execute(
         select(Task)
@@ -177,30 +178,80 @@ async def _batch_loop_summaries(
             # `task_transitions.py`'s `ENTRY_STATUSES` both already treat it as such) — D3's claim
             # sets exactly this status, so without it a freshly claimed task vanished from
             # `current_task` the moment a firing picked it up.
-            Task.status.in_(CLAIMABLE_LOOP_TASK_STATUSES),
+            #
+            # `CURRENT_ITEM_TASK_STATUSES`, not the claimable set: the board answers "what is this
+            # loop working on", which includes a `blocked` task (`agent-loops` §85) that a firing
+            # must not claim. Sharing one constant for both questions was a live defect — see the
+            # constant's own comment for what it looked like.
+            Task.status.in_(CURRENT_ITEM_TASK_STATUSES),
         )
         .order_by(Task.loop_id, *_loop_queue_order())
     )
     # D10 (`task-dependencies` section 9.10): the firing itself skips a gated candidate rather than
     # claiming it, so "current" has to skip the same one or the board shows a task the next firing
-    # will pass over — the exact disagreement human-only check 13.1 exists to catch. Mirrors
-    # `scheduler._first_startable_candidate`'s rule rather than a second one: `in_progress` needs no
-    # fresh check (already running, no `-> in_progress` transition pending); everything else is
-    # tested against the same `dependency_gate.evaluate` the gate itself calls.
-    from ... import dependency_gate
-
-    for task in candidates_result.scalars().all():
-        if task.loop_id in current_task_by_loop:
-            continue
-        if task.status != "in_progress":
-            refusal = await dependency_gate.evaluate(session, task)
-            if refusal.refuses:
-                continue
-        current_task_by_loop[task.loop_id] = {
-            "id": task.id,
-            "title": task.title,
-            "status": task.status,
+    # will pass over — the exact disagreement human-only check 13.1 exists to catch.
+    #
+    # `loop-becomes-a-flow` task 1.4: this used to restate the firing's rule inline, with a comment
+    # saying it "mirrors" it. It now *calls* it — `scheduler.candidate_is_startable` is the single
+    # statement, and only the traversal differs (this one is batched across every loop in six fixed
+    # queries, design D7, so it cannot call `_first_startable_candidate` itself).
+    #
+    # The cap of one is also task 1.4's: a flow may staff several tasks (group 5), and this
+    # derivation is already shaped to report them, but group 1 changes no behaviour — so the board
+    # still renders exactly one current item.
+    #
+    # `loop-notices-and-reacts` 4.3/5.5: the board now takes both answers from `decide_firing`
+    # rather than re-deriving either. That is why it is one walk per loop and not two — computing
+    # the stall label beside a separate candidate walk would have run the dependency gate twice per
+    # loop, which is worse than what this replaced. The per-candidate `candidate_is_startable`
+    # calls that used to live here are gone; `decide_firing` does that work once.
+    stall_reason_by_loop: Dict[str, Optional[str]] = {}
+    # `loop-becomes-a-flow` group 9, design D15. This held one task id per loop and took
+    # `selections[0]`, which was right while a firing made at most one selection and became an
+    # under-report the moment group 5 widened the walk: a flow working three tasks showed one.
+    # Keyed by task rather than collected as a list because the walk below needs to answer "is this
+    # candidate one the firing would claim, and by whom" per row, and a list would make that a scan.
+    claimed_agents_by_loop: Dict[str, Dict[str, str]] = {}
+    for job_id, loop in loop_by_job.items():
+        decision = await decide_firing(session, loop, default_agent=job_agent_by_id.get(job_id, ""))
+        stall_reason_by_loop[loop.id] = decision.stall_reason
+        # Selections *and* in-flight work, because this derivation answers "what is this loop
+        # working on" rather than "what can the next firing start" (finding F23). A task an agent is
+        # mid-turn on is the most current thing a loop has, and omitting it made a flow running
+        # three agents report no current item and a stall.
+        claimed_agents_by_loop[loop.id] = {
+            **dict(decision.in_flight),
+            **{selection.task.id: selection.agent for selection in decision.selections},
         }
+
+    # The current item is the first candidate **in queue order** that is either the task the firing
+    # would claim, or a `blocked` one. Order is what makes this `agent-loops` §85 rather than an
+    # approximation of it: "in progress or blocked" outranks "oldest pending", and `_loop_queue_order`
+    # already puts every non-pending status first. Taking the decision's task directly would invert
+    # that for a queue holding both a blocked task and a pending one.
+    #
+    # No `candidate_is_startable` call here any more: the decision has already answered which task
+    # is claimable, so this walk is a lookup rather than a second evaluation of the dependency gate.
+    for task in candidates_result.scalars().all():
+        claimed = claimed_agents_by_loop.get(task.loop_id, {})
+        is_blocked = task.status == "blocked"
+        if not is_blocked and task.id not in claimed:
+            continue
+        # A blocked task is not claimable and still the loop's current work — the operator is who
+        # unblocks it. The firing and the board diverge here on purpose; see
+        # `scheduler.CURRENT_ITEM_TASK_STATUSES` for the defect that came of merging the two.
+        #
+        # **Every match, not the first** (group 9, design D15). The cap of one was task 1.4's, kept
+        # while a firing could only ever claim one thing. Order still comes from the query's
+        # `_loop_queue_order`, so the card lists them the way the firing considered them.
+        entry: Dict[str, str] = {"id": task.id, "title": task.title, "status": task.status}
+        # The selection's agent where the firing made one, the task's own assignee for a blocked
+        # row (nobody is being selected for it — it is waiting on a person). Omitted rather than
+        # blank when neither exists, so a reader never sees an empty attribution.
+        agent = claimed.get(task.id) or task.assignee
+        if agent:
+            entry["agent"] = agent
+        current_tasks_by_loop.setdefault(task.loop_id, []).append(entry)
 
     # Distinct (job_id, conversation_id) pairs first, so a resume-mode job that fired more than
     # once on the same conversation does not join the same question row once per firing.
@@ -251,7 +302,8 @@ async def _batch_loop_summaries(
             ending_state=loop.ending_state,
             archived_at=loop.archived_at,
             queue=queue_counts.get(loop.id, {}),
-            current_task=current_task_by_loop.get(loop.id),
+            current_tasks=current_tasks_by_loop.get(loop.id, []),
+            stall_reason=stall_reason_by_loop.get(loop.id),
             open_questions=open_questions_by_job.get(job_id, 0),
             control=loop.control,
             pending_edit=_pending_loop_edit(loop),
@@ -352,6 +404,14 @@ async def create_job(
             detail=f"Invalid cron expression: {e}",
         ) from e
 
+    # F1: valid to croniter is not the same as unambiguous here — see
+    # `scheduler.cron_day_ambiguity_reason` for why an expression restricting both day fields
+    # fires on a different date than the one this Hub stores and displays. Refused at both write
+    # sites so no such expression can reach the scheduler at all.
+    day_ambiguity = cron_day_ambiguity_reason(body.cron)
+    if day_ambiguity:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=day_ambiguity)
+
     # Design D2's "definition window": `initial_tasks` is validated up front, before any row is
     # created, so one malformed entry cannot leave a job (and its loop) half-created behind a 422.
     initial_task_bodies: List[TaskCreate] = []
@@ -435,7 +495,7 @@ async def create_job(
             stop_reason=loop.stop_reason,
             stopped_at=loop.stopped_at,
             queue={},
-            current_task=None,
+            current_tasks=[],
             open_questions=0,
         )
 
@@ -580,6 +640,42 @@ async def update_job(
     if job is None or job.project_id != project_id:
         raise HTTPException(status_code=404, detail="Job not found")
 
+    # F13: re-enabling a loop that has already ended used to be accepted, and then silently
+    # undone — the job fired once more a minute later, hit `_loop_stop_reason` again, and set
+    # `enabled` back to false, leaving `enabled: true` alongside `stopped_at` and
+    # `ending_state` in between. Refused here, before anything is mutated, so the operator is
+    # told the toggle cannot do what it looks like it does. `ending_state` is the definitive
+    # ended signal (`Loop.ending_state`); a loop merely paused with `toggle_job` leaves it
+    # `None` and re-enabling that is still ordinary and still allowed. The remedy named is a
+    # new loop rather than "give this one work", because D12 closes an ended loop's queue to
+    # every caller, the operator included (see `_authorize_loop_task_creation` in tasks.py) —
+    # there is no way to feed this one.
+    if body.enabled is True and not job.enabled:
+        ended_result = await session.execute(select(Loop).where(Loop.job_id == job_id))
+        ended_loop = ended_result.scalar_one_or_none()
+        if ended_loop is not None and ended_loop.ending_state is not None:
+            ended_reason = ended_loop.stop_reason or ended_loop.ending_state
+            ended_when = (
+                ended_loop.stopped_at.isoformat() if ended_loop.stopped_at else "an unknown time"
+            )
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "message": (
+                        f"This loop has ended ({ended_reason}) at {ended_when} and cannot be "
+                        "restarted: its queue is closed, so the next firing would stop it again "
+                        "within the minute. Create a new loop with the work instead."
+                    ),
+                    "code": "loop_ended",
+                    "loop_id": ended_loop.id,
+                    "ending_state": ended_loop.ending_state,
+                    "stop_reason": ended_loop.stop_reason,
+                    "stopped_at": (
+                        ended_loop.stopped_at.isoformat() if ended_loop.stopped_at else None
+                    ),
+                },
+            )
+
     # Loop fields (design D6): supplying any of the five on a job with no `Loop` row is a 400
     # unless this update is the one that opts the job in for the first time (mirrors create_job's
     # "at least one field" rule). `spec_document_id` alone does NOT opt a job in (design D2 keeps
@@ -691,6 +787,12 @@ async def update_job(
     if body.message is not None:
         job.message = body.message
     if body.cron is not None:
+        # F1, checked before croniter is even reached, so the rule does not quietly lapse on an
+        # installation without it — the `else` branch below still stores the expression.
+        day_ambiguity = cron_day_ambiguity_reason(body.cron)
+        if day_ambiguity:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=day_ambiguity)
+
         # Validate cron
         croniter_available = True
         try:

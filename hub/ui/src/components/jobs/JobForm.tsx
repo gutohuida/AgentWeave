@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Icon } from '@/components/common/Icon'
 import { useAgents } from '@/api/agents'
 import { Button } from '@/components/ui/button'
 import { JobCreate } from '@/api/jobs'
+import { cronDayAmbiguity, describeCron, formatNextRun, nextRuns } from '@/lib/cron'
 
 interface JobFormProps {
   onSubmit: (job: JobCreate) => void
@@ -10,8 +11,17 @@ interface JobFormProps {
   isPending: boolean
 }
 
+// `loop-notices-and-reacts` 5.3. These bottomed out at every six hours, because until the busy
+// guard landed a fast tick manufactured duplicate briefings. A firing whose agent is running is now
+// refused before it claims or queues anything, and a firing against a stalled queue counts on the
+// record it already has — so five minutes costs a query and no rows, and it bounds how long a
+// finished step waits for the next one to start.
+const LOOP_DEFAULT_CRON = '*/5 * * * *'
+const JOB_DEFAULT_CRON = '0 9 * * *'
+
 const CRON_EXAMPLES = [
-  { label: 'Daily at 9am', value: '0 9 * * *' },
+  { label: 'Every 5 minutes', value: LOOP_DEFAULT_CRON },
+  { label: 'Daily at 9am', value: JOB_DEFAULT_CRON },
   { label: 'Weekdays at 9am', value: '0 9 * * 1-5' },
   { label: 'Every 6 hours', value: '0 */6 * * *' },
   { label: 'Weekly (Sundays)', value: '0 0 * * 0' },
@@ -23,7 +33,7 @@ export function JobForm({ onSubmit, onCancel, isPending }: JobFormProps) {
   const [name, setName] = useState('')
   const [agent, setAgent] = useState('')
   const [message, setMessage] = useState('')
-  const [cron, setCron] = useState('0 9 * * *')
+  const [cron, setCron] = useState(JOB_DEFAULT_CRON)
   const [sessionMode, setSessionMode] = useState<'new' | 'resume'>('new')
   const [error, setError] = useState('')
 
@@ -35,6 +45,19 @@ export function JobForm({ onSubmit, onCancel, isPending }: JobFormProps) {
   const [purpose, setPurpose] = useState('')
   const [stopAt, setStopAt] = useState('')
   const [stopWhenQueueEmpties, setStopWhenQueueEmpties] = useState(false)
+
+  // What the operator is about to commit, said twice over: once as a sentence, once as the actual
+  // instants. Both are `null`/empty for an expression that cannot be read exactly, so a schedule
+  // this product does not understand shows nothing rather than a reassuring guess.
+  const cronPlain = describeCron(cron)
+  const upcoming = useMemo(() => {
+    const from = new Date()
+    return nextRuns(cron, from, 3).map((run) => formatNextRun(run, from))
+  }, [cron])
+  // F1: an expression restricting both day fields is refused by the Hub on submit. Before this,
+  // the form's answer to one was silence — no sentence, no preview — which reads as "keep typing",
+  // not as "this will be rejected". Said here, in the same words the refusal uses.
+  const cronAmbiguity = cronDayAmbiguity(cron)
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -170,6 +193,29 @@ export function JobForm({ onSubmit, onCancel, isPending }: JobFormProps) {
               style={{ ...inputStyle, fontFamily: "'JetBrains Mono', monospace" }}
               disabled={isPending}
             />
+            {cronPlain && (
+              <p className="cron-preview" data-testid="cron-preview">
+                <Icon name="chat" size={13} />
+                {cronPlain}
+              </p>
+            )}
+            {cronAmbiguity && (
+              <p
+                className="next-run-preview"
+                data-testid="cron-ambiguity"
+                style={{ color: 'var(--amber)' }}
+              >
+                <Icon name="alert_triangle" size={12} />
+                {cronAmbiguity}
+              </p>
+            )}
+            {upcoming.length > 0 && (
+              <p className="next-run-preview" data-testid="next-run-preview">
+                <Icon name="schedule" size={12} />
+                Next {upcoming.length} run{upcoming.length === 1 ? '' : 's'}:{' '}
+                {upcoming.join(' · ')} (UTC)
+              </p>
+            )}
             <div className="flex flex-wrap gap-2 mt-2">
               {CRON_EXAMPLES.map((example) => (
                 <button
@@ -227,7 +273,15 @@ export function JobForm({ onSubmit, onCancel, isPending }: JobFormProps) {
           <div className="rounded-lg p-3" style={{ border: '1px solid var(--border)', background: loopEnabled ? 'var(--surface-2)' : undefined }}>
             <button
               type="button"
-              onClick={() => setLoopEnabled(!loopEnabled)}
+              onClick={() => {
+                const next = !loopEnabled
+                // 5.3: opening the loop section moves the schedule to the loop default, but only
+                // while it is still the untouched job default. A plain job is not a loop and
+                // nothing here makes a fast *job* cheap, so the two defaults stay distinct — and an
+                // operator who has already typed a schedule keeps it.
+                if (next && cron === JOB_DEFAULT_CRON) setCron(LOOP_DEFAULT_CRON)
+                setLoopEnabled(next)
+              }}
               className="flex items-center gap-1.5 text-[11px] font-medium"
               style={{ color: 'var(--text-3)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
               aria-expanded={loopEnabled}

@@ -464,10 +464,16 @@ def submit_checkpoint_notes(
     files changed, which tasks are assigned, what is unanswered, and when everything happened.
     Do not restate any of that here.
 
+    Write for somebody else. The checkpoint these notes feed is read by whichever agent the
+    Hub picks up the work next, which may not be you and may not even be working your task —
+    a reviewer of what you just finished reads it too. Anything you would only understand
+    yourself is lost at that handover, so name the file, the task and the decision in full
+    rather than referring back to them.
+
     Give only what cannot be read back from the transcript:
-      intent     — what you were in the middle of doing, and what you were about to do next.
-      suspicions — what you believe but did not verify, and what would confirm or refute it.
-      warnings   — what a successor should not repeat, assume, or waste time re-deriving.
+      intent     — what was in the middle of being done, and what comes next.
+      suspicions — what is believed but unverified, and what would confirm or refute it.
+      warnings   — what the next agent should not repeat, assume, or waste time re-deriving.
 
     Keep it brief; a few hundred words in total is right. These notes are one input among
     several, not the checkpoint — the checkpoint is produced whether or not you call this.
@@ -523,7 +529,13 @@ def create_job(
         name: Job name.
         agent: Exact name of the registered agent the job triggers.
         message: The message delivered to that agent on each run.
-        cron: Cron expression for the schedule.
+        cron: Cron expression for the schedule. Defaults to every five minutes, which is cheap:
+            a firing whose agent is already running is refused before it claims or queues
+            anything and records nothing at all, and a firing against a stalled queue counts on
+            the existing record rather than adding another. So a frequent schedule costs a query
+            and no rows, and it bounds how long a finished step waits before the next one starts.
+            Choose a slower one only when the work itself is periodic — nightly, weekly — rather
+            than to avoid waste.
         session_mode: "new" to start a fresh conversation each run, "resume" to continue.
     """
     return _job_effect(
@@ -544,7 +556,7 @@ def create_loop(
     name: str,
     agent: str,
     message: str,
-    cron: str,
+    cron: str = "*/5 * * * *",
     purpose: str = "",
     stop_at: Optional[str] = None,
     stop_when_queue_empties: bool = False,
@@ -553,9 +565,13 @@ def create_loop(
 ) -> Dict[str, Any]:
     """Create a loop: recurring work with a stated purpose and a stop condition.
 
+    One agent, one task at a time. Use create_flow instead when the work comes from an approved
+    specification document and should be decomposed across several agents, with finished work
+    reviewed by somebody other than whoever did it.
+
     Continuity across firings is by checkpoint (see submit_checkpoint_notes), never by a
     resumed session — every firing starts fresh. Refused outright with no stop condition: a
-    loop that cannot stop is not created.
+    loop that cannot stop is not created, and refused with a document: that is a flow.
 
     Args:
         name: Job name.
@@ -566,9 +582,9 @@ def create_loop(
         stop_at: ISO-8601 timestamp after which the loop stops firing. At least one of
             stop_at or stop_when_queue_empties is required.
         stop_when_queue_empties: Stop once this loop's queue has no open task left.
-        spec_document_id: A specification document this loop decomposes. Tasks materialised
-            from that document, once it is approved, are added to this loop's queue
-            automatically.
+        spec_document_id: Not accepted here — declaring a document makes this a flow. Kept in
+            the signature so the refusal can name create_flow rather than the call failing as an
+            unexpected argument, which tells the caller nothing about what to do instead.
         initial_tasks: Tasks to seed the queue with, created in this same call. Each entry is
             a dict with "title" required and the same optional fields create_task accepts:
             description, assignee, priority, requirements, requirement_ids, spec_document,
@@ -581,6 +597,99 @@ def create_loop(
             "POST",
             "/jobs",
         )
+    if spec_document_id is not None:
+        raise HubAPIError(
+            400,
+            "a loop that declares a specification document is a flow: call create_flow instead, "
+            "which decomposes the document across several agents and has finished work reviewed "
+            "by somebody other than whoever did it",
+            "POST",
+            "/jobs",
+        )
+    return _job_effect(
+        "POST",
+        "/jobs",
+        {
+            "name": name,
+            "agent": agent,
+            "message": message,
+            "cron": cron,
+            "purpose": purpose,
+            "stop_at": stop_at,
+            "stop_when_queue_empties": stop_when_queue_empties,
+            "spec_document_id": spec_document_id,
+            "initial_tasks": initial_tasks,
+        },
+    )
+
+
+@mcp.tool()
+def create_flow(
+    name: str,
+    agent: str,
+    message: str,
+    spec_document_id: str,
+    cron: str = "*/5 * * * *",
+    purpose: str = "",
+    stop_at: Optional[str] = None,
+    stop_when_queue_empties: bool = False,
+    initial_tasks: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    """Create a flow: a loop that decomposes an approved specification document.
+
+    A flow differs from a loop in what it does with its queue, not in what it is. Each firing
+    starts every task whose prerequisites are met and for which an agent is available, so
+    independent work runs in parallel; and a task somebody finished becomes claimable by anybody
+    except its author, which is how work gets reviewed without anyone being asked to hand it over.
+
+    `agent` is the default, not the mandate — the agent a firing uses when nothing else has said
+    otherwise. Reviewers are resolved per task: the document's declared reviewer if it names one
+    and that name resolves, otherwise any agent that is idle and holding no work. A step nobody can
+    review is surfaced to the operator; the rest of the queue carries on.
+
+    Everything else is a loop's: one stop condition is required, continuity across firings is by
+    checkpoint rather than a resumed session, and the checkpoint is the flow's rather than any one
+    agent's — so a reviewer starts from what the implementer recorded.
+
+    Args:
+        name: Job name.
+        agent: Exact name of the registered agent this flow fires by default.
+        message: The message delivered on each firing, after the briefing.
+        spec_document_id: The specification document this flow decomposes. Required — a flow
+            without one is a loop. Tasks materialised from the document, once it is approved, are
+            added to this flow's queue automatically.
+        cron: Cron expression for the schedule.
+        purpose: What this flow exists to do — carried into every firing's briefing.
+        stop_at: ISO-8601 timestamp after which the flow stops firing. At least one of
+            stop_at or stop_when_queue_empties is required.
+        stop_when_queue_empties: Stop once this flow's queue has no open task left.
+        initial_tasks: Tasks to seed the queue with, created in this same call. Each entry is
+            a dict with "title" required and the same optional fields create_task accepts:
+            description, assignee, priority, requirements, requirement_ids, spec_document,
+            acceptance_criteria.
+    """
+    # Both refusals are client-side and precede any HTTP call, matching `create_loop`'s own
+    # stop-condition check. The document one is **not** made redundant by the `str` annotation:
+    # the annotation is what a well-behaved client enforces before calling, and this is what
+    # catches an empty string, or a `None` arriving from a client that did not.
+    if stop_at is None and not stop_when_queue_empties:
+        raise HubAPIError(
+            400,
+            "a flow needs a stop condition: supply stop_at or stop_when_queue_empties=True",
+            "POST",
+            "/jobs",
+        )
+    if not spec_document_id:
+        raise HubAPIError(
+            400,
+            "a flow decomposes a specification document: supply spec_document_id, or call "
+            "create_loop for recurring work that has no document behind it",
+            "POST",
+            "/jobs",
+        )
+    # Byte-identical to `create_loop`'s body but for the document, and deliberately so: design D1
+    # says a flow is a configuration rather than a record, so there is one route and one row. If
+    # these two payloads ever diverge, a `Flow` table has grown in all but name.
     return _job_effect(
         "POST",
         "/jobs",

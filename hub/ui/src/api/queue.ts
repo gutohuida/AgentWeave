@@ -58,6 +58,7 @@ export function useQueueStatus(agent: string | null) {
       || event.type === 'run_interrupted'
       || event.type === 'queue_entry_queued' || event.type === 'queue_entry_delivered'
       || event.type === 'queue_entry_withdrawn' || event.type === 'queue_chain_suspended'
+      || event.type === 'queue_entry_released'
     ) {
       queryClient.invalidateQueries({ queryKey: ['project', projectId, 'queue', agent, 'status'] })
     }
@@ -75,5 +76,14 @@ export function useQueueStatus(agent: string | null) {
 export async function withdrawQueueEntry(projectId: string, entryId: string): Promise<void> {
   await fetchWithAuth(`/api/v1/projects/${projectId}/queue/entries/${entryId}`, {
     method: 'DELETE',
+  })
+}
+
+/** Continues a chain the hop budget is holding: re-bases the entry to depth 0 and delivers it
+ *  on the next turn. Refused with a stated reason if the budget is not what is holding it — the
+ *  entry would still be waiting afterwards, and saying "continued" would name the wrong thing. */
+export async function releaseQueueEntry(projectId: string, entryId: string): Promise<void> {
+  await fetchWithAuth(`/api/v1/projects/${projectId}/queue/entries/${entryId}/release`, {
+    method: 'POST',
   })
 }

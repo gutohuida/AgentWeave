@@ -76,21 +76,36 @@ would then be refused for approving.
 ### Requirement: A flow resolves a reviewer by declaration, then by availability
 
 Where a task declares a reviewer, the Hub SHALL attempt to resolve that declaration to an agent in
-this project. Where it does not resolve, or where none is declared, the Hub SHALL select any agent
-that is not running a turn and holds no task in an active status.
+this project, and SHALL do so by the same resolution the rest of the product already uses for a
+declared reviewer, never a second one.
 
-Where neither yields an agent, the flow SHALL surface that it could not staff the step, naming the
-task. The flow's job SHALL remain enabled and SHALL remain scheduled.
+**Where a declaration exists and does not resolve, the Hub SHALL NOT substitute a different agent.**
+It SHALL surface the declaration and the reason it failed, and the review falls to the operator. A
+declaration that named someone is not the same fact as no declaration at all: quietly running the
+review under a different name tells the operator that the agent they named checked the work when it
+did not.
+
+Where **no** reviewer is declared, the Hub SHALL select any agent that is not running a turn and
+holds no task in an active status.
+
+Where no declaration exists and no agent is available, the flow SHALL surface that it could not
+staff the step, naming the task. The flow's job SHALL remain enabled and SHALL remain scheduled.
 
 #### Scenario: A declared reviewer that resolves is used
 
 - **WHEN** a task declares a reviewer that resolves to an eligible agent
 - **THEN** that agent is fired for the review
 
-#### Scenario: An unresolvable declaration falls back to availability
+#### Scenario: An unresolvable declaration is surfaced, never substituted
 
 - **WHEN** a task declares a reviewer that resolves to no agent in this project
-- **THEN** an agent that is not running and holds no active task is fired instead
+- **THEN** no other agent is fired for that review
+- **AND** the declared name and the reason it did not resolve are surfaced to the operator
+
+#### Scenario: An undeclared review falls back to availability
+
+- **WHEN** a task declares no reviewer at all
+- **THEN** an agent that is not running and holds no active task is fired for the review
 
 #### Scenario: A busy agent is not selected
 
@@ -105,9 +120,40 @@ task. The flow's job SHALL remain enabled and SHALL remain scheduled.
 
 #### Scenario: A single-agent project reaches the same outcome by the same rule
 
-- **WHEN** a flow's project holds only the agent that completed the task
+- **WHEN** a flow's project holds only the agent that completed the task, and no reviewer is
+  declared
 - **THEN** the flow surfaces that it could not staff the review
 - **AND** no special-case path is taken to reach that outcome
+
+### Requirement: An agent fired to review a completed task is given a review turn
+
+Where a flow fires an agent for a task in `completed`, that firing SHALL be a review turn: the agent
+SHALL be given the workspace and the turn context that reviewing already means in this product,
+naming the task under review and the commit its most recent evidence cites.
+
+A firing that staffs a review SHALL NOT deliver an ordinary turn. An ordinary turn places the agent
+in its own working checkout, where work that has not been integrated does not exist — so a reviewer
+given one cannot see what it was fired to review.
+
+Where a review turn cannot be prepared, the flow SHALL surface the stated reason and SHALL NOT fire
+the agent into an ordinary turn instead.
+
+#### Scenario: A reviewer sees the work it was fired to review
+
+- **WHEN** a flow fires an agent for a task another agent completed
+- **AND** that task's evidence cites a commit that exists only on the author's branch
+- **THEN** the reviewing agent's workspace contains that commit's content
+
+#### Scenario: The reviewer is told it is reviewing
+
+- **WHEN** a flow fires an agent for a task in `completed`
+- **THEN** the turn context states that this is a review, of which task, at which commit
+
+#### Scenario: A review turn that cannot be prepared is not downgraded
+
+- **WHEN** a flow would fire an agent for a review and the review turn cannot be prepared
+- **THEN** the agent is not fired with an ordinary turn
+- **AND** the reason is surfaced to the operator
 
 ### Requirement: A flow may start every task whose dependencies are met
 

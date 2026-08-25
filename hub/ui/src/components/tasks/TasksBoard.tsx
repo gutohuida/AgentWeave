@@ -7,6 +7,8 @@ import { EmptyState } from '@/components/common/EmptyState'
 import { Icon } from '@/components/common/Icon'
 import { useAgents } from '@/api/agents'
 import { agentColorVars } from '@/lib/agentColors'
+import { tint } from '@/lib/colorTint'
+import { taskStatusTone } from '@/lib/taskStatusColors'
 import { useTaskFilterStore } from '@/store/taskFilterStore'
 
 // `blocked` has no column of its own, deliberately. It is not a separate stage of work — it is
@@ -16,14 +18,29 @@ import { useTaskFilterStore } from '@/store/taskFilterStore'
 // In Progress (`2026-08-10-blocked-and-conversation-binding`, R3).
 const STATUSES_IN_PROGRESS = ['in_progress', 'blocked']
 
+// Column accents come from `taskStatusColors`, not a second copy of the mapping — see that module
+// for why (the board and the Overview had already drifted apart on `in_progress`).
+//
+// `empty` is per column and deliberately not one shared sentence. Seven columns means the empty
+// treatment is the most-repeated element on this screen, and "No tasks" seven times says nothing
+// about *why* a column is empty or what would fill it. Each one names the state and the move that
+// ends it; the icon comes from the existing lucide map via `Icon`, sized down from `EmptyState`'s
+// own 52px circle so a column reads as a smaller instance of the same pattern, not a new one.
 const COLUMNS = [
-  { key: 'pending',         label: 'Pending',        accentColor: null as string | null, statuses: ['pending'] },
-  { key: 'assigned',        label: 'Assigned',       accentColor: null as string | null, statuses: ['assigned'] },
-  { key: 'in_progress',     label: 'In Progress',    accentColor: 'var(--blue)',         statuses: STATUSES_IN_PROGRESS },
-  { key: 'under_review',    label: 'Under Review',   accentColor: 'var(--amber)',        statuses: ['under_review'] },
-  { key: 'completed',       label: 'Completed',      accentColor: null as string | null, statuses: ['completed'] },
-  { key: 'approved',        label: 'Approved',       accentColor: 'var(--green)',        statuses: ['approved'] },
-  { key: 'revision_needed', label: 'Needs Revision', accentColor: 'var(--red)',          statuses: ['revision_needed'] },
+  { key: 'pending',         label: 'Pending',        accentColor: taskStatusTone('pending'),         statuses: ['pending'],
+    empty: { icon: 'list_alt',    title: 'Nothing pending',   description: 'New work lands here before anyone picks it up.' } },
+  { key: 'assigned',        label: 'Assigned',       accentColor: taskStatusTone('assigned'),        statuses: ['assigned'],
+    empty: { icon: 'person_add',  title: 'Nothing assigned',  description: 'Assign a pending task to move it here.' } },
+  { key: 'in_progress',     label: 'In Progress',    accentColor: taskStatusTone('in_progress'),     statuses: STATUSES_IN_PROGRESS,
+    empty: { icon: 'play_arrow',  title: 'Nothing running',   description: 'Start work on an assigned task to move it here.' } },
+  { key: 'under_review',    label: 'Under Review',   accentColor: taskStatusTone('under_review'),    statuses: ['under_review'],
+    empty: { icon: 'fact_check',  title: 'Nothing to review', description: 'Completed work waits here for your verdict.' } },
+  { key: 'completed',       label: 'Completed',      accentColor: taskStatusTone('completed'),       statuses: ['completed'],
+    empty: { icon: 'task_alt',    title: 'Nothing completed', description: 'An agent moves its own work here when it is done.' } },
+  { key: 'approved',        label: 'Approved',       accentColor: taskStatusTone('approved'),        statuses: ['approved'],
+    empty: { icon: 'verified',    title: 'Nothing approved',  description: 'Approving reviewed work moves it here, and merges it.' } },
+  { key: 'revision_needed', label: 'Needs Revision', accentColor: taskStatusTone('revision_needed'), statuses: ['revision_needed'],
+    empty: { icon: 'edit_note',   title: 'Nothing to redo',   description: 'Work sent back from review lands here.' } },
 ]
 
 interface TasksBoardProps {
@@ -227,7 +244,7 @@ export function TasksBoard({ onOpenRequirement }: TasksBoardProps = {}) {
             gap: 10,
           }}
         >
-          {COLUMNS.map(({ key, label, accentColor, statuses }) => {
+          {COLUMNS.map(({ key, label, accentColor, statuses, empty }) => {
             let col = tasks.filter((t) => statuses.includes(t.status))
             if (activeFilter !== null) {
               col = col.filter((t) => t.assignee === activeFilter)
@@ -295,7 +312,11 @@ export function TasksBoard({ onOpenRequirement }: TasksBoardProps = {}) {
                   <span
                     className="task-column-count"
                     style={{
-                      background: accentColor ? `${accentColor}20` : 'var(--surface-3)',
+                      // color-mix, not a `${token}20` suffix: a custom property cannot carry a
+                      // concatenated alpha channel — `var(--blue)20` is not a colour, so the whole
+                      // declaration was being dropped and the four accented columns rendered their
+                      // count with no background at all while the two neutral ones kept theirs.
+                      background: accentColor ? tint(accentColor, 18) : 'var(--surface-3)',
                       color: accentColor ?? 'var(--text-2)',
                     }}
                   >
@@ -306,8 +327,16 @@ export function TasksBoard({ onOpenRequirement }: TasksBoardProps = {}) {
                     traps the wheel and gives `sticky` above the wrong container to stick to. */}
                 <div className="space-y-2">
                   {col.length === 0 && (
-                    <div className="task-column-empty" aria-label={`${label} has no tasks`}>
-                      No tasks
+                    <div
+                      className="task-column-empty"
+                      data-testid={`task-column-empty-${key}`}
+                      aria-label={`${label} has no tasks`}
+                    >
+                      <span className="task-column-empty-icon" aria-hidden="true">
+                        <Icon name={empty.icon} size={14} />
+                      </span>
+                      <span className="task-column-empty-title">{empty.title}</span>
+                      <span className="task-column-empty-desc">{empty.description}</span>
                     </div>
                   )}
                   {col.map((task) => (
@@ -319,6 +348,7 @@ export function TasksBoard({ onOpenRequirement }: TasksBoardProps = {}) {
                       onOpen={() => setOpenTaskId(task.id)}
                       draggable
                       isDragging={draggedTaskId === task.id}
+                      isSelected={openTaskId === task.id}
                       moveInstructionsId="task-board-move-instructions"
                       onMoveByKeyboard={(direction) => moveByKeyboard(task, direction)}
                       onDragStart={(event) => {
@@ -376,6 +406,7 @@ export function TasksBoard({ onOpenRequirement }: TasksBoardProps = {}) {
                       onOpen={() => setOpenTaskId(task.id)}
                       draggable
                       isDragging={draggedTaskId === task.id}
+                      isSelected={openTaskId === task.id}
                       moveInstructionsId="task-board-move-instructions"
                       onMoveByKeyboard={(direction) => moveByKeyboard(task, direction)}
                       onDragStart={(event) => {

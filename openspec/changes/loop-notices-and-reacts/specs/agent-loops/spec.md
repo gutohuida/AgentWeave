@@ -66,8 +66,15 @@ agent is free.
 ### Requirement: A firing is refused while its queue is stalled
 
 The Hub SHALL refuse a firing whose queue is stalled, before queueing any input, and SHALL record a
-reason naming how many tasks are open and in which statuses. A queue is stalled when it holds tasks
-that are not terminal and none of them is claimable.
+reason naming what the queue is waiting on. A queue is stalled when it holds tasks that are not
+terminal and none of them is claimable.
+
+Where nothing is claimable and no dependency gate is involved, that reason SHALL name how many tasks
+are open and in which statuses. Where instead a dependency gate refuses every candidate, the reason
+is governed by "A queue gated on unapproved work is stalled, never stopped", which requires it to
+distinguish an unmet prerequisite from a rejected one. That reason names counts and causes rather
+than statuses, and this requirement SHALL NOT be read to demand both of it: the operator's remedy
+there is the prerequisite, not the queue's own status breakdown.
 
 The loop's job SHALL remain enabled and remain scheduled. A stalled queue is not a finished one, and
 the operator resolving the stall SHALL be sufficient for a later firing to proceed with no further
@@ -75,9 +82,16 @@ action.
 
 #### Scenario: A stalled queue refuses the firing and states why
 
-- **WHEN** a loop's job fires and every non-terminal task in its queue is unclaimable
+- **WHEN** a loop's job fires and every non-terminal task in its queue is unclaimable, with no
+  dependency gate involved
 - **THEN** the firing is refused
 - **AND** the recorded reason names the count and statuses of the open tasks
+
+#### Scenario: A gated stall states its gate rather than its statuses
+
+- **WHEN** a loop's job fires and every candidate in its queue is refused by the dependency gate
+- **THEN** the firing is refused
+- **AND** the recorded reason names the gating rather than the queue's status breakdown
 
 #### Scenario: A stalled loop is not disabled
 

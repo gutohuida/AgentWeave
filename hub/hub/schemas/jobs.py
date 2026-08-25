@@ -74,6 +74,11 @@ class JobRunResponse(BaseModel):
     trigger: str = Field(max_length=64)
     session_id: Optional[str] = Field(default=None, max_length=128)
     error_summary: Optional[str] = Field(default=None, max_length=500)
+    # How many firings this record stands for (`loop-notices-and-reacts` design D6). Always 1 on a
+    # record of a firing that happened; more only on a stall record, where each subsequent refusal
+    # for the same stall counts here instead of appending another row. Defaults to 1 rather than 0
+    # so a row written before the column existed reads as the one firing it represents.
+    tick_count: int = 1
 
     model_config = {"from_attributes": True}
 
@@ -101,7 +106,23 @@ class LoopSummary(BaseModel):
     ending_state: Optional[str] = None
     archived_at: Optional[datetime] = None
     queue: Dict[str, int] = Field(default_factory=dict)  # status -> count
-    current_task: Optional[Dict[str, str]] = None  # {"id", "title", "status"}
+    # `loop-becomes-a-flow` task 1.5: a list, because a flow may staff several tasks at once
+    # (group 5) and every caller's shape should change once rather than again later. Group 1
+    # changes no behaviour, so this holds zero or one member and the UI renders it exactly as it
+    # rendered the scalar. Empty list, never null — "nothing current" and "several current" then
+    # have the same type, and a caller can iterate without a null check.
+    #: Every task this loop is currently working, in queue order (design D15). `agent` is the
+    #: selection's agent, or a blocked task's assignee, and is absent when neither is known —
+    #: never blank, so a reader is not shown an empty attribution.
+    current_tasks: List[Dict[str, str]] = Field(  # {"id", "title", "status", "agent"?}
+        default_factory=list
+    )
+    # Why this loop's next firing would be refused, or None if it would proceed
+    # (`loop-notices-and-reacts` 5.5). Taken from `decide_firing` — the same computation that
+    # decides it — rather than inferred from the queue counts, so the board cannot say one thing
+    # while the firing does another. Names what is being waited on, not merely that something is:
+    # a stalled loop must read as *waiting*, not as dead.
+    stall_reason: Optional[str] = None
     open_questions: int = 0
     # Design D10 (task A1.1): who decides whether this queue may be extended. NULL means the
     # current default (the operator) — returned as-is, never resolved to "operator" here, mirroring

@@ -163,7 +163,7 @@ async def test_create_task_generates_id_when_omitted(app, auth_headers):
     assert resp.status_code == 201
     body = resp.json()
     assert body["id"].startswith("task-")
-    assert len(body["id"]) == len("task-") + 8  # short_id() = 8 hex chars
+    assert len(body["id"]) == len("task-") + 12  # short_id() = 12 hex chars
 
 
 @pytest.mark.asyncio
@@ -345,6 +345,57 @@ async def test_loop_id_scopes_to_exactly_that_loops_tasks_regardless_of_status(a
     assert shared_resp.status_code == 200
     shared_ids = {t["id"] for t in shared_resp.json()}
     assert "task-loop-3" in shared_ids
+
+
+@pytest.mark.asyncio
+async def test_creating_a_task_in_a_loop_reports_the_loop_it_joined(app, auth_headers):
+    """`POST /tasks {"loop_id": …}` answered 201 with `loop_id: null` while the loop's own summary
+    already counted the task in its queue (`scripts/drive/FINDINGS.md`, F16).
+
+    The write worked; only the reply denied it, so there was no way to confirm from the create call
+    that the task had joined the loop.
+    """
+    async with async_session_factory() as session:
+        job = AIJob(
+            id="job-echo",
+            project_id="proj-test",
+            name="Echo job",
+            agent="builder",
+            message="hello",
+            cron="0 9 * * *",
+            enabled=True,
+        )
+        session.add(job)
+        await session.commit()
+        session.add(
+            Loop(id="loop-echo", project_id="proj-test", job_id=job.id, purpose="Echo the id back")
+        )
+        await session.commit()
+
+    created = await app.post(
+        "/api/v1/projects/proj-test/tasks",
+        json={"title": "Joins the loop", "loop_id": "loop-echo"},
+        headers=auth_headers,
+    )
+
+    assert created.status_code == 201, created.text
+    assert created.json()["loop_id"] == "loop-echo"
+
+    read_back = await app.get(
+        f"/api/v1/projects/proj-test/tasks/{created.json()['id']}", headers=auth_headers
+    )
+    assert read_back.json()["loop_id"] == "loop-echo"
+
+
+@pytest.mark.asyncio
+async def test_a_task_in_no_loop_reports_none(app, auth_headers):
+    """The field has to be able to say "no loop" as well, or it is not an answer."""
+    created = await app.post(
+        "/api/v1/projects/proj-test/tasks", json={"title": "Free-standing"}, headers=auth_headers
+    )
+
+    assert created.status_code == 201, created.text
+    assert created.json()["loop_id"] is None
 
 
 @pytest.mark.asyncio

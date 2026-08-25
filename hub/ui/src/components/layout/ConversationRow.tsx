@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { formatDistanceToNow } from 'date-fns'
 import {
   conversationErrorMessage,
   conversationLabel,
@@ -8,8 +9,46 @@ import {
   type AgentConversation,
 } from '@/api/agentChat'
 import { Icon } from '@/components/common/Icon'
+import { hubDate } from '@/lib/hubTime'
 import { loopTabId, usePanelTabsStore } from '@/store/panelTabsStore'
 import { RowMenu, type RowMenuItem } from './RowMenu'
+
+/**
+ * A conversation's age, in the width a rail row can spare.
+ *
+ * `formatDistanceToNow` — what the agent row one level up uses — produces "about 2 hours ago",
+ * which is right on a line of its own and impossible beside a title that is already truncating.
+ * This is the compact form (`2m`, `1h`, `3d`), floored rather than rounded so a row never claims
+ * to be newer than it is.
+ *
+ * Why it is needed at all: a rail of five threads called "New conversation" has no ordering cue
+ * whatsoever, and `RecencyView` — whose entire purpose is recency — was sorting by a fact it
+ * never showed. Read from `updated_at`, which the conversation payload already carries and which
+ * is what both views sort on, so the number and the order can never disagree.
+ *
+ * Returns null for a timestamp that will not parse, so a Hub sending something unexpected costs
+ * the row its age rather than printing "NaNm".
+ *
+ * Deliberately not exported: `react-refresh/only-export-components` (lint runs at
+ * `--max-warnings 0`) refuses a non-component export from a component module, and `src/lib/` is
+ * where this belongs the day a second caller wants it. `railHierarchy.test.tsx` covers the
+ * boundaries through rendered rows instead, which is what actually ships anyway.
+ */
+function relativeShort(iso: string, now: number = Date.now()): string | null {
+  const at = hubDate(iso).getTime()
+  if (Number.isNaN(at)) return null
+  const seconds = Math.max(0, Math.floor((now - at) / 1000))
+  if (seconds < 60) return 'now'
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes}m`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h`
+  const days = Math.floor(hours / 24)
+  if (days < 7) return `${days}d`
+  const weeks = Math.floor(days / 7)
+  if (weeks < 52) return `${weeks}w`
+  return `${Math.floor(days / 365)}y`
+}
 
 /** What each attention state looks like at rest.
  *
@@ -54,6 +93,10 @@ export function ConversationRow({
   const attention = ATTENTION[conversation.attention]
   const label = conversationLabel(conversation)
   const archived = conversation.lifecycle === 'archived'
+  // Computed at render, not on a timer: every surface that changes `updated_at` also invalidates
+  // this list over SSE, so the row re-renders with a fresh reading anyway and a ticking clock per
+  // row would be a cost with no reader.
+  const age = relativeShort(conversation.updated_at)
   // Held as a const so the null check below narrows inside the click handler too.
   const loop = (showLoopMarker ? conversation.loop : null) ?? null
 
@@ -150,6 +193,11 @@ export function ConversationRow({
             className="row-item min-w-0 flex-1"
             data-testid={testId}
             data-active={active ? 'true' : 'false'}
+            /* Level 3 of the rail's selection ladder, and its leaf: the one row in navigation
+             * that carries a resting fill, because it is the one the operator is actually
+             * reading. See the `.row-item[data-active]` block in index.css for the whole scale
+             * and for why the fill is spent here and nowhere else. */
+            data-depth="conversation"
             data-attention={conversation.attention}
             data-origin={conversation.origin}
             aria-current={active ? 'page' : undefined}
@@ -173,6 +221,19 @@ export function ConversationRow({
                 title="Started by another agent"
               >
                 peer
+              </span>
+            )}
+            {/* Before the attention dot, never after: the dot is the highest-priority signal on
+                the row and its position against the row's right edge has to be stable, or a
+                waiting run appears to move when a neighbour's age changes width. The `title`
+                carries the unabbreviated reading, since "2m" on its own is a guess. */}
+            {age && (
+              <span
+                className="row-meta"
+                data-testid={`${testId}-age`}
+                title={`Last activity ${formatDistanceToNow(hubDate(conversation.updated_at), { addSuffix: true })}`}
+              >
+                {age}
               </span>
             )}
             {attention && (

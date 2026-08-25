@@ -1,9 +1,14 @@
 ## Context
 
-A loop is a mature sequential executor — 25 requirements, three bugs found only by driving it live.
+A loop is a mature sequential executor — 27 requirements, three bugs found only by driving it live.
 The operator's standing decision (`2026-08-20-the-loop-under-dependencies.md` §1) is *"improve the
 loop, do not rebuild it"*, and this design is written to satisfy that literally: the audit in
 `2026-08-21-the-loop-becomes-a-flow.md` §3 found **20 of 25 requirements untouched**.
+
+*(Recounted 2026-08-24. The audit said 25, and `agent-loops` now has **27** — `task-dependencies`
+added §690 and §723 after this was written. This change's delta modifies **3**, so 24 of 27 are
+untouched and the "extension, not a rebuild" evidence is stronger than the sentence above claims,
+not weaker. The two new ones are both in groups 3 and 5's path and were read before this recount.)*
 
 What forces the change is arithmetic, not ambition. An agent cannot approve its own work; a
 dependency is met at `approved`; a loop has one agent. **A single-agent loop cannot advance past its
@@ -55,7 +60,8 @@ Not by widening `CLAIMABLE_LOOP_TASK_STATUSES`, which is actor-blind. Claimabili
 about *(task, agent)* rather than about status alone.
 
 The determination already exists: `_agent_that_completed`
-(`hub/hub/task_transition_service.py:92-116`), which author/reviewer separation reads for
+(`hub/hub/task_transition_service.py:108`, read by the guard at `:153`), which author/reviewer
+separation reads for
 `under_review -> approved`. **Using the same function is not tidiness, it is the correctness
 property** — a task the flow offers an agent must never be one that agent is then refused for
 approving.
@@ -73,9 +79,30 @@ can be omitted, because nothing is asked of the finishing agent.
 
 ```
    1. the task's declared reviewer          (task-dependencies D11) — if it resolves
-   2. any agent not running and holding no active task
+   1b. a declaration that does NOT resolve  — surface it; never substitute
+   2. no declaration: any agent not running and holding no active task
    3. surface: "could not staff this step"
 ```
+
+**Amended 2026-08-24, after `a-reviewer-can-see-the-work` shipped.** This ladder was written on
+2026-08-21 and had rung 1 falling through to rung 2 on an unresolvable declaration. Three days later
+`review_turn.resolve_declared_reviewer` shipped doing the opposite, deliberately, with the reason in
+its docstring: *"an operator reading 'reviewed by critic' when `critic` does not exist and `auditor`
+reviewed it has been told something false about who checked the work."* Two answers to one question,
+and the shipped one is live and carries the argument.
+
+So rung 1b is now explicit, and it is the right distinction rather than a concession: **silence and
+a failed declaration are different facts.** Nobody named a reviewer → the flow is free to choose, and
+rung 2 still runs the whole thing with nothing configured, which is the operator's objection
+answered. Somebody named a reviewer and the name did not resolve → substituting misrepresents who
+checked the work, and the operator is the one who can fix the name.
+
+**Resolution is against agent names, and this is settled rather than open.** `resolve_declared_reviewer`
+matches the declared string against roster `Agent.name` for this project, and treats an archived
+agent as unresolved for the same reason `trigger_agent_directly` refuses one. The flow reuses that
+function; it does not write a second resolution. This closes what the Open Questions below listed as
+*"against charters, agent names, or both"* — `task-dependencies` D11 left it to the flow, and the
+reviewer change answered it first.
 
 Rung 2 is the important one, and it exists because of the operator's objection to the previous
 direction: *"I don't want to end up in a old problem where having a squad to develop is a price that
@@ -104,8 +131,12 @@ cap*, withdrawn because it ignored `token_budget` and made review structurally u
 Width here is not a policy the operator sets; it is the shape of the decomposition they approved. The
 operator still starts parallelism — at spec time, by declaring independent work.
 
-**The largest mechanical consequence:** `_claim_loop_task` returns one task and three callers assume
-it. The set-valued form must land before anything else in this change is useful.
+**The largest mechanical consequence:** `_claim_loop_task` returns one task. *(Corrected
+2026-08-24: this said "three callers assume it". There was **one** — `_do_fire_job`. The board never
+called it; it kept its own copy of the startability rule with a comment saying it "mirrors" the
+firing's. Group 1 turned that copy into a real shared call, `scheduler.candidate_is_startable`, so
+the count is now genuinely two and they cannot drift.)* The set-valued form must land before
+anything else in this change is useful.
 
 *Rejected:* **serial, one task per firing.** It solves every correctness problem and makes the graph
 decorative — a DAG walked in a valid order that never uses its width.
@@ -141,9 +172,200 @@ one place it reliably reads, that finishing means stopping — routing is the fl
 asks — exactly how the self-messaging capability stayed invisible
 (`2026-08-20-an-agent-messaging-its-other-conversation.md`).
 
+### D9 — A firing that staffs a review delivers a review turn, not an ordinary one
+
+**Added 2026-08-24.** This design was written on 2026-08-21, three days before
+`a-reviewer-can-see-the-work` shipped, and it therefore describes firing a reviewer as an ordinary
+firing. It is not one, and the difference is the whole of finding F10.
+
+An ordinary firing puts the agent in its own working checkout. Unreviewed work exists only on the
+author's branch, so a reviewer given an ordinary turn cannot see the thing it was fired to review —
+which is circular in exactly the way `review_turn.py`'s own docstring records: *"the only way to see
+it was to integrate it — which is what the review was meant to decide."*
+
+The mechanism already exists and this change reuses it rather than inventing a second one. A turn
+becomes a review turn when it carries a `review_task_id` — either passed to the trigger or read off
+the queue entry (`InboundQueueEntry.review_task_id`, migration `0086`) — at which point
+`prepare_review_turn` resolves the commit the task's most recent evidence cites, builds a detached
+checkout of it, and states in the turn context that this is a review, of which task, at which
+commit.
+
+**So the concrete gap is one argument.** `scheduler._do_fire_job` builds its entry with
+`new_entry(...)` and passes no `review_task_id` (`hub/hub/scheduler.py:1187`). A flow staffing a
+review must pass it.
+
+*Rejected:* **firing an ordinary turn and letting the agent find the branch itself.** That is what
+produced F10 — the reviewer asked the author what changed. It also puts the author's branch inside
+the reviewer's own checkout, which is the isolation boundary `worktrees.py` exists to hold.
+
+*Rejected:* **downgrading to an ordinary turn when the review turn cannot be prepared.** A reviewer
+silently placed somewhere it cannot see the work reports on what it can see, and the operator reads
+that as a review. `ReviewTurnRefused` already carries a stated reason; surface it.
+
+**Consequence for D4.** Rung 2 selects "any free agent", and a review turn is per-agent isolation —
+so the agent rung 2 picks determines which checkout is built. Nothing here requires the same agent
+across retries, but a released or re-fired review builds a fresh checkout, which is the bounded and
+reused behaviour the reviewer change's own third requirement already specifies.
+
+### D10 — Review outranks new work, because the ordering already said so
+
+**Added 2026-08-24, implementing group 3.** `_loop_queue_order` sorts non-`pending` rows first, by
+`updated` descending, then pending rows oldest-first. A `completed` task is non-pending, so the
+moment group 3 makes one claimable it sorts **ahead of** untouched pending work — a flow reviews
+finished work before starting more.
+
+That was inherited rather than chosen, and it is being written down rather than changed, because it
+is the behaviour a queue should have: work that is finished and waiting on a second pair of eyes is
+closer to done than work not yet begun, and letting it wait while the flow opens new fronts is how a
+queue accumulates a tail of unreviewed work. It also falls out of the same rule that already makes
+an in-progress task outrank a pending one, so there is one ordering rule rather than an exception
+for review.
+
+The author is unaffected: it walks past its own finished task and takes the pending one, because
+claimability is answered per agent before ordering is consulted.
+
+*Rejected:* **a separate ordering for reviewable candidates.** Two orderings is what
+`_loop_queue_order`'s own comment records going wrong — the board and the firing each had one, both
+shared a flaw, and two consistent wrong answers read as a match.
+
+### D11 — A non-author agent may take a task to `approved`
+
+**Decided by the operator 2026-08-24**, answering a question carried unanswered since handoff 0078
+and load-bearing for everything in groups 3, 4 and 4b.
+
+An agent may sign work off. The only guard is author/reviewer separation — the agent that recorded
+the move to `completed` may not approve, reject or request revision of it — and that guard is
+already implemented, already tested, and already the thing group 3's claimability defers to.
+
+Two consequences worth stating, since a later reader will ask:
+
+- **The flow's review is a real review, not a staging step.** A reviewer's turn can end at
+  `approved`, so a queue can drain without the operator in it. That is what makes an unattended flow
+  possible at all; without it every loop stops at a wall of finished work.
+- **The operator is not removed from the loop, only from the critical path.** `ask_user` and the
+  permission posture still stop a run, and B4's evidence gates still govern *what* an approval
+  requires. This decides who may press the button, not what has to be true before it is pressed.
+
+### D12 — Ordinary work resolves an agent too, and an assignee outranks the default
+
+**Decided by the operator 2026-08-24, implementing group 5.** D2 made the job's agent the *default*
+and D4 built a ladder for reviewers, which left the question D5 needs answered and does not ask: a
+firing that starts three ordinary tasks has to say who works the second and third. `decide_firing`
+paired every non-review candidate with `default_agent`, so widening the walk literally would have
+produced three selections that D6 then collapsed to one — a flow with three independent tasks and
+three idle agents starting one, which is D5's own *Rejected* case reached by accident.
+
+So ordinary work resolves an agent, in two steps:
+
+1. **A candidate that already has an assignee resumes with that assignee.** This closes the open
+   question below rather than deferring it again, and it is the finding that made the rest visible:
+   `claimed_task.assignee = selection.agent` is unconditional, so under width a task running under
+   agent B is re-selected next tick as ordinary work, reassigned to the job's agent and briefed to
+   them while B is still working it. An `in_progress` or `assigned` task is *already staffed*; the
+   firing is resuming it, not staffing it.
+2. **Otherwise the job's agent takes the first such task and each further one takes the next free
+   agent**, drawn from `_agents_that_are_free` — the same not-running, holds-no-active-task,
+   not-archived, runner-bound set D4 rung 2 already uses. One notion of "free" in the module, in
+   queue-stable order, so a wide firing pairs the same tasks with the same agents on a rerun.
+
+   **The job's own agent is tested against "running a turn", not against that free set**, and the
+   asymmetry is deliberate. `_agents_that_are_free` is a *recruitment* pool: it additionally demands
+   a roster row with a bound runner and no active work, which is the right bar for an agent the flow
+   is choosing on the operator's behalf and the wrong one for the agent the operator already chose
+   when they created the job. Applying it to the default made a loop whose agent happens to hold any
+   active task — or whose project has no roster rows at all — resolve nobody and read as stalled.
+   That is not hypothetical: the dependency board derives its current item from this same walk, so
+   the first implementation of this decision broke the board's agreement with the firing, which is
+   `task-dependencies` human-only check 13.1 and has a shipped test.
+
+*Rejected:* **running D4's full ladder over ordinary work.** Its rung 1 is
+`resolve_declared_reviewer`, which is review-specific; an ordinary-work sibling would be a second
+resolver with no requirement asking for one. *Rejected:* **leaving ordinary work at width one.** It
+fails task 5.1 as written and is the shape D5 rejects.
+
+**The busy guard has to move for any of this to be reachable.** `_do_fire_job` calls
+`_loop_agent_busy_reason(..., job.agent)` and returns before `decide_firing` runs, on the stated
+grounds that "a loop's agent runs one turn at a time" — true of a loop, false of a flow, where
+`job.agent` is only the default. Left there, the moment a flow staffs its own job's agent, every
+tick for the length of that turn refuses to staff any *other* free agent on any *other* independent
+task, and width is reachable only inside a tick that finds the job's agent idle. Busy-ness becomes a
+fact about *a candidate agent* — it excludes that agent from resolution — rather than a reason to
+abandon the firing. A firing that resolves nobody for anything still refuses, which is the old
+behaviour of a single-agent loop, unchanged.
+
+### D13 — A wide firing records one `JobRun` per selection
+
+**Decided by the operator 2026-08-24.** `JobRun` correlates back to the `Run` it started **only**
+through `conversation_id` — `finalize_job_run_for_conversation` says so, and `models.py` records
+that there is no foreign key. A firing that starts three agents creates three conversations, so one
+row per firing would have nothing left to correlate with, and would need a new rule for when a run
+covering three agents stops being "in progress".
+
+One row per selection keeps that correlation exactly as it is: the finalize path is untouched, and
+each agent's outcome — completed, failed, the error summary — is separately visible instead of
+being merged into a single verdict for the tick.
+
+Two costs, accepted rather than mitigated:
+
+- **`_prune_job_history`'s 100-row window fills N times faster** for a flow of width N, so a wide
+  flow keeps proportionally less history. Left alone: the window is per job, and a flow doing three
+  times the work per tick producing three times the rows is the window measuring the same thing.
+- **`JobCard`'s history shows N rows for one tick.** Correct rather than noisy — they are N turns.
+
+*Rejected:* **one `JobRun` spanning several conversations**, which breaks the only correlation there
+is. *Rejected:* **parent and child rows**, which is a migration and a UI change on top of this
+group's scheduler work, for a presentation improvement group 9 is the place to consider.
+
+### D14 — The tier is presentation; a loop and a flow behave identically
+
+**Decided by the operator 2026-08-24**, answering the question group 8's spec review raised and
+closing it below.
+
+Nothing in `decide_firing`, `task_is_claimable_by` or `resolve_reviewer` consults
+`Loop.spec_document_id`. Width comes from the graph and the roster, claimability by a non-author
+comes from the transition history, and rung 2 of D4's ladder is deliberately written to work with
+nothing configured at all. So a document-less loop in a project with three agents already behaves
+exactly as a flow does, and has since group 5 landed.
+
+That is not a defect to be closed by adding gates — it is the design working. **D1's three tiers
+nest in naming, not in behaviour.** What `create_flow` buys is that the caller states intent, that
+the briefing can tell the agent something true about where its work came from, and that the operator
+reading a board knows which loops are decompositions of an approved document.
+
+*Rejected:* **gating behaviour on the tier** — a plain loop staying serial with its finished work
+never claimed for review. It would make the three tiers real at the cost of contradicting rung 2's
+entire purpose, which is the operator's own objection answered: *"I don't want to end up in a old
+problem where having a squad to develop is a price that you need to pay before even starting
+development."* A loop that cannot get its work reviewed until somebody declares a document is that
+price, reintroduced one tier down.
+
+**Consequence for D1's stated consequence.** D1 said *flow* and *loop* are two live words for one
+table and that this is tolerable while they nest. They do nest, and now it is known exactly how: one
+is the other plus a document, with no behavioural boundary between them. The words disagree nowhere.
+
+### D15 — A wide firing shows several current items, each naming its agent
+
+**Decided by the operator 2026-08-24**, answering the board question this change carried open from
+the start.
+
+The loop's card lists every task being worked with the agent beside it, rather than summarising the
+width on one line or moving the marker onto the graph nodes. `current_tasks` is already a list and
+`_batch_loop_summaries` is already shaped to fill it — group 1 left it that way on purpose — so this
+is the smallest change that stops the board under-reporting, and it needs no new component.
+
+**Accepted cost:** a card grows with the flow's width. That is the right thing to grow with: an
+operator looking at a card wants to know what is happening, and three agents working is three lines
+of fact rather than noise.
+
+*Rejected:* **one line summarising the width** ("3 tasks across 3 agents"). Fixed card height, but
+the operator cannot see what is being worked without navigating, and the thing they most often want
+from this card is exactly that. *Rejected:* **marking the graph nodes instead.** It puts concurrency
+where the structure already is, but leaves the card and the graph disagreeing about what "current"
+means — and this module's history is a catalogue of two derivations of one question drifting apart.
+
 ## Risks / Trade-offs
 
-**[Set-valued claim breaks the board, the firing and §525 at once]** → Land the set-valued form
+**[Set-valued claim breaks the board, the firing and §548 at once]** → Land the set-valued form
 first, with the board reading the same function, before any multi-agent behaviour. A flow that
 returns a set of one must pass every existing test unchanged.
 
@@ -160,6 +382,14 @@ selected at firing time is not. Runner-bound is part of eligibility, not an erro
 
 **[Two words for one table]** → Accepted in D1. The mitigation is that they nest.
 
+**[A flow's review turn multiplies checkouts]** → Every staffed review builds a detached checkout,
+and D5 permits several at once, so a wide flow can build several in one firing. The reviewer
+change's "A review checkout is bounded and reused" requirement is what bounds this, and it was
+written for one reviewer at a time — confirm it still holds when a flow staffs three
+(`scripts/drive/FINDINGS.md` F22 is also open here: shared-dependency symlinks fail on Windows
+without Developer Mode, so a review checkout of a project with `node_modules` or `.venv` is
+unproven).
+
 ## Migration Plan
 
 No data migration. `Checkpoint.agent` already exists and already records the writer; what changes is
@@ -171,10 +401,37 @@ existing loop suite, unmodified.
 
 ## Open Questions
 
-- **What does the board show for a flow staffing several tasks?** The dependency board renders the
-  graph; whether concurrent work is shown per card, per layer, or as a flow header is undecided.
-- **How is a declared reviewer resolved — against charters, agent names, or both?**
-  `task-dependencies` D11 deliberately left this here, and it is the last thing rung 1 needs.
-- **Does a flow ever fire the same agent for a task it is already working?** Resumption of an
-  `in_progress` task should keep its agent; nothing says so yet.
+- ~~**May an agent take a task from `under_review` to `approved`?**~~ **Answered 2026-08-24: yes,
+  provided it is not the agent that completed it.** See D11.
+- ~~**What does the board show for a flow staffing several tasks?**~~ **Answered 2026-08-24:
+  several current items on the loop's card, each naming its agent.** See D15.
+- ~~**How is a declared reviewer resolved — against charters, agent names, or both?**~~
+  **Answered 2026-08-24: agent names.** Not decided here — `a-reviewer-can-see-the-work` shipped
+  `review_turn.resolve_declared_reviewer` first, matching the declared string against roster
+  `Agent.name` and treating an archived agent as unresolved. See D4.
+- ~~**Does a flow ever fire the same agent for a task it is already working?**~~ **Answered
+  2026-08-24: yes — an already-assigned task resumes with its own assignee, never with the job's
+  default agent.** See D12, step 1.
+- ~~**Does the tier gate behaviour, or is it only a name?**~~ **Answered 2026-08-24: it is
+  presentation. A loop and a flow behave identically.** See D14.
+- **What actor is a flow's own claim?** Found by task 10.5, 2026-08-24, which is the first
+  requirement to read the `actor_kind` column. `_do_fire_job` claims with
+  `apply_transition(..., "assigned", operator())`, so the recorded history says a **human** assigned
+  every task any loop has ever claimed. Nobody did. `Actor` has two kinds and its own docstring
+  insists that *"no run id" and "the operator" are different propositions* — a flow's claim is a
+  third, the Hub acting on a schedule, and it currently borrows the operator's name.
+  Not fixed in this change: a third kind is a migration plus a semantic change to an audit trail the
+  operator reads, and it touches every loop rather than only flows.
+  `test_no_judgement_in_the_chain_was_the_operators` pins the current attribution so that fixing it
+  fails loudly rather than silently.
 - **Cross-firing selection races** — see the risk above.
+- **Should a loop's checkpoint anchor on the loop's previous checkpoint rather than the
+  conversation's?** Raised by group 6's spec review, 2026-08-24, and deliberately not acted on.
+  `generate_checkpoint` anchors on `latest_checkpoint(conversation.id)`, which for a loop is always
+  `None`, so `_ANCHOR_SECTION` — *"Carry forward what is still true and record what has changed"* —
+  never reaches the worker. The briefing carries checkpoint N into agent B's turn, but the worker
+  writing checkpoint N+1 sees only B's transcript and whatever B chose to restate, so across a flow
+  each checkpoint covers one firing and A's reasoning survives only as far as B repeated it.
+  Changing the anchor to `latest_checkpoint_for_loop` also moves `_transcript_since`'s and
+  `runs_to_cover`'s boundaries onto another conversation's timestamp, which needs deciding rather
+  than assuming — hence a question rather than a fix.

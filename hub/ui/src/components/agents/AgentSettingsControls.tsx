@@ -18,6 +18,7 @@ import {
   useUpdateAgentWaiting,
 } from '@/api/runners'
 import { SettingsRow } from '@/components/environment/SettingsSection'
+import { Select, Textarea } from '@/components/ui/input'
 
 /**
  * The editable per-agent controls, shared by the settings page and — until it is retired — the
@@ -56,7 +57,7 @@ export function DescriptionSetting({ agent }: { agent: AgentSummary }) {
 
   return (
     <div>
-      <textarea
+      <Textarea
         value={draft}
         rows={2}
         maxLength={MAX_AGENT_DESCRIPTION_CHARS}
@@ -67,9 +68,6 @@ export function DescriptionSetting({ agent }: { agent: AgentSummary }) {
         disabled={update.isPending}
         className="control-field w-full px-3 py-2 rounded-md text-sm resize-y"
         style={{
-          background: 'var(--surface-3)',
-          color: 'var(--text)',
-          border: '1px solid var(--border)',
           opacity: update.isPending ? 0.6 : 1,
         }}
       />
@@ -144,11 +142,11 @@ export function WaitingSetting({
               if (event.key === 'Enter') event.currentTarget.blur()
             }}
             disabled={update.isPending}
+            // The invalid state is the recipe's, not an inline red border — `.control-field` styles
+            // `aria-invalid`, which also announces the error rather than only colouring it.
+            aria-invalid={error ? true : undefined}
             className="control-field w-24 px-3 py-2 rounded-md text-sm"
             style={{
-              background: 'var(--surface-3)',
-              color: 'var(--text)',
-              border: `1px solid ${error ? 'var(--red)' : 'var(--border)'}`,
               opacity: update.isPending ? 0.6 : 1,
             }}
           />
@@ -187,16 +185,13 @@ export function PermissionDefaultSetting({ agent }: { agent: AgentSummary }) {
 
   return (
     <div>
-      <select
+      <Select
         value={agent.default_permission_mode ?? ''}
         onChange={(event) => update.mutate({ agent: agent.name, mode: event.target.value || null })}
         disabled={update.isPending}
         aria-label={`Default permissions for ${agent.name}`}
         className="control-field w-full px-3 py-2 rounded-md text-sm"
         style={{
-          background: 'var(--surface-3)',
-          color: 'var(--text)',
-          border: '1px solid var(--border)',
           opacity: update.isPending ? 0.6 : 1,
         }}
       >
@@ -204,7 +199,7 @@ export function PermissionDefaultSetting({ agent }: { agent: AgentSummary }) {
         {options.map((option) => (
           <option key={option.id} value={option.id}>{option.label}</option>
         ))}
-      </select>
+      </Select>
       <p className="mt-1 text-[11px]" style={{ color: 'var(--text-3)' }}>
         Used when a conversation has not chosen one — including runs a peer or a schedule starts,
         where there is no composer to choose in.
@@ -231,7 +226,7 @@ export function RunnerPicker({ agent }: { agent: AgentSummary }) {
 
   return (
     <div>
-      <select
+      <Select
         value={agent.runner_id ?? ''}
         onChange={(event) => {
           bindRunner.mutate({ agent: agent.name, runnerId: event.target.value || null })
@@ -240,9 +235,6 @@ export function RunnerPicker({ agent }: { agent: AgentSummary }) {
         aria-label={`Runner for ${agent.name}`}
         className="control-field w-full px-3 py-2 rounded-md text-sm"
         style={{
-          background: 'var(--surface-3)',
-          color: 'var(--text)',
-          border: '1px solid var(--border)',
           opacity: bindRunner.isPending ? 0.6 : 1,
         }}
       >
@@ -252,7 +244,7 @@ export function RunnerPicker({ agent }: { agent: AgentSummary }) {
             {runner.name} ({runner.cli})
           </option>
         ))}
-      </select>
+      </Select>
       {bindRunner.isError && (
         <p className="text-xs mt-2" style={{ color: 'var(--red)' }}>
           Could not update runner binding.
@@ -273,7 +265,7 @@ export function CharterPicker({ agent }: { agent: AgentSummary }) {
 
   return (
     <div>
-      <select
+      <Select
         value={agent.charter_id ?? ''}
         onChange={(event) => bindCharter.mutate({
           agent: agent.name,
@@ -283,9 +275,6 @@ export function CharterPicker({ agent }: { agent: AgentSummary }) {
         aria-label={`Charter for ${agent.name}`}
         className="control-field w-full px-3 py-2 rounded-md text-sm"
         style={{
-          background: 'var(--surface-3)',
-          color: 'var(--text)',
-          border: '1px solid var(--border)',
           opacity: bindCharter.isPending ? 0.6 : 1,
         }}
       >
@@ -293,7 +282,7 @@ export function CharterPicker({ agent }: { agent: AgentSummary }) {
         {charters.map((charter) => (
           <option key={charter.id} value={charter.id}>{charter.name}</option>
         ))}
-      </select>
+      </Select>
       {bindCharter.isError && (
         <p className="text-xs mt-2" style={{ color: 'var(--red)' }}>
           Could not update charter binding.
@@ -333,15 +322,12 @@ export function CheckpointOverrideSetting({ agent }: { agent: AgentSummary }) {
   }
 
   const selectStyle = {
-    background: 'var(--surface-3)',
-    color: 'var(--text)',
-    border: '1px solid var(--border)',
   }
 
   return (
     <div className="space-y-3">
       <div>
-        <select
+        <Select
           value={agent.checkpoint_mode ?? ''}
           onChange={(event) => updateMode.mutate({ agent: agent.name, mode: event.target.value || null })}
           aria-label={`Automatic checkpointing for ${agent.name}`}
@@ -352,14 +338,14 @@ export function CheckpointOverrideSetting({ agent }: { agent: AgentSummary }) {
           <option value="off">Off for this agent</option>
           <option value="offered">Offer me one</option>
           <option value="automatic">Do it automatically</option>
-        </select>
+        </Select>
         <p className="mt-1 text-[11px]" style={{ color: 'var(--text-3)' }}>
           Whether this agent checkpoints at all. Independent of the threshold below, so an agent can
           opt out while still accepting the project's threshold.
         </p>
       </div>
       <div className="flex items-center gap-2">
-        <select
+        <Select
           value={unit}
           onChange={(event) => setUnit(event.target.value as 'percent' | 'tokens')}
           aria-label={`Threshold unit for ${agent.name}`}
@@ -368,7 +354,7 @@ export function CheckpointOverrideSetting({ agent }: { agent: AgentSummary }) {
         >
           <option value="percent">Percent</option>
           <option value="tokens">K tokens</option>
-        </select>
+        </Select>
         <input
           type="number"
           min={1}
