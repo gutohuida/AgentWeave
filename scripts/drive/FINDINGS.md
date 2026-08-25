@@ -1318,3 +1318,122 @@ these was driven, not read.
   evidence names a commit, so there is nothing to merge"* — and offered `Try again`.
 
 ---
+
+## F43 (A) — the flow tells every agent to brief its reviewer, and no flow path delivers it
+
+Found 2026-08-25 while staging group 11's task 11.3, which handoff 0086 recorded as *"not
+answerable from this drive: no checkpoint was generated."* It is not answerable because it
+**cannot** be, and the reason is structural rather than a gap in the drive.
+
+This is F41's shape a second time: every link works, the tests pass, and the path cannot fire.
+
+### What the product promises
+
+`_compose_loop_briefing` (`scheduler.py:1522`) tells every agent in a flow:
+
+> **Finish the task below and stop.** … Record what a reviewer will need (see
+> `submit_checkpoint_notes`); somebody else reads it.
+
+Nobody else reads it. Nobody can.
+
+### The chain, and the link that is missing
+
+1. The agent calls `submit_checkpoint_notes`. `api/v1/agent_actions.py:348` writes one
+   `CheckpointNote` scoped to **the author's conversation** and returns `recorded: true`.
+2. A `CheckpointNote` is an input to checkpoint generation, never a readable artefact — its own
+   docstring: notes *"are consumed by that conversation's next checkpoint"*. Nothing else in the
+   Hub reads the table.
+3. `generate_checkpoint` consumes them (`pending_notes`, `checkpoint_generation.py:454`) and stamps
+   `Checkpoint.loop_id` from `loop_for_conversation` (`:448`). Correct, and load-bearing.
+4. `latest_checkpoint_for_loop(loop.id)` finds it, and `_compose_loop_briefing` renders it under
+   `## Prior checkpoint`. Also correct.
+
+Every one of those works. What does not exist is a trigger. `generate_checkpoint` has exactly two
+callers:
+
+- `output_recording.py:230` → `consider_from_reading`, which fires on a **context-usage
+  threshold**; and
+- `api/v1/checkpoints.py:175`, an **operator button**.
+
+A flow firing is `session_mode: new`, one small task, and then that conversation never runs again.
+Its context never approaches a threshold, and no operator presses a button per handover. So no
+checkpoint is generated, the notes are never consumed, and `latest_checkpoint_for_loop` returns
+`None` on every firing the flow will ever have.
+
+### Measured on the live database, not argued
+
+| Query | Result |
+|---|---|
+| `select count(*) from checkpoint_notes` | **3** |
+| …`where consumed_by_checkpoint_id is null` | **3** — all of them |
+| `select count(*) from checkpoints` | 6 |
+| …`where loop_id is not null` | **0** |
+
+All six checkpoints belong to conversations with no `job_run`, so their null `loop_id` is correct —
+checkpoint generation itself is not broken, it has simply never once run inside a loop. And all
+three notes come from `loop-e4b864459808`, the Ledger flow, written by **all three** of its agents.
+
+### The agents did their part, and the note proves task 6.5 worked
+
+The instruction landed. `note-e8cf4afcb4b1`, written by `builder`, is about
+`task-23a0986e7fe9` — the exact task `critic` is queued to review:
+
+> Task task-23a0986e7fe9 "Refuse an entry with no postings": The code implementation is already
+> correct. Entry.balances() on line 20-21 of ledger/book.py already returns False for empty
+> postings…
+
+That is a note written *for somebody else*: it names the task, the file, the line and the finding,
+and it is not notes-to-self. **This is the artefact task 11.3 asks the operator to judge, and it
+already answers the question it was written to raise.** What fails is delivery, not authorship —
+which inverts the check: 11.3 was framed as "if the checkpoint reads as notes-to-self, task 6.5 did
+not work", and 6.5 demonstrably did.
+
+### Why the suite is green
+
+`test_scheduler.py:1408`, `test_loop_briefing_includes_a_prior_checkpoint_in_full_under_the_cap`,
+builds its subject with `_make_checkpoint(db, loop_id=loop.id, …)` — a `Checkpoint` row inserted
+directly with the column already set — and then asserts the briefing renders it. It never exercises
+anything that would *produce* such a row, and in production nothing does. This is verbatim the
+lesson F41 ended with: **the fixture builds what the product does not build.**
+
+### What would close it
+
+The missing trigger belongs at the handover, which is the moment the product already treats as
+significant: a flow task reaching `completed` with a reviewer to be staffed. Generating the
+author's checkpoint there consumes the pending notes and stamps `loop_id`, and every downstream
+link already works.
+
+It is not free — generation is a real model call, measured at ~19s, and a flow that hands over
+often pays it often. That is an operator decision about spend, and it needs `checkpoint_runner_id`
+on the project, which `ledger-stress` does not have set (so even the operator button refuses today,
+409). Recorded rather than fixed; see F44, which has to be settled in the same breath.
+
+---
+
+## F44 (B) — the reviewer is briefed by the loop's newest checkpoint, not the author's
+
+Same reading, and it only bites once F43 is fixed — which is why it is recorded now rather than
+discovered afterwards.
+
+`latest_checkpoint_for_loop` filters on `loop_id` alone, orders by `created_at desc`, and takes
+one. No author, no task. `_compose_loop_briefing` uses that single value for **every** turn,
+including a review turn (`scheduler.py:2453`), and the review path adds no author content of its
+own — `prepare_review_turn` supplies the commit, the evidence id, the branch and the checkout, all
+mechanical.
+
+That identity held for the design it was written for. Its docstring reasons about *"a loop's next
+firing"* — in a one-agent loop the newest checkpoint **is** the previous firing's, so "latest for
+the loop" and "the author's" are the same row. A flow breaks the identity: with three agents
+working concurrently, the newest checkpoint is whoever finished last, and the reviewer of task X
+can be briefed with an unrelated agent's account of task Y while being told it is what a reviewer
+will need.
+
+The live notes show the collision already forming — three notes on one loop from three different
+agents, of which exactly one (`note-e8cf4afcb4b1`) concerns the task actually queued for review.
+Had F43 been fixed alone, two firings in three would have briefed the reviewer with the wrong
+author's work.
+
+Any fix for F43 therefore has to select the checkpoint by **the author of the task under review**,
+not by recency within the loop.
+
+---
