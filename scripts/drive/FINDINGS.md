@@ -1070,6 +1070,200 @@ Left unfixed here deliberately: it is not part of the sweep remediation, and cha
 synchronisation while shipping six other changes would make a genuine failure harder to attribute.
 Recorded so the next full-suite red run is read correctly rather than dismissed *or* chased.
 
+## F41 (A) — F38's fix cannot fire: every document has a `content_digest` from birth
+
+Found 2026-08-25 during the live re-drive of `the-seams-of-the-sweep`, which is precisely what a
+re-drive is for: the fix is unit-tested six ways and green, and does nothing in production.
+
+`note_turn_that_produced_nothing` (`run_divergence.py:288`) gates on the document having no content:
+
+```python
+if document is None or document.content_digest:
+    return False
+```
+
+The docstring explains the intent — *"`content_digest` is the digest of what was last submitted, so
+its absence is 'nothing has ever been written here'"*. The premise is false. **No creation path
+leaves it absent.** Both routes create the row and then immediately write a scaffold payload:
+
+- `api/v1/spec.py:1319` `create_document` → `spec_lifecycle.create_document` (digest null) →
+  `spec_service.save_document(payload)` → `record_content` → `content_digest = digest(content)`.
+- `api/v1/agent_actions.py:1094` `create_spec_document` — the agent's own tool — does the same.
+
+Measured on the live beta database: **50 spec documents, 0 with a null or empty `content_digest`.**
+
+The clinching evidence is the original F38 subject itself. `spec/changes/teal-manticore/spec.html`,
+the document `author` was given and never wrote, carries digest `da8c2bb9…` and this event log:
+
+```
+created  operator  2026-08-25 08:15:40.650773  {"path": "spec/changes/teal-manticore/spec.html"}
+content  operator  2026-08-25 08:15:40.650773  {"requirements": []}
+phase    operator  2026-08-25 08:16:08.128281  {"explore_closed": true}
+```
+
+The `content` event lands in the *same microsecond* as `created`. So the check written to catch that
+turn would have returned `False` on that turn.
+
+**Reproduced live rather than argued.** A document was created (`spec/changes/jade-kelpie/spec.html`)
+and `dev` was triggered against it with `spec_document` set and instructions to reply in prose only:
+
+| Precondition | Required | Actual |
+|---|---|---|
+| run ended with no task | yes | `run-5f5039d40de7`, `task_id = NULL` |
+| inbound entry names a document | yes | `entry-2652466231e4` → `spec/changes/jade-kelpie/spec.html` |
+| run wrote no question | yes | `SELECT COUNT(*) FROM questions WHERE created_by_run_id = …` → 0 |
+| document has no content | yes | `content_digest = 2b43163d…` — **fails here** |
+
+`SELECT COUNT(*) FROM event_logs WHERE event_type='turn_produced_nothing'` → **0**. Every condition
+the finding describes was met and nothing was recorded.
+
+The six tests in `test_turn_produced_nothing.py` pass because `_setup` constructs a `SpecDocument`
+row directly with `content_digest=None` — a state the product never produces. This is the same class
+of defect as the two tests F27 and F37 found pinning bugs in place: the fixture asserts a world the
+code does not build.
+
+**The reachable signal is one column over.** The scaffold write records `{"requirements": []}`, so
+`requirement_digests` is `{}` for a document nothing has been written into, and non-empty once an
+agent submits one. On the live jade-kelpie row: `requirement_digests = '{}'`. That is the honest
+expression of "nothing has ever been written here", it is state rather than prose, and it keeps
+every other property of the design intact — including the rule that the agent's text is never read.
+
+---
+
+## F42 (C) — F27 bounds the blast radius but a run can still claim work it will not do
+
+Noted 2026-08-25 during the same re-drive, and **not a defect in the fix** — it is the documented
+consequence of Key decision 1, recorded so it is not mistaken for an oversight later.
+
+`_guard_run_holds_the_task` refuses `-> completed` from a run that holds nothing, which is what the
+live check confirmed. It does not refuse `-> in_progress`: claiming *binds*, deliberately, because
+that is what keeps the Developer charter's "go find waiting work" a real behaviour. So the sequence
+`pending -> assigned -> in_progress -> completed`, which is exactly what the F27 transcript shows an
+agent reasoning its way into, still succeeds — the run simply binds on the way through.
+
+What changed is the size and the attributability of the harm, and both matter:
+
+- A run carries **at most one** binding, so the measured F27 instance — one run closing four
+  unrelated tasks, a second taking two more — is no longer reachable. The ceiling is one task.
+- The completion is now attributable to a run that took the task, so the run boundary checks it and
+  `run_divergence` has something to reason about.
+
+Closing the remainder would mean requiring evidence at `-> completed`, which
+`requirement_gate`'s docstring explains would deadlock the ordinary path — evidence is accepted
+after review and review follows completion. Recorded, not proposed.
+
+---
+
+## The live re-drive, 2026-08-25 — what the fixes did against a running Hub
+
+Task 8.6/8.7. Everything above was unit-verified when it shipped; this is the same set driven
+against the trial Hub on port 8010 after restarting it on the new code, in project
+`proj-bacb623ca9ba` (`aw-sweep`). `GET /health` returning `{"status":"ok","runtime":"native"}` — the
+`runtime` field is new in this change — is what confirms the restart took.
+
+`job-e2c18b2d` ("Hourly test check", 36 firings) was **disabled first**, at the operator's
+direction, so nothing fired on the new code during the drive.
+
+| Finding | Verified live | How |
+|---|---|---|
+| **F27** (A) | **Yes, by a real agent** | See below. |
+| **F28** (B) | **Yes** | The flow's queue was `{}` with all five tasks carrying `loop_id = NULL`. Re-declaring the document (`PATCH .../jobs/job-ccb60a3cb3f6`, `spec_document_id: spdoc-3e0dbec860d0`) adopted every one: `{"approved": 2, "completed": 2, "under_review": 1}`. |
+| **F29** (B) | **Yes, both surfaces and both directions** | Appending a byte to an approved document made the listing report `diverged: true` and the single read carry recorded/found digests plus the detail. Restoring the file cleared it — content-keyed, not a sticky flag. A `touch` with identical bytes stayed `false`, which is Key decision 5's whole point. |
+| **F30** (B) | **Yes** | `architect`, `builder` and `critic` still carry `self_registered = 1` **with** a non-null `runner_id` — the reachable state the finding describes. All three now report `runnable: true` on their real runner instead of `runner=native cli=architect runnable=False`. The probe and the spawn agree. |
+| **F31** (B) | **Yes** | All four measured false positives pass through intact (`spread-fairness-metric-fix-for-idle-staff`, `mcp__agentweave__submit_spec_document`, `mcp__agentweave__record_evidence`, `this_is_a_perfectly_ordinary_function_name`); all three credential shapes still redact. Exercised against the module, not a rendered transcript. |
+| **F32** (B) | **Yes, both branches** | `dev` (withheld) receives `### You cannot decide evidence` with the three lines including where a verdict goes instead; `rev` (granted) receives `### You can decide evidence`. |
+| **F33** (B) | **Yes** | `POST /jobs` with `agent: "nosuchagent"` → **400**, *"agent 'nosuchagent' is not one of this project's agents, so this job could only ever fail. On the roster: author, dev, probe, rev."* Refused at creation instead of failing silently every cron tick. |
+| **F34** (B) | Yes, previous session | `status`/`doctor` against port 8010 and profile `beta`. |
+| **F35** (C) | Module level | The refusal named the field, the shape and a working example, one at a time. **Then reversed at the operator's direction** — see below. |
+| **F36** (C) | **Yes, every path** | `201 added`; cycle → **409** naming both tasks; self-edge → **400**; unknown id → **404** naming both; a repeated edge → **201 `duplicate`**, which the route documents as deliberate ("an operator who clicks twice has not made a mistake"); `DELETE` → **204**. |
+| **F37** (C) | **Yes** | `spec/changes/teal-manticore/spec.html`, in `exploring`, archived successfully with `tasks_created: []`. This was a hard refusal before. `GET /spec/drift` is now empty. |
+| **F38** (B) | **No — and that is the finding.** | See F41. |
+
+### F27, driven by a real agent rather than asserted
+
+The sharpest result of the drive. `task-326f5f62de51` was created, moved to `in_progress` **by the
+operator** so that no run held it, and `dev` was triggered with instructions to call
+`update_task(task_id, "completed")` and report the result verbatim. It did, and got:
+
+```
+Hub rejected PATCH /tasks/task-326f5f62de51 (403): This run cannot complete task
+task-326f5f62de51: it is not working any task. A run finishes the task it took, and takes at
+most one. To work this task, start a run bound to it — or, if you meant to report on work you
+did not do, say so rather than moving its status.
+```
+
+The task stayed `in_progress`; `run-041af4d5a3f8` ended with `task_id = NULL`, having never bound.
+
+The old behaviour is preserved in the same agent's earlier transcript rows, which is as close to a
+controlled before/after as this gets — an unbound run walking two tasks `pending → assigned →
+in_progress → completed`, reasoning aloud: *"these tasks aren't assigned to me... I should assign
+them to myself first, mark them as in_progress, and then complete them."* That is F27's exact path,
+and it succeeded then. See **F42** for what that reasoning can still achieve, and why.
+
+### What the drive found that unit tests had not
+
+**F41 (A)** — F38's fix cannot fire. Found by driving the case rather than reading the code, then
+confirmed against the original subject's own event log. Recorded above, and fixed.
+
+### Dispositions the operator made on 2026-08-25
+
+- **F22** — fixed. `doctor` gained `check_symlink_privilege`, which probes a directory symlink and,
+  on this machine, reproduces `WinError 1314` and names the one setting that fixes every worktree
+  at once. A warning rather than a failure: the Hub runs correctly without it.
+- **F24** — fixed. The run row leads with its own status, coloured by `runStatusColor`, and keeps
+  the trigger as a muted qualifier. A refused firing now reads `skipped scheduled`, which is what
+  both user test guides tell the operator to look for.
+- **F25** — fixed. A `n refused` chip beside `0 runs`, drawn from the history the card already
+  holds. Neither count was wrong; naming the refusals is what makes the two agree.
+- **F26** — fixed at the source, not in the renderer. `current_tasks[].agent_role` now says which
+  of `working`, `next` or `assigned` the name means, because the merge that produces it is the only
+  place that still knows — by the time the board sees the name, in-flight work and a firing's
+  selections are indistinguishable. The card renders `next: relay` for a completed task's
+  prospective reviewer and the bare name, unchanged, for an agent mid-turn.
+- **F35** — **reversed.** The seven `submit_spec_document` fields advertise `object`/`array` again.
+  `_check_submit_shapes`, `_SUBMIT_SHAPES` and `MalformedCallError` were removed with them rather
+  than left in place: the framework validates before the body runs, so with the annotations
+  restored nothing could ever have reached them. Leaving them would have created a second F41 in
+  the same session that found the first. `test_the_structured_fields_advertise_their_shape` holds
+  the choice, and the parameter list records what reversing again would take.
+- **F39** — fixed. `recall(observation_id)` now carries the same grant caveat `decide_evidence`
+  already had, and an `### Other agents' history` section states both checkpoint grants in both
+  directions. Stated even when both are withheld, which is the half worth defending: `recall`
+  answers **not-found** rather than refusing — it has to, or the refusal would itself confirm the
+  record exists — so an agent that meets the boundary without being told concludes the record is
+  missing rather than that it is not permitted to see it.
+- **F40** — **largely fixed, and the cause was not what the finding guessed.** Recorded in full
+  because the diagnosis is the useful part.
+
+  The finding proposed that `for task in list(_background_runs): await task` snapshots the set and
+  so misses a run scheduled but not yet registered. That is true and it is fixed —
+  `_settled_redrain_runs` drains and re-checks until the state the test asserts on actually holds,
+  with a bounded deadline that names the run statuses it gave up on. But replacing the snapshot
+  alone did **not** make the test green; it made it fail *deterministically* under load, which is
+  how the real cause surfaced.
+
+  Running this file immediately after `test_conversation_contract.py` failed every time, with
+  `assert 2 == 1` — **two** runs on one conversation, both `failed`, where the isolated run was one
+  and `completed`. The cause is the scope of the `PtySession.spawn` patch: the redrain starts its
+  run as a background task that spawns *after* the request has returned, and the patch closed at
+  the end of the request. Lose that race and the run reaches the real `PtySession.spawn`, fails for
+  want of a `claude` binary, and the product then does exactly the right thing —
+  `return_run_entries` puts the entry back and a second run picks it up. Two failed runs where the
+  test asserted one completed one. Awaiting the settle inside the patch closes it.
+
+  **Measured after both changes:** the deterministic repro is green, and 24 of 25 runs of the
+  four-file combination pass, against 4 of 5 before. A full-suite run also went green at
+  3103 passed. **One failure in 25 remains and its message was not captured** — the dominant cause
+  is fixed and a residual race is not ruled out, so a red run here still deserves reading rather
+  than dismissing.
+
+  Two things worth carrying: a narrowly-scoped `patch` around a call that schedules background work
+  is a bug of the same shape wherever it appears, and the snapshot idiom itself still survives in
+  `test_accounting_budget.py:191` (`test_conversation_contract.py` and `test_agent_trigger.py`
+  already loop on the set and are not exposed the same way).
+
+---
+
 ## What held, under a full-surface sweep
 
 Recorded because a report listing only defects describes a product that does not exist. Each of

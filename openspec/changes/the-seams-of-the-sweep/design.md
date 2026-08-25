@@ -201,6 +201,72 @@ path, so tampering is noticed only when someone tries to write. Call it on the r
 thing to be doing. The listing route already carries `divergence`/`diverged` fields that came back
 `None`; they simply need populating.
 
+### D13 — F41: "not written" is a count of writes, not the absence of a digest
+
+**Written after the live re-drive, and it corrects D5.** D5's rule is right and its implementation
+was not: it asked whether the document carried a recorded content digest, reasoning that its absence
+means nothing has ever been written there.
+
+No creation path leaves it absent. Both `api/v1/spec.py` `create_document` and the agent's own
+`create_spec_document` call `spec_service.save_document` with a scaffold payload immediately after
+the row exists, and that write sets the digest. Measured on the live database: **50 documents, 0
+without one.** The check could not fire, and six tests passed because the fixture built a
+null-digest document the product does not produce.
+
+The original subject settles it. `spec/changes/teal-manticore/spec.html` — the document the author
+was given and never wrote — records `created` and `content` at the same microsecond,
+`2026-08-25 08:15:40.650773`, with `{"requirements": []}`. The check written for that turn would
+have returned False on that turn.
+
+**The signal used instead is the number of `content` events on the document.** The scaffold
+contributes exactly one, so a second is the first time anybody wrote anything. Considered and
+rejected: `requirement_digests` being empty, which is simpler but fires on a document written with
+prose and no requirements — a real thing an author may do on the way to a draft, and reporting it as
+"produced nothing" would teach the operator to ignore the notice, which is the failure mode D5
+already argues against.
+
+Every property of D5 survives: state only, the agent's prose never read.
+
+### D14 — F35 reversed: the schema, not the refusal, and the machinery goes with it
+
+D6 shaped a refusal at the tool, accepting untyped annotations as the price. The operator reversed
+that on 2026-08-25 and chose the schema. The trade was stated when it shipped and the reversal is
+one the design anticipated; what the design did not say is what happens to the machinery.
+
+It is **removed**, not left behind a restored type hint. The framework validates before a tool body
+runs, so with `Dict`/`List` annotations restored, `_check_submit_shapes` is unreachable by every
+path. Keeping it would have produced a second F41 inside the change that found the first: code that
+reads as a safeguard, is counted as one, and cannot be triggered. `test_the_structured_fields_advertise_their_shape`
+now fails if an `Any` returns, and the parameter list records that reversing again means restoring
+the annotations *and* the machinery together, since neither works without the other.
+
+fastmcp 3.1.0 was checked for the escape D6 hoped for: `Tool.from_function` takes `output_schema`
+and has no input equivalent, so there is still no way to hold both halves without `pydantic.Field`,
+which this module may not import.
+
+### D15 — F40's cause was the patch scope, not the snapshot
+
+Recorded because the finding's diagnosis was reasonable and wrong, and the wrong one is the kind
+that gets re-proposed.
+
+F40 attributed the flake to `for task in list(_background_runs): await task` snapshotting the set.
+That is a real defect and is fixed. It is not what made the test fail: replacing the snapshot with a
+wait on the condition made the failure **deterministic** under load, which is how the real cause
+surfaced. Run immediately after `test_conversation_contract.py`, the test failed every time with
+`assert 2 == 1` — two runs on one conversation, both `failed`, where the isolated run was one and
+`completed`.
+
+The `PtySession.spawn` patch closed at the end of the relocate request, while the run it starts is a
+background task that spawns after the response returns. Lose that race and the run reaches the real
+spawn, fails for want of a `claude` binary, and the product does the right thing:
+`return_run_entries` puts the entry back and a second run picks it up. Awaiting the settle inside
+the patch closes it.
+
+**Not claimed as eliminated.** 24 of 25 runs of the reproducing combination pass, against 4 of 5
+before, and a full suite went green; one failure remains unexplained. The general lesson is worth
+more than the fix: a narrowly-scoped `patch` around a call that *schedules* background work is a bug
+of this shape wherever it appears.
+
 ## Risks / Trade-offs
 
 - **D1 refuses a legitimate completion path nobody remembered** → `completed` is reachable only from
@@ -217,6 +283,12 @@ thing to be doing. The listing route already carries `divergence`/`diverged` fie
 - **D12 costs a file read per document on the listing route** → measure; bound or defer the listing
   half if the cost shows, keeping the single-document read path which is where an agent actually
   reads.
+- **D13's write count miscounts a legitimate re-render** → `rerendered` is its own event kind,
+  distinct from `content`, so a Hub-initiated regeneration of the navigation region does not read as
+  an author having written something.
+- **Scope grew during the re-drive.** Thirteen findings became nineteen — see the proposal's
+  scope section. Mitigated the same way: each disposition is its own commit with the full suite run
+  between, and none depends on another.
 - **Scope.** Thirteen findings in one change is large. Mitigated by group order: each group is
   independently shippable and committed on completion, and Group 1 alone closes the A.
 

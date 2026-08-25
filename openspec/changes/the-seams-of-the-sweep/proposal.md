@@ -96,7 +96,24 @@ broken repair themselves rather than needing a rebuild.
 - **Reducing the per-turn context floor.** The sweep measured a turn whose entire instruction was
   *"reply with exactly: SWEEP-OK"* costing 34,451 input tokens, because context and charter are
   assembled fresh every turn. Real, recorded, and not a defect — not addressed here.
-- **F22, F24, F25 and F26**, carried since handoff 0079. Not part of the sweep report.
+- ~~**F22, F24, F25 and F26**, carried since handoff 0079. Not part of the sweep report.~~
+  **Withdrawn 2026-08-25**: the operator dispositioned all four during the live re-drive, and
+  they are now in scope. F22 is a `doctor` warning; F24, F25 and F26 are the loop surfaces.
 - **Changing what `completed` requires by way of evidence.** It deliberately requires none, because
   evidence is accepted after review and review follows completion; refusing there would deadlock the
   ordinary path (`requirement_gate` docstring). F27 is fixed by asking *who*, not by asking for more.
+
+## Scope taken on during the live re-drive (2026-08-25)
+
+Recorded here rather than folded in silently, because it is more than the change was approved for.
+Driving the twelve findings against a running Hub is what produced all of it.
+
+- **F41 (A), fixed here.** F38's remedy cannot fire in production: it asks whether the document has
+  a recorded content digest, and every creation path writes a scaffold the instant the row exists.
+  This belongs to this change rather than a new one — it is a defect *in this change's own
+  delivery*, and leaving it would mean shipping a check with six passing tests and no effect.
+- **F42 (C), recorded, not fixed.** What F27's guard does and does not close, written down so the
+  remainder is not later mistaken for an oversight.
+- **F22, F24, F25, F26, F39, F40 and the reversal of F35** — the operator's dispositions, taken in
+  this change because it is not yet archived and because the F35 reversal cannot sensibly live
+  apart from the F35 requirement it reverses.
