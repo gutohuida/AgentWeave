@@ -268,3 +268,59 @@ A review turn's context SHALL NOT name a transition that the task's status does 
 - **THEN** the context names how to record that the work is correct
 - **AND** names how to record that it needs revision
 - **AND** both are transitions the task can actually make
+
+
+### Requirement: A flow generates the author's handover briefing
+
+The Hub SHALL generate an agent's checkpoint at the boundary of the run that completed a task,
+whenever that agent works inside a flow and has recorded notes for whoever reviews the work, and
+that checkpoint SHALL be attributed to the flow.
+
+The Hub SHALL NOT require a context-usage threshold or an operator action for this to happen: a
+flow firing's conversation reaches neither, so a briefing that depends on either is a briefing that
+is never delivered.
+
+Where the agent recorded no notes, the Hub SHALL generate nothing.
+
+Where the project has chosen no runner for checkpoint generation, the Hub SHALL generate nothing
+and SHALL NOT substitute another runner.
+
+#### Scenario: An agent that briefed its reviewer has that briefing generated
+
+- **WHEN** an agent in a flow completes its task having recorded notes for its reviewer
+- **THEN** a checkpoint is generated for that agent's conversation
+- **AND** the checkpoint is attributed to the flow
+- **AND** the agent's notes are consumed by it
+
+#### Scenario: An agent that recorded nothing costs nothing
+
+- **WHEN** an agent in a flow completes its task having recorded no notes
+- **THEN** no checkpoint is generated
+- **AND** no generation is spawned
+
+#### Scenario: A run that finished no task is not a handover
+
+- **WHEN** a run ends without having completed the task it held
+- **THEN** no handover checkpoint is generated
+
+### Requirement: A reviewer is briefed by the author of the work it is reviewing
+
+When a flow gives an agent a review turn, the briefing SHALL carry the checkpoint of the agent that
+completed **the task under review**, and SHALL NOT substitute another agent's merely because it is
+more recent.
+
+A turn that is not a review SHALL continue to be briefed with the flow's most recent checkpoint.
+
+Where the author left no checkpoint, the flow SHALL fall back to its most recent rather than
+briefing with nothing.
+
+#### Scenario: The newest checkpoint belongs to someone else
+
+- **WHEN** a reviewer is given a task whose author is not the last agent to have finished
+- **THEN** the briefing carries the author's checkpoint
+- **AND** does not carry the more recent one
+
+#### Scenario: Ordinary work still reads the flow's latest
+
+- **WHEN** an agent is given a turn that is not a review
+- **THEN** the briefing carries the flow's most recent checkpoint

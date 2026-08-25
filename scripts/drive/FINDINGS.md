@@ -1436,6 +1436,47 @@ author's work.
 Any fix for F43 therefore has to select the checkpoint by **the author of the task under review**,
 not by recency within the loop.
 
+**Both fixed 2026-08-25** (`loop-becomes-a-flow` group 14, design D17), in one change because F44
+only exists once F43 works.
+
+The trigger is the **run boundary** — `checkpoint_handover.consider_handover`, dispatched beside
+`evaluate_run_end` at both runners' call sites and never awaited on them. A flow agent's
+conversation is finished when its run ends, which makes that the author's handover and the moment
+their notes are complete. Generating at review *dispatch* instead was rejected on mechanics: the
+briefing is composed ~20 lines later in the same firing, so it would block the scheduler for ~19s
+or race it and lose.
+
+Gated on the agent having actually recorded notes — the operator's decision the same day. Spend
+stays proportional to agents doing what the product asked, and a silent agent produces no briefing,
+which is no worse than before the fix.
+
+F44 closes with `checkpoints.checkpoint_by_task_author`, resolving through the transition history,
+reached from `scheduler._briefing_checkpoint` — the single place both firing paths ask the question,
+where `is_review` is the whole difference between "what did the author of this task leave me" and
+"what did this loop last do".
+
+`hub/tests/test_handover_briefs_the_reviewer.py`, 10 tests, **both halves causally confirmed**:
+disabling the F43 trigger fails 5 of 10, disabling the F44 selector fails exactly 1. The module
+never inserts a `Checkpoint` for an F43 assertion — it drives the trigger and asserts on what it
+produced, because inserting the row is exactly how the pre-existing briefing test stayed green
+while nothing in production could produce one.
+
+**The first implementation could not have fired, and the live database is what said so.** Recorded
+here rather than as a new finding because it never shipped — but it is the fourth instance of this
+change's dominant failure mode, and the first one caught *before* a push:
+
+- gate 1 required `run.task_id`; **6 of the 10 live runs with a `completed` transition have it NULL**;
+- gate 2 looked for notes in the completing conversation; **0 of 4 stranded notes are there**,
+  because `session_mode: new` gives every firing its own conversation and a task spanning two
+  firings splits its notes from its completion as a matter of course.
+
+Both gates passed ten green tests, because the fixture put the note and the completion in one
+conversation and set `task_id`. The fixture now matches production on both, and narrowing either
+gate back fails 5 of 10 where previously it failed none.
+
+**Not yet re-verified live.** `ledger-stress` has no `checkpoint_runner_id`, so nothing generates
+there until the operator chooses which CLI is billed.
+
 ---
 
 ## F45 (A) — a review that ends without moving the task is re-staffed on every tick, forever

@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import dependency_gate
 from .checkpoint_generation import render_checkpoint
-from .checkpoints import latest_checkpoint_for_loop
+from .checkpoints import checkpoint_by_task_author, latest_checkpoint_for_loop
 from .conversations import (
     conversation_for_provider_session,
     inherit_runtime_overrides,
@@ -1570,6 +1570,33 @@ async def _emit_review_unstaffed(
     await sse_manager.broadcast(job.project_id, "review_unstaffed", payload)
 
 
+async def _briefing_checkpoint(
+    session: AsyncSession, loop: Loop, task: Optional[Task], *, is_review: bool
+) -> Optional[Checkpoint]:
+    """The checkpoint a turn is briefed from.
+
+    Two questions, not one (finding F44). An ordinary continuation turn asks "what did this loop
+    last do", and `latest_checkpoint_for_loop` answers it -- that is what its docstring reasons
+    about, and it stays correct here.
+
+    A **review** turn asks something else: "what did the author of *this task* leave me". Those
+    were the same row only while a loop ran one agent at a time, where the newest checkpoint is by
+    construction the previous firing's. A flow running three agents concurrently breaks the
+    identity, and the reviewer of task X would be briefed with whoever finished last -- measured on
+    the live database as two firings in three carrying the wrong author's work.
+
+    Falls back to the loop's latest when the author left no checkpoint, rather than briefing with
+    nothing: an agent that recorded no notes generates no handover checkpoint by design (F43's
+    gate), and the loop's own account of itself is still better context than an empty section. The
+    fallback is what makes this no worse than the previous behaviour in the case it cannot improve.
+    """
+    if is_review and task is not None:
+        by_author = await checkpoint_by_task_author(session, task.id, loop_id=loop.id)
+        if by_author is not None:
+            return by_author
+    return await latest_checkpoint_for_loop(session, loop.id)
+
+
 async def _compose_loop_briefing(
     session: AsyncSession,
     loop: Loop,
@@ -2200,7 +2227,14 @@ class JobScheduler:
                     # then this guard keeps the divergence from producing a wrong thread.
                     conversation = None
                     resume_session_id = None
-                prior_checkpoint = await latest_checkpoint_for_loop(session, loop.id)
+                prior_checkpoint = await _briefing_checkpoint(
+                    session,
+                    loop,
+                    claimed_task,
+                    # `selection` is None on the "never filled" queue, where there is no task and
+                    # so nothing to be reviewing.
+                    is_review=bool(selection is not None and selection.is_review),
+                )
                 briefing = await _compose_loop_briefing(
                     session, loop, claimed_task, prior_checkpoint
                 )
@@ -2541,7 +2575,7 @@ class JobScheduler:
         )
         session.add(run)
 
-        prior_checkpoint = await latest_checkpoint_for_loop(session, loop.id)
+        prior_checkpoint = await _briefing_checkpoint(session, loop, task, is_review=is_review)
         briefing = await _compose_loop_briefing(session, loop, task, prior_checkpoint)
         entry = new_entry(
             project_id=job.project_id,

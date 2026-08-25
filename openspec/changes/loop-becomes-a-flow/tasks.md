@@ -925,3 +925,52 @@ it is the one thing standing between a supervised flow and one that can be left 
       fixture invents. F41's pattern a third time, in this same change.
       `hub/tests/test_board_agent_role.py` is the missing half: both roles, both causally confirmed
       failing against the unfixed code, and both re-verified live.
+
+
+## 14. Findings F43 and F44 - the reviewer's briefing is generated, and it is the author's
+
+Found 2026-08-25 while staging group 11's task 11.3, which handoff 0086 had recorded as "not
+answerable from this drive: no checkpoint was generated." It is not answerable because it *cannot*
+be. Same disposition as groups 13 and F41 before it: a defect in this change's own delivery, the
+change unarchived, so it is fixed here. Design D17.
+
+- [x] 14.1 **Generate the author's checkpoint at the run boundary.**
+      New `hub/hub/checkpoint_handover.py`. The flow instructs every agent to brief its reviewer via
+      `submit_checkpoint_notes` and no path delivered it: `generate_checkpoint` had two callers, a
+      context threshold and an operator button, and a flow conversation reaches neither. Measured
+      live: 3 of 3 notes unconsumed, 0 of 6 checkpoints carrying a `loop_id`.
+      Dispatched off the boundary, never awaited on it - generation is a blocking ~19s CLI spawn,
+      and the reasoning is `checkpoint_trigger`'s, restated because the failure mode is identical.
+- [x] 14.2 **Both runners reach it.** Wired beside `evaluate_run_end` at both call sites in
+      `api/v1/agent_trigger.py`, for the reason that check's own comment gives: the boundary is
+      AgentWeave's, not either agent's. Wiring one and not the other is the drift 13.1 warns about.
+- [x] 14.3 **Gated on the agent having actually left notes** - the operator's decision, 2026-08-25.
+      A handover with nothing recorded has nothing to deliver, so it spends nothing. The cost is
+      stated rather than discovered later: an agent that ignores the instruction produces no
+      briefing, and its reviewer is no worse off than before this group.
+- [x] 14.4 **F44 - a review turn is briefed by the author, not by whoever finished last.**
+      `checkpoints.checkpoint_by_task_author` resolves through the transition history;
+      `scheduler._briefing_checkpoint` is the one place both firing paths ask the question, and
+      `is_review` is the whole difference between the two. An ordinary continuation turn still uses
+      `latest_checkpoint_for_loop`, which was never wrong for the question it was written for.
+      Had F43 shipped alone, the live notes show **two firings in three** would have briefed the
+      reviewer with an unrelated agent's account of a different task.
+- [x] 14.5 Regression tests: `hub/tests/test_handover_briefs_the_reviewer.py`, 10 tests.
+      **Causally confirmed both halves**: disabling the F43 trigger fails 5 of 10 (the five that
+      require a checkpoint to exist); disabling the F44 selector fails exactly 1 (the wiring
+      assertion, while the selector's own test correctly still passes).
+      The module **never inserts a `Checkpoint` for an F43 assertion** - it drives `consider_handover`
+      and asserts on what that produced. Writing it the convenient way is precisely how F43 stayed
+      green: `test_scheduler.py`'s existing briefing test inserts a row with `loop_id` already set
+      and asserts the briefing renders it, so it never exercised anything that produced one.
+- [x] 14.5b **Measured the first implementation against the live database, and it could not have
+      fired.** Two gates each fatal: `run.task_id` required but NULL on 6 of 10 live runs that
+      completed a task, and notes looked for in the completing conversation when 0 of 4 live notes
+      are there (`session_mode: new` gives every firing its own conversation). Both passed ten green
+      tests. The fixture now matches production on both counts, and narrowing either gate back fails
+      5 of 10. Caught before push — the first of this change's four dead-fix instances that was.
+- [ ] 14.6 **Re-verify live against the trial Hub.** Not closed by unit tests - F41, F45 and F49 are
+      this change's own three precedents for a fix that passed its tests and could not fire.
+      Needs `checkpoint_runner_id` set on `ledger-stress`, which has none today, so even the
+      operator button 409s: that is configuration the operator chooses, since it decides which CLI
+      is billed.

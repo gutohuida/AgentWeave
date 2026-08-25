@@ -402,6 +402,69 @@ better half of that trade, and it is the same reasoning D5 already used against 
 wolf - the state has to be legible before it can be actionable.
 
 
+### D17 - The author's handover generates the briefing, and the reviewer reads the author's
+
+Findings F43 and F44, 2026-08-25.
+
+`_compose_loop_briefing` tells every agent in a flow to "record what a reviewer will need (see
+`submit_checkpoint_notes`); somebody else reads it." Nobody read it, and nobody could. Every link
+worked and the trigger did not exist: `generate_checkpoint` had exactly two callers, a context-usage
+threshold and an operator button. A flow firing is `session_mode: new`, one small task, and a
+conversation that never runs again - so its context never approaches a threshold, and no operator
+presses a button per handover. Measured live: 3 of 3 notes unconsumed, 0 of 6 checkpoints carrying
+a `loop_id`. This is F41's shape a second time inside the same change, and F49's a third.
+
+**The trigger is the run boundary.** A flow agent's conversation is finished when its run ends, so
+that boundary *is* the author's handover and the moment their notes are complete. It sits beside
+`evaluate_run_end` because the two ask mirrored questions of the same moment - that one asks whether
+the run dropped its work, this one whether it finished work somebody else now has to read - and it
+is reached from both runners for the reason the divergence check is: the boundary belongs to
+AgentWeave, not to either agent.
+
+The alternative was generating at review *dispatch*. Rejected on mechanics rather than taste: the
+briefing is composed ~20 lines later in the same firing, so a dispatch-time trigger would either
+block the scheduler on a ~19s CLI spawn or race it and lose. Dispatching async off the run boundary
+instead leaves a small window - a tick arriving inside those ~19s briefs without the checkpoint -
+and that degrades to exactly the previous behaviour rather than to something worse.
+
+**Gated on notes existing**, the operator's decision of 2026-08-25. A handover where the agent
+recorded nothing has nothing to deliver, so it generates nothing and costs nothing, and spend stays
+proportional to agents doing what the product asked. The stated cost: an agent that ignores the
+instruction produces no briefing, and its reviewer is no worse off than before this decision.
+
+**The first draft of this could not have fired, and measurement is what caught it.** Two gates were
+each independently fatal against real data, and both passed a full green unit suite:
+
+- it required `run.task_id` to be set, and of the ten live runs carrying a `completed` transition,
+  **six had that column NULL**. The append-only transition table is the record of what a run
+  finished; the binding column is not, which is the same reason `_agent_that_completed` refuses to
+  read `Task.updated_by_run_id`;
+- it looked for the agent's notes in the *completing* conversation, and **none of the four stranded
+  live notes were there**. A flow job is `session_mode: new`, so every firing gets a fresh
+  conversation; a task needing more than one firing therefore records its notes in one and its
+  completion in another, as the ordinary case. `builder` wrote its note at 22:39:08 in
+  `conv-ad35f0971ebc` and completed the same task at 22:40:00 in `conv-d047f286c1a3`.
+
+So the note is resolved across the loop's conversations by agent, passed to `generate_checkpoint`
+explicitly, and consumed by this module rather than by that function's own conversation-scoped
+lookup. The fixture was rewritten to match — `run.task_id` NULL, note in an earlier firing's
+conversation — and only then did the tests mean anything: narrowing either gate back now fails five
+of ten, where against the original fixture both narrowings passed.
+
+That this happened *inside the remedy for F41*, to an author who had just written "the fixture builds
+what the product does not build" in the same module's docstring, is the strongest argument in this
+change for the standing rule: **measure against live data before believing a green suite.**
+
+**F44 has to be settled in the same breath, and is.** `latest_checkpoint_for_loop` filters on
+`loop_id` and takes the most recent. That is the right answer for a loop's *next firing*, and it was
+the author's only while a loop ran one agent - with three concurrent, the newest checkpoint belongs
+to whoever finished last. Had F43 been fixed alone, the live notes show two firings in three would
+have briefed the reviewer with an unrelated agent's account of a different task while telling it
+this was what a reviewer needs. So a review turn resolves the checkpoint by **the author of the task
+under review**, through the transition history, and an ordinary continuation turn keeps asking the
+question `latest_checkpoint_for_loop` was written for.
+
+
 ## Risks / Trade-offs
 
 **[Set-valued claim breaks the board, the firing and §548 at once]** → Land the set-valued form

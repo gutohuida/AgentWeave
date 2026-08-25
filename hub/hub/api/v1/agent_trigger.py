@@ -41,6 +41,7 @@ from ... import (
 )
 from ...agent_auth import hash_run_token, mint_run_token
 from ...auth import get_project
+from ...checkpoint_handover import consider_handover_from_run_end
 from ...codex_appserver import (
     TRANSPORT_SENTINELS,
     AppServerError,
@@ -1599,6 +1600,14 @@ async def _execute_run(
             # abandoned on this attempt has genuinely dropped its work and must still be evaluated.
             if not returned:
                 await evaluate_run_end(run_id)
+                # The author's handover (finding F43). Beside the divergence check because it is
+                # the same boundary asking the mirrored question: that one is "did this run drop
+                # the work", this one is "did it finish work somebody else now has to read". Both
+                # runners reach it for the reason the divergence check does -- the boundary is
+                # AgentWeave's, not either agent's. Not awaited: generation is a ~19s CLI spawn,
+                # and it self-declines for anything that is not a flow agent handing over with
+                # notes already recorded for its reviewer.
+                consider_handover_from_run_end(run_id)
             await _report_abandoned_entries(db, project_id, agent, run_id)
             await _broadcast_run_lifecycle(
                 db,
@@ -2113,6 +2122,14 @@ async def _execute_codex_appserver_run(
             # went back to the queue, for the reason given there.
             if not returned:
                 await evaluate_run_end(run_id)
+                # The author's handover (finding F43). Beside the divergence check because it is
+                # the same boundary asking the mirrored question: that one is "did this run drop
+                # the work", this one is "did it finish work somebody else now has to read". Both
+                # runners reach it for the reason the divergence check does -- the boundary is
+                # AgentWeave's, not either agent's. Not awaited: generation is a ~19s CLI spawn,
+                # and it self-declines for anything that is not a flow agent handing over with
+                # notes already recorded for its reviewer.
+                consider_handover_from_run_end(run_id)
             await _report_abandoned_entries(db, project_id, agent, run_id)
             # `exit_code` above is the synthetic 0/1 this transport has to invent, because there is
             # no per-turn process status; `AgentOutputPanel.tsx` reads it to detect a handoff and

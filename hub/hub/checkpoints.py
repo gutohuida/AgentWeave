@@ -419,3 +419,63 @@ async def create_checkpoint(
     db.add(checkpoint)
     await db.commit()
     return checkpoint
+
+
+async def checkpoint_by_task_author(
+    db: AsyncSession, task_id: str, *, loop_id: Optional[str] = None
+) -> Optional[Checkpoint]:
+    """The checkpoint written by the agent that **completed** *task_id*, not the loop's newest.
+
+    Finding F44. `latest_checkpoint_for_loop` filters on `loop_id` alone and takes the most recent,
+    which is the right answer for a loop's *next firing* — its docstring reasons about exactly that,
+    and in a one-agent loop "latest for the loop" and "the author's" are the same row.
+
+    A flow breaks the identity. With three agents working concurrently the newest checkpoint belongs
+    to whoever finished last, so the reviewer of task X could be briefed with an unrelated agent's
+    account of task Y while being told it is what a reviewer will need. Measured on the live
+    database when F43 was recorded: three notes on one loop from three different agents, of which
+    exactly one concerned the task actually queued for review — so two firings in three would have
+    briefed the wrong author's work.
+
+    Resolved through the transition history rather than through `Task.updated_by_run_id`, for the
+    reason `_agent_that_completed` gives about that column: it is a single mutable field that the
+    next write overwrites, and being unable to answer this question is why the append-only table
+    exists. By `sequence` and not `created_at`, likewise — transitions staged in one flush share a
+    timestamp, and after a revision cycle an earlier completion by another run is exactly what must
+    not be chosen.
+
+    `loop_id`, when given, is a guard rather than a filter: it refuses a checkpoint that belongs to
+    a different loop, which would otherwise be reachable if a task moved between loops. Returns
+    None when the author left no checkpoint, which is the ordinary case until F43's trigger has run
+    and stays the case for an agent that recorded no notes.
+    """
+    from .db.models import TaskTransition
+
+    run_id = (
+        await db.execute(
+            select(TaskTransition.run_id)
+            .where(TaskTransition.task_id == task_id)
+            .where(TaskTransition.to_status == "completed")
+            .where(TaskTransition.run_id.is_not(None))
+            .order_by(TaskTransition.sequence.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if run_id is None:
+        return None
+
+    conversation_id = (
+        await db.execute(select(Run.conversation_id).where(Run.id == run_id).limit(1))
+    ).scalar_one_or_none()
+    if conversation_id is None:
+        return None
+
+    query = (
+        select(Checkpoint)
+        .where(Checkpoint.conversation_id == conversation_id)
+        .order_by(Checkpoint.created_at.desc(), Checkpoint.id.desc())
+        .limit(1)
+    )
+    if loop_id is not None:
+        query = query.where(Checkpoint.loop_id == loop_id)
+    return (await db.execute(query)).scalars().first()
