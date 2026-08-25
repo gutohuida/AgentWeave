@@ -92,6 +92,28 @@ class HubAPIError(RuntimeError):
         super().__init__(f"{prefix} ({status_code}): {detail}")
 
 
+class MalformedCallError(RuntimeError):
+    """A tool argument is the wrong shape, refused here so the agent is told what would work.
+
+    F35. `submit_spec_document` was called **ten times in one turn** before it succeeded, the agent
+    guessing a nested schema from raw validator output and a link to a validator's website:
+
+        3 validation errors for call[submit_spec_document]
+        scope
+          Input should be a valid dictionary [type=dict_type, input_value='The rota/allocate...']
+          For further information visit https://errors.pydantic.dev/2.12/v/dict_type
+
+    The cost is the finding: that turn recorded **718,650 input tokens** against 73,622 for the turn
+    before it, because every retry resends the whole conversation. One malformed call cost an order
+    of magnitude more than the work around it.
+
+    This applies the standard the rest of the surface already meets. `task_transitions.refusal_detail`
+    exists because *"an agent told merely 'forbidden' retries the same call"* — it names the current
+    state and every reachable one. The tool carrying the largest payload was the one that did not
+    follow it.
+    """
+
+
 class HubUnreachableError(RuntimeError):
     """No Hub answered at this run's configured `HUB_URL` at all — a connectivity or
     misconfiguration failure, distinguishable from `HubAPIError`'s "reached and rejected"
@@ -1022,6 +1044,77 @@ def create_spec_document(title: Optional[str] = None) -> Dict[str, Any]:
     return _hub_request("POST", "/spec/documents/create", body)
 
 
+#: What each structured field of `submit_spec_document` must be, and one call that works. Keyed in
+#: the order the tool declares them, because the refusal names the first thing wrong and an agent
+#: fixing them top to bottom converges rather than ping-ponging.
+#:
+#: The example is the load-bearing half. An agent told "expected object, got string" still has to
+#: invent the object; one shown `{"in": [...], "out": [...]}` does not. Restated here rather than
+#: imported: this module is spawned standalone and imports only stdlib plus fastmcp (see the module
+#: docstring), and `test_mcp_server_shapes_agree.py` asserts this table and the Hub's own contract
+#: do not drift apart.
+_SUBMIT_SHAPES = (
+    ("scope", dict, "an object", '{"in": ["allocate.py"], "out": ["the CLI"]}'),
+    (
+        "requirements",
+        list,
+        "a list of objects",
+        '[{"key": "fair-spread", "statement": "spread() counts every staff member", '
+        '"modal": "MUST"}]',
+    ),
+    (
+        "acceptance_criteria",
+        list,
+        "a list of objects",
+        '[{"requirement": "fair-spread", "given": "a member with no shifts", '
+        '"when": "spread() runs", "then": "they are counted"}]',
+    ),
+    (
+        "tasks",
+        list,
+        "a list of objects",
+        '[{"key": "fix-spread", "title": "Count idle staff", "satisfies": ["fair-spread"]}]',
+    ),
+    (
+        "algorithms",
+        list,
+        "a list of objects",
+        '[{"key": "spread", "steps": ["sum shifts", "divide by headcount"]}]',
+    ),
+    ("evidence", dict, "an object", '{"commands": ["pytest -q"]}'),
+    (
+        "open_questions",
+        list,
+        "a list of objects",
+        '[{"question": "Does an absent member count?", "blocking": true}]',
+    ),
+)
+
+
+def _check_submit_shapes(supplied: Dict[str, Any]) -> None:
+    """Refuse a malformed `submit_spec_document` call by naming the field, the shape and an example.
+
+    Raises `MalformedCallError` on the first field that is wrong. One at a time deliberately: the
+    measured failure was an agent working through *eleven* simultaneous validation errors, which is
+    a wall to parse rather than an instruction to follow.
+
+    A string where an object or list is wanted is by far the common case — it is what the agent did
+    on its first attempt, putting prose into `scope` — so it is named explicitly rather than left to
+    be inferred from a type name.
+    """
+    for name, want_type, want_label, example in _SUBMIT_SHAPES:
+        value = supplied.get(name)
+        if value is None or isinstance(value, want_type):
+            continue
+        got = "text" if isinstance(value, str) else type(value).__name__
+        raise MalformedCallError(
+            f"`{name}` must be {want_label}, but {got} was supplied. "
+            f"Write it as, for example: {name}={example}. "
+            f"Prose belongs in `summary`, `problem` or `design`, which are plain strings — "
+            f"every other field here is structured, and the Hub renders it into the document."
+        )
+
+
 @mcp.tool()
 def submit_spec_document(
     path: str,
@@ -1032,13 +1125,27 @@ def submit_spec_document(
     problem: str = "",
     design: str = "",
     lifecycle: str = "",
-    scope: Optional[Dict[str, Any]] = None,
-    requirements: Optional[List[Dict[str, Any]]] = None,
-    acceptance_criteria: Optional[List[Dict[str, Any]]] = None,
-    tasks: Optional[List[Dict[str, Any]]] = None,
-    algorithms: Optional[List[Dict[str, Any]]] = None,
-    evidence: Optional[Dict[str, Any]] = None,
-    open_questions: Optional[List[Dict[str, Any]]] = None,
+    # `Any` rather than `Dict[...]`/`List[...]`, and this is a trade-off rather than a tidy win.
+    # A precise annotation makes the framework refuse a wrong shape before this function runs, with
+    # the message F35 measured at 718,650 input tokens across ten retries. `Any` routes the same
+    # call to `_check_submit_shapes`, which names the field and shows one that works.
+    #
+    # What it costs: the advertised JSON schema for these seven fields becomes untyped, where it
+    # previously said `object`/`array`. Accepted because the docstring below is where this tool's
+    # shape guidance actually lives — it documents every field key by key, which is strictly more
+    # than a bare type — and because in the one measured instance the precise schema did not
+    # prevent the mistake while the resulting error dominated the turn's cost.
+    #
+    # Revisit if fastmcp gains a way to override a parameter's schema, or if this module's
+    # stdlib-plus-fastmcp rule is relaxed enough to reach `pydantic.Field`. Either would give both
+    # halves instead of the better one.
+    scope: Optional[Any] = None,
+    requirements: Optional[Any] = None,
+    acceptance_criteria: Optional[Any] = None,
+    tasks: Optional[Any] = None,
+    algorithms: Optional[Any] = None,
+    evidence: Optional[Any] = None,
+    open_questions: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """Write a specification document. You supply structure; the Hub renders the document.
 
@@ -1118,6 +1225,10 @@ def submit_spec_document(
         "evidence": evidence,
         "open_questions": open_questions,
     }
+    # Before anything is sent. These are annotated `Any` so that a wrong shape reaches this check
+    # rather than being refused by the framework's own validator, whose message was the finding
+    # (F35) — the Hub still validates the contents server-side and remains the authority.
+    _check_submit_shapes(optional)
     for name, value in optional.items():
         if value is not None:
             document[name] = value

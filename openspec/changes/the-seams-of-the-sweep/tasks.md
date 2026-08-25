@@ -46,13 +46,13 @@
 
 ## 4. The tool with the largest payload gets a real refusal (F35)
 
-- [ ] 4.1 Review this group's spec delta against `hub/hub/mcp_server.py`
-- [ ] 4.2 Shape the document-submission tool's validation failure: name the field, the expected shape, and one minimal example
-- [ ] 4.3 Keep `mcp_server.py` importing **only stdlib + fastmcp** — restate what is needed rather than importing it
-- [ ] 4.4 Add the test asserting the restatement and the Hub's own contract agree, following the existing convention
-- [ ] 4.5 Confirm `approve_tool_call` still has no return annotation
-- [ ] 4.6 Test: a wrong-typed field and a missing field each produce a refusal naming the field and an example
-- [ ] 4.7 Run the Hub suite; commit
+- [x] 4.1 Review this group's spec delta against `hub/hub/mcp_server.py`
+- [x] 4.2 Done, at a stated cost: the wrong shape only reaches our code if the annotation is `Any`, so those seven fields no longer advertise `object`/`array` in the tool schema. Trade-off and the two conditions that would reverse it are recorded at the parameter list
+- [x] 4.3 Keep `mcp_server.py` importing **only stdlib + fastmcp** — restate what is needed rather than importing it
+- [x] 4.4 Add the test asserting the restatement and the Hub's own contract agree, following the existing convention
+- [x] 4.5 Confirm `approve_tool_call` still has no return annotation
+- [x] 4.6 Test: a wrong-typed field and a missing field each produce a refusal naming the field and an example
+- [x] 4.7 Run the Hub suite; commit
 
 ## 5. The operator is told the truth (F31, F30, F34)
 

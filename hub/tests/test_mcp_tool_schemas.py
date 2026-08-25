@@ -274,3 +274,95 @@ def test_rename_spec_document_offers_no_lever_on_the_phase():
     offered = set(schema["properties"])
 
     assert not offered & {"phase", "status", "approve", "approved", "state"}
+
+
+# ---------------------------------------------------------------------------
+# F35: the tool with the largest payload refuses like the rest of the surface
+# ---------------------------------------------------------------------------
+
+
+def _shape_table():
+    return {
+        name: (want, label, example) for name, want, label, example in mcp_server._SUBMIT_SHAPES
+    }
+
+
+def test_the_restated_shapes_agree_with_the_hubs_own_payload():
+    """`mcp_server.py` is spawned standalone and imports only stdlib plus fastmcp, so the shapes it
+    refuses on are restated rather than imported. This is what stops the two drifting apart."""
+    from hub.spec_payload import SpecPayload
+
+    fields = SpecPayload.model_fields
+    for name, (want, _label, _example) in _shape_table().items():
+        assert name in fields, f"{name} is refused here but the Hub has no such field"
+        annotation = str(fields[name].annotation)
+        if want is list:
+            assert (
+                "List[" in annotation or "list[" in annotation
+            ), f"{name} is refused as a list here, but the Hub declares {annotation}"
+        else:
+            # An object on the wire — a nested model on the Hub's side, never a scalar.
+            assert (
+                "List[" not in annotation and "list[" not in annotation
+            ), f"{name} is refused as an object here, but the Hub declares {annotation}"
+
+
+def test_every_structured_field_of_the_tool_is_covered():
+    """A field the tool accepts but this table does not name would keep the old raw refusal."""
+    import inspect
+
+    signature = inspect.signature(mcp_server.submit_spec_document)
+    prose = {"path", "title", "kind", "schema_version", "summary", "problem", "design", "lifecycle"}
+    structured = set(signature.parameters) - prose
+    assert structured == set(_shape_table())
+
+
+@pytest.mark.parametrize("field", ["scope", "evidence"])
+def test_prose_where_an_object_is_wanted_names_the_field_and_shows_one(field):
+    """The measured first failure: the agent put prose into `scope`, and was answered with
+    `Input should be a valid dictionary` and a link to a validator's website."""
+    with pytest.raises(mcp_server.MalformedCallError) as excinfo:
+        mcp_server._check_submit_shapes({field: "The rota/allocate.py module computes fairness"})
+
+    message = str(excinfo.value)
+    assert f"`{field}`" in message
+    assert "text was supplied" in message
+    # The half that stops the guessing: a call that would work.
+    assert f"{field}=" in message
+    assert "summary" in message and "problem" in message
+
+
+@pytest.mark.parametrize("field", ["requirements", "tasks", "open_questions"])
+def test_prose_where_a_list_is_wanted_shows_a_list(field):
+    with pytest.raises(mcp_server.MalformedCallError) as excinfo:
+        mcp_server._check_submit_shapes({field: "one requirement about fairness"})
+
+    message = str(excinfo.value)
+    assert "a list of objects" in message
+    assert f"{field}=[" in message
+
+
+def test_one_field_is_named_at_a_time():
+    """Eleven simultaneous validation errors is a wall to parse, not an instruction to follow. The
+    first field in declaration order is the one named, so fixing them top to bottom converges."""
+    with pytest.raises(mcp_server.MalformedCallError) as excinfo:
+        mcp_server._check_submit_shapes({"scope": "prose", "requirements": "more prose"})
+
+    message = str(excinfo.value)
+    assert "`scope`" in message
+    assert "`requirements`" not in message
+
+
+def test_a_well_formed_call_is_not_refused():
+    mcp_server._check_submit_shapes(
+        {
+            "scope": {"in": ["allocate.py"], "out": []},
+            "requirements": [{"key": "k", "statement": "s", "modal": "MUST"}],
+            "evidence": None,
+        }
+    )
+
+
+def test_an_absent_field_is_not_refused():
+    """Every structured field is optional; omitting one is the ordinary case."""
+    mcp_server._check_submit_shapes({})
