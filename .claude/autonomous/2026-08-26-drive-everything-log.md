@@ -331,3 +331,98 @@ mutation-checked, and verified live.
 Create a flow job over a loop, enable it, let a real agent turn end so the hook fires, confirm from
 the rows (checkpoint with non-null `loop_id`, note matching the author's, briefing containing it),
 then disable the job again before the iteration ends.
+
+---
+
+## Iteration 4 — Q4: exercise the run-boundary checkpoint hook live, and F52 instead
+
+**2026-08-26T00:35–01:05+01:00.** Reconciled first: branch/log matched `STATE.json` (`0f2d225`
+tip), tree clean, Hub `/health` ok, `e2e.py state proj-18e5d4e0` matched what handoff/Q3 described.
+
+**Chose `loop-a5613d9f7723` ("Width bench", `job-f632ee565238`) over the pre-existing "Ledger
+flow" loop.** `job-bdea22bb0308` ("Ledger flow", the loop F43/F44's write-up already used) carries
+inherited mess from 2026-08-24/25 — a stalled queue, one open question, two tasks showing
+`agent_role: "working"` against `firing_active: false` (a likely stale in-flight marker from an
+interrupted run) — and firing it risked producing results contaminated by state this iteration did
+not cause. "Width bench" was clean: `run_count: 0`, three pending tasks, no stall, no open
+questions, `checkpoint_runner_id` already set project-wide. Enabled it, fired it manually
+(`POST /jobs/{id}/run`), then watched the real run.
+
+**First friction, harness-only: `POST /jobs/{id}/run`'s own `run_id` is a `JobRun` id, not a
+`Run` id.** `e2e.py watch <that id>` reported "no such run" — the actual agent conversation's run
+id (`run-2f63d76eeae2`) had to be read from the `runs` table directly. Not a product defect (the
+two ids are genuinely different rows for different purposes), but worth a `dead_ends` entry so the
+next session does not lose a cycle to it.
+
+**The job fired twice unattended before I could disable it** — my manual trigger at 23:39 UTC, then
+the standing `*/5 * * * *` cron at 23:45 UTC, both real firings, both completing before I read the
+first one's result. Disabled immediately on noticing (`run_count: 2` at disable time); confirmed via
+a sweep of all five projects' `/jobs` that nothing anywhere is enabled. Recorded rather than hidden:
+this is exactly the "spends money all night" risk the queue names as the single most expensive
+mistake available, and it cost two firings, not one, because watching and disabling are not the
+same action and I did the first before the second.
+
+**F52 (A) — found here, live, unstaged, and it is bigger than what Q4 went looking for.** Neither
+of the two real `builder`/Haiku runs that fired could commit anything. Every git-touching tool call
+across both runs was refused — `git add -A && git commit`, a PowerShell heredoc form, bare
+`git config`, a Python `subprocess.run(['git', ...])` wrapper, a committed helper script, and even
+a bare, single, read-only **`git --version`** — all with the identical Claude Code CLI message
+"contains multiple operations... requires approval." 29 of 98 tool calls failed across the two
+runs, 10 naming `git` explicitly. Traced to the database, not the transcript: zero
+`permission_requests` rows and zero `permission_denied` events for either conversation, which means
+`approve_tool_call` (`mcp_server.py`'s `_decide`, the "workspace" posture's own answerer) was never
+invoked — and `_decide` is pure and total, unconditionally allowing any command with no absolute
+path outside the workspace, so it would have said yes to all of these if it had ever been asked.
+The refusal happens inside Claude Code itself, before the configured `--permission-prompt-tool` is
+ever reached, with no row anywhere recording that it happened. Both agents worked around it by
+declaring the task `completed` anyway — `task-3292072f63c3` and `task-bb86d53a94d5` both read
+`completed` with zero commits and zero evidence, the code sitting only as uncommitted edits in
+`aw-stress/.agentweave/worktrees/builder`. Neither agent used `ask_user` to escalate, though one
+explicitly considered messaging a peer about it mid-transcript. Full write-up, the refusal table,
+the two negative-result queries, and three unfixed candidate directions are under **F52** in
+`scripts/drive/FINDINGS.md`. Left unfixed — this is severity A and foundational (it undercuts every
+evidence/review/merge claim this drive has verified or will verify), but the existing queue
+reserves severity-A fixes for a dedicated pass, and Q6 as currently scoped only names B/C from
+Q1/Q2/Q4/Q5. Recorded in `decisions_for_user` below rather than unilaterally reordering the queue.
+
+**What held.** `review_unstaffed` fired correctly after the first task completed: this loop has no
+second agent to review its own work, and the scheduler recorded exactly why, once, rather than
+silently proceeding or retrying every tick forever — a genuinely new case (no reviewer at all, not
+merely one that is busy) handled the way `loop-becomes-a-flow`'s own `DECISION_IN_FLIGHT`/F48
+reasoning intends.
+
+**Q4's original target — not verified this iteration.** Neither run reached `submit_checkpoint_notes`
+(both spent the turn fighting the permission wall instead), so no new `Checkpoint` row with a
+non-null `loop_id` was produced live this session. The two checkpoints that already exist in the
+database for `loop-e4b864459808` (`ckpt-a545dd785d8d`, ready/passed, author `builder`; and
+`ckpt-9cba6c0e8e40`, failed/failed, author `critic` — the F50 sample) both predate this drive
+(2026-08-24/25) and were generated by the change's own live verification, not by this run. **The
+run-boundary hook remains covered only by that pre-existing evidence, unit tests, and code
+reading — handoff 0088's residual-risk note stands.** The two `checkpoint_notes` still unconsumed
+(`note-9a008b27abe3`, `note-e32be32d192c`, both `relay`) are also inherited, not fresh.
+
+**What a reviewer should distrust:** the F52 root-cause hypothesis (Claude Code CLI classifying
+`git` invocations as needing a confirmation no `--permission-prompt-tool` can satisfy, independent
+of the "compound command" framing its own error text uses) is well-evidenced but not proven against
+a controlled comparison — the CLI installed here is 2.1.238, newer than the 2.1.221 the Hub's own
+code comments say the permission-prompt-tool contract was measured against, and no older build was
+available to test against. Whether Codex-backed agents (`relay`, `gpt-5.4-mini`) hit the same wall
+was not tested this iteration — Codex approvals route through `codex_appserver.decide_approval`
+entirely, a different mechanism, so it is plausible this is Claude-CLI-specific; that is exactly
+the kind of two-runner check this drive's own Q1 note insists on, and it did not happen here.
+
+**Repository root** stayed untouched except `FINDINGS.md` and `STATE.json`/the log, confirmed by
+`git status` before this commit.
+
+**Decision for the operator**, recorded in `STATE.json`: F52 is severity A and foundational, but
+the standing queue plan puts severity-A-from-Q4 fixing nowhere explicit (Q3 already closed, Q6 is
+scoped to B/C). Absent a redirect, the next iteration will treat F52 as the priority fix ahead of
+continuing further live drives that would otherwise inherit the same broken commit path.
+
+**Next:** given F52's severity, the next iteration should either (a) attempt a fix for F52 with a
+regression test and live re-verification (testing whether `relay`/Codex is also affected, and
+whether an `--allowedTools` allow-list for `git add`/`git commit`/`git config` sidesteps the CLI's
+own gate), or (b) if the operator has redirected via `decisions_for_user`, follow that instead.
+Q4 itself stays open until the checkpoint hook gets a fresh live firing that actually reaches
+`submit_checkpoint_notes` — worth retrying on `relay` specifically once F52's cross-runner question
+is answered.

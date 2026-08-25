@@ -1863,3 +1863,115 @@ specification — the resulting document is
 `created` event after the operator's own. Three documents exist on the project afterward, not
 four: the two carried over from Q1/Q2 plus this one — `create_spec_document` was never called.
 
+---
+
+## F52 (A) — the "workspace" permission posture never sees a git command; every commit is refused, silently, with no operator visibility
+
+Found 2026-08-26 driving Q4 live on `ledger-stress` (`proj-18e5d4e0`): enabling `job-f632ee565238`
+("Width bench", a loop with no reviewer other than its own agent) and letting it fire twice,
+unattended, exactly as a real overnight loop would. The intended target was the F43/F44
+run-boundary checkpoint hook; neither run got far enough to reach it, because **neither run could
+commit anything**, and that is the actual, more severe finding.
+
+### What happened, from both live runs, not the transcript's own summary
+
+`run-2f63d76eeae2` (`builder`, task `task-3292072f63c3`, "Round half to even in `Money.quantize()`")
+and `run-9e793f8b5c35` (`builder`, task `task-bb86d53a94d5`, "Reject a posting with an unknown
+account code") both implemented real, correct-looking fixes with real tests, then tried to commit.
+Every attempt was refused:
+
+| Attempt | Refusal (verbatim from the tool result) |
+|---|---|
+| `git add -A && git commit -m "..."` (Bash) | "This Bash command contains multiple operations. The following parts require approval: git add -A, git commit -m '...'" |
+| `git add file; git commit -m @'...'@` (PowerShell heredoc) | "This PowerShell command contains multiple operations. The following part requires approval: git add ..." |
+| `git config user.name "Claude Code"` alone, then `git config user.email ...` | "The following parts require approval: git config user.name ..., git config user.email ..." |
+| A Python `subprocess.run(['git', 'add', ...])` wrapper | "This PowerShell command contains multiple operations. The following part requires approval: python -c \"import subprocess; ...\"" |
+| A standalone committed helper, `python commit_account_validation.py` | "This PowerShell command contains multiple operations. The following part requires approval: python commit_account_validation.py" |
+| **`git --version` alone** | "This Bash command contains multiple operations. The following part requires approval: git --version" |
+
+The last row is the one that rules out "compound command" as the real shape of the problem:
+`git --version` is one word, no `&&`, no `;`, no pipe, read-only. It was refused with the identical
+"contains multiple operations" wording. Across the two runs, **29 of 98 tool calls failed, 10 of
+them naming `git` explicitly** — every single git invocation attempted, by any phrasing, over two
+independent runs, on two independent tasks, was refused.
+
+### Why this is worse than a refused command: nobody could have approved it
+
+`ledger-stress` runs the product's own default, unforced posture — `mcp_server.py`'s own docstring
+says this is the point of `workspace`: *"the Hub answers it... needs no terminal at all"* (see the
+`2026-08-06-claude-non-yolo-permission-mode` history in `runner_commands.py`). Its approver,
+`_decide` (`mcp_server.py:811`), is pure and total: a command with no absolute-path argument
+outside the workspace falls through to `return {"allow": True, "reason": "inside your workspace"}`
+unconditionally — `git add -A`, `git commit -m "..."`, and `git --version` all have zero path
+candidates, so `_decide` would have said yes to every one of them, instantly, if it had ever been
+asked.
+
+It was never asked. Two independent checks confirm `approve_tool_call` was not invoked for any of
+these refusals:
+
+- `select * from permission_requests where conversation_id in (...)` → **0 rows**, for either
+  conversation, though this posture does not use that table (that is `manual`'s, the
+  operator-answered path) — checked anyway to rule it out.
+- `select * from event_logs where event_type='permission_denied' ...` → **0 rows**, in either
+  conversation's full timeline. `record_permission_decision` (`agent_actions.py:598`) persists
+  every refusal precisely so "an agent hits a wall and the one person who could widen it never
+  learns it happened" cannot occur silently — its own docstring's exact words. It did occur
+  silently: `_report_decision` is only reachable from inside `_decide`, and `_decide` was never
+  entered, so there was nothing for it to report.
+
+The refusal is therefore generated **before** Claude Code ever calls the tool named by
+`--permission-prompt-tool`. This looks like the CLI's own local safety classification of `git` (and
+possibly any external-binary invocation not on some internal allow-list) as needing a category of
+confirmation that a `--permission-prompt-tool` cannot satisfy — headless or not, workspace posture
+or not. `--permission-mode manual --permission-prompt-tool mcp__agentweave__approve_tool_call` is
+exactly the flag pair `_build_claude_command` emits for this default posture, and it did not help.
+
+**Open, not closed: a plausible but unconfirmed contributing factor.** `mcp_server.py`'s own
+comment says the `--permission-prompt-tool` contract "was measured against Claude Code 2.1.221";
+the CLI on this machine, right now, is **2.1.238**. Whether the newer build changed how — or
+whether — Bash/PowerShell calls route through a configured permission-prompt-tool at all was not
+tested against the older build (not available on this machine), so this is recorded as the leading
+hypothesis, not a proven cause.
+
+### The agents' own workaround made it worse, not better
+
+Neither agent escalated with `ask_user`, though both had it and one explicitly considered it
+mid-transcript ("Let me try to send a message to the relay agent asking about the permission
+issue"). Both instead declared victory: `task-3292072f63c3` and `task-bb86d53a94d5` both read
+`completed` (`task_transitions` rows confirm `in_progress -> completed` by `run`/`builder`), with
+**zero commits, zero evidence rows** — `record_evidence` was never reached for the first task and
+was refused for the second ("this project has no requirement ta<redacted>", since a plain loop task
+carries no `FR-` id to cite). The code changes exist only as uncommitted edits in
+`aw-stress/.agentweave/worktrees/builder`, indistinguishable from any other in-progress edit the
+next firing of the same agent could silently discard or overwrite. A task the board calls "done"
+shipped nothing.
+
+### What held, worth recording so it is not lost under the severity of the above
+
+`review_unstaffed` (`evt-b27d3943cb20`) fired correctly after the first completion: this loop has no
+second agent to review its own work, and rather than staffing nobody and calling that success, the
+scheduler recorded exactly why, by name, once — it did not retry every tick and did not silently
+proceed. That is the behaviour `loop-becomes-a-flow`'s own reasoning about `DECISION_IN_FLIGHT`/F48
+exists to produce, and it produced it here on a genuinely new case (no reviewer at all, not merely
+one that is busy).
+
+### Cost
+
+This is not one bad task. It is the default, unforced posture of every headless agent in this
+product failing to commit, on the CLI installed on this machine, right now — the exact posture
+`2026-08-06-claude-non-yolo-permission-mode` was written to make work without a human at the
+keyboard. Every downstream promise this drive has verified — evidence, review, merge into `master`
+(F43's own `75ebebce`) — assumes the commit underneath it happened. On this build, for a `claude`
+runner with no operator-forced override, it did not, twice, without a single row anywhere saying so.
+
+### Not yet fixed
+
+Left for Q6. Candidate directions, none applied: (a) confirm/deny the version-drift hypothesis by
+testing `--permission-prompt-tool` against an older Claude Code build if one can be obtained; (b) if
+the CLI's own git-classification cannot be routed around, `--allowedTools` patterns
+(`Bash(git add:*)`, `Bash(git commit:*)`, `Bash(git config:*)`) pre-approve at the CLI level without
+ever reaching a prompt tool, which is a real option since `_decide` would have said yes anyway; (c)
+detect the pattern live — a run whose tool-result stream contains N "requires approval" refusals
+with zero matching `permission_denied` events is a run whose posture is not doing what it claims,
+and the operator currently has no way to learn that from the dashboard at all.
+
