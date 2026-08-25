@@ -805,7 +805,7 @@ so nothing keeps spending; re-enable `job-bdea22bb0308` to carry on.
 |---|---|---|
 | 11.1 | Not exercised — the drive ran three agents throughout. | Run one with the other two archived. |
 | 11.2 | A handover happened with **no message between agents**: builder completed `task-23a0986e7fe9`, and the next firing queued a turn for `critic` carrying `review_task_id` for it. Zero `Message` rows. | Whether the *conversation list* makes that obvious. |
-| 11.3 | **Not answerable from this drive: no checkpoint was generated.** The flow's agents finished tasks without one being written, so there is no real checkpoint to read. | Whether the amended `submit_checkpoint_notes` wording changes what agents write — needs a run that produces one. |
+| 11.3 | **Blocked by finding F43, 2026-08-25 — and the check inverts.** No checkpoint was generated because none *can* be: notes are consumed only by checkpoint generation for the author's own conversation, and generation fires only on a context threshold or an operator button, neither of which a `session_mode: new` flow firing reaches. Measured live: 3 of 3 notes unconsumed, 0 of 6 checkpoints carrying a `loop_id`. But the notes themselves are good — `note-e8cf4afcb4b1` names the task, the file and the line for a reader who is not its author, so **task 6.5 worked**. | Nothing, until F43 and F44 are decided. Delivery is a defect, not a judgement. |
 | 11.3b | **Confirmed.** `.agentweave/reviews/critic` was checked out detached at `f10d198`, the head of `agentweave/builder`. `master` still contains SEEDED DEFECT 2; the reviewer's copy contains builder's fix. F10 closed with real agents. | Nothing — but worth seeing once yourself. |
 | 11.4 | Rung 3 fired once, live: *"could not staff this step: no agent is free to take it. Every agent on the roster is either running a turn, already holding active work, or is the one that completed this task."* It named all three causes rather than only the one needing action. | Whether that reads as staffing or as breakage. |
 | 11.5 | One firing staffed **three agents at once** — three `JobRun` rows, three conversations, three turns. And it surfaced **finding F23**, below. | Whether three lines of "task — agent" is comprehension or noise. |
@@ -817,6 +817,13 @@ so nothing keeps spending; re-enable `job-bdea22bb0308` to carry on.
 four regression tests confirmed failing against the unfixed code, and the fix re-verified live —
 the same query now returns `stall_reason: None` and both current items with their agents.
 
+
+**Staged 2026-08-25 — see `group-11-staging.md`.** It records where the trial Hub actually stands
+for each check below: which three cost nothing and can be read now (11.6, 11.3b, 11.2), which need
+one firing and what the queue is staged to produce (11.5, 11.4), which needs real setup (11.1), and
+why 11.3 is blocked. **Read its first section before re-enabling the flow** — finding F45 means the
+next firing re-runs a review `critic` has already done, on every tick, with no stop condition able
+to end it.
 
 - [ ] 11.1 **A flow with one agent is indistinguishable from a loop.** Run one. If anything reads
       differently, D2 has leaked.

@@ -1437,3 +1437,77 @@ Any fix for F43 therefore has to select the checkpoint by **the author of the ta
 not by recency within the loop.
 
 ---
+
+## F45 (A) — a review that ends without moving the task is re-staffed on every tick, forever
+
+Found 2026-08-25 while checking whether the Ledger flow could safely be re-enabled to stage group
+11's remaining checks. It cannot, and the reason is a live spend loop.
+
+### The rule
+
+`decide_firing`'s queue walk has two branches. For **ordinary work** it checks `task.assignee`
+first, so a task already staffed is *resumed* rather than re-staffed (`scheduler.py:1133`). For
+**finished work** (`scheduler.py:1182`) there is no equivalent: it resolves the author, walks the
+reviewer ladder, and selects. Nothing anywhere asks whether this task has already been reviewed, or
+by whom.
+
+The design intends the task's own status to be that marker. `REVIEWABLE_STATUSES` is exactly
+`{"completed"}` — `under_review` sits in `BAND_WITH_REVIEWER` and is deliberately excluded. So a
+reviewer is expected to move `completed -> under_review`, and that transition is the only thing
+that takes the task out of the selection pool.
+
+Nothing enforces it, and nothing notices when it does not happen.
+
+### What happened live
+
+`critic` was staffed to review `task-23a0986e7fe9` (author `builder`, commit `f10d198`). It ran —
+`run-d4926120b8c2`, status `completed`, exit 0, 2026-08-25 00:11:32 — and did the work: its note
+`note-2059dd9b1488` reads
+
+> Reviewed builder's implementation for task-23a0986e7fe9 (Refuse an entry with no postings) at
+> commit f10d198. Code and tests are correct and complete. Ready for operator to accept evidence
+> ev-6e7f3bc72c24.
+
+It then left the task in `completed` and the evidence in `awaiting`, deferring the decision to the
+operator — which is a defensible thing for a reviewer to do, and `decide_evidence` being available
+to agents does not make it obligatory.
+
+The consequence is not defensible. The task is still `completed`, so it is still in
+`REVIEWABLE_STATUSES`, so the ladder still resolves `critic` for it. **The product's own board says
+so:** `GET /jobs/job-bdea22bb0308` returns `current_tasks` containing
+
+```
+{"id": "task-23a0986e7fe9", "status": "completed", "agent": "critic", "agent_role": "next"}
+```
+
+and the board derives that from this same walk (the comment at `scheduler.py:1143` that F23 left
+behind says exactly that). This is not a prediction about what the next firing would do — it is the
+next firing's decision, already made and already displayed.
+
+Re-enabling the flow re-runs a review that has already been performed, reaches the same conclusion,
+changes nothing, and does it again five minutes later.
+
+### Why it matters more than one wasted turn
+
+The flow's stop conditions cannot end it. `stop_when_queue_empties` is set, but the queue never
+empties: a task stuck in `completed` is not terminal, so the loop considers itself to have open
+work forever. The only bound is the project's token budget, which is `null` here.
+
+That lands directly on the check the guide calls the one that decides whether a flow can be left
+unattended (test guide section 6, task 11.6). A flow in this state spends indefinitely on a
+conclusion it already reached, and every tick looks *healthy* — a turn ran, an agent was named,
+no notice was raised. Nothing distinguishes it from progress.
+
+### Where a guard belongs
+
+The reviewer ladder is the wrong place — it answers "who", correctly. The selection is the place:
+finished work whose most recent review turn ended without moving the task out of `completed` has
+been reviewed, and re-offering it to the same agent tells the operator nothing new. Either the
+task leaves the pool and the flow raises the operator-facing notice it already has vocabulary for
+(rung 3's "could not staff this step" is the wrong words, but the right surface), or a review turn
+that ends without a transition is itself the recordable outcome.
+
+Not fixed. It interacts with F43 — both are about a handover that completes without producing the
+artefact the next step depends on — and the two want deciding together.
+
+---
