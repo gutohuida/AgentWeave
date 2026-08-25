@@ -219,3 +219,52 @@ stops, because routing the work onward is the flow's responsibility and not the 
 
 - **WHEN** a loop with no document fires its agent
 - **THEN** the briefing does not state that anything will route its work onward
+
+## ADDED Requirements
+
+### Requirement: A dispatched review leaves the reviewable pool
+
+Where a flow staffs a review, the firing SHALL move the task out of the statuses a review may be
+claimed from, in the same commit that queues the review turn. A task a reviewer already holds SHALL
+NOT be offered to any agent, including the reviewer holding it.
+
+The flow SHALL NOT rely on the reviewer performing that move. A review turn that ends without
+recording a verdict SHALL leave the task visible as held by its reviewer, and SHALL NOT return it
+to the pool.
+
+A task held by a reviewer SHALL remain visible as the flow's current work, naming the agent holding
+it, for as long as it is held.
+
+#### Scenario: A finished review is not staffed a second time
+
+- **WHEN** a flow staffs an agent to review a completed task
+- **AND** that review turn ends without moving the task
+- **THEN** the next firing does not staff a review for that task
+- **AND** the task is not offered to any other agent either
+
+#### Scenario: A held task is still the flow's current work
+
+- **WHEN** a flow has staffed a review and nothing else is ready
+- **THEN** the flow does not report itself stalled
+- **AND** the task is shown as current, naming the agent holding it
+
+#### Scenario: A held task is never re-staffed as ordinary work
+
+- **WHEN** a task is held by a reviewer
+- **THEN** no firing staffs that task as ordinary work
+- **AND** no agent is fired at it in a workspace other than the review checkout
+
+### Requirement: A review turn is told how to record its verdict
+
+The turn context for a review SHALL name the transitions available to the reviewer for both
+outcomes — that the work is correct, and that it needs revision — and those transitions SHALL be
+legal from the status the task is in when the reviewer receives it.
+
+A review turn's context SHALL NOT name a transition that the task's status does not offer.
+
+#### Scenario: Both verdicts are stated and both are legal
+
+- **WHEN** an agent is given a review turn
+- **THEN** the context names how to record that the work is correct
+- **AND** names how to record that it needs revision
+- **AND** both are transitions the task can actually make

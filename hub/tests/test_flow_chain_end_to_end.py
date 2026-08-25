@@ -313,11 +313,22 @@ async def test_no_judgement_in_the_chain_was_the_operators(
 
     assert transitions, "a chain that recorded no transitions has not run"
 
-    # Every judgement — finishing work, and every review outcome — was an agent's.
+    # Every judgement — finishing work, and every review *outcome* — was an agent's.
+    #
+    # **`under_review` left this list with finding F45, because the product changed under it.**
+    # It used to be reachable only by a reviewer moving the task by hand, so an operator-attributed
+    # one was real evidence that the chain had been pushed along. A firing that staffs a review now
+    # enters the task there itself, in the same commit that queues the turn, which makes the move a
+    # *routing* step of exactly the same kind as the flow claiming ordinary work — and the flow's
+    # claims are already excluded here and pinned in `operator_rows` below.
+    #
+    # The property this test exists for is untouched: a verdict is still `approved`,
+    # `revision_needed` or `rejected`, all three are still agent-only in the chain, and the
+    # assertion below still fails if the operator reaches any of them.
     judgements = [
         t
         for t in transitions
-        if t.to_status in ("completed", "under_review", "approved", "rejected", "revision_needed")
+        if t.to_status in ("completed", "approved", "rejected", "revision_needed")
     ]
     assert judgements, "the chain must have reached a review outcome to be worth checking"
     assert all(t.actor_kind != ACTOR_OPERATOR for t in judgements), (
@@ -330,9 +341,13 @@ async def test_no_judgement_in_the_chain_was_the_operators(
     operator_rows = {
         (t.task_id, t.to_status) for t in transitions if t.actor_kind == ACTOR_OPERATOR
     }
-    assert operator_rows == {("task-chain-b", "assigned")}, (
-        "the only operator-attributed transition should be the flow claiming B; anything else is "
-        "either a real operator action in the chain or the attribution having changed"
+    assert operator_rows == {
+        ("task-chain-b", "assigned"),
+        ("task-chain-a", "under_review"),
+    }, (
+        "the only operator-attributed transitions should be the flow's own routing — claiming B, "
+        "and entering A's review (finding F45) — and anything else is either a real operator "
+        "action in the chain or the attribution having changed"
     )
 
 

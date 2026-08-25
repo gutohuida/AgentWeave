@@ -865,3 +865,42 @@ a review `critic` has already done, on every tick, with no stop condition able t
       Section 1, before anything else, and it says to stop if it fails rather than continuing down
       the guide. It also names the setup that makes it a real test — archiving the other agents, so
       the single-agent case is genuinely single-agent rather than incidentally so.
+
+## 13. Finding F45 — a dispatched review leaves the reviewable pool
+
+Found 2026-08-25 while staging group 11, and fixed in the same change for the reason F41's
+disposition records: it is a defect in *this change's own delivery*, the change is not archived, and
+it is the one thing standing between a supervised flow and one that can be left running.
+
+- [x] 13.1 **Enter a review at `under_review`, in the same commit that queues the turn.**
+      `scheduler._enter_selected_task` — one statement of "move the task into the status its
+      selection implies", shared by both dispatch sites. Ordinary work keeps `pending -> assigned`
+      untouched; a review moves `completed -> under_review`, which takes it out of
+      `REVIEWABLE_STATUSES` and therefore out of the ladder's reach.
+      Extracted rather than written twice: `_do_fire_job` and `_stage_selection` are ~330 lines
+      apart and each carried its own copy of the `pending -> assigned` move, so adding the review
+      half to one and not the other is exactly the drift that produces the next F45.
+- [x] 13.2 **A task a reviewer holds is in-flight on the board, not absent from it.**
+      `WITH_REVIEWER_STATUSES` joins `CURRENT_ITEM_STATUSES` and `_loop_candidates`, and
+      `decide_firing` gained an explicit branch recording it as `in_flight`.
+      Two defects avoided, both measured rather than reasoned. Without the candidate widening a
+      queue holding one dispatched review returned `stalled` with *"no claimable task among 1 open
+      (1 under_review)"* — finding F23 one band over. Without the explicit branch the walk fell into
+      the **ordinary-work** arm, found the reviewer in `assignee`, and re-fired the review with no
+      `is_review` and therefore no checkout of the commit under review — finding F10 by a new route,
+      which is worse than the loop this task closes.
+- [x] 13.3 **`under_review` bypasses the dependency gate**, for the reason `completed` already does
+      one step earlier: it is not one `apply_transition` from `in_progress`, it is one from
+      `approved` or `revision_needed`, so the gate has no question to answer and asking produces an
+      unactionable stall.
+- [x] 13.4 **The review turn is told how to end.** `agents.py`'s review context named
+      `revision_needed` — an edge `TRANSITIONS` does not offer from `completed` — and said nothing
+      at all about work that is *correct*. A reviewer following the instruction was refused; one
+      finding no fault had no stated exit. Measured across the trial Hub's whole history: **no
+      flow-dispatched review had ever recorded a transition.** Both verdict edges are now named,
+      and 13.1 is what makes them legal.
+- [x] 13.5 Regression tests: `hub/tests/test_review_leaves_the_pool.py`, 9 tests, **5 confirmed
+      failing against the unfixed code** — the four that still pass are the set-shape assertions and
+      the ordinary-work path, which is the correct split.
+- [ ] 13.6 **Re-verify live against the trial Hub.** Not closed by unit tests: F41 is this change's
+      own precedent for a fix that passed six of them and could never fire.

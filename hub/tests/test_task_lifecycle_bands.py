@@ -127,9 +127,25 @@ def test_current_item_matches_the_literal_it_replaced():
     because a firing now *may* take it — for review, by an agent that did not finish it — and if
     the board's query could not return the row it would show no current item for a loop that was
     actively reviewing. That is the 2026-08-21 defect again, mirrored.
+
+    `under_review` is the third, and it arrives from a third direction (finding F45). A firing that
+    staffs a review now *enters* the task there, so a status that used to mean "a reviewer picked
+    this up by hand" means "the flow handed this to a reviewer" — and a board query that could not
+    return it would hide the flow's most active work for exactly as long as the review takes. Same
+    defect, third face.
     """
     assert (
-        frozenset({"in_progress", "assigned", "pending", "revision_needed", "blocked", "completed"})
+        frozenset(
+            {
+                "in_progress",
+                "assigned",
+                "pending",
+                "revision_needed",
+                "blocked",
+                "completed",
+                "under_review",
+            }
+        )
         == CURRENT_ITEM_STATUSES
     )
 
@@ -179,9 +195,13 @@ def test_current_item_holds_everything_claimable_and_more():
     from current-item, or the board would fail to name work the firing is about to take. What may
     be present without being claimable is open-ended by design, and the two members it has today
     are pinned by name below so a *third* arriving unnoticed still fails something.
+
+    **A third did arrive**, and this assertion is what caught it: `under_review`, added by finding
+    F45 so the board can name a task a reviewer is holding. Pinned by name for the same reason as
+    the other two — the openness is in the direction, never in the membership.
     """
     assert frozenset() == CLAIMABLE_STATUSES - CURRENT_ITEM_STATUSES
-    assert {"blocked", "completed"} == CURRENT_ITEM_STATUSES - CLAIMABLE_STATUSES
+    assert {"blocked", "completed", "under_review"} == CURRENT_ITEM_STATUSES - CLAIMABLE_STATUSES
 
 
 def test_the_two_statuses_that_are_current_without_being_claimable_differ_in_kind():
@@ -201,10 +221,24 @@ def test_the_two_statuses_that_are_current_without_being_claimable_differ_in_kin
 
 
 def test_live_and_current_item_are_not_the_same_question_either():
-    """`blocked` is the loop's current work but not live work anyone is doing; `under_review` is
-    live work but not this loop's current item. Neither set contains the other."""
+    """`blocked` is the loop's current work but not live work anyone is doing, so the two sets are
+    still different questions.
+
+    **The relationship changed with finding F45, and the new one is the right way round.** This
+    used to assert that neither set contained the other, with `under_review` as the witness: live
+    work that was *not* the loop's current item. That gap was the bug. A task a reviewer is holding
+    is the most active thing a flow has, and a board that could not show it reported the flow
+    stalled at its busiest — F23's defect, one band over.
+
+    So live is now a subset of current-item, and it should be: anything somebody is actively doing
+    must be showable as the loop's current work. What keeps the two questions distinct is the other
+    direction, which is asserted here rather than assumed."""
     assert "blocked" in CURRENT_ITEM_STATUSES and "blocked" not in LIVE_STATUSES
-    assert "under_review" in LIVE_STATUSES and "under_review" not in CURRENT_ITEM_STATUSES
+    assert LIVE_STATUSES < CURRENT_ITEM_STATUSES, "live work must always be showable as current"
+    assert {"blocked", "completed"} == CURRENT_ITEM_STATUSES - LIVE_STATUSES, (
+        "current-item holds work nobody is doing — waiting on a person, or waiting on a reviewer "
+        "to be staffed — and that is what makes it a different question from live"
+    )
 
 
 def test_the_awaiting_someone_else_gap_is_exactly_three_statuses():

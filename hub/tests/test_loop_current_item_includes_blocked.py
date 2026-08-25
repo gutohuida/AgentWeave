@@ -139,6 +139,10 @@ async def test_the_two_sets_differ_only_by_blocked(app):
     assert set(CURRENT_ITEM_TASK_STATUSES) - set(CLAIMABLE_LOOP_TASK_STATUSES) == {
         "blocked",
         "completed",
+        # Finding F45: a firing that staffs a review enters the task at `under_review`, so the
+        # board must be able to return a row no firing may claim — the same shape as the two
+        # above, for the third distinct reason (this one: somebody already has it).
+        "under_review",
     }
     assert set(CLAIMABLE_LOOP_TASK_STATUSES) - set(CURRENT_ITEM_TASK_STATUSES) == set()
     # `completed` is the reviewable set entire, and it is in current-item without being in the

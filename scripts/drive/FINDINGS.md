@@ -1511,3 +1511,98 @@ Not fixed. It interacts with F43 — both are about a handover that completes wi
 artefact the next step depends on — and the two want deciding together.
 
 ---
+
+### F45 — fixed 2026-08-25, and diagnosing it found F46
+
+Fixed inside `loop-becomes-a-flow` (group 13), on F41's precedent: a defect in the change's own
+delivery, the change unarchived, and the one thing standing between a supervised flow and one that
+can be left running.
+
+**The fix is the missing half of a rule that already existed.** Ordinary work is *entered* — the
+firing moves `pending -> assigned` and writes the assignee in the same commit that queues the turn.
+Review work was selected but never entered, so it stayed in `completed`, which is exactly
+`REVIEWABLE_STATUSES`. `scheduler._enter_selected_task` now states both halves, and a review enters
+at `completed -> under_review`.
+
+Two consequences found by running it rather than by reasoning, both of which would have been
+regressions worse than the bug:
+
+- **Widening `_loop_candidates` was not optional.** With `under_review` outside the candidate query
+  the walk could not see the task at all, and a queue holding one dispatched review returned
+  `stalled`, reason *"no claimable task among 1 open (1 under_review)"*. That is finding F23 exactly,
+  one band over — a flow reading as dead while its review runs.
+- **An explicit branch in `decide_firing` was not optional either.** `under_review` is absent from
+  `REVIEWABLE_LOOP_TASK_STATUSES`, so the widened walk fell into the **ordinary-work** arm, found the
+  reviewer sitting in `assignee`, and re-staffed the review with no `is_review` — firing the reviewer
+  into its own worktree with no checkout of the commit under review. That is **finding F10 arriving
+  by a new route**, and it is worse than the loop being fixed.
+
+`hub/tests/test_review_leaves_the_pool.py`, 9 tests, **5 confirmed failing against the unfixed
+code**. The four that still pass are the set-shape assertions and the ordinary-work path, which is
+the correct split rather than a gap.
+
+**Not claimed closed.** Task 13.6 is live re-verification against the trial Hub, unticked. F41 is
+this change's own precedent for a fix that passed six unit tests and could never fire.
+
+---
+
+## F46 (B) — the review turn named a transition the task could not make
+
+Found 2026-08-25 while fixing F45, and it is why no reviewer had ever moved a task rather than
+merely why one reviewer did not.
+
+`TRANSITIONS` gives `completed` exactly one agent-legal edge: `under_review`. The review turn's
+context (`api/v1/agents.py`) told the reviewer:
+
+> Do not fix what you find. Report it. The author makes the change, through `revision_needed` — a
+> reviewer that edits the work has reviewed its own work.
+
+`revision_needed` is **not reachable from `completed`**. A reviewer that followed the instruction
+literally was refused by the transition machine. And a reviewer that found the work *correct* was
+given no exit at all — the context said what to do about work that is wrong and nothing about work
+that is right.
+
+**Measured, not inferred.** Across the whole trial database, every task that ever reached
+`under_review` got there by the operator or by `Architect` in an older non-flow project. **No
+flow-dispatched review has ever recorded a transition.** `critic`'s review of `task-23a0986e7fe9`
+is the representative case: it ran to completion, wrote a note concluding *"Code and tests are
+correct and complete. Ready for operator to accept evidence ev-6e7f3bc72c24"*, and moved nothing —
+which was the only thing it could do.
+
+So F45's loop was not a reviewer being lazy. It was the product asking for something it had made
+impossible, and then re-asking every five minutes.
+
+**Fixed by F45's fix, plus one line.** Entering the review at `under_review` makes both verdict
+edges legal; the context now names both, and says that leaving the task where it is ends the turn
+without a review having happened. The wording alone would not have been enough — that is the point
+of recording this separately.
+
+---
+
+## F47 (C) — the flow's own routing is recorded as the operator's
+
+Recorded 2026-08-25 while fixing F45, which **extended** this defect rather than introducing it.
+
+`ACTOR_KINDS` has two members: `run` and `operator`. A firing is neither. So when the flow claims
+ordinary work it records `pending -> assigned` as `operator()`, and `test_flow_chain_end_to_end.py`
+already names that for what it is — *"the misattribution above, pinned so that fixing it, or a
+genuine operator action appearing, both fail here."*
+
+F45's fix adds a second routing move, `completed -> under_review`, and it lands on a status that
+carries more meaning than `assigned` does. The history for a reviewed task now reads as though the
+operator put it with a reviewer. Nobody did; the flow did.
+
+**Why it was not fixed here.** The honest repair is a third actor kind — a flow or system actor,
+distinct from both an authenticated agent run and a person. That touches `Actor`'s validation, the
+`is_operator` property that several guards branch on, every consumer that switches on
+`actor_kind`, and the operator-facing history surfaces. It is a change about *attribution across
+the whole transition machine*, not about review staffing, and doing it inside F45's fix would bury
+it.
+
+**What it costs today.** An operator asking "what did I do to this task" is told they did something
+they did not. No guard is bypassed — `_guard_author_is_not_reviewer` binds `_REVIEW_OUTCOMES`, and
+neither `assigned` nor `under_review` is one — so this is a truthfulness defect in the record
+rather than a hole in enforcement. The pin in `test_flow_chain_end_to_end.py` now lists both rows,
+so whoever fixes the attribution will be told exactly what to update.
+
+---

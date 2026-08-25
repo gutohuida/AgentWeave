@@ -303,12 +303,26 @@ REVIEWABLE_STATUSES: FrozenSet[str] = _statuses_in(BAND_AWAITING_HANDOFF)
 #: the row it would show no current item for a loop that was actively reviewing. That is the same
 #: defect `blocked` caused on 2026-08-21, arriving from the other direction.
 #:
+#: `under_review` is the third, added by finding F45. A review that has been dispatched moves the
+#: task into `BAND_WITH_REVIEWER`, and a band the board's query could not return would hide the
+#: firing's most active work for exactly as long as the review takes -- the same defect `blocked`
+#: caused from one direction and `completed` from the other, arriving from a third.
+#:
 #: Membership here is not a claim that the task is claimable. The board's own walk still shows a
 #: task as current only when the firing would claim it or it is `blocked`, so a `completed` task
 #: nobody may review is in this set and still not displayed as current.
 CURRENT_ITEM_STATUSES: FrozenSet[str] = _statuses_in(
-    BAND_AGENT_ACTIONABLE, BAND_AWAITING_PERSON, BAND_AWAITING_HANDOFF
+    BAND_AGENT_ACTIONABLE, BAND_AWAITING_PERSON, BAND_AWAITING_HANDOFF, BAND_WITH_REVIEWER
 )
+
+#: Statuses meaning "a reviewer already has this". Not claimable by anybody: the reviewer finishes
+#: it, or the operator resolves it. Consumed by `scheduler.WITH_REVIEWER_LOOP_TASK_STATUSES`.
+#:
+#: This set is what closes finding F45. Before it, a dispatched review left the task in `completed`
+#: -- still inside `REVIEWABLE_STATUSES` -- so a reviewer that finished without transitioning had
+#: its work offered straight back to it on the next tick, forever, with no stop condition able to
+#: end it and every tick reading as healthy.
+WITH_REVIEWER_STATUSES: FrozenSet[str] = _statuses_in(BAND_WITH_REVIEWER)
 
 #: Is this task finished, for the purpose of binding a run to it? Consumed by
 #: `run_task_binding.TERMINAL_FOR_BINDING`.

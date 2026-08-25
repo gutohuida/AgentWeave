@@ -1129,6 +1129,18 @@ async def _render_hub_agent_context(
                 "- Do not fix what you find. Report it. The author makes the change, through "
                 "`revision_needed` — a reviewer that edits the work has reviewed its own work."
             )
+            # Finding F45. The turn above already says what to do about work that is wrong and
+            # said nothing at all about work that is right, so a reviewer finding no fault had no
+            # stated way to end -- and measured across this Hub, none of them ever did: not one
+            # flow-dispatched review had recorded a transition. Both edges are named here, and
+            # both are legal, because the firing enters the task at `under_review` rather than
+            # leaving it in `completed`, from which neither was reachable.
+            lines.append(
+                "- **End the review with a verdict, using `update_task`.** The task is "
+                "`under_review`: set it to `approved` if the work is right, or `revision_needed` "
+                "if it is not. Leaving it where it is ends your turn without a review having "
+                "happened, and the work waits for a person."
+            )
             lines.append(
                 "- Your own working checkout is outside this turn's boundary. You are not in it "
                 "and cannot reach it from here."

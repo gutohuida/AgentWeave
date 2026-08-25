@@ -363,6 +363,45 @@ from this card is exactly that. *Rejected:* **marking the graph nodes instead.**
 where the structure already is, but leaves the card and the graph disagreeing about what "current"
 means — and this module's history is a catalogue of two derivations of one question drifting apart.
 
+### D16 - A review is *entered*, exactly as ordinary work is
+
+Finding F45, 2026-08-25.
+
+The change shipped with an asymmetry nobody noticed because only one half of it was ever written
+down. Ordinary work is **entered**: the firing moves `pending -> assigned` and writes the assignee,
+in the same commit that queues the turn. Review work was *selected* but never entered - the task
+stayed in `completed`, which is precisely `REVIEWABLE_STATUSES`, so the ladder resolved the same
+reviewer for the same finished work on every subsequent tick.
+
+The design's intent was that the **reviewer** perform the move. Two things were wrong with that.
+It is unenforceable - a turn that ends without transitioning is a turn that ended, and nothing
+noticed. And it was not actually possible to follow: `TRANSITIONS` offers `completed` exactly one
+agent-legal edge, `under_review`, while the review context told the reviewer to report through
+`revision_needed`. A reviewer that obeyed was refused; one that found the work correct had no stated
+exit at all. Measured across the trial Hub's whole history, **no flow-dispatched review had ever
+recorded a transition** - the ones that exist were the operator's.
+
+So the fix is not a new rule but the missing half of an existing one. `_enter_selected_task` states
+both: `pending -> assigned` for ordinary work, `completed -> under_review` for a review. The status
+then means what `BAND_WITH_REVIEWER`'s own comment always said it meant - *"Somebody else has it.
+Not claimable, but live work: it is in flight, just not here."*
+
+**Why `under_review` at dispatch rather than a "has been reviewed" marker.** The alternative was to
+leave the task in `completed` and teach the walk to skip one that already had a terminal review run
+against it. That needs new state, a join in a hot path, and it leaves the task in a status claiming
+it awaits a handoff that has in fact already happened and come back. Entering at `under_review`
+needs no new state, and it fixes the instruction gap as a side effect: both verdict edges are legal
+from there, so the context can name them truthfully.
+
+**What it costs, stated rather than discovered later.** A review turn that dies leaves the task in
+`under_review` with nobody working it, and `stop_when_queue_empties` still cannot fire, because
+`under_review` is not terminal either. That is deliberate: the failure mode moves from *an
+invisible spend loop* to *a visible stall carrying its reviewer's name*, and `under_review` has
+three operator exits where `completed` had one. A stall the operator can see and resolve is the
+better half of that trade, and it is the same reasoning D5 already used against notices that cry
+wolf - the state has to be legible before it can be actionable.
+
+
 ## Risks / Trade-offs
 
 **[Set-valued claim breaks the board, the firing and §548 at once]** → Land the set-valued form

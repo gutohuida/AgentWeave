@@ -31,6 +31,7 @@ from .task_transitions import (
     CLAIMABLE_STATUSES,
     CURRENT_ITEM_STATUSES,
     REVIEWABLE_STATUSES,
+    WITH_REVIEWER_STATUSES,
     operator,
 )
 from .utils import persist_event, short_id
@@ -526,6 +527,13 @@ CURRENT_ITEM_TASK_STATUSES: tuple = tuple(sorted(CURRENT_ITEM_STATUSES))
 #: rule exists to stop.
 REVIEWABLE_LOOP_TASK_STATUSES: tuple = tuple(sorted(REVIEWABLE_STATUSES))
 
+#: The statuses meaning a reviewer already holds the task, claimable by nobody (finding F45).
+#:
+#: A firing that staffs a review moves the task here in the same commit that queues the turn --
+#: `_enter_selected_task` -- which is what takes it out of `REVIEWABLE_LOOP_TASK_STATUSES` and
+#: stops the next tick offering the same finished work to the same reviewer again.
+WITH_REVIEWER_LOOP_TASK_STATUSES: tuple = tuple(sorted(WITH_REVIEWER_STATUSES))
+
 
 async def task_is_claimable_by(session: AsyncSession, task: Task, agent: str) -> bool:
     """Whether *agent* may be fired for *task* (`loop-becomes-a-flow` design D3).
@@ -616,8 +624,17 @@ async def candidate_is_startable(
     has nothing whatever to do with whether the work may be looked at. The consequence of getting
     it wrong is quiet: the task is skipped from review, the queue stalls citing a gate, and the
     remedy the stall names is one nobody can act on.
+
+    **`under_review` joins them for finding F45**, and the reason is the previous paragraph's,
+    one step later: a task a reviewer already holds is not one `apply_transition` away from
+    `in_progress` either -- it is one away from `approved` or `revision_needed`. The gate has no
+    question to answer about it, and asking would produce the same unactionable stall.
     """
-    if task.status in ("in_progress", "blocked") or task.status in REVIEWABLE_LOOP_TASK_STATUSES:
+    if (
+        task.status in ("in_progress", "blocked")
+        or task.status in REVIEWABLE_LOOP_TASK_STATUSES
+        or task.status in WITH_REVIEWER_LOOP_TASK_STATUSES
+    ):
         return True, None
     refusal = await dependency_gate.evaluate(session, task)
     return (not refusal.refuses), refusal
@@ -635,6 +652,13 @@ async def _loop_candidates(session: AsyncSession, loop: Loop) -> "list[Task]":
     The reviewable statuses are in the set as of `loop-becomes-a-flow` group 3. They are not
     claimable by status alone; whether any given one may be taken is answered per agent, further
     down.
+
+    **The with-reviewer statuses joined them for finding F45, and not because a firing may claim
+    one — it may not.** They are here so the walk can *see* them and record them as in-flight. A
+    query that excluded them would leave `decide_firing` unable to distinguish a loop whose reviews
+    are all running from a loop with nothing to do, and it would report the second: measured on the
+    unfixed code, a queue holding one dispatched review returned `stalled` with the reason "no
+    claimable task among 1 open (1 under_review)". That is finding F23 exactly, one band over.
     """
     return list(
         (
@@ -642,7 +666,11 @@ async def _loop_candidates(session: AsyncSession, loop: Loop) -> "list[Task]":
                 select(Task)
                 .where(
                     Task.loop_id == loop.id,
-                    Task.status.in_(CLAIMABLE_LOOP_TASK_STATUSES + REVIEWABLE_LOOP_TASK_STATUSES),
+                    Task.status.in_(
+                        CLAIMABLE_LOOP_TASK_STATUSES
+                        + REVIEWABLE_LOOP_TASK_STATUSES
+                        + WITH_REVIEWER_LOOP_TASK_STATUSES
+                    ),
                 )
                 .order_by(*_loop_queue_order())
             )
@@ -694,6 +722,51 @@ async def _first_startable_candidate(
             continue
         return task, gated
     return None, gated
+
+
+async def _enter_selected_task(
+    session: AsyncSession, task: Task, *, agent: str, is_review: bool
+) -> None:
+    """Move *task* into the status its selection implies, and record who holds it.
+
+    The two halves are symmetric and only one of them existed until finding F45:
+
+    * ordinary work enters at `pending -> assigned`, and a task already `assigned` or
+      `in_progress` is being *resumed*, so its status is left alone (design D3);
+    * a review enters at `completed -> under_review`, which is the same statement one band over --
+      the task is no longer awaiting a handoff, somebody has it.
+
+    **The review half is what closes F45.** Without it a dispatched review left the task in
+    `completed`, which is precisely `REVIEWABLE_STATUSES`, so the ladder resolved the same reviewer
+    for the same finished work on every subsequent tick. `stop_when_queue_empties` could not end it
+    -- `completed` is not terminal -- so with no token budget the only bound was the operator
+    noticing, and nothing on the board said anything was wrong.
+
+    It also makes the reviewer's own instructions true. The turn context tells a reviewer to report
+    through `revision_needed`, and `TRANSITIONS` does not offer that edge from `completed` --
+    `completed` reaches only `under_review`. A reviewer that followed the instruction literally was
+    refused, and one that found the work correct had no legal exit at all; measured across this
+    Hub's history, no flow-dispatched reviewer had ever recorded a transition. Entering the review
+    at `under_review` puts both `approved` and `revision_needed` one legal edge away.
+
+    Extracted rather than written twice. Both `_do_fire_job` and `_stage_selection` stage a
+    selection, ~330 lines apart, and each carried its own copy of the `pending -> assigned` move;
+    adding the review half to one and not the other is exactly the drift this module's own
+    `_loop_queue_order` comment warns about.
+    """
+    if is_review:
+        if task.status in WITH_REVIEWER_LOOP_TASK_STATUSES:
+            # Already with a reviewer. Reachable when a firing re-stages a selection whose entry
+            # was queued but whose turn never started; moving again would be an illegal edge.
+            pass
+        elif task.status in REVIEWABLE_LOOP_TASK_STATUSES:
+            await apply_transition(session, task, "under_review", operator())
+    elif task.status == "pending":
+        await apply_transition(session, task, "assigned", operator())
+    # The selection's agent, not the job's: from group 2 these differ whenever a flow staffs a task
+    # with someone other than the job's own agent, and a task assigned to the job's agent while
+    # another works it is the first place that divergence would become a lie the board repeats.
+    task.assignee = agent
 
 
 async def _claim_loop_task(session: AsyncSession, loop: Loop, *, agent: str) -> "list[Task]":
@@ -1126,6 +1199,26 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
         if not startable:
             assert refusal is not None  # only the gated branch reports not-startable
             gated.append((task, refusal))
+            continue
+
+        if task.status in WITH_REVIEWER_LOOP_TASK_STATUSES:
+            # A reviewer already holds this (finding F45). Staffable by nobody: the reviewer
+            # finishes it, or the operator resolves it from `under_review`'s three exits.
+            #
+            # **Tested before the ordinary/review split, not inside it, because it belongs to
+            # neither.** `under_review` is absent from `REVIEWABLE_LOOP_TASK_STATUSES`, so without
+            # this branch the walk would fall into the *ordinary work* arm below, find the
+            # reviewer sitting in `assignee`, and re-staff the review as though it were
+            # implementation -- firing the reviewer into its own worktree with no checkout of the
+            # commit under review, which is finding F10 arriving by a new route.
+            #
+            # Recorded as in-flight rather than skipped, for finding F23's reason: a bare
+            # `continue` removes the row from the board, and a flow whose reviews are all running
+            # would read as having nothing to do. It is also what makes a review that ended
+            # without a verdict *visible* -- the task stays here with its reviewer named, which is
+            # a stall the operator can see and act on, where F45 was a spend loop they could not.
+            if task.assignee:
+                in_flight.append((task.id, task.assignee))
             continue
 
         if task.status not in REVIEWABLE_LOOP_TASK_STATUSES:
@@ -2074,23 +2167,21 @@ class JobScheduler:
                         logger.info(f"Job {job.id} fire skipped: {stall_reason}")
                         return False
                 if claimed_task is not None:
-                    # Only a `pending` task is *entered*; `assigned`/`in_progress` are being
-                    # resumed, so their status stays untouched (design D3). `assigned` became
-                    # reachable here on 2026-08-19 — see CLAIMABLE_LOOP_TASK_STATUSES — which is
-                    # exactly the resume case this branch already guarded for.
-                    if claimed_task.status == "pending":
-                        await apply_transition(session, claimed_task, "assigned", operator())
-                    # The selection's agent, not the job's: from group 2 these differ whenever a
-                    # flow staffs a task with someone other than the job's own agent, and a task
-                    # assigned to the job's agent while another works it is the first place that
-                    # divergence would become a lie the board repeats.
+                    # Entering the task is `_enter_selected_task`'s single statement, shared with
+                    # `_stage_selection` (finding F45): `pending -> assigned` for ordinary work,
+                    # `completed -> under_review` for a review, and the assignee either way.
                     #
-                    # From group 5 this is also a no-op for a resumption rather than an overwrite:
-                    # `decide_firing` resolves an already-assigned task to its own assignee (design
-                    # D12 step 1), so the value written back is the one already there. It used to be
-                    # `default_agent` unconditionally, which under width silently reassigned another
-                    # agent's running task to the job's own.
-                    claimed_task.assignee = selection.agent
+                    # From group 5 the assignee write is a no-op for a resumption rather than an
+                    # overwrite: `decide_firing` resolves an already-assigned task to its own
+                    # assignee (design D12 step 1), so the value written back is the one already
+                    # there. It used to be `default_agent` unconditionally, which under width
+                    # silently reassigned another agent's running task to the job's own.
+                    await _enter_selected_task(
+                        session,
+                        claimed_task,
+                        agent=selection.agent,
+                        is_review=selection.is_review,
+                    )
                 # `selection` is None on the "never filled" queue — no task, but the firing still
                 # proceeds, because filling the queue is the agent's job (`_loop_stall_reason`).
                 # That firing is for the job's own agent, which `acting_agent` already holds.
@@ -2425,9 +2516,9 @@ class JobScheduler:
         """
         from .inbound_queue import new_entry
 
-        if task.status == "pending":
-            await apply_transition(session, task, "assigned", operator())
-        task.assignee = agent
+        # Shared with `_do_fire_job`'s primary path — see `_enter_selected_task` for why the review
+        # half cannot live in only one of the two (finding F45).
+        await _enter_selected_task(session, task, agent=agent, is_review=is_review)
 
         conversation = new_conversation(project_id=job.project_id, agent=agent, origin="job")
         session.add(conversation)
