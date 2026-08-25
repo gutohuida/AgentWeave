@@ -14,6 +14,7 @@ import shutil
 import socket
 import sqlite3
 import sys
+import tempfile
 import urllib.error
 import urllib.request
 from dataclasses import asdict, dataclass
@@ -388,6 +389,66 @@ def check_hub_state_permissions() -> DiagnosticResult:
         str(target),
         "The native Hub state location is not readable and writable.",
         hint=f"Grant read and write permission to {target}.",
+        category="environment",
+    )
+
+
+#: The directories `hub.worktrees.SHARED_DEPENDENCY_DIRS` links into each agent worktree, restated
+#: for the message above. Restated rather than imported: the CLI's own code imports nothing outside
+#: the stdlib, and `test_cli_symlink_privilege.py` asserts the two lists agree.
+_SHARED_DEPENDENCY_DIRS = ("node_modules", ".venv", "venv")
+
+
+def check_symlink_privilege() -> DiagnosticResult:
+    """Can this machine create a directory symlink at all? (F22)
+
+    Every writing agent gets its own git worktree, and `worktrees._symlink_shared_dependencies`
+    links the shared dependency directories — `node_modules` and friends — into it rather than
+    copying them. On Windows without Developer Mode or an elevated shell that call raises
+    `OSError [WinError 1314] A required privilege is not held by the client`, and the Hub
+    deliberately swallows it: failing a whole turn over a missing `node_modules` would be worse
+    than provisioning without one.
+
+    The cost is that **every worktree on such a machine silently has no shared dependencies**, and
+    until now no surface said so. Not the agent, which discovers it by running the suite and
+    failing. Not the operator, who sees a checkout that looks complete. Not this command, which did
+    not look. It stayed invisible while the fixtures were Python projects with their tools on PATH,
+    and stops being invisible the moment a reviewer is handed a checkout *because it can run the
+    tests* — that reviewer then reports "could not run the suite" and is telling the truth about an
+    environment nobody told it about.
+
+    Reported once, here, rather than per worktree: the remedy is one machine-wide setting and it
+    fixes every worktree at once. A warning rather than a failure — the Hub runs correctly without
+    it, and on a project whose tooling is all on PATH nothing is lost.
+    """
+    target = _nearest_existing_parent(NATIVE_HUB_DIR)
+    with tempfile.TemporaryDirectory(dir=target) as probe_dir:
+        probe = Path(probe_dir)
+        source = probe / "source"
+        source.mkdir()
+        link = probe / "link"
+        try:
+            link.symlink_to(source, target_is_directory=True)
+        except OSError as exc:
+            return warn(
+                "symlink_privilege_missing",
+                str(target),
+                "This machine cannot create directory symlinks, so agent worktrees are "
+                "provisioned without the shared dependency directories "
+                f"({', '.join(_SHARED_DEPENDENCY_DIRS)}). An agent that needs them will report "
+                "that it could not run the project's tests.",
+                hint=(
+                    "On Windows, enable Developer Mode (Settings > System > For developers), or "
+                    "run the Hub from an elevated shell. One setting fixes every worktree."
+                ),
+                category="environment",
+                data={"error": str(exc)},
+            )
+    return ok(
+        "symlink_privilege_ready",
+        str(target),
+        "Directory symlinks can be created, so agent worktrees share the project's "
+        "installed dependencies.",
         category="environment",
     )
 
@@ -1072,6 +1133,7 @@ def collect_diagnostics(
     results.append(check_port_availability(port, hub_answered=instance.status != "warn"))
     results.append(check_database_accessibility(profile))
     results.append(check_hub_state_permissions())
+    results.append(check_symlink_privilege())
     return results
 
 

@@ -43,3 +43,37 @@ the wrong thing is worse than no report.
 #### Scenario: Diagnostics cannot reach the bound instance
 - **WHEN** the bound instance cannot be reached
 - **THEN** that SHALL be reported as a failure rather than omitted from the summary
+
+### Requirement: A silently degraded environment SHALL be reported once, where it can be acted on
+
+Where the Hub deliberately degrades rather than failing, `doctor` SHALL report the degraded
+condition, name its consequence in terms the operator will meet it in, and name the remedy.
+
+Degrading is often correct — failing a whole turn because a shared dependency directory could not be
+linked into an agent's worktree would be worse than provisioning without it. What is not correct is
+that nobody is told. Measured on this machine: directory symlinks cannot be created without an extra
+privilege, so **every** agent worktree is provisioned without the project's installed dependencies,
+and no surface says so. The agent discovers it by running the suite and failing. The operator sees a
+checkout that looks complete. The diagnostic did not look.
+
+It stayed invisible while the fixtures were projects whose tooling was already on the path, and
+stops being invisible the moment a reviewer is handed a checkout *because it can run the tests* —
+that reviewer then reports that it could not run the suite, and is telling the truth about an
+environment nobody told it about.
+
+#### Scenario: The environment cannot support a facility the Hub relies on
+- **WHEN** diagnostics run on a machine where that facility is unavailable
+- **THEN** the report SHALL include a warning naming the facility and what will be missing without it
+- **AND** SHALL name the remedy
+
+#### Scenario: The facility is available
+- **WHEN** diagnostics run on a machine where it works
+- **THEN** the report SHALL say so and SHALL NOT warn
+
+#### Scenario: Degraded is not failed
+- **WHEN** the facility is unavailable but the Hub is otherwise ready
+- **THEN** the condition SHALL be reported as a warning and SHALL NOT be reported as a failure
+
+#### Scenario: The probe leaves no trace
+- **WHEN** the diagnostic tests the facility
+- **THEN** it SHALL not leave anything behind in the location it probed
