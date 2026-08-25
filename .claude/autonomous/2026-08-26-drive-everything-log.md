@@ -72,3 +72,56 @@ one.
 environment measurement, and the only claims are ones with a command and its output behind them.
 
 ---
+
+## Iteration 0b — the baseline is green, and prep found three more things
+
+**The green baseline, measured on the branch tip before any queue work.** This exists so that a
+failure appearing overnight is known to be *this run's* rather than inherited:
+
+| Check | Result |
+|---|---|
+| `py -3.11 -m pytest hub/tests/ -q` | **3127 passed, 84 skipped, 1 xpassed, 0 failed** in 672s |
+| `py -3.11 -m pytest tests/ -q` | 440 passed, 3 skipped |
+| `py -3.11 -m ruff check src/ hub/ tests/` | All checks passed |
+| `black --check src/ hub/hub/ hub/tests/ tests/ --target-version py311` | 481 files unchanged |
+| `npx openspec validate loop-becomes-a-flow --strict` | valid |
+
+Note the suite took **11 minutes, not the 22–23** every recent handoff claims. That figure is stale
+and is corrected in `STATE.json`.
+
+**Three things prep found, beyond the two database traps in iteration 0.**
+
+**1. The driver ignored the model the operator chose.** `run-iteration.ps1` invoked `claude -p`
+with no `-m`, so every firing would have fallen back to the CLI's own default. This machine's
+`~/.claude/settings.json` says `"model": "opus[1m]"`. The operator selected **Sonnet 5**, so an
+eight-hour run would have been **Opus end to end**, at several times the authorised cost, while
+`STATE.json` recorded `"model": "claude-sonnet-5"` as pure decoration. Fixed for both runners —
+leaving half of it makes the next Codex run silently wrong the same way. Verified: parses under
+PS 5.1, ASCII-only, and `claude -p ... --model claude-sonnet-5` answers. (`f739ea6`)
+
+**2. `e2e.py clean` printed "removed" over a directory that was still there.** Found by cleaning a
+throwaway project during prep and then *looking* — the rows went, the tree stayed.
+`shutil.rmtree(..., ignore_errors=True)` is a lie on Windows: git marks everything under
+`.git/objects` read-only, `rmtree` raises `PermissionError` on the first one, and `ignore_errors`
+swallows it. This matters because Q10's tidy-up depends on `clean` being honest, and the skill's
+own warning is that *a stray test project is indistinguishable from a real one a week later*.
+Fixed and verified causally against the abandoned directory: `exists after -> False`. (`03e785e`)
+
+**3. F4 is not broken, and the brief was corrected before the loop could waste an iteration on it.**
+All four projects appeared to read `main_branch: null`. They do not — `GET /api/v1/projects` and
+`GET /projects/{id}` simply **do not carry the field**; it lives on `GET /projects/{id}/settings`,
+the same trap `checkpoint_runner_id` set for handoff 0088. A project created fresh during prep came
+up `main_branch: "master"`, and `ledger-stress` already reads `"master"`, so **Q5's integration
+step is not blocked**. What had been written as a decision for the operator is now recorded as
+resolved.
+
+**Armed with:** ten queue items alternating drive and fix; `Q4` carrying the highest-value gap in
+the repository (F43's run-boundary checkpoint hook has never fired live, which handoff 0088 names
+as the residual risk in `loop-becomes-a-flow`); F50 pre-authorised; F47 parked; cheap models only.
+
+**What a reviewer should distrust:** still nothing driven. Every claim above has a command and its
+output behind it, and the three fixes were each verified causally rather than by assertion. The one
+thing prep could **not** establish is whether the queue is correctly *sized* for eight hours — that
+is a guess, and the morning summary should say how far it actually got.
+
+---
