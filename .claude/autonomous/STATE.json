@@ -9,8 +9,8 @@
   "started_at": "2026-08-26T00:05:00+01:00",
   "stop_at": "2026-08-26T08:00:00+01:00",
   "stop_when_queue_empties": false,
-  "iteration": 1,
-  "last_heartbeat": "2026-08-25T23:28:16+01:00",
+  "iteration": 2,
+  "last_heartbeat": "2026-08-26T00:18:43+01:00",
   "green_at_arming": {
     "sha": "the branch tip at arming time",
     "hub_tests": "3127 passed, 84 skipped, 1 xpassed, 0 failed (672s, 2026-08-26 00:02)",
@@ -55,7 +55,7 @@
     {
       "id": "Q2",
       "title": "Drive the spec flow: document to materialised tasks",
-      "status": "open",
+      "status": "closed",
       "detail": "On the Q1 project, drive document creation through to tasks, entirely through the real surface. `e2e.py doc-new`, then trigger the author agent on the document and let it interview you. Play the operator HONESTLY: answer decisively, in prose, with actual constraints - and DELIBERATELY LEAVE ONE ask_user QUESTION UNANSWERED. That is method, not laziness: a tester who answers everything never discovers which questions silently evaporate, and the single most valuable finding in this skill's first run came from a question that was never answered. Then drive the operator gates: close-exploration, propose, approve (`e2e.py close|propose|phase`). Watch the seams, which is where the defects are: between exploring and proposing; between an approved document and a task; whether requirements materialise into tasks with a real dependency graph; whether the unanswered question blocks, times out, or vanishes. Read what the agent ACTUALLY SAID - the transcript is evidence, and on the first run an agent correctly reported it could not do something the tool surface claimed it could. Verify against the database rows, not the chat: document_events, task rows, transitions. Number findings F51+ continuing from Q1.",
       "verify": "Tasks exist on the board, traceable to requirements in the approved document; every claim in the log is backed by a row id or a transcript quote."
     },
@@ -117,8 +117,8 @@
     }
   ],
 
-  "current": "Q2",
-  "next_action": "Start Q2 on proj-8605b92d0028 (drive-2026-08-26, at C:\\Users\\huida\\Documents\\drive-2026-08-26, seeded with inventory.py carrying three uncovered defects; agents author=claude/claude-haiku-4-5-20251001/Spec Author charter-35ddf2283310, reviewer=codex/gpt-5.4-mini/Code Reviewer charter-3be3dd63c942). Confirm the Hub is still alive and on the beta database before touching anything (see the Q1 log entry for the exact commands). Run `e2e.py doc-new proj-8605b92d0028`, then trigger the author agent on the document with `e2e.py turn` and let it interview you - answer honestly and decisively in prose, but DELIBERATELY leave one ask_user question unanswered. Drive close-exploration -> propose -> approve with `e2e.py close|propose|phase`. Watch the seams: exploring->proposing, approved-document->task materialisation, whether the unanswered question blocks/times out/vanishes. Verify against document_events, task rows and transitions in the database, not the chat transcript. Record findings as F51+ in scripts/drive/FINDINGS.md (Q1 produced none - clean cold start, logged as what HELD). Commit and push before the iteration ends, whatever state Q2 reached.",
+  "current": "Q3",
+  "next_action": "Start Q3 (fix pass 1) on proj-8605b92d0028's F51, the one severity-A finding Q2 produced (scripts/drive/FINDINGS.md, full root cause and fix sketch already written). F51: pressing 'start exploration' creates a spec document (e2e.py doc-new / POST .../project/documents) and passes its path as spec_document on the next agent/trigger call, but hub/hub/api/v1/agents.py's '_render_hub_agent_context' (~line 1244, 'Open specification document' block) tells the agent to treat that open document as context only, not an instruction to act on - so the agent calls create_spec_document and builds a SECOND document, orphaning the operator's (confirmed live: spdoc-9c8691592be1 stayed requirements:[] forever while spdoc-f64ba8051a5b, born in the SAME run run-8555716d6b9b, got the real content). Fix sketch in the findings file: when phase=exploring and the open document has no content yet (content empty/requirements empty - knowable from the row), state directly that submit_spec_document should be called with path=<open_spec_path> and that create_spec_document should NOT be called since one already exists this turn; thread the same path through spec_turn_notice (hub/hub/launchability.py:247), which is the copy that wins competing attention per its own docstring. Write a regression test (probably in hub/tests/test_agent_context.py or wherever _render_hub_agent_context is unit-tested - grep for 'Open specification document' or 'Treat it as context' first) asserting the rendered context names the open path as the write target when the document is empty. MUTATION-CHECK per the queue's rule: revert the fix, watch the new test fail by name. Then VERIFY LIVE: fresh e2e.py doc-new + turn --doc on proj-8605b92d0028 (or a new throwaway project), confirm from spec_document_events that the agent's created/content rows land on the SAME document_id the operator's doc-new created, not a second one. Commit the fix separately from any other Q3 fix. Only after F51 is fixed and verified (or explicitly deferred with reasons written down) should Q3 continue to any other severity-A finding - there are none outstanding from Q1/Q2 besides F51.",
 
   "decisions_for_user": [
     "F47 was offered during prep and you did NOT select it, so it is PARKED: the flow's own routing is still recorded as the operator's, and F45 extended that from assigned to under_review. If the drive re-finds it from the outside that is confirmation, not news. Cost when you do want it: no migration (task_transitions.actor_kind has no CHECK constraint), so it is the Python consumers plus deciding what to do with the existing indistinguishable rows.",

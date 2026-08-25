@@ -175,3 +175,77 @@ Everything else in this entry has a command and its output behind it above.
 
 **Next:** Q2 — drive the spec flow live on `proj-8605b92d0028`, with `author` interviewing on a new
 document, honestly answered but one `ask_user` question left deliberately unanswered.
+
+---
+
+## Iteration 2 — Q2: drive the spec flow, document to materialised tasks
+
+**2026-08-26T00:07–00:18+01:00.** Reconciled first: branch/log matched `STATE.json`, tree clean,
+Hub `/health` ok, `e2e.py state proj-8605b92d0028` showed the empty board Q1 left.
+
+**Reproduced the UI's own "start exploration" flow through the real HTTP surface**, in the same
+order the frontend makes the calls: `e2e.py doc-new` (`POST .../project/documents`, what
+`ConversationView.tsx`'s `startExploration` calls via `createDocument.mutate`) created
+`spec/changes/onyx-sylph/spec.html`, then `e2e.py turn author ... --doc <that path>` triggered the
+interview with `spec_document` set to it, exactly as `specDocumentPath` feeds the composer.
+
+**F51 (A) — found here, live, and written up with row ids in `scripts/drive/FINDINGS.md`.** The
+agent never wrote to the document the operator's press created. It called `create_spec_document`
+and built an entirely new one (`spdoc-f64ba8051a5b`, born `golden-sylph`, renamed to
+`fix-three-bugs-in-inventory-module`) **in the same run** (`run-8555716d6b9b`) that received
+`spec_document=spec/changes/onyx-sylph/spec.html`. The operator's own document
+(`spdoc-9c8691592be1`) sits in `exploring` with `requirements: []` and was never touched again —
+confirmed straight from `spec_document_events`, not the transcript. Root cause is in
+`hub/hub/api/v1/agents.py`'s "Open specification document" context block: it tells the agent
+*"This is where they are looking right now. Treat it as context for what they ask, not as an
+instruction to act on it"* — correct for an unrelated document happening to be open, wrong for the
+one `startExploration` just created specifically to be written into — and nothing downstream
+(the phase-duty text, the `create_spec_document` tool description, or `spec_turn_notice`) ever
+names the open path as the one to pass to `submit_spec_document`. Every "start exploration" press
+produces exactly this: a correct document plus a permanent empty husk, compounding into F37. Full
+write-up, root cause with line numbers, and a fix sketch are in the findings file. Left unfixed for
+Q3.
+
+**Deliberately left one question unanswered, and it HELD.** The agent's first reply asked five
+clusters of questions in prose (the exploring-phase duty: "interview in your reply, not through a
+tool"). I answered four honestly and decisively, omitting `add_tag`'s two sub-questions entirely.
+The next turn (`run-1b0019b3a0da`) did **not** invent an assumption and did **not** submit anything
+— it stopped and asked the same `add_tag` question again, explicitly. Confirmed from `--- document
+events ---`: no new `content` row between the two turns. This is the exact failure mode F38 was
+fixed against, and it held on live re-drive.
+
+**F35 reconfirmed live, not new.** Once I answered the last question, `submit_spec_document` failed
+**nine times** in one turn (`run-ada01aa19b51`) before succeeding — `scope` must be a dict, then
+`requirements` need a `key`, then a `modal` field restricted to `MUST/SHOULD/MAY/SHALL`, then
+`acceptance_criteria` need `given`/`when`/`then` and their own `key`, and so on — the agent
+rediscovering the nested schema one Pydantic error at a time, same shape `scripts/drive/FINDINGS.md`
+already records as F35 (C). Not logged as a new finding; logged here as a second live sample
+confirming the existing one.
+
+**Close → propose → approve, and real requirement traceability, confirmed from rows, not
+titles.** `e2e.py close` then `propose` then `phase ... approved` moved
+`spec/changes/fix-three-bugs-in-inventory-module/spec.html` from `exploring` to `proposed` to
+`approved` and returned `tasks_created: [task-06e74937de88, task-a9f72e6c80f8,
+task-9b0b4a141b21]`. `tasks.requirements` is `NULL` on all three (a legacy/unused column, not a
+bug) — the real link lives in `task_requirement_links`, and it is correct:
+`task-06e74937de88` ↔ `FR-1` + `FR-2` (`apply-bulk-discount-all-items`,
+`apply-bulk-discount-validate`), `task-a9f72e6c80f8` ↔ `FR-3` (`is-low-stock-lte`),
+`task-9b0b4a141b21` ↔ `FR-4` (`add-tag-no-accumulation`) — matching exactly what the agent's own
+reply said it was bundling. This is the dependency graph the queue item asked to verify, and it
+HELD.
+
+**What a reviewer should distrust:** I did not exercise a genuine `ask_user` tool call this
+iteration — the exploring-phase duty routes the interview through reply text, not the tool, so the
+"blocks / times out / vanishes" question from the queue item is answered here only for the
+reply-text path (it neither blocked nor vanished; see above). The `ask_user` tool itself, its
+timeout, and F14 are Q8's job, not exercised here. Everything else above has a row id or a
+transcript quote behind it.
+
+**Repository root** stayed untouched — `git status` after the whole drive showed only
+`FINDINGS.md` and `STATE.json` modified.
+
+**Next:** Q3 — fix pass 1. F51 is the one severity-A finding this run produced and is the natural
+first item: it is a real product defect (not a design gap), reproducible in two lines of HTTP calls,
+and its fix sketch is already written in the findings file. Mutation-check it per the queue's rule
+before calling it done, and verify live against a fresh `doc-new` + `turn --doc` pair on this same
+project once fixed.

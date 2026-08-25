@@ -1771,3 +1771,64 @@ fix:
 
 Recorded, not fixed.
 
+## F51 (A) — "start exploration" orphans its own document; the agent writes a second one
+
+Found 2026-08-25 driving Q2 live on a fresh project (`proj-8605b92d0028`), reproducing the UI's
+own "start exploration" flow through the real HTTP surface: `POST .../project/documents` (what
+`ConversationView.tsx`'s `startExploration` calls via `createDocument.mutate`, which the comment
+there says exists *because* "pressing it creates the document"), then
+`POST .../agent/trigger` with `spec_document` set to that path (what `specDocumentPath` feeds the
+composer) — the same two calls the UI makes, in the same order, with a real interview message.
+
+**What happened, from the database, not the chat:**
+
+| document | id | created by | requirements |
+|---|---|---|---|
+| `spec/changes/onyx-sylph/spec.html` | `spdoc-9c8691592be1` | operator (`POST documents`) | `[]` — never touched again |
+| `spec/changes/fix-three-bugs-in-inventory-module/spec.html` (born `golden-sylph`) | `spdoc-f64ba8051a5b` | agent `author`, **same run** (`run-8555716d6b9b`) | the real interview's output |
+
+The agent read the seeded `inventory.py`, asked genuinely good interview questions grounded in the
+code — and did all of it against a document the operator never asked it to create, while the one
+the operator's press *did* create sits forever in `exploring` with zero content. This is F37
+("a document created by mistake is permanent, and becomes a standing warning") happening not from
+a mistake but from the intended entry point into exploration, every single time.
+
+**Root cause, read from the code the agent actually receives (`hub/hub/api/v1/agents.py`,
+`_render_hub_agent_context`):** when `spec_document` is set, the context's "Open specification
+document" block (~line 1244) says plainly:
+
+> "The operator is viewing `{open_spec_path}` in the Hub's Spec view. **This is where they are
+> looking right now. Treat it as context for what they ask, not as an instruction to act on it.**"
+
+That line is correct for the case it was written for — an operator asking about something else
+while an unrelated document happens to be open — but `startExploration` does not produce that
+case. It exists, per its own comment, so that "pressing it *creates the document*"; the freshly
+created empty document *is* the instruction, not incidental context. Nothing downstream
+distinguishes the two. The phase duty text that follows (`SPEC_PHASE_DUTIES["exploring"]`,
+~line 987) tells the agent to interview but never says which path to hand to
+`submit_spec_document` when it does write. The tool description for `create_spec_document`
+(~line 908) reads "start a specification document yourself; **you do not need the operator to
+start it**" — true in general, false in this specific turn, and nothing in context tells the model
+the exception applies here. `spec_turn_notice` (`hub/hub/launchability.py:247`), which duplicates
+the phase instructions into the turn prompt itself specifically because standing context loses to
+a competing workflow (its own docstring, citing three prior live runs), has the identical gap: it
+says "Write the document only with `submit_spec_document`" and never names the open path either.
+
+**Not a one-off model choice.** The agent's own reasoning (from the run's `[thinking]` blocks) was
+methodical and did not hesitate over the open document at all — it read `create_spec_document`'s
+description, saw no reason not to call it, and moved on. Every instruction it was given was
+followed correctly; the instructions just never say "this one."
+
+**Cost:** every real exploration started the way the product's own UI starts one produces a second,
+correct document plus a first, permanent, empty husk indistinguishable later from abandoned work —
+compounding directly into F37's "standing warning" with no operator action able to prevent it.
+
+**Fix sketch, not yet applied:** the "Open specification document" block already computes
+`open_spec_path`; when the phase is `exploring` and the document has no content yet (this is
+knowable — the row's `content_digest`/requirements are empty, exactly as `spdoc-9c8691592be1`'s
+were), state directly: "This document is what you are interviewing for. When you call
+`submit_spec_document`, pass `path='{open_spec_path}'` — do not call `create_spec_document`, one
+already exists for this turn." `spec_turn_notice` needs the same path threaded through it, since
+it is deliberately the copy that wins competing attention. Left unfixed for Q3 to pick up as
+severity A.
+
