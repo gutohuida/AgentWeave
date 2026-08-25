@@ -1,33 +1,39 @@
 ## ADDED Requirements
 
-### Requirement: A malformed tool call is refused with the field, the shape, and an example
+### Requirement: A structured tool parameter advertises its shape in the tool schema
 
-A tool that refuses a call for a malformed payload SHALL name which field was wrong, what shape it
-expects, and SHALL give one minimal working example. Raw validator output SHALL NOT be the whole of
-a refusal.
+Every structured parameter of a tool SHALL declare its type in the schema clients receive, so that
+an object or array parameter is discoverable as such before the tool is called.
 
-This applies the standard the rest of the surface already meets — *"an agent told merely 'forbidden'
-retries the same call"* — to the tool carrying the largest payload, which is currently the one that
-does not meet it.
+**This requirement replaces one that briefly held the opposite, and the reversal is recorded here
+rather than dropped.** The measured problem was real: an agent called the document-submission tool
+**ten times** in a single turn, guessing at a nested schema from type errors and a link to a
+validator's website, and that turn recorded **718,650 input tokens** against 73,622 for the turn
+before it, because every retry resends the whole conversation. The first remedy shaped a refusal
+that named the field, its shape and a working example. Shaping it required the wrong value to reach
+the tool's own code, which meant untyped annotations — so the seven structured fields stopped
+advertising `object`/`array` at all. The operator weighed that trade on 2026-08-25 and chose the
+schema.
 
-The cost is measured, not assumed. One agent called the document-submission tool **ten times** in a
-single turn, guessing at a nested schema from type errors and a link to a validator's website. That
-turn recorded **718,650 input tokens** against 73,622 for the turn before it, because every retry
-resends the whole conversation. One malformed call cost an order of magnitude more than the work
-around it.
+The refusal machinery was removed rather than kept alongside the restored annotations. The framework
+validates arguments before a tool body runs, so with the types declared nothing could ever have
+reached it — and code that cannot be reached, kept because it looks like a safeguard, is the exact
+defect this same change found in its own turn-outcome check. A safeguard nobody can trigger is worse
+than no safeguard, because it is counted as one.
 
-#### Scenario: A field is given the wrong type
-- **WHEN** a tool call supplies a string where a structured object is required
-- **THEN** the refusal SHALL name the field, state the expected shape, and include a minimal example
+#### Scenario: A parameter that takes an object
+- **WHEN** a client reads a tool's input schema
+- **THEN** a parameter that requires an object SHALL be declared as an object
+- **AND** SHALL NOT be declared as accepting any type
 
-#### Scenario: A required field is missing
-- **WHEN** a tool call omits a required field
-- **THEN** the refusal SHALL name the missing field and what it is for
+#### Scenario: A parameter that takes a list
+- **WHEN** a client reads a tool's input schema
+- **THEN** a parameter that requires a list SHALL be declared as an array
 
-#### Scenario: The refusal is restated where the tool lives
-- **WHEN** the standalone tool process shapes a refusal
-- **THEN** it SHALL do so without importing beyond its permitted dependencies
-- **AND** a test SHALL assert that its restatement and the Hub's own contract agree
+#### Scenario: The declaration is what is tested
+- **WHEN** the tool surface is exercised by a test
+- **THEN** the assertion SHALL be made against the schema a client actually receives
+- **AND** an untyped parameter SHALL fail that assertion
 
 ### Requirement: The tools an agent may call are named to it
 
