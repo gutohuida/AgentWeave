@@ -20,11 +20,20 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional, Tuple
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .db.engine import async_session_factory
-from .db.models import Agent, InboundQueueEntry, Question, Run, RunDivergence, SpecDocument, Task
+from .db.models import (
+    Agent,
+    InboundQueueEntry,
+    Question,
+    Run,
+    RunDivergence,
+    SpecDocument,
+    SpecDocumentEvent,
+    Task,
+)
 from .inbound_queue import new_entry
 from .run_task_binding import (
     DEFAULT_POLICY,
@@ -300,8 +309,8 @@ async def note_turn_that_produced_nothing(session: AsyncSession, run: Run) -> bo
     something question-shaped existed until 2026-08-20 and was retired deliberately, because
     guessing whether trailing prose is a question is a judgement the product should not make on the
     operator's behalf; migration `0082` dropped its table. This reintroduces none of that. It asks
-    three questions with recorded answers: was this turn given a document, does that document have
-    content, and did this run write a question.
+    three questions with recorded answers: was this turn given a document, was anything ever written
+    into it, and did this run write a question.
 
     The task case is not handled here — a bound run that ends without moving its task is a
     divergence, which is the rest of this module. This is the same shape for the deliverable that
@@ -329,10 +338,32 @@ async def note_turn_that_produced_nothing(session: AsyncSession, run: Run) -> bo
         .where(SpecDocument.path == document_path)
         .limit(1)
     )
-    # No row, or a row with content, both mean this is not the F38 shape. `content_digest` is the
-    # digest of what was last submitted, so its absence is "nothing has ever been written here" —
-    # the state the author's document was left in.
-    if document is None or document.content_digest:
+    if document is None:
+        return False
+
+    # "Has anything ever been written here" is a count of `content` events after the first, not the
+    # presence of `content_digest` (F41). Both creation paths — `api/v1/spec.py` `create_document`
+    # and the agent's own `create_spec_document` in `api/v1/agent_actions.py` — call
+    # `spec_service.save_document` with a scaffold payload immediately after the row exists, and
+    # that scaffold write sets the digest. So `content_digest` is populated from the document's
+    # first microsecond and never absent: measured on the live database, 50 documents, 0 without
+    # one. Gating on it made this whole check unreachable.
+    #
+    # The original subject proves it. `spec/changes/teal-manticore/spec.html` — the document the
+    # author was given and never wrote — records `created` and `content` at the same timestamp,
+    # `2026-08-25 08:15:40.650773`, with `{"requirements": []}`. The check written to catch that
+    # turn would have returned False on that turn.
+    #
+    # The scaffold contributes exactly one `content` event, so a second one is the first time
+    # anybody wrote anything. That is still structured state and still never reads the agent's
+    # prose, which is the property that matters here.
+    writes = await session.scalar(
+        select(func.count())
+        .select_from(SpecDocumentEvent)
+        .where(SpecDocumentEvent.document_id == document.id)
+        .where(SpecDocumentEvent.kind == "content")
+    )
+    if (writes or 0) > 1:
         return False
 
     # Any question, not only a blocking one. `ask_user(blocking=False)` is the agent leaving a note

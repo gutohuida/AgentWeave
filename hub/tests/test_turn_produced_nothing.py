@@ -9,21 +9,51 @@ import pytest
 from sqlalchemy import select
 
 from hub.db.engine import async_session_factory
-from hub.db.models import EventLog, InboundQueueEntry, Question, Run, SpecDocument
+from hub.db.models import (
+    EventLog,
+    InboundQueueEntry,
+    Question,
+    Run,
+    SpecDocument,
+    SpecDocumentEvent,
+)
 from hub.run_divergence import evaluate_run_end
 
 DOC = "spec/changes/teal-manticore/spec.html"
+
+
+def _content_event(document_id: str, suffix: str) -> SpecDocumentEvent:
+    return SpecDocumentEvent(
+        id=f"spdocev-{document_id}-{suffix}",
+        document_id=document_id,
+        project_id="proj-test",
+        kind="content",
+        actor_kind="operator",
+        actor="operator",
+        origin="submission",
+    )
 
 
 async def _setup(
     run_id: str,
     *,
     document_path=DOC,
-    content_digest=None,
+    written=False,
     named_document=True,
     asked=False,
     phase="exploring",
 ):
+    """Build the document the way the product builds one, which is the whole point (F41).
+
+    `create_document` is followed immediately by a scaffold `save_document` on both creation paths,
+    so a real document always carries a `content_digest` **and** exactly one `content` event before
+    any agent sees it. A fixture that left the digest null described a state nothing produces, and
+    six tests passed against a check that could never fire in production.
+
+    `written=True` adds the second `content` event — the first time anybody actually wrote
+    something into the document.
+    """
+    document_id = f"spdoc-{run_id}"
     async with async_session_factory() as session:
         session.add(
             Run(id=run_id, project_id="proj-test", agent="author", status="completed"),
@@ -31,14 +61,19 @@ async def _setup(
         if document_path is not None:
             session.add(
                 SpecDocument(
-                    id=f"spdoc-{run_id}",
+                    id=document_id,
                     project_id="proj-test",
                     path=document_path,
                     title="Spread fairness",
                     phase=phase,
-                    content_digest=content_digest,
+                    # Populated exactly as the scaffold write populates it. Never null on a real row.
+                    content_digest="0" * 64,
                 )
             )
+            await session.flush()
+            session.add(_content_event(document_id, "scaffold"))
+            if written:
+                session.add(_content_event(document_id, "authored"))
         session.add(
             InboundQueueEntry(
                 id=f"entry-{run_id}",
@@ -104,9 +139,9 @@ async def test_a_turn_that_asked_is_not_recorded(app):
 
 @pytest.mark.asyncio
 async def test_a_turn_that_wrote_the_document_is_not_recorded(app):
-    """`content_digest` is the digest of what was last submitted, so its presence is the
-    deliverable having advanced."""
-    await _setup("run-f38-wrote", content_digest="a" * 64)
+    """A second `content` event is the first time anybody wrote anything into the document —
+    the deliverable having advanced."""
+    await _setup("run-f38-wrote", written=True)
 
     await evaluate_run_end("run-f38-wrote")
 
@@ -132,7 +167,7 @@ async def test_prose_is_never_the_evidence(app):
     nothing — because the text is never read. The backstop that inspected prose was retired on
     2026-08-20 and migration 0082 dropped its table; this must not reintroduce it by another route.
     """
-    await _setup("run-f38-prose", content_digest="b" * 64)
+    await _setup("run-f38-prose", written=True)
 
     async with async_session_factory() as session:
         run = await session.get(Run, "run-f38-prose")
@@ -165,3 +200,39 @@ async def test_the_record_names_what_was_not_written(app):
     assert payload["spec_document"] == DOC
     assert payload["agent"] == "author"
     assert payload["document_phase"] == "exploring"
+
+
+@pytest.mark.asyncio
+async def test_a_populated_digest_alone_does_not_mean_the_document_was_written(app):
+    """F41, pinned directly: the check must not gate on `content_digest`.
+
+    Both creation paths write a scaffold payload the instant the row exists, so every real document
+    carries a digest before any agent sees it — measured on the live database, 50 documents, 0
+    without one. Gating on it made the whole check unreachable, and the six tests above passed
+    anyway because the fixture built a null-digest document the product never produces.
+
+    The original subject is the proof: `spec/changes/teal-manticore/spec.html`, the document the
+    author was given and never wrote, records `created` and `content` at the same microsecond.
+    """
+    await _setup("run-f41-digest")
+
+    async with async_session_factory() as session:
+        document = await session.get(SpecDocument, "spdoc-run-f41-digest")
+        assert document.content_digest, "the fixture must build the shape the product builds"
+        writes = (
+            (
+                await session.execute(
+                    select(SpecDocumentEvent).where(
+                        SpecDocumentEvent.document_id == "spdoc-run-f41-digest",
+                        SpecDocumentEvent.kind == "content",
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+    assert len(writes) == 1, "a document nobody wrote into carries exactly the scaffold write"
+
+    await evaluate_run_end("run-f41-digest")
+
+    assert await _noted("run-f41-digest")

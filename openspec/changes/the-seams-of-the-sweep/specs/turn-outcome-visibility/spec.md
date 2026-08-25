@@ -51,3 +51,21 @@ path of least resistance at the moment the agent had a question.
 #### Scenario: The expectation is stated in advance
 - **WHEN** canonical context is assembled for a turn whose deliverable is an unwritten document
 - **THEN** the context SHALL state that ending without either submitting it or asking is not a valid outcome
+
+#### Scenario: A document that exists but has never been written into has not advanced
+- **WHEN** a run is given a document that the Hub created and scaffolded but into which nothing has since been written
+- **THEN** that deliverable SHALL be treated as not advanced
+- **AND** the determination SHALL NOT rest on any field the Hub populates at creation time
+
+The last clause is what the first implementation got wrong, and it is stated as a requirement
+because the mistake is not visible from the rest of this document. That implementation asked
+whether the document had a recorded content digest, on the reasoning that its absence means
+"nothing has ever been written here". No creation path leaves it absent: both the operator route
+and the agent's own document-creation tool write a scaffold payload the instant the row exists, so
+the digest is populated from the document's first microsecond. Measured on the live database, 50
+documents, 0 without one — so the check never fired, while six tests passed against a fixture that
+built a document in a state the product does not produce.
+
+The document this requirement was written for proves it. The one the author was given and never
+wrote records its creation and its scaffold write at the same microsecond. The check written to
+catch that turn would have returned "advanced" on that turn.
