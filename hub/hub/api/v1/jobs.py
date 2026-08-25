@@ -5,13 +5,13 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from pydantic import ValidationError
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...auth import get_project
 from ...db.engine import get_session
-from ...db.models import AIJob, JobRun, Loop, Project, Question, Run, Task
+from ...db.models import Agent, AIJob, JobRun, Loop, Project, Question, Run, Task
 from ...scheduler import cron_day_ambiguity_reason
 from ...schemas.jobs import JobCreate, JobResponse, JobRunResponse, JobUpdate, LoopSummary
 from ...schemas.tasks import TaskCreate
@@ -122,6 +122,98 @@ async def _check_spec_document_conflict(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"document '{spec_document_id}' is already claimed by loop '{conflicting.id}'",
         )
+
+
+async def _check_agent_exists(session: AsyncSession, project_id: str, agent: str) -> None:
+    """A job naming an agent this project does not have is refused when written (F33).
+
+    Measured 2026-08-25: `POST /jobs` naming `nobody` returned `201`, enabled, with `next_run` set —
+    and then failed every five minutes forever, filling the history the operator is meant to read.
+    The neighbouring cron check on this same route refuses a malformed expression at creation.
+
+    **This is deliberately not the unconditional check the finding assumed was possible.** A cron
+    expression is well-formed or it is not, and nothing later changes the answer. Agent existence is
+    not that kind of fact here: `list_agents` builds the roster from synced session data, `Agent`
+    rows, and a 24-hour window of messages, heartbeats, outputs and task assignees. An agent can
+    legitimately be named before any of those exist — a job created before the watchdog first syncs
+    is the ordinary bootstrap order, not a mistake.
+
+    So this refuses the case that is actually diagnosable: the project **has** a roster and the name
+    is not on it, which is a typo. A project with nothing known yet is left alone, because there is
+    no evidence to refuse on and inventing some would break the create-before-sync order.
+
+    The roster is named in the refusal, bounded, because the fix is nearly always a name the
+    operator already has. An archived agent is refused separately: it exists, and "does not exist"
+    would send the operator looking for something they would never find — the same class of wrong
+    answer this check exists to end.
+    """
+    from .agents import _get_session_data
+
+    rows = (
+        (await session.execute(select(Agent).where(Agent.project_id == project_id))).scalars().all()
+    )
+    archived = {row.name for row in rows if row.lifecycle == "archived"}
+    known = {row.name for row in rows if row.lifecycle != "archived"}
+
+    session_data = await _get_session_data(project_id, session)
+    known.update((session_data or {}).get("agents", {}).keys())
+
+    if agent in known:
+        return
+    if agent in archived:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"agent '{agent}' is archived, so a job for it would never run. "
+                f"Unarchive it, or name a different agent."
+            ),
+        )
+    if not known:
+        # Nothing is known about this project's agents yet, so there is no roster to contradict.
+        return
+
+    listed = ", ".join(sorted(known)[:10])
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail=(
+            f"agent '{agent}' is not one of this project's agents, so this job could only ever "
+            f"fail. On the roster: {listed}."
+        ),
+    )
+
+
+async def _adopt_document_tasks(session: AsyncSession, project_id: str, loop: Loop) -> int:
+    """Take ownership of tasks already materialised from the document this loop claims (F28).
+
+    `spec_tasks.materialise()` stamps `loop_id` on each task as it creates it, resolving the owning
+    loop by the document. Its comment states the assumption plainly — *"the binding was fixed at
+    loop-creation time"* — and that holds only when the loop already exists at approval.
+
+    Approve first and build the flow second and nothing back-fills, so the tasks carry
+    `spec_document_id` and a null `loop_id` while every loop-queue query reads `Task.loop_id`
+    (`scheduler.py:314, 327, 644, 1305, 1569`). Measured 2026-08-25: the flow was accepted, the
+    claim succeeded, and its queue was empty permanently, with no error and no stall reason.
+
+    Adopting here makes the build order stop mattering, which is better than documenting a trap.
+    Restricted to `loop_id IS NULL` so a task another loop already owns is never taken; the caller
+    has just passed `_check_spec_document_conflict`, so no second loop can hold this document
+    anyway, and this is the belt to that braces.
+
+    Returns how many tasks were adopted, which is `0` in the ordinary create-then-approve order
+    because there is nothing to adopt yet.
+    """
+    if loop.spec_document_id is None:
+        return 0
+    result = await session.execute(
+        update(Task)
+        .where(
+            Task.project_id == project_id,
+            Task.spec_document_id == loop.spec_document_id,
+            Task.loop_id.is_(None),
+        )
+        .values(loop_id=loop.id)
+    )
+    return result.rowcount or 0
 
 
 async def _batch_loop_summaries(
@@ -390,6 +482,10 @@ async def create_job(
             detail="this job is a loop; continuity is by checkpoint, not by resumed session",
         )
 
+    # Same moment as the cron check below, for the same reason: both are facts about this request
+    # that are knowable now, and a job that can only ever fail should not be scheduled (F33).
+    await _check_agent_exists(session, project_id, body.agent)
+
     # Validate cron using croniter
     try:
         from croniter import croniter
@@ -477,6 +573,9 @@ async def create_job(
             created_by_run_id=run_identity,
         )
         session.add(loop)
+        # Before the commit, so a flow and the queue it just adopted land together — a loop that
+        # exists while its tasks still read `loop_id = NULL` is the F28 state itself.
+        await _adopt_document_tasks(session, project_id, loop)
         try:
             await session.commit()
         except IntegrityError as e:
@@ -714,6 +813,12 @@ async def update_job(
                 session, project_id, body.spec_document_id, exclude_loop_id=loop.id
             )
             loop.spec_document_id = body.spec_document_id
+            # A claim made by editing an existing loop reaches the same F28 state as one made at
+            # creation, so it adopts on the same terms. Unlike the definition edits below this is
+            # applied on the spot rather than staged: the document binding is not part of the
+            # definition a firing under way was briefed with, and leaving the queue empty until the
+            # next firing would preserve exactly the bug.
+            await _adopt_document_tasks(session, project_id, loop)
 
         # Design D11 (task A2.1/A2.2): once a loop already exists, purpose/stop_at/
         # stop_when_queue_empties are its *definition*, and an edit to it is always accepted but

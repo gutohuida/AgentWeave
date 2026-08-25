@@ -24,9 +24,8 @@ Ordered by damage prevented per line changed, not by severity label.
   task requires that binding. Two conditions in `apply_transition`, beside the dependency and
   requirement gates already there. The operator is unaffected.
 - **Nothing is scheduled that can only fail or idle** (F28, F33). A flow adopts the tasks already
-  materialised from the document it claims, so build-order stops mattering; a flow with
-  `stop_when_queue_empties` stops instead of spawning an agent against an empty queue; a job naming
-  an agent that does not exist is refused at creation, where the cron beside it already is.
+  materialised from the document it claims, so build-order stops mattering; a job naming an agent
+  the project does not have is refused at creation, where the cron beside it already is.
 - **Agents are told what they may *not* do** (F32), and can reach the tools they are given (F21).
   Canonical context states withheld capabilities, not only granted ones.
 - **A turn that produced nothing says so** (F38). Recorded from state the Hub already holds — the
@@ -56,9 +55,7 @@ on a path that was never legitimate.
 - `task-lifecycle-governance`: the `-> completed` edge requires the acting run to be bound to the
   task it closes.
 - `agent-loops`: a flow adopts tasks already materialised from the document it claims; a job must
-  name an agent on the roster.
-- `loop-firing-accountability`: a flow honouring `stop_when_queue_empties` does not fire against an
-  empty queue.
+  name an agent the project has.
 - `agent-context-onboarding`: withheld capabilities are stated as plainly as granted ones.
 - `agent-tool-surface`: callable tools are named explicitly; a malformed call is refused with the
   field, the shape wanted, and one example.

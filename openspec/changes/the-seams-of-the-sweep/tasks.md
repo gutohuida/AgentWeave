@@ -13,20 +13,20 @@
 
 ## 2. Nothing is scheduled that can only fail or idle (F28, F33)
 
-- [ ] 2.1 Review this group's spec deltas against `hub/hub/api/v1/jobs.py`, `hub/hub/spec_tasks.py` and `hub/hub/scheduler.py`
-- [ ] 2.2 Back-fill `loop_id` when a loop claims a document, at the create site beside `_check_spec_document_conflict`, restricted to tasks with `loop_id IS NULL`
-- [ ] 2.3 Apply the same adoption at the loop-update site where a document claim can change
-- [ ] 2.4 Make a firing under `stop_when_queue_empties` with no claimable task end the loop instead of spawning a turn
-- [ ] 2.5 Add the roster check to job creation, beside the existing cron validation, refusing an agent that does not exist
-- [ ] 2.6 Apply the same check on the job-update route
-- [ ] 2.7 Correct the fire-time message so "does not exist" and "has no runner bound" are distinct
-- [ ] 2.8 Decide whether the data migration back-filling `loop_id` for existing flows is worth it; if yes, write it with a missing-table guard as `0033`/`0034` do
-- [ ] 2.9 If a migration was added, bump the head assertions in **both** `hub/tests/test_migrations.py` and `hub/tests/test_project_persistence.py`
-- [ ] 2.10 Test: a flow created after its document is approved has a populated queue
-- [ ] 2.11 Test: a flow created before approval is unchanged, and tasks owned by another loop are not taken
-- [ ] 2.12 Test: an empty queue under the stop condition ends the loop and spawns nothing
-- [ ] 2.13 Test: a job naming a missing agent is refused at creation; one naming a real agent is created
-- [ ] 2.14 Run the Hub suite; commit
+- [x] 2.1 Review this group's spec deltas against `hub/hub/api/v1/jobs.py`, `hub/hub/spec_tasks.py` and `hub/hub/scheduler.py`
+- [x] 2.2 Back-fill `loop_id` when a loop claims a document, at the create site beside `_check_spec_document_conflict`, restricted to tasks with `loop_id IS NULL`
+- [x] 2.3 Apply the same adoption at the loop-update site where a document claim can change
+- [x] 2.4 **Withdrawn — see design D3.** `scheduler._loop_stall_reason` documents "never filled -> fire; the agent's job is to fill it" as a decision, and F28's flow only took that branch because `loop_id` was null. Adoption closes both halves; changing the firing would break the create-then-populate order
+- [x] 2.5 Add the roster check to job creation, beside the existing cron validation, refusing an agent that does not exist
+- [x] 2.6 **No subject — `JobUpdate` has no `agent` field,** so an update cannot change which agent a job names (`hub/hub/schemas/jobs.py:45`). Nothing to check
+- [x] 2.7 Correct the fire-time message so "does not exist" and "has no runner bound" are distinct
+- [x] 2.8 **Decided: no migration.** Adoption runs on any claim, including a re-claim by PATCH, so an already-broken flow repairs itself the moment the operator re-declares its document — a one-line operator action against a bug that has existed for days, versus a migration that rewrites task ownership rows on every existing database. `aw-sweep` is the only known instance
+- [x] 2.9 Not applicable — no migration was added (2.8)
+- [x] 2.10 Test: a flow created after its document is approved has a populated queue
+- [x] 2.11 Test: a flow created before approval is unchanged, and tasks owned by another loop are not taken
+- [x] 2.12 **Withdrawn with 2.4.** The behaviour is correct as it stands and is already covered by `test_loop_whose_tasks_are_all_completed_but_unapproved_spins` and `test_a_stalled_loop_queue_is_neither_claimable_nor_drained`
+- [x] 2.13 Test: a job naming a missing agent is refused at creation; one naming a real agent is created
+- [x] 2.14 Run the Hub suite; commit
 
 ## 3. Agents can see their limits and reach their tools (F32, F38, F21)
 

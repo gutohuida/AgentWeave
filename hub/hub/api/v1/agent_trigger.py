@@ -340,11 +340,15 @@ async def trigger_agent_directly(
     )
     agent_row = agent_row_result.scalars().first()
     if agent_row is None:
+        # Says the agent is absent, not that it lacks a runner (F33). The old wording sent the
+        # operator to configure a roster entry that was never there — measured 2026-08-25, where a
+        # job for a mistyped agent reported "has no runner bound" every five minutes. The
+        # `runner_id is None` branch below is the case that message actually describes.
         raise TriggerAgentError(
             status.HTTP_409_CONFLICT,
-            f"{agent} has no runner bound. Bind one via PATCH "
-            f"/api/v1/projects/{project_id}/agents/{agent} "
-            "(runner_id) or the Hub UI before triggering.",
+            f"{agent} is not an agent in this project, so there is nothing to trigger. "
+            f"Create it in the Hub UI, or correct the name — if a scheduled job names it, that "
+            f"job will keep failing until the name is fixed.",
         )
     if agent_row.runner_id is None:
         config = await get_agent_config(project_id, agent, session)

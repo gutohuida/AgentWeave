@@ -1166,3 +1166,244 @@ async def test_re_enabling_an_ordinary_job_is_untouched_by_the_loop_refusal(app,
     )
     assert resume.status_code == 200
     assert resume.json()["enabled"] is True
+
+
+# ---------------------------------------------------------------------------
+# F28: a flow adopts the tasks already materialised from the document it claims
+# ---------------------------------------------------------------------------
+
+
+async def _task_rows(task_ids):
+    from sqlalchemy import select
+
+    from hub.db.engine import async_session_factory
+    from hub.db.models import Task
+
+    async with async_session_factory() as session:
+        result = await session.execute(select(Task).where(Task.id.in_(task_ids)))
+        return {row.id: row for row in result.scalars().all()}
+
+
+async def _materialised_task(task_id: str, document_id: str, loop_id=None):
+    """A task as `spec_tasks.materialise()` leaves it: carrying its document, and a loop only if
+    one already claimed that document at the time."""
+    from hub.db.engine import async_session_factory
+    from hub.db.models import Task
+
+    async with async_session_factory() as session:
+        session.add(
+            Task(
+                id=task_id,
+                project_id="proj-test",
+                title=f"Work {task_id}",
+                status="pending",
+                spec_document_id=document_id,
+                loop_id=loop_id,
+            )
+        )
+        await session.commit()
+
+
+@pytest.mark.asyncio
+async def test_a_flow_created_after_approval_adopts_the_documents_tasks(app, auth_headers):
+    """The F28 reproduction. Approve first, build the flow second: the tasks exist with a null
+    `loop_id`, and every queue query reads `Task.loop_id`, so the queue was empty forever."""
+    await _materialised_task("task-f28-a", "doc-f28-after")
+    await _materialised_task("task-f28-b", "doc-f28-after")
+
+    resp = await app.post(
+        "/api/v1/projects/proj-test/jobs",
+        json={
+            "name": "Built after approval",
+            "agent": "kimi",
+            "message": "Work the queue",
+            "cron": "0 9 * * *",
+            "purpose": "Drive doc-f28-after",
+            "spec_document_id": "doc-f28-after",
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201, resp.text
+    loop_id = resp.json()["loop"]["id"]
+
+    rows = await _task_rows(["task-f28-a", "task-f28-b"])
+    assert rows["task-f28-a"].loop_id == loop_id
+    assert rows["task-f28-b"].loop_id == loop_id
+
+
+@pytest.mark.asyncio
+async def test_adoption_does_not_take_a_task_another_loop_already_owns(app, auth_headers):
+    """Restricted to `loop_id IS NULL`. A task another flow is already driving keeps its owner."""
+    await _materialised_task("task-f28-owned", "doc-f28-owned", loop_id="loop-someone-else")
+
+    resp = await app.post(
+        "/api/v1/projects/proj-test/jobs",
+        json={
+            "name": "Late claimer",
+            "agent": "kimi",
+            "message": "Work the queue",
+            "cron": "0 9 * * *",
+            "purpose": "Drive doc-f28-owned",
+            "spec_document_id": "doc-f28-owned",
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201, resp.text
+
+    rows = await _task_rows(["task-f28-owned"])
+    assert rows["task-f28-owned"].loop_id == "loop-someone-else"
+
+
+@pytest.mark.asyncio
+async def test_a_flow_does_not_adopt_another_documents_tasks(app, auth_headers):
+    """The claim is on one document, so adoption is too."""
+    await _materialised_task("task-f28-other", "doc-f28-unrelated")
+
+    resp = await app.post(
+        "/api/v1/projects/proj-test/jobs",
+        json={
+            "name": "Claims its own document",
+            "agent": "kimi",
+            "message": "Work the queue",
+            "cron": "0 9 * * *",
+            "purpose": "Drive doc-f28-mine",
+            "spec_document_id": "doc-f28-mine",
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201, resp.text
+
+    rows = await _task_rows(["task-f28-other"])
+    assert rows["task-f28-other"].loop_id is None
+
+
+@pytest.mark.asyncio
+async def test_claiming_a_document_by_patch_also_adopts_its_tasks(app, auth_headers):
+    """A claim made by editing an existing loop reaches the same state as one made at creation."""
+    await _materialised_task("task-f28-patch", "doc-f28-patched")
+
+    created = await app.post(
+        "/api/v1/projects/proj-test/jobs",
+        json={
+            "name": "Claims later",
+            "agent": "kimi",
+            "message": "Work the queue",
+            "cron": "0 9 * * *",
+            "purpose": "Will name its document in a moment",
+        },
+        headers=auth_headers,
+    )
+    assert created.status_code == 201, created.text
+
+    patched = await app.patch(
+        f"/api/v1/projects/proj-test/jobs/{created.json()['id']}",
+        json={"spec_document_id": "doc-f28-patched"},
+        headers=auth_headers,
+    )
+    assert patched.status_code == 200, patched.text
+
+    rows = await _task_rows(["task-f28-patch"])
+    assert rows["task-f28-patch"].loop_id == created.json()["loop"]["id"]
+
+
+# ---------------------------------------------------------------------------
+# F33: a job that could only ever fail is not scheduled
+# ---------------------------------------------------------------------------
+
+
+async def _roster(*names):
+    from hub.db.engine import async_session_factory
+    from hub.db.models import Agent
+
+    async with async_session_factory() as session:
+        for name in names:
+            session.add(Agent(id=f"agt-{name}", project_id="proj-test", name=name))
+        await session.commit()
+
+
+@pytest.mark.asyncio
+async def test_a_job_naming_an_agent_not_on_the_roster_is_refused(app, auth_headers):
+    """The F33 reproduction: `nobody` was accepted, enabled and scheduled, then failed every five
+    minutes forever. The cron on this same route is refused at creation."""
+    await _roster("realagent")
+
+    resp = await app.post(
+        "/api/v1/projects/proj-test/jobs",
+        json={
+            "name": "Ghost",
+            "agent": "nobody",
+            "message": "work",
+            "cron": "*/5 * * * *",
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 400, resp.text
+    detail = resp.json()["detail"]
+    assert "nobody" in detail
+    assert "realagent" in detail
+
+
+@pytest.mark.asyncio
+async def test_a_job_naming_a_real_agent_is_created(app, auth_headers):
+    await _roster("presentagent")
+
+    resp = await app.post(
+        "/api/v1/projects/proj-test/jobs",
+        json={
+            "name": "Real",
+            "agent": "presentagent",
+            "message": "work",
+            "cron": "*/5 * * * *",
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201, resp.text
+
+
+@pytest.mark.asyncio
+async def test_a_project_with_no_known_agents_is_left_alone(app, auth_headers):
+    """Deliberately not unconditional. Creating a job before the watchdog first syncs is the
+    ordinary bootstrap order, and there is no roster to contradict."""
+    resp = await app.post(
+        "/api/v1/projects/proj-test/jobs",
+        json={
+            "name": "Before any sync",
+            "agent": "not-yet-registered",
+            "message": "work",
+            "cron": "*/5 * * * *",
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201, resp.text
+
+
+@pytest.mark.asyncio
+async def test_a_job_for_an_archived_agent_says_it_is_archived(app, auth_headers):
+    """It exists, so "does not exist" would send the operator looking for the wrong thing."""
+    from hub.db.engine import async_session_factory
+    from hub.db.models import Agent
+
+    async with async_session_factory() as session:
+        session.add(
+            Agent(
+                id="agt-gone",
+                project_id="proj-test",
+                name="goneagent",
+                lifecycle="archived",
+            )
+        )
+        session.add(Agent(id="agt-here", project_id="proj-test", name="hereagent"))
+        await session.commit()
+
+    resp = await app.post(
+        "/api/v1/projects/proj-test/jobs",
+        json={
+            "name": "For an archived agent",
+            "agent": "goneagent",
+            "message": "work",
+            "cron": "*/5 * * * *",
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 400, resp.text
+    assert "archived" in resp.json()["detail"]

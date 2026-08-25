@@ -78,11 +78,34 @@ approved* — the artifact's own fallback suggestion, and a real improvement ove
 turns a working intention into an error the operator must work around by rebuilding the flow.
 Adopting makes the trap **not exist**, which is better than reporting it.
 
-### D3 — F28b: an empty queue under `stop_when_queue_empties` stops
+### D3 — F28b: **withdrawn.** The firing was a symptom, not a second defect
 
-Separate defect inside the same finding, and the one that costs money: `stall_reason` was `null`
-and the flow **fired a real turn on a real model against an empty queue**, on a cron, indefinitely.
-The flag already declares the intent; honour it before spawning rather than after.
+This design originally proposed that a flow honouring `stop_when_queue_empties` must not fire
+against an empty queue, on the strength of the finding's observation that it *"fires a real turn
+against the empty queue anyway"*. **Reviewing the spec against the code before implementing — the
+standing method — showed that would have been wrong, and would have broken working behaviour.**
+
+`scheduler._loop_stall_reason` names three queue states outright:
+
+```
+nothing ready YET   open work, none claimable   -> skip this firing, keep polling
+nothing LEFT        every task terminal         -> `_loop_stop_reason`, stop for good
+never filled        no tasks at all             -> fire; the agent's job is to fill it
+```
+
+The third is a decision, not an oversight: a loop is created before its work exists, and
+`_loop_stop_reason`'s own comment records that arming the stop condition at creation *"would
+disable the loop on its first tick, before it had ever run anything, permanently"*. Firing an
+empty, never-filled loop is how a flow whose job is to *produce* tasks gets to do it.
+
+F28's flow held five tasks and looked never-filled, because `loop_id` was null — so it took the
+third branch correctly, on false information. **D2 alone closes both halves of F28:** once the
+tasks are adopted, `ever_count` is non-zero, the queue is genuinely non-empty, and the existing
+machinery does the right thing without modification.
+
+Consequently the `loop-firing-accountability` delta is withdrawn: there is no behaviour to change
+there. Recorded rather than quietly dropped, because the finding's second paragraph reads as a
+separate defect and the next reader will otherwise re-propose this.
 
 ### D4 — F32: capability announcement becomes symmetric
 
