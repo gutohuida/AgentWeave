@@ -9,8 +9,8 @@
   "started_at": "2026-08-26T00:05:00+01:00",
   "stop_at": "2026-08-26T08:00:00+01:00",
   "stop_when_queue_empties": false,
-  "iteration": 2,
-  "last_heartbeat": "2026-08-25T23:40:01+01:00",
+  "iteration": 3,
+  "last_heartbeat": "2026-08-26T00:31:00+01:00",
   "green_at_arming": {
     "sha": "the branch tip at arming time",
     "hub_tests": "3127 passed, 84 skipped, 1 xpassed, 0 failed (672s, 2026-08-26 00:02)",
@@ -62,7 +62,7 @@
     {
       "id": "Q3",
       "title": "Fix pass 1 - everything severity A from Q1 and Q2",
-      "status": "open",
+      "status": "closed",
       "detail": "Fix every severity-A finding (wrong behaviour an operator will act on) that Q1 and Q2 produced, each with a regression test, on this branch. Defer B and C to Q6 unless a B is a one-line fix sitting in a file you are already editing. THE RULE THAT GOVERNS THIS ITEM, because it is this repository's dominant failure mode: a fix that passes its tests and cannot fire in production. F41, F43, F45 and F49 were each an instance. So for every fix, MUTATION-CHECK IT - disable the line the test exists for and watch a NAMED test fail - and where the finding was found live, VERIFY IT LIVE against the running Hub, not only against a fixture. A fixture that builds what the product does not build proves nothing; that exact sentence is F43's write-up, and F43's own first implementation then reproduced it and was caught only by querying the live database. Commit each finding's fix separately so the morning diff is readable per finding.",
       "verify": "py -3.11 -m pytest hub/tests/ -q (about 22 minutes - run it in the background and keep working, do NOT conclude it is stuck) plus the live re-drive of each fixed scenario through e2e.py."
     },
@@ -117,8 +117,8 @@
     }
   ],
 
-  "current": "Q3",
-  "next_action": "Start Q3 (fix pass 1) on proj-8605b92d0028's F51, the one severity-A finding Q2 produced (scripts/drive/FINDINGS.md, full root cause and fix sketch already written). F51: pressing 'start exploration' creates a spec document (e2e.py doc-new / POST .../project/documents) and passes its path as spec_document on the next agent/trigger call, but hub/hub/api/v1/agents.py's '_render_hub_agent_context' (~line 1244, 'Open specification document' block) tells the agent to treat that open document as context only, not an instruction to act on - so the agent calls create_spec_document and builds a SECOND document, orphaning the operator's (confirmed live: spdoc-9c8691592be1 stayed requirements:[] forever while spdoc-f64ba8051a5b, born in the SAME run run-8555716d6b9b, got the real content). Fix sketch in the findings file: when phase=exploring and the open document has no content yet (content empty/requirements empty - knowable from the row), state directly that submit_spec_document should be called with path=<open_spec_path> and that create_spec_document should NOT be called since one already exists this turn; thread the same path through spec_turn_notice (hub/hub/launchability.py:247), which is the copy that wins competing attention per its own docstring. Write a regression test (probably in hub/tests/test_agent_context.py or wherever _render_hub_agent_context is unit-tested - grep for 'Open specification document' or 'Treat it as context' first) asserting the rendered context names the open path as the write target when the document is empty. MUTATION-CHECK per the queue's rule: revert the fix, watch the new test fail by name. Then VERIFY LIVE: fresh e2e.py doc-new + turn --doc on proj-8605b92d0028 (or a new throwaway project), confirm from spec_document_events that the agent's created/content rows land on the SAME document_id the operator's doc-new created, not a second one. Commit the fix separately from any other Q3 fix. Only after F51 is fixed and verified (or explicitly deferred with reasons written down) should Q3 continue to any other severity-A finding - there are none outstanding from Q1/Q2 besides F51.",
+  "current": "Q4",
+  "next_action": "Start Q4: exercise the run-boundary checkpoint hook live on proj-18e5d4e0 (ledger-stress). This is the highest-value gap named in the queue - the run-boundary wiring in agent_trigger.py that delivers a reviewer's briefing (F43's fix) has never been exercised live; F43 was verified by calling consider_handover directly against the database, never by a real run boundary firing the hook. checkpoint_runner_id is already set on this project to runner-a30ddea6 (Haiku cheap). Create a flow job over a loop (cheap runner ONLY - runner-a30ddea6 or runner-fde56879), ENABLE it, let a real agent turn end so the hook fires for real, then confirm from the rows: a checkpoint appears carrying a non-null loop_id, its note is the AUTHOR's (F44 - not merely the loop's newest note), and the next agent's briefing text actually contains it. Also watch F12's shape while here (a loop firing every minute while finished work waits for review) and whether loop-becomes-a-flow's claimable-by-a-different-agent change resolved it - note what you observe either way. CRITICAL: DISABLE THE JOB before the iteration ends, whatever else happens - a loop left enabled spends money all night, and this is named as the single most expensive mistake available in this run. The trial Hub is already running on the beta database (confirmed this iteration after a restart to pick up the F51 fix - proj-8605b92d0028's state matched before and after). Number any new findings F52+ in scripts/drive/FINDINGS.md with row ids, not claims.",
 
   "decisions_for_user": [
     "F47 was offered during prep and you did NOT select it, so it is PARKED: the flow's own routing is still recorded as the operator's, and F45 extended that from assigned to under_review. If the drive re-finds it from the outside that is confirmation, not news. Cost when you do want it: no migration (task_transitions.actor_kind has no CHECK constraint), so it is the Python consumers plus deciding what to do with the existing indistinguishable rows.",

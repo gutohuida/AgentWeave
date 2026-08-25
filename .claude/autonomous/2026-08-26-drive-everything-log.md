@@ -249,3 +249,85 @@ first item: it is a real product defect (not a design gap), reproducible in two 
 and its fix sketch is already written in the findings file. Mutation-check it per the queue's rule
 before calling it done, and verify live against a fresh `doc-new` + `turn --doc` pair on this same
 project once fixed.
+
+---
+
+## Iteration 3 — Q3: fix pass 1, F51
+
+**2026-08-26T00:07–00:31+01:00.** Reconciled first: branch/log matched `STATE.json` (`d92b466`
+tip), tree clean, `next_action` named F51 as Q3's single item.
+
+**Root cause read from the code, not just the findings file.** `_render_hub_agent_context`'s "Open
+specification document" block (`hub/hub/api/v1/agents.py`) tells the agent to treat the open
+document as context, never an instruction — correct for an unrelated document, wrong for the one
+`startExploration` just created to be written into.
+
+**One correction to the findings file's own fix sketch, made during implementation.** The sketch
+said to key off `content_digest` being empty. It is not: `POST /documents` ("start exploration")
+calls `spec_service.save_document` immediately with `requirements: []`, so `content_digest` is set
+from the moment of creation — every open document looks "written" by that signal, including the
+one this fix exists for. `requirement_digests` is the real signal: `{}` until a submission carries
+at least one requirement (`spec_digest.payload_digests` returns `{}` for zero requirements), which
+is exactly "start exploration"'s own state and never a genuinely-written document's. Caught by
+writing the regression test first and watching it fail against the sketch's own logic before the
+fix was even applied — worth recording because the sketch was written confidently and was wrong in
+a way that would have shipped a fix that never fires.
+
+**Fix.** `_render_hub_agent_context` and `spec_turn_notice` (`hub/hub/launchability.py`) both now
+branch on `phase == "exploring" and not row.requirement_digests`: when true, the block names
+`open_spec_path` directly as the `submit_spec_document` target and says not to call
+`create_spec_document`. `_spec_phase_for` (`hub/hub/api/v1/agent_trigger.py`) now returns
+`(phase, is_unwritten)` instead of just `phase`, so the turn-prompt copy carries the same signal as
+the canonical context — the queue item's own point, that `spec_turn_notice` is "the copy that wins
+competing attention" and needed the identical fix, not just the standing context.
+
+**Regression tests**, `hub/tests/test_task_spec_document_context.py`, three new (`test_f51_*`): one
+asserts the new instruction fires and the old framing is absent on an unwritten document; one
+asserts the *old* framing still holds on a document that already has content — this is the guard
+against over-firing, since the general "treat it as context" framing is correct there and must
+survive; one exercises `spec_turn_notice` directly for both cases. 23/23 passed in the two files
+touched (`test_task_spec_document_context.py`, `test_spec_turn_notice.py`).
+
+**Mutation-checked** per the queue's rule: stashed only the three source files (not the tests),
+reran — exactly `test_f51_an_unwritten_open_document_is_named_as_the_write_target` and
+`test_f51_spec_turn_notice_names_the_unwritten_path` failed, by name, with the expected messages
+(old framing present where it should be absent; `spec_turn_notice` raising `TypeError` on the new
+kwargs). The "keeps the old framing" guard test correctly still passed — that case was never
+broken, which is the point of having it.
+
+**Verified LIVE**, not just against the fixture. Restarted the trial Hub (`Stop-Process` on the PID
+holding port 8010, relaunched `uvicorn hub.main:app` from `hub/` with `DATABASE_URL` pointed at the
+beta profile — confirmed via `e2e.py state proj-8605b92d0028` reading the same project state as
+before the restart, so this was the beta database, not `hub/data/agentweave.db`). On
+`proj-8605b92d0028`, the same project F51 was found on: `e2e.py doc-new` produced
+`spec/changes/lilac-chimera/spec.html`; turn one (a genuine interview reply, prose only, no tool
+call) left **no document event at all** — no second document, which is the negative case the fix
+protects; turn two, answered honestly, ended in `rename_spec_document` then `submit_spec_document`
+(with one blocking retry — five requirements against a three-per-task limit, an unrelated and
+already-known shape, not F51). `spec_document_events` afterward: `renamed` then `content`, both
+`agent/author`, **no `created` event** after the operator's own `doc-new` press. Three documents on
+the project afterward, not four — `create_spec_document` was never called. Resolution written up
+under F51 in `scripts/drive/FINDINGS.md` with the corrected root cause and the live evidence.
+
+Ran the touched-file slice of the suite in the background while driving live (`-k "spec or
+agent_context or agent_trigger or launchability"`): 672 passed, 18 skipped, 1 xpassed, 0 failed.
+`ruff check` clean on the four changed files; `black --check` initially flagged
+`agent_trigger.py` (the new multi-line `_spec_phase_for` signature and the `spec_notice` call
+site), reformatted with `--target-version py311` and reverified both the formatter and the tests
+after.
+
+**What a reviewer should distrust:** the full `hub/tests/` suite (all ~3100) has not been rerun
+this iteration — only the touched-file slice (672 tests) and the two directly-relevant files. Q9's
+full sweep is still where the whole-suite green gets re-established. The live verification used a
+throwaway document (`lilac-chimera` → `cli-wrapper-for-inventory-stock-level-queries`) on the
+Q1 drive project rather than a fresh project — deliberate, to reuse `proj-8605b92d0028`'s existing
+two cheap-runner agents rather than registering a third pair, and because the queue's own
+`next_action` named this project for the re-drive.
+
+Q3 closes: F51 was the only severity-A finding Q1/Q2 produced, and it is now fixed, tested,
+mutation-checked, and verified live.
+
+**Next:** Q4 — exercise the run-boundary checkpoint hook live on `proj-18e5d4e0` (ledger-stress).
+Create a flow job over a loop, enable it, let a real agent turn end so the hook fires, confirm from
+the rows (checkpoint with non-null `loop_id`, note matching the author's, briefing containing it),
+then disable the job again before the iteration ends.
