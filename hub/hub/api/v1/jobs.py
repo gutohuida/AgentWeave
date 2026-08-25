@@ -323,7 +323,13 @@ async def _batch_loop_summaries(
         # it meant "relay is who would review this". Deciding that in the UI from the task's status
         # is not possible: the same status can arrive by either route. Only this merge knows, and
         # it is one dict comprehension away from saying so.
-        working_by_loop[loop.id] = set(decision.in_flight)
+        #
+        # **Task ids, not the `(task_id, agent)` pairs** (finding F49). `decision.in_flight` is a
+        # sequence of pairs, and `set(...)` of it is a set of tuples — which the membership test
+        # below asks with a bare `task.id`, so it never matched and `agent_role` could never be
+        # `working`. F26 shipped with the renderer tested and this derivation not tested at all;
+        # the branch it exists to feed was unreachable in production from the day it landed.
+        working_by_loop[loop.id] = {task_id for task_id, _agent in decision.in_flight}
 
     # The current item is the first candidate **in queue order** that is either the task the firing
     # would claim, or a `blocked` one. Order is what makes this `agent-loops` §85 rather than an
@@ -1105,6 +1111,27 @@ async def get_job_history(
     return result.scalars().all()
 
 
+async def _loop_work_is_all_in_flight(session: AsyncSession, job: AIJob) -> bool:
+    """Whether this job's loop declined to fire because everything it could take is already being
+    worked — finding F48's question, asked of the decision rather than guessed from a run row.
+
+    Re-deciding is cheap and, more to the point, it is the only honest way to ask. The firing that
+    just declined recorded nothing at all (design: F23), so there is no artefact to read; the
+    alternative would be inferring health from the *absence* of a row, which is exactly how "the
+    flow is fine" and "the flow broke" became indistinguishable in the first place.
+
+    Answers `False` for a plain job with no loop, which is right: `DECISION_IN_FLIGHT` is a loop's
+    outcome, so a plain job that failed to fire really did fail.
+    """
+    from ...scheduler import DECISION_IN_FLIGHT, decide_firing
+
+    loop = (await session.execute(select(Loop).where(Loop.job_id == job.id))).scalar_one_or_none()
+    if loop is None:
+        return False
+    decision = await decide_firing(session, loop, default_agent=job.agent or "")
+    return decision.kind == DECISION_IN_FLIGHT
+
+
 @router.post("/{job_id}/run")
 async def run_job(
     job_id: str,
@@ -1166,12 +1193,29 @@ async def run_job(
                     status_code=status.HTTP_409_CONFLICT,
                     detail=latest_run.error_summary or "Job was skipped.",
                 )
+            # Finding F48. A firing that declined because every candidate is already being worked
+            # (`DECISION_IN_FLIGHT`) deliberately records **nothing** — that is F23's own reasoning,
+            # since the agents' running rows already carry the fact. So there is no fresh `JobRun`
+            # to read a status off, `latest_run` is some *earlier* firing, and the branch below
+            # reported "Failed to fire job" for a loop in perfect health.
+            #
+            # Reachable before this change and much more so after F45, which parks every dispatched
+            # review in flight — pressing Run while a review is out is now the ordinary case, and
+            # the operator was being told their flow had broken.
+            if not await _loop_work_is_all_in_flight(session, job):
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=(
+                        latest_run.error_summary
+                        if latest_run and latest_run.error_summary
+                        else "Failed to fire job"
+                    ),
+                )
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                status_code=status.HTTP_409_CONFLICT,
                 detail=(
-                    latest_run.error_summary
-                    if latest_run and latest_run.error_summary
-                    else "Failed to fire job"
+                    "Every task on this loop's queue is already being worked. Nothing was started, "
+                    "and nothing is wrong — the next firing picks up whatever finishes."
                 ),
             )
 

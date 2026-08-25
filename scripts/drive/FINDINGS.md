@@ -1606,3 +1606,81 @@ rather than a hole in enforcement. The pin in `test_flow_chain_end_to_end.py` no
 so whoever fixes the attribution will be told exactly what to update.
 
 ---
+
+## F48 (B) — pressing Run on a healthy flow reported "Failed to fire job"
+
+Found live 2026-08-25, on the second firing of the F45 verification. Pre-existing, and made
+ordinary by F45's fix.
+
+A loop firing that declines because every candidate is already being worked returns
+`DECISION_IN_FLIGHT` and **records nothing at all** — deliberately, and F23's reasoning is right:
+the agents' own running rows already carry the fact, and a `JobRun` per tick would evict real
+history through `_prune_job_history`'s window at a five-minute cadence.
+
+`POST /jobs/{id}/run` explains a `False` return by reading the **latest** `JobRun`. With nothing
+fresh written it found some *earlier* firing, whose status was not `"skipped"`, and fell through to:
+
+```
+500  {"detail": "Failed to fire job"}
+```
+
+Measured: `run-150ff546845c` was still `in_progress` from the previous firing, so the route reported
+a 500 about a loop that was working exactly as designed.
+
+**Reachable before F45 and common after it.** The old trigger was "every candidate's assignee is
+mid-turn"; the new one is "a review is out", which after F45 is what a flow looks like most of the
+time. The runbook written the same day tells the operator to press Run — so the instruction and the
+defect shipped together.
+
+Fixed by asking the decision rather than guessing from a row: `_loop_work_is_all_in_flight`
+re-decides and, on `DECISION_IN_FLIGHT`, answers **409** with *"Every task on this loop's queue is
+already being worked. Nothing was started, and nothing is wrong — the next firing picks up whatever
+finishes."* Re-deciding is the only honest option available, since the decline leaves no artefact;
+inferring health from the absence of a row is how the two states became indistinguishable in the
+first place.
+
+Verified live: 409 with that sentence, against the same flow that produced the 500.
+
+---
+
+## F49 (A) — `agent_role` could never say `working`
+
+Found live 2026-08-25, immediately after F45's fix — and it is **finding F41's pattern for the
+third time in this change**.
+
+F26 shipped a real distinction: on the loop board, `working` means *this agent is mid-turn on it*
+and `next` means *this is who the next firing would give it to*. Handoff 0086 records it as fixed
+"**at the source** because only the merge still knows whether a name means 'working' or 'next'".
+
+The source built its lookup as:
+
+```python
+working_by_loop[loop.id] = set(decision.in_flight)      # a set of (task_id, agent) TUPLES
+...
+if task.id in working_by_loop.get(task.loop_id, ()):    # asked with a bare string
+```
+
+`decision.in_flight` is a sequence of pairs. The line above it gets this right —
+`dict(decision.in_flight)` — and this one does not. A string is never in a set of tuples, so the
+branch never taken, and **`agent_role` could not be `working` in production from the day it
+shipped.**
+
+**Why the suite was green: there is no Python test for `agent_role` at all.** The only coverage is
+five vitest cases in `jobCard.test.tsx`, each handing the *renderer* an `agent_role` the fixture
+made up. The renderer was tested; the derivation that feeds it never was. That is exactly F41 —
+six passing tests over a gate that could not fire — and exactly F43 — a chain whose links all work
+and whose trigger does not.
+
+Confirmed live before and after. Before: two tasks held by reviewers, both reading
+`agent_role: "next"` — "this is who *would* take it", about work already taken. After:
+
+```
+under_review | relay  | working
+under_review | critic | working
+```
+
+Fixed to `{task_id for task_id, _agent in decision.in_flight}`, with
+`hub/tests/test_board_agent_role.py` covering both roles — the module that should have existed
+when F26 landed.
+
+---

@@ -902,5 +902,26 @@ it is the one thing standing between a supervised flow and one that can be left 
 - [x] 13.5 Regression tests: `hub/tests/test_review_leaves_the_pool.py`, 9 tests, **5 confirmed
       failing against the unfixed code** — the four that still pass are the set-shape assertions and
       the ordinary-work path, which is the correct split.
-- [ ] 13.6 **Re-verify live against the trial Hub.** Not closed by unit tests: F41 is this change's
-      own precedent for a fix that passed six of them and could never fire.
+- [x] 13.6 **Re-verified live against the trial Hub**, 2026-08-25, on `job-bdea22bb0308`
+      (`ledger-stress`). Not closed by unit tests: F41 is this change's own precedent for a fix that
+      passed six of them and could never fire.
+      One firing moved both staged tasks `completed -> under_review` and the queue went
+      `{completed: 2, rejected: 1}` -> `{under_review: 2, rejected: 1}`. A **second** firing staffed
+      nothing — which is the assertion — and `stall_reason` stayed `None` rather than reporting the
+      flow dead. The job is back to `enabled: False` on its original `*/5` cron.
+      **The live drive earned its keep twice over**, finding two defects no unit test had: F48, a
+      500 on the second firing, and F49, an `agent_role` branch that had never once fired in
+      production. Both are below.
+
+- [x] 13.7 **F48 — a manual Run on an all-in-flight loop said "Failed to fire job".**
+      `DECISION_IN_FLIGHT` records nothing by design (F23), so the route read an *earlier* `JobRun`
+      and reported a 500 about a healthy flow. Pre-existing; F45 made it the common case, and the
+      runbook written the same day tells the operator to press Run. Now 409 with a sentence,
+      answered by re-deciding rather than by guessing from a row.
+- [x] 13.8 **F49 — `agent_role` could never be `working`.** F26's fix built its lookup as
+      `set(decision.in_flight)`, a set of `(task_id, agent)` **tuples**, and tested membership with
+      a bare `task.id`. The line above it gets the same conversion right. Green because **no Python
+      test for `agent_role` existed at all** — the five vitest cases feed the renderer a value the
+      fixture invents. F41's pattern a third time, in this same change.
+      `hub/tests/test_board_agent_role.py` is the missing half: both roles, both causally confirmed
+      failing against the unfixed code, and both re-verified live.
