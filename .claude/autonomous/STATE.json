@@ -1,113 +1,169 @@
 {
-  "purpose": "Fix the mechanical findings from the 2026-08-23 stress-test drive (scripts/drive/FINDINGS.md). Fifteen corrections across the Hub API, the scheduler and the dashboard, each with a regression test. The two architectural changes from that drive - 2026-08-23-a-reviewer-can-see-the-work and 2026-08-23-the-hop-budget-is-a-real-bound - are specified and validated but deliberately NOT in this queue; they are for an attended session with the operator, who is awake from 08:00.",
+  "purpose": "Drive AgentWeave end to end as a real operator would - a live Hub, real agents, real runs - across every feature area, and fix what breaks. This is the /e2e-loop method run unattended: findings live BETWEEN features, not inside them, which is why 3127 passing Hub tests do not substitute for it. Findings are numbered F51 onward in scripts/drive/FINDINGS.md, continuing the series from the 2026-08-23 stress test. Drive items and fix items alternate deliberately, so that death at any hour costs at most one drive's worth of unfixed findings.",
   "runner": "claude",
   "model": "claude-sonnet-5",
   "permission_mode": "unattended-full-access",
-  "branch": "autonomous/2026-08-24-stress-test-remediation",
-  "parent_branch": "fix/2026-08-23-design-audit-remediation",
-  "parent_sha": "969b7b91dc3a5c5143a7a382dd88f19e883738d5",
-  "started_at": "2026-08-23T23:58:00+01:00",
-  "stop_at": "2026-08-24T08:00:00+01:00",
-  "stop_when_queue_empties": true,
-  "iteration": 6,
-  "log_file": ".claude/autonomous/2026-08-24-stress-test-remediation-log.md",
+  "branch": "autonomous/2026-08-26-drive-everything-and-fix-it",
+  "parent_branch": "master",
+  "parent_sha": "721909089e2d7664a5891a1a90c8e5fc8f5e069f",
+  "started_at": "2026-08-26T00:05:00+01:00",
+  "stop_at": "2026-08-26T08:00:00+01:00",
+  "stop_when_queue_empties": false,
+  "iteration": 0,
+  "log_file": ".claude/autonomous/2026-08-26-drive-everything-log.md",
+  "findings_file": "scripts/drive/FINDINGS.md",
+  "exploration_file": "openspec/explorations/2026-08-26-driving-everything.md",
+
+  "environment": {
+    "hub_url": "http://127.0.0.1:8010",
+    "hub_db": "C:/Users/huida/.agentweave/hub/profiles/beta/agentweave.db",
+    "hub_pid_at_prep": 9116,
+    "hub_started_on_sha": "721909089e2d7664a5891a1a90c8e5fc8f5e069f",
+    "db_backup": "C:/Users/huida/.agentweave/hub/profiles/beta/agentweave.db.bak-pre-0089-drive",
+    "harness": ".claude/skills/e2e-loop/e2e.py",
+    "harness_invocation": "cd .claude/skills/e2e-loop && AW_HUB_DB=\"C:/Users/huida/.agentweave/hub/profiles/beta/agentweave.db\" py -3.11 e2e.py <cmd> ...",
+    "restart_hub": "powershell -NoProfile -Command \"Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{CommandLine='cmd.exe /c \\\"cd /d C:\\Users\\huida\\Documents\\projects\\AgentWeave\\hub && set DATABASE_URL=sqlite+aiosqlite:///C:/Users/huida/.agentweave/hub/profiles/beta/agentweave.db && C:\\Users\\huida\\AppData\\Local\\Programs\\Python\\Python311\\python.exe -m uvicorn hub.main:app --host 127.0.0.1 --port 8010 > %TEMP%\\agentweave-hub.log 2>&1\\\"'}\"",
+    "cheap_runners_on_ledger_stress": {
+      "runner-a30ddea6": "Haiku cheap (claude, claude-haiku-4-5-20251001)",
+      "runner-fde56879": "Codex mini (codex, gpt-5.4-mini)"
+    },
+    "existing_projects": {
+      "proj-18e5d4e0": "ledger-stress at C:\\Users\\huida\\Documents\\aw-stress - accumulated state: approved document, 15 tasks, two in under_review (task-23a0986e7fe9 with critic, task-3cd54c17faa6 with relay), agents builder/critic (Haiku) and relay (Codex mini), six jobs ALL DISABLED",
+      "proj-5e960453": "this repository, spec-flow only, no agent may run a turn on it"
+    }
+  },
+
   "queue": [
     {
       "id": "Q1",
-      "title": "Backend papercuts, no UI files",
-      "detail": "Six independent corrections, all Python, each with its own regression test. (F4) hub/hub/api/v1/projects.py: on POST /projects/open of a git repository, adopt the branch that GET /projects/{id}/main-branch-suggestion already computes, instead of leaving main_branch null. Integration silently skips without it. (F8) hub/hub/requirement_evidence.py: the refusal for an unknown evidence decision must name the permitted values ('accepted', 'rejected') the way model_catalog's permission_mode refusal names its four, and the route must return 422 not 403. A malformed enum is a validation error, and an agent reading the status code concludes it lacks permission and stops retrying. (F7) Same module: refuse or flag a second piece of evidence for the same requirement, task and commit. Note the existing `digest` column is NOT a duplicate detector; it pins the requirement's wording at production time. (F16) hub/hub/api/v1/tasks.py: TaskResponse must echo loop_id. POST /tasks accepts it and returns null, so a caller cannot confirm the task joined the loop. (S2) hub/hub/utils.py: widen short_id() from 8 hex characters to 12. Columns are already String(64) so NO migration is needed and existing ids keep working; this moves the birthday bound from ~77k rows to ~800M on event_logs and agent_outputs, the two tables nothing prunes. (F6/F18) hub/hub/run_task_binding.py: bind_run_to_task must set task.assignee the way the loop's claim already does at scheduler.py:979. Today a task moved to in_progress by a direct trigger shows no assignee and reports assignee_status 'idle' about a running agent.",
-      "verify": "py -3.11 -m pytest hub/tests/ -q"
+      "title": "Cold start: a fresh project through the whole setup path",
+      "status": "open",
+      "detail": "Create a NEW project outside the repository and drive the cold-start path that ledger-stress can no longer exercise, because it already has everything. Use the harness: `cd .claude/skills/e2e-loop && AW_HUB_DB=\"C:/Users/huida/.agentweave/hub/profiles/beta/agentweave.db\" py -3.11 e2e.py setup drive-2026-08-26`. Then seed the directory with a REAL subject - a small Python module with three deliberately seeded defects the tests do not cover, the way `ledger` was built - because make-work fixtures never reach the parts of AgentWeave that decide whether work is GOOD. Register two agents on the two cheap runners (Haiku 4.5 and gpt-5.4-mini): `e2e.py agent <proj> author <charter-substring> claude claude-haiku-4-5-20251001` and `e2e.py agent <proj> reviewer <charter-substring> codex gpt-5.4-mini`. TWO runners is not optional - the first run of this skill found a defect that affected only Claude and would have reported the product healthy on one runner. Watch specifically: does POST /projects/open adopt main_branch now that F4 shipped (all four existing projects read main_branch null, which may be pre-fix data or may be F4 not firing - determine which); do the seeded charters attach; does the project marker land at .agentweave/project.json in the NEW directory and nowhere else. Record every friction as F51+ in scripts/drive/FINDINGS.md with the request and the row that proves it. If a step has no API, that absence IS the finding - write it down and continue, never paper over it in the harness.",
+      "verify": "e2e.py state <new-proj> shows the project, both agents bound to their runners, and a clean board; the new project's directory contains .agentweave/project.json and the repository root's git status is still clean."
     },
     {
       "id": "Q2",
-      "title": "Scheduler honesty: F11, F13, and the cron refusal",
-      "detail": "(F11) hub/hub/scheduler.py: _do_fire_job increments job.run_count and stamps job.last_run at lines ~796-797, BEFORE every skip branch, so both describe 'the scheduler considered this job' rather than 'this job ran'. Measured: run_count 9 for 4 real firings. Move the increment below the skip branches so only a firing that reaches a queued entry counts. JobRun rows already carry an honest status and must not change. (F13) hub/hub/api/v1/jobs.py: PATCH {enabled:true} on a loop whose ending_state is set returns 200 and leaves a contradictory state (enabled true, stopped_at set, ending_state 'completed'), then the next firing re-stops it a minute later and the operator's action is silently undone. Refuse it with a message saying what to do instead: give the loop work, or create a new one. (F1, backend half) hub/hub/scheduler.py: refuse a cron expression that restricts BOTH day-of-month and day-of-week, at job creation and update, naming the ambiguity and suggesting two jobs. Measured: '0 0 15 * 5' is stored with next_run 2026-08-28 and actually fires 2027-05-15, because APScheduler's CronTrigger ANDs the two fields while croniter ORs them. Note hub/ui/src/lib/cron.ts's describeCron already declines this shape in prose.",
-      "verify": "py -3.11 -m pytest hub/tests/test_scheduler.py hub/tests/test_jobs.py hub/tests/test_jobs_crud.py -q"
+      "title": "Drive the spec flow: document to materialised tasks",
+      "status": "open",
+      "detail": "On the Q1 project, drive document creation through to tasks, entirely through the real surface. `e2e.py doc-new`, then trigger the author agent on the document and let it interview you. Play the operator HONESTLY: answer decisively, in prose, with actual constraints - and DELIBERATELY LEAVE ONE ask_user QUESTION UNANSWERED. That is method, not laziness: a tester who answers everything never discovers which questions silently evaporate, and the single most valuable finding in this skill's first run came from a question that was never answered. Then drive the operator gates: close-exploration, propose, approve (`e2e.py close|propose|phase`). Watch the seams, which is where the defects are: between exploring and proposing; between an approved document and a task; whether requirements materialise into tasks with a real dependency graph; whether the unanswered question blocks, times out, or vanishes. Read what the agent ACTUALLY SAID - the transcript is evidence, and on the first run an agent correctly reported it could not do something the tool surface claimed it could. Verify against the database rows, not the chat: document_events, task rows, transitions. Number findings F51+ continuing from Q1.",
+      "verify": "Tasks exist on the board, traceable to requirements in the approved document; every claim in the log is backed by a row id or a transcript quote."
     },
     {
       "id": "Q3",
-      "title": "Dashboard truth: all UI source changes, no bundle rebuild yet",
-      "detail": "Make every change under hub/ui/src in this one item so the committed bundle is rebuilt exactly once, in Q4. (F17) The rail reads agent.last_seen at AgentTree.tsx:163-167, and last_seen is populated ONLY from a heartbeat row (api/v1/agents.py:537), which only a self-registered agent posts. So every Hub-managed agent reads 'No activity yet' forever, including one that just did nine runs. Derive it from the agent's most recent run or output instead; no migration, the data exists in runs.started_at and agent_outputs.timestamp. (F19) TaskCard.tsx renders neither prerequisites nor dependents, though GET /tasks already returns a populated prerequisites array carrying each prerequisite's status, so a gated task looks like any ordinary pending card. Mark it. (F9) Add an inline note, NOT a dialog, on the approve control stating which commit will be merged into which branch: approving runs task_integration and cherry-picks the accepted evidence's commit into the main branch, which is a write the operator is not currently warned about. (F14) A task whose run is blocked on an unanswered ask_user still reads in_progress with blocked_reason null, because block_task_for_question is called only from run_divergence.evaluate_run_end. Surface 'waiting on you' on the card without changing the status. (F2) JobForm.tsx:193 and JobsPage.tsx:182 both say 'server time'; the scheduler is pinned to UTC (scheduler.py:626 and :683) and cron.ts computes in UTC deliberately. Change the word to UTC. On this machine local time is UTC+1 today, so the label is wrong by an hour. (F1, UI half) Align cron.ts and the JobCard/JobForm previews with whatever the Q2 refusal leaves legal, so the card and the form can no longer give two different next-run answers.",
-      "verify": "cd hub/ui && npm run lint && npx tsc --noEmit && npx vitest run"
+      "title": "Fix pass 1 - everything severity A from Q1 and Q2",
+      "status": "open",
+      "detail": "Fix every severity-A finding (wrong behaviour an operator will act on) that Q1 and Q2 produced, each with a regression test, on this branch. Defer B and C to Q6 unless a B is a one-line fix sitting in a file you are already editing. THE RULE THAT GOVERNS THIS ITEM, because it is this repository's dominant failure mode: a fix that passes its tests and cannot fire in production. F41, F43, F45 and F49 were each an instance. So for every fix, MUTATION-CHECK IT - disable the line the test exists for and watch a NAMED test fail - and where the finding was found live, VERIFY IT LIVE against the running Hub, not only against a fixture. A fixture that builds what the product does not build proves nothing; that exact sentence is F43's write-up, and F43's own first implementation then reproduced it and was caught only by querying the live database. Commit each finding's fix separately so the morning diff is readable per finding.",
+      "verify": "py -3.11 -m pytest hub/tests/ -q (about 22 minutes - run it in the background and keep working, do NOT conclude it is stuck) plus the live re-drive of each fixed scenario through e2e.py."
     },
     {
       "id": "Q4",
-      "title": "Bundle, full verification, and the morning summary",
-      "detail": "cd hub/ui && npm run build, then from the repo root py -3.11 scripts/refresh_ui_bundle.py. IMPORTANT: git's CRLF normalisation on commit invalidates the stamp, so commit first and then rebuild and re-stamp AFTER that commit, or /health reports ui_stale on a clean tree. This cost the previous session a cycle. Then run: py -3.11 -m pytest hub/tests/ -q (expect 2758+ passed, 84 skipped, 1 xpassed, about 9 minutes); cd hub/ui && npx vitest run; uvx ruff@0.15.22 check src/ hub/ tests/; uvx black@26.5.1 --check src/ hub/hub/ hub/tests/ tests/; npx openspec validate --changes --strict. Read the full diff for accidental legacy revival, generated debris and unrelated files. Then write the morning summary at the log_file path: what landed per finding id, what did not and why, and anything that surprised you.",
-      "verify": "py -3.11 -m pytest hub/tests/ -q"
+      "title": "Drive the flow, and exercise the run-boundary checkpoint hook live",
+      "status": "open",
+      "detail": "This item carries the highest-value gap in the repository right now. Handoff 0088: the run-boundary wiring in agent_trigger.py that delivers a reviewer's briefing (F43's fix) HAS NEVER BEEN EXERCISED LIVE. The live drive that verified F43 called consider_handover directly against the database; the hook itself is covered only by unit tests and code reading. That is named as the residual risk in the whole loop-becomes-a-flow change. Close it: on ledger-stress (proj-18e5d4e0, which has the accumulated state and the checkpoint_runner_id already set to runner-a30ddea6), create a flow job over a loop, ENABLE it, and let a real agent turn end so the hook fires for real. Confirm from the rows: a checkpoint appears carrying a loop_id, its note is the AUTHOR's (F44) and not merely the loop's newest, and the next agent's briefing actually contains it. REMEMBER TO DISABLE THE JOB WHEN THE ITEM ENDS - a loop left enabled spends all night. While here, also watch F12's shape (a loop firing every minute while finished work waits for review) and whether loop-becomes-a-flow's claimable-by-a-different-agent change actually resolved it. Cheap runners ONLY.",
+      "verify": "Rows, not claims: a checkpoint with a non-null loop_id created by a real run boundary, the consumed note id matching the author's, and the briefing text containing it. Then confirm every job in every project is disabled again."
+    },
+    {
+      "id": "Q5",
+      "title": "Drive review, evidence, approval and integration",
+      "status": "open",
+      "detail": "The chain from completed work to merged work, which is where the product decides whether work is GOOD. ledger-stress has two tasks sitting in under_review (task-23a0986e7fe9 with critic, task-3cd54c17faa6 with relay) - drive them to a verdict with a real reviewer turn rather than by setting a status. Then: can the reviewer actually READ the code it is reviewing (that was F10, and worktree isolation is what made a reviewer blind); does record_evidence work from a Haiku agent (F21 said it could not, and burned a whole turn trying - re-check it); does a rejection route back to the author with the rejections legible; does approval cherry-pick into the main branch and does the operator get told which commit lands where (F9). Note ledger-stress reads main_branch null in the projects list - establish whether integration can even run, because F4's fix was supposed to set it. Also exercise the F50 fix once Q7 lands it, or note that it is not yet in.",
+      "verify": "A task moved under_review -> approved by a real reviewer turn, with the evidence row, the transition row, and the resulting commit in the subject repository all identified by id."
+    },
+    {
+      "id": "Q6",
+      "title": "Fix pass 2 - severity B and C from Q1, Q2, Q4, Q5",
+      "status": "open",
+      "detail": "Same discipline as Q3: regression test per finding, mutation-check each, commit per finding. Rank by what each finding COST, not by where it was found. Anything that is a design gap rather than a defect gets written up in openspec/explorations/2026-08-26-driving-everything.md instead of patched - and say which it is. Before proposing anything new, check openspec/explorations/2026-08-10-specification-and-surface-program-roadmap.md and the archived changes: the first run of this skill rediscovered two existing roadmap entries from the outside, which is confirmation rather than news, and it is worth knowing which you have.",
+      "verify": "py -3.11 -m pytest hub/tests/ -q and py -3.11 -m pytest tests/ -q both green; each fix mutation-checked."
+    },
+    {
+      "id": "Q7",
+      "title": "F50 - render the probe failure (PRE-AUTHORISED by the operator)",
+      "status": "open",
+      "detail": "The operator authorised this fix during prep, choosing it over parking it. A checkpoint that FAILED its own probe - meaning the model's written summary was checked against the Hub's computed envelope and contradicted it - is briefed to the reviewer as though it passed. render_checkpoint surfaces neither status nor probe_status, and neither checkpoint selector filters on them. Measured rate on the only live sample that exists: 1 of 2. The chosen fix is RENDER THE FAILURE, not skip the checkpoint: the computed half is the Hub's own and stays accurate, so discarding it to avoid a bad paragraph is the more expensive error. Change is in hub/hub/checkpoint_generation.py render_checkpoint (~line 271, where checkpoint.body is appended around line 331) to state status and probe_status, plus a test. Then close task 14.7 in openspec/changes/loop-becomes-a-flow/tasks.md with the evidence, and record the resolution under F50 in scripts/drive/FINDINGS.md. Verify LIVE if Q4 produced a failed checkpoint to render; if it did not, say so rather than claiming live verification.",
+      "verify": "A named test fails when the status line is removed; npx openspec validate loop-becomes-a-flow --strict stays valid."
+    },
+    {
+      "id": "Q8",
+      "title": "Drive the operator-in-the-loop surfaces, then vary one axis",
+      "status": "open",
+      "detail": "Two parts. FIRST, the surfaces where the product deliberately stops and asks: trigger a run with overrides {\"permission_mode\": \"manual\"} so Claude routes through --permission-prompt-tool and Codex through decide_approval, and answer the approval card through the real API. Then let a permission card and an ask_user batch TIME OUT rather than answering - AW_DECISION_TIMEOUT and AW_QUESTION_TIMEOUT come from Agent.permission_timeout_seconds and Agent.question_timeout_seconds - and record what the operator sees when they do. Remember there is deliberately NO BACKSTOP behind these and F38's detector was retired on purpose; a turn that ends without calling ask_user has ended, and that is the design, not a bug. Also check F14: a run blocked on an unanswered ask_user should not read in_progress with blocked_reason null. SECOND, Step 6 of the e2e-loop method - vary ONE environmental axis and re-run a verification. PYTHONIOENCODING=utf-8 is the one with a track record: the first run's tests passed 99/99 and failed 9 under it, and a two-agent review was structurally incapable of noticing because both agents shared one machine. Locale, working directory or a different runner are the alternatives.",
+      "verify": "The approval card answered through the API and the run continuing; the timeout path observed with its actual elapsed time; the varied axis re-run reported with its real output, pass or fail."
+    },
+    {
+      "id": "Q9",
+      "title": "Sweep, record, and make the morning easy",
+      "status": "open",
+      "detail": "Full verification and the write-up. Run: py -3.11 -m pytest hub/tests/ -q (background it, about 22 minutes); py -3.11 -m pytest tests/ -q; py -3.11 -m ruff check src/ hub/ tests/; black --check src/ hub/hub/ hub/tests/ tests/ --target-version py311; npx openspec validate --changes --strict. If hub/ui/src was touched at any point, then cd hub/ui && npm run lint && npx tsc --noEmit && npx vitest run && npm run build, then py -3.11 scripts/refresh_ui_bundle.py from the repo root, and commit hub/ui/src with hub/hub/static/ui together. NOTE the correction recorded in the previous STATE: /health reads src_fingerprint alone, which is unaffected by committing the stamp, so build, refresh, commit ONCE - there is no second re-stamp, and believing otherwise has cost two sessions a cycle. Read the full diff for accidental legacy revival, generated debris and unrelated files. Write openspec/explorations/2026-08-26-driving-everything.md ranked by what each finding COST, each with its evidence, each labelled one-defect-or-design-gap, and record WHAT HELD as well - a gate that correctly refused something is a result the next session needs. Then the morning summary in the log: what landed per finding id, what did not and why, what to distrust, and what surprised you.",
+      "verify": "Every suite green or its failure explained; the exploration document written; the log's final entry says plainly how far the run actually got."
+    },
+    {
+      "id": "Q10",
+      "title": "Tidy the drive's own residue",
+      "status": "open",
+      "detail": "Only if time remains before 08:00. Leave the machine the way an operator would want to find it. EVERY JOB IN EVERY PROJECT DISABLED - check all four projects plus anything Q1 created, because a loop left enabled spends money all night and this is the single most expensive thing to get wrong. The Q1 drive project: keep it if it carries state worth re-driving, and SAY SO EXPLICITLY AND WHY in the log, otherwise `e2e.py clean <proj>`; a stray test project is indistinguishable from a real one a week later. Remove any credentials the run minted. Do NOT delete ledger-stress, the trial database, its backups, or C:\\Users\\huida\\Documents\\aw-sweep - all of those are the operator's to decide about. Do NOT uninstall or install anything into the shared environment; agents are isolated by worktree, not by environment, and one agent running pip install -e . once changed what its own reviewer imported.",
+      "verify": "curl every project's jobs endpoint and show enabled:false for all of them, in the log, as output rather than as a claim."
     }
   ],
-  "current": null,
-  "next_action": "NOTHING. This run is COMPLETE and the heartbeat was deliberately NOT released, so no further firing should reach this branch before `stop_at` (2026-08-24T08:00:00+01:00). Do not invent a Q5. All fifteen mechanical items in scope landed and were verified twice - once by the iteration that wrote them and again from disk in iteration 6: Q1 F4/F6/F18/F7/F8/F16/S2 (3b4efd6), Q2 F11/F13/F1-backend (d706187), Q3 F17/F19/F9/F14/F2/F1-UI (7fcd172), Q4 the bundle rebuild (9eb37c8) plus the full sweep. What remains is the OPERATOR's and is entirely in decisions_for_user - read the two 2026-08-23 openspec changes and the approval-posture question first, then F15, which is the omission this queue's scoping missed.",
+
+  "current": "Q1",
+  "next_action": "Start Q1. Read this file and the last entry of .claude/autonomous/2026-08-26-drive-everything-log.md first, then reconcile git log and git status against what this file claims before trusting either. Confirm the Hub is alive AND on the right database - `curl -s http://127.0.0.1:8010/health` must be ok, and `curl -s -H \"Authorization: Bearer $(grep AW_BOOTSTRAP_API_KEY= hub/.env | cut -d= -f2)\" http://127.0.0.1:8010/api/v1/projects` must list proj-18e5d4e0 ledger-stress. IF IT LISTS ui-showcase-2026-08-22 INSTEAD, the Hub is on the wrong database - restart it with the environment.restart_hub command in this file, which sets DATABASE_URL. Then create the fresh drive project per Q1, seed it with a real subject carrying three uncovered defects, and register the two cheap-runner agents. Record findings as F51+ in scripts/drive/FINDINGS.md. Commit and push before the iteration ends, whatever state Q1 reached.",
+
   "decisions_for_user": [
-    "The two specified changes are NOT in this queue and are waiting for you: openspec/changes/2026-08-23-a-reviewer-can-see-the-work (F10, which also unblocks the in-flight loop-becomes-a-flow, a change that ships a reviewer unable to read code without it) and openspec/changes/2026-08-23-the-hop-budget-is-a-real-bound (F5). Both validate strict. Read them before deciding when to implement.",
-    "Posture is still undecided: may an AGENT take under_review to approved, and therefore write to your main branch, or is approval always yours? Deferred deliberately. Decide it after seeing a reviewer work with F10 fixed.",
-    "The per-task review policy you proposed on 2026-08-23, where the specification declares per task who may approve it and which model is enough for it, is a later change of its own and is not yet written up.",
-    "F12 (a loop firing every minute while its finished work waits for review) is deliberately held out of this queue: loop-becomes-a-flow fixes its root cause by making a completed task claimable by a different agent, and papering over it now would be work thrown away.",
-    "F3 (contact_mode still defaults to 'watchdog-spawn') and F20 (an unknown deep link falls back to Overview) were judged not worth fixing. Say so if you disagree.",
-    "F4 is fixed only for the two branch names the Hub already knew: detect_main_branch walks MAIN_BRANCH_NAMES, which is exactly ('main', 'master'). A project on 'develop' or 'trunk' still opens with main_branch null and still needs you to set it in settings. Widening what the Hub recognises is a separate decision and was deliberately not taken unattended -- guessing that the single branch of a one-branch repository is its trunk is plausible, but it is a guess that ends in a cherry-pick into that branch.",
-    "F11 changed what `run_count` means, and one place reads it as policy rather than as a display value: hub/hub/api/v1/tasks.py's `_authorize_loop_task_creation` gates a creator agent's ability to extend its own loop's queue on `job.run_count > 0` -- D10's \"definition window\", i.e. \"this loop has already fired at least once\". With F11 in, a loop that has only ever SKIPPED (stalled on unreviewed work, or its agent unavailable) no longer counts as having fired, so its creator's definition window stays open longer than it used to. That reads as more correct, not less -- no agent ran, so nothing has been briefed on the queue yet -- and it is why the change was made rather than special-cased. Flagged because it is a governance boundary moving as a side effect of a display fix, which is your call to confirm, not mine.",
-    "F17's fix changes what a task card says about a STALLED agent. `_attach_assignee_liveness` copies `agents.py`'s precedence verbatim, so a live Run row now outranks a stalled heartbeat on the board as well as on the roster: a stalled agent mid-run reads `running` on its card where it previously read `stalled`. That is the only way the board and the rail can describe one agent the same way, which is what F6/F18 reported -- but it is a real change in what `stalled` is visible on, so it is yours to confirm. It is pinned by `test_a_live_run_outranks_a_stalled_heartbeat_here_exactly_as_it_does_on_the_roster`, and if you want it back, it has to move in agents.py and tasks.py together or the two surfaces disagree again.",
-    "F19 was implemented for prerequisites only, not dependents. The queue item said TaskCard renders neither; the card now marks what GATES it (with the blocking prerequisites and their statuses in the title) and still says nothing about what it is itself blocking downstream. A task with dependents is not blocked by them, the Dependencies board already draws those edges, and widening a card badge to carry the reverse direction looked like a different design decision rather than a papercut fix. Say if you want the other half.",
-    "F15 needs your decision and was missed by this queue's scoping: there is no way to pause an AGENT, only to stop a run. `POST /agent/{name}/stop` behaves correctly -- run goes to `stopped`, `ended_at` set, the delivered entry not spuriously returned -- and then a peer conversation that outlived the stop starts the next run moments later. Adding a pause needs a decision about what a paused agent does with input that arrives while it is paused (queue it, refuse it, or drop it), which is why it was not taken unattended. Flagged as an omission rather than as a judgement: unlike F3 and F20, nobody had decided it was not worth fixing.",
-    "Handoff boilerplate to correct before the next prep: the line that says git's CRLF normalisation on commit invalidates the UI build stamp is wrong, and it has cost two sessions a cycle. /health reads `src_fingerprint` alone (hub/hub/main.py:163-167), which is a fingerprint of hub/ui/src and is unaffected by committing the stamp; only `src_commit` and `built_at` churn. Build, refresh, commit once, done -- there is no second re-stamp to do.",
-    "Noticed while reading the diff, not a defect today: agent_actions.py's record_evidence route (:846-849) maps EvidenceRefusedError to a hard 409 without consulting exc.http_status, where the decide route (:959) honours it. Correct now -- F7's duplicate refusal sets no http_status and 409 is right for a duplicate -- but a future refusal on the record path that sets one would be silently downgraded. Worth an eye if that field grows callers."
+    "F47 was offered during prep and you did NOT select it, so it is PARKED: the flow's own routing is still recorded as the operator's, and F45 extended that from assigned to under_review. If the drive re-finds it from the outside that is confirmation, not news. Cost when you do want it: no migration (task_transitions.actor_kind has no CHECK constraint), so it is the Python consumers plus deciding what to do with the existing indistinguishable rows.",
+    "Approval posture is STILL undecided and has been carried since 2026-08-23: may an AGENT take under_review to approved, and therefore write to your main branch, or is approval always yours? Q5 drives the review chain and will make this concrete rather than theoretical - read its log entry before deciding.",
+    "All four existing projects read main_branch null in GET /api/v1/projects. F4's fix was supposed to adopt the branch on POST /projects/open. Q1 determines whether that is pre-fix data or F4 failing to fire; if it is the latter it is a severity-A finding and Q3 fixes it, but if integration is blocked on ledger-stress specifically, setting its main_branch is a write to your fixture and the run will ASK rather than do it.",
+    "The two tasks in under_review on ledger-stress (task-23a0986e7fe9 with critic, task-3cd54c17faa6 with relay) will be driven to a verdict by a real reviewer turn in Q5. If you wanted to judge those yourself, say so - the run will have consumed them.",
+    "Whether C:\\Users\\huida\\Documents\\aw-sweep is wanted on disk. Carried unanswered from handoff 0088. The run will not touch it."
   ],
+
   "limits": [
-    "Run the Hub test suite with `py -3.11 -m pytest hub/tests/ -q`. NEVER bare `python`: in this shell it resolves to C:\\Users\\huida\\AppData\\Local\\hermes\\hermes-agent\\venv\\Scripts\\python.exe, which HAS pytest so it looks legitimate, but produces three false failures in test_pty_runner.py on a completely green tree. Measured 2026-08-23 on the same commit: bare python gave 3 failed / 2755 passed / 13 skipped; py -3.11 gave 2758 passed / 84 skipped. If test_pty_runner fails with empty spawn output, check the interpreter before the code.",
-    "Stay on autonomous/2026-08-24-stress-test-remediation. Do not merge, do not open a PR, do not release or publish, do not force-push, do not rewrite history. Push that branch only.",
-    "Never touch port 8000, which is the operator's real usage. Port 8010 is the trial Hub and is safe to drive; it currently serves the ledger-stress fixture (proj-18e5d4e0) used by scripts/drive/.",
-    "Do not point a Hub you are editing at this source checkout. Every Hub code change restarts the process and kills runs in flight.",
-    "Do not implement anything from the two openspec changes dated 2026-08-23. They are for an attended session. Implementing them unattended is the specific thing this queue was scoped to avoid.",
-    "Do not recreate deleted subsystems: watchdog.py, messaging.py, runner.py, transport/local.py, transport/git.py, or the role subsystem.",
-    "hub/hub/static/ui is a committed build artefact. After npm run build run py -3.11 scripts/refresh_ui_bundle.py, and commit hub/ui/src and hub/hub/static/ui together.",
-    "Icons come from lucide via the Icon wrapper, plus simple-icons brand marks reached as brand:<key>. Never add a third icon source and never an icon font. Never import all of simple-icons.",
-    "design/IDENTITY.md is the binding visual contract. Read it before any UI change. --blue is focus and selection plus exactly one status (in_progress) and nothing else.",
-    "Stage explicit paths. Never use git add -A. Never commit kimichanges.md or kimiwork.md.",
-    "Never mark a task complete because a plan for it exists. Only verified implementation closes a task.",
-    "At 08:00 local time stop cleanly even if the queue is incomplete. The operator gets up then and will read the log first, so a truthful account of where you stopped is worth more than a rushed final item. Record the exact continuation work rather than inventing completion."
+    "Stay on autonomous/2026-08-26-drive-everything-and-fix-it. No commits, merges or rebases onto master. No PRs - the standing directive is PUSH, NO PRs. No release, no publish, no force-push, no history rewriting. Push this branch every iteration; that is what makes the work durable.",
+    "NEVER touch port 8000 - that is the operator's real usage. Port 8010 is the trial Hub and is the only one to drive.",
+    "Do not point a Hub you are editing at this source checkout. If Hub code changes, restart the trial Hub deliberately with the environment.restart_hub command and confirm it came back on the BETA database, not hub/data/agentweave.db.",
+    "Cheap models only for agent runs: claude-haiku-4-5-20251001 and gpt-5.4-mini, which is what the operator authorised. If a scenario cannot complete on a cheap model, that is a FINDING (F21 was exactly this) - record it, do not silently escalate to an expensive model.",
+    "Never leave a job enabled at the end of an iteration. A loop firing every minute overnight is the most expensive mistake available here.",
+    "Run tests with `py -3.11 -m pytest`, NEVER bare `python`: bare python resolves to a venv that HAS pytest so it looks legitimate, but produces three false failures in test_pty_runner.py on a completely green tree. Measured on an identical commit: bare python 3 failed/2755 passed; py -3.11 2758 passed/84 skipped. If test_pty_runner fails with empty spawn output, check the interpreter before the code.",
+    "Nothing destructive: do not delete projects, databases, backups, kept reproductions, or C:\\Users\\huida\\Documents\\aw-sweep.",
+    "Never mark a task or a queue item complete on the strength of a plan existing. Only real, verified implementation closes one. This matters MORE when nobody is checking, not less.",
+    "Every claim is measured or explicitly labelled unverified. If something could not be run, the log says so in those words.",
+    "Stage explicit paths. Never `git add -A` - it sweeps in scratch. Never commit kimichanges.md or kimiwork.md.",
+    "This repository is dogfooded SPEC-FLOW ONLY: the operator authors documents in the Hub, but NO AGENT RUNS A TURN on proj-5e960453. Do the work directly. Do not invoke the legacy aw-* collab skills; they are product source, not a workflow.",
+    "hub/hub/mcp_server.py may import ONLY stdlib and fastmcp, and approve_tool_call must keep having NO return annotation - FastMCP would derive structuredContent from one and silently defeat an allow.",
+    "hub/hub/static/ui is a committed build artefact; commit hub/ui/src and the bundle together, never one without the other.",
+    "Test projects live OUTSIDE this repository. The repository root's .agentweave/ and spec/ belong to the migration and must not be deleted as cleanup."
   ],
-  "last_heartbeat": "2026-08-24T07:46:22+01:00",
-  "completed_at": "2026-08-24T07:15:37+01:00",
-  "queue_state": "empty and CLOSED. Q1 (3b4efd6), Q2 (d706187), Q3 (7fcd172) and Q4 (bundle 9eb37c8 + full sweep) are all closed and verified. `stop_when_queue_empties` is true and `completed_at` is stamped, so this run is finished. Iteration 6 was a stand-down: it reconciled STATE.json against the tree (exact match), re-verified all fifteen fixes at their named source locations rather than trusting iteration 5's summary, re-ran the AW_CHECK_UI_BUNDLE=1 stamp gate (11 passed), and invented no work.",
-  "run_summary": {
-    "landed": {
-      "3b4efd6": [
-        "F4",
-        "F6/F18",
-        "F7",
-        "F8",
-        "F16",
-        "S2"
-      ],
-      "d706187": [
-        "F11",
-        "F13",
-        "F1 (backend)"
-      ],
-      "7fcd172": [
-        "F17",
-        "F19 (prerequisites only)",
-        "F9",
-        "F14",
-        "F2",
-        "F1 (UI)"
-      ],
-      "9eb37c8": [
-        "the committed UI bundle for 7fcd172's sources"
-      ]
-    },
-    "not_landed": {
-      "F5, F10": "the two architectural changes — specified and strict-validated, left for an attended session by design",
-      "F12": "held out; loop-becomes-a-flow fixes the root cause",
-      "F3, F20": "judged not worth fixing — say so if you disagree",
-      "F15": "never in the queue and, until this final iteration, not in decisions_for_user either — an omission, now closed. Stopping an agent stops one run and the queue starts the next; there is no pause-this-agent lever. A missing capability needing a decision, not a papercut.",
-      "F19 dependents half": "the card marks what gates it, not what it gates"
-    },
-    "corrected_belief": "The inherited warning that git's CRLF normalisation invalidates the UI build stamp is aimed at the wrong field. `_compute_ui_staleness_warning` (hub/hub/main.py:163-167) reads `src_fingerprint` ONLY; re-running refresh_ui_bundle.py after a commit changes just `src_commit` and `built_at`, so the second commit the older handoffs advise achieves nothing and re-stales `src_commit` on the next commit forever. Measured: fingerprint byte-identical, /health clean on the committed tree, AW_CHECK_UI_BUNDLE=1 gate passing. Two earlier sessions burned a cycle chasing this.",
-    "morning_summary": "Iteration 5 of .claude/autonomous/2026-08-24-stress-test-remediation-log.md, with iteration 6's stand-down and independent re-verification appended after it."
-  },
-  "stood_down_at": "2026-08-24T07:46:22+01:00",
-  "heartbeat_released": false,
-  "heartbeat_release_note": "Iterations 1-5 each ended by backdating `last_heartbeat` ~40 minutes to hand the work to the next firing. Iteration 6 deliberately did NOT: that mechanism hands off WORK, and the queue is empty. `last_heartbeat` is now, which holds the branch for 40 minutes and therefore past the 08:00 `stop_at`, ending the loop instead of waking it to re-read an empty queue. The release in iteration 5 is why iteration 6 fired at all - it releases unconditionally, without knowing whether what follows is more work or nothing."
+
+  "dead_ends": [
+    "The bash heredoc mangles \\n inside Python string literals - writing an escaped newline through `python - <<'PYEOF'` produces a REAL newline and a SyntaxError. Use the Write/Edit tools for any content with escapes or backticks.",
+    "`gh run list --limit 1` returns whichever workflow finished first, not CI. Select by name: gh run list --json name,status,conclusion,databaseId.",
+    "GET /projects/{id} does not return checkpoint_runner_id - it is a settings field, and reading it there returns None for a project that has one set. PATCH /projects/{id} is 405; the route is PUT /projects/{id}/settings.",
+    "AIJob has no `schedule` field (it is `cron` plus `session_mode`); Loop has no `label` (it is `purpose`); Checkpoint.body is Text, a markdown string, not the notes dict.",
+    "A test asserting 'notes consumed' scoped to the completing conversation is vacuous once the fixture puts the note elsewhere - it finds nothing and passes while proving nothing. Assert by note id.",
+    "A flow job is session_mode: new, so EVERY firing gets its own conversation. A task needing more than one firing records its notes in one conversation and its completion in another, routinely. Any gate that requires them to be in the same conversation cannot fire in production.",
+    "run.task_id is NULL on most runs carrying a completed transition - read the transition table instead, never run.task_id.",
+    "The full hub suite takes about 22-23 minutes. Do not conclude it is stuck; background it and keep working.",
+    "ruff is not on PATH in Git Bash - use py -3.11 -m ruff. black IS on PATH but needs --target-version py311 (this machine's black runs under 3.11 and the codebase targets 3.12).",
+    "pytest --timeout= is unavailable - no pytest-timeout plugin. sqlite3 is not on PATH - use py -3.11 -c with file:<path>?mode=ro. A sleep longer than a few minutes is blocked in the Bash tool.",
+    "The aw.py driver in scripts/drive is imported by path - every py -3.11 -c \"from aw import ...\" must run from scripts/drive/. Its API is api(method, path, body=None) returning (status, parsed); aw.P is empty unless AW_PROJECT is set.",
+    "`agentweave --port 8010` cannot start the trial Hub - the installed console script's bundled migrations lag this checkout and it dies with 'Can't locate revision'. Start from hub/ with uvicorn from source.",
+    "agentweave cannot be started from the repository ROOT at all: -m puts the cwd on sys.path[0] and this repo's own hub/ directory shadows the installed hub package. Start from hub/.",
+    "npx openspec validate needs --all --strict or a named change. openspec requires SHALL/MUST on a requirement's OPENING line, not merely somewhere in its body - the validator reads only the first physical line.",
+    "NEW, measured during this prep: the e2e-loop skill's own reference restart command OMITS DATABASE_URL, so a Hub started with it lands on hub/data/agentweave.db - a real but stale database that nothing serves, last written 2026-08-23. It comes up healthy and lists a completely different set of projects, so it looks working. Always confirm the project list after a restart, not just /health.",
+    "NEW, measured during this prep: e2e.py's DB constant defaults to hub/data/agentweave.db too, so its sqlite read paths report an empty or stale world unless AW_HUB_DB is set to the beta profile. Its HTTP paths are unaffected, which makes the mismatch look like missing data rather than a wrong file.",
+    "Correction to older handoff boilerplate, do not re-learn it: the claim that git's CRLF normalisation on commit invalidates the UI build stamp is WRONG and has cost two sessions a cycle. /health reads src_fingerprint alone, a fingerprint of hub/ui/src, unaffected by committing the stamp. Build, refresh, commit once."
+  ],
+
+  "method_reminders": [
+    "Use the real surface. Never simulate a step. If something has no API, that absence IS the finding - write it down and continue. This is how 'no integration step exists' surfaced.",
+    "Play the operator honestly, and leave something unanswered. A tester who answers everything never discovers which questions silently evaporate.",
+    "Watch the seams: between exploring and proposing, between an approved document and a task, between a completed task and a reviewed one, between one agent and the next. The defects are there, not inside a phase.",
+    "Read what the agent actually said. The transcript is evidence. Do not dismiss an agent's account of its own failure - verify it.",
+    "Follow peer-triggered work, not just what you triggered. Runs an agent starts by messaging another take a different path through the code, and that is where posture and continuity get lost.",
+    "Never accept 'the tests pass' as evidence. Run them yourself, then recompute a result by hand and compare. Check the rows, not the chat: an agent's summary of what it did is a claim, the rows are the fact.",
+    "A green suite agrees with broken behaviour more often than you expect. Mutation-check anything you claim: delete the line the test exists for, and watch a NAMED test fail.",
+    "The best evidence is the failure you did not stage. Watch for unprovoked failures and write them up when they happen.",
+    "Say when you contaminated your own test. Testing code you wrote yourself inherits your blind spots - a finding you did NOT make is weaker evidence, and the operator needs to know which is which.",
+    "Record what HELD, not only what broke. A gate that correctly refused something is a result the next session needs."
+  ]
 }
