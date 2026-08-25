@@ -387,13 +387,29 @@ Both depend on the busy guard (group 1). Five minutes is only safe once a busy t
 
 These cannot be established by an agent and must be checked by the operator against a running Hub.
 
-- [ ] 8.1 With a loop mid-turn, confirm the loop board does not flicker or show the loop as idle
+**Driven live 2026-08-25 against the trial Hub on 8010**, project `ledger-stress`
+(`proj-18e5d4e0`), job `job-453b909ba418` ("Stall bench", `loop-f3ce6dfedb93`) — a purpose-built
+loop with one task parked in `completed` so the queue was open and unclaimable. Five refused ticks
+accumulated, then one real firing was triggered to produce the running and post-stall states.
+Cost: two Haiku turns. The operator reviewed the captures and accepted all four.
+
+| Check | What was measured |
+|---|---|
+| 8.1 | The board sampled six times across 50s while a turn ran: `1 complete · 1 running · 2 idle` on every sample. No flicker, never `idle`. The row carried an amber `running` badge with a grey `idle` row directly beneath it. |
+| 8.2 | One row, not five: `loop queue is stalled: no claimable task among 1 open (1 completed)` · `re-checked 5 times` · `25 minutes ago`. The count climbed 1 → 4 → 5 while the timestamp stayed pinned to the first refusal, as designed. |
+| 8.3 | Amber `stalled` with the prefix-trimmed reason underneath, immediately above a grey `idle` — the two are unmistakable side by side. |
+| 8.4 | After the real firing, Recent Runs read `scheduled` (real), `manual`, then the single collapsed refusal row. Both real firings visible without scrolling; before this change they would have been under five refusals. |
+
+Three presentation findings were recorded rather than blocking these checks — see
+`scripts/drive/FINDINGS.md` F24–F26.
+
+- [x] 8.1 With a loop mid-turn, confirm the loop board does not flicker or show the loop as idle
       while firings are being refused.
-- [ ] 8.2 Confirm a stalled loop's history entry reads sensibly as its tick count climbs, rather than
+- [x] 8.2 Confirm a stalled loop's history entry reads sensibly as its tick count climbs, rather than
       looking like a stuck row.
-- [ ] 8.3 Confirm a stalled loop reads as *waiting*, not as *dead* — the distinction is a judgement
+- [x] 8.3 Confirm a stalled loop reads as *waiting*, not as *dead* — the distinction is a judgement
       no test can make, and getting it wrong makes a working loop look broken.
-- [ ] 8.4 With a five-minute tick, confirm the last-ten runs view still shows the firings that
+- [x] 8.4 With a five-minute tick, confirm the last-ten runs view still shows the firings that
       claimed work rather than a screen of refusals.
 
 ## 9. User test guide

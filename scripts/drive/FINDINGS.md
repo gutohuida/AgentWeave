@@ -508,3 +508,52 @@ and a spec review per group, and none of it asked what the board says while thre
 actually mid-turn — because in every test the turns are either finished or faked.
 
 ---
+
+
+## F24 (C) — a refused firing's status label says `scheduled`, contradicting the reason beside it
+
+Observed 2026-08-25 driving group 8's checks on `job-453b909ba418`. The collapsed stall row in the
+job card's Recent Runs renders its status word as **`scheduled`**, in the neutral text colour, with
+the amber stall reason immediately to its right:
+
+```
+scheduled   loop queue is stalled: no claimable task among 1 open (1 completed)
+                                        re-checked 5 times    25 minutes ago
+```
+
+The `JobRun` row's own status is `skipped`. Both user test guides describe this row as "one skipped
+row", which is what the operator is told to look for and is not what the UI says. A row that
+simultaneously reads "scheduled" and "stalled" makes the reader work out which word to believe.
+
+Not blocking 8.2 — the count-and-age pairing does its job, which is what that check judges — but
+the label is the first token on the row and it is wrong.
+
+---
+
+## F25 (C) — a stalled job card reads `0 runs` with a run visible underneath
+
+Same session. Before any real firing, the card showed the `0 runs` chip while Recent Runs displayed
+one entry. `run_count` counts firings that actually ran, so a queue that has only ever refused is
+honestly zero — and it went to `2 runs` once real firings happened, confirming the intent. But the
+chip and the list are two counts of the same word on one card, and they disagree on first read.
+
+---
+
+## F26 (C) — the board names a different agent than the task's assignee
+
+Same session, after `builder` completed `task-18e900f3eb96` and the loop staffed a reviewer by
+itself. The database has `assignee = 'critic'`; the board's current item renders:
+
+```
+completed | relay | Name the two totals when an entry does not balance
+```
+
+The reading that makes this correct is that `current_tasks[].agent` is *who the next firing would
+staff* rather than *who holds it now* — plausible, since `relay` is the one agent that is neither
+the author nor the last reviewer. If so the value is right and the presentation is not: `completed
+| relay` reads as "relay is working this".
+
+Worth settling because 11.5 asks whether a wide board says *what* is happening, and an agent column
+whose meaning changes with task status is exactly what would make three such lines unreadable.
+
+---
