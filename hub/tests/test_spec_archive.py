@@ -152,7 +152,16 @@ async def test_archiving_does_not_touch_tasks(app, auth_headers, run_headers, tm
 
 
 @pytest.mark.asyncio
-async def test_archiving_a_proposed_document_is_refused(app, auth_headers, run_headers, tmp_path):
+async def test_archiving_a_proposed_document_that_produced_work_is_refused(
+    app, auth_headers, run_headers, tmp_path
+):
+    """Still refused, by a different rule (F37).
+
+    `exploring -> archived` and `proposed -> archived` became legal so that a document created by
+    mistake can be retired — but this one carries requirements and tasks, so archiving it here
+    would retire work that exists. The refusal moved from the phase map to a guard that asks what
+    the document produced, which is the distinction that actually matters.
+    """
     await app.post(
         f"{BASE}/documents", json={"path": PATH, "title": "Archive demo"}, headers=auth_headers
     )
@@ -170,11 +179,22 @@ async def test_archiving_a_proposed_document_is_refused(app, auth_headers, run_h
     )
 
     assert response.status_code == 409
-    assert response.json()["detail"]["code"] == "illegal_transition"
+    assert response.json()["detail"]["code"] == "archive_would_orphan_work"
 
 
 @pytest.mark.asyncio
-async def test_archiving_an_exploring_document_is_refused(app, auth_headers, tmp_path):
+async def test_an_empty_exploring_document_can_be_retired(app, auth_headers, tmp_path):
+    """**This assertion is inverted deliberately** — it used to pin F37 in place.
+
+    Confirmed live 2026-08-25: an agent was given a conversation with a document attached, ignored
+    it, created a second one, and wrote the specification there. The first was an empty orphan and
+    every exit was closed — `archived` needs `approved`, `approved` needs `proposed`, `proposed`
+    needs requirements it does not have, and `DELETE` is 405. It was not inert either: it left a
+    standing spec manifest drift warning nobody could clear.
+
+    A document that has produced nothing is a mistake, not abandoned work, and retiring it is the
+    operator's to do.
+    """
     await app.post(
         f"{BASE}/documents", json={"path": PATH, "title": "Archive demo"}, headers=auth_headers
     )
@@ -182,12 +202,12 @@ async def test_archiving_an_exploring_document_is_refused(app, auth_headers, tmp
     response = await app.post(
         f"{BASE}/documents/phase",
         params={"path": PATH, "to": "archived"},
-        json={"reason": ""},
+        json={"reason": "created by mistake"},
         headers=auth_headers,
     )
 
-    assert response.status_code == 409
-    assert response.json()["detail"]["code"] == "illegal_transition"
+    assert response.status_code == 200, response.text
+    assert response.json()["phase"] == "archived"
 
 
 @pytest.mark.asyncio

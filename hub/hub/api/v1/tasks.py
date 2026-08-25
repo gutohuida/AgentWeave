@@ -5,11 +5,18 @@ from datetime import datetime, timezone
 from typing import Any, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ... import dependency_gate, project_workspace, spec_lifecycle, spec_reading
+from ... import (
+    dependency_gate,
+    project_workspace,
+    spec_lifecycle,
+    spec_reading,
+    task_dependency_writer,
+)
 from ...agent_activity import latest_activity_by_agent
 from ...agent_status import effective_heartbeat_status
 from ...auth import get_project
@@ -1308,3 +1315,94 @@ async def recent_divergences(
         }
         for row in result.scalars().all()
     ]
+
+
+class DependencyRequest(BaseModel):
+    """One edge, named by task ids.
+
+    Ids rather than document keys: keys are the document's own vocabulary, minted by the agent that
+    authored the decomposition, and an operator declaring an ordering between two cards is looking
+    at ids. `spec_tasks` keeps its key resolution and hands the shared writer resolved ids exactly
+    as this does.
+    """
+
+    depends_on: str = Field(max_length=64)
+
+    model_config = {"extra": "forbid"}
+
+
+@router.post("/{task_id}/dependencies", status_code=status.HTTP_201_CREATED)
+async def add_task_dependency(
+    task_id: str,
+    body: DependencyRequest,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Declare that this task depends on another (F36).
+
+    Until this existed, dependency rows were written in exactly one place — `spec_tasks.py`, reached
+    only when an approved document carried `depends_on` keys. `TaskUpdate` refused the field with
+    `422 extra_forbidden` and no route reached it, so an operator could not say "B needs A" about
+    two tasks they had made, and `dependency_gate`, the Dependencies board tab, two tables and the
+    `prerequisites`/`dependents` fields on every task response were reachable only if an agent
+    happened to author the right keys. In the sweep the agent authored no ordering at all, so the
+    graph came out empty and the gate was never exercisable.
+
+    Refusals name what is wrong, following `refusal_detail`'s standard: an operator told only
+    "invalid" tries the same thing again.
+    """
+    project_id, _ = project
+    outcome = await task_dependency_writer.add_dependency(
+        session, project_id, task_id, body.depends_on
+    )
+
+    if outcome == task_dependency_writer.SELF:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="a task cannot depend on itself",
+        )
+    if outcome == task_dependency_writer.MISSING:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                f"one of these tasks does not exist in this project: {task_id}, {body.depends_on}"
+            ),
+        )
+    if outcome == task_dependency_writer.CYCLE:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"task {body.depends_on} already depends on {task_id}, directly or through others, "
+                f"so this would make each wait on the other forever."
+            ),
+        )
+
+    await session.commit()
+    # `duplicate` is a 201 too. Declaring an edge that exists is a restatement of something already
+    # true, not a conflict, and an operator who clicks twice has not made a mistake.
+    return {"task_id": task_id, "depends_on": body.depends_on, "outcome": outcome}
+
+
+@router.delete("/{task_id}/dependencies/{depends_on}", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_task_dependency(
+    task_id: str,
+    depends_on: str,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Withdraw a declared dependency, so a wrong one is not permanent (the shape of F37).
+
+    A 404 when there was no such edge, rather than a silent success: an operator removing an edge
+    that is not there has misidentified something, and saying so is cheaper than letting them
+    believe the graph changed.
+    """
+    project_id, _ = project
+    removed = await task_dependency_writer.remove_dependency(
+        session, project_id, task_id, depends_on
+    )
+    if not removed:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"task {task_id} does not depend on {depends_on}",
+        )
+    await session.commit()

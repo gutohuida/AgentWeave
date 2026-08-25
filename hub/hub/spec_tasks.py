@@ -29,7 +29,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from . import requirement_links, spec_identity
+from . import requirement_links, spec_identity, task_dependency_writer
 from .db.models import (
     Loop,
     SpecDocument,
@@ -368,15 +368,34 @@ async def _materialise_edges(
                     )
                 )
                 continue
-            if target.id == task.id or target.id in existing_edges:
+            # Through the shared writer since F36, so this path and the operator's build the graph
+            # the same way — and so this path gains the cycle check it never had. A document
+            # declaring `a -> b -> a` previously produced a graph on which `dependency_gate`
+            # refused both tasks forever, each waiting on the other.
+            outcome = await task_dependency_writer.add_dependency(
+                session,
+                document.project_id,
+                task.id,
+                target.id,
+                known_edges=existing_edges,
+            )
+            if outcome in (
+                task_dependency_writer.ADDED,
+                task_dependency_writer.DUPLICATE,
+                task_dependency_writer.SELF,
+            ):
                 continue
-            existing_edges.add(target.id)
+            # A refusal is recorded, never raised: an approval must not fail over the shape of a
+            # dependency (`materialise_quietly`'s reasoning). This is the same channel an
+            # unresolvable key already uses, so the operator sees one kind of "this `depends_on`
+            # was not honoured" rather than two.
             session.add(
-                TaskDependency(
-                    id=f"tdep-{short_id()}",
+                TaskDependencyReference(
+                    id=f"tdr-{short_id()}",
                     project_id=document.project_id,
                     task_id=task.id,
-                    depends_on_task_id=target.id,
+                    reference=dep_key,
+                    reason=outcome,
                 )
             )
 

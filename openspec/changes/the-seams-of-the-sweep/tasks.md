@@ -79,14 +79,14 @@
 
 ## 7. Doors with more than one key (F36, F37)
 
-- [ ] 7.1 Review this group's spec deltas against `hub/hub/spec_tasks.py` (~375), `hub/hub/api/v1/tasks.py` and `hub/hub/spec_lifecycle.py`
-- [ ] 7.2 Extract the dependency writer so the document path and the operator path share one implementation
-- [ ] 7.3 Accept operator-declared dependencies on the task surface, naming task ids
-- [ ] 7.4 Reject cycles and missing tasks in the shared writer, so both paths get the check
-- [ ] 7.5 Test: an operator-declared dependency gates the dependent task; a cycle and a missing task are each refused; the document path is unchanged
-- [ ] 7.6 Open `exploring -> archived` and `proposed -> archived`, guarded on nothing having been materialised
-- [ ] 7.7 Test: an orphan archives and its drift warning clears; a document with materialised tasks is refused, naming what depends on it
-- [ ] 7.8 Run the Hub suite; commit
+- [x] 7.1 Review this group's spec deltas against `hub/hub/spec_tasks.py` (~375), `hub/hub/api/v1/tasks.py` and `hub/hub/spec_lifecycle.py`
+- [x] 7.2 Extract the dependency writer so the document path and the operator path share one implementation
+- [x] 7.3 Accept operator-declared dependencies on the task surface, naming task ids
+- [x] 7.4 Done — and the extraction revealed the document path had **no cycle check at all**, so `a -> b -> a` produced a graph on which the gate refused both tasks forever. Both paths have it now
+- [x] 7.5 Test: an operator-declared dependency gates the dependent task; a cycle and a missing task are each refused; the document path is unchanged
+- [x] 7.6 Open `exploring -> archived` and `proposed -> archived`, guarded on nothing having been materialised
+- [x] 7.7 Test: an orphan archives and its drift warning clears; a document with materialised tasks is refused, naming what depends on it
+- [x] 7.8 Run the Hub suite; commit
 
 ## 8. Verification and close-out
 

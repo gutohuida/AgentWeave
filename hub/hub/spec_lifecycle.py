@@ -43,11 +43,26 @@ TRANSITIONS = {
     # silent edit.
     (PROPOSED, EXPLORING),
     (APPROVED, EXPLORING),
-    # A finished, shipped change becomes history. Scoped to `approved` only — an abandoned
-    # exploration or proposal is a different situation, and the existing reopen transitions
-    # already give the operator a way to walk a document backwards without inventing a second
-    # kind of "done." There is no transition out of `archived`.
+    # A finished, shipped change becomes history. There is no transition out of `archived`.
     (APPROVED, ARCHIVED),
+    # Retiring a document that produced nothing (F37).
+    #
+    # This was previously `approved`-only, on the reasoning that "the existing reopen transitions
+    # already give the operator a way to walk a document backwards without inventing a second kind
+    # of 'done'." That holds for undoing a proposal — but walking backwards ends at `exploring`,
+    # and `exploring` had no exit at all. Confirmed live 2026-08-25: an agent created a second
+    # document by mistake and the empty original was unreachable in every direction. `archived`
+    # needs `approved`, `approved` needs `proposed`, `proposed` needs requirements the orphan does
+    # not have, and there is no `DELETE`. It is not inert either — it leaves a standing spec
+    # manifest drift warning that nobody can clear.
+    #
+    # The concern about a second meaning of "done" is answered by the guard below rather than by
+    # the phase map: these two edges are refused for any document that has produced requirements or
+    # tasks. So `archived` reached this way can only ever mean "this document was a mistake", never
+    # "this work was abandoned" — which really would be a different thing, and still is not
+    # expressible.
+    (EXPLORING, ARCHIVED),
+    (PROPOSED, ARCHIVED),
 }
 
 
@@ -283,6 +298,25 @@ async def transition(
             "only the operator can archive a document",
             code="archive_is_the_operators",
         )
+
+    if to_phase == ARCHIVED and document.phase in (EXPLORING, PROPOSED):
+        # What keeps the two edges added for F37 meaning "this document was a mistake" rather than
+        # becoming a way to bury work that exists. Imported here rather than at module scope: this
+        # module is the one every phase write passes through, and `Task` reaches back into it.
+        from .db.models import SpecRequirement, Task
+
+        produced = await session.scalar(
+            select(SpecRequirement.id).where(SpecRequirement.document_id == document.id).limit(1)
+        ) or await session.scalar(
+            select(Task.id).where(Task.spec_document_id == document.id).limit(1)
+        )
+        if produced is not None:
+            raise PhaseError(
+                "this document has produced requirements or tasks, so archiving it from "
+                f"{document.phase} would retire work that still exists. Approve it and archive "
+                "that, or reopen it and decide about the work first.",
+                code="archive_would_orphan_work",
+            )
 
     if to_phase == PROPOSED and document.explore_closed_at is None:
         raise PhaseError(
