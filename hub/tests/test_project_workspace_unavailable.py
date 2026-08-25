@@ -10,6 +10,7 @@ lines 117-136:
 - Repair (relocate/open) re-evaluates queued work without disabling jobs.
 """
 
+import asyncio
 import shutil
 from unittest.mock import MagicMock, patch
 
@@ -19,6 +20,57 @@ from sqlalchemy import select
 from hub.agent_auth import hash_run_token
 from hub.db.engine import async_session_factory
 from hub.db.models import EventLog, InboundQueueEntry, Project, Question, Run
+
+#: A run that has stopped, however it stopped. Waiting on "completed" alone would hang for the
+#: full deadline on a genuine failure and then report a timeout instead of the failure.
+_TERMINAL_RUN_STATUSES = ("completed", "failed", "stopped", "error", "cancelled")
+
+
+async def _settled_redrain_runs(agent_trigger, *, deadline: float = 10.0):
+    """Wait for the work a redrain scheduled, by condition rather than by snapshot (F40).
+
+    This replaces `for task in list(agent_trigger._background_runs): await task`, which was flaky
+    at roughly **1 run in 5** — measured on an unmodified checkout, so it had been flaky since it
+    was written. `list(...)` takes the set as it stands at that instant, and a run the redrain has
+    scheduled but not yet registered is not in it. The assertions below then evaluated against work
+    still in flight, and the failure looked like a workspace-relocation regression rather than a
+    test racing itself. That matters more than one red run: this test guards the repair path for a
+    project whose directory moved, and a suite with a known-flaky test trains its readers to re-run
+    rather than to read.
+
+    Draining and re-checking in a loop closes the window in both directions — a task registered
+    after the first pass is picked up on the next, and the loop only stops once the state the test
+    is about to assert on actually holds.
+    """
+    loop = asyncio.get_running_loop()
+    end = loop.time() + deadline
+    runs = []
+    while True:
+        pending = list(agent_trigger._background_runs)
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+        async with async_session_factory() as session:
+            runs = (
+                (
+                    await session.execute(
+                        select(Run).where(
+                            Run.project_id == "proj-test",
+                            Run.agent == "claude",
+                            Run.id != "run-blocking",
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+        if runs and all(run.status in _TERMINAL_RUN_STATUSES for run in runs):
+            return runs
+        if loop.time() >= end:
+            raise AssertionError(
+                "the redrained run never settled within "
+                f"{deadline}s: {[(run.id, run.status) for run in runs]}"
+            )
+        await asyncio.sleep(0.05)
 
 
 async def _sync_agent(app, auth_headers, agent_name):
@@ -403,28 +455,26 @@ async def test_relocate_repairs_and_redrains_queued_work(
             json={"path": str(new_directory)},
         )
 
-    assert response.status_code == 200, response.text
-    assert response.json()["directory_state"] == "available"
+        assert response.status_code == 200, response.text
+        assert response.json()["directory_state"] == "available"
 
-    for task in list(agent_trigger._background_runs):
-        await task
+        # Awaited **inside** the patch, and that is the whole of F40's real cause. The redrain
+        # starts its run as a background task, which spawns after the request has already
+        # returned — so with the patch closing at the end of the request, whether the fake spawn
+        # was still in force was a race. Lose it and the run reaches the real `PtySession.spawn`,
+        # fails for want of a `claude` binary, and the failure path then does exactly what it
+        # should: `return_run_entries` puts the entry back and a second run picks it up. The test
+        # then saw two failed runs where it asserted one completed one.
+        #
+        # Reproduced deterministically by running this file after `test_conversation_contract.py`,
+        # which is slow enough to lose the race every time: two runs, both `failed`, both on the
+        # same conversation. In isolation the spawn usually won, which is why this read as
+        # "flaky at 1 in 5" rather than as a scoping bug.
+        runs = await _settled_redrain_runs(agent_trigger)
+
+    assert len(runs) == 1
+    assert runs[0].status == "completed"
 
     async with async_session_factory() as session:
-        runs = (
-            (
-                await session.execute(
-                    select(Run).where(
-                        Run.project_id == "proj-test",
-                        Run.agent == "claude",
-                        Run.id != "run-blocking",
-                    )
-                )
-            )
-            .scalars()
-            .all()
-        )
-        assert len(runs) == 1
-        assert runs[0].status == "completed"
-
         project = await session.get(Project, "proj-test")
         assert project.working_directory == str(new_directory)
