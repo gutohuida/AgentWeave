@@ -90,11 +90,11 @@
 
 ## 8. Verification and close-out
 
-- [ ] 8.1 Run the full Hub suite and the CLI suite; account for every delta from baseline (3041 passed locally, 3037 in CI)
-- [ ] 8.2 If any UI changed: `cd hub/ui && npm run build`, then `py -3.11 scripts/refresh_ui_bundle.py`, and commit `hub/ui/src` and `hub/hub/static/ui` together
-- [ ] 8.3 `AW_CHECK_UI_BUNDLE=1 py -3.11 -m pytest hub/tests/test_ui_build_stamp.py -q`
-- [ ] 8.4 `npx openspec validate the-seams-of-the-sweep --strict`
-- [ ] 8.5 Confirm CI is green on the pushed branch
-- [ ] 8.6 Re-drive the affected sweep areas against the trial Hub on **8010** — areas 3, 7, 8, 11, 12, 13 and the spec-integrity path — and confirm each finding no longer reproduces. `proj-bacb623ca9ba` holds a live F28 and F37 reproduction
+- [x] 8.1 Hub **3107 passed** / 84 skipped / 1 xpassed; CLI **434 passed** / 3 skipped. Baselines 3041 and 412, so +66 and +22 — every delta is a test added by this change, none lost
+- [x] 8.2 **Not applicable** — `git diff 4c80f5e..HEAD -- hub/ui/src hub/hub/static/ui` is empty. No UI was touched by any group
+- [x] 8.3 Not applicable with 8.2 — the bundle is byte-identical to the one `b1ee218` committed
+- [x] 8.4 `npx openspec validate the-seams-of-the-sweep --strict`
+- [x] 8.5 CI green on every commit of this change, including the last (`d431385`, run 32850403770, all nine jobs)
+- [ ] 8.6 **Not started, and it needs the operator.** The 8010 instance still runs the pre-change code, so verifying live means restarting it — and `job-e2c18b2d` (`proj-2826f39e`, "Hourly test check", agent `dev`, `0 * * * *`) is **enabled** and will spend on a real turn each hour. Handoff 0084 recorded every job as disabled, so this one was enabled since. Decide about that job before restarting
 - [ ] 8.7 Record each finding's outcome in `scripts/drive/FINDINGS.md`, including any that did not reproduce as expected
 - [ ] 8.8 Reconcile the change's outcome into `openspec/specs/` and archive it
