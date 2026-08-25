@@ -18,8 +18,8 @@ from hub.run_task_binding import (
     resolve_task_for_project,
     run_advanced_its_task,
 )
-from hub.task_transition_service import apply_transition, history_for
-from hub.task_transitions import run_actor
+from hub.task_transition_service import RunNotBoundError, apply_transition, history_for
+from hub.task_transitions import operator, run_actor
 
 
 async def _make_task(session, task_id: str, status: str = "pending", project="proj-test") -> Task:
@@ -388,3 +388,130 @@ async def test_a_task_that_binds_without_starting_still_names_its_agent(app):
         assert transition is None
         assert task.status == "pending"
         assert task.assignee == "builder"
+
+
+# ---------------------------------------------------------------------------
+# F27: a run may claim work it does not hold, but may only finish work it does
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_an_unbound_run_cannot_complete_a_task_it_never_took():
+    """The F27 reproduction, reduced.
+
+    `run-fba9bbc08b8d` was a concurrency probe — entire prompt *"reply CONC-1 only"*, `task_id`
+    NULL — and it moved four unrelated tasks to `completed`. Nothing it did was individually
+    illegal; nothing asked whether it was the run that took them.
+    """
+    async with async_session_factory() as session:
+        task = await _make_task(session, "task-f27-unheld", "in_progress")
+        run = _run("run-f27-probe")
+        session.add(run)
+        await session.commit()
+
+        with pytest.raises(RunNotBoundError) as excinfo:
+            await apply_transition(session, task, "completed", run_actor(run.id, "worker"))
+
+    assert "not working any task" in str(excinfo.value)
+    assert task.status == "in_progress"
+
+
+@pytest.mark.asyncio
+async def test_a_run_cannot_complete_a_peers_task():
+    """One run, one task. Holding A is not authority over B."""
+    async with async_session_factory() as session:
+        mine = await _make_task(session, "task-f27-mine", "in_progress")
+        theirs = await _make_task(session, "task-f27-theirs", "in_progress")
+        run = _run("run-f27-holder", task_id=mine.id)
+        session.add(run)
+        await session.commit()
+
+        with pytest.raises(RunNotBoundError) as excinfo:
+            await apply_transition(session, theirs, "completed", run_actor(run.id, "worker"))
+
+    assert mine.id in str(excinfo.value)
+    assert theirs.status == "in_progress"
+
+
+@pytest.mark.asyncio
+async def test_claiming_an_unheld_task_binds_the_run_to_it():
+    """The charter tells agents to go and find waiting work. Doing so is a claim, not a glance."""
+    async with async_session_factory() as session:
+        task = await _make_task(session, "task-f27-claimed", "pending")
+        run = _run("run-f27-claimer")
+        session.add(run)
+        await session.commit()
+
+        transition = await apply_transition(
+            session, task, "in_progress", run_actor(run.id, "worker")
+        )
+        await session.commit()
+
+        assert transition is not None
+        assert run.task_id == task.id
+        assert task.status == "in_progress"
+
+
+@pytest.mark.asyncio
+async def test_a_run_holding_one_task_cannot_claim_another():
+    """`run-task-binding`'s existing invariant: a run carries at most one binding."""
+    async with async_session_factory() as session:
+        held = await _make_task(session, "task-f27-held", "in_progress")
+        other = await _make_task(session, "task-f27-other", "pending")
+        run = _run("run-f27-greedy", task_id=held.id)
+        session.add(run)
+        await session.commit()
+
+        with pytest.raises(RunNotBoundError):
+            await apply_transition(session, other, "in_progress", run_actor(run.id, "worker"))
+
+        assert other.status == "pending"
+        assert run.task_id == held.id
+
+
+@pytest.mark.asyncio
+async def test_a_run_that_claimed_the_work_can_finish_it():
+    """The whole legitimate path, end to end: find, claim, do, complete."""
+    async with async_session_factory() as session:
+        task = await _make_task(session, "task-f27-endtoend", "pending")
+        run = _run("run-f27-worker")
+        session.add(run)
+        await session.commit()
+
+        actor = run_actor(run.id, "worker")
+        await apply_transition(session, task, "in_progress", actor)
+        await apply_transition(session, task, "completed", actor)
+        await session.commit()
+
+        assert task.status == "completed"
+        assert run.task_id == task.id
+
+
+@pytest.mark.asyncio
+async def test_the_operator_needs_no_binding_to_complete_a_task():
+    """An operator marking a card done is a statement by a person."""
+    async with async_session_factory() as session:
+        task = await _make_task(session, "task-f27-operator", "in_progress")
+        await session.commit()
+
+        await apply_transition(session, task, "completed", operator())
+        await session.commit()
+
+        assert task.status == "completed"
+
+
+@pytest.mark.asyncio
+async def test_the_runtime_binding_path_arrives_already_bound():
+    """`bind_run_to_task` sets `task_id` before transitioning, so the guard is a no-op for it."""
+    async with async_session_factory() as session:
+        task = await _make_task(session, "task-f27-runtime", "pending")
+        run = _run("run-f27-runtime")
+        session.add(run)
+        await session.commit()
+
+        transition = await bind_run_to_task(session, run, task)
+        await session.commit()
+
+        assert transition is not None
+        assert task.status == "in_progress"
+        assert run.task_id == task.id

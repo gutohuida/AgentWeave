@@ -22,7 +22,7 @@ from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .db.models import Task, TaskTransition
+from .db.models import Run, Task, TaskTransition
 from .task_transitions import (
     Actor,
     allowed_targets,
@@ -105,6 +105,17 @@ class DependencyUnmetError(TransitionRefusedError):
 _REVIEW_OUTCOMES = frozenset({"approved", "rejected", "revision_needed"})
 
 
+class RunNotBoundError(TransitionRefusedError):
+    """A run tried to claim or finish a task it does not hold.
+
+    403 rather than 409, by this module's own rule: the task's state is fine and the move is a legal
+    edge — the *asker* is wrong. Collapsing it into 409 would send an agent looking for a state
+    problem that is not there.
+    """
+
+    http_status = 403
+
+
 async def _agent_that_completed(session: AsyncSession, task_id: str) -> Optional[str]:
     """The **agent** responsible for the most recent move of this task into `completed`.
 
@@ -158,6 +169,73 @@ async def _guard_author_is_not_reviewer(
             f"requires a different actor. Another agent or the operator must review it. Starting a "
             f"new run does not make you a different actor."
         )
+
+
+async def _guard_run_holds_the_task(
+    session: AsyncSession, task: Task, to_status: str, actor: Actor
+) -> None:
+    """A run may claim work it does not hold, but may only finish work it does.
+
+    Found live 2026-08-25 (F27): a run whose entire prompt was *"concurrency probe 1: reply CONC-1
+    only"*, carrying `task_id = NULL`, moved four unrelated tasks straight to `completed`; a second
+    unbound run took two more. Six tasks recorded as finished and no work done on any of them.
+
+    Nothing was individually wrong, which is why no test caught it. The Developer charter tells
+    agents to go and find waiting work. `TRANSITIONS` legally grants a `run` actor both edges.
+    `completed` deliberately requires no evidence, because evidence is accepted after review and
+    review follows completion — refusing there would deadlock the ordinary path, as
+    `requirement_gate`'s docstring explains. The gap was that nothing asked whether the run closing
+    a task was the run that took it, though `run_task_binding` already records exactly that.
+
+    It does not stop at bookkeeping. `completed` is in `BAND_AWAITING_HANDOFF`, so a flow offers
+    each falsely-finished task to *another* agent as reviewable work; that reviewer finds the code
+    correct — it is, because a different agent really did it — approves, and `task_integration`
+    merges. No human on that path, and no single false statement along it.
+
+    So the rule is in two halves, and the second is only enforceable because of the first:
+
+    * `-> in_progress` — **claiming binds.** A run holding nothing takes the task. This is what
+      keeps the charter's "call `list_tasks` to see what is waiting" a real behaviour rather than a
+      dead end. A run already holding a *different* task is refused, which is the existing
+      `run-task-binding` invariant that a run carries at most one binding.
+    * `-> completed` — **only the holder finishes.** `TRANSITIONS` makes `completed` reachable only
+      from `in_progress`, so every legitimate completion has already passed through the claim above
+      and is therefore bound. That is what makes this check safe to apply unconditionally rather
+      than a trap for some path nobody remembered.
+
+    The operator is untouched in both halves: `is_operator` returns immediately. An operator marking
+    a card done is a statement by a person, and has never needed a binding.
+
+    `bind_run_to_task` sets `run.task_id` *before* calling `apply_transition(..., origin=runtime)`,
+    so the runtime path arrives already bound and takes the no-op branch.
+
+    A run id with no `Run` row cannot be produced by any surface — the agent plane binds identity
+    from a per-run credential (`agent_auth.py`) and never accepts it from a request — so rather than
+    inventing a policy for an unreachable state, this leaves such a caller alone. There is no
+    binding to check and none to record.
+    """
+    if actor.is_operator or to_status not in ("in_progress", "completed"):
+        return
+    run = await session.get(Run, actor.run_id)
+    if run is None:
+        return
+
+    if run.task_id == task.id:
+        return
+
+    if to_status == "in_progress" and run.task_id is None:
+        run.task_id = task.id
+        return
+
+    held = (
+        f"it is already working task {run.task_id}" if run.task_id else "it is not working any task"
+    )
+    verb = "claim" if to_status == "in_progress" else "complete"
+    raise RunNotBoundError(
+        f"This run cannot {verb} task {task.id}: {held}. A run finishes the task it took, and "
+        f"takes at most one. To work this task, start a run bound to it — or, if you meant to "
+        f"report on work you did not do, say so rather than moving its status."
+    )
 
 
 def guard_entry_status(status: str) -> None:
@@ -222,6 +300,11 @@ async def apply_transition(
         raise IllegalTransitionError(refusal_detail(from_status, to_status, actor.kind))
 
     await _guard_author_is_not_reviewer(session, task, to_status, actor)
+
+    # Who is doing the work, before anything about whether the work may proceed (F27). Beside the
+    # author/reviewer guard because it answers the same kind of question — is this actor entitled to
+    # this move — rather than the gates below, which ask about the state of the work.
+    await _guard_run_holds_the_task(session, task, to_status, actor)
 
     # The dependency gate, on the `-> in_progress` edge only (`task-dependencies` design D1) — this
     # covers `pending -> in_progress`, `assigned -> in_progress` and the `blocked -> in_progress`

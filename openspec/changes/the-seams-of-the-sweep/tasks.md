@@ -1,15 +1,15 @@
 ## 1. A run may only finish what it holds (F27, severity A)
 
-- [ ] 1.1 Review this group's spec deltas against the current code before writing anything — the standing method. Confirm `completed` is still reachable only from `in_progress` in `hub/hub/task_transitions.py`
-- [ ] 1.2 Add the claim-binds condition to `apply_transition` (`hub/hub/task_transition_service.py`) on the `-> in_progress` edge for a `run` actor: bind when the run holds nothing, refuse when it holds another task
-- [ ] 1.3 Add the holder-only condition on the `-> completed` edge for a `run` actor, requiring `run.task_id == task.id`
-- [ ] 1.4 Write both refusals to the `refusal_detail` standard — name what the run is bound to, and what would work
-- [ ] 1.5 Confirm the operator actor is unaffected on both edges
-- [ ] 1.6 Test: reproduce F27 exactly — an unbound run completing a second, unrelated task is refused
-- [ ] 1.7 Test: the full claim → work → complete path an agent finding waiting work would take still passes
-- [ ] 1.8 Test: the runtime binding path (`bind_run_to_task`) still starts a task, arriving already bound
-- [ ] 1.9 Run `py -3.11 -m pytest hub/tests/ -q` and account for every delta from the 3041-passed baseline
-- [ ] 1.10 Commit
+- [x] 1.1 Review this group's spec deltas against the current code before writing anything — the standing method. Confirm `completed` is still reachable only from `in_progress` in `hub/hub/task_transitions.py`
+- [x] 1.2 Add the claim-binds condition to `apply_transition` (`hub/hub/task_transition_service.py`) on the `-> in_progress` edge for a `run` actor: bind when the run holds nothing, refuse when it holds another task
+- [x] 1.3 Add the holder-only condition on the `-> completed` edge for a `run` actor, requiring `run.task_id == task.id`
+- [x] 1.4 Write both refusals to the `refusal_detail` standard — name what the run is bound to, and what would work
+- [x] 1.5 Confirm the operator actor is unaffected on both edges
+- [x] 1.6 Test: reproduce F27 exactly — an unbound run completing a second, unrelated task is refused
+- [x] 1.7 Test: the full claim → work → complete path an agent finding waiting work would take still passes
+- [x] 1.8 Test: the runtime binding path (`bind_run_to_task`) still starts a task, arriving already bound
+- [x] 1.9 Run `py -3.11 -m pytest hub/tests/ -q` and account for every delta from the 3041-passed baseline
+- [x] 1.10 Commit
 
 ## 2. Nothing is scheduled that can only fail or idle (F28, F33)
 

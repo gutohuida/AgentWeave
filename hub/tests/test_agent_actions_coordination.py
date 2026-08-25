@@ -813,6 +813,14 @@ async def test_an_agent_may_still_move_its_task(app):
         )
         await session.commit()
 
+        # The run holds this task. That is what "its task" means in this test's name, and since
+        # F27 it is also what the completion guard checks — an agent may finish the work it took,
+        # and only that. Previously the run was left unbound, so this asserted the weaker claim
+        # that an agent may complete *a* task, which is the behaviour F27 turned out to be.
+        run = await session.get(Run, "run-policy-3")
+        run.task_id = "task-policy-move"
+        await session.commit()
+
     response = await app.patch(
         "/api/v1/agent-actions/tasks/task-policy-move",
         headers=headers,
