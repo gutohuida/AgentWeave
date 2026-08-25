@@ -384,16 +384,20 @@ async def test_work_dir_cannot_be_combined_with_a_review_turn(
         session.add(Task(id="task-1", project_id="proj-test", title="A task", status="completed"))
         await session.commit()
 
-        with pytest.raises(TriggerAgentError) as excinfo:
-            await trigger_agent_directly(
-                project_id="proj-test",
-                agent="critic",
-                message="review",
-                conversation_id=conversation.id,
-                work_dir="somewhere",
-                session=session,
-                review_task_id="task-1",
-            )
+        # The launchability probe runs before this argument check, so without the patch the
+        # refusal a machine without `claude` on PATH sees is "not found in PATH" — which is
+        # not what this test is about. Same patch every other trigger in this file uses.
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            with pytest.raises(TriggerAgentError) as excinfo:
+                await trigger_agent_directly(
+                    project_id="proj-test",
+                    agent="critic",
+                    message="review",
+                    conversation_id=conversation.id,
+                    work_dir="somewhere",
+                    session=session,
+                    review_task_id="task-1",
+                )
 
     assert "cannot be combined with a review turn" in excinfo.value.detail
 
