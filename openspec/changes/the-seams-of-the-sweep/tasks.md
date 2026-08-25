@@ -30,10 +30,10 @@
 
 ## 3. Agents can see their limits and reach their tools (F32, F38, F21)
 
-- [ ] 3.1 Review this group's spec deltas against `hub/hub/api/v1/agents.py` around the capability section at ~1321
-- [ ] 3.2 Emit the withheld-capability section for evidence decisions, stating who holds the authority and where to put a verdict instead
-- [ ] 3.3 Audit the rest of the canonical-context builder for capabilities announced only when granted; apply the same symmetry
-- [ ] 3.4 Test: context for an ungranted agent states the limit; context for a granted agent is unchanged
+- [x] 3.1 Review this group's spec deltas against `hub/hub/api/v1/agents.py` around the capability section at ~1321
+- [x] 3.2 Emit the withheld-capability section for evidence decisions, stating who holds the authority and where to put a verdict instead
+- [x] 3.3 Audited. `GRANT_FIELDS` holds three grants; only `can_accept_evidence` appears in context at all. `can_read_checkpoints` and `can_recall` are announced in **neither** direction — recorded as **F39**, not fixed here: two of the three gate tools, so the general remedy is F21's territory rather than three more hand-written sections
+- [x] 3.4 Test: context for an ungranted agent states the limit; context for a granted agent is unchanged
 - [ ] 3.5 **Investigate F21 before fixing it** — how this surface defers tools (`src/agentweave/tool_surface.py`, `hub/hub/mcp_server.py`). Record what is found; the remedy is not settled
 - [ ] 3.6 Name the callable tools a turn needs in canonical context, per the investigation's finding
 - [ ] 3.7 Test: a turn whose deliverable includes recording evidence has that tool named by its exact callable name

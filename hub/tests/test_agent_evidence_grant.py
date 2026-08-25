@@ -165,3 +165,58 @@ async def test_the_tools_are_named_to_every_agent_regardless(app, auth_headers, 
     context = rendered.json()["context"]
     assert "record_evidence(" in context
     assert "list_evidence(" in context
+
+
+@pytest.mark.asyncio
+async def test_an_ungranted_agent_is_told_it_cannot_decide(app, auth_headers, reviewer):
+    """F32: the principle was applied in one direction only.
+
+    Measured 2026-08-25: `rev` spent a full 97-row Codex turn reviewing — running the suite twice
+    and writing a hand reproducer — and only then hit a 403 on `decide_evidence`. `list_evidence`
+    had succeeded moments earlier, so it could read the queue it was not permitted to answer.
+    """
+    rendered = await app.get(
+        f"{AGENTS}/agent-context", params={"agent": "reviewer"}, headers=auth_headers
+    )
+    assert rendered.status_code == 200, rendered.text
+    context = rendered.json()["context"]
+
+    assert "### You cannot decide evidence" in context
+    # Named, so the agent does not plan a turn around reaching for it.
+    assert "decide_evidence" in context
+    # Reading the queue is not an invitation to answer it — the exact trap `rev` fell into.
+    assert "list_evidence" in context
+
+
+@pytest.mark.asyncio
+async def test_the_withheld_case_says_where_a_verdict_goes_instead(app, auth_headers, reviewer):
+    """The downstream cost of F32, not the 403 itself.
+
+    Unable to record its verdict, `rev` wrote the review to `.reviews/review-0001-...md` inside its
+    own worktree, which is isolated by design. Its conclusion — "ship it", with its checks — is on
+    a branch nobody reads. A refusal that does not say where the work should go loses the work.
+    """
+    rendered = await app.get(
+        f"{AGENTS}/agent-context", params={"agent": "reviewer"}, headers=auth_headers
+    )
+    context = rendered.json()["context"]
+
+    lowered = context.lower()
+    assert "message" in lowered or "record it on the task" in lowered
+    assert "worktree" in lowered
+
+
+@pytest.mark.asyncio
+async def test_a_granted_agent_is_not_told_it_cannot(app, auth_headers, reviewer):
+    """The two halves are exclusive: exactly one is emitted, never both."""
+    await app.patch(f"{AGENTS}/reviewer", json={"can_accept_evidence": True}, headers=auth_headers)
+
+    rendered = await app.get(
+        f"{AGENTS}/agent-context", params={"agent": "reviewer"}, headers=auth_headers
+    )
+    context = rendered.json()["context"]
+
+    assert "You can decide evidence" in context
+    # The granted branch already contains the sentence "You cannot decide evidence you produced
+    # yourself", so the heading is what distinguishes the two branches.
+    assert "### You cannot decide evidence" not in context

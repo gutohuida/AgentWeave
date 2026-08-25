@@ -1334,6 +1334,31 @@ async def _render_hub_agent_context(
             "evidence you produced yourself."
         )
         lines.append("")
+    else:
+        # The other half of the comment above, and the half that was missing (F32). Measured
+        # 2026-08-25: a reviewer spent a full 97-row turn — a genuine review, running the suite
+        # twice and writing a reproducer — and only then discovered it could not record the
+        # verdict. `list_evidence` had succeeded moments earlier, so it could read the queue it was
+        # not permitted to answer, and nothing said so.
+        #
+        # Saying where the verdict goes instead is not politeness. Unable to record it, that
+        # reviewer wrote the review to a file inside its own worktree, which is isolated by design
+        # — so its actual conclusion, "ship it", landed on a branch nobody reads.
+        lines.append("### You cannot decide evidence")
+        lines.append(
+            "- Accepting or rejecting requirement evidence is the operator's here. "
+            "`decide_evidence` will refuse you, so do not spend a turn planning around it."
+        )
+        lines.append(
+            "- `list_evidence` still works, and showing you the queue is not an invitation to "
+            "answer it — you can see what is waiting on somebody without being that somebody."
+        )
+        lines.append(
+            "- If you reviewed something, put the verdict where it will be read: send it as a "
+            "message, or record it on the task. A review written only into your worktree is on a "
+            "branch nobody reads."
+        )
+        lines.append("")
 
     if project_instructions:
         lines.append("## Project Instructions")

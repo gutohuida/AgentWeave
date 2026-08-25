@@ -935,6 +935,51 @@ requires guessing at prose. The Hub already knows the run ended, that it was the
 a document in `exploring`, and that no `Question` row was written.
 
 ---
+---
+
+## F39 (B) — two of the three operator grants are announced in neither direction
+
+**Found 2026-08-25 while fixing F32**, by the audit its own remediation task called for
+(`the-seams-of-the-sweep`, task 3.3) rather than by driving the product.
+
+F32 was that `can_accept_evidence` is announced to an agent **only when granted**. Fixing it meant
+looking for the same one-directional shape elsewhere. What the audit found is worse in one respect
+and narrower in another.
+
+`GRANT_FIELDS` (`hub/hub/api/v1/agents.py:1633`) is the complete set of boolean capabilities the
+operator confers:
+
+```
+can_read_checkpoints
+can_recall
+can_accept_evidence
+```
+
+Only the third appears in canonical turn context at all. `can_read_checkpoints` and `can_recall`
+are announced **neither when granted nor when withheld** — grep for either name in the context
+builder returns nothing.
+
+So F32's own reasoning, quoted from the comment three lines above the section it guards, applies to
+these two in the granted direction as well:
+
+> A capability an agent does not know it holds is one it does not use, and one it guesses at is a
+> 403 in the middle of a turn it has already spent.
+
+An agent granted `can_recall` and never told it holds recall will not use recall. The operator
+turned something on and nothing downstream says so. That is the *first* half of the sentence, and
+it is the half F32 did not have to deal with — `can_accept_evidence` at least announced itself when
+granted.
+
+**Not yet driven, and that matters.** F32 was measured: a 97-row turn, a real review, a 403 at the
+end, and a verdict stranded in a worktree. This one is read from the code. Whether an agent granted
+`can_recall` actually fails to use it, or discovers the tool from the surface anyway, has not been
+observed — which is exactly the question F21 is about, and the reason this is recorded rather than
+fixed alongside F32.
+
+The remedy is probably not three more hand-written sections. Two of these three grants gate *tools*
+(`recall`, and checkpoint reads), so the general form is likely "the tool surface states what this
+agent may call, in both directions" — F21's territory. Recorded separately so that whoever settles
+F21 knows this is part of the same question.
 
 ## What held, under a full-surface sweep
 
