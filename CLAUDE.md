@@ -174,15 +174,24 @@ mkdocs serve  # http://localhost:8000
 
 ### Code Quality
 
+**Run exactly what CI runs, over exactly the paths CI covers.** The narrower form that used to be
+written here (`ruff check src/`) passed locally on a tree CI then failed, because CI lints `tests/`
+too — a test file with an uppercase local was clean by the documented command and red by the gating
+one. The path lists below are copied from `.github/workflows/ci.yml`; if that file changes, change
+these with it.
+
 ```bash
-# Python (CLI)
-ruff check src/
-black src/
+# Python — the paths matter, and they differ between the two tools
+ruff check src/ hub/ tests/
+black --check src/ hub/hub/ hub/tests/ tests/
 mypy src/
 
 # TypeScript (Hub UI)
 cd hub/ui && npm run lint
 ```
+
+On this machine `black` runs under 3.11 and the codebase targets 3.12, so add
+`--target-version py311` or it refuses with a safety-check warning.
 
 ### Testing
 

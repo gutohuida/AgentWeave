@@ -62,11 +62,11 @@ def test_the_failure_is_carried_for_diagnosis():
 
 def test_the_probe_leaves_nothing_behind():
     """It writes into the Hub's own state directory, so it must not accumulate anything there."""
-    NATIVE_HUB_DIR = diagnostics.NATIVE_HUB_DIR
+    hub_dir = Path(diagnostics.NATIVE_HUB_DIR)
 
-    before = set(Path(NATIVE_HUB_DIR).iterdir()) if Path(NATIVE_HUB_DIR).exists() else set()
+    before = set(hub_dir.iterdir()) if hub_dir.exists() else set()
     _result()
-    after = set(Path(NATIVE_HUB_DIR).iterdir()) if Path(NATIVE_HUB_DIR).exists() else set()
+    after = set(hub_dir.iterdir()) if hub_dir.exists() else set()
 
     assert before == after
 
