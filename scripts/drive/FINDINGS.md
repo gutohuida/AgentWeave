@@ -1177,7 +1177,7 @@ direction, so nothing fired on the new code during the drive.
 | **F35** (C) | Module level | The refusal named the field, the shape and a working example, one at a time. **Then reversed at the operator's direction** — see below. |
 | **F36** (C) | **Yes, every path** | `201 added`; cycle → **409** naming both tasks; self-edge → **400**; unknown id → **404** naming both; a repeated edge → **201 `duplicate`**, which the route documents as deliberate ("an operator who clicks twice has not made a mistake"); `DELETE` → **204**. |
 | **F37** (C) | **Yes** | `spec/changes/teal-manticore/spec.html`, in `exploring`, archived successfully with `tasks_created: []`. This was a hard refusal before. `GET /spec/drift` is now empty. |
-| **F38** (B) | **No — and that is the finding.** | See F41. |
+| **F38** (B) | **No — and that is the finding.** | See F41. Fixed here, and the fix re-driven live: the same scenario now records `turn_produced_nothing`. |
 
 ### F27, driven by a real agent rather than asserted
 
@@ -1205,6 +1205,26 @@ and it succeeded then. See **F42** for what that reasoning can still achieve, an
 **F41 (A)** — F38's fix cannot fire. Found by driving the case rather than reading the code, then
 confirmed against the original subject's own event log. Recorded above, and fixed.
 
+**The fix was then verified the same way it was found**, which is the whole point: a defect whose
+lesson is *"the unit tests said yes and production said no"* must not be closed on unit tests alone.
+The Hub was restarted on the fix and the identical scenario re-run — a fresh document
+(`spec/changes/sapphire-unicorn/spec.html`, `content_digest` populated at creation exactly as
+before), `dev` triggered against it with `spec_document` set and told to reply in prose only:
+
+```
+turn_produced_nothing   dev   severity=warning
+{"run_id": "run-4c14c8077442", "agent": "dev",
+ "spec_document": "spec/changes/sapphire-unicorn/spec.html",
+ "document_phase": "exploring", "run_exit_status": "completed"}
+```
+
+`run-4c14c8077442` completed with `task_id = NULL`, wrote 0 questions, and the document carried
+exactly 1 `content` event — the scaffold. Before the fix this produced **nothing**.
+
+The negative cases — a turn that asked, a turn that wrote the document, a turn given no document —
+are covered by unit tests only; each would have cost another real run to drive, and none of them was
+the case that was broken.
+
 ### Dispositions the operator made on 2026-08-25
 
 - **F22** — fixed. `doctor` gained `check_symlink_privilege`, which probes a directory symlink and,
@@ -1226,9 +1246,13 @@ confirmed against the original subject's own event log. Recorded above, and fixe
   restored nothing could ever have reached them. Leaving them would have created a second F41 in
   the same session that found the first. `test_the_structured_fields_advertise_their_shape` holds
   the choice, and the parameter list records what reversing again would take.
-- **F39** — fixed. `recall(observation_id)` now carries the same grant caveat `decide_evidence`
-  already had, and an `### Other agents' history` section states both checkpoint grants in both
-  directions. Stated even when both are withheld, which is the half worth defending: `recall`
+- **F39** — fixed, **and verified live in both directions.** `recall(observation_id)` now carries
+  the same grant caveat `decide_evidence` already had, and an `### Other agents' history` section
+  states both checkpoint grants in both directions. Against the restarted Hub: an ungranted agent
+  reads *"You may read your own checkpoints and no one else's"*; granting both to `rev` switched it
+  to *"You may read your peers' checkpoints"* immediately, and withdrawing them switched it back —
+  so the operator's switch is reflected in what the agent is told, which is the half
+  `test_the_operator_grants_it_and_reads_it_back` exists to protect for the evidence grant. Stated even when both are withheld, which is the half worth defending: `recall`
   answers **not-found** rather than refusing — it has to, or the refusal would itself confirm the
   record exists — so an agent that meets the boundary without being told concludes the record is
   missing rather than that it is not permitted to see it.
