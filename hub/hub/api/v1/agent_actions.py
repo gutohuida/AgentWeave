@@ -1060,6 +1060,30 @@ async def read_spec_document(
         "open_questions": (payload or {}).get("open_questions"),
         "diagnostics": diagnostics,
     }
+    # F29. This route's own docstring, four paragraphs up, ends on "with no way for anyone to
+    # detect divergence from what was approved" — and until now that was still true of the content
+    # it serves. `spec_lifecycle.divergence` had one caller, on the save path, so a document edited
+    # directly on disk was handed to every reader unmarked. Both halves are already in hand here,
+    # so the check costs nothing extra.
+    #
+    # Told to the agent rather than refused. An agent reading a diverged document may still have
+    # good reason to proceed; one that does not know it is reading unapproved bytes cannot judge
+    # that at all, which is the whole failure.
+    drift = spec_lifecycle.divergence(document, content)
+    if drift is not None:
+        recorded_digest, found_digest = drift
+        view["diverged"] = True
+        view["divergence"] = {
+            "recorded": recorded_digest,
+            "found": found_digest,
+            "detail": (
+                "This document's file was changed outside the Hub, so what you are reading is not "
+                "what was submitted — and, if it is approved, not what was approved. Treat its "
+                "requirements as unconfirmed and say so rather than building on them silently."
+            ),
+        }
+    else:
+        view["diverged"] = False
     if include == "full":
         for extra in ("design", "tasks", "algorithms", "evidence", "lifecycle"):
             view[extra] = (payload or {}).get(extra)

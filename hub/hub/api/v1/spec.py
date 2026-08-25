@@ -15,6 +15,7 @@ contract, rather than trusting a caller's classification.
 
 from __future__ import annotations
 
+import contextlib
 import dataclasses
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -132,6 +133,53 @@ async def list_specs(
     }
 
 
+async def _divergence_fields(
+    session: AsyncSession, project_id: str, path: str, content: Optional[str]
+) -> Dict[str, Any]:
+    """Whether what is being served still matches what the Hub recorded (F29).
+
+    `spec_lifecycle.divergence` existed with exactly one caller, on the **save** path
+    (`spec_service.py:236`), so tampering was noticed only when somebody tried to write and never
+    when somebody read. Measured 2026-08-25: an approved document was edited on disk to say
+    `TAMPERED BEHIND THE HUB`, and every reader — the operator in the Spec view, and any agent
+    calling `read_spec_document` — received that text with nothing marking it.
+
+    That inverts the guarantee the phase machine is built to provide. `spec_lifecycle`'s docstring
+    opens on the rule that an agent cannot approve a document, enforced by reading the phase from a
+    row rather than from the file the agent can write. The row is indeed authoritative for the
+    phase; the **content** was still served from the file, unchecked. Approval therefore attached
+    to a path rather than to the bytes anyone subsequently read.
+
+    Marked, never refused. Editing an approved document on the way to a new revision is a
+    legitimate thing to be doing, and refusing the read would break it — the rule this module
+    already states is that the Hub surfaces both versions and waits for the operator.
+
+    Returns `{}` for a document the Hub has no row for, or one that was never written: there is
+    nothing recorded to differ from, which is not the same as agreeing.
+    """
+    document = await spec_lifecycle.get_document(session, project_id, path)
+    if document is None:
+        return {}
+    found = spec_lifecycle.divergence(document, content)
+    if found is None:
+        return {"diverged": False}
+    recorded_digest, found_digest = found
+    return {
+        "diverged": True,
+        "divergence": {
+            "recorded": recorded_digest,
+            "found": found_digest,
+            "phase": document.phase,
+            "detail": (
+                f"This file no longer matches what the Hub recorded for it at phase "
+                f"'{document.phase}'. It was changed outside the Hub, so what you are reading is "
+                f"not what was submitted — and, if this document is approved, not what was "
+                f"approved."
+            ),
+        },
+    }
+
+
 @router.get("/spec")
 async def get_spec(
     path: str = Query(...),
@@ -156,11 +204,13 @@ async def get_spec(
     if content is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="spec not found")
 
-    return {
+    payload = {
         "path": path,
         "content": content,
         "updated_at": spec_documents.document_updated_at(workspace, path),
     }
+    payload.update(await _divergence_fields(session, project_id, path, content))
+    return payload
 
 
 class DocumentCreate(BaseModel):
@@ -248,7 +298,32 @@ async def list_documents(
     """Every document this project tracks, with the phase it is in."""
     project_id, _ = project
     documents = await spec_lifecycle.list_documents(session, project_id)
-    return {"documents": [_document_view(document) for document in documents]}
+
+    # F29: a diverged document must be identifiable here too, not only when one is opened —
+    # otherwise the operator has to open all of them to find the one that was changed behind the
+    # Hub. Reading each file to hash it, rather than trusting mtime, because a touched-but-identical
+    # file is not divergence and reporting it as such would teach the reader to ignore the flag.
+    #
+    # Measured before adding it: 30 documents averaging 16 KB cost 18.9 ms. Affordable here because
+    # this query is not polled — `useSpecDocuments` sets no `refetchInterval` and is invalidated by
+    # mutations, and this project's live state goes over SSE rather than polling. If it ever
+    # becomes a hot path, this is the line to make conditional.
+    try:
+        workspace = await _workspace(session, project_id)
+    except HTTPException:
+        # The workspace being unavailable is its own reported condition elsewhere; it must not turn
+        # listing the documents into an error.
+        workspace = None
+
+    views = []
+    for document in documents:
+        view = _document_view(document)
+        if workspace is not None:
+            with contextlib.suppress(OSError, SpecPathError, project_workspace.ProjectPathError):
+                on_disk = spec_documents.read_document(workspace, document.path)
+                view["diverged"] = spec_lifecycle.divergence(document, on_disk) is not None
+        views.append(view)
+    return {"documents": views}
 
 
 class EvidenceRecord(BaseModel):

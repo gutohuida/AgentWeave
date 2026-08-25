@@ -70,12 +70,12 @@
 
 ## 6. Approval attaches to bytes, not to a path (F29)
 
-- [ ] 6.1 Review this group's spec delta against `hub/hub/spec_lifecycle.py` and `hub/hub/spec_service.py`
-- [ ] 6.2 Call `divergence()` on the single-document read path and mark the result, without refusing the read
-- [ ] 6.3 Mark divergence for an agent reading through the tool surface
-- [ ] 6.4 Populate the listing route's existing `divergence`/`diverged` fields; measure the per-document file-read cost and bound or defer that half if it shows
-- [ ] 6.5 Test: a tampered approved document is served marked; an unmodified one reports no divergence
-- [ ] 6.6 Run the Hub suite; commit
+- [x] 6.1 Review this group's spec delta against `hub/hub/spec_lifecycle.py` and `hub/hub/spec_service.py`
+- [x] 6.2 Call `divergence()` on the single-document read path and mark the result, without refusing the read
+- [x] 6.3 Mark divergence for an agent reading through the tool surface
+- [x] 6.4 Measured first, as asked: 30 documents averaging 16 KB cost **18.9 ms**. Added unconditionally rather than bounded, because `useSpecDocuments` sets no `refetchInterval` and is invalidated by mutations — this is not a polled path. Reversal condition recorded at the line
+- [x] 6.5 Test: a tampered approved document is served marked; an unmodified one reports no divergence
+- [x] 6.6 Run the Hub suite; commit
 
 ## 7. Doors with more than one key (F36, F37)
 
