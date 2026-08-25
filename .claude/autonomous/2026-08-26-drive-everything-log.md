@@ -125,3 +125,53 @@ thing prep could **not** establish is whether the queue is correctly *sized* for
 is a guess, and the morning summary should say how far it actually got.
 
 ---
+
+## Iteration 1 — Q1: cold start, a fresh project through the whole setup path
+
+**2026-08-26T00:07+01:00.** Reconciled first: branch and `git log` matched `STATE.json` exactly
+(`2ab1ec8` tip), tree clean, Hub `/health` ok and `/api/v1/projects` listed `proj-18e5d4e0
+ledger-stress` — the beta database, not the stale one.
+
+**Setup.** `e2e.py setup drive-2026-08-26` created `proj-8605b92d0028` at
+`C:\Users\huida\Documents\drive-2026-08-26`, marker confirmed:
+`.agentweave/project.json = {"version": 1, "project_id": "proj-8605b92d0028"}`, nowhere else on
+disk.
+
+**Seeded a real subject, not a fixture.** `inventory.py` + `test_inventory.py`: an `Item`/pricing
+module with three defects the tests do not cover — `apply_bulk_discount`'s off-by-one drops the
+last item (`range(len(items) - 1)`), `is_low_stock` uses float `==` instead of a threshold
+comparison, `add_tag` carries a mutable default-argument list across calls. All four tests pass
+(`4 passed in 0.01s`) while masking every one of the three — the same shape as `ledger`. Committed
+into the drive project's own git repo (`c88133f`) so a reviewer/author agent in Q2 has something
+real to look at.
+
+**Registered the two cheap-runner agents**, with one piece of self-caught friction: the first
+attempt bound `author` with charter substring `"writ"`, which matched `Underwriter` (the substring
+is *inside* "Underwriter") rather than failing or reaching `Spec Author` — a harness (`e2e.py`)
+naive-substring issue, not a product defect; `e2e.py`'s own `cmd_agent` is idempotent on PATCH, so
+re-running with `"Spec Author"` fixed it cleanly. Final state, confirmed from
+`GET /api/v1/projects/{id}/agents`:
+
+| agent | runner | charter |
+|---|---|---|
+| `author` | `runner-4943e0702172` (claude / claude-haiku-4-5-20251001) | `charter-35ddf2283310` Spec Author |
+| `reviewer` | `runner-e7784567779d` (codex / gpt-5.4-mini) | `charter-3be3dd63c942` Code Reviewer |
+
+**What HELD.** The board came up empty and coherent (`GET /tasks` → `[]`, no half-populated state).
+The two project-default runners (`Claude (default)`, `Codex (default)`) appeared alongside the two
+just-registered ones — seeding worked, nothing was overwritten. All 9 starter charters were present.
+`GET /projects/{id}/settings` read `main_branch: "master"` on the very first read of a freshly
+opened project — reconfirms F4 fixed, now on a *second* fresh project, independent of the one used
+during prep. Repository root `git status` stayed clean throughout.
+
+**No new product findings.** Q1 was cold-start plumbing and every measured row was correct on the
+first real try (after the self-caught harness substring mistake, which is not product behaviour).
+Nothing to number as F51 yet — the first real product finding, if any, will come from Q2 driving the
+document flow.
+
+**What a reviewer should distrust:** the charter-substring friction was self-inflicted (my choice of
+match string, not a harness or product bug) — recorded so nobody re-diagnoses it as a real defect.
+Everything else in this entry has a command and its output behind it above.
+
+**Next:** Q2 — drive the spec flow live on `proj-8605b92d0028`, with `author` interviewing on a new
+document, honestly answered but one `ask_user` question left deliberately unanswered.

@@ -9,7 +9,8 @@
   "started_at": "2026-08-26T00:05:00+01:00",
   "stop_at": "2026-08-26T08:00:00+01:00",
   "stop_when_queue_empties": false,
-  "iteration": 0,
+  "iteration": 1,
+  "last_heartbeat": "2026-08-26T00:09:00+01:00",
   "green_at_arming": {
     "sha": "the branch tip at arming time",
     "hub_tests": "3127 passed, 84 skipped, 1 xpassed, 0 failed (672s, 2026-08-26 00:02)",
@@ -38,7 +39,8 @@
     },
     "existing_projects": {
       "proj-18e5d4e0": "ledger-stress at C:\\Users\\huida\\Documents\\aw-stress - accumulated state: approved document, 15 tasks, two in under_review (task-23a0986e7fe9 with critic, task-3cd54c17faa6 with relay), agents builder/critic (Haiku) and relay (Codex mini), six jobs ALL DISABLED",
-      "proj-5e960453": "this repository, spec-flow only, no agent may run a turn on it"
+      "proj-5e960453": "this repository, spec-flow only, no agent may run a turn on it",
+      "proj-8605b92d0028": "drive-2026-08-26 at C:\\Users\\huida\\Documents\\drive-2026-08-26, created in Q1 - inventory.py/test_inventory.py seeded with 3 uncovered defects (off-by-one in apply_bulk_discount, float== in is_low_stock, mutable default in add_tag), committed c88133f; agents author (claude/claude-haiku-4-5-20251001/Spec Author) and reviewer (codex/gpt-5.4-mini/Code Reviewer) registered and bound, no tasks yet"
     }
   },
 
@@ -46,7 +48,7 @@
     {
       "id": "Q1",
       "title": "Cold start: a fresh project through the whole setup path",
-      "status": "open",
+      "status": "closed",
       "detail": "Create a NEW project outside the repository and drive the cold-start path that ledger-stress can no longer exercise, because it already has everything. Use the harness: `cd .claude/skills/e2e-loop && AW_HUB_DB=\"C:/Users/huida/.agentweave/hub/profiles/beta/agentweave.db\" py -3.11 e2e.py setup drive-2026-08-26`. Then seed the directory with a REAL subject - a small Python module with three deliberately seeded defects the tests do not cover, the way `ledger` was built - because make-work fixtures never reach the parts of AgentWeave that decide whether work is GOOD. Register two agents on the two cheap runners (Haiku 4.5 and gpt-5.4-mini): `e2e.py agent <proj> author <charter-substring> claude claude-haiku-4-5-20251001` and `e2e.py agent <proj> reviewer <charter-substring> codex gpt-5.4-mini`. TWO runners is not optional - the first run of this skill found a defect that affected only Claude and would have reported the product healthy on one runner. Watch specifically: do the seeded charters attach and do the default runners appear; does the board come up empty and coherent rather than half-populated. Two things are ALREADY MEASURED during prep and do not need re-testing - POST /projects/open adopts main_branch correctly (F4 fires; read it from GET /projects/{id}/settings, NOT from the projects list, which omits the field), and the marker lands at .agentweave/project.json in the new directory carrying {version, project_id} and nowhere else. Record every friction as F51+ in scripts/drive/FINDINGS.md with the request and the row that proves it. If a step has no API, that absence IS the finding - write it down and continue, never paper over it in the harness.",
       "verify": "e2e.py state <new-proj> shows the project, both agents bound to their runners, and a clean board; the new project's directory contains .agentweave/project.json and the repository root's git status is still clean."
     },
@@ -115,8 +117,8 @@
     }
   ],
 
-  "current": "Q1",
-  "next_action": "Start Q1. Read this file and the last entry of .claude/autonomous/2026-08-26-drive-everything-log.md first, then reconcile git log and git status against what this file claims before trusting either. Confirm the Hub is alive AND on the right database - `curl -s http://127.0.0.1:8010/health` must be ok, and `curl -s -H \"Authorization: Bearer $(grep AW_BOOTSTRAP_API_KEY= hub/.env | cut -d= -f2)\" http://127.0.0.1:8010/api/v1/projects` must list proj-18e5d4e0 ledger-stress. IF IT LISTS ui-showcase-2026-08-22 INSTEAD, the Hub is on the wrong database - restart it with the environment.restart_hub command in this file, which sets DATABASE_URL. Then create the fresh drive project per Q1, seed it with a real subject carrying three uncovered defects, and register the two cheap-runner agents. Record findings as F51+ in scripts/drive/FINDINGS.md. Commit and push before the iteration ends, whatever state Q1 reached.",
+  "current": "Q2",
+  "next_action": "Start Q2 on proj-8605b92d0028 (drive-2026-08-26, at C:\\Users\\huida\\Documents\\drive-2026-08-26, seeded with inventory.py carrying three uncovered defects; agents author=claude/claude-haiku-4-5-20251001/Spec Author charter-35ddf2283310, reviewer=codex/gpt-5.4-mini/Code Reviewer charter-3be3dd63c942). Confirm the Hub is still alive and on the beta database before touching anything (see the Q1 log entry for the exact commands). Run `e2e.py doc-new proj-8605b92d0028`, then trigger the author agent on the document with `e2e.py turn` and let it interview you - answer honestly and decisively in prose, but DELIBERATELY leave one ask_user question unanswered. Drive close-exploration -> propose -> approve with `e2e.py close|propose|phase`. Watch the seams: exploring->proposing, approved-document->task materialisation, whether the unanswered question blocks/times out/vanishes. Verify against document_events, task rows and transitions in the database, not the chat transcript. Record findings as F51+ in scripts/drive/FINDINGS.md (Q1 produced none - clean cold start, logged as what HELD). Commit and push before the iteration ends, whatever state Q2 reached.",
 
   "decisions_for_user": [
     "F47 was offered during prep and you did NOT select it, so it is PARKED: the flow's own routing is still recorded as the operator's, and F45 extended that from assigned to under_review. If the drive re-finds it from the outside that is confirmation, not news. Cost when you do want it: no migration (task_transitions.actor_kind has no CHECK constraint), so it is the Python consumers plus deciding what to do with the existing indistinguishable rows.",
