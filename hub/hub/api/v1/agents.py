@@ -1254,6 +1254,19 @@ async def _render_hub_agent_context(
                     "- You cannot propose or approve. Those are the operator's, and there is no "
                     "argument that does either."
                 )
+                # The exit condition, stated as one (F38). Measured 2026-08-25: the author
+                # diagnosed the bug correctly and unprompted, then asked four well-judged questions
+                # as chat text in a turn that completed — no question row, nothing blocking, and
+                # the specification never written. Its charter already named `ask_user` six times,
+                # so the instruction existed and the tool worked; what was missing was anything
+                # saying that ending the turn was not one of the ways to finish.
+                lines.append(
+                    "- **Ending this turn without either submitting the document or calling "
+                    "`ask_user` is not a way to finish.** Questions written as ordinary reply text "
+                    "reach nobody: the turn ends, nothing is recorded, and the operator is not "
+                    "waiting for you. If you need an answer before you can write, ask for it with "
+                    "the tool."
+                )
                 # Precedence, not just procedure. Saying *how* to author a document does not settle
                 # *which authority governs it*, and until this was stated an agent read the block,
                 # understood it, and still opened with "I'm going to use the OpenSpec proposal

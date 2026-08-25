@@ -34,15 +34,15 @@
 - [x] 3.2 Emit the withheld-capability section for evidence decisions, stating who holds the authority and where to put a verdict instead
 - [x] 3.3 Audited. `GRANT_FIELDS` holds three grants; only `can_accept_evidence` appears in context at all. `can_read_checkpoints` and `can_recall` are announced in **neither** direction — recorded as **F39**, not fixed here: two of the three gate tools, so the general remedy is F21's territory rather than three more hand-written sections
 - [x] 3.4 Test: context for an ungranted agent states the limit; context for a granted agent is unchanged
-- [ ] 3.5 **Investigate F21 before fixing it** — how this surface defers tools (`src/agentweave/tool_surface.py`, `hub/hub/mcp_server.py`). Record what is found; the remedy is not settled
-- [ ] 3.6 Name the callable tools a turn needs in canonical context, per the investigation's finding
-- [ ] 3.7 Test: a turn whose deliverable includes recording evidence has that tool named by its exact callable name
-- [ ] 3.8 Implement the state-only non-outcome record for F38: terminal run + no question written + deliverable did not advance
-- [ ] 3.9 Surface that outcome to the operator on the run
-- [ ] 3.10 State the expectation in advance in canonical context — for an unwritten document, ending without submitting or asking is not a valid outcome
-- [ ] 3.11 Test: the four F38 scenarios, including that prose is never the evidence
-- [ ] 3.12 Confirm nothing added here inspects agent prose, and that migration `0082`'s retired backstop is not reintroduced
-- [ ] 3.13 Run the Hub suite; commit
+- [x] 3.5 Investigated. **The planned remedy already ships** — `record_evidence(` is named in every agent's context, pinned by `test_the_tools_are_named_to_every_agent_regardless`, and the agent's narration shows it had the name. The cause is deferred tool-schema loading in the spawned CLI (`runner_commands.py:224-236` passes `--mcp-config` + `--allowedTools`), which is that harness's behaviour, not the Hub's. Recorded in FINDINGS.md
+- [x] 3.6 **Already true**, and therefore not the fix — see 3.5. Left open with the cause named rather than closed with a change that would not have prevented it
+- [x] 3.7 Already covered by `test_the_tools_are_named_to_every_agent_regardless`
+- [x] 3.8 Implement the state-only non-outcome record for F38: terminal run + no question written + deliverable did not advance
+- [x] 3.9 Surface that outcome to the operator on the run
+- [x] 3.10 State the expectation in advance in canonical context — for an unwritten document, ending without submitting or asking is not a valid outcome
+- [x] 3.11 Test: the four F38 scenarios, including that prose is never the evidence
+- [x] 3.12 Confirm nothing added here inspects agent prose, and that migration `0082`'s retired backstop is not reintroduced
+- [x] 3.13 Run the Hub suite; commit
 
 ## 4. The tool with the largest payload gets a real refusal (F35)
 

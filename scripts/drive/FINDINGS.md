@@ -400,6 +400,43 @@ Not the review checkout's doing — the same agent, same runner, same project, r
 happily when asked for that alone. It looks like deferred-tool discovery interacting badly with a
 smaller model under a long instruction, which makes it a question about how the tool surface is
 presented rather than about the tool.
+### Investigated 2026-08-25 — the proposed remedy was already shipped, and the cause is not here
+
+`the-seams-of-the-sweep` task 3.5 called for an investigation before a fix, on the grounds that the
+remedy was unsettled. It was, and the investigation changed the finding.
+
+**The planned fix already exists.** The remedy on the table was "name the callable tools explicitly
+in canonical turn context, so a smaller model does not have to discover them." That is already
+true, for every agent, and has a test pinning it —
+`test_the_tools_are_named_to_every_agent_regardless` asserts `record_evidence(` and `list_evidence(`
+appear in the rendered context. The agent's own narration confirms it received the name:
+
+> "Now I'll record the evidence for FR-3. Let me invoke the record_evidence tool:"
+> "Now I need to find a way to call the mcp__agentweave__record_evidence tool."
+
+It knew what to call, including the fully-qualified `mcp__agentweave__` form. It could not *call*
+it, and looped on `ToolSearch` trying to load the schema.
+
+**Which puts the cause outside this codebase.** AgentWeave spawns `claude` with `--mcp-config` and
+`--allowedTools "mcp__agentweave__*"` (`runner_commands.py:224-236`). Whether the spawned CLI
+presents those 24 tool schemas eagerly or defers them behind a search step is that harness's
+behaviour, not something the Hub selects. The failure is the interaction of deferred tool loading
+with a smaller model under a long instruction — a real defect, and not one with a fix in `hub/`.
+
+Two things that *are* actionable were separated out rather than left inside this finding:
+
+1. **The invisible-failure half is now covered.** The worse cost recorded here was never the wasted
+   turn: it was that *"the run reports success"* while the evidence rows do not exist. That is the
+   same shape as **F38**, and `turn_produced_nothing` closes the shared half — a turn that was given
+   a deliverable, produced nothing, and asked nothing is now recorded. F21's evidence case is not
+   yet one of its triggers; the document case is. Worth extending once the shape has been driven.
+2. **F39** was found by the audit this group also called for, and its likely remedy is the same
+   question this finding raises: what the surface tells an agent it may call, in both directions.
+
+**Disposition:** the tool-reach half is **not fixable in AgentWeave** as it stands. Reducing the MCP
+surface below whatever threshold triggers deferral would work and is a product decision, not a bug
+fix — 24 tools is the surface the product deliberately has. Left open, with the cause named, rather
+than closed with a change that would not have prevented it.
 
 ## F22 (B) — Shared dependencies are not symlinked on this machine, and nothing says so
 

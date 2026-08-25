@@ -34,6 +34,16 @@ path of least resistance at the moment the agent had a question.
 - **WHEN** a run advanced the deliverable it was given
 - **THEN** no such outcome SHALL be recorded
 
+#### Scenario: A turn that was given no deliverable
+- **WHEN** a run was given no document and no task
+- **THEN** no such outcome SHALL be recorded, whatever the run produced
+- **AND** an ordinary conversational reply SHALL therefore never be recorded as a non-outcome
+
+#### Scenario: A turn given a task rather than a document
+- **WHEN** a run bound to a task ends without moving it
+- **THEN** the existing run-divergence behaviour SHALL apply unchanged
+- **AND** the two mechanisms SHALL NOT both record the same run
+
 #### Scenario: Prose is never the evidence
 - **WHEN** a run's final message reads like a question but no question was recorded and the deliverable advanced
 - **THEN** no such outcome SHALL be recorded

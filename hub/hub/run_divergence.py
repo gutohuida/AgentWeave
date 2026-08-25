@@ -24,7 +24,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .db.engine import async_session_factory
-from .db.models import Agent, Question, Run, RunDivergence, Task
+from .db.models import Agent, InboundQueueEntry, Question, Run, RunDivergence, SpecDocument, Task
 from .inbound_queue import new_entry
 from .run_task_binding import (
     DEFAULT_POLICY,
@@ -285,6 +285,86 @@ async def _announce_block(
     await sse_manager.broadcast(run.project_id, "task_blocked", payload)
 
 
+async def note_turn_that_produced_nothing(session: AsyncSession, run: Run) -> bool:
+    """Record a turn that was given a document to write, wrote none, and asked nothing (F38).
+
+    Measured 2026-08-25: the spec author read the code, diagnosed the bug correctly and unprompted,
+    and closed with four well-judged questions — as chat text, in a turn that then completed. No
+    `Question` row, no blocking, no parked task. The run was over and the specification was never
+    written. Its charter names `ask_user` six times; told plainly on the next turn, it used the tool
+    immediately and well. The mechanism works — what was missing was anything noticing that a turn
+    had produced nothing.
+
+    **Every fact used here is structured state, and the agent's prose is never read.** That is the
+    whole design, not an implementation detail. A backstop that inspected a run's final text for
+    something question-shaped existed until 2026-08-20 and was retired deliberately, because
+    guessing whether trailing prose is a question is a judgement the product should not make on the
+    operator's behalf; migration `0082` dropped its table. This reintroduces none of that. It asks
+    three questions with recorded answers: was this turn given a document, does that document have
+    content, and did this run write a question.
+
+    The task case is not handled here — a bound run that ends without moving its task is a
+    divergence, which is the rest of this module. This is the same shape for the deliverable that
+    has no task: `InboundQueueEntry.spec_document` exists precisely because the operator had a
+    document open when they sent the input.
+
+    A turn with no document named is not a candidate at all. Most turns are conversation, and a
+    reply that produces no row is the correct outcome for one — recording a non-outcome for every
+    chat turn would be noise the operator learns to ignore, which is worse than silence.
+
+    Returns whether anything was recorded.
+    """
+    document_path = await session.scalar(
+        select(InboundQueueEntry.spec_document)
+        .where(InboundQueueEntry.delivered_in_run_id == run.id)
+        .where(InboundQueueEntry.spec_document.isnot(None))
+        .limit(1)
+    )
+    if not document_path:
+        return False
+
+    document = await session.scalar(
+        select(SpecDocument)
+        .where(SpecDocument.project_id == run.project_id)
+        .where(SpecDocument.path == document_path)
+        .limit(1)
+    )
+    # No row, or a row with content, both mean this is not the F38 shape. `content_digest` is the
+    # digest of what was last submitted, so its absence is "nothing has ever been written here" —
+    # the state the author's document was left in.
+    if document is None or document.content_digest:
+        return False
+
+    # Any question, not only a blocking one. `ask_user(blocking=False)` is the agent leaving a note
+    # and carrying on, which is still the agent having said something the operator will see — and
+    # this check is about silence, not about whether the run waited.
+    asked = await session.scalar(
+        select(Question.id).where(Question.created_by_run_id == run.id).limit(1)
+    )
+    if asked:
+        return False
+
+    await persist_event(
+        session,
+        run.project_id,
+        "turn_produced_nothing",
+        {
+            "run_id": run.id,
+            "agent": run.agent,
+            "spec_document": document_path,
+            "document_phase": document.phase,
+            "run_exit_status": run.status,
+        },
+        agent=run.agent,
+        severity="warning",
+    )
+    await session.commit()
+    logger.info(
+        "run %s ended without writing %s and without asking anything", run.id, document_path
+    )
+    return True
+
+
 async def evaluate_run_end(run_id: str, *, input_returned: bool = False) -> Optional[str]:
     """The run boundary check. Returns the divergence id when one was recorded.
 
@@ -306,7 +386,14 @@ async def evaluate_run_end(run_id: str, *, input_returned: bool = False) -> Opti
         return None
     async with async_session_factory() as session:
         run = await session.get(Run, run_id)
-        if run is None or not run.task_id:
+        if run is None:
+            return None
+        if not run.task_id:
+            # No task to have neglected — but a turn can be given a deliverable that is not a task,
+            # and end having produced nothing (F38). Same boundary, same state-only reasoning, and
+            # it returns None either way: this is a note for the operator, not a divergence, so
+            # none of the policy machinery below applies to it.
+            await note_turn_that_produced_nothing(session, run)
             return None
         if await run_advanced_its_task(session, run):
             return None
