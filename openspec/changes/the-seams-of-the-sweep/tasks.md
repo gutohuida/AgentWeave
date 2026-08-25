@@ -56,17 +56,17 @@
 
 ## 5. The operator is told the truth (F31, F30, F34)
 
-- [ ] 5.1 Review this group's spec deltas against `hub/hub/runner_events.py`, `hub/hub/launchability.py` and `src/agentweave/cli.py`
-- [ ] 5.2 Narrow `_SECRET_VALUE_RE`'s high-entropy alternative to exclude `_` and `-`, leaving both credential prefixes untouched
-- [ ] 5.3 Test both directions: the Hub's own tool names and minted slugs survive; prefixed and unprefixed credentials still redact
-- [ ] 5.4 Key the launchability runner merge on `runner_id` rather than on `self_registered` (`launchability.py:353`)
-- [ ] 5.5 Test the real invariant: the probe and the spawn describe the same runner for a self-registered bound agent
-- [ ] 5.6 Test: an agent with no runner bound is told so, and no CLI is named after the agent
-- [ ] 5.7 Thread the global `--port` as the subcommand default, with an explicit subcommand flag winning
-- [ ] 5.8 Report a natively started instance as native rather than Docker
-- [ ] 5.9 Make `doctor` examine the instance the project is bound to, and report unreachability as a failure rather than omitting it
-- [ ] 5.10 Keep the CLI's own code importing nothing outside the stdlib
-- [ ] 5.11 Run `py -3.11 -m pytest tests/ -q` for the CLI and the Hub suite; commit
+- [x] 5.1 Review this group's spec deltas against `hub/hub/runner_events.py`, `hub/hub/launchability.py` and `src/agentweave/cli.py`
+- [x] 5.2 Narrow `_SECRET_VALUE_RE`'s high-entropy alternative to exclude `_` and `-`, leaving both credential prefixes untouched
+- [x] 5.3 Test both directions: the Hub's own tool names and minted slugs survive; prefixed and unprefixed credentials still redact
+- [x] 5.4 Key the launchability runner merge on `runner_id` rather than on `self_registered` (`launchability.py:353`)
+- [x] 5.5 Test the real invariant: the probe and the spawn describe the same runner for a self-registered bound agent
+- [x] 5.6 Test: an agent with no runner bound is told so, and no CLI is named after the agent
+- [x] 5.7 Thread the global `--port` as the subcommand default, with an explicit subcommand flag winning
+- [x] 5.8 Report a natively started instance as native rather than Docker
+- [x] 5.9 Done, with one correction: unreachable is a **warn**, not a fail — `doctor` runs before first launch as often as after it, and "nothing is serving yet" is the ordinary state then. Also gained `--port`/`--profile`, which it had neither of
+- [x] 5.10 Keep the CLI's own code importing nothing outside the stdlib
+- [x] 5.11 Run `py -3.11 -m pytest tests/ -q` for the CLI and the Hub suite; commit
 
 ## 6. Approval attaches to bytes, not to a path (F29)
 

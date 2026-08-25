@@ -24,7 +24,26 @@ MAX_PAYLOAD_BYTES = 64 * 1024
 MAX_TOOL_RESULT_BYTES = 8 * 1024
 
 _SECRET_FIELD_RE = re.compile(r"(api[_-]?key|token|secret|password|authorization)", re.I)
-_SECRET_VALUE_RE = re.compile(r"(aw_live_[A-Za-z0-9_=-]+|sk-[A-Za-z0-9_=-]+|[A-Za-z0-9_=-]{32,})")
+
+#: Two known credential prefixes, then a bounded high-entropy catch-all.
+#:
+#: The third alternative used to be `[A-Za-z0-9_=-]{32,}`, which matched **any** long identifier
+#: (F31). Measured 2026-08-25, it redacted the Hub's own vocabulary:
+#:
+#:     41  <redacted>  <- spread-fairness-metric-fix-for-idle-staff
+#:     37  <redacted>  <- mcp__agentweave__submit_spec_document
+#:     32  <redacted>  <- mcp__agentweave__record_evidence
+#:     42  <redacted>  <- this_is_a_perfectly_ordinary_function_name
+#:
+#: The Hub mints those document slugs itself from titles agents choose, and it names its own MCP
+#: tools — so the rule was guaranteed to fire on the Hub's own words whenever a title ran long, and
+#: the operator lost precisely the identifier saying *which* document an agent read.
+#:
+#: Excluding `_` and `-` is what separates the two populations. Raw credentials are hex or base64
+#: and carry neither; identifiers a human or the Hub composed are made of joined words and carry
+#: one or the other. A credential that does contain them is still caught whenever it wears a known
+#: prefix, which is what the first two alternatives are for, and those are untouched.
+_SECRET_VALUE_RE = re.compile(r"(aw_live_[A-Za-z0-9_=-]+|sk-[A-Za-z0-9_=-]+|[A-Za-z0-9+/=]{32,})")
 
 
 def redact_secrets(value: Any) -> Any:

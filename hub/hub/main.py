@@ -214,6 +214,24 @@ def _has_uncommitted_ui_source(ui_src: Path) -> bool:
 _ui_staleness_cache: "tuple[float, Optional[str]] | None" = None
 
 
+def _runtime_kind() -> str:
+    """Whether this process is running in a container or directly on the host (F34).
+
+    Reported on `/health` because **this process is the only thing that knows**. The CLI used to
+    infer it — `native` if it found a PID file it had written, `docker` otherwise — which made the
+    absence of its own bookkeeping proof of a container. Measured 2026-08-25: a Hub started by hand
+    with `uvicorn` was reported `running (docker)`.
+
+    `/.dockerenv` is the conventional marker and is present in Docker's own images; `AW_RUNTIME`
+    overrides it for anything that containerises differently, so a deployment this check does not
+    recognise can state the answer rather than be guessed about.
+    """
+    declared = os.environ.get("AW_RUNTIME", "").strip()
+    if declared:
+        return declared
+    return "docker" if Path("/.dockerenv").exists() else "native"
+
+
 def _ui_staleness_warning() -> Optional[str]:
     global _ui_staleness_cache
     now = time.monotonic()
@@ -355,7 +373,7 @@ def create_app() -> FastAPI:
 
     @app.get("/health", include_in_schema=False)
     async def health():
-        payload: Dict[str, Any] = {"status": "ok"}
+        payload: Dict[str, Any] = {"status": "ok", "runtime": _runtime_kind()}
         warning = _ui_staleness_warning()
         if warning:
             payload["ui_stale"] = True

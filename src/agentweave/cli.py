@@ -82,24 +82,29 @@ def cmd_status(args: argparse.Namespace) -> int:
     hub_url = _hub_url(port)
     health_url = _hub_health_url(port)
 
-    # Check native PID first
+    # A PID file this CLI wrote proves the instance is native and names the process. Its *absence*
+    # proves nothing — the Hub may have been started by hand, which is exactly how the trial
+    # instance runs — so it is no longer used to conclude "docker" (F34).
     pid = _hub_pid_running(port=port, profile=profile)
-    mode_label = "native" if pid is not None else "docker"
 
     try:
         with _req.urlopen(health_url, timeout=5) as resp:
             if resp.status == 200:
-                print(f"[HUB] Status: running ({mode_label})")
+                body = {}
+                with contextlib.suppress(ValueError, UnicodeDecodeError, json.JSONDecodeError):
+                    body = json.loads(resp.read().decode("utf-8"))
+                # The running process says what it is. Only it knows. An older Hub that does not
+                # report `runtime` is described without a mode rather than guessed about.
+                mode = body.get("runtime") or ("native" if pid is not None else "")
+                print(f"[HUB] Status: running ({mode})" if mode else "[HUB] Status: running")
                 print(f"   URL:    {hub_url}")
                 projects = _hub_project_status_summary(port)
                 if projects:
                     print(f"   Projects: {projects}")
                 if pid is not None:
                     print(f"   PID:    {pid}")
-                with contextlib.suppress(ValueError, UnicodeDecodeError, json.JSONDecodeError):
-                    body = json.loads(resp.read().decode("utf-8"))
-                    if body.get("ui_stale"):
-                        print_warning(f"   {body.get('ui_stale_detail', 'UI bundle is stale.')}")
+                if body.get("ui_stale"):
+                    print_warning(f"   {body.get('ui_stale_detail', 'UI bundle is stale.')}")
                 return 0
     except _uerr.HTTPError as exc:
         print(f"[HUB] Status: error (HTTP {exc.code})")
@@ -118,7 +123,11 @@ def cmd_doctor(args: argparse.Namespace) -> int:
 
     from .diagnostics import collect_diagnostics, format_results, has_failures, summarize
 
-    results = collect_diagnostics(include_network=not getattr(args, "no_network", False))
+    port = getattr(args, "port", None) or DEFAULT_HUB_PORT
+    profile = getattr(args, "profile", "default") or "default"
+    results = collect_diagnostics(
+        include_network=not getattr(args, "no_network", False), port=port, profile=profile
+    )
     if getattr(args, "json", False):
         payload = {
             "summary": summarize(results),
@@ -1403,30 +1412,53 @@ For more help: https://github.com/gutohuida/AgentWeave
     doctor_parser.add_argument(
         "--no-network", action="store_true", help="Skip network reachability checks"
     )
+    # F34: without these, `doctor` could only ever examine port 8000 and the default profile — so
+    # run inside a project bound to another instance it described a Hub that project does not use
+    # and still reported every check passing. SUPPRESS for the same reason as `status` above.
+    doctor_parser.add_argument(
+        "--port",
+        type=int,
+        default=argparse.SUPPRESS,
+        help="Port of the Hub to examine (default: 8000)",
+    )
+    doctor_parser.add_argument(
+        "--profile",
+        type=str,
+        default=argparse.SUPPRESS,
+        help="Named Hub instance to examine",
+    )
 
     status_parser = subparsers.add_parser("status", help="Check whether the Hub is running")
+    # `default=argparse.SUPPRESS`, not `None`/`"default"` (F34). A subparser argument sharing a
+    # dest with a global one **overwrites** it in the same namespace when the subcommand omits it,
+    # so `agentweave --port 8010 status` set port=8010 and then the subparser's own default put it
+    # back to None. Measured 2026-08-25 against a Hub confirmed live: the documented form reported
+    # `stopped` while `status --port 8010` reported it running, and neither errored — so the
+    # operator was simply told the service was down while it was serving requests. SUPPRESS leaves
+    # the attribute unset when the flag is absent, so the global value survives and an explicit
+    # subcommand flag still wins.
     status_parser.add_argument(
         "--port",
         type=int,
-        default=None,
+        default=argparse.SUPPRESS,
         help="Port to check (default: 8000; required if --profile names a non-default profile)",
     )
     status_parser.add_argument(
-        "--profile", type=str, default="default", help="Named Hub instance to check"
+        "--profile", type=str, default=argparse.SUPPRESS, help="Named Hub instance to check"
     )
 
     stop_parser = subparsers.add_parser("stop", help="Stop a running Hub instance")
     stop_parser.add_argument(
         "--port",
         type=int,
-        default=None,
+        default=argparse.SUPPRESS,
         help="Port to stop (default: 8000; required if --profile names a non-default profile)",
     )
     stop_parser.add_argument(
         "--local", action="store_true", help="Docker dev mode: stop the ./hub/ compose project"
     )
     stop_parser.add_argument(
-        "--profile", type=str, default="default", help="Named Hub instance to stop"
+        "--profile", type=str, default=argparse.SUPPRESS, help="Named Hub instance to stop"
     )
 
     reset_parser = subparsers.add_parser("reset", help="Destroy local Hub state and start clean")
@@ -1434,7 +1466,7 @@ For more help: https://github.com/gutohuida/AgentWeave
     reset_parser.add_argument(
         "--profile",
         type=str,
-        default="default",
+        default=argparse.SUPPRESS,
         help="Only destroy this named profile's data, not the default profile's",
     )
     reset_parser.add_argument(

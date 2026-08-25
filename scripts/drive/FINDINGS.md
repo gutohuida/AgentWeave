@@ -1017,6 +1017,58 @@ The remedy is probably not three more hand-written sections. Two of these three 
 (`recall`, and checkpoint reads), so the general form is likely "the tool surface states what this
 agent may call, in both directions" — F21's territory. Recorded separately so that whoever settles
 F21 knows this is part of the same question.
+---
+
+## F40 (B) — `test_relocate_repairs_and_redrains_queued_work` is flaky, and has been all along
+
+**Measured 2026-08-25**, while verifying an unrelated change. Not a product defect — a defect in
+the suite that guards the product, which is worth the same attention because it is what decides
+whether a red run gets believed.
+
+`hub/tests/test_project_workspace_unavailable.py::test_relocate_repairs_and_redrains_queued_work`
+fails intermittently. Measured on its own file, nothing else running:
+
+```
+run 1   7 passed
+run 2   1 failed, 6 passed      <- same test
+run 3   7 passed
+```
+
+**And it is not new.** The same file, with the three Group 5 source changes stashed so the tree was
+clean:
+
+```
+7 passed / 7 passed / 7 passed / 7 passed / 1 failed, 6 passed
+```
+
+One in five on an unmodified checkout. It surfaced here only because this session ran the full Hub
+suite six times in a day, which is more consecutive full runs than the suite normally gets.
+
+**The likely mechanism**, from reading the test rather than instrumenting it. The test drains a
+queue through `POST /relocate` and then awaits the background work it started:
+
+```python
+for task in list(agent_trigger._background_runs):
+    await task
+```
+
+That snapshots the set at the moment the loop runs. A run the redrain schedules but has not yet
+registered is not in the snapshot, so the assertions below it — exactly one other run, and that run
+`completed` — are evaluated against work still in flight. Nothing in the test waits for the
+redrain to have *finished scheduling*, only for whatever happened to be scheduled already.
+
+If that is right, the fix is a condition rather than a snapshot: wait until the expected run exists
+and is terminal, with a bounded timeout, instead of awaiting whatever set membership happens to
+hold at one instant. The same `_background_runs` idiom appears in other tests and is worth checking
+for the same race.
+
+**Why it matters beyond one red run.** A suite with a known-flaky test trains its readers to re-run
+rather than to read, and this one guards workspace relocation — the repair path for a project whose
+directory moved. A real regression there would look exactly like the noise.
+
+Left unfixed here deliberately: it is not part of the sweep remediation, and changing a test's
+synchronisation while shipping six other changes would make a genuine failure harder to attribute.
+Recorded so the next full-suite red run is read correctly rather than dismissed *or* chased.
 
 ## What held, under a full-surface sweep
 

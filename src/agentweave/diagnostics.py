@@ -229,19 +229,84 @@ def _port_is_available(port: int) -> bool:
         return False
 
 
-def check_port_availability(port: int = 8000) -> DiagnosticResult:
+def check_hub_instance(port: int = 8000) -> DiagnosticResult:
+    """Ask the Hub on `port` what it is, rather than reasoning about it from the outside (F34).
+
+    The one check here that contacts the instance the operator actually uses. Without it `doctor`
+    could report six passes while describing a Hub that was not running and a database nobody
+    served — which is what it did, measured 2026-08-25 from a project bound to port 8010.
+
+    Not reachable is a **warn**, not a fail: `doctor` is run before first launch as often as after
+    it, and "nothing is serving yet" is the ordinary state then. What would be wrong is saying
+    nothing.
+    """
+    url = f"http://127.0.0.1:{port}/health"
+    body: dict = {}
+    try:
+        with urllib.request.urlopen(url, timeout=5) as resp:
+            raw = resp.read().decode("utf-8")
+        try:
+            body = json.loads(raw)
+        except (ValueError, UnicodeDecodeError):
+            body = {}
+    except (urllib.error.URLError, OSError) as exc:
+        return warn(
+            "hub_not_running",
+            f"port:{port}",
+            f"No Hub answered on port {port} ({exc}).",
+            hint=f"Start it with `agentweave --port {port} hub-start`, if it should be running.",
+            category="environment",
+            data={"port": port},
+        )
+
+    runtime = body.get("runtime") or "unknown"
+    if body.get("ui_stale"):
+        return warn(
+            "hub_ui_stale",
+            f"port:{port}",
+            f"The Hub on port {port} is running ({runtime}) but its bundled interface is stale.",
+            hint=body.get("ui_stale_detail") or "Rebuild the UI bundle.",
+            category="environment",
+            data={"port": port, "runtime": runtime},
+        )
+    return ok(
+        "hub_running",
+        f"port:{port}",
+        f"The Hub on port {port} is running ({runtime}) and answering.",
+        category="environment",
+        data={"port": port, "runtime": runtime},
+    )
+
+
+def check_port_availability(port: int = 8000, hub_answered: bool = False) -> DiagnosticResult:
+    """Whether this port is usable, given what is already on it.
+
+    `hub_answered` is what makes an occupied port readable rather than alarming. Once
+    `check_hub_instance` has asked *what* is there, "in use" splits into two very different facts:
+    the operator's own healthy Hub, which is the normal state of a working system and must not be
+    reported as a failure — and something else holding the port, which is a real conflict and keeps
+    the remediation it always had.
+    """
     if _port_is_available(port):
         return ok(
             "hub_port_available",
             f"port:{port}",
-            f"Port {port} is available for the Hub.",
+            f"Port {port} is free, so nothing is serving on it yet.",
+            category="environment",
+            data={"port": port},
+        )
+    if hub_answered:
+        return ok(
+            "hub_port_in_use_by_hub",
+            f"port:{port}",
+            f"Port {port} is in use by the Hub that just answered on it.",
             category="environment",
             data={"port": port},
         )
     return fail(
         "hub_port_unavailable",
         f"port:{port}",
-        f"Port {port} is already in use.",
+        f"Port {port} is already in use, and no Hub answered on it.",
         hint=f"Stop the process using port {port}, or start AgentWeave with --port <free-port>.",
         category="environment",
         data={"port": port},
@@ -255,8 +320,19 @@ def _nearest_existing_parent(path: Path) -> Path:
     return candidate
 
 
-def check_database_accessibility() -> DiagnosticResult:
-    database = NATIVE_HUB_DIR / "data" / "agentweave.db"
+def _profile_data_dir(profile: str = "default") -> Path:
+    """Where a profile keeps its database. Mirrors `cli._hub_profile_data_dir`.
+
+    Restated rather than imported to keep `diagnostics` free of a dependency on `cli`, which
+    imports it. `test_doctor_follows_the_profile` asserts the two agree.
+    """
+    if profile and profile != "default":
+        return NATIVE_HUB_DIR / "profiles" / profile
+    return NATIVE_HUB_DIR / "data"
+
+
+def check_database_accessibility(profile: str = "default") -> DiagnosticResult:
+    database = _profile_data_dir(profile) / "agentweave.db"
     if not database.exists():
         parent = _nearest_existing_parent(database.parent)
         if os.access(parent, os.W_OK):
@@ -969,22 +1045,34 @@ def check_jobs() -> list[DiagnosticResult]:
 
 
 def collect_diagnostics(
-    *, include_network: bool = True, port: int = 8000
+    *, include_network: bool = True, port: int = 8000, profile: str = "default"
 ) -> list[DiagnosticResult]:
     """Collect non-mutating readiness checks for the single native runtime.
 
-    ``include_network`` remains accepted for CLI/API compatibility. The port probe is a local bind
-    check and does not contact a running Hub or any external service.
+    ``port`` and ``profile`` name the instance to examine. They matter (F34): run from inside a
+    project bound to a Hub on another port, this used to probe 8000 and the default profile's
+    database — neither of which was the Hub that project uses — and return every check passing
+    without having looked at the running instance at all. A clean bill of health that inspected the
+    wrong thing is worse than no report.
+
+    ``include_network`` remains accepted for CLI/API compatibility. It no longer suppresses
+    anything: the instance probe below contacts `127.0.0.1` only, which is the same machine every
+    other check here already reads.
     """
     del include_network
-    return [
+    results = [
         check_python_version(),
         check_hub_runtime(),
         check_runner_clis(),
-        check_port_availability(port),
-        check_database_accessibility(),
-        check_hub_state_permissions(),
     ]
+    instance = check_hub_instance(port)
+    results.append(instance)
+    # The port check reads the instance result rather than probing again: "in use" means something
+    # different once you know the Hub itself is what is holding it.
+    results.append(check_port_availability(port, hub_answered=instance.status != "warn"))
+    results.append(check_database_accessibility(profile))
+    results.append(check_hub_state_permissions())
+    return results
 
 
 def has_failures(results: Iterable[DiagnosticResult]) -> bool:
