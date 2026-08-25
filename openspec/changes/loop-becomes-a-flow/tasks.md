@@ -969,8 +969,18 @@ change unarchived, so it is fixed here. Design D17.
       are there (`session_mode: new` gives every firing its own conversation). Both passed ten green
       tests. The fixture now matches production on both counts, and narrowing either gate back fails
       5 of 10. Caught before push — the first of this change's four dead-fix instances that was.
-- [ ] 14.6 **Re-verify live against the trial Hub.** Not closed by unit tests - F41, F45 and F49 are
-      this change's own three precedents for a fix that passed its tests and could not fire.
-      Needs `checkpoint_runner_id` set on `ledger-stress`, which has none today, so even the
-      operator button 409s: that is configuration the operator chooses, since it decides which CLI
-      is billed.
+- [x] 14.6 **Re-verified live against the trial Hub**, 2026-08-25, on `ledger-stress`
+      (`loop-e4b864459808`), with `checkpoint_runner_id` set to the project's `Haiku cheap` runner.
+      Not closed by unit tests - F41, F45 and F49 are this change's own three precedents for a fix
+      that passed its tests and could not fire.
+      **The counterfactual was measured first, read-only, across all 156 runs in the live database:
+      the first implementation fires 0 times, the corrected one fires 2.** Then driven for real:
+      both produced a checkpoint carrying the author's note, including `note-e8cf4afcb4b1` - the
+      exact note F43's own write-up cites as written for `critic` about `task-23a0986e7fe9`.
+      Checkpoints with a `loop_id` went **0 of 6 -> 2**, and unconsumed notes **4 -> 2** (the
+      remaining two belong to `relay`, whose runs completed no task).
+- [ ] 14.7 **F50 - decide what a reviewer is shown when a checkpoint fails its probe.** Found by
+      14.6's drive and caused by F43 becoming real: 1 of the 2 generated checkpoints was graded
+      `failed` against the Hub's own envelope, and `render_checkpoint` surfaces neither `status` nor
+      `probe_status`, so it briefs identically to one that passed. The operator's call between
+      skipping it, rendering the failure, and leaving it.

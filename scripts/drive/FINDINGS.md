@@ -1725,3 +1725,49 @@ Fixed to `{task_id for task_id, _agent in decision.in_flight}`, with
 when F26 landed.
 
 ---
+
+---
+
+## F50 (B) — a checkpoint that failed its own probe is briefed to the reviewer as though it passed
+
+Found 2026-08-25 by the live drive that verified F43, and **caused by F43 becoming real**: before
+it, no loop checkpoint had ever existed, so nothing was ever briefed and the question could not
+arise. The behaviour itself is pre-existing in `render_checkpoint`.
+
+Driving the corrected F43 trigger against the live trial database generated two handover
+checkpoints from real stranded notes. **One of the two failed its probe:**
+
+| checkpoint | agent | status | probe_status | body |
+|---|---|---|---|---|
+| `ckpt-a545dd785d8d` | `builder` | `ready` | `passed` | 1781 chars |
+| `ckpt-9cba6c0e8e40` | `critic` | **`failed`** | **`failed`** | 865 chars |
+
+`status = failed` means exactly one thing here, stated by `probe_checkpoint`'s own comment:
+*"Ready means a record exists and passed. It has never meant the run stopped."* The model's written
+summary was graded against the Hub's computed envelope and **disagreed with it**.
+
+`render_checkpoint` appends `checkpoint.body` whenever one exists and renders no `status` and no
+`probe_status` at all. Neither `latest_checkpoint_for_loop` nor `checkpoint_by_task_author` filters
+on status either. So the reviewer receives a summary the product has already judged to contradict
+its own database, under the heading `## Prior checkpoint`, indistinguishable from one that passed.
+
+**The note is consumed either way, and that half is deliberate** — `generate_checkpoint` says so:
+*"Marked consumed even when generation failed. The notes described a moment that has now passed;
+carrying them into a later checkpoint would present stale intent as current."* That reasoning holds.
+Combined with this, though, the consequence is that a probe failure costs the reviewer the author's
+notes **and** hands it a summary known to be wrong.
+
+Rate on the only live sample that exists: **1 of 2**.
+
+Three ways to close it, and choosing between them is a product judgement rather than a mechanical
+fix:
+
+1. **Skip a failed checkpoint when briefing** and fall back to the next candidate. The reviewer gets
+   less, but nothing false.
+2. **Render it with the failure stated** — the computed half is the Hub's own and remains accurate,
+   so the envelope is still worth delivering; only the written half is suspect.
+3. **Leave it**, on the argument that a disagreeing summary beside accurate computed fields is still
+   better than nothing.
+
+Recorded, not fixed.
+
