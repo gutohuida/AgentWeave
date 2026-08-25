@@ -563,3 +563,406 @@ Worth settling because 11.5 asks whether a wide board says *what* is happening, 
 whose meaning changes with task status is exactly what would make three such lines unreadable.
 
 ---
+
+## F27 (A) — a run can complete tasks it was never given and never did
+
+**2026-08-25 full-surface sweep, project `aw-sweep`.** The most expensive finding of the run.
+
+`run-fba9bbc08b8d` was a concurrency probe. Its entire prompt was *"concurrency probe 1: reply
+CONC-1 only"*. It carried `task_id = NULL` — no binding to any task. Its first recorded words are
+*"Message sent successfully. Now let me check for any assigned tasks."*
+
+It then moved **four** unrelated tasks `pending → in_progress → completed`:
+
+```
+task-a57fc76baf30  C: document the fairness guarantee in README
+task-43b57060ddc5  A: add a failing test for spread() with an idle member
+task-c4c939ed8d31  B: fix spread() to count every staff member
+task-301d3de1bb6b  Fix spread() to count idle staff
+```
+
+A later unbound run, `run-e8a02702cd01`, completed two more. Six tasks recorded as finished; no work
+was done on any of them. Read straight from `task_transitions`:
+
+```
+task-a57fc76baf30 : pending -> in_progress | actor= run | run= run-fba9bbc08b8d
+task-a57fc76baf30 : in_progress -> completed | actor= run | run= run-fba9bbc08b8d
+```
+
+**Nothing here is a bug in isolation, which is why no test catches it.** Three correct decisions
+compose into a wrong outcome:
+
+1. The Developer charter, line 33, instructs the agent: *"Call `list_tasks` to see what is waiting,
+   and `get_task` for the one you are taking"*. Going to find work is the behaviour asked for.
+2. `TRANSITIONS` grants a `run` actor both `pending → in_progress` and `in_progress → completed`.
+   Both are legal, so `task_transition_service` is right to allow them.
+3. `completed` requires no evidence — deliberately and correctly. `requirement_gate` refuses at
+   `approved`, not at `completed`, because evidence is accepted after review and review follows
+   completion; refusing `completed` would deadlock the ordinary path. Its docstring says so.
+
+The gap is that **`update_task` never asks whether the run is bound to the task it is closing.**
+`run_task_binding` exists precisely to answer "what is this run working on", and the write path does
+not consult it. The one fact that separates "I finished this" from "I noticed this" is recorded and
+unused.
+
+Why it matters beyond tidiness: `completed` is in `BAND_AWAITING_HANDOFF`, so a flow will offer
+every one of these six to *another* agent as reviewable work. A reviewer sees a task marked finished
+by a peer, finds the code already correct — it was, because a different agent really had done that
+work — and approves. `task_integration` then merges. The chain from "an agent glanced at a list" to
+"work is on master" has no human in it and no single false statement along the way.
+
+**Suggested shape, not a prescription:** for `-> completed` only, require the acting run's bound task
+to match, leaving the operator unaffected. That is one condition inside `apply_transition`, beside
+the two gates already there.
+
+---
+
+## F28 (B) — a flow created after its document is approved has a permanently empty queue
+
+Same session. `spdoc-3e0dbec860d0` was approved, materialising five tasks. A flow was then created
+against that same document — accepted, `201`, the document claim held, everything looked right:
+
+```
+loop-d6da88c89c56 | Spread flow | stop_when_queue_empties: true | queue: {} | current_tasks: []
+```
+
+The five tasks carry `spec_document_id = spdoc-3e0dbec860d0` and `loop_id = NULL`.
+
+**Cause, from the code.** `spec_tasks.materialise()` resolves `owning_loop` with
+`select(Loop).where(Loop.spec_document_id == document.id)` and stamps `loop_id` on each task as it
+creates it (`spec_tasks.py:117`, `:216`). Nothing back-fills. The comment at `:114` states the
+assumption plainly — *"the binding was fixed at loop-creation time"* — which holds only when the
+loop already exists at approval. Every loop-queue query reads `Task.loop_id`
+(`scheduler.py:314, 327, 644, 1305, 1569`), never `spec_document_id`, so the tasks are invisible to
+the flow that owns their document.
+
+There is no error and no warning. `stall_reason` is `null`.
+
+**And it is worse than a stall.** Firing it produced `run-536479b417d4` — a real turn, on a real
+model, against an empty queue, despite `stop_when_queue_empties: true`. The failure mode is not
+"nothing happens"; it is "an agent is spawned with nothing to do", on a cron, indefinitely.
+
+The working order — create the flow, *then* approve the document — is not stated in `create_flow`'s
+docstring, which says only that tasks "are added to this flow's queue automatically".
+
+---
+
+## F29 (B) — an approved document tampered with on disk is served to everyone, silently
+
+Same session. `spec/changes/spread-fairness-metric-fix-for-idle-staff/spec.html` was approved, then
+edited directly on disk with `<p>TAMPERED BEHIND THE HUB</p>`.
+
+```
+GET /projects/{p}/project/spec?path=...  -> 200, body contains "TAMPERED"
+GET /projects/{p}/project/documents      -> divergence: None, diverged: None
+```
+
+Every reader — the operator in the Spec tab, and any agent calling `read_spec_document` — receives
+the tampered text with nothing marking it.
+
+The Hub is not missing the information. `SpecDocument.content_digest` holds the digest of what was
+approved, and `spec_lifecycle.divergence(document, content_on_disk)` exists to compare them. It has
+exactly one caller — `spec_service.py:236`, on the **save** path. So divergence is noticed only when
+somebody tries to write, and never when somebody reads.
+
+That inverts the guarantee the phase machine is built to provide. `spec_lifecycle`'s docstring opens
+on the rule that *an agent cannot approve a document*, enforced by reading the phase from a row
+rather than from the file the agent can write. The row is indeed authoritative for the phase; the
+**content** is still served from the file, unchecked. Approval therefore attaches to a path, not to
+the bytes anyone subsequently reads.
+
+---
+
+## F30 (B) — a self-registered agent bound to a runner reports a CLI named after itself
+
+Same session. Three agents were created via `POST /agents/register` and then bound with
+`PATCH /agents/{name}` — the exact sequence this repo's own harness uses
+(`.claude/skills/e2e-loop/e2e.py`, `cmd_agent`). All three were reported unlaunchable:
+
+```
+architect  runner=native  cli=architect  runnable=False  reason="Runner CLI 'architect' was not found in PATH."
+probe      runner=claude  cli=claude     runnable=True   collab=True
+```
+
+`probe` differs only in having been created through `POST /agents`, the UI's Add-agent path.
+Database rows: all four carry a real `runner_id`; the three broken ones carry `self_registered = 1`.
+
+`launchability.get_agent_config` gates the entire bound-runner merge behind
+`if agent_row is not None and not agent_row.self_registered:` (`launchability.py:353`). The
+exemption is deliberate and its reasoning is sound — a self-registered agent manages its own
+execution and legitimately has no `Runner`. But it is written as `self_registered ⇒ unbound`, and
+nothing enforces that: `self_registered = 1` with a non-null `runner_id` is reachable through two
+ordinary API calls.
+
+**Report-only.** Triggering one works — `run-c2b75b561127` completed normally on the bound runner —
+because `trigger_agent_directly` reads `runner_id` directly. So the probe and the spawn disagree
+about the same agent, and the probe is the one the operator sees.
+
+The docstring above that line already records this bug's previous incarnation, fixed 2026-08-21,
+which reported "a missing CLI named after the agent" for the unbound case. This is the same symptom
+reached through the other branch of the same condition.
+
+---
+
+## F31 (B) — `_SECRET_VALUE_RE` redacts any 32-character identifier, including the Hub's own
+
+Same session. Transcripts render as:
+
+```
+TOOL: {"include": "full", "path": "spec/changes/<redacted>/spec.html"}
+TOOL: {"max_results": 2, "query": "select:<redacted>,<redacted>"}
+```
+
+`runner_events._SECRET_VALUE_RE` is
+`(aw_live_[A-Za-z0-9_=-]+|sk-[A-Za-z0-9_=-]+|[A-Za-z0-9_=-]{32,})`. The third alternative matches
+**any** run of 32 or more word/hyphen characters. Measured:
+
+```
+41  <redacted>  <- spread-fairness-metric-fix-for-idle-staff
+37  <redacted>  <- mcp__agentweave__submit_spec_document
+32  <redacted>  <- mcp__agentweave__record_evidence
+42  <redacted>  <- this_is_a_perfectly_ordinary_function_name
+40  <redacted>  <- aw_live_58ab7d84a1bf7b34eb2d1b424875bacd
+```
+
+The Hub mints those document slugs itself from the title the agent chose, and it names its own MCP
+tools. The rule is therefore guaranteed to fire on the Hub's own vocabulary whenever a title runs
+long, and the operator loses precisely the identifier that says *which* document the agent read.
+
+Real credentials are already caught by the two prefix alternatives, which is what makes the third so
+costly: it removes legitimate content to catch secrets the first two have caught already.
+
+---
+
+## F32 (B) — an agent is told what it may do, never what it may not
+
+Same session, and the clearest instance of a general shape.
+
+`rev` was asked to review work and decide the evidence. It spent a full Codex turn — 97 recorded
+output rows, a genuine review including running the suite twice and writing a hand reproducer — then:
+
+```
+Error calling tool 'decide_evidence': Hub rejected POST /spec/evidence/ev-.../decision (403):
+{'message': "accepting evidence is the operator's, or an agent the operator has granted it.
+ A project that has granted no agent still has the operator.", 'code': 'acceptance_not_granted'}
+```
+
+The refusal itself is good: correct, and it names who holds the authority. The problem is *when* it
+arrives. `list_evidence` had succeeded moments earlier, so the agent could read the queue it was not
+permitted to answer, and nothing in its canonical context said so.
+
+The code knows. `agents.py:1321` carries the comment:
+
+> A capability an agent does not know it holds is one it does not use, and one it guesses at is a
+> 403 in the middle of a turn it has already spent. This is the `submit_spec_document` failure mode
+> exactly: served, correct, and invisible.
+
+The section it guards is then emitted **only when the grant is held.** Granting
+`can_accept_evidence` did add "### You can decide evidence", correctly and helpfully, including the
+self-review rule. The negative case emits nothing — so the stated principle is applied in one
+direction, and the failure mode the comment names is the one that survives.
+
+Consequence beyond the wasted turn: the reviewer, unable to record its verdict, wrote it to
+`.reviews/review-0001-2026-08-25-0930.md` **inside its own worktree**, which is isolated by design.
+The review's actual conclusion — "Ship it", with its checks — is on a branch nobody reads.
+
+---
+
+## F33 (B) — a job for an agent that does not exist is created, enabled, and scheduled
+
+Same session.
+
+```
+POST /projects/{p}/jobs {"name":"Ghost","agent":"nobody","message":"work","cron":"*/5 * * * *"}
+-> 201, enabled: true, next_run set
+```
+
+There is no agent called `nobody`. Validation happens at fire time instead, where it is legible:
+
+```
+status: failed
+error_summary: "nobody has no runner bound. Bind one via PATCH .../agents/nobody (runner_id)
+                or the Hub UI before triggering."
+```
+
+So a typo produces a job that is enabled, scheduled, and fails every five minutes forever, filling
+the history the operator is meant to read. Compare the neighbouring check on the same route, which
+refuses a bad cron **at creation**:
+
+```
+POST .../jobs {"cron":"not a cron"} -> 400 "Invalid cron expression: Exactly 5, 6 or 7 columns..."
+```
+
+Both facts are checkable at the same moment; one is checked and the other is not.
+
+The fire-time message is also slightly wrong: it says `nobody` *has no runner bound*, when `nobody`
+does not exist at all. An operator would go looking for an agent to configure.
+
+---
+
+## F34 (B) — `agentweave --port N status` is silently ignored; `status --port N` works
+
+Same session, against a Hub confirmed live (`curl http://127.0.0.1:8010/health` → `{"status":"ok"}`).
+
+```
+agentweave --port 8010 status   ->  [HUB] Status: stopped
+agentweave status --port 8010   ->  [HUB] Status: running (docker)
+                                       URL: http://localhost:8010
+                                       Projects: 5 registered (most recent: aw-sweep)
+```
+
+`--help` documents the **first** form — `usage: agentweave [--port PORT] ... {doctor,status,...}` —
+and that is the one that lies. Neither errors, so the operator has no signal the flag went nowhere;
+they are simply told the Hub is down while it is serving requests.
+
+A second defect in the same three lines: the Hub on 8010 is a **native** `uvicorn hub.main:app`
+process. It is reported as `running (docker)`.
+
+`agentweave --profile beta --port 8010 status` also reports `stopped`.
+
+`doctor` has the matching blind spot: from inside a project bound to the 8010 Hub it reports
+`port:8000` available and checks `~/.agentweave/hub/data/agentweave.db`, neither of which is the Hub
+this project uses. It returns `pass: 6  warn: 0  fail: 0` without examining the running instance.
+
+---
+
+## F35 (C) — `submit_spec_document` answers a malformed call with raw Pydantic errors
+
+Same session. `author` called `submit_spec_document` **ten times** in one turn before it succeeded.
+The refusals it was working from:
+
+```
+3 validation errors for call[submit_spec_document]
+scope
+  Input should be a valid dictionary [type=dict_type, input_value='The rota/allocate.py mod...', input_type=str]
+  For further information visit https://errors.pydantic.dev/2.12/v/dict_type
+```
+
+then `11 validation errors`, then more. The agent was guessing at a nested schema from type errors
+and a link to pydantic's website.
+
+**The cost is the finding.** That turn recorded **718,650 input tokens** — every retry resends the
+whole conversation — against 73,622 for the turn before it. One malformed call to one tool cost an
+order of magnitude more than the work around it.
+
+This is the same product that produces, elsewhere:
+
+```
+Cannot move a task from 'pending' to 'approved'. From 'pending' the available transitions are:
+assigned, in_progress, rejected.
+```
+
+`task_transitions.refusal_detail` exists because *"a refused agent's only feedback is this string,
+so it names both the current status and what is actually reachable — an agent told merely
+'forbidden' retries the same call."* That reasoning applies unchanged here, and the tool carrying
+the most complex payload in the surface is the one that does not follow it.
+
+---
+
+## F36 (C) — dependencies can only be declared by an agent, inside a spec document
+
+Same session. `TaskDependency` rows are written in exactly one place in the codebase:
+`spec_tasks.py:375`, reached only by `materialise()` when an approved document's task entry carries
+a `depends_on` list of keys.
+
+Neither `TaskCreate` nor `TaskUpdate` accepts dependencies — `PATCH` with `depends_on` is refused
+`422 extra_forbidden` — and no router carries a dependencies route.
+
+So an operator cannot say "B needs A" about two tasks they created, and the whole subsystem —
+`dependency_gate.py`, the Dependencies board tab, `task_dependencies` and
+`task_dependency_references`, `Task.dependency_state`, the `prerequisites`/`dependents` response
+fields — is reachable only if an agent happens to author the right keys into a document that is then
+approved. In this run the agent authored a five-task decomposition with no `depends_on` at all, so
+the graph came out empty and the gate was never exercisable.
+
+---
+
+## F37 (C) — a document created by mistake is permanent, and becomes a standing warning
+
+**S11 confirmed live**, three sessions after it was first suspected from reading the code.
+
+`author` was given a conversation with `spec/changes/teal-manticore/spec.html` attached. It ignored
+that document, called `create_spec_document` to make a second one, and wrote the specification
+there. The first is now an empty orphan, and every exit is closed:
+
+```
+phase -> archived : 409 illegal_transition ("a document cannot move from exploring to archived")
+phase -> approved : 409 illegal_transition
+DELETE            : 405 Method Not Allowed
+```
+
+`archived` is reachable only from `approved`; `approved` only from `proposed`; `proposed` requires
+requirements the orphan does not have. Every one of those rules is defensible on its own.
+
+It is not inert: the Spec tab now carries a permanent `1 spec manifest drift item` banner for a
+document nobody can remove.
+
+The seam that created it is worth separating from the dead end it caused. The conversation carried an
+attached document and the agent made a new one anyway. Nothing refused that, and nothing asked
+whether it was meant.
+
+---
+
+## F38 (B) — an agent that needs an answer ends its turn instead of asking
+
+Same session, and the reason F32's shape matters.
+
+`author`'s first turn read `rota/allocate.py` and `tests/test_allocate.py`, diagnosed the bug
+correctly and unprompted, and then ended with:
+
+> **What I need to clarify before writing the spec:**
+> 1. **Interface — how does spread() learn about all staff?** …
+> *Let me know your answers and I'll write the spec.*
+
+Four well-judged questions. Asked as **chat text, in a turn that then completed.** No `Question`
+row, no blocking, no task parked — `SELECT * FROM questions` was empty. The run was over, and the
+specification was never written.
+
+The agent was not underinstructed. Its charter names `ask_user` six times, including
+*"Requirement ambiguity → `ask_user`. Do not guess; a guessed requirement is built on before anyone
+notices"*. Told explicitly on the next turn to use the tool, it did so immediately and well.
+
+So the mechanism works and the instruction exists; what is missing is anything making the tool the
+path of least resistance at the moment the agent has a question. `CLAUDE.md` records that the
+backstop which used to detect this — a completed run whose final text reads like a question — was
+**retired on 2026-08-20 at the operator's request**, on the reasoning that guessing whether trailing
+prose is a question is a judgement the product should not make on the operator's behalf. That
+reasoning is sound. This is what it costs, measured: a capable agent, following a charter that told
+it plainly what to do, produced a silently stalled turn on its first attempt.
+
+Worth stating precisely, because the remedy is probably not the retired backstop. Nothing here
+requires guessing at prose. The Hub already knows the run ended, that it was the first turn against
+a document in `exploring`, and that no `Question` row was written.
+
+---
+
+## What held, under a full-surface sweep
+
+Recorded because a report listing only defects describes a product that does not exist. Each of
+these was driven, not read.
+
+- **The task transition machine.** Every illegal jump refused `409` with a string naming what *is*
+  reachable. Every non-entry creation status refused `422` naming the two that are legal. No refusal
+  needed a second call to interpret.
+- **The requirement gate, at `gate` rigor.** Refused approval, named the requirement, its state, the
+  remedy, and the alternative: *"Satisfy them, or lower the document's rigor — which is recorded."*
+- **The whole spec → work → evidence → merge chain.** An agent read an approved document, edited in
+  its own worktree, ran the suite, and recorded evidence carrying a git footprint with
+  `reachable_from_main: false`. A second agent **on a different CLI** reviewed it. Accepting the
+  evidence moved coverage to `verified`; approving the task merged `75ebebce` into `master`.
+  Verified independently: the fix is correct (old `spread` = 0 on the idle case, new = 2), the suite
+  went 6 → 7, and `master` carries the change.
+- **`ask_user`.** Two blocking questions, batched, with structured options; the run held open;
+  answering released it. Exemplary — see F38 for the half that is not.
+- **Permission postures.** `manual` produced a card showing the exact command. Denial by timeout was
+  honoured (`expired`, file absent). Explicit approval let the command run and the file appeared.
+- **One run per agent.** Two simultaneous triggers: one `running`, one `queued` with
+  `waiting_reason: "agent is already running"`. The second ran when the first finished.
+- **Stopping a run.** `stopping` → `stopped`, cleanly, mid-flight.
+- **`repo_hygiene`.** Wrote five ignore rules into `.git/info/exclude` of a repository the Hub did
+  not create. (`.agentweave/project.json` is not among them, and is machine-local — worth adding.)
+- **The dashboard.** All thirteen screens rendered with **zero console errors**. Empty board columns
+  explain what would land in them. A task that could not merge said exactly why — *"no accepted
+  evidence names a commit, so there is nothing to merge"* — and offered `Try again`.
+
+---
