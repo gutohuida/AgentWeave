@@ -548,10 +548,16 @@ itself. The database has `assignee = 'critic'`; the board's current item renders
 completed | relay | Name the two totals when an entry does not balance
 ```
 
-The reading that makes this correct is that `current_tasks[].agent` is *who the next firing would
-staff* rather than *who holds it now* — plausible, since `relay` is the one agent that is neither
-the author nor the last reviewer. If so the value is right and the presentation is not: `completed
-| relay` reads as "relay is working this".
+**Confirmed by reading the code**, not inferred. `_batch_loop_summaries`
+(`hub/hub/api/v1/jobs.py`, ~line 217) builds `claimed_agents_by_loop` from
+`decision.in_flight` merged under `decision.selections` — both of which answer *who would work this
+next*, never *who holds it now*. So for a `completed` task awaiting review the agent shown is the
+prospective **reviewer**: `relay`, the one agent that is neither the author nor the last reviewer.
+
+The value is therefore right and the **presentation** is wrong: `completed | relay` reads as "relay
+is working this", when it means "relay is who would review this". The column's meaning silently
+changes with the task's status — for an `in_progress` task it is the current worker, for a
+`completed` one it is a proposal.
 
 Worth settling because 11.5 asks whether a wide board says *what* is happening, and an agent column
 whose meaning changes with task status is exactly what would make three such lines unreadable.
