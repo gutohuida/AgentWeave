@@ -314,6 +314,32 @@ def cmd_state(project):
         pass
 
 
+def _rmtree_windows(path):
+    """Delete a test project's directory, and say so honestly when it survives.
+
+    This used to be `shutil.rmtree(path, ignore_errors=True)`, which on Windows is a lie: git
+    marks everything under `.git/objects` read-only, `rmtree` raises PermissionError on the first
+    one, `ignore_errors` swallows it, and `clean` prints "removed" over a directory that is still
+    there. Measured 2026-08-26 — a smoke project was cleaned, the rows went, the tree stayed. A
+    stray test project is indistinguishable from a real one a week later, which is the whole
+    reason `clean` exists.
+    """
+
+    def force(func, target, _exc):
+        os.chmod(target, 0o700)
+        func(target)
+
+    if not os.path.exists(path):
+        return
+    try:
+        shutil.rmtree(path, onerror=force)
+    except OSError as exc:
+        print(f"  !! could not remove {path}: {exc}")
+        return
+    if os.path.exists(path):
+        print(f"  !! {path} still exists after rmtree reported success")
+
+
 def cmd_clean(project):
     c = sqlite3.connect(DB)
     d = c.execute("select working_directory from projects where id=?", (project,)).fetchone()
@@ -324,7 +350,7 @@ def cmd_clean(project):
     c.execute("delete from projects where id=?", (project,))
     c.commit()
     if d:
-        shutil.rmtree(d[0], ignore_errors=True)
+        _rmtree_windows(d[0])
     print("removed", project)
 
 
