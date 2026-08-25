@@ -77,6 +77,11 @@ try { $state = Get-Content $stateFile -Raw | ConvertFrom-Json } catch {
 }
 $stateRunner = if ($state.runner) { ([string]$state.runner).ToLowerInvariant() } else { "claude" }
 $statePermissionMode = if ($state.permission_mode) { ([string]$state.permission_mode).ToLowerInvariant() } else { "unattended-full-access" }
+# STATE.json records the model prep agreed with the operator, and without this it was decoration:
+# a headless CLI with no -m falls back to the user's own default. Measured 2026-08-26 -- the
+# operator selected Sonnet 5, ~/.claude/settings.json says "opus[1m]", and every firing of an
+# eight-hour run would have been Opus. Absent from the state file, keep the CLI default.
+$stateModel = if ($state.model) { ([string]$state.model).Trim() } else { "" }
 if ($stateRunner -ne $Runner -or $statePermissionMode -ne $PermissionMode) {
   Write-Log "Driver settings ($Runner/$PermissionMode) disagree with STATE.json ($stateRunner/$statePermissionMode). Stopping."
   exit 2
@@ -164,13 +169,19 @@ $previousErrorActionPreference = $ErrorActionPreference
 $ErrorActionPreference = "Continue"
 try {
   if ($Runner -eq "claude") {
-    & $AgentExecutable -p $prompt --permission-mode bypassPermissions 2>&1 | ForEach-Object { Write-Log $_ }
+    if ($stateModel) {
+      & $AgentExecutable -p $prompt --model $stateModel --permission-mode bypassPermissions 2>&1 | ForEach-Object { Write-Log $_ }
+    } else {
+      & $AgentExecutable -p $prompt --permission-mode bypassPermissions 2>&1 | ForEach-Object { Write-Log $_ }
+    }
   } elseif ($PermissionMode -eq "unattended-full-access") {
     # Pipe the prompt and close stdin explicitly. A Scheduled Task has no interactive stdin, and
     # Codex otherwise waits to see whether inherited stdin contains an additional input block.
-    $prompt | & $AgentExecutable exec --ephemeral --color never --cd $Repo --dangerously-bypass-approvals-and-sandbox - 2>&1 | ForEach-Object { Write-Log $_ }
+    $codexModel = if ($stateModel) { @("-m", $stateModel) } else { @() }
+    $prompt | & $AgentExecutable exec --ephemeral --color never --cd $Repo @codexModel --dangerously-bypass-approvals-and-sandbox - 2>&1 | ForEach-Object { Write-Log $_ }
   } else {
-    $prompt | & $AgentExecutable --ask-for-approval never exec --ephemeral --color never --cd $Repo --sandbox workspace-write - 2>&1 | ForEach-Object { Write-Log $_ }
+    $codexModel = if ($stateModel) { @("-m", $stateModel) } else { @() }
+    $prompt | & $AgentExecutable --ask-for-approval never exec --ephemeral --color never --cd $Repo @codexModel --sandbox workspace-write - 2>&1 | ForEach-Object { Write-Log $_ }
   }
   $code = $LASTEXITCODE
 } finally {
