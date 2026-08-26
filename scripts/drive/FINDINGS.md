@@ -1477,6 +1477,38 @@ gate back fails 5 of 10 where previously it failed none.
 **Not yet re-verified live.** `ledger-stress` has no `checkpoint_runner_id`, so nothing generates
 there until the operator chooses which CLI is billed.
 
+**Positively verified live 2026-08-26, Q4 retry (5th live attempt, across two iterations).** Four
+prior live firings — two on `ledger-stress`'s flow job (blocked by F52's git refusal before either
+reached `submit_checkpoint_notes`) and two on its "Ledger flow" loop (one confused between two
+similarly-titled tasks and completed neither; one completed its task but never called the tool
+despite the flow briefing instructing it to) — never produced a positive sample, so the run-boundary
+hook stayed covered only by unit tests and code reading, exactly as handoff 0088 flagged. A fifth
+attempt changed the shape rather than repeating it: a minimal **non-flow** loop (`job-525b85035aaf`
+/ `loop-b920a216f57c` on `proj-8605b92d0028`, no `spec_document_id`), one unambiguous
+`initial_tasks` entry, and a `job.message` making `submit_checkpoint_notes` an explicit required
+first step before any code edit. Fired once (`POST .../run` → `run-736d9e1f2cd3`, agent
+`loopauthor`, Haiku). The agent called the tool, then made the change, then completed the task in
+the same turn — confirmed from rows: `task_transitions` shows `assigned→in_progress→completed`
+all attributed to `run-736d9e1f2cd3`; `checkpoint_notes` row `note-7c7ef8892644` was written in
+`conv-a7f22c12da79` (this run's own conversation) and its `consumed_by_checkpoint_id` is
+`ckpt-42c9362f7ba4`; that checkpoint's own row reads `loop_id: loop-b920a216f57c` (non-null),
+`covers_through_run_id: run-736d9e1f2cd3`, `status/probe_status: ready/passed`; its `body` names the
+task, the note's own risk content ("existing tests may already be passing invalid negative prices"),
+and next actions for a successor — the briefing genuinely carries the author's note, not a
+placeholder. The underlying code change itself is real, not just claimed: `run.snapshot_commit_sha`
+`e4a4ae9d...` shows a real `Auto-snapshot: loopauthor's turn` commit touching `inventory.py` and
+`test_inventory.py`. Handoff 0088's residual-risk note is retired: the run-boundary checkpoint hook
+has now fired for real, end to end, with every claim backed by a row id. Job disabled and archived
+immediately after (`job-525b85035aaf`, `archived_at` set); all jobs project-wide re-swept to
+`enabled: 0` afterward.
+
+Whether the earlier four attempts' unreliability is flow-briefing-specific (spec-document-flow
+briefings carry a lot more competing instruction than this minimal loop's did) or was mostly bad
+luck on cheap-model tool-call discipline was not conclusively separated — this sample used a
+shorter, single-purpose message and got a clean result on the first try, which is suggestive but is
+one data point, not a controlled comparison. Worth a note for Q6/future drives rather than a closed
+question.
+
 ---
 
 ## F45 (A) — a review that ends without moving the task is re-staffed on every tick, forever

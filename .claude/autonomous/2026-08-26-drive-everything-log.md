@@ -670,3 +670,77 @@ whether the tool-call unreliability is model-specific or briefing-specific, or a
 confirmed decline-path drives as sufficient evidence for the write-up and move to Q5, which is next
 in the queue regardless. Q6 should pick up F53 (and the task-name-confusion episode, once numbered)
 alongside the existing B/C backlog.
+
+---
+
+## Iteration 7 — Q4 CLOSES: the fifth live attempt produced the positive checkpoint, rows and all
+
+**2026-08-26T01:47–01:55+01:00.** Reconciled first: branch/log matched `STATE.json` (`8bee33b`
+tip after iteration 6's heartbeat release), tree clean, Hub `/health` ok, `/api/v1/projects` served
+from the beta database (five projects listed, `ledger-stress` among them).
+
+**Followed the state file's own recommendation rather than re-running the same shape a sixth
+time.** Built the minimal non-flow loop it named: a job with no `spec_document_id` (so the plain
+"finish and stop" briefing applies, not the flow one), on `drive-2026-08-26`
+(`proj-8605b92d0028`), agent `loopauthor` (Hub-managed, bound to the same Haiku runner already set
+as the project's `checkpoint_runner_id`), one `initial_tasks` entry with an unambiguous title ("Add
+input validation to `Item.__init__` in inventory.py") distinct from every other pending task on the
+project, and a `job.message` stating `submit_checkpoint_notes` as an explicit required first step
+before any code edit, `stop_when_queue_empties: true`, `cron: "0 0 31 2 *"` (a date that never
+occurs, so only a manual `POST .../run` could fire it — deliberate, to keep this a single
+controlled shot rather than a real schedule).
+
+**Fired once, and it worked on the first try.** `run-736d9e1f2cd3` (real conversation, not the
+`JobRun` id `POST .../run` returns — confirmed against `dead_ends`' own warning before trusting the
+returned id). Watched live: the agent loaded the tool schema, called
+`submit_checkpoint_notes` as its very first action, then read both files, edited both, then
+completed the task in the same turn. Full detail and every row id are now written up as a
+resolution appended to **F43** in `scripts/drive/FINDINGS.md` (not a new finding — this closes the
+residual risk F43's own entry already named), rather than repeated here. In short, all four gates
+checked against the database, not the transcript: the note (`note-7c7ef8892644`) was written in
+this run's own conversation; the task's transitions (`assigned→in_progress→completed`) are all
+attributed to `run-736d9e1f2cd3`; the resulting `Checkpoint` (`ckpt-42c9362f7ba4`) carries
+`loop_id: loop-b920a216f57c` (non-null) and `covers_through_run_id: run-736d9e1f2cd3`; the note is
+marked `consumed_by_checkpoint_id` on that same checkpoint; the checkpoint's `body` genuinely
+contains the note's own risk content, not a placeholder. The code change itself is real, confirmed
+by reading the auto-snapshot commit directly (`e4a4ae9d...`, `git show --stat`: two files touched)
+rather than trusting the agent's self-report.
+
+**One thing noticed and worth carrying forward rather than fixing now.** After the queue emptied
+(the loop's one task went to `completed`), the job's `loop.stopped_at`/`ending_state` stayed null
+and `enabled` stayed `true` — `stop_when_queue_empties` is evaluated on the next scheduler tick, not
+synchronously at the moment the queue empties, and this job's cron (deliberately set to never fire)
+meant no tick was ever going to arrive to notice. This is very likely an artifact of the test's own
+never-firing cron rather than a real defect — a job with an ordinary cron would tick and self-stop
+normally — but it means **a loop cannot be trusted to disable itself the instant its queue is
+empty**, which is exactly the kind of gap the standing "never leave a job enabled" rule exists to
+catch by hand. Disabled and archived immediately (`PATCH enabled:false` then `POST .../archive`,
+both `200`), then sweept `ai_jobs` project-wide: all twelve rows across all five projects read
+`enabled: 0`, shown as query output, not claimed.
+
+**What HELD, beyond the positive checkpoint itself.** The auto-snapshot mechanism (F52's
+correction) held again — a real commit exists regardless of whether the agent's own git calls
+would have succeeded. The Hub-managed-agent requirement for loop spawn targets (found in iteration
+6) held consistently — `loopauthor` fired without the `409` `author` (self-registered) would have
+hit.
+
+**What a reviewer should distrust:** this is one positive sample, not a controlled comparison
+against the four negative ones — whether the earlier unreliability was flow-briefing-specific or
+just this session's bad luck on cheap-model tool-call discipline is explicitly left open in the
+`FINDINGS.md` write-up rather than overclaimed. The full `hub/tests/` suite (~3100 tests) still has
+not been rerun since iteration 3's touched-file slice; Q9's sweep is still where whole-suite green
+gets re-established — nothing was changed in `hub/` source this iteration (only `FINDINGS.md`,
+`STATE.json`, and this log), so there is no new mutation-check obligation, but the suite itself is
+still owed a full run before the morning summary can claim it.
+
+**Repository root** stayed untouched except `FINDINGS.md` and `STATE.json`/the log — confirmed by
+`git status` before this commit. No source file in `hub/` or `src/` was touched this iteration.
+
+**Q4 closes.** All three of its `verify` criteria are met with row ids, live, on the fifth attempt.
+
+**Next:** Q5 — drive the two `ledger-stress` tasks already sitting in `under_review`
+(`task-23a0986e7fe9` with `critic`, `task-3cd54c17faa6` with `relay`) to a real reviewer verdict:
+can the reviewer read the code (F10), does `record_evidence` work from Haiku (F21), does rejection
+route back legibly, does approval cherry-pick into the main branch with the landing commit
+reported (F9). `ledger-stress` reads `main_branch: "master"` (F4 confirmed, prep + Q1), so
+integration is not blocked.
