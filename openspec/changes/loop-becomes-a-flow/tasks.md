@@ -841,8 +841,25 @@ a review `critic` has already done, on every tick, with no stop condition able t
       review from a work entry without reading the database. Recorded as **F61**; the operator's
       chosen fix is to title a flow conversation by its agent and role. Ticked as *judged*, not as
       *passed*: the judgement is complete and its outcome is a finding.
-- [ ] 11.3 **The reviewer arrives briefed.** Read what the reviewer was given. If the implementer's
+- [x] 11.3 **The reviewer arrives briefed.** Read what the reviewer was given. If the implementer's
       checkpoint reads as notes-to-self, task 6.5 did not work.
+      **Judged 2026-08-26 by the operator: PASSES.** `group-11-runbook.md` section 4 says this
+      check "cannot pass, and that is finding F43" — **that line is now stale**, written before
+      F43 was fixed on 2026-08-25 and before the overnight drive exercised the run-boundary hook.
+      Its own diagnostic expected `3 / 3 / 6 / 0` and now measures **6 notes / 3 unconsumed /
+      9 checkpoints / 3 carrying a `loop_id`**: delivery happens.
+      The content is not notes-to-self. `ckpt-a545dd785d8d` (builder, probe passed) names the file
+      and lines (`ledger/book.py` 20-21), states the decision and why the alternative was rejected,
+      and flags a contradiction *for its successor* — that the conversation claims pytest and git
+      ran while showing no tool outputs, against predecessor notes saying permission restrictions
+      prevent exactly those. That is written for a reader who is not its author, which is what 6.5
+      asked for.
+      Also verified live in the same pass: `ckpt-9cba6c0e8e40` (critic) **failed its probe** — its
+      body claims "work committed and evidence recorded" where the Hub's computed record disagreed
+      — and `render_checkpoint` was called against the real row to confirm F50's fix fires on it,
+      emitting `Status: failed`, `Probe: failed`, and the paragraph telling the reviewer the
+      written half disagreed with the computed half. So the probe caught an over-claiming agent and
+      the reviewer is told, rather than being handed it silently.
 - [x] 11.3b **The reviewer is looking at the work.** Open the reviewer's workspace during a review
       firing and confirm the author's changes are in it. This is the human half of 4b.2, and it is
       the check that would have caught F10.
