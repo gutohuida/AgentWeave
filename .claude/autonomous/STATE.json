@@ -10,7 +10,7 @@
   "stop_at": "2026-08-26T08:00:00+01:00",
   "stop_when_queue_empties": false,
   "iteration": 23,
-  "last_heartbeat": "2026-08-26T07:40:49+01:00",
+  "last_heartbeat": "2026-08-26T07:01:15+01:00",
   "green_at_arming": {
     "sha": "the branch tip at arming time",
     "hub_tests": "3127 passed, 84 skipped, 1 xpassed, 0 failed (672s, 2026-08-26 00:02)",
