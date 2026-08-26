@@ -2278,7 +2278,16 @@ class EvidenceReview(Base):
 
     __tablename__ = "evidence_reviews"
 
-    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    # Ordered by an autoincrement key, not by `created_at`, and not by the string id. Two reviews
+    # committed in the same clock tick (the same measured cause as `Checkpoint.sequence`, F55:
+    # Windows clock resolution is coarser than the microsecond precision `datetime.now()` implies)
+    # used to tie-break on `EvidenceReview.id` — a random `evr-…` id with no relationship to
+    # insertion order — so "the latest review" picked the wrong decision roughly half the time
+    # whenever two decisions landed in the same tick (F59). Same shape as `Checkpoint.sequence`,
+    # `TaskTransition.sequence` and `InboundQueueEntry`/`Conversation.sequence`, for the identical
+    # reason.
+    sequence: Mapped[int] = mapped_column(Integer, autoincrement=True)
+    id: Mapped[str] = mapped_column(String(64), nullable=False)
     project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
     evidence_id: Mapped[str] = mapped_column(
         String(64), ForeignKey("requirement_evidence.id"), nullable=False
@@ -2291,6 +2300,8 @@ class EvidenceReview(Base):
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
 
     __table_args__ = (
+        PrimaryKeyConstraint("sequence", name="pk_evidence_reviews"),
+        UniqueConstraint("id", name="uq_evidence_reviews_id"),
         CheckConstraint(
             "decision IN ('" + "', '".join(EVIDENCE_DECISIONS) + "')",
             name="ck_evidence_reviews_decision",

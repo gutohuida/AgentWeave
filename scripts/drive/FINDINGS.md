@@ -2727,3 +2727,93 @@ work (rather than, say, another agent's) was traced only as far as confirming th
 `runs`/`task_transitions` one by one. No fix was attempted this iteration; this is a finding and a
 design question, not yet a patch.
 
+
+## F59 (B) — the same clock-tick tie-break bug as F55, in a second table: an evidence review's "latest" can pick the older decision
+
+Found 2026-08-26, Q9's full-suite sweep run early (an iteration reconciling stale `STATE.json`/log
+bookkeeping used the time waiting on a background full-suite run to also finish it properly, having
+been lost across a process boundary twice in prior iterations). The suite reported exactly one
+failure: `test_evidence_latest_review_signal.py::test_a_later_acceptance_replaces_the_reason_shown`.
+Re-run bare, six times, on the unmodified branch tip: **3 of 6 failed**, alternating pass/fail with
+no code change between runs — the same intermittent shape F55 was chased down as, not a flake to
+shrug off.
+
+### Root cause, read from the code, not inferred
+
+`_latest_reviews_for` (`hub/hub/api/v1/spec.py:1093-1116`) and `reviews_for`
+(`hub/hub/requirement_evidence.py:515-521`) both answered "which review is latest" (and, for the
+second, "in what order did they happen") by
+`order_by(EvidenceReview.created_at, EvidenceReview.id)`. This is the *exact* shape F55 fixed for
+`Checkpoint` two migrations earlier in this same run — same measured cause: `datetime.now()` on
+this machine can return an identical value across consecutive calls (Windows clock resolution
+coarser than the microsecond precision the value implies), so two decisions recorded back to back
+— an operator rejecting then immediately accepting, or two automated decisions in the same
+turn — land in the same tick more often than not. `EvidenceReview.id` cannot break the tie
+either: it is `evr-` + a random short id with no relationship to insertion order, so roughly half
+the time the tie-break picked the *older* review as "latest" and the operator was shown a stale
+decision and its stale reason, silently, with no error anywhere.
+
+### Fix — the same shape F55 already established
+
+`EvidenceReview` gained a `sequence` autoincrement primary key (migration `0091`,
+`hub/hub/db/models.py`), exactly mirroring `Checkpoint.sequence`'s reasoning and shape. Both
+ordering call sites now read `order_by(EvidenceReview.sequence)` — a real insertion-order key the
+database hands out itself, immune to clock resolution. No `get_by_id`-style helper was needed
+(unlike `Checkpoint`): no `session.get(EvidenceReview, ...)` call site exists anywhere in the
+codebase, checked before writing the migration, so nothing looks an `EvidenceReview` up by its
+string id via the ORM identity map.
+
+**A real, second bug caught during verification, not authored by the fix itself.** The
+`_columns()` existence guard originally checked only `{evidence_reviews, projects,
+requirement_evidence}`. Running the full migration test suite immediately surfaced 14 additional
+failures across `test_migrations.py`/`test_project_persistence.py` — `NoSuchTableError: tasks`,
+thrown from *inside* `batch_alter_table(..., recreate="always")`'s own reflection, not from this
+migration's guard. Traced: `evidence_reviews.evidence_id` FKs to `requirement_evidence`, and
+`recreate="always"`'s batch mode reflects that FK target table to preserve the relationship across
+the recreate — which in turn reflects `requirement_evidence.task_id`'s own FK to `tasks`. The
+several tests that synthesize an upgrade chain starting from a stamped-but-not-materialised early
+revision (the same shape `test_migration_00NN_is_guarded_when_tasks_does_not_exist` exists to
+cover for *other* migrations) never create `tasks` at all in that chain, so this second-order
+reflection raised before this migration's own guard logic ever got a chance to matter. Fixed by
+adding `tasks` to the guard's required-table set, with the reasoning written into the migration's
+own docstring so the next person editing a table that FKs into `requirement_evidence` does not
+rediscover this by a red suite. This is the third distinct instance in this run of a migration's
+own reachability guard being insufficient in a way only the *full* migration suite catches — F53's
+`downgrade()` missing-table guard and this one are the same species, and the standing rule ("run
+the whole migration suite, not just the new test, before calling a migration done") held again
+here specifically because it was followed.
+
+**Regression test** (`test_latest_review_breaks_a_tie_by_insertion_order_not_id`,
+`hub/tests/test_evidence_latest_review_signal.py`): constructs two `EvidenceReview` rows directly
+against the ORM with an identical `created_at` (read from the real evidence row, not synthesized)
+and ids chosen adversarially — the *older* row's id (`evr-zzz-older`) sorts alphabetically *after*
+the *newer* row's (`evr-aaa-newer`) — the exact shape that picked the wrong row under the old
+ordering. Asserts both `_latest_reviews_for` (the "which is latest" query) and `reviews_for` (the
+full-history query, which must read chronologically, not just get the endpoint right) pick by
+insertion order. **Mutation-checked**: reverted both `order_by` call sites to
+`.order_by(EvidenceReview.created_at, EvidenceReview.id)`, reran — the new test failed with the
+predicted assertion (`assert 'evr-zzz-older' == 'evr-aaa-newer'`); restored, reconfirmed green.
+Bare-reran the originally-flaky test 8 consecutive times post-fix: 8/8 passed, where the unmodified
+tip had failed 3/6. `ruff check` and `black --check --target-version py311` clean on all seven
+touched files (three source, one migration, three test). Broader slice
+(`-k "evidence or spec or agent_actions or requirement"`, 837 tests): 817 passed, 20 skipped, 0
+failed.
+
+**Verified LIVE**, not only against the fixture. Restarted the trial Hub on the beta database
+(confirmed via a direct query, not `/health` alone: `alembic_version` reads `0091`, and
+`evidence_reviews.sequence` is populated `1..3` in original insertion order on the three
+pre-existing rows). Posted two real decisions back to back over HTTP against a genuine `awaiting`
+evidence row on `ledger-stress` (`ev-9ab3be95`, project `proj-18e5d4e0`) — reject, then
+accept — using the operator's own bootstrap API key: the response after the second call correctly
+read `review_state: "accepted"` and `latest_review.reason` naming the second call's text, not the
+first's. Confirmed from the database directly afterward: `sequence` values `4` then `5` for the two
+new rows, `evr-...` ids in no particular alphabetical relationship to which came first — insertion
+order, not id, is what the response actually followed. Job sweep immediately after, all five
+projects: fourteen `ai_jobs` rows, all `enabled: 0`.
+
+**What a reviewer should distrust:** the live HTTP round-trip above did not land in the identical
+clock tick (real network/API latency separated the two calls by ~50ms, `04:36:50.241` vs `.290`),
+so it demonstrates the fix works correctly on the real path end-to-end but does not itself
+reproduce the original tie live — the tie itself is proven only by the mutation-checked unit test,
+which forces it deterministically rather than hoping for a coincidence. This is the same
+distinction F55's own live verification drew for `Checkpoint`.

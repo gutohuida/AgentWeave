@@ -11,8 +11,10 @@ the `decide_evidence` response itself.
 import pytest
 
 from hub.agent_auth import hash_run_token
+from hub.api.v1.spec import _latest_reviews_for
 from hub.db.engine import async_session_factory
-from hub.db.models import Agent, Run
+from hub.db.models import Agent, EvidenceReview, RequirementEvidence, Run
+from hub.requirement_evidence import reviews_for
 from hub.spec_payload import SCHEMA_VERSION
 
 BASE = "/api/v1/projects/proj-test/project"
@@ -156,3 +158,63 @@ async def test_a_later_acceptance_replaces_the_reason_shown(app, auth_headers, b
     assert row["review_state"] == "accepted"
     assert row["latest_review"]["decision"] == "accepted"
     assert row["latest_review"]["reason"] == "fixed and re-checked"
+
+
+@pytest.mark.asyncio
+async def test_latest_review_breaks_a_tie_by_insertion_order_not_id(app, auth_headers, builder):
+    """F59. `datetime.now()` on this machine can return an identical value across consecutive
+    calls (the same measured cause as F55's `Checkpoint.sequence`), so two reviews from the same
+    clock tick are a real occurrence, not a theoretical one. `_latest_reviews_for` and
+    `reviews_for` used to tie-break on `EvidenceReview.id` - a random `evr-...` id with no
+    relationship to insertion order - so ids are chosen here so the *older* review's id sorts
+    alphabetically AFTER the *newer* one's: the exact shape that picked the wrong row under the
+    old ordering. Constructed directly against the ORM rather than via two HTTP calls, because the
+    real bug depends on a clock tie the test cannot reliably force through wall-clock timing alone.
+    """
+    await _document(app, auth_headers, builder)
+    recorded = await app.post(
+        AGENT_EVIDENCE,
+        json={"identifier": "FR-1", "kind": "test_result", "summary": "ran it"},
+        headers=builder,
+    )
+    evidence_id = recorded.json()["id"]
+
+    async with async_session_factory() as db:
+        evidence = await db.get(RequirementEvidence, evidence_id)
+        tied_at = evidence.produced_at
+
+        older = EvidenceReview(
+            id="evr-zzz-older",
+            project_id="proj-test",
+            evidence_id=evidence_id,
+            decision="rejected",
+            actor_kind="operator",
+            reason="not enough, and its id sorts after the newer one's",
+            created_at=tied_at,
+        )
+        db.add(older)
+        await db.commit()
+
+        newer = EvidenceReview(
+            id="evr-aaa-newer",
+            project_id="proj-test",
+            evidence_id=evidence_id,
+            decision="accepted",
+            actor_kind="operator",
+            reason="fixed and re-checked, must win the tie regardless of its id",
+            created_at=tied_at,
+        )
+        db.add(newer)
+        await db.commit()
+
+    async with async_session_factory() as db:
+        latest_by_id = await _latest_reviews_for(db, [evidence_id])
+        history = await reviews_for(db, evidence_id)
+
+    assert (
+        latest_by_id[evidence_id].id == "evr-aaa-newer"
+    ), "insertion order, not a random id, must decide which review is latest"
+    assert [row.id for row in history] == [
+        "evr-zzz-older",
+        "evr-aaa-newer",
+    ], "review history must read in the order the decisions actually happened"

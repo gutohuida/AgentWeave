@@ -1104,7 +1104,7 @@ async def _latest_reviews_for(session: AsyncSession, evidence_ids) -> dict:
             await session.execute(
                 select(EvidenceReview)
                 .where(EvidenceReview.evidence_id.in_(wanted))
-                .order_by(EvidenceReview.created_at, EvidenceReview.id)
+                .order_by(EvidenceReview.sequence)
             )
         )
         .scalars()

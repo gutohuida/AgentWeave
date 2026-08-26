@@ -516,7 +516,7 @@ async def reviews_for(session: AsyncSession, evidence_id: str) -> List[EvidenceR
     result = await session.execute(
         select(EvidenceReview)
         .where(EvidenceReview.evidence_id == evidence_id)
-        .order_by(EvidenceReview.created_at, EvidenceReview.id)
+        .order_by(EvidenceReview.sequence)
     )
     return list(result.scalars().all())
 
