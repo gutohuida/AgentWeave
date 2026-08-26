@@ -1510,3 +1510,90 @@ tests, 21s); `hub/tests/` (3147 tests, ~16 minutes) under the same axis remains 
 `PYTHONIOENCODING=utf-8` check to `hub/tests/` if time allows. After that, Q9 (the full sweep and
 the `openspec/explorations/2026-08-26-driving-everything.md` write-up) is the next queue item with
 no operator blocker.
+
+## Iteration 16 — 2026-08-26 06:30–06:53+01:00 — bookkeeping reconciliation, Q9 closed, Q10 closed
+
+**Reconciliation.** `git log` matched STATE.json exactly (tip `c83487e`, iteration 15's heartbeat
+release) — no drift to fix there. But `git status` showed one untracked file:
+`openspec/explorations/2026-08-26-driving-everything.md`, already 210 lines of a substantially
+complete Q9 write-up, including a section ("An organic, unplanned data point on Q8's Codex leg")
+describing events — a real, live Codex manual-permission run discovered already in progress at the
+start of *some* iteration — that postdate iteration 15's own commit and log entry. This is bookkeeping
+debt from an interrupted process: an iteration (almost certainly a distinct attempt at what would
+have been iteration 16) did real, live-verified work and wrote a careful document, but was cut off
+before committing or updating STATE.json/the log. Per the standing rule (never trust an uncommitted
+claim), the document's factual claims were spot-checked against the live trial-Hub database before
+accepting them:
+
+- `run-3e08cae3629d` (the "organic Codex run"): DB confirms `status='failed'`,
+  `error='turn timed out with no turn/completed notification'` — matches the document exactly.
+- `task-9b0b4a141b21`: DB confirms `status='in_progress'`, `blocked_reason=None` — the task the failed
+  run was working is still sitting `in_progress`, not itself part of this iteration's scope, noted
+  below under Q10.
+- Permission requests for that run: DB shows 8 rows (document said "seven... most allowed"); one more
+  arrived between the document being written and this check, consistent, not a contradiction.
+- All 14 `ai_jobs` rows across all five projects: still `enabled=0` — reconfirmed via both the live
+  `GET /projects/{id}/jobs` API (which only lists non-archived jobs; five of `proj-8605b92d0028`'s
+  rows are archived, which is why that project's API list reads empty despite having job rows in the
+  table) and a direct DB read of the full table.
+
+The document's content is real and grounded, not fabricated — adopted rather than rewritten.
+
+**Q9 closed this iteration.** Ran the full sweep the document had not yet recorded:
+
+| Check | Result |
+|---|---|
+| `py -3.11 -m pytest hub/tests/ -q` | 3147 passed, 84 skipped, 1 xpassed, 0 failed (950.60s / 15:50) |
+| `py -3.11 -m pytest tests/ -q` | 440 passed, 3 skipped (22.00s) |
+| `py -3.11 -m ruff check src/ hub/ tests/` | All checks passed |
+| `black --check src/ hub/hub/ hub/tests/ tests/ --target-version py311` | 485 files unchanged |
+| `npx openspec validate --changes --strict` | `change/loop-becomes-a-flow` — 1/1 passed |
+
+All green. Hub's passing count rose from `green_at_arming`'s 3127 to 3147 (+20) — consistent with the
+regression tests this run's own fixes (F50–F60) added, not a discrepancy; zero failures anywhere.
+`hub/ui/src` was not touched this run, so the UI lint/build/refresh/stamp steps do not apply. Appended
+this table and a short reconciliation note into the exploration document itself, then committed it
+along with this log entry and the STATE.json update — closing Q9 for real, not on the strength of a
+document existing (the standing rule the document's own text quotes back at itself).
+
+**Q10 closed this iteration**, time permitting (06:53, well inside the 08:00 window):
+- **Job sweep, done as output not claim**: `curl` against `GET /api/v1/projects/{id}/jobs` for all
+  five live projects (`proj-8605b92d0028`, `proj-18e5d4e0`, `proj-2826f39e`, `proj-54d33cac`,
+  `proj-5e960453`) shows either an empty list or every entry `enabled: false`. Cross-checked against
+  a direct read of the `ai_jobs` table (14 rows total, all `enabled=0`) to explain why
+  `proj-8605b92d0028`'s API list reads empty (its five job rows are all `archived_at`-set, hence
+  excluded from the live list endpoint, not because they don't exist).
+- **The Q1 drive project (`proj-8605b92d0028`, `drive-2026-08-26`): KEEPING it, explicitly.** It
+  carries real, non-trivial accumulated state worth re-driving: `task-06e74937de88` (`in_progress`,
+  the F60 fix per iteration 15's notes sitting unmerged in the author's worktree) and
+  `task-9b0b4a141b21` (`in_progress`, the task the organic Codex run above left mid-flight after a
+  timeout failure — itself worth a clean, deliberate re-drive of Q8's Codex leg in a future
+  iteration, since this iteration's own review of it was passive, not self-triggered). Running
+  `e2e.py clean` on this project would destroy both. Not cleaned.
+- **Minted credentials**: checked for a standalone revocable-credential trail (`operator_credentials`,
+  `api_keys` tables exist in schema) — nothing this run itself minted requiring removal; per
+  CLAUDE.md, run credentials are minted per-run (`agent_auth.py`) and are not standalone records this
+  drive created or needs to clean up.
+- Nothing destructive attempted or needed: ledger-stress, the trial database, its backups, and
+  `C:\Users\huida\Documents\aw-sweep` were not touched.
+
+**What a reviewer should distrust:** the "organic Codex leg" observation and `task-9b0b4a141b21`'s
+current state are inherited from a document this iteration did not author from scratch — verified
+against the live DB as described above, but this iteration did not itself trigger or watch that run.
+Everything else in this entry (the full sweep, the job-sweep curl output, the keep/clean decision) was
+directly executed and observed this iteration.
+
+**Queue status after this iteration:** Q1–Q7, Q9, Q10 closed. Q6 remains blocked-on-operator (F53,
+F58 need the operator's design call — unchanged from iteration 14). Q8 remains open: the Claude leg
+and the `ask_user` timeout leg are driven and closed within Q8's own scope, but a clean,
+deliberately-triggered rep of the Codex `decide_approval` leg (as opposed to the organic, passively-
+observed one) is still outstanding, and is the only substantive item left in this run's queue.
+
+**Next:** if a future iteration fires before 08:00 and Q8's Codex leg still hasn't had a clean rep,
+that is the one thing left worth spending remaining budget on: trigger a `manual`-mode run on the
+Codex cheap runner (`gpt-5.4-mini`) deliberately (not by finding one already running), watch
+`decide_approval` produce and answer a `permission_requests` row through the real API, and record
+whether Codex's behaviour diverges from Claude's beyond routing. Otherwise, the run is functionally
+complete: every queue item is closed or explicitly blocked on the operator, every suite is green, and
+`decisions_for_user` has the outstanding operator calls (F53, F58's design half, F60/F14's durable-
+surfacing half) recorded and not duplicated.
