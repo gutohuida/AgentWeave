@@ -3368,3 +3368,47 @@ remains as defence in depth for a hand-assembled `queue_entry_ids`.
 `turn_scheduler.py` already carries the same defect's earlier twin one comment above, from design D1
 and finding F5: *"nothing used to ask which entries may ride on it."* F66 is that sentence with
 "over-budget" replaced by "of the other kind".
+
+## F68 (B) — two spellings of one severity, and the louder event is the one that renders as routine
+
+Found 2026-08-26 while measuring the severity distribution for `every-run-knows-its-task`'s D6.
+Nothing was looking for it; it fell out of a count.
+
+```
+severity   count
+info       2996
+warn        108
+warning       3     <- turn_produced_nothing, all three
+```
+
+`hub/hub/run_divergence.py:613` emits `severity="warning"`. Every other call site emits `"warn"`.
+`persist_event` (`hub/hub/utils.py:25`) does not normalise — severity is a free-form string written
+to the column verbatim, so nothing catches the divergence at the write.
+
+Three consumers key on `"warn"` and none knows `"warning"`:
+
+- `EventRow.tsx:44` `SEVERITY_BORDER` — no match, `borderClr` is `undefined`, the row renders with
+  **no amber border**.
+- `EventRow.tsx:37` `SEVERITY_CHIP` — no match, `chip` is `undefined`, the row renders with **no
+  severity chip**.
+- `ActivityLog.tsx:31` `SEVERITY_FILTERS = ['all','error','warn','info','debug']`, filtered at `:165`
+  by strict equality. The event is reachable **only** under `all`. Selecting `warn` hides it;
+  selecting `info` hides it too.
+
+The API has the same hole: `GET /events?severity=warn` compares `EventLog.severity == severity`
+(`api/v1/events.py:42`), so an operator or script asking for warnings never receives one.
+
+So `turn_produced_nothing` — a turn that ended having written nothing and asked nothing, precisely an
+event that wants attention — is the one event in the product that renders as routine and disappears
+under the filter meant to find it. Three rows exist today.
+
+**Why it is B and not C:** nothing is lost and no spend is wasted, but the event exists solely to be
+seen and it cannot be, which is the "passes its test but cannot fire in production" shape this series
+keeps finding. Any test asserting "the event was persisted with a severity" passes.
+
+**Recommended fix:** normalise in `persist_event` against an enumerated accepted set, rather than
+only correcting line 613. Fixing the one call site leaves the class open — a fourth spelling can be
+introduced the same way tomorrow. The enumeration is what makes it a mechanism instead of a habit.
+
+Adjacent to `every-run-knows-its-task` D6, which derives divergence severity rather than hardcoding
+it; that change should not land a new severity string without this normalisation existing.

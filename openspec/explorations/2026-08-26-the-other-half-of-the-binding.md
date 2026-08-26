@@ -147,9 +147,14 @@ change, and `release_conversations_bound_to` then fires on terminal statuses.
 3. **Does the task auto-starting at `in_progress` change what the flow board should show?** It
    removes the reason the agent-fallback exists, which is the whole point — but 4.7 should land
    with it, not before it.
-4. **`dev`'s 36 firings on an empty queue in `toolkit-sandbox`** — separate finding, not this one.
-   A loop fired 36 times with nothing to claim. `_loop_stall_reason` is supposed to be what an
-   operator sees for that. Worth checking whether they saw it.
+4. ~~**`dev`'s 36 firings on an empty queue in `toolkit-sandbox`**~~ — **struck 2026-08-26. This
+   question was wrong.** There was no stall and nothing for an operator to see: the runs belong to
+   `Hourly test check`, a plain scheduled job that runs `pytest -q` and reports, not to a loop.
+   `proj-2826f39e` has thirteen tasks and **none carries a `loop_id`**, so no firing there could
+   claim or bind anything; 37 runs started, were delivered input, and completed. This strengthens
+   rather than weakens the scoped figure below — those 36 are a pytest reporter doing its job and
+   would never bind under the new rule either. Measured in
+   `2026-08-26-what-is-still-unanswered.md`.
 
 ## What this does *not* block
 
