@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Dict, Optional, Tuple
 
 from sqlalchemy import select
@@ -11,7 +12,13 @@ from sqlalchemy import select
 from .conversations import get_conversation_by_id
 from .db.engine import async_session_factory
 from .db.models import InboundQueueEntry, Run
-from .inbound_queue import can_start, format_turn_prompt, project_limits, queued_entries
+from .inbound_queue import (
+    DELIVERY_ATTEMPT_LIMIT,
+    can_start,
+    format_turn_prompt,
+    project_limits,
+    queued_entries,
+)
 from .sse import sse_manager
 from .usage_accounting import project_budget_state
 from .utils import persist_event
@@ -105,7 +112,8 @@ async def schedule_agent(project_id: str, agent: str) -> ScheduleResult:
                 initiator=initiator,
             )
         except TriggerAgentError as exc:
-            if getattr(exc, "workspace_unavailable", False):
+            workspace_unavailable = getattr(exc, "workspace_unavailable", False)
+            if workspace_unavailable:
                 await persist_event(
                     db,
                     project_id,
@@ -127,9 +135,50 @@ async def schedule_agent(project_id: str, agent: str) -> ScheduleResult:
                         "directory_state": exc.directory_state,
                     },
                 )
+            else:
+                # No `Run` was ever created for this attempt, so `selected` never became
+                # `delivered` and `return_run_entries`'s own abandonment bookkeeping never runs
+                # for it (F56) — a refusal raised here (a review target with no evidence naming a
+                # commit, an archived agent, a task that does not exist, ...) repeats identically
+                # forever, and every entry queued behind it starves along with it. Count the
+                # attempt the same way a spawned-and-failed run's does, and give up on the same
+                # schedule, so a permanently wrong entry stops wedging the whole queue.
+                abandoned: list[InboundQueueEntry] = []
+                for entry in selected:
+                    entry.delivery_attempts = (entry.delivery_attempts or 0) + 1
+                    if entry.delivery_attempts >= DELIVERY_ATTEMPT_LIMIT:
+                        entry.state = "withdrawn"
+                        entry.withdrawn_at = datetime.now(timezone.utc)
+                        entry.abandoned_reason = (
+                            f"delivery failed {entry.delivery_attempts} times "
+                            f"({exc.detail}); the Hub stopped retrying"
+                        )
+                        abandoned.append(entry)
+                await db.commit()
+                # Same shape `_report_abandoned_entries` broadcasts for a spawned-and-failed run,
+                # `run_id: None` because none was ever created — the operator's signal that input
+                # is being dropped should not depend on which of the two paths dropped it.
+                for entry in abandoned:
+                    payload = {
+                        "entry_id": entry.id,
+                        "agent": agent,
+                        "run_id": None,
+                        "attempts": entry.delivery_attempts,
+                        "reason": entry.abandoned_reason,
+                        "conversation_id": entry.conversation_id,
+                    }
+                    await persist_event(
+                        db,
+                        project_id,
+                        "queue_entry_abandoned",
+                        payload,
+                        agent=agent,
+                        severity="warn",
+                    )
+                    await sse_manager.broadcast(project_id, "queue_entry_abandoned", payload)
             return ScheduleResult(
                 waiting_reason=exc.detail,
-                terminal_failure=not getattr(exc, "workspace_unavailable", False),
+                terminal_failure=not workspace_unavailable,
             )
         return ScheduleResult(response=response, terminal_failure=False)
 

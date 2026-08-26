@@ -744,3 +744,110 @@ can the reviewer read the code (F10), does `record_evidence` work from Haiku (F2
 route back legibly, does approval cherry-pick into the main branch with the landing commit
 reported (F9). `ledger-stress` reads `main_branch: "master"` (F4 confirmed, prep + Q1), so
 integration is not blocked.
+
+---
+
+## Iteration 8 — Q5 in progress: F56 found live and fixed, both under_review tasks driven to a real verdict, an unexpected cascade surfaces a possible F10 recurrence still open
+
+**2026-08-26T01:03–02:22+01:00.** Reconciled first: branch/log matched `STATE.json` (`3c22d53` tip
+after iteration 7's heartbeat release), tree clean, trial Hub `/health` ok and serving the `beta`
+database.
+
+**Q5's very first step blocked immediately, and the block was the finding.** Triggering `critic`
+on `task-23a0986e7fe9` (`e2e.py turn ... --task task-23a0986e7fe9`) returned `queued`, `run_id:
+null`, with a `waiting_reason` naming a completely different, already-`completed` task
+(`task-18e900f3eb96`). Repeated with a raw API call — identical, unrelated refusal. Traced through
+`turn_scheduler.schedule_agent`, `agent_trigger.trigger_agent_directly` and
+`requirement_evidence.commit_for_task_review`, then confirmed directly against the live
+`inbound_queue_entries` table: a job-queued review request from **2026-08-25T00:10**, over 24 hours
+earlier, had been refused once (the task it named had no evidence naming a commit — itself now
+moot, since that task later completed by other means) and then never touched again, because a
+refusal raised before any `Run` exists is invisible to `DELIVERY_ATTEMPT_LIMIT`'s counting — that
+bookkeeping only runs for a `Run` that was created and then failed. Eight later entries, spanning
+three origin types and this session's own first two drive attempts, had piled up behind it with
+zero self-correction and zero operator-legible signal. Full write-up: **F56 (A)** in
+`scripts/drive/FINDINGS.md`.
+
+**Fixed live, `hub/hub/turn_scheduler.py`:** a terminal (non-`workspace_unavailable`)
+`TriggerAgentError` now counts against the same entries' `delivery_attempts`, abandoning them at
+`DELIVERY_ATTEMPT_LIMIT` with a stated reason and a `queue_entry_abandoned` broadcast, exactly
+mirroring what `return_run_entries` already does for a spawned-and-failed run — extended to cover
+the case that mechanism structurally could not see. Two regression tests added to
+`hub/tests/test_failed_run_returns_input.py` (the terminal-refusal abandonment, and a
+workspace-unavailable refusal correctly *not* counting). Mutation-checked: `git stash` on just the
+source file reproduced the new terminal-refusal test failing while the workspace-unavailable test
+still passed; unstashed and reconfirmed green. `ruff`/`black --target-version py311` clean on both
+touched files after a `black` reformat.
+
+**Unblocked live** by withdrawing the poisoned entry through the documented operator escape hatch
+(`DELETE /queue/entries/{id}` — confirmed to exist and work), then restarted the trial Hub onto the
+fixed code (`Stop-Process` on the two prior PIDs, relaunched via the documented `uvicorn` command;
+confirmed back on the `beta` database with all five projects listed, and all twelve `ai_jobs` rows
+still `enabled: 0`). The fix itself was verified through the regression suite against a real async
+SQLite session (not mocked) plus the mutation check; it was not separately re-poisoned against the
+freshly-restarted process, a judgment call recorded in `FINDINGS.md` rather than left implicit.
+
+**Both `under_review` tasks then got a real reviewer verdict, live, through the actual product
+surface — Q5's core question.** `critic` (Haiku), given a proper `review_task_id` turn, was checked
+out at the exact evidence commit (`f10d198d…`), read the real diff and history unprompted (it
+independently worked out that the code fix predated the reviewed commit and only new tests were
+added — see below), ran the suite, and called `update_task` to `approved` with real reasoning
+(`run-45862ae056ff`). `relay` (Codex mini), on a fresh queue with no backlog, went straight to
+`running`, hit and worked around a `pytest`-console-entrypoint quirk on its own, wrote a review
+artifact, and also called `update_task` to `approved` (`run-51255c8b0ff0`). Confirmed against the
+`tasks` table, not the transcripts: both rows now read `status: approved`. Neither task carries a
+linked spec requirement (`requirement_ids: []`), so both reviewers correctly discovered
+`record_evidence` refuses a bare task id as `identifier` (F21's finding, not new) and neither
+integration nor a landing commit is possible for either — `integration-preview` read
+`will_merge: false, reason: "no accepted evidence names a commit"` before and necessarily still
+does after, since approval alone creates none. `requirement_gate.evaluate` has nothing to check for
+a task with zero linked requirements, so the approval sailed through with no gate at all — traced
+in code, matches the documented design (`task_integration.py`'s own docstring: "a supported project
+shape, not a degraded one"), not a new finding. **Q5's F9 half (a real merge with a landing commit
+reported) is therefore still undriven** — these two tasks were never going to exercise it.
+
+**What HELD.** F10 did not recur on the properly-formed review turn: isolation for a genuine
+`review_task_id` turn worked exactly as designed. The withdraw escape hatch is real and sufficient
+to unblock an agent by hand today. F45/F46's fix (a review that moves the task rather than looping)
+held under real load, below.
+
+**Unplanned, and the most interesting open thread of the iteration.** Once unblocked, the queue
+*self-drained*: `critic`'s tail apparently reschedules itself after each completion, and four more
+backlogged entries fired on their own over the next ~12 minutes with no further triggering from
+this session (`run-e842f20908da`, `run-76aea9746e7f`, `run-8ecd51e9f81b`, `run-26f0c4702de0`, all
+`completed`, no errors). One of them carried a *third*, requirement-linked `under_review` task this
+session had not gone looking for — `task-0dfc3be5` ("Refuse the empty entry", `FR-2`, already had
+evidence-with-commit recorded) — and `critic` moved it to **`revision_needed`**, a real rejection,
+not a rubber stamp. Reading that run's transcript (`run-e842f20908da`) for legibility found two
+things worth carrying forward rather than fully chasing down this iteration, for time: (1)
+`task.notes` and `task.deliverables` are both `null` on the now-`revision_needed` task — whatever
+reasoning `critic` had is in the run's own output, not anywhere the task record itself carries
+forward, which bears directly on Q5's "does rejection route back legibly" question and reads like a
+plausible gap, not yet confirmed as one; (2) the transcript shows `critic` genuinely blocked at
+first — "I cannot access the builder's worktree commits... I am blocked on reviewing this until the
+builder responds" — before it separately discovered it could read the builder's branch directly
+with `git`, which looks like **F10 recurring** on a turn that was not a clean, single-target review
+turn (this run's batch mixed a `review_task_id` entry with unrelated `task_id`-only entries from
+other tasks, unlike the two turns this session drove directly). Not written up as a finding yet:
+the exact mechanism (why workspace setup differed here) was not traced before time ran out this
+iteration. Flagged in `decisions_for_user` below with both run ids so it is not lost.
+
+**What a reviewer should distrust.** The cascade's four extra runs were not independently watched
+live the way the two deliberate drives were — verified after the fact against `runs` and
+`task_transitions`, not observed turn-by-turn. The full `hub/tests/` suite has still not been rerun
+this session (only the touched-file slice plus three adjacent files, 126 tests, all green); Q9's
+sweep remains where whole-suite green gets re-established. The `task.notes` observation above is
+one data point on one task, not confirmed as a pattern.
+
+**Repository root** touched only `hub/hub/turn_scheduler.py`, `hub/tests/test_failed_run_returns_input.py`,
+`scripts/drive/FINDINGS.md`, and `STATE.json`/this log — confirmed by `git status` before commit.
+
+**Job sweep, as output:** `ai_jobs` across all five projects, all twelve rows `enabled: 0`,
+confirmed via direct query against the live `beta` database after the Hub restart.
+
+**Next:** Q5 remains open — the F9 merge/landing-commit half is still undriven and needs a task
+that both reaches `under_review` and carries a linked, evidence-bearing requirement (`task-e6b05093`
+carrying `FR-3`, currently `assigned` to `builder`, is a live candidate once it completes; a second
+review-and-accept-evidence pass on `task-0dfc3be5` is another, once its `revision_needed` cycle
+resolves). The possible F10 recurrence on a mixed-batch review turn (above) should be traced and
+either written up or ruled out before Q5 closes.

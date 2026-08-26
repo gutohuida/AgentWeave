@@ -486,6 +486,127 @@ async def test_giving_up_lets_the_agent_accept_new_input(app, auth_headers, bind
 
 
 # ---------------------------------------------------------------------------
+# F56: a refusal raised before any Run exists still has to count and abandon
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_a_terminal_pre_spawn_refusal_abandons_the_entry_after_the_limit(
+    app, auth_headers, bind_runner
+):
+    """`review_turn.prepare_review_turn` (a review target with no evidence naming a commit) and
+    every other `TriggerAgentError` `trigger_agent_directly` can raise share this path: no `Run`
+    row is ever created, so `return_run_entries`'s counting is structurally unreachable — the
+    exact gap F56 found live (a stuck review-target entry wedged an agent's entire queue for over
+    a day with `delivery_attempts` stuck at 0). `schedule_agent`'s own `except TriggerAgentError`
+    branch must do the counting itself."""
+    project_id = await _project_id(app, auth_headers)
+    await _register(app, auth_headers, "terminally-refused")
+    await bind_runner("terminally-refused", cli="claude")
+    queue = sse_manager.subscribe(project_id)
+
+    from hub.turn_scheduler import schedule_agent
+
+    refusal = agent_trigger.TriggerAgentError(409, "this task has no evidence naming a commit")
+    with patch("hub.api.v1.agent_trigger.trigger_agent_directly", AsyncMock(side_effect=refusal)):
+        for _ in range(DELIVERY_ATTEMPT_LIMIT):
+            resp = await app.post(
+                "/api/v1/projects/proj-test/agent/trigger",
+                json={
+                    "agent": "terminally-refused",
+                    "message": "review this",
+                    "session_mode": "new",
+                },
+                headers=auth_headers,
+            )
+            assert resp.status_code == 200
+
+        entries = await _entries_for("terminally-refused")
+        poisoned = min(entries, key=lambda e: e.arrived_at)
+        assert poisoned.state == "withdrawn"
+        assert poisoned.delivery_attempts == DELIVERY_ATTEMPT_LIMIT
+        assert poisoned.abandoned_reason and "stopped retrying" in poisoned.abandoned_reason
+        assert refusal.detail in poisoned.abandoned_reason
+        # No Run was ever created for the poisoned entry — the operator's breadcrumb is absent
+        # here, unlike the spawned-and-failed case, because there is nothing to point at.
+        assert poisoned.delivered_in_run_id is None
+
+        events = _drain(queue)
+        abandoned = [
+            d
+            for t, d in events
+            if t == "queue_entry_abandoned" and d["agent"] == "terminally-refused"
+        ]
+        assert len(abandoned) == 1
+        assert abandoned[0]["run_id"] is None
+        assert abandoned[0]["attempts"] == DELIVERY_ATTEMPT_LIMIT
+
+        # The point of the cap: the wedge is gone. The two later POSTs each queued their own
+        # entry behind the first (only the oldest is ever retried), so they are still sitting
+        # there, untouched. One more scheduling pass, still under the same permanent refusal,
+        # must fall through to the *next* entry rather than re-refusing the one already
+        # withdrawn — proving the abandonment actually unblocks the queue instead of only
+        # recording a reason nothing then acts on. Kept inside the same patch so this stays a
+        # test of the scheduler's own bookkeeping, not of a real spawn.
+        remaining = {e.id for e in entries if e.state == "queued"}
+        assert poisoned.id not in remaining
+        assert remaining  # the two later entries are still there, untouched so far
+
+        await schedule_agent(project_id, "terminally-refused")
+
+    async with async_session_factory() as db:
+        refreshed = (
+            (await db.execute(select(InboundQueueEntry).where(InboundQueueEntry.id == poisoned.id)))
+            .scalars()
+            .one()
+        )
+        # Still exactly the reason it was abandoned for — a later pass must not touch it again.
+        assert refreshed.delivery_attempts == DELIVERY_ATTEMPT_LIMIT
+        next_up = (
+            (
+                await db.execute(
+                    select(InboundQueueEntry).where(
+                        InboundQueueEntry.id.in_(remaining),
+                        InboundQueueEntry.delivery_attempts > 0,
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        # One of the entries that was waiting behind the wedge got its own attempt counted —
+        # proof the scheduler moved on rather than looping on the entry it just gave up on.
+        assert len(next_up) >= 1
+
+
+@pytest.mark.asyncio
+async def test_a_workspace_unavailable_refusal_does_not_count_an_attempt(
+    app, auth_headers, bind_runner
+):
+    """The environmental case, already handled by `queue_agent_paused`: not the entry's fault, so
+    it must not spend down the same limit a genuinely-poisoned entry does."""
+    await _register(app, auth_headers, "workspace-paused")
+    await bind_runner("workspace-paused", cli="claude")
+
+    refusal = agent_trigger.TriggerAgentError(
+        409, "workspace is unavailable", workspace_unavailable=True, directory_state="missing"
+    )
+    with patch("hub.api.v1.agent_trigger.trigger_agent_directly", AsyncMock(side_effect=refusal)):
+        resp = await app.post(
+            "/api/v1/projects/proj-test/agent/trigger",
+            json={"agent": "workspace-paused", "message": "hi", "session_mode": "new"},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+
+    entries = await _entries_for("workspace-paused")
+    assert len(entries) == 1
+    assert entries[0].state == "queued"
+    assert entries[0].delivery_attempts == 0
+    assert entries[0].abandoned_reason is None
+
+
+# ---------------------------------------------------------------------------
 # A pre-spawn failure schedules too
 # ---------------------------------------------------------------------------
 

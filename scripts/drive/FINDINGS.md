@@ -2295,3 +2295,122 @@ incidentally surfaced it. Left for Q6. The measured "identical timestamp" repro 
 machine-specific (this Windows box); it is not claimed that every environment reproduces the tie at
 the same rate, only that the tie-break itself is unsound regardless of how often it fires.
 
+## F56 (A) — one review target with no evidence permanently wedges an agent's entire inbound queue, silently
+
+Found live 2026-08-26, at the very start of Q5, trying to do the thing Q5 asks for: trigger `critic`
+to give a real verdict on `task-23a0986e7fe9`. `POST /agent/trigger` with `task_id:
+"task-23a0986e7fe9"` returned `200`, `run_id: null`, and:
+
+```
+"waiting_reason": "queued task task-18e900f3eb96 has no recorded evidence, so there is no commit
+to review. Evidence naming a commit is what a review turn is given."
+```
+
+`task-18e900f3eb96` is not the task I named, has nothing to do with it, and reads `status:
+completed` in the database — the review the message is about was superseded over a day earlier.
+Repeated with a second, independent trigger: identical refusal, identical unrelated task named.
+
+### Root cause, traced through the code and confirmed against the live `inbound_queue_entries` table
+
+`turn_scheduler.schedule_agent` picks `controlling`, the *oldest* still-`queued` entry for the
+agent (`queued_entries` orders by `sequence`), regardless of what that entry is about, then batches
+every other queued entry sharing its conversation and calls `trigger_agent_directly` with that
+batch. If the batch's `review_task_id` resolves to a task with no evidence naming a commit,
+`review_turn.prepare_review_turn` raises `ReviewTurnRefused`, converted to a `TriggerAgentError` and
+raised **before any `Run` row is created**. `schedule_agent`'s `except TriggerAgentError` branch
+(pre-fix) did nothing but return a `ScheduleResult` — it never touched the entries at all.
+
+That matters because of exactly one asymmetry: `InboundQueueEntry.state` only moves to
+`"delivered"` atomically *with* a `Run`'s creation (`inbound_queue.py`'s delivery-marking helper).
+No `Run` here means no delivery, which means `delivery_attempts` — the counter
+`return_run_entries` uses to abandon a poisoned entry at `DELIVERY_ATTEMPT_LIMIT` (3) — **never
+increments**, because that bookkeeping only runs for a `Run` that was created and then failed. A
+refusal raised before a `Run` exists is invisible to the one safety net designed to stop exactly
+this class of problem ("the Hub stopped retrying" — `inbound_queue.py:174`'s own comment). The
+entry sits `queued` forever, `controlling` is always it again on the next scheduling pass, and
+every entry queued behind it — regardless of what *they* target — starves identically, forever.
+
+Measured directly against the live `beta` database, `critic`'s queue on `proj-18e5d4e0`
+(`ledger-stress`):
+
+```
+entry-1a37fe42ec46  queued  arrived 2026-08-25T00:10:00Z  review_task_id=task-18e900f3eb96  (job)
+entry-078312a2652f  queued  arrived 2026-08-25T18:33:24Z  review_task_id=task-23a0986e7fe9  (job)
+entry-1549fa5bbca5  queued  arrived 2026-08-25T23:43:32Z  task_id=task-3292072f63c3          (agent)
+entry-c03602972249  queued  arrived 2026-08-25T23:47:14Z  task_id=task-bb86d53a94d5          (agent)
+entry-fbeb63c07a21  queued  arrived 2026-08-26T00:32:17Z  task_id=task-23a0986e7fe9           (agent, mine)
+entry-9d9904d9252b  queued  arrived 2026-08-26T00:35:20Z  review_task_id=task-0dfc3be5        (job)
+entry-37c37a73155d  queued  arrived 2026-08-26T01:03:40Z  task_id=task-23a0986e7fe9           (operator, mine)
+entry-942eb1bb30a4  queued  arrived 2026-08-26T01:03:53Z  task_id=task-23a0986e7fe9           (operator, mine)
+```
+
+The head entry (`entry-1a37fe42ec46`) arrived within seconds of `task-18e900f3eb96` completing —
+plausibly a loop queuing its own next-step review the instant the task finished — and whatever
+evidence that review needed was never recorded against it (or was recorded through a path that
+doesn't name a commit). From that moment, **every subsequent attempt to talk to `critic` for over
+24 hours, eight of them, spanning three different origin types and both real drive attempts this
+session made**, silently piled up behind it with zero self-correction and zero signal to the
+operator beyond a `200`-with-`run_id: null` response naming a task nobody asked about.
+
+### Fixed live this iteration, `hub/hub/turn_scheduler.py`
+
+A refusal from `trigger_agent_directly` that is not `workspace_unavailable` (an environmental,
+not-the-entry's-fault condition already handled separately and correctly, via
+`queue_agent_paused`) now counts against the same `delivery_attempts` /
+`DELIVERY_ATTEMPT_LIMIT` bookkeeping `return_run_entries` already uses for a `Run` that spawned
+and then failed — extended to cover the case that bookkeeping structurally could not see, a
+refusal before any `Run` exists. At the limit, the entry is withdrawn with an `abandoned_reason`
+naming the refusal, exactly like the existing "the Hub stopped retrying" path.
+
+Regression test added (`hub/tests/test_failed_run_returns_input.py`,
+`test_a_terminal_pre_spawn_refusal_abandons_the_entry_after_the_limit`): three triggers against an
+agent whose `trigger_agent_directly` call is patched to always raise a terminal `TriggerAgentError`
+assert `delivery_attempts` reaches `DELIVERY_ATTEMPT_LIMIT`, the entry's `state` becomes
+`"withdrawn"` with a non-null `abandoned_reason` naming the refusal, and a fourth trigger for the
+same agent proceeds past it rather than repeating the same wait forever. A second test asserts a
+`workspace_unavailable` refusal does **not** count an attempt, preserving the existing
+`queue_agent_paused` behaviour for an environmental block. Mutation-checked: reverting the `else`
+branch to its pre-fix `pass` reproduces both new tests failing.
+
+### Verified live against the actual wedge, not only against the regression test
+
+Withdrew the specific poisoned entry by hand first (`DELETE
+/projects/proj-18e5d4e0/queue/entries/entry-1a37fe42ec46` — the documented operator escape hatch,
+confirmed to exist and work: `200`, `state: "withdrawn"`), which is the only way to unblock `critic`
+*today* without restarting the Hub on the fixed code. Then re-triggered `critic` on
+`task-23a0986e7fe9` with `review_task_id` set correctly this time: the response changed from a
+misdirected refusal to `"an older conversation's queued input is being delivered first (run
+run-45862ae056ff)"` — the queue moving again — and that run completed for real: `critic` was handed
+an isolated checkout at the reviewed commit (`f10d198d5952f7fb7856...`), read the actual diff and
+history (working out on its own that the code fix predated the commit under review and only the
+tests were new — see F10's note below), ran the suite, and reached a genuine verdict (`APPROVED`,
+`update_task` called, transition recorded). The Hub restart to pick up the code fix itself, and the
+fixed code's own re-verification once running, are recorded in this iteration's log rather than
+repeated here.
+
+### What HELD
+
+**F10 did not recur.** The reviewer's worktree was genuinely checked out at the commit its evidence
+named, and it read the real diff rather than guessing — worktree isolation for a *review* turn
+(`review_turn.prepare_review_turn`, design D4) works as documented. The escape hatch (`DELETE
+/queue/entries/{id}`) also held: it is real, documented, and suffices to unblock an agent by hand
+today, which is why this is severity A rather than "unrecoverable."
+
+### What a reviewer should distrust
+
+The withdraw route (`DELETE /queue/entries/{id}`) does not itself call `schedule_agent` afterward
+(`release_queue_entry` does; `withdraw_queue_entry` does not) — clearing the head entry did not
+wake the rest of the queue on its own; a fresh trigger was what actually nudged it. Not written up
+as its own finding — a fresh trigger is an ordinary thing an operator would do next regardless —
+but worth knowing if a future session sees a withdrawal that appears to do nothing.
+
+The Hub code fix itself was verified against the real async DB layer through the regression test
+(no mock session — `async_session_factory` against a real, if temporary, SQLite database), plus
+mutation-checked. It was **not** separately re-poisoned against the running trial Hub after
+deploying it: the trial Hub was restarted on the fixed code this iteration (confirmed back on the
+`beta` database, all five projects present, all twelve `ai_jobs` rows still `enabled: 0`), but
+building a fresh three-refusal reproduction live would have meant deliberately wedging another
+agent's queue to prove it un-wedges itself — judged not worth the extra live disruption once the
+mechanism was already confirmed live once (the escape hatch) and unit-tested against the real
+query path the running process uses. Flagged here rather than silently assumed equivalent.
+
