@@ -23,6 +23,7 @@ from typing import Optional, Tuple
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from .conversations import get_conversation_by_id, name_conversation, new_conversation
 from .db.engine import async_session_factory
 from .db.models import (
     Agent,
@@ -173,6 +174,7 @@ async def _queue_response(
     prompt: str,
     task_id: str,
     source_run_id: str,
+    diverged_run: Run,
     review_task_id: Optional[str] = None,
 ) -> str:
     """Put the response in the agent's queue rather than spawning it here.
@@ -196,6 +198,9 @@ async def _queue_response(
     "which task this run inspects" are the two meanings this change exists to keep apart — deriving
     one from the other inside this function would put the collision back one layer down.
     """
+    conversation_id = await _conversation_for_response(
+        session, project_id=project_id, agent=agent, diverged_run=diverged_run
+    )
     entry = new_entry(
         project_id=project_id,
         agent=agent,
@@ -205,9 +210,62 @@ async def _queue_response(
         task_id=task_id,
         divergence_source_run_id=source_run_id,
         review_task_id=review_task_id,
+        conversation_id=conversation_id,
     )
     session.add(entry)
     return entry.id
+
+
+async def _conversation_for_response(
+    session: AsyncSession,
+    *,
+    project_id: str,
+    agent: str,
+    diverged_run: Run,
+) -> Optional[str]:
+    """Which thread the response arrives in. **Finding F67.**
+
+    Until 2026-08-26 this function did not exist and the entry carried no conversation at all —
+    and `turn_scheduler.schedule_agent` refuses precisely that shape, returning *"queued entry has
+    no conversation"*. So every response ever queued sat `queued` forever. Measured on the trial
+    database before the fix: **25 divergence rows, zero carrying a `response_run_id`.** Not few;
+    none, across the entire life of the capability.
+
+    It stayed invisible because nothing reached here. `retry` needs a task nobody set to `retry`;
+    `escalate` needs `task.escalation_agent`, NULL on every task ever recorded. All 24 historical
+    divergences are `surfaced`, which queues nothing. `restaffed` (design D4) is the first outcome
+    that reaches this on an ordinary task with nothing configured, and it walked straight into it on
+    the first live drive.
+
+    Two cases, and the agent is what separates them:
+
+    - **Same agent** (`retry`) — continue in the thread the run diverged in. It is that agent's own
+      thread and the work is the same work; a fresh conversation would hide the retry from the
+      history that explains it, and would throw away a resumable provider session.
+    - **A different agent** (`escalate`, `restaffed`) — a fresh thread, because a conversation
+      belongs to one agent and `schedule_agent` checks exactly that. Origin `divergence`, its own
+      value rather than a borrowed one: nobody asked for this thread, and reusing `operator` would
+      put the operator's name on work they did not ask for (migration `0058`'s reasoning for the
+      queue entry's own `origin_type`, and `0093`'s for this).
+
+    Returns None only where the diverged run has no conversation to continue and none can be made,
+    which leaves the old behaviour rather than raising — a divergence must never turn a finished run
+    into a failed one.
+    """
+    if agent == diverged_run.agent and diverged_run.conversation_id:
+        # `get_conversation_by_id`, never `session.get`: the primary key is `sequence`, an
+        # autoincrement integer, so `session.get` would compare a `conv-…` string against an
+        # integer column and never match. The helper exists because that trap has been fallen into
+        # before — and it was fallen into again while writing this function, caught by the test.
+        existing = await get_conversation_by_id(session, diverged_run.conversation_id)
+        if existing is not None and existing.lifecycle == "open" and existing.agent == agent:
+            return existing.id
+
+    conversation = new_conversation(project_id=project_id, agent=agent, origin="divergence")
+    name_conversation(conversation, f"Divergence on {diverged_run.id}")
+    session.add(conversation)
+    await session.flush()
+    return conversation.id
 
 
 # --------------------------------------------------------------------------------------
@@ -329,6 +387,7 @@ async def _answer_failed_review(
         # original review turn was given.
         review_task_id=task.id,
         source_run_id=run.id,
+        diverged_run=run,
     )
     return OUTCOME_RESTAFFED, choice.agent, previous_assignee, None
 
@@ -369,6 +428,7 @@ async def _apply_policy(
             prompt=_response_prompt(task, run, escalating=False),
             task_id=task.id,
             source_run_id=run.id,
+            diverged_run=run,
         )
         return outcome, run.agent, None
 
@@ -396,6 +456,7 @@ async def _apply_policy(
             prompt=_response_prompt(task, run, escalating=True),
             task_id=task.id,
             source_run_id=run.id,
+            diverged_run=run,
         )
         return outcome, target, previous_assignee
 

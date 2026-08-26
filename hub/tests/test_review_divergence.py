@@ -22,6 +22,7 @@ So a review takes D4's split instead:
 import pytest
 from sqlalchemy import select
 
+from hub.conversations import get_conversation_by_id, new_conversation
 from hub.db.engine import async_session_factory
 from hub.db.models import (
     AIJob,
@@ -567,3 +568,96 @@ async def test_re_delivery_is_bounded_and_says_why_it_stopped(
         assert entry.delivery_attempts >= DELIVERY_ATTEMPT_LIMIT
         assert "stopped retrying" in entry.abandoned_reason
         assert entry.delivered_in_run_id == "run-bounded", "the breadcrumb is kept"
+
+
+# ---------------------------------------------------------------------------
+# F67 — a queued response must be one the scheduler will actually deliver
+#
+# Found by driving, not by reading, and it is this repository's dominant failure mode appearing in
+# this change's own work. Group 2's tests asserted the response entry was queued with the right
+# agent and the right columns; none asserted it could ever be *delivered*. It could not:
+# `_queue_response` wrote no `conversation_id`, and `turn_scheduler.schedule_agent` refuses exactly
+# that shape with "queued entry has no conversation".
+#
+# Measured on the trial database before the fix: 25 divergence rows, ZERO carrying a
+# `response_run_id`. The path had never been walked, because `retry` needs a policy nobody set and
+# `escalate` needs `task.escalation_agent`, NULL on every task ever recorded. `restaffed` is the
+# first outcome that reaches it with nothing configured.
+# ---------------------------------------------------------------------------
+
+
+async def test_a_restaffed_response_is_deliverable_not_merely_queued(
+    app, auth_headers, bind_runner, bind_project_workspace, tmp_path
+):
+    """The assertion whose absence let F67 ship. An entry the scheduler will not pick up is work
+    that was recorded and then silently dropped."""
+    from hub.turn_scheduler import schedule_agent
+
+    await bind_project_workspace(_init_repo(tmp_path / "repo"))
+    await _roster(app, auth_headers, bind_runner, AUTHOR, "critic", "auditor")
+
+    async with async_session_factory() as db:
+        task = await _completed_by_the_author(db, "task-deliverable")
+        await _review_run_that_said_nothing(db, "run-deliverable", task, reviewer="critic")
+
+    assert await evaluate_run_end("run-deliverable") is not None
+
+    responses = await _divergence_responses("auditor")
+    assert len(responses) == 1
+    assert responses[0].conversation_id is not None, (
+        "a response with no conversation is refused by schedule_agent and sits queued forever — "
+        "which is what 25 divergences with zero response runs looked like"
+    )
+
+    async with async_session_factory() as db:
+        conversation = await get_conversation_by_id(db, responses[0].conversation_id)
+        assert conversation is not None
+        assert conversation.agent == "auditor", "a conversation belongs to one agent"
+        assert conversation.lifecycle == "open"
+        assert (
+            conversation.origin == "divergence"
+        ), "its own origin, not a borrowed one: nobody asked for this thread"
+
+    # The scheduler's own verdict, rather than our reading of it. Any reason but the one F67 was.
+    result = await schedule_agent("proj-test", "auditor")
+    assert result.waiting_reason != "queued entry has no conversation"
+
+
+async def test_a_retry_continues_in_the_thread_the_run_diverged_in(
+    app, auth_headers, bind_runner, bind_project_workspace, tmp_path
+):
+    """Same agent, same work: a fresh conversation would hide the retry from the history that
+    explains it, and throw away a resumable provider session. Only a response to a *different*
+    agent needs a thread of its own."""
+    await bind_project_workspace(_init_repo(tmp_path / "repo"))
+    await _roster(app, auth_headers, bind_runner, "worker")
+
+    async with async_session_factory() as db:
+        conversation = new_conversation(project_id="proj-test", agent="worker", origin="operator")
+        db.add(conversation)
+        task = Task(
+            id="task-retry-thread",
+            project_id="proj-test",
+            title="ordinary work",
+            status="pending",
+            divergence_policy="retry",
+        )
+        db.add(task)
+        run = Run(
+            id="run-retry-thread",
+            project_id="proj-test",
+            agent="worker",
+            status="completed",
+            conversation_id=conversation.id,
+        )
+        db.add(run)
+        await db.flush()
+        await bind_run_to_task(db, run, task)
+        await db.commit()
+        original_conversation = conversation.id
+
+    assert await evaluate_run_end("run-retry-thread") is not None
+
+    responses = await _divergence_responses("worker")
+    assert len(responses) == 1
+    assert responses[0].conversation_id == original_conversation

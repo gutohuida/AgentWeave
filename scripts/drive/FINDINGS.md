@@ -3194,3 +3194,160 @@ already the task's own assignee. So the Stall bench was misdescribing itself as 
 even before any agent was archived; archiving only made the misattribution easier to see. The fix is
 reporting truthfully, not over-reporting. **Whether a roster of three should be unable to staff one
 review is a separate question about the ladder**, not about this fix, and is left for the operator.
+
+## F66 — A batched turn's workspace and its run binding are decided by two different rules, and they can name different tasks
+
+**Found:** 2026-08-26, driving group 6 of `one-answer-to-what-is-happening` live against the trial
+Hub on port 8010. Not by reading — by checking a claim I had already written down and finding it
+too generous to itself.
+
+**The claim that was wrong.** Group 1 and its exploration state that *every* review run in the
+product's history was unbound. Measured column-wise that is true — `inbound_queue_entries` has zero
+rows carrying both `task_id` and `review_task_id`, so no review run was ever bound *through its
+review entry*. But two review runs are bound anyway:
+
+```
+run-26f0c4702de0   run.task_id = task-23a0986e7fe9
+   seq 184  review_task_id = task-0dfc3be5        <- what it was checked out to review
+   seq 186  task_id        = task-23a0986e7fe9    <- what it was bound to
+
+run-d7e30a9c650d   run.task_id = task-0dfc3be5    (the mirror image, same day)
+   seq 188  review_task_id = task-23a0986e7fe9
+   seq 199  task_id        = task-0dfc3be5
+```
+
+Both turns were delivered **two** entries: a review of one task and work on another. Their
+*workspace* was a detached checkout of the first task's commit; their *run binding*, and therefore
+the boundary check that asks "did this run move its task", was against the second. **That is worse
+than unbound.** An unbound run is exempt from the check; these were checked against work they were
+not looking at.
+
+**The mechanism, and why it is still there.** Two rules pick a task from the same batch and they are
+not the same rule:
+
+| | rule | source |
+|---|---|---|
+| workspace | **any** entry in the batch carrying `review_task_id` wins; two distinct values is a 409 | `agent_trigger._review_task_from_entries` |
+| binding | the **earliest queued** entry naming a task wins | `run_task_binding.binding_from_entries` |
+
+Group 1 narrows the gap but does not close it. In both rows above the review entry is the earliest,
+so after group 1 they bind to the task they were reviewing and the two rules agree. Reverse the
+arrival order — work queued first, review second — and the workspace is still the review checkout
+while the binding is the work task. The disagreement is reachable, it is just not what these two
+rows happened to be.
+
+**Not fixed here, and deliberately.** `one-answer-to-what-is-happening` is about a review turn
+knowing its own task; this is about a turn that is doing two things at once, which is a question
+about whether such a turn should exist at all. Test 1.3 pins the binding as deterministic across
+both sources, which is what stops it drifting further while the question is open.
+
+**For the operator:** should a turn ever batch a review and ordinary work? The 409 on two distinct
+review tasks says the product already thinks one review per turn is the limit. One review plus one
+piece of work is the case nothing refuses and nothing reconciles.
+
+## F67 — A divergence response is queued into a conversation that does not exist, so it can never be delivered
+
+**Found:** 2026-08-26, driving task 6.4 of `one-answer-to-what-is-happening` live. **The repository's
+dominant failure mode, caught in my own work**: a fix that passes its tests and cannot fire.
+
+**Measured on the beta database, before any fix:**
+
+```
+run_divergences                          25 rows
+  ... with a response_run_id              0
+divergence-origin queue entries           1  (the one this drive produced)
+  ... with conversation_id NULL           1
+```
+
+**Zero divergence responses have ever produced a run.** Not "few" — none, across the whole history
+of the capability.
+
+**The mechanism.** `run_divergence._queue_response` builds its entry with no `conversation_id`:
+
+```python
+entry = new_entry(project_id=..., agent=..., origin_type="divergence", content=prompt,
+                  hop_depth=0, task_id=task_id, divergence_source_run_id=source_run_id)
+```
+
+and `turn_scheduler.schedule_agent` refuses exactly that shape:
+
+```python
+controlling = next((e for e in entries if e.hop_depth <= hop_budget), None)
+if controlling is None or controlling.conversation_id is None:
+    return ScheduleResult(waiting_reason="queued entry has no conversation")
+```
+
+So the entry is written, `schedule_agent` is called, it declines, and the row sits `queued`
+forever. Nothing errors. The divergence record even reserves a `response_run_id` column for a run
+that cannot exist, and `record_response_run` waits for a caller that never arrives.
+
+**Why it stayed hidden for the whole life of the capability.** `_queue_response` is only reached on
+the `retried` and `escalated` outcomes. `escalate` requires `task.escalation_agent`, NULL on every
+task ever; no task carried `retry`. All 24 historical divergences are `surfaced`, which queues
+nothing. The path had never been walked.
+
+**What walked it.** Group 2 of `one-answer-to-what-is-happening` added `restaffed` — a failed
+review answered by resolving the reviewer again — which reaches `_queue_response` on a plain
+`surface` task with nothing configured. The first live restaffing (`div-cfae68a70173`,
+`loopreviewer` silent on `task-9b0b4a141b21`) produced a correct divergence row, a correct
+reassignment, and a queue entry carrying `review_task_id` exactly as design D5 requires — that then
+went nowhere.
+
+**Why the group 2 tests did not catch it.** They assert the *entry* is queued with the right agent
+and the right columns. None of them asserts it is ever *delivered*. That is the same gap shape as
+F49 (renderer tested, derivation not) and as mutation check 4.9 (behaviour covered, boundary not).
+An assertion about what was written is not an assertion about what happens.
+
+**Fix.** A response entry gets a conversation. `retry` continues in the diverged run's own thread —
+same agent, same work. `escalate` and `restaffed` go to a *different* agent, and a conversation
+belongs to one agent (`schedule_agent` checks `conversation.agent != agent`), so those need a fresh
+one. Its `origin` is `divergence`, its own value rather than a borrowed one, for the reason
+migration `0058` gives for the queue entry's own `origin_type`: *"a signal that reports something
+other than what it names is the exact defect this whole capability exists to remove."* Migration
+`0093` widens `ck_conversations_origin`.
+
+### F67 — Resolution and live verification, 2026-08-26
+
+Fixed by giving the response entry a conversation, split by agent: `retry` continues in the diverged
+run's own thread (same agent, same work, and a fresh one would throw away a resumable provider
+session); `escalate` and `restaffed` get a fresh conversation with `origin='divergence'`, because a
+conversation belongs to one agent and `schedule_agent` checks exactly that. Migration `0093` widens
+`ck_conversations_origin`.
+
+**A second bug inside the fix, caught by its own test rather than by review.** The first draft used
+`session.get(Conversation, conversation_id)`. `Conversation`'s primary key is `sequence`, an
+autoincrement integer — `session.get` would have compared a `conv-…` string against it and never
+matched, silently opening a fresh thread on every retry. `get_conversation_by_id` exists precisely
+because that trap has been fallen into before, and its docstring says so. Falling into it again, in
+the fix for a defect of the same family, is worth recording rather than quietly correcting.
+
+**Live-verified** against the trial Hub restarted onto this code, driving the whole chain on
+`task-9b0b4a141b21` in `drive-2026-08-26`:
+
+```
+div-cfae68a70173  loopreviewer  review  restaffed  -> author     (entry stranded; pre-fix)
+div-98d3894a9eef  loopauthor    review  restaffed  -> author      response_run_id = run-4f2b920d2b0d
+div-3c5011c08e0e  author        review  surfaced   -> nobody left, reason names why
+```
+
+The middle row is the point: `run-4f2b920d2b0d` is **the first run in this product's history
+started in response to a divergence.** Before the fix the count was 25 divergences and zero response
+runs. Its entry carried `review_task_id`, so the responding reviewer got the checkout of the work
+under review — design D5, finding F10, verified in production rather than in a fixture.
+
+The third row is the chain bound working: `reviewer` barred as the agent that completed the task,
+`loopreviewer` and `loopauthor` barred as agents already silent on it, `author` silent in turn, and
+the flow surfaced with *"could not staff this step: no agent is free to take it…"* rather than
+looping. Nothing was left queued.
+
+**Also verified in the same drive**, both with the task's policy set to `retry`:
+
+- **The review carve-out (design D3).** `policy_applied` recorded `review`, not `retry`, and **zero**
+  response entries were queued. Under the previous behaviour a `retry` task would have re-run the
+  same reviewer on the same evidence.
+- **A declared reviewer is surfaced, never substituted (design D4).** With `loopreviewer` declared in
+  the document and two other agents free, its silent review produced `outcome: surfaced`,
+  `response_agent: null`, and a reason naming the declared reviewer and the task.
+
+The trial project was left as found: the declaration removed, the policy back to `surface`, no job
+enabled in any project, no run alive, and nothing this drive created left queued.

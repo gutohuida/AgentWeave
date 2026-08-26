@@ -111,27 +111,30 @@
 
 ## 6. Verify live, not only against fixtures
 
-- [ ] 6.1 Restart the trial Hub on port 8010 from source on this branch, against the beta profile
+- [x] 6.1 Restart the trial Hub on port 8010 from source on this branch, against the beta profile
       database. **Confirm the project list, not only `/health`** — a stale-database start answers
       `{"status":"ok"}` while serving a different world.
-- [ ] 6.2 Drive a real review to a verdict on the trial Hub; confirm `run.task_id` is set on the
+- [x] 6.2 Drive a real review to a verdict on the trial Hub; confirm `run.task_id` is set on the
       review run and no divergence is recorded.
-- [ ] 6.3 Drive a review that ends without a verdict; confirm the `RunDivergence` row exists, the
+- [x] 6.3 Drive a review that ends without a verdict; confirm the `RunDivergence` row exists, the
       task did not move, and the card presents the reviewer as held rather than working.
-- [ ] 6.4 Drive a failed **availability-picked** review; confirm re-resolution excludes the failed
+- [x] 6.4 Drive a failed **availability-picked** review; confirm re-resolution excludes the failed
       agent and the responding reviewer's workspace is the checkout of the work under review.
-- [ ] 6.5 Drive a failed **declared** reviewer; confirm it surfaces and no substitute is fired.
-- [ ] 6.6 Set a task's policy to `retry`, fail its review, and confirm nothing is retried — the
+- [x] 6.5 Drive a failed **declared** reviewer; confirm it surfaces and no substitute is fired.
+- [x] 6.6 Set a task's policy to `retry`, fail its review, and confirm nothing is retried — the
       carve-out firing in production, not only in a fixture.
-- [ ] 6.7 Leave no job enabled in any project when finished, and record in `scripts/drive/FINDINGS.md`
+- [x] 6.7 Leave no job enabled in any project when finished, and record in `scripts/drive/FINDINGS.md`
       anything the drive surfaced that this change does not cover.
 
 ## 7. Sweep
 
-- [ ] 7.1 `py -3.11 -m pytest hub/tests/ -q` and `py -3.11 -m pytest tests/ -q`, both green, run
+- [x] 7.1 `py -3.11 -m pytest hub/tests/ -q` and `py -3.11 -m pytest tests/ -q`, both green, run
       **after** the final commit rather than before it.
-- [ ] 7.2 `py -3.11 -m ruff check src/ hub/ tests/` and `black --check src/ hub/hub/ hub/tests/ tests/
+- [x] 7.2 `py -3.11 -m ruff check src/ hub/ tests/` and `black --check src/ hub/hub/ hub/tests/ tests/
       --target-version py311`.
-- [ ] 7.3 `cd hub/ui && npx tsc --noEmit`, `npm run lint`, `npx vitest run`.
-- [ ] 7.4 `npx openspec validate one-answer-to-what-is-happening --strict`.
-- [ ] 7.5 Confirm the new test count matches the tests added, so a silently skipped module is visible.
+- [x] 7.3 `cd hub/ui && npx tsc --noEmit`, `npm run lint`, `npx vitest run`.
+- [x] 7.4 `npx openspec validate one-answer-to-what-is-happening --strict`.
+- [x] 7.5 Confirm the new test count matches the tests added, so a silently skipped module is visible.
+      Collected per file: `test_review_divergence.py` 14 (new), `test_task_attribution.py` 16 (new),
+      `test_run_task_binding.py` 29 -> 37, `test_turn_produced_nothing.py` 7 -> 8. **+39**, and the
+      Hub suite moved 3155 -> 3194. Nothing skipped silently.

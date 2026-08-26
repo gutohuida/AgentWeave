@@ -380,10 +380,15 @@ class OperatorCredential(Base):
 
 CONVERSATION_LIFECYCLES = ("open", "archived")
 
-# Where a conversation came from, recorded at creation and immutable thereafter. `handoff`,
-# `spec` and `job` are accepted with no producer yet — deliberately, so that retrofitting a
-# producer later does not leave every conversation predating it recorded as something it wasn't.
-CONVERSATION_ORIGINS = ("operator", "peer", "handoff", "spec", "job")
+# Where a conversation came from, recorded at creation and immutable thereafter. `handoff` and
+# `spec` are accepted with no producer yet — deliberately, so that retrofitting a producer later
+# does not leave every conversation predating it recorded as something it wasn'''t.
+#
+# `divergence` is the Hub opening a thread to answer a run that ended holding work nobody moved
+# (finding F67). It has to be its own value: a response to an `escalate` or `restaffed` outcome
+# goes to a *different* agent than the one that diverged, and a conversation belongs to one agent,
+# so the diverged run'''s thread cannot be reused.
+CONVERSATION_ORIGINS = ("operator", "peer", "handoff", "spec", "job", "divergence")
 
 # The stored length of a title, and so the ceiling a rename is rejected above.
 CONVERSATION_TITLE_MAX_LENGTH = 120
@@ -489,8 +494,12 @@ class Conversation(Base):
         PrimaryKeyConstraint("sequence", name="pk_conversations"),
         UniqueConstraint("id", name="uq_conversations_id"),
         CheckConstraint("lifecycle IN ('open', 'archived')", name="ck_conversations_lifecycle"),
+        # `divergence` is the Hub opening a thread because a run ended holding work nobody moved
+        # (finding F67). Its own value rather than a borrowed one, for migration `0058`'s reason:
+        # a signal that reports something other than what it names is the defect the capability
+        # exists to remove, and nobody asked for this thread.
         CheckConstraint(
-            "origin IN ('operator', 'peer', 'handoff', 'spec', 'job')",
+            "origin IN ('operator', 'peer', 'handoff', 'spec', 'job', 'divergence')",
             name="ck_conversations_origin",
         ),
         Index("ix_conversations_project_agent_updated", "project_id", "agent", "updated_at"),

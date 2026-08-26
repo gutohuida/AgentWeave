@@ -6,9 +6,14 @@
 ## How this surfaced
 
 Group 1 of `one-answer-to-what-is-happening` closed a hole for reviews: a review turn's queue entry
-carried `review_task_id`, `binding_from_entries` read only `task_id`, so **every review run in the
-product's history was unbound** and `run_advanced_its_task` waved each one through on *"no task to
+carried `review_task_id`, `binding_from_entries` read only `task_id`, so **no review run had ever
+been bound through its review entry** and `run_advanced_its_task` waved them through on *"no task to
 have neglected"*.
+
+*(Corrected 2026-08-26 while driving group 6: the original wording here said "every review run was
+unbound", which is too generous to itself. Two review runs **are** bound — to a different task,
+because a work item was batched into the same turn, so their boundary check ran against work they
+were not looking at. Worse than unbound. See finding F66.)*
 
 Task 4.7 then asks to remove the board's agent-fallback, on the reasoning that D1 made
 `Run.task_id` trustworthy. Before removing it I checked whether it was still load-bearing. It is —

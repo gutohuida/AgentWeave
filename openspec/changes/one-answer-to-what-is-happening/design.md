@@ -7,8 +7,16 @@ edge that would let them agree is not written.
 and nothing else (`hub/hub/scheduler.py:2611`, consumed at `hub/hub/api/v1/agent_trigger.py:471`).
 `task_id` on the same row drives the *run binding* (`hub/hub/run_task_binding.py:106`, consumed at
 `agent_trigger.py:538`). On the trial database the two columns are perfectly disjoint — 34 rows with
-`task_id`, 9 with `review_task_id`, no row with both — so every review run in the product's history
-has `run.task_id` NULL.
+`task_id`, 9 with `review_task_id`, no row with both — so no review run has ever been bound through
+its review entry.
+
+**Sharpened by the live drive (finding F66).** "Every review run has `run.task_id` NULL" was the
+original wording and it is not quite true: two review turns were delivered a work item alongside the
+review, bound to the *work* task, and had their boundary checked against work they were not looking
+at. Group 1's earliest-queued-wins rule makes those two agree with their workspace; a batch arriving
+in the other order would still disagree, because the workspace rule ("any review entry in the batch
+wins") and the binding rule ("the earliest entry naming a task wins") are different rules. Left
+open deliberately — see F66.
 
 The board compensates. `hub/hub/api/v1/jobs.py` matches on `Run.task_id` where it is set and on
 `Run.agent` where it is not, and its own comment states the cost: the fallback "can still
