@@ -1597,3 +1597,87 @@ whether Codex's behaviour diverges from Claude's beyond routing. Otherwise, the 
 complete: every queue item is closed or explicitly blocked on the operator, every suite is green, and
 `decisions_for_user` has the outstanding operator calls (F53, F58's design half, F60/F14's durable-
 surfacing half) recorded and not duplicated.
+
+## Iteration 17 — 2026-08-26 07:05–07:15+01:00 — Q8's Codex leg closed via inherited live evidence, corrected a stale-read false alarm
+
+**Reconciliation.** `git log` matched STATE.json exactly (tip `cc84cde`, iteration 16's released
+heartbeat) and `git status` was clean — no bookkeeping debt this time, a clean handoff for once.
+
+**Found Q8's remaining scope already mid-flight, not started by this iteration.** `e2e.py state
+proj-8605b92d0028` showed a `reviewer` run (`run-7575bf8435a8`, `task-9b0b4a141b21`) reading
+`status: running` with `started_at` nearly 70 minutes earlier and no `last_heartbeat_at` ever
+recorded — inherited state from whatever process ran between iteration 16's commit (06:53) and this
+iteration's start (07:05), which left no log entry and was almost certainly cut off before it could
+write one. Rather than re-trigger a fresh run and risk duplicating in-flight work, this iteration
+chose to **observe and verify the inherited run**, since it was already exactly the scenario Q8
+asked for: a deliberately-triggered `manual`-permission-mode Codex turn.
+
+**First read produced what looked like a severe new finding, and it was wrong — caught before being
+filed.** Reading `run-7575bf8435a8` via `sqlite3.connect('file:...?mode=ro', uri=True)` showed
+`status='running'`, `pid=None`, `ended_at=None`, unchanged across a live process check. Cross-referencing
+`permission_requests` for that run showed 11 real rows spanning 05:58–06:06, every one `status:
+allowed`, `decided_by: operator` — clear proof `codex_appserver`'s `decide_approval` routes through
+the identical `permission_requests` table and API as Claude's `--permission-prompt-tool` (matching
+the structural finding iteration 15 already made, now with a full live rep to back it). The
+worrying part was the *last* row (`perm-7ed30492574d`, a `pytest -q -s test_inventory.py` shell
+call, decided `allowed` at 06:06:16) having no `tool_result` afterward and the run sitting silent
+for ~59 minutes past that with no timeout firing — worth writing up as "the turn-timeout mechanism
+that failed the two runs before this one didn't fire a third time." **That would have been wrong.**
+A second read of the identical row, moments later, showed `status='failed'`,
+`error='turn timed out with no turn/completed notification'`, `ended_at='2026-08-26 06:08:23'` —
+almost exactly 600s (`DEFAULT_TURN_TIMEOUT_SECONDS` in `hub/hub/codex_appserver.py:490`) after its
+`05:58:22` start, precisely matching the pattern of the two runs before it. **The first read was
+stale**, not the row. Filed here as a new, general-purpose method note rather than as a product
+finding: reading the beta trial database via `sqlite3.connect('file:...?mode=ro', uri=True)` can
+return data that is *committed but not yet visible* to a fresh read-only connection when the
+database is in WAL mode and the WAL file hasn't been checkpointed — this is a documented SQLite
+behavior under `mode=ro` (a read-only connection may not get a shared-memory index and can miss
+recent WAL-resident writes), not a bug in AgentWeave. `e2e.py`'s own `state`/`ro()` helper uses the
+identical `mode=ro` URI pattern and is equally exposed. **Any time-sensitive "is this run actually
+stuck" read from this database should be taken twice, a few seconds apart, before being trusted or
+written up as a finding** — added to `dead_ends` in STATE.json so a future iteration doesn't
+rediscover this the expensive way (by filing a false finding first).
+
+**What actually held, confirmed with a clean second measurement:** the Codex turn-timeout mechanism
+fired correctly a third consecutive time (`run-3e08cae3629d`, `run-45f17874e9e0`,
+`run-7575bf8435a8` — three real Codex turns, three clean `failed` transitions at very close to
+600s, zero silent hangs). `codex_appserver.py`'s comment at its `turn_timeout` parameter
+(`hub/hub/codex_appserver.py:840`) states plainly the protocol itself supplies no turn-level
+timeout and this is the Hub's own backstop — confirmed working, not merely documented, across three
+independent real repros. Also confirmed the Hub's automatic redelivery: `inbound_queue_entries`
+shows `entry-0749d003bc9e` (the same logical instruction) delivered first into `run-7575bf8435a8`
+(failed, `delivery_attempts` bumped to 1) and then automatically redelivered into a fresh run
+(`run-dbbd0ba274af`, a genuinely new Codex `app-server` process observed starting at 07:08:23 —
+confirmed via `Get-CimInstance Win32_Process`, not inferred) without any trigger from this
+iteration. `DELIVERY_ATTEMPT_LIMIT = 3` (`hub/hub/inbound_queue.py:174`) bounds this to at most
+three ~10-minute attempts before the Hub gives up on the entry and records why — self-limiting, not
+an unbounded overnight cost risk like an enabled job/loop would be, so this iteration did not
+intervene to stop it; it will resolve (succeed or get abandoned with a recorded reason) within
+roughly the next attempt cycle on its own, native-mode Hub scheduling working as designed.
+
+**Q8 formally closed.** Both legs now have a real, live, deliberately-observed rep: Claude's
+`--permission-prompt-tool` leg (iteration 15/16, `perm-efedf9c04e01` et al.) and Codex's
+`decide_approval` leg (this iteration, 11+ real `permission_requests` rows across
+`run-7575bf8435a8` alone, `decided_by: operator`, routed through the identical REST surface). The
+`ask_user` timeout leg (F60) was already closed in iteration 15. No further Q8 scope remains.
+
+**What a reviewer should distrust:** this iteration did not itself trigger any of the Codex runs it
+observed — they were inherited, in-flight state from an unlogged, uncommitted prior process. The
+permission-request evidence and the timeout-mechanism confirmation are independently verified
+against the database and OS process list (not merely re-stated from what that prior process might
+have intended), but the *task itself* (`task-9b0b4a141b21`) was not driven to a terminal state by
+this iteration and its final outcome (third attempt succeeding, or the entry being abandoned at the
+3-attempt limit) is unobserved as of this log entry — left for whichever iteration or the operator
+next reads `e2e.py state proj-8605b92d0028` to confirm, with the double-read caveat above in mind.
+
+**Queue status after this iteration: Q1–Q10 all closed or blocked-on-operator (Q6, unchanged).** No
+substantive open scope remains in this run's queue. `decisions_for_user` is unchanged from
+iteration 16 — nothing new needed the operator's judgment this iteration beyond what was already
+recorded (F53, F58's design half, F60/F14's durable-surfacing half).
+
+**Next**, if a future iteration fires before `stop_at` (08:00+01:00, very little runway left — this
+iteration closed at ~07:15): there is no mandatory remaining scope. Worthwhile optional
+follow-through, not required to consider the run complete: confirm `task-9b0b4a141b21`'s final
+resolution (read twice, per the WAL caveat above) and note it for the record; otherwise the run is
+functionally complete and further time is better spent standing down cleanly than manufacturing new
+scope.
