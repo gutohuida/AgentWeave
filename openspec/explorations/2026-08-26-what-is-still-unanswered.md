@@ -220,3 +220,139 @@ its queue position. A flow that reviews often could in principle keep pushing it
 is that it cannot starve because the review and the work are usually for different agents and the
 deferred entry is first in line on the next turn — but that is an assumption, and the task list pins
 it with a test (1.3) rather than proving it.
+
+---
+
+# Decisions, 2026-08-26
+
+The operator answered all eight. Two answers changed the shape of the item they answered, and both
+changes came from the operator's own knowledge rather than from the measurements above.
+
+## 1. F58 — **(c), per-task worktrees.** Not merely the cleanest; the only correct one
+
+Asked directly whether (c) is right and whether the objection is rework. **The objection was not
+rework**, and the standing preference settles that anyway. The objection was specific: a task that
+legitimately builds on another task's not-yet-landed work would find a worktree forked from the main
+branch missing it.
+
+**That objection is dissolved by the product's own rule, checked rather than assumed.**
+`task-dependencies` requires *"A dependency is met at approval, not at completion"*, and
+`task_transition_service.py:375` runs `integrate_task` on exactly `to_status == "approved"`. So a
+prerequisite is merged to the main branch **before** its dependent may start. A per-task worktree
+forked from the main branch therefore contains every dependency it is entitled to see, by
+construction.
+
+With that gone, (a) and (b) are not weaker options — they are wrong ones:
+
+- **(a) `cherry-pick <last-integrated>..<target>`** cannot separate two tasks whose commits
+  interleave on one branch. F58's own text concedes this.
+- **(b) a squashed single-commit diff** breaks a task whose work spans several commits: the evidence
+  names the tip, so only the tip's diff lands, shipping partial work that has never been run. Read
+  the other way — the *tree* at the target — it re-includes the other task's files and fixes nothing.
+
+Only (c) makes the branch correspond to the task, so that "merge what the evidence names" and "merge
+this task's work" finally denote the same thing, multi-commit tasks included.
+
+**What is genuinely left is engineering, not unknowns:** the worktree lifecycle and disk cost of one
+checkout per task rather than per agent (precedent exists — *"A review checkout is bounded and
+reused"*); what happens to an agent mid-task on a per-agent worktree when this lands; and the fact
+that two task branches forked before either landed will meet as an ordinary merge, possibly with a
+conflict. That last one is a feature: it surfaces a real collision the current design hides by
+sweeping both into one branch.
+
+**Next step:** its own exploration before a proposal. It is the only item on this list that can
+damage a repository.
+
+## 2. The reviewer ladder — **option 2, a separate review capacity**
+
+Rung 2 asks one question, *"is this agent free"*, and uses it to answer two different ones. It will
+ask *"is this agent free to be given work"* and *"is this agent free to review"* separately, with
+their own rules. D4's pile-up argument is about the first; a review is a bounded turn against
+somebody else's commit, not an accumulation of ownership.
+
+Not chosen: excluding `under_review` from what makes an agent unfree (option 1). It fixes the
+measured case but leaves one question still doing two jobs — the defect
+`one-answer-to-what-is-happening` exists to end.
+
+## 3. F53(b) — **keep the history; gate on liveness instead**
+
+The operator's answer: *"the important here is to keep the history to retrace it later."*
+
+So `loop_id` is **never nulled**, on any task, in any state. The column is history and it stays. What
+changes is the *gate*: `_adopt_document_tasks` is restricted to `loop_id IS NULL`, and that
+restriction becomes "owned by a **live** loop" — exactly the `archived_at.is_(None)` shape already
+shipped for `_check_spec_document_conflict` in option (a).
+
+This is better than the line the exploration proposed drawing (release `pending`, keep the rest).
+That would have destroyed history on precisely the tasks whose history is cheapest to lose and
+hardest to notice missing, and it needed a judgement call about where the line sits. Gating on
+liveness needs none: every task keeps its full provenance, and a dead loop stops blocking anything.
+One rule, symmetric with the half already shipped.
+
+## 4. F60 — **ship the guard, park the surfacing**
+
+`questions.py`'s PATCH handler refuses an answer whose asking run has ended, so the record can no
+longer claim the operator chose something the shipped code contradicts. The durable board-surfacing
+half — *"this completed task shipped on an unanswered question"* — waits for F14's own fix rather
+than being bolted on separately.
+
+## 5. F61 — **the chosen fix is withdrawn.** It was built on a concept the product does not own
+
+The operator's objection, and it is correct: *"the problem of using role is that agentweave doesn't
+enforce a role. This is a recurring problem. Role means different things in different places."*
+
+Verified. **`role` survives in this codebase only in two prose comments** (`runner_commands.py:136`,
+`worktrees.py:360`) — no field, no enum, no API, no UI. CLAUDE.md is explicit that *"the former CLI
+multi-role subsystem, fixed enum, role files, and role-derived API/UI fields no longer exist and must
+not be recreated"*, and last session's `agent_role` → `agent_capacity` rename was this same problem
+being paid off again. Titling a conversation *"by agent and role"* would have reintroduced the exact
+vocabulary the product spent effort removing, one week after removing it. This is what handoff 0090's
+"re-check before building" warning was for, and it earned its keep here.
+
+**And there is a better fix already built.** The operator noted an AI naming option exists but is
+unreachable. Confirmed, in full:
+
+- `conversation_titles.generate_conversation_title` is complete and wired — called at run completion
+  from `agent_trigger.py:1670` and `:2193`, gated on `project.conversation_title_mode == "generate"`,
+  bounded by a concurrency gate, and it overwrites a non-operator title (`:213` bails only on
+  `title_set_by_operator`). So it **would** replace `Ledger flow` on a flow conversation.
+- The field exists on the model (`db/models.py:96`), on the API schema (`api/v1/projects.py:87`), and
+  in the TypeScript type (`ui/src/api/projects.ts:88`).
+- `ProjectSettingsPanel.tsx` renders **no control for it** — zero occurrences.
+- `ui/src/__tests__/projectSettingsPanel.test.tsx` fixtures it as `'generate'`, so the suite
+  exercises a value no operator can set.
+
+A finished feature, reachable only by writing to the database by hand, with a green test over the
+setting nobody can reach. The same shape as F68 and for the same reason: everything asserted that the
+value round-trips, nothing asserted that a human could produce it.
+
+**Revised fix: make the existing feature reachable** — expose `conversation_title_mode` in project
+settings — rather than invent a title template on an unowned concept. If a derived fallback is still
+wanted for projects that leave titling off, build it from facts the product *does* own: the agent
+name, and whether the entry carries `review_task_id`. Never from "role".
+
+Handoff 0089's sub-question is answered by the same reasoning: `review_task_id` stays off
+`QueueEntryResponse`. Nothing needs it once titles are real.
+
+## 6. F65 — **terminal on the first refusal**, as chosen. The three-attempt bound is survivable, not right.
+
+## 7. F47 — **its own change.** A third actor kind, not a bolt-on.
+
+## 8. `TaskIntegrationNote.tsx` — **keep the fix.**
+
+## Not asked, still standing
+
+**F68** (`severity="warning"` vs `"warn"`) has no competing options. Normalise in `persist_event`
+against an enumerated set so the class closes rather than the instance, and land it before
+`every-run-knows-its-task` begins deriving severities.
+
+## A pattern worth naming, since it is now three findings deep
+
+F61's real defect, F68, and `conversation_title_mode` are the same failure: **a value the code
+handles correctly and no human can produce or see.** The AI titler works and cannot be switched on.
+`turn_produced_nothing` is emitted and cannot be seen. Both have green tests, because the tests
+assert the value round-trips through the layer under test and never that it reaches a person.
+
+The cheap counter-check, worth adding to the drive method: for any setting, ask *which control sets
+it*; for any event, ask *which filter shows it*. Both questions are answerable by grep in under a
+minute, and both would have caught these before a live drive did.
