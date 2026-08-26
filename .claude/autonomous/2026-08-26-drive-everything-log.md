@@ -1681,3 +1681,45 @@ follow-through, not required to consider the run complete: confirm `task-9b0b4a1
 resolution (read twice, per the WAL caveat above) and note it for the record; otherwise the run is
 functionally complete and further time is better spent standing down cleanly than manufacturing new
 scope.
+
+## Iteration 18 — final sanity check, run closed clean, no scope remains
+
+Started at 07:15:54+01:00 with ~45 minutes of runway left before `stop_at` (08:00+01:00). State and
+`git log` agreed exactly with no reconciliation needed (tip `37eefa9`, tree clean). Iteration 17 had
+already closed every queue item and left only optional follow-through: confirm the trial Hub is
+still healthy, confirm no job is enabled anywhere, and (optionally) confirm
+`task-9b0b4a141b21`'s eventual terminal state. Did exactly that and nothing more — the queue has no
+open scope to manufacture work from.
+
+**Hub health:** `GET /health` → `{"status":"ok","runtime":"native"}`. Still the trial instance on
+port 8010, unchanged since prep.
+
+**Jobs, all three active projects, read live via the real REST surface (not sqlite):**
+`proj-18e5d4e0` (ledger-stress) has six job rows, every one `enabled: false`
+(`job-ee75c21a`, `job-18311467`, `job-f5558cff`, `job-bdea22bb0308`, `job-453b909ba418`,
+`job-f632ee565238`). `proj-5e960453` (this repository — spec-flow only, correctly no agent-run
+jobs) and `proj-8605b92d0028` (drive-2026-08-26) both return an empty job list. Nothing enabled
+anywhere — the single most expensive thing to get wrong is confirmed clean at the run's true end.
+
+**`task-9b0b4a141b21` final resolution:** read twice, ~5 seconds apart, via `GET
+/projects/proj-8605b92d0028/tasks/task-9b0b4a141b21` (the live HTTP API, which goes through the
+Hub's own connection — not the raw `sqlite3 mode=ro` path the iteration-17 WAL caveat is actually
+about, so a single read here would already have been trustworthy; the second read was taken anyway
+for belt-and-suspenders since the caveat was fresh). Both reads agree: `status: "completed"`. The
+Codex retry chain iteration 17 observed in flight (`run-7575bf8435a8` → redelivery →
+`run-dbbd0ba274af`) resolved to a successful terminal completion within the self-limiting 3-attempt
+window, with no intervention needed from any iteration, exactly as iteration 17 predicted.
+
+**Queue status: unchanged, Q1–Q10 all closed or blocked-on-operator (Q6).** `decisions_for_user` is
+unchanged — no new operator decision surfaced this iteration.
+
+**What a reviewer should distrust:** nothing new. This iteration performed only read-only
+verification against the live Hub and its REST API; it triggered no runs, changed no code, and
+touched no other project state.
+
+**Run status: complete.** Across 18 iterations (2026-08-26T00:05 through 07:16+01:00), the full
+queue Q1–Q10 was driven to closed or explicitly blocked-on-operator, every finding is recorded in
+`scripts/drive/FINDINGS.md`, every outstanding operator decision is carried in this STATE.json's
+`decisions_for_user`, and both suites plus lint/type-check were last confirmed green in iteration
+16. No further iteration needs to fire before `stop_at`; if one does anyway (little runway remains),
+it should simply reconfirm health and jobs-disabled and stand down, exactly as this one did.
