@@ -250,6 +250,53 @@ async def test_an_unwritten_checkpoint_renders_saying_its_written_half_is_missin
     assert "generation produced nothing usable" in rendered
 
 
+@pytest.mark.asyncio
+async def test_a_ready_checkpoint_states_its_status_without_a_failure_warning(app):
+    async with async_session_factory() as db:
+        conversation = await _conversation(db)
+        checkpoint = await create_checkpoint(
+            db,
+            conversation,
+            trigger="operator",
+            envelope=await compute_envelope(db, conversation),
+            body=render_body(CheckpointBody(**GOOD_BODY), notes_incorporated=False),
+        )
+        rendered = render_checkpoint(checkpoint)
+
+    assert "Status: ready" in rendered
+    assert "Probe:" not in rendered  # probe_status is NULL until actually probed
+    assert "failed its probe" not in rendered
+
+
+@pytest.mark.asyncio
+async def test_a_checkpoint_that_failed_its_probe_states_the_failure_instead_of_hiding_it(app):
+    """F50: a written summary graded 'failed' against the Hub's own envelope used to render
+    identically to one that passed, so a reviewer could not tell the two apart. The computed
+    half stays accurate regardless, so it is rendered either way; only the written half's
+    trustworthiness changes."""
+    async with async_session_factory() as db:
+        conversation = await _conversation(db)
+        envelope = await compute_envelope(db, conversation)
+        envelope.files_changed = ["hub/hub/worker.py"]
+        checkpoint = await create_checkpoint(
+            db,
+            conversation,
+            trigger="operator",
+            envelope=envelope,
+            body=render_body(CheckpointBody(**GOOD_BODY), notes_incorporated=False),
+        )
+        checkpoint.status = "failed"
+        checkpoint.probe_status = "failed"
+        rendered = render_checkpoint(checkpoint)
+
+    assert "Status: failed" in rendered
+    assert "Probe: failed" in rendered
+    assert "failed its probe" in rendered
+    # The computed half is not withheld just because the written half is suspect.
+    assert "## Files changed" in rendered
+    assert "hub/hub/worker.py" in rendered
+
+
 # --------------------------------------------------------------------------- end to end
 
 

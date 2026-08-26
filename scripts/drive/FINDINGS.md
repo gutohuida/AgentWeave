@@ -1825,7 +1825,16 @@ fix:
 3. **Leave it**, on the argument that a disagreeing summary beside accurate computed fields is still
    better than nothing.
 
-Recorded, not fixed.
+**Resolution (2026-08-26, Q7, pre-authorised):** option 2, render the failure. `render_checkpoint`
+now states `Status: <status>` and, when set, `Probe: <probe_status>` in the header, and — only when
+`status == "failed"` — a warning ahead of the written body naming the disagreement and pointing out
+that the computed sections above stay accurate regardless. Two new tests
+(`hub/tests/test_checkpoint_generation.py`); mutation-checked (reverting the render change fails
+both new tests with exactly the predicted assertion). Verified live: restarted the trial Hub onto
+the fix and re-fetched the ORIGINAL failed checkpoint from this finding's own reproduction,
+`GET /projects/proj-18e5d4e0/checkpoints/ckpt-9cba6c0e8e40/rendered`, over real HTTP — the response
+now reads `Status: failed`, `Probe: failed`, and the stated warning, unchanged since 2026-08-25.
+Task 14.7 in `openspec/changes/loop-becomes-a-flow/tasks.md` closed with this evidence.
 
 ## F51 (A) — "start exploration" orphans its own document; the agent writes a second one
 

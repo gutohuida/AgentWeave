@@ -279,6 +279,9 @@ def render_checkpoint(checkpoint: Checkpoint) -> str:
     lines.append(f"Conversation: {checkpoint.conversation_id}")
     lines.append(f"Agent: {checkpoint.agent}")
     lines.append(f"Trigger: {checkpoint.trigger}")
+    lines.append(f"Status: {checkpoint.status}")
+    if checkpoint.probe_status:
+        lines.append(f"Probe: {checkpoint.probe_status}")
     if checkpoint.previous_checkpoint_id:
         lines.append(f"Previous checkpoint: {checkpoint.previous_checkpoint_id}")
     lines.append("")
@@ -326,6 +329,18 @@ def render_checkpoint(checkpoint: Checkpoint) -> str:
         lines.append("## Runtime overrides in force")
         lines.append("")
         lines.extend(f"- {key}: {value}" for key, value in checkpoint.runtime_overrides.items())
+        lines.append("")
+
+    if checkpoint.status == "failed":
+        # F50: the computed sections above are the Hub's own and stay accurate regardless of the
+        # probe's verdict. Skipping the written half entirely would cost a reviewer real signal to
+        # avoid a wrong paragraph; stating the disagreement lets them judge the body accordingly.
+        lines.append(
+            f"_This checkpoint's written summary failed its probe (probe_status: "
+            f"{checkpoint.probe_status}) — it was graded against the computed record above and "
+            f"disagreed with it. The sections above remain accurate; treat what follows with that "
+            f"in mind._"
+        )
         lines.append("")
 
     if checkpoint.body:

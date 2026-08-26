@@ -979,8 +979,25 @@ change unarchived, so it is fixed here. Design D17.
       exact note F43's own write-up cites as written for `critic` about `task-23a0986e7fe9`.
       Checkpoints with a `loop_id` went **0 of 6 -> 2**, and unconsumed notes **4 -> 2** (the
       remaining two belong to `relay`, whose runs completed no task).
-- [ ] 14.7 **F50 - decide what a reviewer is shown when a checkpoint fails its probe.** Found by
+- [x] 14.7 **F50 - decide what a reviewer is shown when a checkpoint fails its probe.** Found by
       14.6's drive and caused by F43 becoming real: 1 of the 2 generated checkpoints was graded
       `failed` against the Hub's own envelope, and `render_checkpoint` surfaces neither `status` nor
       `probe_status`, so it briefs identically to one that passed. The operator's call between
       skipping it, rendering the failure, and leaving it.
+
+      **Resolved 2026-08-26 (pre-authorised by the operator during prep, option 2 — render the
+      failure, don't skip it):** `render_checkpoint` (`hub/hub/checkpoint_generation.py`) now
+      states `Status: <status>` and, when set, `Probe: <probe_status>` in the header, and — only
+      when `status == "failed"` — a stated warning ahead of the written body explaining that the
+      summary disagreed with the Hub's own computed envelope and that the computed sections above
+      remain accurate regardless. Two new tests in `test_checkpoint_generation.py`
+      (`test_a_ready_checkpoint_states_its_status_without_a_failure_warning`,
+      `test_a_checkpoint_that_failed_its_probe_states_the_failure_instead_of_hiding_it`).
+      Mutation-checked: reverting the render change made both new tests fail exactly as predicted
+      (`assert "Status: failed" in rendered` on the unmodified, pre-fix render). Verified LIVE:
+      restarted the trial Hub onto this fix and fetched
+      `GET /projects/proj-18e5d4e0/checkpoints/ckpt-9cba6c0e8e40/rendered` over real HTTP — Q4's
+      original failed checkpoint, unchanged since 2026-08-25. The response now reads
+      `Status: failed`, `Probe: failed`, and the stated warning ahead of the written body, exactly
+      as the unit tests predict. The sibling `ready` checkpoint (`ckpt-a545dd785d8d`) was not
+      re-fetched in this pass; the negative-case unit test covers that shape instead.
