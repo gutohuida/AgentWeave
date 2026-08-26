@@ -2503,3 +2503,119 @@ the restarted process specifically to re-observe `notes` landing non-null. Flag 
 wants that extra rep — `task-0dfc3be5` is still sitting `revision_needed` and is a ready-made target
 for exactly that, once a reviewer is triggered on it again.
 
+## F58 (A) — approving one task's evidence merges its agent's *entire branch history*, including other unapproved tasks' work and scratch debris, not "the commit the evidence names"
+
+Found live 2026-08-26, driving Q5's undriven F9 half to a full landing commit for the first time
+this run. `task_integration.py`'s own module docstring states three rules "each exists because the
+naive version damages a repository," and the first is: **"Merge a commit, never a branch... Merging
+the branch when one task is approved would ship the others. The accepted evidence already names the
+commit the work was demonstrated at; that is what goes in, and anything committed after it stays
+out."** `hub/tests/test_task_integration.py::test_later_commits_on_the_branch_are_not_merged`
+restates the same guarantee in its own docstring: "D1: what merges is the commit the evidence names,
+not the agent's branch. If this test fails, approving one task ships another task's unreviewed
+work." That test is green on this branch tip. The guarantee it names is false anyway.
+
+### What actually happened, live
+
+Sequence, on `ledger-stress` (`proj-18e5d4e0`): `task-0dfc3be5` (FR-2) went `revision_needed` ->
+(builder revision turn, `run-8c7dda053998`) -> `completed` -> (operator `task-set`) ->
+`under_review` -> (critic review turn, `run-d7e30a9c650d`) -> `approved`
+(`task_transitions.sequence=95`). Its newest evidence, `ev-57bfd7d6552f`, named commit
+`d64b43dffe9666585b383981efb3b91d2125a0e7` on branch `agentweave/builder`. As operator, accepted
+that evidence (`POST .../project/spec/evidence/ev-57bfd7d6552f/decision`), confirmed
+`integration-preview` then reported `will_merge: true` naming exactly that one commit, and called
+`POST .../tasks/task-0dfc3be5/integrations/retry`. Outcome: `merged`, landing commit `9e593f2` in
+the subject repo (`C:\Users\huida\Documents\aw-stress`, confirmed by `git log`/`git show --stat`
+directly against the repository, not the Hub's own account of it).
+
+**The merge commit's diff carries 13 files, not the evidence commit's own diff.** Alongside the
+real fix (`ledger/book.py`, `tests/test_ledger.py`), it also landed: `commit.sh`,
+`commit_account_validation.py`, `do_commit.py`, `verify_empty_entry.py`, `verify_fix.py` — scratch
+scripts the agent wrote for itself across earlier, unrelated turns — and **`tests/test_account_order.py`**,
+which `git log --all -- tests/test_account_order.py` traces to commit `90aa643`, the test for
+**`task-e6b05093`** ("Make account ordering stable", FR-3) — a *different task*, still sitting
+`assigned`, never reviewed, never approved, no evidence accepted for it at all.
+`git log --oneline fbeeb26..d64b43d` (`fbeeb26` was the branch's previous integration point) lists
+**16** auto-snapshot commits, and all 16 landed on `master` from the single accepted-evidence commit
+at the tip.
+
+### Root cause
+
+`task_integration.integrate()` (`hub/hub/task_integration.py:265`) runs:
+
+```python
+_git(root, "-c", ..., "merge", "--no-ff", "-m", f"Integrate approved work {sha[:12]}", target.commit_sha)
+```
+
+`git merge --no-ff <sha>` brings in **every ancestor of `<sha>` not already in the target branch** —
+the commit's entire history back to the merge-base — not the tree at `<sha>` applied as a patch.
+`test_later_commits_on_the_branch_are_not_merged` only ever commits *after* the accepted evidence
+and asserts those are excluded; commits *after* a target are never ancestors of it regardless of
+merge-vs-cherry-pick, so that test cannot fail no matter which mechanism is used — it is the F43/F52
+shape again: a fixture that cannot distinguish the two implementations it exists to tell apart.
+Nothing in the suite commits *earlier*, unrelated work on the same branch and asserts it stays out —
+the one scenario the docstring's own words promise and the one this live drive actually hit.
+
+### Severity and blast radius
+
+This is not a narrow edge case: `worktrees.branch_name` is per-*agent* (stated in this same module's
+docstring), so **every** builder agent's branch accumulates every task it has ever touched, in
+commit order. The first evidence acceptance on *any* task on that branch ships the *entire* prior
+history of that branch — every other task's work-in-progress, however unreviewed, however far from
+`approved`, plus any scratch/debris file the agent happened to leave uncommitted at end-of-turn
+(auto-snapshotted unconditionally by `worktrees.snapshot_worktree`, per F52's finding). The review
+gate this module exists to enforce is real for the *task being approved* and decorative for
+everything else that happens to share its agent's branch. An operator reading `integration-preview`
+or the `integrations` history sees one commit sha named and reports it as "what landed" — the UI has
+no rendering of the other 15 commits that rode along.
+
+### Not fixed this iteration
+
+This needs a real design decision, not a one-line patch, for the reason `[[F53]]` and `[[F55]]` were
+also left open rather than patched in place: the *correct* narrower semantics is not obvious.
+Candidates, un-evaluated: (a) `git cherry-pick <last-integrated-on-this-branch>..<target>` — bounds
+the merge to "what's new since this branch's last approved landing," which is materially tighter but
+still not per-task if two tasks' work is interleaved commit-by-commit on one branch; (b) a true
+single-commit cherry-pick of `<target>` applied as a squashed diff against its merge-base, which
+is closest to the stated intent but changes conflict semantics and needs its own test matrix; (c)
+per-task worktrees instead of per-agent, which is a much larger change. Left for Q6, and flagged
+as the highest-severity item in that pass — it directly contradicts this module's own stated design
+guarantee and both existing tests that claim to cover it.
+
+### What HELD
+
+The conflict-then-abort path is real and clean: this same live drive hit an actual
+`CONFLICT (modify/delete)` (self-inflicted — see below) on a first retry attempt, and
+`task_integration.integrate()` ran `git merge --abort` and left the subject repository in a
+genuinely clean state (confirmed by `git status` showing no `CHERRY_PICK_HEAD`/`MERGE_HEAD`, no
+conflict markers, tree clean) — recorded as a `failed` integration row with the real git conflict
+text, not a corrupted checkout. `has_uncommitted_changes`/`CHECKOUT_DIRTY` also fired for real and
+correctly refused rather than merging over a dirty tree (see below), and `retry` correctly created a
+fresh append-only row each time rather than mutating a past one.
+
+### A second, unrelated but real thing this drive found and cleaned up
+
+`ledger/__pycache__/*.pyc` and `tests/__pycache__/*.pyc` were tracked in git in the `aw-stress`
+subject repo since its very first commit (`edc23dc`, 2026-08-23), the product of an earlier
+session's project-seeding step using a broad `git add` rather than staging explicit paths — the
+exact mistake this run's own standing limits warn against. Any turn that runs the test suite (both
+`builder` and `critic` did, live, this iteration) regenerates those `.pyc` files and dirties the
+tracked checkout, which silently blocks every future `integrations/retry` with `CHECKOUT_DIRTY` until
+an operator manually commits or discards them — with no affordance in the product to tell the
+difference between "real uncommitted work" and "regenerated bytecode cache." Untracked
+(`git rm -r --cached`, `.gitignore` added, committed as `c421f07`) as real, needed housekeeping of
+the test fixture, not an AgentWeave code change. This directly caused the first `merge` attempt's
+`CONFLICT (modify/delete)` above (removing the files on `master` while the evidence commit still
+modified them) — reverted (`git reset --hard fbeeb26`) before the successful retry so the fix
+candidates above are evaluated against the real bug, not a self-inflicted one.
+
+### What a reviewer should distrust
+
+The landing commit `9e593f2` and its 13-file diff were read directly from `git log`/`git show` in
+the subject repository — not taken from the Hub's own report, which only ever names the one
+`commit_sha` it targeted. The claim that all 16 ancestor commits belong to *this agent's own* prior
+work (rather than, say, another agent's) was traced only as far as confirming they are all
+`Auto-snapshot: builder's turn` commits by the same agent — not independently verified against
+`runs`/`task_transitions` one by one. No fix was attempted this iteration; this is a finding and a
+design question, not yet a patch.
+

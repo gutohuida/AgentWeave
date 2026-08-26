@@ -931,3 +931,90 @@ through `integration-preview`/the actual merge, with the commit sha reported. Al
 re-reviewing `task-0dfc3be5` (FR-2, already evidence-bearing) after a builder revision cycle is a
 second route to the same F9 half, and would also supply the extra live rep F57's write-up flagged as
 optional. Either drives Q5's remaining open question.
+
+---
+
+## Iteration 10 — Q5 closed: F9's merge half driven to a real landing commit, and F58 (A) found doing it
+
+**2026-08-26T02:35–02:46+01:00.** Reconciled first: branch/log matched `STATE.json` (`b9d2de8` tip
+after iteration 9's heartbeat release), tree clean, trial Hub `/health` ok on the `beta` database.
+Picked up exactly where iteration 9 left off: Q5's F9 merge/landing-commit half was still undriven.
+
+**Drove `task-0dfc3be5` (FR-2) through a full revision-review-approve-merge cycle, live.** It was
+`revision_needed`, gating `task-e6b05093` (FR-3) as `dependency_state: gated`. Triggered `builder`
+with an explicit task-scoped turn (`run-8c7dda053998`); it found its own earlier test missing from
+the worktree, re-added it, recorded evidence, and moved the task to `completed` (`update_task` only
+allows `in_progress -> {assigned, blocked, completed}`, not directly to `under_review` — confirmed
+by the tool's own rejection message; the `completed -> under_review` step upstream is an
+operator-only transition, consistent with the same pattern already seen at `sequence=82` in this
+task's own history). Moved it to `under_review` as operator (`task-set`), then triggered `critic`
+(`run-d7e30a9c650d`): it read the spec, the task, the evidence, the code, ran the real test suite
+(after some friction — `Bash`/`PowerShell` calls failed first, worked around via the repo's own
+`run_tests.py`), and called `update_task("approved", notes=...)`. **First live confirmation that
+F57's fix works end-to-end on a fresh rejection/approval, not just in the regression suite**: the
+task row now carries a real, substantial `notes` field from a live agent call.
+
+**Then drove the merge itself — the one part of Q5 no prior iteration had reached.** All of this
+task's evidence rows were `review_state: awaiting`; `integration-preview` correctly reported
+`will_merge: false` ("no accepted evidence names a commit"). Discovered along the way: **no
+evidence has ever been `decide_evidence`-accepted anywhere in this project's history** — every prior
+`approved` task in `ledger-stress` skipped a real merge for exactly this reason, which is why Q4/Q5's
+earlier approvals never produced one either. As operator, called
+`POST .../project/spec/evidence/{id}/decision` to accept the newest evidence
+(`ev-57bfd7d6552f`, commit `d64b43dffe96...`); `integration-preview` then correctly flipped to
+`will_merge: true`, naming exactly that commit. Called `.../integrations/retry`.
+
+**First attempt hit a real `CONFLICT (modify/delete)`, self-inflicted** — while investigating,
+found and untracked long-stray `__pycache__/*.pyc` files in the `aw-stress` subject repo (tracked
+since its very first commit, `edc23dc`, 2026-08-23, evidently seeded with a broad `git add` rather
+than explicit paths — the standing mistake this run's own limits warn against). That cleanup
+conflicted with the evidence commit, which still modified those tracked files. Reverted
+(`git reset --hard fbeeb26`) to test the real bug in isolation, retried: **`merged`, landing commit
+`9e593f2` in the subject repository, confirmed directly by `git log`/`git show --stat` against
+`C:\Users\huida\Documents\aw-stress`, not the Hub's own report.** `git merge --abort` on the earlier
+conflict left the checkout genuinely clean (no `MERGE_HEAD`, no conflict markers) — a real "what
+HELD" result.
+
+**F58 (A), found reading that merge commit's own diff.** It carried 13 files, not the evidence
+commit's own change: alongside the real fix, five scratch scripts the agent had written for itself
+across earlier turns (`commit.sh`, `commit_account_validation.py`, `do_commit.py`,
+`verify_empty_entry.py`, `verify_fix.py`) and — the serious part — `tests/test_account_order.py`,
+traced via `git log --all` to commit `90aa643`, which belongs to **`task-e6b05093`** (FR-3), a
+*different, still-`assigned`, never-reviewed, never-approved task on the same agent's branch*.
+`git log --oneline fbeeb26..d64b43d` lists 16 auto-snapshot commits; all 16 landed. Root cause,
+read directly in `hub/hub/task_integration.py:265`: `integrate()` runs `git merge --no-ff
+<commit_sha>`, which merges the commit's **entire ancestry**, not its diff alone — contradicting
+the module's own stated design rule ("merge a commit, never a branch... anything committed after it
+stays out") and the one existing test that claims to guard it
+(`test_later_commits_on_the_branch_are_not_merged`), which only ever commits *after* the accepted
+evidence and so structurally cannot catch commits *before* it riding along — the F43/F52 shape
+again, a green test that cannot distinguish the two implementations it exists to tell apart. Written
+up in full in `scripts/drive/FINDINGS.md` with the blast-radius argument (every builder agent's
+branch carries every task it has ever touched, so this is not a narrow edge case) and three
+un-evaluated fix candidates, deliberately **not fixed this iteration** — same standard as `[[F53]]`
+and `[[F55]]`: a real design decision (cherry-pick range vs. single-commit patch vs. per-task
+worktrees), not a one-line patch, and flagged as the top Q6 priority given it directly contradicts
+this module's own documented guarantee.
+
+**Q5 is now closed.** Its verify criterion — "a task moved under_review -> approved by a real
+reviewer turn, with the evidence row, the transition row, and the resulting commit in the subject
+repository all identified by id" — is satisfied: `task-0dfc3be5`, `task_transitions.sequence=95`,
+evidence `ev-57bfd7d6552f`, landing commit `9e593f2`. It closes with a major caveat recorded (F58)
+rather than a clean pass, which is the honest account of what driving it found.
+
+**What a reviewer should distrust.** The `aw-stress` subject repo's checkout was directly modified
+by this iteration (the `.gitignore`/untrack commit, the reset, the merge) — legitimate operator
+housekeeping and the product's own merge mechanism, not a workaround, but worth knowing the
+repository is not in the state iteration 9 left it. The claim that all 16 ancestor commits are the
+same agent's own prior work was checked only as far as "all `Auto-snapshot: builder's turn`," not
+verified commit-by-commit against `runs`. `task-e6b05093` itself remains `assigned`/`gated` —
+unblocking it (its prerequisite `task-0dfc3be5` is now `approved`) was not attempted this iteration;
+Q5 closed on the merge question, not on clearing the whole task graph.
+
+**Job sweep, as output:** `ai_jobs` on `ledger-stress`, all six rows `enabled: false`, queried live
+against the `beta` database.
+
+**Next:** Q6 opens. F58 is now the top-priority item in it — severity A, contradicts the module's
+own stated guarantee, needs a real design decision on cherry-pick semantics before a fix, not a
+patch. F53 and F55 remain queued behind it. `task-e6b05093` (now unblocked) and the general
+Q6/Q7/Q8/Q9/Q10 backlog remain untouched.
