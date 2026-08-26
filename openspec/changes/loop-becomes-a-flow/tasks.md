@@ -827,8 +827,30 @@ which needs real setup (11.1), and why 11.3 is blocked.
 **Read §2 of the runbook before re-enabling the flow** — finding F45 means the next firing re-runs
 a review `critic` has already done, on every tick, with no stop condition able to end it.
 
-- [ ] 11.1 **A flow with one agent is indistinguishable from a loop.** Run one. If anything reads
+- [x] 11.1 **A flow with one agent is indistinguishable from a loop.** Run one. If anything reads
       differently, D2 has leaked.
+      **Judged 2026-08-26 by the operator: PASSES — D2 has not leaked.** Driven live on
+      `job-bdea22bb0308` (`loop-e4b864459808`, agent `builder`) with `critic` and `relay` archived,
+      and with no finished work in the queue, so the flow was judged on ordinary work rather than on
+      a review it would take first. Fired twice; both firings read identically, and identically to a
+      loop:
+      | | firing 1 | firing 2 |
+      |---|---|---|
+      | runs created | 1 (`run-11f66951522d`) | 1 (`run-e4f6d5bf7bbf`) |
+      | current items on the card | 1 | 1 |
+      | agent named | `builder` | `builder` |
+      | `agent_role` during / after | `working` / `next` | `working` / `next` |
+      | outcome | completed | completed |
+      Nothing plural leaked into the single-agent case: no second row, no width vocabulary, no extra
+      attribution.
+      **One runbook expectation that did not hold, and is not D2 leaking.** It expects consecutive
+      firings to collapse into a single conversation row; they do not — each firing opened its own
+      (`conv-dc1b2a45ab54` and a fresh one after it). That is `session_mode: new`, a property of the
+      *job* rather than of flow-versus-loop, and a loop configured the same way behaves the same. It
+      is, however, the mechanism behind F61's eleven identically-titled conversations.
+      **A confirmation that sharpens F63:** `agent_role` fell back to `next` correctly here when the
+      run ended, so the stale `working` is specific to the `under_review` arm at `scheduler.py:1220`
+      rather than general — which is why the chosen three-role fix lands in one place.
 - [x] 11.2 **The handover is legible.** Watch an implementer finish and a reviewer start. It should
       be obvious from the conversation list that a handover happened and to whom.
       **Judged 2026-08-26 by the operator: FAILS.** The routing itself is correct — eight review
