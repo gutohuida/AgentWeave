@@ -1759,3 +1759,29 @@ no code changed, no other project state touched.
 runway left after this entry, there is still no scope to manufacture. The next iteration, if any
 fires before `stop_at`, should do the same minimal reconfirmation and then stand down. The next
 real work on this line of effort should start as a fresh `autonomous-prep` cycle.
+
+## Iteration 20 — 2026-08-26T07:26:00+01:00
+
+Started with ~34 minutes of runway left before `stop_at` (08:00+01:00). State and `git log` agreed
+exactly with no reconciliation needed (tip `d1f1996`, tree clean). Iteration 19's `next_action` was
+explicit, for the second consecutive iteration: no mandatory or optional scope remains; if a future
+iteration fires anyway, reconfirm health and jobs-disabled, then stand down. Did exactly that.
+
+**Hub health:** `GET /health` → `{"status":"ok","runtime":"native"}`.
+
+**Jobs, read live via `sqlite3 mode=ro` against the beta trial database:** `SELECT COUNT(*) FROM
+ai_jobs WHERE enabled=1` → `0`. Nothing enabled anywhere, repository-wide, consistent with every
+prior confirmation this run.
+
+**Runs table:** `SELECT COUNT(*) FROM runs WHERE status IN ('running','queued')` → `0`. The Hub is
+fully idle.
+
+**Queue status: unchanged, Q1–Q10 all closed or blocked-on-operator (Q6).** `decisions_for_user`
+unchanged — no new operator decision surfaced this iteration. No project state touched; read-only
+verification only.
+
+**Run status: complete, confirmed for the third consecutive iteration.** With ~30 minutes of
+runway left after this entry and `stop_at` at 08:00+01:00, there is still no scope to manufacture.
+If another iteration fires before then, repeat this same minimal reconfirmation and stand down. The
+next real work on this line of effort should start as a fresh `autonomous-prep` cycle, not a
+continuation of this one.
