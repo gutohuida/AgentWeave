@@ -55,11 +55,11 @@
 
 ## 3. Audit the "is it running" call sites (D10)
 
-- [ ] 3.1 Enumerate every site computing `Run.status == "running"`, with its scoping and its caller.
-- [ ] 3.2 For each, write down which question it asks and whether it is the same question as the
+- [x] 3.1 Enumerate every site computing `Run.status == "running"`, with its scoping and its caller.
+- [x] 3.2 For each, write down which question it asks and whether it is the same question as the
       board's. `agent_auth` (live run for credentials) and `conversation_titles` (deliberately records
       no `Run`) are expected to be legitimately different — confirm rather than assume.
-- [ ] 3.3 Record the outcome per site in `design.md` under D10, including the sites that do **not**
+- [x] 3.3 Record the outcome per site in `design.md` under D10, including the sites that do **not**
       move and why. A site left alone with no stated reason is an open hole, not a decision.
 
 ## 4. One owned determination of capacity (D8, D9)

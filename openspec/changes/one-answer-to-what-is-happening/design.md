@@ -247,6 +247,63 @@ recording a `Run` so a titling spawn does not make an agent look busy. The audit
 written outcome per site — same question, or legitimately different, and why — and only the first
 kind moves.
 
+#### The audit, performed (tasks 3.1–3.3)
+
+Fifteen query sites, not eight. The earlier "eight modules that should collapse" claim was
+overstated and was already corrected in the exploration; this is the enumeration that replaces it.
+**One site moves. Fourteen stay, each with a reason — a site left alone with no stated reason is an
+open hole, not a decision.**
+
+**Moves — the board's own question.**
+
+| Site | Scope | Why it moves |
+|---|---|---|
+| `api/v1/jobs.py:346` | `(Run.agent, Run.task_id)` across the batch's projects | The ~90-line derivation D9 owns. It splits the rows into `running_task_ids` and `running_agents_without_task`, and the second set is the agent-fallback whose own comment concedes it "can still over-report `working` when an agent is mid-turn on a *different* task". After D1 the fallback has almost nothing left to catch, because the runs that needed it were the review runs. |
+
+**Stays — concurrency guards.** Each asks *may I do this now*, scoped to the thing it guards. None
+is a question about attribution, and routing one through a derived answer would let a second spawn
+through on a rendering nicety.
+
+- `api/v1/agent_trigger.py:421` — refuse a second concurrent run for an agent.
+- `agent_lifecycle.py:39` — refuse to archive an agent mid-run.
+- `conversations.py:355` — refuse to archive a conversation mid-run.
+- `project_lifecycle.py:200`, `:238` — refuse to delete or relocate a project mid-run.
+- `scheduler._agents_that_are_free` (~946) — "not running" as one half of eligibility. The other
+  half is "holding no active task", and D4's docstring already explains why neither alone suffices.
+
+**Stays — a different subject.** Each is about an agent, a conversation or a firing, not about a
+task, so there is no shared question to unify.
+
+- `api/v1/agents.py:399`, `api/v1/projects.py:228` — is this *agent* running anything, for the
+  status dot. An agent running anything genuinely is running; the two are noted in their own
+  comments as needing to agree with each other, and they do.
+- `api/v1/inbound_queue.py:130` — why a queue is not draining ("agent is already running").
+- `conversations.py:392` — per-conversation attention, where *waiting* outranks *running*.
+- `api/v1/jobs.py:449` — is a firing active for this loop, joined through `JobRun.conversation_id`.
+- `api/v1/agent_trigger.py:1050` — fetch *the* live run for an agent. A lookup, not a derivation.
+
+**Stays — confirmed legitimately different, as the design predicted.**
+
+- `agent_auth.py:55` — keyed by `capability_token_hash`, not by agent or task. A security check.
+  Widening it to consult a display derivation would be the wrong direction entirely.
+- `conversation_titles.py` — deliberately records no `Run`, so a titling spawn does not make an
+  agent look busy. Confirmed by reading rather than assumed.
+- `run_reconciliation.py` — its subject is rows *wrongly* marked running. It is what makes every
+  other site's read trustworthy, and cannot itself consume a derivation built on that read.
+
+**Already precise, and D1 improves it.** `api/v1/tasks.py:372` joins on
+`Run.status == "running" & Run.task_id.in_(task_ids)` — it reads the *binding*, not the agent, so it
+was never part of the defect. Group 1 makes it more accurate for free: review runs now have a
+`task_id` to match on.
+
+**One borderline, deliberately left and flagged.** `api/v1/tasks.py:428` (`_attach_assignee_activity`)
+sets `assignee_status = "running"` when a task's assignee has *any* run alive — the same over-report
+mechanism as the `jobs.py` fallback, on a different surface. It is left alone for now because it
+speaks a different vocabulary answering a different question: agent presence (`running`/`idle`, the
+live-pulse cue on `TaskCard`), not task capacity (`working`/`held`/`next`/`assigned`). Group 4's task
+list does not cover it, and widening scope mid-change is not the implementer's call — **an open
+question for the operator**, recorded rather than silently absorbed or silently skipped.
+
 ## Risks / Trade-offs
 
 **Bound reviews enter divergence machinery for the first time** → all 40 tasks are
