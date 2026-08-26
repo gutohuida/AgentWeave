@@ -26,7 +26,7 @@ import pytest
 from sqlalchemy import select
 
 from hub.db.engine import async_session_factory
-from hub.db.models import AIJob, Loop, Task
+from hub.db.models import AIJob, Loop, Run, Task
 from hub.scheduler import JobScheduler, _enter_selected_task
 from hub.task_transition_service import apply_transition
 from hub.task_transitions import run_actor
@@ -72,6 +72,26 @@ async def _flow(db, *, suffix):
     return job, loop, task
 
 
+async def _running_turn(db, task, agent, *, with_task_id=True):
+    """A `Run` genuinely in flight, which is what `working` is now allowed to mean (F63).
+
+    `with_task_id=False` is not a convenience: `run.task_id` is NULL on most real runs -- measured
+    on the trial database at 6 of the 10 carrying a `completed` transition -- so the agent fallback
+    in `_batch_loop_summaries` is the branch production actually takes, and a fixture that always
+    set `task_id` would leave it untested.
+    """
+    run = Run(
+        id=f"run-live-{agent}-{task.id}",
+        project_id="proj-test",
+        agent=agent,
+        status="running",
+        task_id=task.id if with_task_id else None,
+    )
+    db.add(run)
+    await db.commit()
+    return run
+
+
 async def _completed_by(db, task, agent):
     actor = run_actor(run_id=f"run-{agent}-{task.id}", agent=agent)
     for status in ("assigned", "in_progress", "completed"):
@@ -110,12 +130,19 @@ async def test_a_task_being_reviewed_reads_as_working_not_next(app, auth_headers
 
     A task a reviewer already holds is in-flight, so the board must say `working`. Before the fix
     it said `next` — "this is who *would* take it" — about work already taken.
+
+    **A live `Run` was added to this fixture on 2026-08-26 for F63**, and that is a correction to
+    the test rather than a convenience. It asserted `working` over a review with no run anywhere,
+    which is exactly the state F63 found the board lying about — so as written it pinned the bug in
+    place. F49's actual claim is that the `working` branch is *reachable*, and it still is: with a
+    real run in flight this passes, and the `held` case below is what the run-less fixture means.
     """
     await _roster(app, auth_headers, bind_runner, AUTHOR, REVIEWER)
     async with async_session_factory() as db:
         job, _loop, task = await _flow(db, suffix="working")
         await _completed_by(db, task, AUTHOR)
         await _enter_selected_task(db, task, agent=REVIEWER, is_review=True)
+        await _running_turn(db, task, REVIEWER)
         await db.commit()
 
     res = await app.get("/api/v1/projects/proj-test/jobs", headers=auth_headers)
@@ -143,6 +170,87 @@ async def test_a_task_awaiting_review_still_reads_as_next(app, auth_headers, bin
 
     assert [(t["id"], t.get("agent"), t.get("agent_role")) for t in current] == [
         (task.id, REVIEWER, "next")
+    ]
+
+
+# ---------------------------------------------------------------------------
+# F63 — `working` must mean a run exists, and `held` must exist to mean the rest
+# ---------------------------------------------------------------------------
+
+
+async def test_a_review_nobody_is_running_reads_as_held_not_working(app, auth_headers, bind_runner):
+    """The assertion that distinguishes this fix from doing nothing.
+
+    Found live by the operator on 2026-08-26 judging group 11's check 11.5: after a review turn
+    *failed*, the card still read `working` with zero non-terminal runs in the database.
+
+    The cause is one word meaning two things. `scheduler.decide_firing` appends an `under_review`
+    task to `in_flight` unconditionally whenever it has an assignee, deliberately -- that is what
+    keeps a verdict-less review visible instead of vanishing from the board (F23, F45) -- so
+    `in_flight` means "this firing cannot staff anybody onto this". `_batch_loop_summaries` rendered
+    that as "this agent is mid-turn on it". Both were right about their own side.
+    """
+    await _roster(app, auth_headers, bind_runner, AUTHOR, REVIEWER)
+    async with async_session_factory() as db:
+        job, _loop, task = await _flow(db, suffix="held")
+        await _completed_by(db, task, AUTHOR)
+        await _enter_selected_task(db, task, agent=REVIEWER, is_review=True)
+        await db.commit()
+
+    res = await app.get("/api/v1/projects/proj-test/jobs", headers=auth_headers)
+    assert res.status_code == 200
+    current = _card(res.json(), job.id)["loop"]["current_tasks"]
+
+    assert [(t["id"], t.get("agent"), t.get("agent_role")) for t in current] == [
+        (task.id, REVIEWER, "held")
+    ]
+
+
+async def test_a_run_without_a_task_id_still_reads_as_working(app, auth_headers, bind_runner):
+    """The agent fallback, which is the branch production actually takes.
+
+    `run.task_id` is NULL on most runs, so matching on it alone would report `held` about genuinely
+    running work -- the same lie as F63 in the opposite direction. Deliberately paired with the test
+    above: together they say `working` is about a *run existing*, not about which column carries it.
+    """
+    await _roster(app, auth_headers, bind_runner, AUTHOR, REVIEWER)
+    async with async_session_factory() as db:
+        job, _loop, task = await _flow(db, suffix="notaskid")
+        await _completed_by(db, task, AUTHOR)
+        await _enter_selected_task(db, task, agent=REVIEWER, is_review=True)
+        await _running_turn(db, task, REVIEWER, with_task_id=False)
+        await db.commit()
+
+    res = await app.get("/api/v1/projects/proj-test/jobs", headers=auth_headers)
+    current = _card(res.json(), job.id)["loop"]["current_tasks"]
+
+    assert [(t["id"], t.get("agent"), t.get("agent_role")) for t in current] == [
+        (task.id, REVIEWER, "working")
+    ]
+
+
+async def test_a_terminal_run_does_not_keep_a_review_reading_as_working(
+    app, auth_headers, bind_runner
+):
+    """A finished run is not a running one, which is the literal shape of what was found live.
+
+    The review turn that produced F63 ended `failed`. A fix that asked "is there a run for this
+    task" without asking "is it still going" would pass the two tests above and reproduce the bug.
+    """
+    await _roster(app, auth_headers, bind_runner, AUTHOR, REVIEWER)
+    async with async_session_factory() as db:
+        job, _loop, task = await _flow(db, suffix="terminal")
+        await _completed_by(db, task, AUTHOR)
+        await _enter_selected_task(db, task, agent=REVIEWER, is_review=True)
+        run = await _running_turn(db, task, REVIEWER)
+        run.status = "failed"
+        await db.commit()
+
+    res = await app.get("/api/v1/projects/proj-test/jobs", headers=auth_headers)
+    current = _card(res.json(), job.id)["loop"]["current_tasks"]
+
+    assert [(t["id"], t.get("agent"), t.get("agent_role")) for t in current] == [
+        (task.id, REVIEWER, "held")
     ]
 
 

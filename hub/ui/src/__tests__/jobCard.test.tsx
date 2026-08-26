@@ -489,6 +489,52 @@ describe('JobCard: what the row and the chips actually claim', () => {
     expect(within(list).getByText('assigned: critic')).toBeInTheDocument()
   })
 
+  it('names a held review as waiting rather than as working (F63)', async () => {
+    // Found live by the operator judging group 11's 11.5: a review turn had FAILED, no run existed
+    // anywhere, and the card still read the bare name -- which means "this agent is mid-turn".
+    // `held` is the state where the loop cannot staff anybody and nobody is running either, and it
+    // has to look different from `working` or the split in the API buys nothing on screen.
+    const user = userEvent.setup()
+    loopTasks = [{ id: 'task-1' }, { id: 'task-2' }]
+    renderCard(
+      baseJob({
+        loop: {
+          id: 'loop-1',
+          label: 'Ship it',
+          purpose: 'Ship it',
+          stop_when_queue_empties: false,
+          queue: { completed: 2 },
+          current_tasks: [
+            {
+              id: 'task-1',
+              title: 'Reviewed by nobody right now',
+              status: 'under_review',
+              agent: 'critic',
+              agent_role: 'held',
+            },
+            {
+              id: 'task-2',
+              title: 'Genuinely being worked',
+              status: 'in_progress',
+              agent: 'builder',
+              agent_role: 'working',
+            },
+          ],
+          open_questions: 0,
+          firing_active: false,
+        },
+      }),
+    )
+
+    await user.click(screen.getByLabelText('Expand job details'))
+    const list = screen.getByTestId('job-loop-current-tasks')
+
+    expect(within(list).getByText('waiting on critic')).toBeInTheDocument()
+    // The bare name is reserved for genuinely running work, which is the whole distinction.
+    expect(within(list).queryByText('critic')).not.toBeInTheDocument()
+    expect(within(list).getByText('builder')).toBeInTheDocument()
+  })
+
   it('falls back to the bare name when the Hub sends no role (F26)', async () => {
     // A Hub older than this change sends `agent` without `agent_role`. It must render as it always
     // did rather than acquiring a qualifier the server never claimed.

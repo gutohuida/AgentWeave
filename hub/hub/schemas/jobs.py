@@ -116,10 +116,15 @@ class LoopSummary(BaseModel):
     #: never blank, so a reader is not shown an empty attribution.
     current_tasks: List[Dict[str, str]] = Field(
         # {"id", "title", "status", "agent"?, "agent_role"?}
-        # `agent_role` says what the name means — "working" (mid-turn), "next" (who the next
-        # firing would give it to) or "assigned" (the row's own assignee, the blocked case). It
-        # exists because the board rendered all three identically, so a completed task showed its
-        # prospective reviewer as though that agent were working it (F26).
+        # `agent_role` says what the name means — "working" (a run is genuinely in flight),
+        # "held" (this agent owns it and nothing is running: a review that ended without a verdict,
+        # or whose turn failed), "next" (who the next firing would give it to) or "assigned" (the
+        # row's own assignee, the blocked case). It exists because the board rendered all of them
+        # identically, so a completed task showed its prospective reviewer as though that agent
+        # were working it (F26).
+        # `held` was split out of `working` for F63: the scheduler records an `under_review` task
+        # as in-flight whether or not anybody is running it, so "the loop cannot staff this" and
+        # "someone is mid-turn on this" had been sharing one word and one label.
         default_factory=list
     )
     # Why this loop's next firing would be refused, or None if it would proceed

@@ -37,6 +37,8 @@ from hub.db.models import (
     TurnUsage,
 )
 from hub.scheduler import JobScheduler, _compose_loop_briefing, decide_firing
+from hub.task_transition_service import apply_transition
+from hub.task_transitions import run_actor
 
 from .test_review_turn import _roster
 
@@ -802,3 +804,77 @@ async def test_the_board_shows_in_flight_work_as_the_current_item(app, auth_head
     assert [t["id"] for t in summary.current_tasks] == ["task-width-boardflight-a"]
     assert summary.current_tasks[0]["agent"] == SECOND
     assert summary.stall_reason is None
+
+
+# ---------------------------------------------------------------------------
+# F64 — a stall caused by having nobody must say so, not blame the queue
+# ---------------------------------------------------------------------------
+
+
+async def _completed_by(db, task, agent):
+    """Walk a task to `completed` through real transitions, so the ladder knows who authored it."""
+    actor = run_actor(run_id=f"run-author-{task.id}", agent=agent)
+    for status in ("assigned", "in_progress", "completed"):
+        await apply_transition(db, task, status, actor)
+    await db.commit()
+
+
+async def test_a_queue_nobody_can_staff_says_so_instead_of_blaming_the_queue(
+    app, auth_headers, bind_runner
+):
+    """The assertion that distinguishes this fix from doing nothing.
+
+    Found live by the operator on 2026-08-26 judging group 11's check 11.4. Rung 3's own notice was
+    right — *"could not staff this step: no agent is free to take it..."* — and went to the event
+    stream. The loop card, the surface an operator actually reads, described the same instant as
+    *"no claimable task among 1 open (1 completed)"*: a shortage of **work**, where the truth is a
+    shortage of **people**. The remedies are opposite (add tasks / add an agent) and the card named
+    the wrong one.
+
+    Deliberately *not* F23's case: nothing here is in flight and nothing is running. This is the
+    neighbouring state — neither busy nor short of work, but short of eligible agents — which had
+    no branch of its own.
+    """
+    await _roster(app, auth_headers, bind_runner, OWNER)
+    async with async_session_factory() as db:
+        job, loop = await _flow(db, suffix="nostaff")
+        task = await _task(db, loop, "nostaff-a")
+        await _completed_by(db, task, OWNER)
+
+    decision = await _decide(job.id, loop.id)
+
+    assert decision.kind == "stalled"
+    assert decision.unstaffed, "the author is the only agent, so its review cannot be staffed"
+    assert decision.stall_reason is not None
+    assert (
+        "could not staff" in decision.stall_reason
+    ), f"the card must name the staffing cause, not the queue; got {decision.stall_reason!r}"
+    assert "no claimable task among" not in decision.stall_reason
+
+
+async def test_a_genuinely_empty_queue_still_blames_the_queue(app, auth_headers, bind_runner):
+    """The other side, so the fix cannot become "always say staffing".
+
+    A queue whose candidates are gated on an unapproved prerequisite has nothing to do with
+    staffing, and telling that operator to add an agent would send them somewhere useless. Nothing
+    is unstaffed here, so the queue sentence must survive untouched.
+    """
+    await _roster(app, auth_headers, bind_runner, OWNER, SECOND)
+    async with async_session_factory() as db:
+        job, loop = await _flow(db, suffix="reallyempty")
+        blocker = await _task(db, loop, "reallyempty-a", status="pending")
+        gated = await _task(db, loop, "reallyempty-b", status="pending")
+        await _depend(db, gated.id, blocker.id)
+        await _completed_by(db, blocker, OWNER)
+        await apply_transition(
+            db, blocker, "under_review", run_actor(run_id="run-re-x", agent=SECOND)
+        )
+        await db.commit()
+
+    decision = await _decide(job.id, loop.id)
+
+    assert decision.kind == "stalled"
+    assert decision.stall_reason is not None
+    assert (
+        not decision.unstaffed
+    ), "SECOND can review the blocker, so nothing is unstaffable and the queue sentence must stand"

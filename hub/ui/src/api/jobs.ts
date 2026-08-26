@@ -63,15 +63,18 @@ export interface LoopSummary {
   /** Every task the loop is currently working, in queue order. Several when a flow staffs
    *  several (design D15). `agent` is absent rather than blank when nobody is attributed. */
   /** `agent_role` says what `agent` means, which the board previously left the reader to infer
-   *  from the status and could not: "working" is mid-turn, "next" is who the next firing would
-   *  give it to (a completed task's reviewer, not its author), "assigned" is the row's own
-   *  assignee for a blocked task waiting on a person (F26). */
+   *  from the status and could not: "working" is mid-turn, "held" is this agent owns it and
+   *  nothing is running (a review that ended without a verdict, or whose turn failed), "next" is
+   *  who the next firing would give it to (a completed task's reviewer, not its author),
+   *  "assigned" is the row's own assignee for a blocked task waiting on a person (F26).
+   *  `held` was split out of `working` for F63 — the two had shared one label, so the board said
+   *  an agent was mid-turn on a task with no run anywhere. */
   current_tasks?: {
     id: string
     title: string
     status: string
     agent?: string
-    agent_role?: 'working' | 'next' | 'assigned'
+    agent_role?: 'working' | 'held' | 'next' | 'assigned'
   }[]
   // Why the next firing would be refused, or absent if it would proceed
   // (`loop-notices-and-reacts` 5.5). From the Hub's own firing decision, never inferred from

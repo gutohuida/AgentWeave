@@ -915,6 +915,18 @@ a review `critic` has already done, on every tick, with no stop condition able t
       **Also found in this setup, recorded as F65:** the review briefing whose run F56 correctly
       refused stayed `queued` with `delivery_attempts: 1`, retryable against a task that can never
       have evidence — and while it sat there it blocked archiving its agent.
+      **Re-judged after the fix, same day: the card NOW PASSES too.** `decide_firing` prefers the
+      staffing sentence over the queue sentence whenever it has one, with paired tests so it cannot
+      degenerate into always saying staffing, mutation-checked, and live-verified on the restarted
+      trial Hub: the `Stall bench` card now reads *"could not staff this step: no agent is free to
+      take it…"* where it read *"no claimable task among 2 open (2 completed)"*. Notice and card now
+      give one account of one state.
+      **One thing the live re-check turned up, left for the operator:** that card reports the
+      staffing reason with the **full roster restored** — all three agents `open`, zero running runs
+      — because the author is excluded, one agent holds other active work, and the third is already
+      the task's own assignee. So the Stall bench was misdescribing itself before anything was
+      archived. The fix reports truthfully; whether a roster of three should be unable to staff one
+      review is a question about the ladder, not about this fix. F65 remains unfixed.
 - [x] 11.5 **Concurrent work is comprehensible.** With a flow running three agents, judge whether the
       board says what is happening or merely that a lot is.
       **Judged 2026-08-26 by the operator: FAILS.** Driven live on the `Width bench` flow
@@ -934,6 +946,11 @@ a review `critic` has already done, on every tick, with no stop condition able t
       operator's chosen fix is a third role — `working` only when a run genuinely exists, `held`
       when a reviewer owns the task but nothing is running, `next` otherwise — which also gives
       F23's "a stall the operator can see" a name of its own.
+      **Re-judged after the fix, same day: NOW PASSES.** `held` shipped with three backend tests and
+      one renderer test, all mutation-checked, and the trial Hub was restarted onto it. The exact row
+      that produced the finding, `task-bb86d53a94d5`, now reads `agent_role: held` — rendered
+      "waiting on relay" — where an hour earlier it read `working` with zero runs in the database;
+      `task-948637265cb0` beside it still reads `next`. The board now says what is happening.
 - [x] 11.6 **The spend is visible.** Run a wide flow and confirm you can tell what it cost without
       reconstructing it.
       **Judged 2026-08-26 by the operator: PASSES, with the mixed-CLI gap recorded.** One call to

@@ -321,6 +321,34 @@ async def _batch_loop_summaries(
     #: Task ids an agent is *mid-turn* on, as opposed to ones the next firing would claim. The
     #: distinction is invisible in `claimed_agents_by_loop`, which merges both (F26).
     working_by_loop: Dict[str, set] = {}
+    # **What is actually running right now** (finding F63), which `in_flight` cannot answer and was
+    # wrongly asked to. The scheduler puts an `under_review` task into `in_flight` unconditionally
+    # whenever it has an assignee, *deliberately* — that is what keeps a review which ended without
+    # a verdict visible on the board instead of vanishing from it (findings F23 and F45). So
+    # `in_flight` means "this firing cannot staff anybody onto this", and rendering it as "this
+    # agent is mid-turn on it" told the operator `relay` was working a task whose review run had
+    # already failed, with no run anywhere in the database.
+    #
+    # Matched on `Run.task_id` where it is set and on the agent where it is not, because
+    # **`run.task_id` is NULL on most runs** — measured on the trial database while fixing F43,
+    # NULL on 6 of the 10 runs carrying a `completed` transition. Task-id-only would therefore say
+    # `held` about genuinely running work most of the time, which is the same class of lie in the
+    # other direction. The agent fallback can still over-report `working` when an agent is mid-turn
+    # on a *different* task, and that is the precision the scheduler itself staffs on
+    # (`_agents_running_a_turn`); it is bounded and one-directional, where the bug it replaces was
+    # unbounded.
+    #
+    # This is the seventh query, and it stays batched across every loop for design D7's reason.
+    running_rows = (
+        await session.execute(
+            select(Run.agent, Run.task_id).where(
+                Run.project_id.in_({loop.project_id for loop in loops}),
+                Run.status == "running",
+            )
+        )
+    ).all()
+    running_task_ids = {task_id for _agent, task_id in running_rows if task_id}
+    running_agents_without_task = {agent for agent, task_id in running_rows if not task_id}
     for job_id, loop in loop_by_job.items():
         decision = await decide_firing(session, loop, default_agent=job_agent_by_id.get(job_id, ""))
         stall_reason_by_loop[loop.id] = decision.stall_reason
@@ -377,8 +405,14 @@ async def _batch_loop_summaries(
             # give it to, which for a `completed` task is its reviewer, not the person who did it.
             # `assigned` — nobody is being selected, and this is the row's own assignee, which is
             # the blocked case waiting on a person.
+            # `held` — the loop cannot staff anybody onto this and nobody is mid-turn on it either:
+            # a review whose turn ended without a verdict, or failed. It is the state F23 asked to
+            # keep visible, finally wearing its own name instead of borrowing `working`'s (F63).
             if task.id in working_by_loop.get(task.loop_id, ()):
-                entry["agent_role"] = "working"
+                if task.id in running_task_ids or agent in running_agents_without_task:
+                    entry["agent_role"] = "working"
+                else:
+                    entry["agent_role"] = "held"
             elif task.id in claimed:
                 entry["agent_role"] = "next"
             else:

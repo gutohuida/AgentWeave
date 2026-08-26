@@ -49,8 +49,32 @@ function getStatusLabel(enabled: boolean): string {
  * draws from in-flight work and from the firing's selections, and by the time the board sees it
  * the two are indistinguishable.
  */
-function CurrentTaskAgent({ name, role }: { name: string; role?: 'working' | 'next' | 'assigned' }) {
-  const qualifier = role === 'next' ? 'next: ' : role === 'assigned' ? 'assigned: ' : ''
+/**
+ * What the agent's name beside a current task means. The qualifier is the whole point: an
+ * unqualified name reads as "this agent is working on it", which is right for `working` and wrong
+ * for every other role (F26).
+ *
+ * `held` earns its own word rather than falling back to the bare name (F63). It is the state where
+ * the loop cannot staff anybody onto the task and nobody is mid-turn on it either -- a review whose
+ * turn ended without a verdict, or failed. The board used to render exactly this as `working`, so
+ * it claimed an agent was busy on work that had no run at all. "waiting on" names what the operator
+ * can act on, which is the same thing rung 3's own notice does.
+ */
+function CurrentTaskAgent({
+  name,
+  role,
+}: {
+  name: string
+  role?: 'working' | 'held' | 'next' | 'assigned'
+}) {
+  const qualifier =
+    role === 'next'
+      ? 'next: '
+      : role === 'assigned'
+        ? 'assigned: '
+        : role === 'held'
+          ? 'waiting on '
+          : ''
   return (
     <span className="ml-1.5" style={{ color: 'var(--text-3)', opacity: 0.75 }}>
       {qualifier}

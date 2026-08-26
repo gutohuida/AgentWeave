@@ -3118,3 +3118,79 @@ operator's own judgement was that this is worth recording rather than obviously 
 rather than retryable, and withdraw the entry when the refusal fires. The scheduler re-queues a
 review when evidence appears anyway, so nothing is lost by not holding this one — and the roster
 stops being held hostage by a message that cannot succeed.
+
+### F63 — Resolution, 2026-08-26
+
+Fixed as the operator chose: a **third role**, rather than narrowing `in_flight` or having the
+renderer second-guess it.
+
+`_batch_loop_summaries` (`api/v1/jobs.py`) gained a seventh batched query — `Run.agent` and
+`Run.task_id` where `Run.status == "running"`, across the projects the loops belong to — and the
+role now splits three ways instead of two: `working` when a run is genuinely in flight, **`held`**
+when the loop cannot staff the task and nobody is mid-turn on it, `next` when this is who the next
+firing would give it to. `scheduler.decide_firing` is untouched; `in_flight` keeps the meaning F23
+and F45 gave it.
+
+**Matched on the agent as well as on `task_id`, deliberately.** `run.task_id` is NULL on most real
+runs — measured on this database while fixing F43, NULL on 6 of the 10 carrying a `completed`
+transition — so a task-id-only test would have reported `held` about genuinely running work, the
+same lie in the other direction. The agent fallback can over-report `working` when an agent is
+mid-turn on a *different* task; that is the precision the scheduler itself staffs on
+(`_agents_running_a_turn`), it is bounded, and it is one-directional.
+
+On screen (`JobCard.tsx`) `held` renders as **"waiting on <agent>"**. The bare unqualified name is
+now reserved for genuinely running work, which is the distinction the split exists for.
+
+**A test that pinned the bug in place was corrected, not worked around.**
+`test_a_task_being_reviewed_reads_as_working_not_next` asserted `working` over a review with **no
+run anywhere** — exactly the state this finding is about — so as written it required the defect.
+F49's actual claim is that the `working` branch is *reachable*, and it still is: the fixture now
+carries a live `Run` and the assertion is unchanged. This is the F41/F43/F52 shape again, caught in
+a test rather than in product code.
+
+Three new tests in `test_board_agent_role.py`: the run-less review reads `held`; a running run with
+a NULL `task_id` still reads `working` (the branch production takes); and a **terminal** run does
+not keep a review reading `working` — that last one exists because a fix asking "is there a run for
+this task" without asking "is it still going" would pass the other two and reproduce the bug, the
+review turn that produced F63 having ended `failed`. One vitest case for the renderer.
+
+**Mutation-checked:** collapsing the split back to an unconditional `working` fails
+`test_a_review_nobody_is_running_reads_as_held_not_working` and
+`test_a_terminal_run_does_not_keep_a_review_reading_as_working` by name; removing the `held`
+qualifier from `CurrentTaskAgent` fails the vitest case. Restored and re-confirmed green each time.
+
+**Live-verified** against the trial Hub restarted onto this code, on the exact row that produced the
+finding: `task-bb86d53a94d5` now reads `agent_role: held` where it read `working` with zero runs in
+the database an hour earlier, and `task-948637265cb0` beside it still reads `next`.
+
+### F64 — Resolution, 2026-08-26
+
+Fixed with the narrow shape: `decide_firing` prefers the staffing sentence over the queue sentence
+when it has one. Reaching the stall branch already means no selection and nothing in flight, so if
+`unstaffed` is non-empty then unstaffable candidates are *why* nothing was claimable, and the queue
+sentence is describing the symptom while naming the wrong cause.
+
+The rung-3 message was already being computed on that same walk and emitted as a `review_unstaffed`
+event; it simply never reached the surface an operator reads. The first reason rather than a join of
+all of them: several unstaffable reviews in one queue are unstaffable for the same reason, and a
+card is a line rather than a report — the event stream still carries one entry per task.
+
+Two tests in `test_flow_width.py`, paired on purpose: a queue whose only agent authored its own
+completed work must name staffing and must **not** say "no claimable task among", and a queue that
+is genuinely gated on a prerequisite — nothing unstaffed — must keep the queue sentence untouched,
+so the fix cannot degenerate into "always say staffing".
+
+**Mutation-checked:** removing the preference fails
+`test_a_queue_nobody_can_staff_says_so_instead_of_blaming_the_queue` by name.
+
+**Live-verified** against the restarted trial Hub: the `Stall bench` card, which read *"loop queue
+is stalled: no claimable task among 2 open (2 completed)"*, now reads *"could not staff this step:
+no agent is free to take it…"*.
+
+**Something the live check turned up that the finding had not claimed.** That card still reports the
+staffing reason with the **full roster restored** — `builder`, `critic` and `relay` all `open`, zero
+running runs — because `builder` authored the task, `relay` holds other active work, and `critic` is
+already the task's own assignee. So the Stall bench was misdescribing itself as a queue shortage
+even before any agent was archived; archiving only made the misattribution easier to see. The fix is
+reporting truthfully, not over-reporting. **Whether a roster of three should be unable to staff one
+review is a separate question about the ladder**, not about this fix, and is left for the operator.

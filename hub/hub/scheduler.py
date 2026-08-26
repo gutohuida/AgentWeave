@@ -1323,6 +1323,26 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
         return FiringDecision(
             kind=DECISION_PROCEED_EMPTY, unstaffed=tuple(unstaffed), deferred=tuple(deferred)
         )
+    if unstaffed:
+        # **Finding F64: say why, not merely that.** Reaching here means no selection and nothing
+        # in flight, so nothing was claimable — and `_stall_reason_from_walk` describes that as a
+        # property of the *queue* ("no claimable task among 2 open (2 completed)"). When `unstaffed`
+        # is non-empty that attribution is wrong in the way that matters: the queue is holding work
+        # which is ready this second, and what is missing is an agent permitted to take it. The two
+        # remedies are opposite — add tasks, or add an agent — and the operator acts on whichever
+        # the card names.
+        #
+        # The rung-3 sentence was already being computed on this very walk and emitted as a
+        # `review_unstaffed` event; it simply never reached the surface an operator looks at. This
+        # is not F23 returning: that fix put the `in_flight` branch *above* the stall check so a
+        # busy flow stops calling itself stalled, and it works. This is the neighbouring case, a
+        # flow that is neither busy nor short of work but short of eligible agents, which had no
+        # branch of its own.
+        #
+        # The first reason, not a join of all of them: when a queue holds several unstaffable
+        # reviews they are unstaffable for the same reason, and a card is a line rather than a
+        # report. The event stream still carries one entry per task.
+        stall_reason = unstaffed[0][1]
     return FiringDecision(
         kind=DECISION_STALLED,
         stall_reason=stall_reason,
