@@ -1723,3 +1723,39 @@ queue Q1–Q10 was driven to closed or explicitly blocked-on-operator, every fin
 `decisions_for_user`, and both suites plus lint/type-check were last confirmed green in iteration
 16. No further iteration needs to fire before `stop_at`; if one does anyway (little runway remains),
 it should simply reconfirm health and jobs-disabled and stand down, exactly as this one did.
+
+## Iteration 19 — 2026-08-26T07:20:48+01:00
+
+Started with ~40 minutes of runway left before `stop_at` (08:00+01:00). State and `git log` agreed
+exactly with no reconciliation needed (tip `25ac32c`, tree clean). Iteration 18's `next_action` was
+explicit: there is no mandatory or optional remaining scope, and if a future iteration fires anyway
+it should re-confirm health and jobs-disabled, then stand down. Did exactly that.
+
+**Hub health:** `GET /health` → `{"status":"ok","runtime":"native"}`.
+
+**Jobs, read live via `sqlite3 mode=ro` against every row in `ai_jobs` across all five projects
+(not just the three previously called active):** every single row reads `enabled: 0`, including the
+five archived drive-2026-08-26 job rows from earlier iterations and the two toolkit-sandbox rows
+from before this run began. Nothing enabled anywhere, repository-wide.
+
+**Runs table:** no row with `status IN ('running','queued')` anywhere in the database — the Hub is
+fully idle.
+
+**ledger-stress task board (`e2e.py state proj-18e5d4e0`):** `task-23a0986e7fe9` and
+`task-3cd54c17faa6`, the two Q5 drove to a verdict, both now read `approved`. One task
+(`task-6bc5c366aad6`, critic reviewing `Money.quantize()`) reads `in_progress` with no active run
+behind it — a leftover from a prior iteration's live drive, not new, and not actionable without
+either triggering another turn (out of scope, no queue item covers it) or operator input on
+whether to touch ledger-stress further. Left as-is; it is not a stuck run (no matching `runs` row),
+just a task that has not been picked up again.
+
+**Queue status: unchanged, Q1–Q10 all closed or blocked-on-operator (Q6).** `decisions_for_user`
+unchanged — no new operator decision surfaced this iteration.
+
+**What a reviewer should distrust:** nothing new. Read-only verification only; no runs triggered,
+no code changed, no other project state touched.
+
+**Run status: complete, confirmed for the second consecutive iteration.** With ~35 minutes of
+runway left after this entry, there is still no scope to manufacture. The next iteration, if any
+fires before `stop_at`, should do the same minimal reconfirmation and then stand down. The next
+real work on this line of effort should start as a fresh `autonomous-prep` cycle.
