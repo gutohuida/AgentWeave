@@ -872,8 +872,25 @@ a review `critic` has already done, on every tick, with no stop condition able t
       yet landed. The mechanism is unchanged and holds.
 - [ ] 11.4 **Rung 3 reads as staffing, not breakage.** With no eligible agent, confirm the notice
       says the flow needs someone rather than that it failed.
-- [ ] 11.5 **Concurrent work is comprehensible.** With a flow running three agents, judge whether the
+- [x] 11.5 **Concurrent work is comprehensible.** With a flow running three agents, judge whether the
       board says what is happening or merely that a lot is.
+      **Judged 2026-08-26 by the operator: FAILS.** Driven live on the `Width bench` flow
+      (`job-f632ee565238`), fired once with its cron parked at `0 4 1 1 *` and restored to disabled
+      afterwards. One firing staffed two turns — two `JobRun` rows on one tick, which is correct by
+      design since each turn succeeds or fails on its own — and the card listed both with task,
+      agent and role.
+      Two fixes were confirmed working in the same firing: **F49** (`agent_role` reached `working`,
+      which that finding said it never could) and **F56** (the review turn that could not be given a
+      commit failed with a stated reason — *"task task-bb86d53a94d5 has no recorded evidence, so
+      there is no commit to review"* — instead of wedging the agent's queue silently; all three
+      agent queues confirmed unwedged afterwards).
+      **What fails the check:** after the firing, `task-bb86d53a94d5` still read `agent_role:
+      working` with **zero non-terminal runs in the database** — its review run had *failed*.
+      Nobody was mid-turn on it. The board was not merely vague about concurrency; it asserted
+      something untrue about it, which is worse than saying nothing. Recorded as **F63**. The
+      operator's chosen fix is a third role — `working` only when a run genuinely exists, `held`
+      when a reviewer owns the task but nothing is running, `next` otherwise — which also gives
+      F23's "a stall the operator can see" a name of its own.
 - [x] 11.6 **The spend is visible.** Run a wide flow and confirm you can tell what it cost without
       reconstructing it.
       **Judged 2026-08-26 by the operator: PASSES, with the mixed-CLI gap recorded.** One call to

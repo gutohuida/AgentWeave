@@ -2944,3 +2944,87 @@ here is wrong, only partial. Two shapes if it is ever fixed: price Codex turns f
 a model price table (introduces a second, estimated source of truth for money), or mark the total
 as partial whenever any contributing turn had no cost report (honest, cheaper, and does not
 pretend to a number the CLI never gave).
+
+## F63 (B) — the board says an agent is mid-turn on work nothing is running; two meanings of "in flight" collided
+
+Found 2026-08-26 by the **operator**, judging group 11's check 11.5 ("is concurrent work
+comprehensible?") against a live firing of the `Width bench` flow (`job-f632ee565238`) on
+`proj-18e5d4e0`. The third finding in this series produced by a human judgement call.
+
+### What happened, live
+
+One firing, two turns staffed — the concurrency itself worked. Afterwards the loop card read:
+
+```
+task-bb86d53a94d5  Reject a posting with an unknown account code   relay    working
+task-948637265cb0  Report the trial balance in account-code order  builder  next
+```
+
+`task-948637265cb0` is right. `task-bb86d53a94d5` is not: its review run **failed**
+(`run-cd011fb845ce`, `error_summary: "task task-bb86d53a94d5 has no recorded evidence, so there is
+no commit to review..."`), `firing_active` was `False`, and a direct query for non-terminal runs —
+`select id, agent, status, task_id from runs where status not in
+('completed','failed','stopped','interrupted')` — returned **zero rows**. Nothing anywhere was
+running. The board said `relay` was mid-turn on it anyway.
+
+### Root cause — one word meaning two things
+
+`scheduler.py:1220`, in the `under_review` arm of the queue walk:
+
+```python
+if task.assignee:
+    in_flight.append((task.id, task.assignee))
+continue
+```
+
+Unconditional, and **deliberately so**. Its own comment says why: *"Recorded as in-flight rather
+than skipped, for finding F23's reason: a bare `continue` removes the row from the board... It is
+also what makes a review that ended without a verdict visible -- the task stays here with its
+reviewer named, which is a stall the operator can see and act on, where F45 was a spend loop they
+could not."* For the scheduler, `in_flight` means **"this firing cannot staff anybody onto this"**.
+
+`api/v1/jobs.py:381` then reads the same collection:
+
+```python
+if task.id in working_by_loop.get(task.loop_id, ()):
+    entry["agent_role"] = "working"
+```
+
+whose own comment defines the word differently: *"`working` — this agent is mid-turn on it."*
+
+Both comments are correct about their own side. Neither is correct about the other. An
+`under_review` task whose reviewer is not currently running satisfies the scheduler's meaning and
+violates the board's, and there is no third state for it to fall into.
+
+### Why it surfaced now and not before
+
+This is the third finding in the F26 / F49 family, and it exists *because* F49 was fixed. F26 was
+"the board names a different agent than the task's assignee"; F49 was "`agent_role` could never say
+`working`", because the membership test asked a bare `task.id` against a set of `(task_id, agent)`
+tuples and never matched. F49 made the branch reachable for the first time since F26 shipped — and
+the first live firing after that fix reached it in a case where it is wrong. A branch unreachable
+in production for its whole life is a branch nobody could have found this in.
+
+### The fix the operator chose
+
+A **third role**, rather than narrowing `in_flight` or consulting the runs table from the renderer:
+
+- `working` — a non-terminal run genuinely exists for this task;
+- `held` — a reviewer owns it and nothing is running (the verdict-less review, the failed review
+  turn, the task waiting on a person);
+- `next` — this is who the next firing would give it to.
+
+Rejected alternatives, recorded so they are not re-proposed: having `jobs.py` check the runs table
+and downgrade `working` to `next` (loses the distinction between "waiting on a reviewer" and
+"queued for the next firing", which is exactly the distinction F23 asked for), and splitting
+`FiringDecision.in_flight` into two fields in the scheduler (cleanest at the source, but touches
+every consumer for a defect that is entirely in one renderer).
+
+### What HELD
+
+The concurrency itself. One firing, two `JobRun` rows, two conversations, two independent outcomes
+— and two rows for one tick is correct rather than a duplicate, because a single row could not say
+that one turn finished and one failed. Both **F49** and **F56** were confirmed working in this same
+firing: `agent_role` reached `working` at all (F49), and the review turn that could not be given a
+commit refused with a stated reason rather than silently wedging `relay`'s inbound queue (F56) —
+all three agent queues were checked afterwards and none is wedged.
