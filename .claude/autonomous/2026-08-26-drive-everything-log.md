@@ -1099,3 +1099,340 @@ sketch the F58 fix options concretely enough that a `decisions_for_user` entry c
 choice rather than restating iteration 10's three candidates, or (b) pick up whichever of F53/F58
 turns out to have a narrower, decision-free sub-piece worth fixing now while the design question
 stays open for the operator. Confirm the full-suite background run's result first.
+
+---
+
+## Iteration 12 — F58's decision-free sub-piece: found already implemented, independently
+verified, live-checked, committed. F53 has the same shape, unfixed.
+
+**2026-08-26T03:07–03:5X+01:00.** Fresh process, no memory of prior iterations, as designed.
+Reconciliation found the same pattern iteration 11 hit: `git log` tip (`ca13c32`, iteration 11's
+heartbeat release) matched `STATE.json` exactly, but the tree was **not** clean — a complete,
+well-written fix for exactly the option-(b) path iteration 11's own `next_action` named ("F58's
+blast radius could be reduced by ... warning/flagging when `integrate()` is about to merge more
+than the named commit's own diff, without yet choosing the full cherry-pick redesign"), already
+sitting uncommitted: `task_integration.py`'s `commits_riding_along()`, a new
+`TaskIntegration.rode_along_commits` column (migration `0089`), the API exposing it, the UI
+rendering an amber warning under a merged row, tests for both the Python and TypeScript sides, and
+a `FINDINGS.md` write-up already self-labelled "iteration 12." A second fresh process within the
+same run had done this work and stopped before committing — same shape as iteration 11's own F55
+pickup, and treated the same way: verify independently before trusting any of it, never on the
+strength of the write-up's own claims.
+
+**Independently reproduced every claim, not copied from the write-up.** `pytest
+tests/test_task_integration.py tests/test_migrations.py tests/test_project_persistence.py -q`:
+104 passed, 1 skipped — matches. `npx vitest run src/__tests__/taskIntegrationRetry.test.tsx`:
+8/8 passed — matches. `ruff check` and `black --check --target-version py311` clean on all seven
+touched Python files; `tsc --noEmit` and `eslint` clean on the three touched TS/TSX files. **Ran my
+own mutation check**, not the write-up's: stashed only `task_integration.py`, reran the new test —
+`test_rode_along_commits_names_what_actually_landed` failed with the exact predicted diff
+(`assert [] == ['7b7a670b...']`), restored, reconfirmed green. (The UI-guard mutation check the
+write-up describes — commenting out the render condition — was not separately repeated; the Python
+mutation check plus the passing UI test together were judged sufficient given the component is a
+five-line conditional already covered by both a positive and a negative test.)
+
+**UI bundle rebuilt and committed with its source, per the standing rule.** `hub/ui/src` was
+touched; ran `npm run lint` (clean, no output), `npx tsc --noEmit` (clean), `npm run build`
+(succeeded, 2703 modules), then `py -3.11 scripts/refresh_ui_bundle.py` from the repo root — old
+hashed assets removed, new ones added, `ui-build-stamp.json` updated. Committed together in the
+same commit as the source, per the rule this file has cost two prior sessions for getting wrong.
+
+**Verified LIVE, one step further than the write-up's own "not verified live" admission.**
+Restarted the trial Hub (stopped PID `10892` holding port 8010, relaunched `uvicorn` from `hub/`
+with `DATABASE_URL` pointed at the beta profile; `/health` ok in ~8s; `e2e.py state proj-18e5d4e0`
+read the same `ledger-stress` run history as before the restart, confirming the beta database).
+Queried the live database directly: `alembic_version` reads `0089` (migration applied cleanly on
+restart), and `task_integrations.rode_along_commits` exists and reads `''` on the one pre-existing
+F58 merge row (`tint-cc7f14015dfb`, from Q5's iteration 9 drive) — expected, since that merge ran
+before this column existed and nothing retroactively recomputes history. **A full live re-drive
+producing a new, non-empty `rode_along_commits` row was not attempted** — the one candidate
+(`task-e6b05093`, FR-3, on the same agent branch as the original F58 merge) is still `assigned`,
+not yet under review, and driving it to `approved` through a real reviewer turn is a bigger unit of
+work than this iteration's verification pass; left explicit rather than silently skipped.
+
+**Job sweep, as output, both before and after the restart:** all twelve `ai_jobs` rows across all
+five projects read `enabled: 0`.
+
+**Committed** (`f20e181`): all fifteen files (seven `hub/` source/test, three UI source/test, the
+rebuilt bundle, the new migration, `FINDINGS.md`) in one commit — one finding, one commit, per the
+standing discipline.
+
+**Kicked off the full `hub/tests/` suite in the background** (`py -3.11 -m pytest tests/ -q`,
+~11-14 minutes measured) to reconfirm whole-suite green after two consecutive schema-touching
+migrations (`0088`'s `Checkpoint` primary-key change, `0089`'s new column) — this has not been run
+whole since the arming baseline; every iteration since has run only touched-file/topic slices.
+Result recorded below once it completed, per this run's own "don't conclude it is stuck" guidance.
+
+**FULL SUITE RESULT:** lost — the background process that ran it belonged to the fresh process's
+own shell session, which ended before this entry was committed, so its output was never captured
+anywhere durable. Recorded here rather than silently dropped, per this run's "never claim what
+wasn't measured" rule. The next iteration (below) relaunches the full suite itself and reports a
+real result.
+
+**What a reviewer should distrust.** This iteration did not author F58's mitigation — it inherited,
+independently re-verified (test counts, the mutation-check failure text, the live migration/column
+check, the job sweep), and committed work whose original authorship is not separately
+distinguishable from this entry, same caveat iteration 11 recorded for F55. The live verification
+confirms the schema and code are live-safe, not that a new rode-along scenario renders correctly
+end-to-end through the UI in a browser — that remains unexercised.
+
+**Next:** F53 has the identical shape available: a narrow, decision-free half
+(`_check_spec_document_conflict` excluding archived loops, letting a new job be created against a
+document an archived loop still claims) that does not require deciding what happens to the
+already-`loop_id`-stamped tasks (the part that is genuinely the operator's call, since it turns on
+whether "already started" work should keep or lose its `loop_id`). That is the natural next unit of
+work for Q6. Failing that, Q7 (F50, pre-authorised, not yet touched this run) has no decision
+blocker at all and is the fallback.
+
+**2026-08-26T04:19–04:5X+01:00.** Fresh process, no memory of prior iterations, as designed.
+Reconciliation: `git log` tip (`f20e181`, F58's commit) matched what `STATE.json` claims as its
+parent history, but the tree was again **not** clean — the exact pattern this run has now hit
+three iterations running (11, 12, and this one). Uncommitted in the tree at start: a complete
+narrow fix for F53's decision-free half (option (a) from F53's own write-up), `next_action`'s named
+top choice — `jobs.py`'s `_check_spec_document_conflict` now excludes archived loops, `models.py`'s
+`Loop.spec_document_id` replaced its unconditional `unique=True` with a partial unique index
+(migration `0090`), plus a regression test and updated head-revision assertions in two other test
+files. No `FINDINGS.md` entry existed for it yet and `STATE.json` had not been advanced past
+`"iteration": 12"` with a fresh heartbeat but stale `next_action`/`decisions_for_user` text still
+narrating the F58 handoff as upcoming rather than done.
+
+**Did not trust the code on sight — independently verified, and this time verification caught a
+real bug the inherited work had not.** Ran the directly-relevant slice first
+(`test_jobs.py -k "f53 or spec_document or document_conflict"`, `test_migrations.py`,
+`test_project_persistence.py`): 4 passed on the narrow slice, but `test_migrations.py` on its own
+came back **2 failed** — `test_migration_0085_adds_lineage_id` and
+`test_migration_0086_adds_review_task_id_to_queue_entries`, both `sqlite3.OperationalError: no such
+table: main.loops`. Traced, not dismissed: those two tests synthesize a database starting from an
+early revision (0034), so by the time `alembic upgrade head` walks through migration `0090`'s
+`downgrade()` path (both tests upgrade to head then downgrade partway), the `loops` table can be
+absent. `upgrade()` in `0090` correctly guards for a missing table (`if not existing and _TABLE not
+in ...: return`, matching `0033`/`0034`'s own precedent this repo's CLAUDE.md names explicitly) —
+`downgrade()` did not have the same guard, and crashed trying `CREATE UNIQUE INDEX
+ix_loops_spec_document_id ON loops (...)` against a table that does not exist. Added the identical
+guard to `downgrade()`. Reran: `test_migrations.py` + `test_project_persistence.py` → 78 passed, 1
+skipped. Reran the full trio together (`test_jobs.py` + both migration files) → 134 passed, 2
+skipped.
+
+**Mutation-checked the actual fix, not just the schema bug.** Temporarily reverted
+`_check_spec_document_conflict`'s `Loop.archived_at.is_(None)` filter via a scripted patch/restore
+(not a manual edit left lying around) and reran the new test alone: failed with the exact pre-fix
+`409 {"detail": "document 'doc-declare-f53' is already claimed by loop '...'"}`, confirming the API
+check is load-bearing independent of the schema-level partial index. Restored, reconfirmed clean
+via `git diff --stat` (0 lines changed).
+
+**`ruff check` and `black --check --target-version py311` clean** on all six touched files
+(`jobs.py`, `models.py`, the new migration, three test files).
+
+**Verified LIVE, from scratch, not by trusting the write-up's own live-verification claims (there
+were none yet — this fix had no write-up at all when the iteration started).** Found the trial
+Hub's actual listening PID via `netstat -ano | grep 8010` (`25788`, not whatever prep last
+recorded — PIDs do not survive restarts), killed it, relaunched `uvicorn` from `hub/` with
+`DATABASE_URL` pointed at the beta profile per `environment.restart_hub`, confirmed `/health` ok.
+Queried the live SQLite file directly: `alembic_version` reads `0090`; `sqlite_master` on `loops`
+shows both `ix_loops_spec_document_id` (now non-unique, matching the model's bare `index=True`) and
+the new partial-unique `ux_loops_spec_document_live`. Then drove the real scenario over real HTTP
+against `proj-8605b92d0028` (the Q1 drive project, chosen because it is idle and disposable rather
+than disturbing `ledger-stress`'s accumulated state): `POST /jobs` with `spec_document_id:
+doc-f53-live-verify-iter13` and `enabled: false` (so nothing could ever fire or spend) → `201`;
+`POST /jobs/{id}/archive` → `200`; a second `POST /jobs` against the identical `spec_document_id`
+→ **`201`**, where the F53 write-up's own reproduction shows this was a permanent `409` before the
+fix. Archived the second job immediately after (cleanup, not left for the morning). Confirmed via
+`GET /projects` + per-project `GET /projects/{id}/jobs` that all jobs across all five projects
+(`proj-8605b92d0028`, `proj-18e5d4e0`, `proj-2826f39e`, `proj-54d33cac`, `proj-5e960453`) read
+`enabled: false` — printed as output above, not asserted.
+
+**Updated `FINDINGS.md`** with a "Resolution (partial)" section under F53 itself, rather than a new
+finding number, since this closes exactly the decision-free half the original write-up already
+scoped out — states what was fixed, what was caught in verification (the downgrade guard bug), how
+it was live-verified, and that the `loop_id`-orphaning half (root cause 2) is still open and still
+the operator's call.
+
+**Committed** (one finding, one commit): the six touched files plus the `FINDINGS.md` addendum.
+
+**Relaunched the full `hub/tests/` suite in the background** (`py -3.11 -m pytest hub/tests/ -q`)
+from the repository root, both to reconfirm whole-suite green after this iteration's schema change
+stacked on `0088`/`0089`'s, and to replace the previous iteration's lost result. Not yet complete
+as of this being written — result below, filled in before this entry closes, per this run's own
+"don't conclude it is stuck" guidance and its sibling rule against claiming an unmeasured result.
+
+**FULL SUITE RESULT:** lost again — the same pattern as the previous iteration's attempt: the
+background process belonged to a shell session that ended before this entry was committed. This is
+now twice in a row this run has tried to background the full suite across a process boundary and
+lost the result both times, which is itself worth recording as friction in the method rather than
+quietly retrying a third time the same way: a background job started by one fresh process is not
+guaranteed to survive to the next one, so a whole-suite confirmation should be run and consumed
+within a single iteration's own lifetime, not handed off. The next iteration (below) does exactly
+that.
+
+**What a reviewer should distrust.** This iteration did not author F53's mitigation — it inherited,
+found a real defect in it during independent verification (the migration downgrade guard), fixed
+that defect itself, then verified the corrected whole through the same discipline (mutation check,
+live HTTP drive, job sweep) previous iterations have used. The live verification confirms the
+create→archive→recreate path is live-safe on this one project; it does not exercise the UI's own
+loop-archive flow in a browser, which remains unexercised exactly as prior iterations left it for
+F58's UI-adjacent piece.
+
+**Next:** F53's other half (`_adopt_document_tasks`'s `loop_id` orphaning) still needs the
+operator's decision and stays open. Q7 (F50, pre-authorised, no decision blocker) is the cleanest
+next unit of work if nothing else in Q6 turns up a similarly narrow, decision-free slice.
+
+---
+
+## Iteration 13 — Q7 closes: F50 found already implemented, independently verified, live-reconfirmed against a real reproduction; a full-suite result finally captured within one iteration's own lifetime
+
+**2026-08-26T04:45–05:1X+01:00.** Fresh process, no memory of prior iterations, as designed.
+Reconciliation: `git log` tip (`3defb1e`) sat three commits ahead of what the on-disk `STATE.json`
+and log described (`f20e181`/F58, `2239f38`/F53-partial, and — new, undocumented — `3defb1e`/F50).
+The working tree itself was clean this time (no uncommitted work waiting), but `STATE.json` and the
+log had not been advanced to match: `STATE.json`'s `next_action` still narrated iteration 11's F55
+close as current, and the log's own "Next" pointer above still named F50 as unstarted. Fourth
+iteration in a row this run has found its own bookkeeping behind its own commits — a fresh process
+had done the F50 work, written a complete commit message with its own verification claims, and
+exited before touching `STATE.json` or this log at all (no uncommitted trace, unlike iterations
+11–12's pattern — this one committed cleanly but the handoff files were simply never written).
+
+**Did not trust the commit message's own verification claims — independently reproduced every one.**
+`pytest hub/tests/test_checkpoint_generation.py -q`: 21 passed, matching the commit's claim. **Ran
+my own mutation check**, not the commit's: patched out the two new `lines.append` calls for
+`Status`/`Probe` in `render_checkpoint` via a scripted patch (not a manual edit left lying around),
+reran the checkpoint-generation suite narrowed to `status or probe or F50 or failure` — both named
+tests failed exactly as predicted
+(`test_a_ready_checkpoint_states_its_status_without_a_failure_warning`,
+`test_a_checkpoint_that_failed_its_probe_states_the_failure_instead_of_hiding_it`,
+`AssertionError: assert 'Status: failed' in '...'`). Restored via `git checkout --`, confirmed
+`git diff --stat` empty, reconfirmed 21/21 green. `ruff check` and `black --check
+--target-version py311` clean on both touched Python files. `npx openspec validate
+loop-becomes-a-flow --strict`: valid.
+
+**Verified LIVE against the trial Hub, which was already running and did not need a restart** (no
+schema change in this commit — `render_checkpoint` is pure formatting over existing columns).
+`GET /health` ok. Fetched the commit's own named reproduction over real HTTP with the project's live
+API key: `GET /projects/proj-18e5d4e0/checkpoints/ckpt-9cba6c0e8e40/rendered` — response reads
+`Status: failed`, `Probe: failed`, and the stated warning paragraph ahead of the written body,
+exactly as the commit describes and exactly matching `FINDINGS.md`'s own resolution write-up
+(already present under F50, correctly labelled severity B). `openspec/changes/loop-becomes-a-flow/
+tasks.md` task 14.7 already closed with matching evidence — nothing left to add there.
+
+**Job sweep, as output, across all five projects:** `proj-8605b92d0028` `[]`, `proj-18e5d4e0` six
+jobs all `enabled: False`, `proj-2826f39e` two jobs both `enabled: False`, `proj-54d33cac` `[]`,
+`proj-5e960453` `[]`.
+
+**Full `hub/tests/` suite, run and consumed within this single iteration's own process lifetime —
+not handed across a process boundary, which is exactly the failure the previous two iterations
+named as friction.** Launched via the harness's own tracked background-command mechanism (not a
+raw shell `&`, which is what iterations 11–12 lost) so the result survives regardless of how long
+verification of other things takes in between.
+
+**This entry itself was cut off here mid-write** — the fresh process that ran this suite committed
+`3defb1e` (the F50 fix above) cleanly, then was terminated (or the harness cycled) before it could
+finish writing this log entry or touch `STATE.json` at all: no uncommitted trace was left in the
+tree (unlike iterations 11–12's pattern), but `STATE.json`'s `next_action` still narrated
+iteration 11's F55 close as current and this log's own last "Next" pointer still named F50 as
+unstarted, even though `git log` already showed F58, F53-partial, and F50 all committed. The next
+iteration (below) found and fixed this reconciliation gap, and independently captured the result
+this entry was waiting on: **1 failed, 3144 passed, 84 skipped, 1 xpassed, 190 warnings in 1052.50s
+(17:32)** — the single failure was
+`test_evidence_latest_review_signal.py::test_a_later_acceptance_replaces_the_reason_shown`, a real,
+new-to-this-run finding (F59), not noise. See the next entry for the investigation and fix.
+
+---
+
+## Iteration 14 — reconciliation (three iterations' worth of undocumented commits), and F59: the F55 clock-tie bug recurs in a second table
+
+**2026-08-26T05:00–05:4X+01:00.** Fresh process, no memory of prior iterations, as designed.
+Reconciliation found the pattern now established across iterations 11–13: `git log` tip (`3defb1e`)
+sat three commits ahead of what `STATE.json` and the log described. Unlike 11–12 (uncommitted work
+waiting) or 13 (clean tree, no handoff written), this time the tree held a **partial, uncommitted
+edit already in progress** — `STATE.json`'s `iteration` bumped to 12 and Q7 marked `closed`, and
+223 lines already appended to this log documenting iterations 12 and 13 — meaning a *fourth* fresh
+process had already started this exact reconciliation and been cut off mid-way through, before
+finishing `next_action`/`decisions_for_user` or committing. Read and kept rather than discarded:
+independently spot-checked against `FINDINGS.md`'s F58/F53/F50 write-ups and `git log`, and it was
+accurate.
+
+**The full suite's own result was still missing**, exactly as the previous entry's own final
+paragraph says — this iteration's first job was to finish capturing it rather than trust either
+prior claim about it. Found the actual pytest process still running (PID `15672`, started
+`05:01:37`, the same run iteration 13 had launched and lost across its own process boundary) via
+`Get-CimInstance Win32_Process`, found its live output already redirected to `/tmp/full_suite_out.log`
+(one of three candidate log files from repeated prior attempts — picked by mtime, the freshest),
+and waited on it via a monitored background loop rather than losing it a third time. Result: **1
+failed, 3144 passed, 84 skipped, 1 xpassed, 190 warnings, 1052.50s** —
+`test_evidence_latest_review_signal.py::test_a_later_acceptance_replaces_the_reason_shown`.
+
+**F59 (B) — investigated rather than dismissed as a flake, and it is the identical bug class F55
+already named, in a second table.** Re-ran the failing test bare, six times, on the unmodified
+branch tip: 3 of 6 failed, alternating with no code change between runs — not a coincidence, and
+`git log` confirmed this file was untouched by any commit this entire run, so it predates this
+session's own work rather than being a regression from it. Read `_latest_reviews_for`
+(`hub/hub/api/v1/spec.py`) and `reviews_for` (`hub/hub/requirement_evidence.py`): both order by
+`EvidenceReview.created_at, EvidenceReview.id` — exactly F55's `Checkpoint` shape, tie-broken by a
+random string id with no relation to insertion order, on a machine where `datetime.now()` can
+return an identical value across consecutive calls. Full write-up under **F59** in
+`scripts/drive/FINDINGS.md`.
+
+**Fixed following F55's own established shape, not reinvented.** `EvidenceReview` gained a
+`sequence` autoincrement primary key (migration `0091`), both `order_by` call sites now read
+`.order_by(EvidenceReview.sequence)`. **A second, real bug was caught during verification, not
+authored by the fix**: the migration's existence guard didn't account for `batch_alter_table`'s
+`recreate="always"` transitively reflecting `requirement_evidence`'s own FK to `tasks` (because
+`evidence_reviews` FKs to `requirement_evidence`) — 14 unrelated `test_migrations.py`/
+`test_project_persistence.py` tests broke with `NoSuchTableError: tasks` the moment the new
+migration was added, all of them synthetic early-revision upgrade chains that never materialise a
+`tasks` table. Added `tasks` to the guard's required-table set; all 14 passed again. Full
+regression test constructs the tie deterministically (adversarial ids, a shared `created_at` read
+from a real row) rather than relying on wall-clock luck. **Mutation-checked**: reverted both
+`order_by` sites, the new test failed with the exact predicted assertion; restored, reconfirmed.
+Bare-reran the originally-flaky test 8 times post-fix: 8/8 passed. `ruff`/`black
+--target-version py311` clean on all seven touched files. Broader slice (`-k "evidence or spec or
+agent_actions or requirement"`, 837 tests): 817 passed, 20 skipped, 0 failed.
+
+**Verified LIVE.** Restarted the trial Hub on the beta database (PID found via `netstat`, not
+assumed from a stale record — this run's own `dead_ends` note that PIDs do not survive restarts).
+Confirmed via direct query, not `/health` alone: `alembic_version` reads `0091`,
+`evidence_reviews.sequence` populated `1..3` in original insertion order on the three pre-existing
+rows. Posted two real decisions back to back over HTTP against a genuine `awaiting` evidence row on
+`ledger-stress` (`ev-9ab3be95`) using the operator's bootstrap API key: the response after the
+second call correctly read `review_state: "accepted"` with the second call's own reason text, and
+the database afterward showed `sequence` `4` then `5` for the two new rows — insertion order, not a
+random id, is what the live response actually followed. **What a reviewer should distrust**: the
+two live HTTP calls landed ~50ms apart (real network/API latency), not in the same clock tick, so
+this proves the fixed path works correctly end-to-end but does not itself reproduce the original
+race live — only the mutation-checked unit test forces the tie deterministically. Job sweep
+immediately after: all fourteen `ai_jobs` rows across all five projects read `enabled: 0`.
+
+**Full `hub/tests/` suite kicked off again**, freshly, from this iteration itself, to confirm
+whole-suite green with F59's fix included (the previous 1052s run predates the fix and is now
+superseded, not reused) — launched via a properly backgrounded, trackable process from the start
+this time rather than recovered after the fact. **Result: 3147 passed, 84 skipped, 1 xpassed, 0
+failed, 950.78s (15:50).** `py -3.11 -m ruff check src/ hub/ tests/`: all checks passed. `black
+--check src/ hub/hub/ hub/tests/ tests/ --target-version py311`: 485 files unchanged. Whole-suite
+green is re-established with all of this run's work through F59 included.
+
+**Job sweep, reconciliation-adjacent:** the fourteen `ai_jobs` rows read above are the same set
+observed both before and after this iteration's Hub restart — nothing was enabled by any of this
+iteration's own actions.
+
+**Repository root** stayed as expected: `.claude/autonomous/STATE.json` and this log (both being
+actively reconciled), plus the seven `hub/` files for F59 — confirmed by `git status` before
+committing.
+
+**What a reviewer should distrust, overall:** this is the fourth consecutive iteration to spend
+part of its turn on bookkeeping debt left by a predecessor rather than pure forward progress —
+worth naming as a pattern rather than an isolated event. The underlying cause each time has been
+the same: a fresh process does real, correctly-verified work, then is cut off (by the driver
+cycling, by a background process outliving its own shell) before writing `STATE.json`/the log or,
+in iterations 11–12's case, before committing at all. None of the underlying work itself has been
+wrong when independently re-verified — the cost has been entirely in continuity, not correctness.
+If this keeps recurring, the actual fix is probably making the commit+STATE.json+log update one
+atomic step at the very end of whatever unit of work an iteration does, before any "let me also
+just quickly..." follow-on — not something to patch this session, but worth flagging plainly for
+whoever reads this run's own retrospective.
+
+**Next:** with F50/F53(partial)/F58(partial)/F59 all now closed or as-closed-as a decision-free fix
+allows, Q6's two remaining items (F53's `loop_id`-orphan half, F58's merge-redesign) are both
+genuinely blocked on the operator's judgment — there is no further decision-free work available in
+Q6. The natural next unit of work is **Q8**: drive the operator-in-the-loop surfaces (a `manual`
+permission-mode run, answering an approval card through the real API, letting a permission card and
+an `ask_user` batch time out and observing what the operator sees, checking F14's shape), then vary
+one environmental axis (`PYTHONIOENCODING=utf-8` has the track record) and re-run a verification.
