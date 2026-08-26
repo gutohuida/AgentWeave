@@ -3028,3 +3028,93 @@ that one turn finished and one failed. Both **F49** and **F56** were confirmed w
 firing: `agent_role` reached `working` at all (F49), and the review turn that could not be given a
 commit refused with a stated reason rather than silently wedging `relay`'s inbound queue (F56) —
 all three agent queues were checked afterwards and none is wedged.
+
+## F64 (B) — one unstaffable queue, two surfaces, two different causes, opposite remedies
+
+Found 2026-08-26 by the **operator**, judging group 11's check 11.4 ("does rung 3 read as staffing
+or as breakage?") on a live firing of the `Stall bench` flow (`job-453b909ba418`).
+
+**Setup, live:** `critic` and `relay` archived, leaving only `builder` — who authored
+`task-18e900f3eb96` (`task_transitions` sequence 68 `assigned -> in_progress` and 69
+`in_progress -> completed`, both `actor_agent: builder`) and is therefore excluded from reviewing
+it. Two completed tasks in the loop, nobody permitted to take either.
+
+**What rung 3 says**, emitted as a `review_unstaffed` event, severity `info`
+(`_emit_review_unstaffed`, fed from `FiringDecision.unstaffed`):
+
+> could not staff this step: no agent is free to take it. Every agent on the roster is either
+> running a turn, already holding active work, or is the one that completed this task and so may
+> not review it.
+
+This is **correct and was judged a pass.** It names staffing, it is `info` rather than an error, and
+it does not invite a restart.
+
+**What the loop card says**, for the same state at the same moment
+(`loop.stall_reason`, from `_stall_reason_from_walk`):
+
+> loop queue is stalled: no claimable task among 2 open (2 completed)
+
+This attributes the condition to the **queue** — as though the flow were short of claimable work.
+It is short of *people*. Both completed tasks are ready for review this second; what is missing is
+an agent permitted to take one. **The two remedies are opposite:** the card's reading sends the
+operator to add or unblock tasks, the true cause needs them to add or unarchive an agent.
+
+### Root cause — the good sentence is computed, and then not used by the card
+
+`decide_firing` (`scheduler.py:1300-1320`) returns in a fixed order: `selections` -> `in_flight` ->
+`stall_reason`. `unstaffed` rides along on **all three** and is emitted separately as an event at
+`scheduler.py:2111`. The card reads `stall_reason` only. So on a firing where every candidate is
+unstaffable, `unstaffed` holds the accurate explanation, `stall_reason` holds the generic one, and
+the surface an operator actually looks at gets the generic one.
+
+Note this is not the F23 ordering bug returning: that fix put `in_flight` **before** the stall check
+so a busy flow stops reporting itself stalled, and it works. This is the neighbouring case — a flow
+that is neither busy nor short of work, but short of eligible agents — for which no branch exists.
+
+Two shapes if it is fixed, neither chosen here: have `_stall_reason_from_walk` consult the same
+walk's `unstaffed` and prefer its reason when every open candidate is unstaffable (narrow, keeps one
+field), or surface `unstaffed` on the loop card as its own line beside `stall_reason` (wider, and
+would also give the `review_unstaffed` event a home in the UI it currently lacks).
+
+### What HELD
+
+Rung 3 itself, completely: it fired when it should, said the right thing, at the right severity,
+without disabling the job — `_emit_review_unstaffed`'s own comment gives the reason, that
+`remove_job` is not undone by resolving whatever caused it. Also `POST /agents/relay/archive`
+refused cleanly with `"relay has 1 queued message. Discard them to archive the agent."`, carrying
+`blocking_queue_entry_count` and `blocking_queue_entry_ids` — a refusal that names the cause, the
+count, and the remedy. The one wrinkle worth a line: the product's own API calls that remedy
+**withdraw** (`DELETE /queue/entries/{entry_id}`, `withdraw_queue_entry`), not "discard", so the
+operator has to translate the word before they can follow the instruction.
+
+## F65 (C) — a review briefing refused for having no evidence stays queued, and blocks archiving its agent
+
+Found 2026-08-26 by the **operator**, while setting up check 11.4 — an incidental discovery rather
+than a targeted one, which is why it is recorded separately from F64.
+
+`entry-74c9a267afc6` is the loop briefing delivered to `relay` carrying
+`review_task_id: task-bb86d53a94d5`. Its run, `run-cd011fb845ce`, failed with the refusal **F56's
+fix produces**:
+
+> task task-bb86d53a94d5 has no recorded evidence, so there is no commit to review. Evidence naming
+> a commit is what a review turn is given.
+
+That refusal is correct and is a real improvement — before F56 this wedged the agent's entire
+inbound queue silently. But the entry itself stayed `state: queued`, `delivery_attempts: 1`. Two
+consequences:
+
+1. **It will be re-delivered and re-refused.** Nothing about `task-bb86d53a94d5` will produce
+   evidence on its own; the same briefing is queued to fail again on every firing that reaches it.
+2. **It blocked archiving its agent.** `POST /agents/relay/archive` returned `409` naming this one
+   entry, so an operator trying to reconfigure their roster is stopped by a message queued for a
+   turn that has already been refused as impossible. Cleared here with
+   `DELETE /queue/entries/entry-74c9a267afc6`, after which the archive succeeded.
+
+Severity C rather than B: nothing is lost, no spend is wasted (the refusal happens before any model
+is invoked), and the retry is defensible in the abstract — evidence *could* arrive later, and the
+operator's own judgement was that this is worth recording rather than obviously wrong.
+
+**The operator's chosen fix:** treat "no evidence to review" as **terminal for that briefing**
+rather than retryable, and withdraw the entry when the refusal fires. The scheduler re-queues a
+review when evidence appears anyway, so nothing is lost by not holding this one — and the roster
+stops being held hostage by a message that cannot succeed.

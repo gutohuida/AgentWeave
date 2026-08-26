@@ -870,8 +870,29 @@ a review `critic` has already done, on every tick, with no stop condition able t
       the runbook's original example `f10d198` is now on master too, because the night's drive
       correctly approved and merged that task, so the demonstration moved to a commit that has not
       yet landed. The mechanism is unchanged and holds.
-- [ ] 11.4 **Rung 3 reads as staffing, not breakage.** With no eligible agent, confirm the notice
+- [x] 11.4 **Rung 3 reads as staffing, not breakage.** With no eligible agent, confirm the notice
       says the flow needs someone rather than that it failed.
+      **Judged 2026-08-26 by the operator: the NOTICE PASSES; the card fails and is recorded
+      separately.** Driven live on the `Stall bench` flow (`job-453b909ba418`): `critic` and `relay`
+      archived so the only agent left was `builder`, the author of `task-18e900f3eb96` (confirmed
+      from `task_transitions` sequence 68-69) and therefore excluded from reviewing it. Rung 3 fired
+      and emitted a `review_unstaffed` event at severity **`info`**:
+      > could not staff this step: no agent is free to take it. Every agent on the roster is either
+      > running a turn, already holding active work, or is the one that completed this task and so
+      > may not review it.
+      That is what the check asks for — it says *could not staff*, names *no agent is free*, carries
+      `info` rather than an error severity, and nothing in it invites restarting anything. The
+      runbook's specific worry, that naming all three causes rather than only the actionable one
+      would muddy it, was judged not to: the three are all true and the operator can tell which
+      applies.
+      **What fails, recorded as F64:** the loop card explains the *same* condition as
+      `"loop queue is stalled: no claimable task among 2 open (2 completed)"` — a shortage of
+      *work*, where the truth is a shortage of *people*. The two remedies are opposite (add tasks
+      vs add an agent) and the card points at the wrong one. The good sentence and the misleading
+      one describe one state in two places.
+      **Also found in this setup, recorded as F65:** the review briefing whose run F56 correctly
+      refused stayed `queued` with `delivery_attempts: 1`, retryable against a task that can never
+      have evidence — and while it sat there it blocked archiving its agent.
 - [x] 11.5 **Concurrent work is comprehensible.** With a flow running three agents, judge whether the
       board says what is happening or merely that a lot is.
       **Judged 2026-08-26 by the operator: FAILS.** Driven live on the `Width bench` flow
