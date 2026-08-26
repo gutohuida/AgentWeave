@@ -2817,3 +2817,63 @@ so it demonstrates the fix works correctly on the real path end-to-end but does 
 reproduce the original tie live — the tie itself is proven only by the mutation-checked unit test,
 which forces it deterministically rather than hoping for a coincidence. This is the same
 distinction F55's own live verification drew for `Checkpoint`.
+
+## F60 (A) — An unanswered `ask_user` question that resolves itself mid-turn leaves the task reading `completed`, and the operator can still "answer" it afterward into a state that contradicts the code that shipped
+
+Driven live (Q8), following the method's own directive to leave a question deliberately
+unanswered. `proj-8605b92d0028`'s `author` agent (Haiku, cheap runner) was told, honestly, to ask
+the operator a structured question before touching `task-a9f72e6c80f8` (the `is_low_stock` float
+equality bug) and to wait for an answer. It called `ask_user` with three labelled options
+(`q-6080bf46c57c`, `blocking: true`). The question was left unanswered on purpose.
+
+**During the wait**, polled every 10s against the live database for the full 290s the turn actually
+ran: `runs.status` stayed `running`, and `tasks.status`/`blocked_reason` stayed `in_progress`/`None`
+the entire time. This reconfirms **F14** exactly as documented — nothing on the task tells the
+operator their agent is sitting on a question.
+
+**What happens after the wait is worse than F14's own write-up anticipated it would be.** F14 says
+a task only parks to `blocked` "if the run **ends** with the question unanswered" — implying that
+when the run does end, the operator at least sees the task stall visibly. That is not what
+happened. `QUESTION_ANSWER_TIMEOUT` (240s) expired inside the tool call; the agent's own transcript
+shows it correctly reasoning about the timeout ("The question was not answered within the
+timeout... I'll proceed with the most straightforward approach based on the approved
+specification"), picked "Direct `<=` comparison" by reading FR-3 itself, made the code edit, ran the
+tests, and — in the **same turn** — called `update_task` to set `task-a9f72e6c80f8` to `completed`.
+By the time `run_divergence.evaluate_run_end` ran at the true end of the run, the task was no
+longer `in_progress` (the agent had already moved it), so `block_task_for_question` had nothing to
+park. The run ended `completed`, not `stopped`/`failed`. Confirmed from the rows, not the
+transcript's own account: `tasks.status = 'completed'`, `blocked_reason = None`, and
+`questions.answered = 0`, `declined = 0`, `blocked_task_id = None` — the question was never parked,
+never declined, never linked to anything. It simply stopped being anyone's problem.
+
+**The board now shows a clean, completed task.** Nothing on `task-a9f72e6c80f8` — not its status,
+not `blocked_reason`, not any field the task API exposes — indicates that a substantive judgment
+call (which comparison semantics to ship) was made unilaterally by the agent after the operator
+failed to respond in time. An operator scanning the board for problems would not find this one; they
+would have to separately check the questions list and notice a `blocking: true` question with
+`answered: false` that no longer has any visible connection to the now-completed task.
+
+**Compounding it: the question can still be "answered" after the fact, into a value that
+contradicts the shipped code, with no error and no warning.** Five minutes after the run ended,
+`PATCH /api/v1/projects/{id}/questions/q-6080bf46c57c` with `{"answer": "Epsilon-based tolerance"}`
+(deliberately the option the agent did *not* pick) returned `200` and recorded `answered: true`,
+`answer: "Epsilon-based tolerance"`. Nothing rejects answering a question whose asking run has
+already ended, and nothing reconciles the late answer against what actually shipped. The task still
+reads `completed` with the `<=` comparison in its worktree; the question record now claims the
+operator chose epsilon tolerance. An operator who answers questions from a queue without checking
+timestamps would walk away believing they made the decision that shipped, and would be wrong.
+
+**What held:** the timeout itself is real and bounded — `ask_user` did not hang the turn forever,
+and the agent's handling of the timeout (falling back to the spec's own explicit language rather
+than inventing an answer) was reasonable, arguably the best available behavior for *that* Haiku
+agent in *that* turn. The gap is entirely in what the Hub records and surfaces afterward, not in
+the model's own judgment call.
+
+Not fixed this session — recorded as a Q8 drive finding per the queue's own discipline (drive items
+record, fix passes fix). The shape of a fix is not obvious enough to guess at here: closing the
+"question answered after its run ended" hole is a straightforward guard
+(`questions.py`'s PATCH handler could refuse or warn when `created_by_run_id`'s run is no longer
+`running`), but making the *board* surface "this completed task shipped on an unanswered question"
+durably — after the task has already left `in_progress` — is a design decision (a task-level flag?
+a distinct completion state? surfaced only via the questions list forever?) that belongs with F14's
+own eventual fix, not bolted on separately.

@@ -1436,3 +1436,77 @@ Q6. The natural next unit of work is **Q8**: drive the operator-in-the-loop surf
 permission-mode run, answering an approval card through the real API, letting a permission card and
 an `ask_user` batch time out and observing what the operator sees, checking F14's shape), then vary
 one environmental axis (`PYTHONIOENCODING=utf-8` has the track record) and re-run a verification.
+
+## Iteration 15 — Q8 part 1: manual permission mode driven live, and F60, a sharper version of F14
+
+**2026-08-26T05:55–06:1X+01:00.** Fresh process. Reconciliation this time was clean: `git log` tip
+(`e8e7501`) matched `STATE.json` exactly, working tree clean, no undocumented commits — the first
+iteration in several to start with zero bookkeeping debt. Verified the trial Hub was already up
+(`/health` returned `ok`) and moved straight into Q8's first unit of work.
+
+**Manual permission mode, driven end to end on the real surface, not simulated.** Used
+`proj-8605b92d0028` (the Q1 drive project, which had accumulated real state since STATE.json's own
+`environment` note was written: three pending bug-fix tasks plus one already completed by an
+earlier iteration's loop run — the stale "no tasks yet" in `STATE.json.environment` is corrected
+here, not re-trusted). Triggered `author` (Haiku, cheap runner) on `task-06e74937de88` (the
+`apply_bulk_discount` off-by-one) with `overrides.permission_mode: manual` via `e2e.py turn --perm
+manual`. A real `PermissionRequest` row (`perm-efedf9c04e01`) appeared carrying the actual `Edit`
+tool call — `old_string`/`new_string` and all — within seconds. Answered it through the real
+operator API, `POST /permission-requests/{id}/decide {"allow": true}`, not a shortcut: the run
+picked the decision up and continued, completed cleanly, and the fix (`range(len(items) - 1)` →
+`range(len(items))`, plus a discount-rate validation the agent added on its own initiative) landed
+in the run's own worktree — confirmed by reading the worktree file directly, not the transcript.
+`record_evidence` succeeded from the Haiku agent once the document path was supplied (a workable
+path through what F21 once found broken, not a contradiction of it — different obstacle). Only the
+`Edit` call generated a permission card; `Read`/`ToolSearch` did not — read that as Claude Code's
+own CLI-level default (read-only tools are typically pre-approved regardless of `--permission-mode`
+in the CLI itself) rather than an AgentWeave gap; not filed as a finding on that basis alone.
+
+**Then the `ask_user` timeout, per the method's own directive to leave one question deliberately
+unanswered — and it produced the single most valuable finding of this iteration.** Told `author`
+honestly to ask a structured question before fixing `task-a9f72e6c80f8` (the `is_low_stock` float
+equality bug) and to wait for an answer; it did, `blocking: true`, three labelled options. Left it
+unanswered on purpose and polled the live database every 10s for the full 290s the turn ran
+(backgrounded properly this time via the harness's own background-task mechanism, not lost across a
+shell boundary). Confirmed F14 exactly as documented during the wait: `runs.status=running`,
+`tasks.status=in_progress`, `blocked_reason=None`, the whole time — nothing on the board says the
+agent is stuck on a question. **What happens after the timeout is a new, sharper finding, F60,
+severity A.** The 240s `QUESTION_ANSWER_TIMEOUT` expired inside the tool call; the agent correctly
+reasoned about the timeout in its own transcript, picked an answer from the spec text itself, made
+the fix, ran tests, and — in the *same* turn — called `update_task` to mark the task `completed`
+*before* the run itself ended. By the time `run_divergence.evaluate_run_end` ran,
+`block_task_for_question` had nothing to park: the task was no longer `in_progress`. Confirmed from
+the rows: `tasks.status='completed'`, `blocked_reason=None`, and the question row itself —
+`answered=0, declined=0, blocked_task_id=None` — permanently orphaned, forever `pending` in the
+operator's questions list with no visible link to the now-completed task. **Then compounded it
+live**: `PATCH` on the orphaned question five minutes after the run ended, with the answer the agent
+had *not* picked, returned `200` and recorded it as if current — nothing refuses answering a
+question whose asking run has already ended, and nothing reconciles a late answer against what
+actually shipped. Full write-up as **F60** in `scripts/drive/FINDINGS.md`, including what held (the
+timeout itself is bounded and the agent's own fallback judgment was reasonable — the gap is
+entirely in what the Hub records and surfaces afterward). Not fixed this iteration: recorded per the
+queue's own drive/fix split, and the durable-surfacing half of a fix belongs with F14's own eventual
+fix, not guessed at separately.
+
+**Environmental axis variation, scoped to what fit in the remaining budget.** `PYTHONIOENCODING=utf-8
+py -3.11 -m pytest tests/ -q`: **440 passed, 3 skipped, 21.46s** — identical to `green_at_arming`'s
+baseline, no regression surfaced under this axis today. Recorded as a "what held" result, not
+chased further; the full `hub/tests/` suite was not rerun under the variation (≈16 minutes, judged
+not worth spending against the remaining Codex half of Q8).
+
+**Job sweep**, before wrapping: all fourteen `ai_jobs` rows across all five projects (`proj-2826f39e`
+×2, `proj-18e5d4e0` ×7, `proj-8605b92d0028` ×5) read `enabled: 0` — none of this iteration's direct
+`agent/trigger` calls touch job state, and none did.
+
+**What a reviewer should distrust:** F60's live reproduction is a single run on a Haiku agent;
+whether a different runner (Codex) reaches the same "resolves the question itself mid-turn, then
+completes the task" shape, or instead genuinely blocks, is unverified — the Codex `decide_approval`
+leg of Q8 was not reached this iteration. The `PYTHONIOENCODING` check only covered `tests/` (443
+tests, 21s); `hub/tests/` (3147 tests, ~16 minutes) under the same axis remains unverified this run.
+
+**Next:** Q8's remaining scope — trigger a `manual`-mode run on the Codex cheap runner
+(`gpt-5.4-mini`) and confirm `codex_appserver.decide_approval` routes through the same
+`permission-requests` surface, or record where it diverges; optionally extend the
+`PYTHONIOENCODING=utf-8` check to `hub/tests/` if time allows. After that, Q9 (the full sweep and
+the `openspec/explorations/2026-08-26-driving-everything.md` write-up) is the next queue item with
+no operator blocker.
