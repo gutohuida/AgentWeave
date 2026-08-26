@@ -38,12 +38,15 @@ from .inbound_queue import new_entry
 from .run_task_binding import (
     DEFAULT_POLICY,
     OUTCOME_ESCALATED,
+    OUTCOME_RESTAFFED,
     OUTCOME_RETRIED,
     OUTCOME_SURFACED,
     POLICY_ESCALATE,
     POLICY_RETRY,
+    POLICY_REVIEW,
     block_task_for_question,
     may_retry,
+    review_task_for_run,
     run_advanced_its_task,
     unanswered_blocking_question,
 )
@@ -170,6 +173,7 @@ async def _queue_response(
     prompt: str,
     task_id: str,
     source_run_id: str,
+    review_task_id: Optional[str] = None,
 ) -> str:
     """Put the response in the agent's queue rather than spawning it here.
 
@@ -179,6 +183,18 @@ async def _queue_response(
 
     `hop_depth=0`: the Hub is the origin, not a forwarding agent. The retry bound (D8) is what stops
     a chain here, not the hop budget.
+
+    **`review_task_id` is set when the diverged run was itself a review** (design D5). Without it a
+    responding reviewer is fired into its own worktree, where the author's unmerged work does not
+    exist — finding F10, reproduced by the very mechanism meant to rescue a failed review. It had
+    never fired only because reaching this path at all required `task.escalation_agent`, which is
+    NULL on every task; D4 makes the path reachable, which is what turns this from a cleanup into a
+    prerequisite.
+
+    A response to a run that was *not* a review passes None and prepares no checkout. Left as an
+    argument rather than derived here from `task_id`, because "which task this run works on" and
+    "which task this run inspects" are the two meanings this change exists to keep apart — deriving
+    one from the other inside this function would put the collision back one layer down.
     """
     entry = new_entry(
         project_id=project_id,
@@ -188,9 +204,155 @@ async def _queue_response(
         hop_depth=0,
         task_id=task_id,
         divergence_source_run_id=source_run_id,
+        review_task_id=review_task_id,
     )
     session.add(entry)
     return entry.id
+
+
+# --------------------------------------------------------------------------------------
+# A review that gave no verdict (`one-answer-to-what-is-happening`, D3–D6)
+# --------------------------------------------------------------------------------------
+
+
+async def _reviewers_that_gave_no_verdict(session: AsyncSession, task: Task) -> "set[str]":
+    """Every agent holding an unresolved review divergence on *task*.
+
+    This is what bounds re-resolution, and it is derived rather than counted. Excluding only the
+    agent that just failed would let `A → B → A → B` run forever on a two-agent roster; excluding
+    every agent that has already been silent on this task terminates against a finite roster, and
+    reaches D4's own stated end state — *"a second failure with nobody left surfaces"* — by the
+    general rule rather than by a hop counter nobody can see.
+
+    Scoped to **unresolved** divergences deliberately. `resolve_divergences_for_task` closes these
+    the moment an actor transition lands, so a task that went through a review cycle, got its
+    verdict, was revised and came back is free to reach the same reviewer again. The bar is on the
+    attempt in progress, not on the agent's history.
+    """
+    result = await session.execute(
+        select(RunDivergence.agent)
+        .where(RunDivergence.task_id == task.id)
+        .where(RunDivergence.policy_applied == POLICY_REVIEW)
+        .where(RunDivergence.resolved_at.is_(None))
+    )
+    return {agent for agent in result.scalars().all() if agent}
+
+
+async def _review_was_declared(session: AsyncSession, run: Run, task: Task) -> bool:
+    """Whether the reviewer that just gave no verdict was the one the task's document **named**.
+
+    Derived by asking the declaration, not by storing which rung staffed the turn. The declaration
+    is a fact about the document and the document is what the operator would fix — so reading it
+    now answers with the operator's *current* statement. A document edited between staffing and
+    failure therefore classifies by what it says today, which is the more useful of the two answers
+    and self-correcting besides.
+
+    A review run exists at all only where the declaration resolved to this agent, or where there
+    was no declaration and availability picked one: rung 1b surfaces without firing anybody. So the
+    two branches below are exhaustive.
+    """
+    from . import review_turn
+
+    resolution = await review_turn.resolve_declared_reviewer(
+        session, project_id=run.project_id, task=task
+    )
+    return bool(resolution.declared) and resolution.agent == run.agent
+
+
+async def _answer_failed_review(
+    session: AsyncSession, run: Run, task: Task
+) -> Tuple[str, Optional[str], Optional[str], Optional[str]]:
+    """What a review that gave no verdict costs. Returns (outcome, response_agent, previous
+    assignee, reason).
+
+    Design D4's split, and it falls straight out of the requirement archived the same morning:
+    *"by the same resolution the rest of the product already uses for a declared reviewer, never a
+    second one."*
+
+    ```
+      reviewer was DECLARED   ──▶ surface. Never substitute.
+      reviewer was AVAILABLE  ──▶ resolve again, excluding everyone already silent on this task
+    ```
+
+    Firing somebody else for a declared reviewer would tell the operator the named reviewer checked
+    the work when it did not — the same reasoning rung 1b already applies to a declaration that
+    fails to resolve, and it does not weaken because the named agent ran and then said nothing.
+
+    `task.escalation_agent` is deliberately not consulted on either branch. It would be a *second*
+    reviewer resolution, and D6's problem — an escalation target that authored the work is a
+    guaranteed 403 from `_agent_that_completed` — cannot arise here at all, because the resolver
+    already excludes the author by construction.
+    """
+    # Local imports, matching `scheduler._task_is_claimable_by`'s own call of
+    # `_agent_that_completed`: this module is imported by the trigger path that `scheduler` also
+    # reaches, and the module docstring's line about keeping the deciding half free of the spawning
+    # half is what these keep true.
+    from .scheduler import resolve_reviewer
+    from .task_transition_service import _agent_that_completed
+
+    if await _review_was_declared(session, run, task):
+        return (
+            OUTCOME_SURFACED,
+            None,
+            None,
+            f"{run.agent} is this task's declared reviewer and its review of {task.id} ended "
+            f"without recording a verdict. Nobody has been substituted: naming a different "
+            f"reviewer, reviewing it yourself, or asking this one again is the way forward.",
+        )
+
+    author = await _agent_that_completed(session, task.id)
+    barred = await _reviewers_that_gave_no_verdict(session, task)
+    barred.add(run.agent)
+    if author:
+        barred.add(author)
+
+    choice = await resolve_reviewer(session, task, project_id=run.project_id, exclude=barred)
+    if choice.agent is None:
+        # Rung 3, or a declaration that appeared since. Either way nobody is fired and the reason
+        # comes from the resolver unchanged, so the operator reads why rather than that something
+        # failed. The flow's job is untouched — it stays enabled and stays scheduled.
+        return OUTCOME_SURFACED, None, None, choice.reason
+
+    previous_assignee = task.assignee
+    # Reassigned for the same reason escalation reassigns: leaving the assignee pointing at the
+    # agent that gave no verdict would make the board disagree with reality. `_enter_selected_task`
+    # writes the reviewer into `assignee` on the flow path too, so this is the same statement that
+    # path makes, not a new one. The previous assignee is on the record, so it is reversible.
+    task.assignee = choice.agent
+    await _queue_response(
+        session,
+        project_id=run.project_id,
+        agent=choice.agent,
+        prompt=_failed_review_prompt(task, run),
+        task_id=task.id,
+        # D5. The responding reviewer gets the same checkout of the work under review that the
+        # original review turn was given.
+        review_task_id=task.id,
+        source_run_id=run.id,
+    )
+    return OUTCOME_RESTAFFED, choice.agent, previous_assignee, None
+
+
+def _failed_review_prompt(task: Task, diverging_run: Run) -> str:
+    """What a reviewer taking over from one that said nothing is told.
+
+    Names the task, its status and the legal verdicts, from the same declaration the service
+    enforces — so this cannot drift into promising a move that would be refused. It does **not**
+    characterise the previous reviewer's judgement, because there was none to characterise: the
+    only fact is that the turn ended without one.
+    """
+    reachable = sorted(allowed_targets(task.status, ACTOR_RUN))
+    moves = ", ".join(reachable) if reachable else "none — this task is not yours to move"
+    return (
+        f"Run {diverging_run.id} ({diverging_run.agent}) was given task {task.id} to review and "
+        f"ended without recording a verdict, so the review comes to you.\n\n"
+        f"Task: {task.title}\n"
+        f"Current status: {task.status}\n"
+        f"Verdicts available to you: {moves}\n\n"
+        f"Your workspace is the checkout of the work under review. Read it and record one of those "
+        f"verdicts, or say plainly what stops you reaching one. Do not record a verdict the work "
+        f"has not earned."
+    )
 
 
 async def _apply_policy(
@@ -452,8 +614,22 @@ async def evaluate_run_end(run_id: str, *, input_returned: bool = False) -> Opti
         if task.status == STATUS_BLOCKED:
             return None
 
-        policy = task.divergence_policy or DEFAULT_POLICY
-        outcome, response_agent, previous_assignee = await _apply_policy(session, run, task)
+        # Which régime governs (design D3). A review answers to the reviewer resolution; everything
+        # else answers to the task's `divergence_policy`. Split here, at the one place both arrive,
+        # rather than inside `_apply_policy` — a review must not *enter* the policy at all, or the
+        # column recording which policy applied would name one that did not.
+        #
+        # Reviews reached this boundary for the first time in this change. Before D1 every one of
+        # them was unbound and returned above on `if not run.task_id`.
+        reason: Optional[str] = None
+        if await review_task_for_run(session, run) is not None:
+            policy = POLICY_REVIEW
+            outcome, response_agent, previous_assignee, reason = await _answer_failed_review(
+                session, run, task
+            )
+        else:
+            policy = task.divergence_policy or DEFAULT_POLICY
+            outcome, response_agent, previous_assignee = await _apply_policy(session, run, task)
 
         divergence = RunDivergence(
             id=f"div-{short_id()}",
@@ -481,6 +657,15 @@ async def evaluate_run_end(run_id: str, *, input_returned: bool = False) -> Opti
             "outcome": outcome,
             "response_agent": response_agent,
         }
+        if policy == POLICY_REVIEW:
+            # What the operator needs in order to act, and what they cannot work out from the rest
+            # of the payload. `was_review` because "agent X did not move task Y" reads as neglected
+            # work when it was a verdict that never came, and `reason` because a surfaced review is
+            # the branch where nothing else happens — a declared reviewer they must re-point, or a
+            # roster with nobody left. Absent on the restaffed branch: `response_agent` says it.
+            payload["was_review"] = True
+            if reason:
+                payload["reason"] = reason
         # `warn`, not `error`: the work is not lost and nothing is broken. It is the operator's
         # attention this needs, which is what `warn` means in the operator's view.
         await persist_event(

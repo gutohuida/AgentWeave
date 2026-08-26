@@ -22,32 +22,36 @@
 
 ## 2. How a verdict-less review is answered (D3, D4, D5, D6)
 
-- [ ] 2.1 Test: a review that ends with no verdict on a task whose policy is `retry` starts no
+- [x] 2.1 Test: a review that ends with no verdict on a task whose policy is `retry` starts no
       further run by that policy.
-- [ ] 2.2 Test: a review that ends with no verdict on a task whose policy is `escalate`, with an
+- [x] 2.2 Test: a review that ends with no verdict on a task whose policy is `escalate`, with an
       escalation agent named, does not reassign the task by that policy and starts no run by it.
-- [ ] 2.3 Test: a work run on the same task with the same policy still retries and still escalates —
+- [x] 2.3 Test: a work run on the same task with the same policy still retries and still escalates —
       the carve-out is for reviews, not a removal of the policy.
-- [ ] 2.4 Test: a **declared** reviewer that gives no verdict is surfaced and no other agent is
+- [x] 2.4 Test: a **declared** reviewer that gives no verdict is surfaced and no other agent is
       fired; the operator is told which declared reviewer gave no verdict, naming the task.
-- [ ] 2.5 Test: an **availability-picked** reviewer that gives no verdict is replaced by re-resolving,
+- [x] 2.5 Test: an **availability-picked** reviewer that gives no verdict is replaced by re-resolving,
       and the agent that failed is excluded.
-- [ ] 2.6 Test: an availability-picked review failing with no other eligible agent surfaces, naming
+- [x] 2.6 Test: an availability-picked review failing with no other eligible agent surfaces, naming
       the task, and leaves the flow's job enabled and scheduled.
-- [ ] 2.7 Test: the agent that moved a task to `completed` is never resolved as its reviewer, on
+- [x] 2.7 Test: the agent that moved a task to `completed` is never resolved as its reviewer, on
       first resolution and after a failure.
-- [ ] 2.8 Test: a run started in response to a failed review is given the checkout of the work under
+- [x] 2.8 Test: a run started in response to a failed review is given the checkout of the work under
       review. **Fails today** — `_queue_response` builds `new_entry(..., task_id=task_id)` with no
       `review_task_id`, which is finding F10 reproduced.
-- [ ] 2.9 Test: a response to a run that was *not* a review prepares no review checkout.
-- [ ] 2.10 A review run reaching the boundary with no verdict records a `RunDivergence` and does not
+- [x] 2.9 Test: a response to a run that was *not* a review prepares no review checkout.
+- [x] 2.10 A review run reaching the boundary with no verdict records a `RunDivergence` and does not
       enter `_apply_policy`.
-- [ ] 2.11 `_queue_response` carries `review_task_id` when the diverged run was itself a review.
-- [ ] 2.12 Re-resolution for a failed availability-picked review, excluding the failed agent, through
+- [x] 2.11 `_queue_response` carries `review_task_id` when the diverged run was itself a review.
+- [x] 2.12 Re-resolution for a failed availability-picked review, excluding the failed agent, through
       the existing reviewer resolution — not a second one.
-- [ ] 2.13 Surfacing for a failed declared reviewer, carrying the declared name and the reason.
-- [ ] 2.14 Mutation checks by name: removing the review carve-out fails 2.1 and 2.2; removing
+- [x] 2.13 Surfacing for a failed declared reviewer, carrying the declared name and the reason.
+- [x] 2.14 Mutation checks by name: removing the review carve-out fails 2.1 and 2.2; removing
       `review_task_id` from the response entry fails 2.8; removing the failed-agent exclusion fails 2.5.
+      **Measured: the third one fails 2.6, not 2.5.** A reviewer that just gave no verdict still holds
+      the task as assignee and `under_review` is a live status, so `_agents_that_are_free` already
+      excludes it on the first re-resolution; the explicit exclusion is the *chain bound*, biting only
+      after restaffing frees the old reviewer. Recorded in `design.md` under D4.
 
 ## 3. Audit the "is it running" call sites (D10)
 

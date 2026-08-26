@@ -149,6 +149,20 @@ Three properties fall out: no entry price (nobody populates `escalation_agent`, 
 AgentWeave not demanding setup before use); the D6 eligibility problem cannot arise, because the
 resolver already excludes ineligible agents; and a spec-time declaration is what gets honoured.
 
+**Measured during implementation, and it changes what the exclusion is for.** Task 2.14 predicted
+that removing the failed-agent exclusion would fail the "an availability-picked reviewer is
+replaced" test. It does not — it fails the *second-failure* test instead, and the reason is worth
+keeping. A reviewer that just gave no verdict still holds the task as its `assignee`, and
+`under_review` is in `LIVE_STATUSES`, so `_agents_that_are_free` already excludes it on the first
+re-resolution. The explicit exclusion is redundant there and becomes load-bearing only one step
+later: restaffing moves the assignee to the new reviewer, which frees the old one, and without a
+divergence-derived exclusion `critic → auditor → critic` runs forever.
+
+So the exclusion is not "do not ask the same agent twice in a row" — it is the **chain bound**, and
+that is why it is derived from the unresolved divergence rows rather than from the immediately
+preceding agent. Recorded rather than adjusted: the prediction was wrong about which test carries
+the pin, and the pin is real.
+
 ### D5 — a divergence response entry carries the review checkout
 
 `run_divergence._queue_response` builds `new_entry(..., task_id=task_id)` with no `review_task_id`
