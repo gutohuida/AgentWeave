@@ -829,19 +829,46 @@ a review `critic` has already done, on every tick, with no stop condition able t
 
 - [ ] 11.1 **A flow with one agent is indistinguishable from a loop.** Run one. If anything reads
       differently, D2 has leaked.
-- [ ] 11.2 **The handover is legible.** Watch an implementer finish and a reviewer start. It should
+- [x] 11.2 **The handover is legible.** Watch an implementer finish and a reviewer start. It should
       be obvious from the conversation list that a handover happened and to whom.
+      **Judged 2026-08-26 by the operator: FAILS.** The routing itself is correct — eight review
+      handovers carry a `review_task_id` and one is `withdrawn`, which is F45's fix working — but
+      the *legibility* the check asks about is absent. Eleven conversations on `proj-18e5d4e0` are
+      all titled `Ledger flow`, across three agents and two roles, with nothing distinguishing a
+      review turn from a work turn; the night's drive nearly doubled that count from six. And
+      `review_task_id` is exposed on **no** API — `QueueEntryResponse` carries `origin_type` and
+      `origin_agent` but not the field that makes an entry a review — so an operator cannot tell a
+      review from a work entry without reading the database. Recorded as **F61**; the operator's
+      chosen fix is to title a flow conversation by its agent and role. Ticked as *judged*, not as
+      *passed*: the judgement is complete and its outcome is a finding.
 - [ ] 11.3 **The reviewer arrives briefed.** Read what the reviewer was given. If the implementer's
       checkpoint reads as notes-to-self, task 6.5 did not work.
-- [ ] 11.3b **The reviewer is looking at the work.** Open the reviewer's workspace during a review
+- [x] 11.3b **The reviewer is looking at the work.** Open the reviewer's workspace during a review
       firing and confirm the author's changes are in it. This is the human half of 4b.2, and it is
       the check that would have caught F10.
+      **Judged 2026-08-26 by the operator: PASSES.** Four worktrees live on `aw-stress`, two of
+      them reviews (`.agentweave/reviews/critic` at `f10d198`, `.agentweave/reviews/relay` at
+      `d8c4355`), each a detached checkout separate from both master and the author's own tree.
+      Isolation shown on commits that are *not* reachable from master (`d8c4355`, `f58f6ae`) —
+      the runbook's original example `f10d198` is now on master too, because the night's drive
+      correctly approved and merged that task, so the demonstration moved to a commit that has not
+      yet landed. The mechanism is unchanged and holds.
 - [ ] 11.4 **Rung 3 reads as staffing, not breakage.** With no eligible agent, confirm the notice
       says the flow needs someone rather than that it failed.
 - [ ] 11.5 **Concurrent work is comprehensible.** With a flow running three agents, judge whether the
       board says what is happening or merely that a lot is.
-- [ ] 11.6 **The spend is visible.** Run a wide flow and confirm you can tell what it cost without
+- [x] 11.6 **The spend is visible.** Run a wide flow and confirm you can tell what it cost without
       reconstructing it.
+      **Judged 2026-08-26 by the operator: PASSES, with the mixed-CLI gap recorded.** One call to
+      `GET /projects/{id}/accounting` returns the project total and a per-agent breakdown with no
+      reconstruction from runs — measured after the overnight drive at 34,717,146 tokens over 65
+      measured turns (1 unavailable), ≈$7.83, split builder 21.85M / critic 12.55M / relay 322k.
+      The gap the operator chose to record rather than block on: `relay` reports tokens but
+      `api_equivalent_usd_micros: null`, because the dollar figure comes from the CLI's own report
+      (`total_cost_usd` for Claude, `cost` for Codex — `runner_parsing.py:339,641`) and the Codex
+      CLI sends none. So a mixed-CLI flow tells you its tokens in full and its money in part.
+      Recorded as **F62**. Tokens being complete and per-agent is what the check actually asks for,
+      which is why this is a pass with a finding rather than a fail.
 
 ## 12. User test guide
 

@@ -2877,3 +2877,70 @@ record, fix passes fix). The shape of a fix is not obvious enough to guess at he
 durably — after the task has already left `in_progress` — is a design decision (a task-level flag?
 a distinct completion state? surfaced only via the questions list forever?) that belongs with F14's
 own eventual fix, not bolted on separately.
+
+## F61 (B) — every flow conversation has the same title, and no API says which turn is a review
+
+Found 2026-08-26 by the **operator**, judging group 11's check 11.2 ("the handover is legible")
+against the live trial Hub. This is the first finding in this series produced by a human judgement
+call rather than by a drive script, which is the point of group 11 existing.
+
+The routing underneath is correct and was confirmed first, so that the finding is about legibility
+and not about mechanism: eight `inbound_queue_entries` on `proj-18e5d4e0` carry a `review_task_id`
+(`entry-b3b2decb5bd3`, `entry-bdbff2b6d33b`, `entry-078312a2652f`, `entry-abb2e8c3855e`,
+`entry-9d9904d9252b`, `entry-695a53e2517d`, `entry-f54274ebd7f8`, and `entry-1a37fe42ec46`, the
+last of which is `withdrawn` — F45's fix visibly working). The scheduler routed every one of them.
+
+**What the operator cannot see.** Two halves, same gap:
+
+1. **Eleven conversations, one title.** `select id, title from conversations where title like
+   '%flow%'` returns eleven rows on this project, every one titled `Ledger flow`, spanning three
+   agents (`builder`, `critic`, `relay`) and two roles (work, review). Nothing in the title says
+   whose turn it is or which kind. The overnight drive took this from six to eleven, so the
+   condition worsens with exactly the usage the feature is for.
+2. **`review_task_id` is exposed on no API.** `GET /projects/{id}/queue/{agent}` returns
+   `abandoned_reason, agent, arrived_at, content, conversation_id, delivered_in_run_id,
+   delivery_attempts, hop_depth, id, origin_agent, origin_type, state` — and `grep -n
+   "review_task_id" hub/hub/schemas/*.py` matches nothing. The one field that makes an entry a
+   review is readable only by opening the database directly, which is what this session had to do.
+
+So the product knows which turn is a review, records it correctly, acts on it correctly, and tells
+the operator through neither the UI nor the API.
+
+**Operator's chosen fix:** title a flow conversation by its agent and role, so the activity list
+distinguishes a review turn from a work turn on sight. Whether `review_task_id` also belongs on
+`QueueEntryResponse` was offered alongside and not selected — the title is the fix.
+
+**What held:** the routing, the `review_task_id` stamping, and F45's withdrawal path are all real
+and correct in the rows. Nothing here is a behavioural defect; it is entirely a surfacing one.
+
+**A correction to the runbook, worth carrying:** `group-11-runbook.md` states that the handover
+"involved no messaging at all" and that no message carries a `task_id`. That was true when it was
+written on 2026-08-25. It is not true now — thirteen messages on this project carry a `task_id`,
+`builder` <-> `critic`, from 2026-08-25 23:43 onward, produced by the overnight drive. Both handover
+shapes now exist here: silent routing by the scheduler, and agents messaging each other about
+tasks. Judge against the live rows, not the runbook's snapshot of them.
+
+## F62 (C) — a mixed-CLI flow reports its tokens in full and its money in part
+
+Found 2026-08-26 by the **operator**, judging group 11's check 11.6 ("the spend is visible"), and
+recorded rather than blocked on — the check passes, this is the caveat attached to the pass.
+
+`GET /projects/proj-18e5d4e0/accounting` answers in one call with no reconstruction from runs:
+34,717,146 tokens over 65 measured turns (1 unavailable), `api_equivalent_usd_micros: 7832067`,
+split `builder` 21.85M / `critic` 12.55M / `relay` 322k. That is what the check asks for and it
+arrives early enough to act on, which is why 11.6 is a pass.
+
+**The gap:** `relay` reports `total_tokens: 322085` and `api_equivalent_usd_micros: null`. The
+dollar figure is not computed by the Hub from tokens and a price table — it is taken from the CLI's
+own report, `total_cost_usd` for Claude and `cost` for Codex (`runner_parsing.py:339` and `:641`),
+and the Codex CLI does not send one. So the project total of ≈$7.83 is the sum of the turns that
+*could* be priced, and silently excludes every Codex turn. On this project that is 10 of 65 turns
+and a small amount of money; on a Codex-heavy flow it would be most of the spend, and the total
+would still render as though complete.
+
+Severity C rather than B because the tokens — which are complete, per-agent, and the thing an
+operator can actually act on before leaving a flow running — are all correct, and because nothing
+here is wrong, only partial. Two shapes if it is ever fixed: price Codex turns from tokens against
+a model price table (introduces a second, estimated source of truth for money), or mark the total
+as partial whenever any contributing turn had no cost report (honest, cheaper, and does not
+pretend to a number the CLI never gave).
