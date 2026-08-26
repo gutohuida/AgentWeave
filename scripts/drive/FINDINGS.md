@@ -3351,3 +3351,20 @@ looping. Nothing was left queued.
 
 The trial project was left as found: the declaration removed, the policy back to `surface`, no job
 enabled in any project, no run alive, and nothing this drive created left queued.
+
+### F66 — decided 2026-08-26: refuse the mix, at the batcher
+
+The operator's answer to *"should a turn ever batch a review and ordinary work"* is **no**. Proposed
+as group 1 of `openspec/changes/every-run-knows-its-task`, which ships it **before** the work-run
+binding in the same change — binding work runs is what makes the disagreement reachable, so the
+separation lands ahead of the hazard rather than behind it.
+
+The fix is at `turn_scheduler.py`'s batch selection, not only at the trigger's 409: entries stay
+queued after a refusal, so refusing alone would reassemble the same batch every attempt and wedge the
+agent permanently. Narrowing the batch instead — the controlling entry's kind decides the turn, the
+other kind waits for the next one — loses nothing and defers rather than drops. The trigger's refusal
+remains as defence in depth for a hand-assembled `queue_entry_ids`.
+
+`turn_scheduler.py` already carries the same defect's earlier twin one comment above, from design D1
+and finding F5: *"nothing used to ask which entries may ride on it."* F66 is that sentence with
+"over-budget" replaced by "of the other kind".

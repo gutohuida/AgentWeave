@@ -1,7 +1,10 @@
 # The other half of the binding: a flow's own work runs do not know what they are working on
 
 **Date:** 2026-08-26 · **Found while:** implementing group 4 of `one-answer-to-what-is-happening`
-**Status:** exploration. No code written. Nothing here is proposed yet.
+**Status:** **proposed, 2026-08-26** as `openspec/changes/every-run-knows-its-task`, which also
+carries F66 — binding work runs is what makes a mixed turn dangerous, so the two ship together.
+Still no code written. The four questions below were answered before proposing; the answers are
+in that change's `design.md` as D3, D6 and D7, and question 4 stays out of scope there.
 
 ## How this surfaced
 
