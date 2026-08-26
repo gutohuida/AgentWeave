@@ -78,6 +78,20 @@ class CheckpointEnvelope:
     covers_through_run_id: Optional[str] = None
 
 
+async def get_checkpoint_by_id(db, checkpoint_id: Optional[str]) -> Optional[Checkpoint]:
+    """Look a checkpoint up by its stable `ckpt-` id.
+
+    Not `session.get(Checkpoint, checkpoint_id)`: the primary key is `sequence`, an autoincrement
+    integer, not `id` (F55) — `session.get()` looks up by primary key, so it would compare a
+    `ckpt-…` string against an integer column and never match. Every call site that used to read
+    `db.get(Checkpoint, ...)` reads this instead.
+    """
+    if checkpoint_id is None:
+        return None
+    result = await db.execute(select(Checkpoint).where(Checkpoint.id == checkpoint_id))
+    return result.scalar_one_or_none()
+
+
 async def latest_checkpoint(db, conversation_id: str) -> Optional[Checkpoint]:
     """The checkpoint a new one anchors on, or None for a conversation's first."""
     return (
@@ -85,7 +99,7 @@ async def latest_checkpoint(db, conversation_id: str) -> Optional[Checkpoint]:
             await db.execute(
                 select(Checkpoint)
                 .where(Checkpoint.conversation_id == conversation_id)
-                .order_by(Checkpoint.created_at.desc(), Checkpoint.id.desc())
+                .order_by(Checkpoint.sequence.desc())
                 .limit(1)
             )
         )
@@ -103,13 +117,16 @@ async def latest_checkpoint_for_loop(db: AsyncSession, loop_id: str) -> Optional
     `Checkpoint.loop_id`, never by `conversation_id` — a same-conversation query would only ever
     find None, since a loop's *next* firing is, by construction, a conversation that does not
     exist yet.
+
+    Ordered by `sequence`, not `created_at` (F55): two firings completing in the same clock tick
+    used to tie-break on a random id and could return the older checkpoint as "latest", silently.
     """
     return (
         (
             await db.execute(
                 select(Checkpoint)
                 .where(Checkpoint.loop_id == loop_id)
-                .order_by(Checkpoint.created_at.desc(), Checkpoint.id.desc())
+                .order_by(Checkpoint.sequence.desc())
                 .limit(1)
             )
         )
@@ -473,7 +490,7 @@ async def checkpoint_by_task_author(
     query = (
         select(Checkpoint)
         .where(Checkpoint.conversation_id == conversation_id)
-        .order_by(Checkpoint.created_at.desc(), Checkpoint.id.desc())
+        .order_by(Checkpoint.sequence.desc())
         .limit(1)
     )
     if loop_id is not None:

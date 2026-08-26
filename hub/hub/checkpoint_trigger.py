@@ -118,7 +118,7 @@ async def _nothing_new_since_last_checkpoint(db, conversation_id: str) -> bool:
         await db.execute(
             select(Checkpoint.covers_through_run_id)
             .where(Checkpoint.conversation_id == conversation_id)
-            .order_by(Checkpoint.created_at.desc(), Checkpoint.id.desc())
+            .order_by(Checkpoint.sequence.desc())
             .limit(1)
         )
     ).scalar_one_or_none()

@@ -1436,7 +1436,21 @@ class Checkpoint(Base):
 
     __tablename__ = "checkpoints"
 
-    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    # Ordered by an autoincrement key, not by `created_at`, and not by the string id. Two
+    # checkpoints created in the same clock tick (measured on Windows: `datetime.now()` can return
+    # an identical value across five consecutive calls) used to tie-break on `Checkpoint.id.desc()`
+    # — a random `ckpt-…` id with no relationship to insertion order — so "which checkpoint is
+    # newest" picked the wrong one roughly half the time (F55). Same shape as `TaskTransition`,
+    # `InboundQueueEntry` and `Conversation.sequence`, for the identical reason.
+    #
+    # `primary_key=True` is deliberately not set on the column — the primary key is declared in
+    # `__table_args__` instead, with an explicit name (same reasoning as `Conversation.sequence`,
+    # `models.py:406-411`): an unnamed constraint gets whatever name SQLAlchemy or SQLite happens
+    # to assign, and migration `0088`'s downgrade has to `drop_constraint` it by name — a database
+    # built by `create_all` from this model must produce the identical name, or the downgrade
+    # cannot find what to drop. Same reasoning for `id`'s unique constraint.
+    sequence: Mapped[int] = mapped_column(Integer, autoincrement=True)
+    id: Mapped[str] = mapped_column(String(64), nullable=False)
     project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
     conversation_id: Mapped[str] = mapped_column(
         String(64), ForeignKey("conversations.id"), nullable=False, index=True
@@ -1509,6 +1523,8 @@ class Checkpoint(Base):
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
 
     __table_args__ = (
+        PrimaryKeyConstraint("sequence", name="pk_checkpoints"),
+        UniqueConstraint("id", name="uq_checkpoints_id"),
         CheckConstraint(
             "trigger IN ('" + "', '".join(CHECKPOINT_TRIGGERS) + "')",
             name="ck_checkpoints_trigger",

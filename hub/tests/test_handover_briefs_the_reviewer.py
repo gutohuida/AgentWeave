@@ -32,7 +32,11 @@ import pytest
 from sqlalchemy import select
 
 from hub.checkpoint_handover import consider_handover
-from hub.checkpoints import checkpoint_by_task_author, latest_checkpoint_for_loop
+from hub.checkpoints import (
+    checkpoint_by_task_author,
+    get_checkpoint_by_id,
+    latest_checkpoint_for_loop,
+)
 from hub.db.engine import async_session_factory
 from hub.db.models import (
     AIJob,
@@ -253,7 +257,7 @@ async def test_a_flow_handover_with_notes_generates_the_authors_checkpoint(
 
     assert checkpoint_id is not None, "the handover produced no checkpoint"
     async with async_session_factory() as db:
-        checkpoint = await db.get(Checkpoint, checkpoint_id)
+        checkpoint = await get_checkpoint_by_id(db, checkpoint_id)
         assert checkpoint.conversation_id == conversation.id
         assert checkpoint.loop_id == loop.id, "the checkpoint is not attributed to the flow"
         assert checkpoint.trigger == "task_completion"

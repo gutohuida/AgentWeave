@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...auth import get_project
 from ...checkpoint_cutover import CutoverRefusedError, cut_over
 from ...checkpoint_generation import generate_checkpoint, render_checkpoint
+from ...checkpoints import get_checkpoint_by_id
 from ...conversations import get_conversation_by_id
 from ...db.engine import get_session
 from ...db.models import Checkpoint, Project, Runner, WorkerInvocation
@@ -90,7 +91,7 @@ async def list_checkpoints(
             await session.execute(
                 select(Checkpoint)
                 .where(Checkpoint.conversation_id == conversation_id)
-                .order_by(Checkpoint.created_at.desc(), Checkpoint.id.desc())
+                .order_by(Checkpoint.sequence.desc())
             )
         )
         .scalars()
@@ -123,7 +124,7 @@ async def get_rendered_checkpoint(
 ):
     """The artifact exactly as a successor receives it — envelope, body and citations."""
     project_id, _ = project
-    row = await session.get(Checkpoint, checkpoint_id)
+    row = await get_checkpoint_by_id(session, checkpoint_id)
     if row is None or row.project_id != project_id:
         raise HTTPException(status_code=404, detail=f"Checkpoint '{checkpoint_id}' not found")
     return {"id": row.id, "status": row.status, "rendered": render_checkpoint(row)}
@@ -284,7 +285,7 @@ async def cutover_to_successor(
 ):
     """Open the successor, hand it this checkpoint, and archive the predecessor."""
     project_id, _ = project
-    checkpoint = await session.get(Checkpoint, checkpoint_id)
+    checkpoint = await get_checkpoint_by_id(session, checkpoint_id)
     if checkpoint is None or checkpoint.project_id != project_id:
         raise HTTPException(status_code=404, detail=f"Checkpoint '{checkpoint_id}' not found")
 

@@ -212,6 +212,57 @@ async def test_a_loops_checkpoints_do_not_chain_and_that_is_the_point(app):
 # ---------------------------------------------------------------------------
 
 
+async def test_latest_checkpoint_for_loop_breaks_a_tie_by_insertion_order_not_id(app):
+    """F55. `datetime.now()` on this machine can return an identical value across consecutive
+    calls (measured: five back-to-back calls, same microsecond), so two checkpoints from the same
+    clock tick are a real occurrence, not a theoretical one. `latest_checkpoint_for_loop` used to
+    tie-break on `Checkpoint.id.desc()` — a random `ckpt-…` id with no relationship to insertion
+    order — so ids are chosen here so the *older* checkpoint's id sorts alphabetically AFTER the
+    *newer* one's: the exact shape that picked the wrong row under the old ordering.
+    """
+    async with async_session_factory() as db:
+        _job, loop = await _flow(db, suffix="tie")
+        conversation = new_conversation(project_id="proj-test", agent=FIRST, origin="job")
+        db.add(conversation)
+        await db.commit()
+        tied_at = conversation.created_at
+
+        older = Checkpoint(
+            id="ckpt-zzz-older",
+            project_id="proj-test",
+            conversation_id=conversation.id,
+            agent=FIRST,
+            trigger="task_completion",
+            status="ready",
+            loop_id=loop.id,
+            lineage_id="ckpt-zzz-older",
+            body="Older, but its id sorts after the newer one's.",
+            created_at=tied_at,
+        )
+        db.add(older)
+        await db.commit()
+
+        newer = Checkpoint(
+            id="ckpt-aaa-newer",
+            project_id="proj-test",
+            conversation_id=conversation.id,
+            agent=FIRST,
+            trigger="task_completion",
+            status="ready",
+            loop_id=loop.id,
+            lineage_id="ckpt-aaa-newer",
+            body="Newer, and must win the tie regardless of its id.",
+            created_at=tied_at,
+        )
+        db.add(newer)
+        await db.commit()
+
+    async with async_session_factory() as db:
+        latest = await latest_checkpoint_for_loop(db, loop.id)
+
+    assert latest.id == "ckpt-aaa-newer", "insertion order, not a random id, must decide the tie"
+
+
 async def test_a_document_less_single_agent_loop_is_unchanged(app, auth_headers, bind_runner):
     """The regression bar D7's migration plan sets: *"The behaviour of a flow with one agent is
     today's behaviour, so the regression suite is the existing loop suite, unmodified."* Driven

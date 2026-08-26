@@ -2309,15 +2309,55 @@ content while looking exactly like a correctly-functioning handover. The same pa
 codebase that orders checkpoints, notes, or events by timestamp with no monotonic tie-break —
 not audited exhaustively this iteration.
 
+### Fixed, iteration 11 — `Checkpoint.sequence`, migration `0088`
+
+Same shape as `TaskTransition`, `InboundQueueEntry` and `Conversation.sequence` (migration `0073`,
+identical reasoning): an autoincrement integer becomes the table's primary key, with `id` demoted
+to a plain unique column. `sequence` is assigned by the database in insertion order, so it cannot
+tie regardless of what `datetime.now()` returns.
+
+`hub/hub/db/models.py`: `Checkpoint.sequence` is now the primary key, declared in `__table_args__`
+with an explicit name (`PrimaryKeyConstraint("sequence", name="pk_checkpoints")`,
+`UniqueConstraint("id", name="uq_checkpoints_id")`) rather than inline `primary_key=True` — the
+first attempt used the inline form and its migration's downgrade round-trip tests failed with
+`KeyError: 'pk_checkpoints'`, because SQLAlchemy leaves an inline single-column primary key
+unnamed and `create_all` (what `test_migrations.py`'s fixtures build from) then produces a table
+whose PK constraint has no name for the migration to `drop_constraint` by. `Conversation.sequence`
+already carries the comment explaining exactly this trap (`models.py:406-411`); it applied
+identically here and the fix is the same shape.
+
+Migration `0088` recreates the table (`batch_alter_table(..., recreate="always")`, SQLite cannot
+move a primary key in place), guarded for a missing `checkpoints`/`projects`/`conversations` table
+the way `0073`/`0087` are. Three call sites read `session.get(Checkpoint, checkpoint_id)`
+(`api/v1/checkpoints.py` x2, `tests/test_handover_briefs_the_reviewer.py` x1) — `session.get()`
+resolves by primary key, so all three would have silently stopped matching once `id` left the
+primary key. Replaced with a new `hub/hub/checkpoints.py:get_checkpoint_by_id`, the same fix
+`conversations.py:get_conversation_by_id` applied for `0073`. Four `order_by(Checkpoint.created_at.desc(), Checkpoint.id.desc())` call sites (`checkpoints.py` x3, `checkpoint_trigger.py`,
+`api/v1/checkpoints.py`) now read `order_by(Checkpoint.sequence.desc())`.
+
+Regression test: `tests/test_flow_checkpoint_lineage.py::test_latest_checkpoint_for_loop_breaks_a_tie_by_insertion_order_not_id`
+— two checkpoints inserted with an explicitly identical `created_at` and ids chosen so the *older*
+row's id sorts alphabetically *after* the newer one's (`ckpt-zzz-older` before `ckpt-aaa-newer`),
+the exact shape that made the old tie-break pick the wrong row. Deterministic, not probabilistic:
+under the old ordering this fails every run, not roughly half the time. Mutation-checked by
+reverting `latest_checkpoint_for_loop`'s `order_by` to the old `created_at`/`id` tie-break — the
+named test failed with the older checkpoint winning, exactly as predicted — then restored and
+reconfirmed green. Full suite: `test_migrations.py` (71 passed, 1 skipped — the round-trip fixed
+here), `test_flow_checkpoint_lineage.py`, `test_handover_briefs_the_reviewer.py`, six other
+`test_checkpoint_*.py` files, and `test_project_persistence.py` all green (240 passed, 1 skipped).
+`ruff` and `black --target-version py311` clean.
+
 ### What a reviewer should distrust
 
-Not fixed this iteration — time was spent confirming the mechanism rather than patching it, since
-the right fix (a monotonic sequence column, the same shape `TaskTransition.sequence` already uses
-for exactly this reason per an existing `dead_ends` note) is a schema change, not a one-line patch,
-and deserves its own migration and test rather than being folded into the F54 commit that
-incidentally surfaced it. Left for Q6. The measured "identical timestamp" repro above is
-machine-specific (this Windows box); it is not claimed that every environment reproduces the tie at
-the same rate, only that the tie-break itself is unsound regardless of how often it fires.
+Verified against the regression suite, the migration round-trip tests, and a deliberate mutation —
+not against a fresh live tie forced through the running trial Hub, since forcing two loop firings
+into the identical clock tick live is not practical to stage on demand. The trial Hub restart that
+picks this migration up is recorded in this iteration's log entry rather than here. The "likely
+recurs anywhere else... ordered by timestamp with no monotonic tie-break" observation from the
+original write-up was not re-audited this iteration; `CheckpointNote.created_at.desc(),
+CheckpointNote.id.desc()` (`checkpoint_generation.py:404`) has the identical shape and was
+deliberately left alone as out of scope for this finding — a candidate for a future finding, not
+folded in here.
 
 ## F56 (A) — one review target with no evidence permanently wedges an agent's entire inbound queue, silently
 
